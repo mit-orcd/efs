@@ -47,14 +47,20 @@ int raft_group_reserve(struct raft_disk_group *g)
 void raft_group_install(struct raft_disk_group *g, uint64_t index,
                         uint64_t term, uint8_t *cmd, uint32_t clen)
 {
-    uint32_t off = (uint32_t)(index - (g->snap_idx + 1));
+    uint32_t off = (uint32_t)(index - (g->log_base + 1));
 
     if (off < g->n) {
+        g->bytes_all -= g->log[off].clen;
+        if (index <= g->snap_idx)
+            g->bytes_old -= g->log[off].clen;
         free(g->log[off].cmd);
     } else {
         off = g->n;
         g->n++;
     }
+    g->bytes_all += clen;
+    if (index <= g->snap_idx)
+        g->bytes_old += clen;
     g->log[off].term = term;
     g->log[off].end_off = 0;
     g->log[off].clen = clen;
@@ -64,7 +70,7 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
 /* True when index is the next slot or an existing one; a gap is invalid. */
 static int index_ok(const struct raft_disk_group *g, uint64_t index)
 {
-    uint64_t first = g->snap_idx + 1;
+    uint64_t first = g->log_base + 1;
 
     if (index == 0 || index < first)
         return 0;
@@ -98,37 +104,77 @@ int raft_group_truncate(struct raft_disk_group *g, uint64_t index)
 {
     uint32_t off, i;
 
-    if (index <= g->snap_idx)
+    if (index <= g->snap_idx || index < g->log_base + 1)
         return EFS_ERR_INVAL;
-    off = (uint32_t)(index - (g->snap_idx + 1));
+    off = (uint32_t)(index - (g->log_base + 1));
     if (off >= g->n)
         return EFS_OK;
-    for (i = off; i < g->n; i++)
+    for (i = off; i < g->n; i++) {
+        g->bytes_all -= g->log[i].clen;
+        if (g->log_base + 1 + i <= g->snap_idx)
+            g->bytes_old -= g->log[i].clen;
         free(g->log[i].cmd);
+    }
     g->n = off;
     return EFS_OK;
 }
 
 int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
-                    uint64_t last_term)
+                    uint64_t last_term, uint64_t base_hint)
 {
-    uint64_t first = g->snap_idx + 1;
-    uint32_t drop, i;
+    uint32_t n_in = 0, drop, i;
+    uint64_t bytes;
 
     if (last_index < g->snap_idx)
         return EFS_ERR_INVAL;
-    if (last_index >= first) {
-        drop = (uint32_t)(last_index - first + 1);
-        /* Clamped, not rejected: a rotated log writes the snapshot record
-         * without the entries it already compacted away, so replay
-         * legitimately sees a snapshot ahead of an empty log. Same
-         * clamp as raft_mem (InstallSnapshot onto a fresh replica). */
-        if (drop > g->n)
-            drop = g->n;
-        for (i = 0; i < drop; i++)
-            free(g->log[i].cmd);
-        memmove(g->log, g->log + drop, (size_t)(g->n - drop) * sizeof(*g->log));
-        g->n -= drop;
+    /* Entries the snapshot covers. A suffix past last_index (appended
+     * and not yet in this image) stays put. */
+    while (n_in < g->n && g->log_base + 1 + n_in <= last_index)
+        n_in++;
+    if (n_in > 0) {
+        bytes = 0;
+        for (i = 0; i < n_in; i++)
+            bytes += g->log[i].clen;
+        drop = 0;
+        while (drop < n_in && bytes > EFS_RAFT_SNAP_BYTES) {
+            bytes -= g->log[drop].clen;
+            g->bytes_all -= g->log[drop].clen;
+            free(g->log[drop].cmd);
+            g->log[drop].cmd = NULL;
+            drop++;
+        }
+        if (drop) {
+            memmove(g->log, g->log + drop,
+                    (size_t)(g->n - drop) * sizeof(*g->log));
+            g->n -= drop;
+            g->log_base += drop;
+        }
+        /* Everything still in the log up to last_index is now "old". */
+        g->bytes_old = bytes;
+        /* Snapshot ran past the log end (InstallSnapshot onto a short
+         * replica). A window that stops short of snap_idx would make
+         * last() answer below the snapshot and open a gap before the
+         * next append, so the log is emptied, as before the window. */
+        if (g->n == 0 || g->log_base + g->n < last_index) {
+            for (i = 0; i < g->n; i++)
+                free(g->log[i].cmd);
+            g->n = 0;
+            g->bytes_all = 0;
+            g->bytes_old = 0;
+            g->log_base = last_index;
+        }
+    } else if (g->n == 0) {
+        /* Rotated file: the SNAP record is replayed before its entries.
+         * base_hint is the retained window. Old 16-byte records have
+         * hint 0 and compact the whole prefix. */
+        if (base_hint > 0 && base_hint <= last_index)
+            g->log_base = base_hint;
+        else
+            g->log_base = last_index;
+        g->bytes_old = 0;
+    } else {
+        /* Snapshot behind the whole log (n_in == 0): nothing becomes old. */
+        g->bytes_old = 0;
     }
     g->snap_idx = last_index;
     g->snap_term = last_term;
@@ -215,7 +261,7 @@ static int disk_append(void *ctx, uint64_t index, uint64_t term,
         goto out;
     raft_group_install(g, index, term, copy, clen);
     {
-        uint32_t off = (uint32_t)(index - (g->snap_idx + 1));
+        uint32_t off = (uint32_t)(index - (g->log_base + 1));
 
         if (off < g->n)
             g->log[off].end_off = g->d->bytes;
@@ -236,12 +282,12 @@ static int disk_truncate_from(void *ctx, uint64_t index)
     if (!g)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
-    if (index <= g->snap_idx) {
+    if (index <= g->snap_idx || index < g->log_base + 1) {
         pthread_mutex_unlock(&g->d->mu);
         return EFS_ERR_INVAL;
     }
     /* Beyond the end is a no-op, and logging one would only grow the file. */
-    if (index - (g->snap_idx + 1) >= (uint64_t)g->n) {
+    if (index - (g->log_base + 1) >= (uint64_t)g->n) {
         pthread_mutex_unlock(&g->d->mu);
         return EFS_OK;
     }
@@ -265,21 +311,22 @@ static int disk_get(void *ctx, uint64_t index, uint64_t *term, uint8_t *cmd,
     if (!g || !term || !clen || index == 0)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&g->d->mu);
+    first = g->log_base + 1;
+    if (index >= first) {
+        off = (uint32_t)(index - first);
+        if (off < g->n)
+            goto hit;
+    }
+    /* The snapshot's included index, once its entry has fallen out of
+     * the retained window. */
     if (index == g->snap_idx && g->snap_idx > 0) {
         *term = g->snap_term;
         *clen = 0;
         goto out;
     }
-    first = g->snap_idx + 1;
-    if (index < first) {
-        rc = EFS_ERR_NOT_FOUND;
-        goto out;
-    }
-    off = (uint32_t)(index - first);
-    if (off >= g->n) {
-        rc = EFS_ERR_NOT_FOUND;
-        goto out;
-    }
+    rc = EFS_ERR_NOT_FOUND;
+    goto out;
+hit:
     need = g->log[off].clen;
     *term = g->log[off].term;
     if (*clen < need) {
@@ -311,7 +358,7 @@ static int disk_last(void *ctx, uint64_t *index, uint64_t *term)
         *index = g->snap_idx;
         *term = g->snap_term;
     } else {
-        *index = g->snap_idx + g->n;
+        *index = g->log_base + g->n;
         *term = g->log[g->n - 1].term;
     }
     pthread_mutex_unlock(&g->d->mu);
@@ -341,7 +388,7 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
     rc = raft_log_append(g->d, RAFT_REC_SNAP, g, last_index, last_term, NULL,
                          0);
     if (rc == EFS_OK) {
-        rc = raft_group_snap(g, last_index, last_term);
+        rc = raft_group_snap(g, last_index, last_term, 0);
         /* A snapshot can drop almost the whole file. The usual check
          * waits until the file doubles, which would leave a multi-GB
          * log on disk after the prefix is dead. */
@@ -429,6 +476,32 @@ static int disk_batch_end(void *ctx)
     return raft_log_defer_end(g->d);
 }
 
+static uint64_t disk_log_floor(void *ctx)
+{
+    struct raft_disk_group *g = group_of(ctx);
+    uint64_t floor;
+
+    if (!g)
+        return 1;
+    pthread_mutex_lock(&g->d->mu);
+    floor = g->log_base + 1;
+    pthread_mutex_unlock(&g->d->mu);
+    return floor;
+}
+
+static uint64_t disk_log_new_bytes(void *ctx)
+{
+    struct raft_disk_group *g = group_of(ctx);
+    uint64_t n;
+
+    if (!g)
+        return 0;
+    pthread_mutex_lock(&g->d->mu);
+    n = g->bytes_all >= g->bytes_old ? g->bytes_all - g->bytes_old : 0;
+    pthread_mutex_unlock(&g->d->mu);
+    return n;
+}
+
 static const struct efs_raft_store disk_ops = {
     .save_hard = disk_save_hard,
     .load_hard = disk_load_hard,
@@ -443,6 +516,8 @@ static const struct efs_raft_store disk_ops = {
     .destroy = disk_destroy,
     .batch_begin = disk_batch_begin,
     .batch_end = disk_batch_end,
+    .log_floor = disk_log_floor,
+    .log_new_bytes = disk_log_new_bytes,
 };
 
 /* --- open / close ---------------------------------------------------- */

@@ -164,6 +164,10 @@ int kv_seg_w_open(const char *path, struct kv_seg_w **out)
         free(w);
         return EFS_ERR_IO;
     }
+    /* stdio's default buffer is st_blksize (4 KiB), so a 250 MiB
+     * compaction output was 64K write() calls (5.25M of them in one
+     * 20-minute trace, Sep 29). One syscall per MiB instead. */
+    setvbuf(w->f, NULL, _IOFBF, 1u << 20);
     *out = w;
     return EFS_OK;
 }

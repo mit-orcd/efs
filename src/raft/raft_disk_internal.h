@@ -17,6 +17,10 @@
  *     ENTRY: u64 index · u64 term · u32 clen · cmd
  *     TRUNC: u64 from_index
  *     SNAP:  u64 last_index · u64 last_term
+ *            [· u64 log_base]  (present when the record is 24 bytes of
+ *            payload past the type; absent on logs written before the
+ *            retained window. log_base is the index before the first
+ *            kept entry.)
  *     CFG:   u32 cfg_old · u32 cfg_new
  * A short or crc-failing record at the END of the file is the crash point and
  * ends replay. One in the MIDDLE is corruption and fails the open loudly: a
@@ -59,10 +63,18 @@ struct raft_disk_group {
     int32_t voted_for;
     uint64_t snap_idx;
     uint64_t snap_term;
+    /* log[i] is index log_base+1+i. Equals snap_idx when nothing before
+     * the snapshot is retained. A window keeps log_base < snap_idx. */
+    uint64_t log_base;
+    /* Running sums of clen: every entry in log[], and the ones with
+     * index <= snap_idx (the retained window). new bytes = all - old.
+     * Kept here so the pump's snapshot check is O(1). */
+    uint64_t bytes_all;
+    uint64_t bytes_old;
     uint32_t cfg_old;
     uint32_t cfg_new;
     int have_cfg;
-    struct raft_log_ent *log; /* log[i] is index snap_idx+1+i */
+    struct raft_log_ent *log; /* log[i] is index log_base+1+i */
     uint32_t n;
     uint32_t cap;
 };
@@ -114,7 +126,7 @@ int raft_group_put_entry(struct raft_disk_group *g, uint64_t index,
                          uint64_t term, const uint8_t *cmd, uint32_t clen);
 int raft_group_truncate(struct raft_disk_group *g, uint64_t index);
 int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
-                    uint64_t last_term);
+                    uint64_t last_term, uint64_t base_hint);
 uint64_t raft_group_live_bytes(const struct raft_disk_group *g);
 
 #endif

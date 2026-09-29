@@ -12,8 +12,9 @@
  * everything above it — so the ONE rule a caller owes is:
  *
  *   never call efs_raft_snapshot() until the applied KV is durable through
- *   last_applied (efs_kv_lsm_flush()), because the snapshot drops the log
- *   prefix that would otherwise replay those commands.
+ *   last_applied (efs_kv_lsm_flush()). The snapshot drops the log prefix
+ *   outside the retained window (EFS_RAFT_SNAP_BYTES); a follower still
+ *   inside that window is served from the log.
  *
  * Physical shape: one multiplexed record log per NODE, not per group. Every
  * group on the node appends to it and concurrent appends share one fsync, so

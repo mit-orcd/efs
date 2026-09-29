@@ -54,9 +54,34 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   D1–D3): span publishes commute (no base-gen CAS for spans, fold by
   the chain-filler or a reader, still no lock); `open()` adopts the row
   only and chunk maps arrive in per-lane windows with no knob; the 5/s
-  idle gate stays. Implement those; do not re-ask. The implementation
-  order is the numbered table there: W17.1, W16.1, W18, W19, W14.4,
-  W15.3, residuals, D1, D2, W16.2–3, W8/W10.**
+  idle gate stays. Implement those; do not re-ask. **Decided Sep 29
+  (D4–D8):** snapshot by log bytes (512 MiB) with a retained log
+  window, InstallSnapshot only below it (W22.1); the follower applies
+  an import diff in per-tick slices and keeps answering heartbeats
+  (W22.2); measure `fsync` shared vs quiet root, then `--meta-storage`
+  and redeploy if the sharing is the 100 ms mode (W22.3, ask which
+  device); `path_hint = 0xffffffff` = first write, server skips the
+  probe (W14.4b); `pub_batch_ms` in `raft-obs`, one IOR, bring the
+  number before any budget question (W16.2–3 / D8). Implement those;
+  do not re-ask. Rolled 04:08Z Sep 29 (`54a500da9dc8-dirty`): W22.1
+  (snapshot at 512 MiB of log commands, retain that window,
+  InstallSnapshot only below it), W22.2 (import diff in 1024-key
+  slices), W14.4b (`EFS_PATH_HINT_NEW`), `--meta-storage` defaulting
+  to the first storage root (mdraft not moved), and `pub_p50`/`pub_max`
+  on the raft-obs line. Earlier the same day, through 02:35Z: W17.1,
+  W16.1, W18, W19, W14.4, W15.3, W15.4, W14.2(a)–(b), W20, W21, D1's
+  span publish, D2 step (a). Order now: D2's parallel windows, one IOR
+  for D8's `pub_p50`, then D6's fsync measurement (ask which device
+  before moving mdraft), W8/W10.** `HOST_SNAP_MIN`'s replacement
+  (`EFS_RAFT_SNAP_BYTES`), the retained-window size, and the per-tick
+  slice (`HOST_SNAP_SLICE`, 1024 keys) are internal constants, not knobs.
+  **Pending Sep 29 04:27Z (START-HERE D9–D11, W23; ask, do not
+  implement on your own):** D9 the pump never waits for the compactor
+  (back-pressure = BUSY at `host_propose` on the leader); D10 compact a
+  range by L0 bytes (1/8 of its L1), L0 cap in bytes, split range 0,
+  1 MiB merge reads; D11 closes D6 — the Raft-log fsync is 0.4 ms, the
+  100 ms mode is the compactor's own segment, do not move `mdraft/`.
+  D8 is answered: `pub_p50` 3 ms with a pump-hold tail; no wire change.
 - **EEXIST / `ino_dup` on a unique never-used name is an allocator bug,
   never benign.** Two names on one inode row = duplicate ino (Sep 19–20:
   IO-500 76108 read errors + 27 undeletable files; posix `cafeé`/`aaaa…`).
@@ -65,17 +90,30 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
-  (`bbcbcb5ad779-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
-  Rolled `--all` 02:35Z Sep 29 with `--perf --strace` (RDMA). Group 0
-  leader 0 term 9370 commit==applied 13674381; group 2 leader 1 term
-  2792 commit==applied 12095245. Clients fcstor007–015 remounted
-  02:35Z, all FUSE_OK, perf and strace attached (the recorder starts
-  in the daemon child). IOR `results/io500/20260929-023447-iorperf2`
-  aborted on the first BUSY REPORT (rounds=1, rc=-13, 18–19 s); no
-  bandwidth. Trace files are node-local `/tmp/efs-perf/`
-  (`efsd.data`+`efsd.strace` on 003–006, `fuse.data`+`fuse.strace`
-  on 007–015); recorders were stopped at 02:41Z. Prior roll was
-  00:28Z.
+  (`54a500da9dc8-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
+  Rolled `--all` 04:08Z Sep 29 with `--perf --strace` (RDMA). Group 0
+  leader 1 term 9418 commit==applied 13687019; group 2 leader 1 term
+  2902 commit==applied 12107762.   Clients fcstor007–015 remounted 04:08Z and fcstor003–006's
+  efs-fuse remounted 04:13Z, all FUSE_OK, perf and strace attached
+  and still running (the recorder starts in the daemon child).
+  Recorders stopped 04:27Z (perf children are zombies until
+  `stop_recorder`; `pgrep -x perf` counts them). Files node-local and
+  final: `/tmp/efs-perf/efsd.data` + `efsd.strace` (2.4–3.7 GB) on
+  003–006, `fuse.data` + `fuse.strace` on 003–015. Analysis:
+  `results/measure/20260929-040800-idle-trace/ana`. A user `ecopy`
+  04:15–04:22Z wrote 408K fragments per server; zero `raft-snap: start`
+  (W22.1 holds), 26K `access()` for 408K creates (D7 holds), but the
+  pump blocked in `kv_maybe_flush_locked` on L0 back-pressure for
+  4.1 / 1.7 / 24.2 / 2.7 / 3.6 s on fcstor004 (each = one compaction;
+  range 0 is 1.8 GB per rewrite; 433 compactions / 159 GB in 20 min on
+  a 5.3 GB table) → `apply-sleep` 400 ms → REPORT `rc=-13` and g0
+  9418→9421, g2 2902→2904. That is the remaining election trigger
+  (W23). In tree, not rolled: O(1) `disk_log_new_bytes` (the tick walk
+  was 1–1.25 %), `setvbuf` 1 MiB on segment writes (5.25M 4 KiB
+  `write`s). Prior roll 02:35Z
+  (`bbcbcb5ad779-dirty`) recorded the IOR abort in
+  `results/io500/20260929-023447-iorperf2`; those recorders were
+  stopped at 02:41Z. Prior to that, 00:28Z.
   At 00:39Z group 0 was commit==applied 13665609 (term 9309, leader 0)
   and group 2 12085588 (term 2763, leader 3). fcstor006 lagged that
   roll on a 2.3 GB group-2 snapshot (5796 ms) and was caught up
@@ -384,6 +422,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  the durability boundary; the KV must be durable only before the saved
  applied index advances. No per-apply fsync; no snapshot past the KV's
  durable point.
+- **The compactor's L0 back-pressure wait is on the pump (Sep 29
+  04:27Z trace).** `kv_maybe_flush_locked` waits on `l->cv` while
+  `n_l0 + 16 > 64`; the caller is the apply path under `h->mu`, so a
+  1.8 GB range-0 rewrite (24 s) is a 24 s pump hold: no heartbeats,
+  `host_wait_applied` 400 ms timeouts (`apply-sleep`), REPORT BUSY,
+  client fsync EIO. The compactor's segment `fsync` is the 100 ms mode
+  (its own 200–300 MB of dirty pages); the pump's Raft-log `fsync` is
+  0.4 ms. A snapshot export is no longer in the picture (W22.1).
+  Compaction shape is a design decision (D9/D10) — ask.
 - **L1 compaction is a background thread (W13, Sep 26).** An L0 still
  spans every shard, so each cycle rewrites all of L1 (~760 MiB, ~2 s
  on the live table). The merge uses private segment opens and holds

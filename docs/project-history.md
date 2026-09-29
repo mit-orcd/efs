@@ -25,6 +25,55 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 29 2026 04:08Z — snapshot window, sliced import, first-write hint
+
+Rolled `--all` (`~/efs-runs/rollw22.log`) onto `54a500da9dc8-dirty`,
+RDMA, `EFS_RAFT_OBS=1`, servers and clients fcstor007–015 with
+`--perf --strace`. No suite and no IOR. Group 0 leader 1 term 9418
+commit==applied 13687019; group 2 leader 1 term 2902 commit==applied
+12107762. All nine clients FUSE_OK. Recorders left running.
+
+W22.1: `host_maybe_snapshot` fires when command bytes past `snap_idx`
+reach `EFS_RAFT_SNAP_BYTES` (512 MiB). `raft_group_snap` keeps that
+many command bytes (`log_base`); `send_ae` InstallSnapshots only when
+`next_index` is below the window. A rotated log records `log_base` in
+the SNAP record so replay can put the window back. W22.2: the pump
+applies an import diff 1024 keys at a time and returns BUSY until the
+cursor finishes, so a heartbeat can go out between slices. W14.4b:
+the client's first PUT of a fragment sends `EFS_PATH_HINT_NEW`; the
+server skips the `access()` walk and the writer picks the least-queued
+root. A retry of an unacknowledged PUT sends 0. D6: `efsd
+--meta-storage` exists and defaults to the first `--storage` root;
+`mdraft/` stayed where it was. D8: `raft-obs` prints `pub_p50` and
+`pub_max` for the publish batch's propose-to-apply wait. D2's
+parallel chunk-map windows are still open.
+
+### 04:27Z — the trace, analyzed
+
+Recorders stopped at 04:27Z; per-host analysis in
+`results/measure/20260929-040800-idle-trace/ana` (scripts
+`~/efs-runs/ana4*.sh`). A user `ecopy` ran 04:15–04:22Z (408K fragment
+creates per server; nothing through fcstor007–015's FUSE, whose
+profiles are idle: `recv_poller` 930 `poll`/s, 0.3 % of a core).
+
+Held: zero snapshot exports in 20 minutes (W22.1); 26K `access()` for
+408K creates (D7). Regressed: `disk_log_new_bytes` walked the retained
+log per pump tick, 1–1.25 % of every server — replaced with running
+counters (in tree). Found: the compactor is 48–55 % of two servers,
+433 compactions and 159 GB of `bytes=` in 20 minutes on a 5.3 GB
+table, range 0 at 1.8 GB per rewrite; the pump's apply path blocked in
+`kv_maybe_flush_locked` for 4.1 / 1.7 / 24.2 / 2.7 / 3.6 s on
+fcstor004, each the length of one compaction, giving `apply-sleep`
+400 ms timeouts, `report-split … rc=-13`, and the run's two term
+changes (g0 9418→9421, g2 2902→2904). Per-thread `fsync`: pump
+(Raft log) 0.38–0.40 ms average on 003/004/005; compactor 36–62 ms
+average with 141–407 calls in 90–120 ms — the 100 ms mode is the
+compactor's own segment, so D6's shared-journal premise is closed
+(D11). D8's `pub_p50` is 3.1 ms when the pump is free. Also in tree:
+`setvbuf` 1 MiB on segment writes (5.25M 4 KiB `write`s). W23 (D9:
+pump never waits for the compactor; D10: compact by bytes, split
+range 0) is written up as pending decisions in START-HERE.
+
 ## Sep 29 2026 02:35Z — outbox coalesce, multi-chunk copy, post-and-return; IOR with perf and strace
 
 Rolled `bbcbcb5ad779-dirty` `--all` at 02:35Z with `EFSD_ARGS='--perf

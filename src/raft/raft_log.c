@@ -80,6 +80,15 @@ static uint32_t rec_encode(struct efs_raft_disk *d, uint8_t type,
         off += 8;
         put_u64(p + off, b);
         off += 8;
+        /* Optional retained-window base. 8 bytes, big-endian like the
+         * other fields. Absent (clen 0) is a pre-window record. */
+        if (clen == 8 && cmd) {
+            uint64_t base;
+
+            memcpy(&base, cmd, 8);
+            put_u64(p + off, base);
+            off += 8;
+        }
         break;
     case RAFT_REC_CFG:
         put_u32(p + off, (uint32_t)a);
@@ -294,10 +303,16 @@ static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len)
         if (len - off != 8)
             return EFS_ERR_PROTO;
         return raft_group_truncate(g, get_u64(p + off));
-    case RAFT_REC_SNAP:
-        if (len - off != 16)
+    case RAFT_REC_SNAP: {
+        uint64_t hint = 0;
+
+        if (len - off != 16 && len - off != 24)
             return EFS_ERR_PROTO;
-        return raft_group_snap(g, get_u64(p + off), get_u64(p + off + 8));
+        if (len - off == 24)
+            hint = get_u64(p + off + 16);
+        return raft_group_snap(g, get_u64(p + off), get_u64(p + off + 8),
+                               hint);
+    }
     case RAFT_REC_CFG:
         if (len - off != 8)
             return EFS_ERR_PROTO;
@@ -430,13 +445,14 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
                                   (uint32_t)g->voted_for, NULL, 0);
         if (rc == EFS_OK && g->snap_idx)
             rc = log_write_locked(d, RAFT_REC_SNAP, g->group, g->snap_idx,
-                                  g->snap_term, NULL, 0);
+                                  g->snap_term,
+                                  (const uint8_t *)&g->log_base, 8);
         if (rc == EFS_OK && g->have_cfg)
             rc = log_write_locked(d, RAFT_REC_CFG, g->group, g->cfg_old,
                                   g->cfg_new, NULL, 0);
         for (k = 0; rc == EFS_OK && k < g->n; k++)
             rc = log_write_locked(d, RAFT_REC_ENTRY, g->group,
-                                  g->snap_idx + 1 + k, g->log[k].term,
+                                  g->log_base + 1 + k, g->log[k].term,
                                   g->log[k].cmd, g->log[k].clen);
     }
     if (rc == EFS_OK && fsync(fd) != 0)

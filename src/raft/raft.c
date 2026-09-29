@@ -669,7 +669,7 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     ni = r->next_index[to];
     if (ni == 0)
         ni = 1;
-    if (ni <= r->snap_idx) {
+    if (ni < efs_raft_log_floor(r)) {
         /* Same one-outstanding rule as the entry batch below: a snapshot
          * per propose to a peer in the snap window is a multi-MiB blob per
          * propose. on_snap_rep clears it; the heartbeat retransmits.
@@ -1825,6 +1825,27 @@ uint64_t efs_raft_applied(const struct efs_raft *r)
 uint64_t efs_raft_snap_index(const struct efs_raft *r)
 {
     return r ? r->snap_idx : 0;
+}
+
+uint64_t efs_raft_log_floor(const struct efs_raft *r)
+{
+    if (!r)
+        return 1;
+    if (r->store && r->store->log_floor)
+        return r->store->log_floor(r->store_ctx);
+    return r->snap_idx + 1;
+}
+
+int efs_raft_tracks_log_bytes(const struct efs_raft *r)
+{
+    return r && r->store && r->store->log_new_bytes != NULL;
+}
+
+uint64_t efs_raft_log_new_bytes(const struct efs_raft *r)
+{
+    if (!efs_raft_tracks_log_bytes(r))
+        return 0;
+    return r->store->log_new_bytes(r->store_ctx);
 }
 
 int efs_raft_leader(const struct efs_raft *r)

@@ -100,7 +100,8 @@ static void usage(const char *prog)
             "Usage: %s --node-id <id> --addr <addr> --port <port> "
             "--storage <path>[,path...] [--storage <path> ...] "
             "[--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
-            "[--writers <n>] [--join <host:port>] [--no-persist] [--perf] [--strace]\n"
+            "[--writers <n>] [--join <host:port>] [--no-persist] [--perf] [--strace] "
+            "[--meta-storage <root>]\n"
             "   or: %s --bench <path> --time <seconds> "
             "[--writers <n>] [--direct-io|--no-direct-io]\n"
             "  --storage        1..%d paths (comma and/or repeated).\n"
@@ -111,7 +112,10 @@ static void usage(const char *prog)
             "  --direct-io      O_DIRECT for fragment I/O\n"
             "  --no-direct-io   use the page cache for fragment I/O (default)\n"
             "  --writers <n>    shared writer threads across all storage paths "
-            "(default: nproc-%d, 0 = inline)\n",
+            "(default: nproc-%d, 0 = inline)\n"
+            "  --meta-storage   directory whose mdraft/ holds the Raft log and KV.\n"
+            "                   Default: the first --storage root. Does not move\n"
+            "                   an existing mdraft.\n",
             prog, prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_RESERVED);
 }
 
@@ -362,6 +366,10 @@ int main(int argc, char **argv)
                 usage(argv[0]);
                 return 1;
             }
+        } else if (strcmp(argv[i], "--meta-storage") == 0 && i + 1 < argc) {
+            strncpy(server.meta_storage, argv[++i],
+                    sizeof(server.meta_storage) - 1);
+            server.meta_storage[sizeof(server.meta_storage) - 1] = '\0';
         } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
             bench_path = argv[++i];
         } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
@@ -460,6 +468,12 @@ int main(int argc, char **argv)
         mkdir_p(subdir);
         snprintf(subdir, sizeof(subdir), "%s/log", server.storage_paths[pi]);
         mkdir_p(subdir);
+    }
+    if (server.meta_storage[0] &&
+        mkdir_p(server.meta_storage) != 0 && errno != EEXIST) {
+        fprintf(stderr, "mkdir meta-storage %s: %s\n", server.meta_storage,
+                strerror(errno));
+        return 1;
     }
 
     server.nodes[0].id = server.id;

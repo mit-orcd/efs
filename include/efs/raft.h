@@ -111,7 +111,19 @@ struct efs_raft_store {
      * still holding the shared log fsync. */
     int (*batch_begin)(void *ctx);
     int (*batch_end)(void *ctx);
+    /* Optional. First index still in the log. Absent means snap_idx+1,
+     * the point where a snapshot has dropped every earlier entry.
+     * A retained window reports an index at or below snap_idx. */
+    uint64_t (*log_floor)(void *ctx);
+    /* Optional. Bytes of log commands with index > snap_idx. The host
+     * snapshots when this reaches EFS_RAFT_SNAP_BYTES. */
+    uint64_t (*log_new_bytes)(void *ctx);
 };
+
+/* Snapshot once the log has grown by this many command bytes, and keep
+ * that much of the log afterwards so a follower inside the window
+ * catches up from AppendEntries. Internal: not a knob. */
+#define EFS_RAFT_SNAP_BYTES (512ull << 20)
 
 typedef int (*efs_raft_send_fn)(void *net, const struct efs_raft_msg *msg);
 typedef int (*efs_raft_apply_fn)(void *app, uint64_t index, uint64_t term,
@@ -204,6 +216,12 @@ uint64_t efs_raft_term(const struct efs_raft *r);
 uint64_t efs_raft_commit(const struct efs_raft *r);
 uint64_t efs_raft_applied(const struct efs_raft *r);
 uint64_t efs_raft_snap_index(const struct efs_raft *r);
+/* First index the log can still serve. snap_idx+1 when the store keeps
+ * no window. InstallSnapshot is for a peer below this. */
+uint64_t efs_raft_log_floor(const struct efs_raft *r);
+/* 1 when the store reports log_new_bytes. */
+int efs_raft_tracks_log_bytes(const struct efs_raft *r);
+uint64_t efs_raft_log_new_bytes(const struct efs_raft *r);
 int efs_raft_leader(const struct efs_raft *r); /* -1 if unknown */
 
 /* Committed voting set (C_old). During joint this is still C_old. */

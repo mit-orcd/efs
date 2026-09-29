@@ -396,9 +396,12 @@ send_reply:
                         };
                         efs_store_nvme_bind(&st, &nctx, g_server, ex);
                         efs_tls_path_used = -1;
-                        efs_tls_path_hint = (req->path_hint > 0)
-                                                ? (int)req->path_hint - 1
-                                                : -1;
+                        if (req->path_hint == EFS_PATH_HINT_NEW)
+                            efs_tls_path_hint = EFS_PATH_HINT_SKIP;
+                        else if (req->path_hint > 0)
+                            efs_tls_path_hint = (int)req->path_hint - 1;
+                        else
+                            efs_tls_path_hint = -1;
                         rc = efs_store_put(&st, &fid, data, expect,
                                            req->checksum);
                         efs_tls_path_hint = -1;

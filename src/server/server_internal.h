@@ -61,6 +61,10 @@ struct efsd_server {
     char storage_paths[EFS_MAX_STORAGE_PATHS][EFS_MAX_PATH];
     uint32_t storage_path_count;
     char storage_path[EFS_MAX_PATH];
+    /* D6. Empty means mdraft lives under storage_path (the first
+     * --storage root). --meta-storage names a different root; nothing
+     * moves an existing mdraft on its own. */
+    char meta_storage[EFS_MAX_PATH];
     uint64_t quota; /* local storage quota in bytes; 0 = unlimited */
 
     struct efs_node nodes[EFS_MAX_NODES];
@@ -176,8 +180,10 @@ extern __thread int efs_tls_write_known_zero;
  * (-1 = unset; store path helpers fall back to probing / round-robin). */
 extern __thread int efs_tls_write_root;
 
-/* W14.4. path_hint is the client's guess (-1 = none). path_used is the
- * root the PUT landed on (-1 until the write picks one). */
+/* W14.4. path_hint is the client's guess (-1 = none, -2 = first write
+ * of this generation: do not access(), create on the least-queued root).
+ * path_used is the root the PUT landed on (-1 until the write picks one). */
+#define EFS_PATH_HINT_SKIP (-2)
 extern __thread int efs_tls_path_hint;
 extern __thread int efs_tls_path_used;
 

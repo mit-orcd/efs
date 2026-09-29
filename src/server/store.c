@@ -356,6 +356,12 @@ int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
     uint32_t ri;
     int hint = efs_tls_path_hint;
 
+    /* First write of this fragment generation. The name cannot collide,
+     * so the access() walk is pure overhead. The writer picks the
+     * least-queued root when this returns "not found". */
+    if (hint == EFS_PATH_HINT_SKIP)
+        return -1;
+
     /* Do not fall back to gen=0 when the caller asked for a candidate.
      * A per-fragment leftover hit mixed with gen-N siblings decodes as
      * EFS_ERR_DECODE (W1 two-client RMW).

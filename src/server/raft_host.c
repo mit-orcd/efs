@@ -227,6 +227,8 @@ struct host_group {
      * newer snapshot can still discard it without writing the KV. */
     struct efs_kv_item *import_diff;
     uint32_t import_ni;
+    uint32_t import_at;      /* keys already batched; slice cursor */
+    int import_applying;     /* pump holds the diff; cancel must not free */
     uint8_t *import_hold_a;
     uint8_t *import_hold_b;
     uint64_t import_retry_us;
@@ -405,6 +407,10 @@ struct efs_raft_host {
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
+    /* Last 64 publish-batch waits (propose → apply), microseconds. */
+    uint64_t obs_pub_ring[64];
+    uint64_t obs_pub_n;
+    uint64_t obs_pub_max_us;
     uint64_t obs_pump_hold_max_us;
     uint64_t obs_last_dump_ms;
     /* EFS_RAFT_OBS: per-cycle phase maxima (us) + applies in the worst
@@ -2101,6 +2107,11 @@ static void host_snap_close(void *handle)
 #define SNAP_IMP_RUN    2
 #define SNAP_IMP_DONE   3
 #define SNAP_IMP_FAIL   4
+#define SNAP_IMP_APPLY  5
+/* Keys of an import diff the pump writes per cycle, then returns so
+ * the same cycle can answer AppendEntries. A fixed count, not a knob:
+ * one tick is 5 ms and a point put is well under that at this size. */
+#define HOST_SNAP_SLICE 1024
 
 static void snap_import_free_diff(struct host_group *g)
 {
@@ -2111,6 +2122,7 @@ static void snap_import_free_diff(struct host_group *g)
     g->import_hold_a = NULL;
     g->import_hold_b = NULL;
     g->import_ni = 0;
+    g->import_at = 0;
 }
 
 /* Drop a queued import, or invalidate one the GC thread is already
@@ -2125,7 +2137,9 @@ static void snap_import_cancel(struct efs_raft_host *h, struct host_group *g)
     st = g->import_state;
     g->import_gen++;
     g->import_state = SNAP_IMP_IDLE;
-    if (st != SNAP_IMP_RUN)
+    /* RUN: the GC thread owns the buffers. APPLY: the pump is mid-slice
+     * and frees them when it notices the state left APPLY. */
+    if (st != SNAP_IMP_RUN && !g->import_applying)
         snap_import_free_diff(g);
     if (st == SNAP_IMP_QUEUED || st == SNAP_IMP_DONE || st == SNAP_IMP_FAIL)
         __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
@@ -2153,26 +2167,50 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
     }
     if (st == SNAP_IMP_DONE) {
         struct efs_kv_item *diff = g->import_diff;
-        uint8_t *ha = g->import_hold_a, *hb = g->import_hold_b;
+        uint32_t at = g->import_at;
         uint32_t ni = g->import_ni;
+        uint32_t n;
 
-        g->import_diff = NULL;
-        g->import_hold_a = NULL;
-        g->import_hold_b = NULL;
-        g->import_ni = 0;
+        n = (at < ni) ? ni - at : 0;
+        if (n > HOST_SNAP_SLICE)
+            n = HOST_SNAP_SLICE;
+        g->import_applying = 1;
+        g->import_state = SNAP_IMP_APPLY;
+        pthread_mutex_unlock(&h->snap_mu);
+        /* One slice, then back to the pump so heartbeats go out before
+         * the leader retries this chunk. The ack (OK) waits until the
+         * cursor reaches ni; until then the retry gets BUSY. */
+        __atomic_store_n(&h->snap_batch, 1, __ATOMIC_RELEASE);
+        *rc = n ? efs_kv_batch(h->kv, diff + at, n) : EFS_OK;
+        __atomic_store_n(&h->snap_batch, 0, __ATOMIC_RELEASE);
+        pthread_mutex_lock(&h->snap_mu);
+        g->import_applying = 0;
+        if (g->import_state != SNAP_IMP_APPLY) {
+            snap_import_free_diff(g);
+            __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
+            pthread_mutex_unlock(&h->snap_mu);
+            *rc = EFS_ERR_BUSY;
+            return 1;
+        }
+        if (*rc != EFS_OK) {
+            g->import_state = SNAP_IMP_DONE;
+            pthread_mutex_unlock(&h->snap_mu);
+            return 1;
+        }
+        g->import_at = at + n;
+        if (g->import_at < g->import_ni) {
+            g->import_state = SNAP_IMP_DONE;
+            pthread_mutex_unlock(&h->snap_mu);
+            *rc = EFS_ERR_BUSY;
+            return 1;
+        }
         g->part_off = 0;
         g->import_state = SNAP_IMP_IDLE;
+        snap_import_free_diff(g);
         pthread_mutex_unlock(&h->snap_mu);
         unlink(g->part_path);
-        /* Same call as the ack, so a newer snapshot cannot land between
-         * the write and snap_installed. */
-        __atomic_store_n(&h->snap_batch, 1, __ATOMIC_RELEASE);
-        *rc = ni ? efs_kv_batch(h->kv, diff, ni) : EFS_OK;
-        __atomic_store_n(&h->snap_batch, 0, __ATOMIC_RELEASE);
         __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
-        free(diff);
-        free(ha);
-        free(hb);
+        *rc = EFS_OK;
         return 1;
     }
     *rc = g->import_rc ? g->import_rc : EFS_ERR_IO;
@@ -2265,8 +2303,16 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
         return EFS_OK;
     applied = efs_raft_applied(h->g[gi].r);
     snap = efs_raft_snap_index(h->g[gi].r);
-    if (applied < snap + HOST_SNAP_MIN)
+    /* Byte budget, not an entry count. HOST_SNAP_MIN (256) exported the
+     * whole KV every few seconds. A store that reports log bytes
+     * snapshots once per EFS_RAFT_SNAP_BYTES of commands past snap_idx
+     * and keeps that window for AppendEntries. */
+    if (efs_raft_tracks_log_bytes(h->g[gi].r)) {
+        if (efs_raft_log_new_bytes(h->g[gi].r) < EFS_RAFT_SNAP_BYTES)
+            return EFS_OK;
+    } else if (applied < snap + HOST_SNAP_MIN) {
         return EFS_OK;
+    }
     /* efs_raft_snapshot → host_snap_open flushes again and pins. A BUSY
      * open still records the snap point; the file follows on the GC thread. */
     return efs_raft_snapshot(h->g[gi].r);
@@ -4343,7 +4389,7 @@ static void drain_inbox(struct efs_raft_host *h)
 static void applied_path(struct efs_raft_host *h, uint8_t group,
                          char *path, size_t cap)
 {
-    snprintf(path, cap, "%s/mdraft/applied.%u", h->s->storage_path, group);
+    snprintf(path, cap, "%s/applied.%u", h->mdraft, group);
 }
 
 /* Pump thread only, h->mu NOT required: idx was read under h->mu after
@@ -4478,13 +4524,38 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)(tx->st_get_max_us / 1000ull));
     }
     if (any || h->obs_wait_timeouts || h->obs_pump_hold_max_us ||
-        h->obs_arc_miss || h->obs_arc_term_miss || h->obs_opid_replay) {
+        h->obs_arc_miss || h->obs_arc_term_miss || h->obs_opid_replay ||
+        __atomic_load_n(&h->obs_pub_n, __ATOMIC_RELAXED)) {
+        uint64_t pub_n = __atomic_load_n(&h->obs_pub_n, __ATOMIC_RELAXED);
+        uint64_t pub_p50 = 0;
+        uint32_t pc, pi, pj;
+        uint64_t psamp[64];
+
+        if (pub_n > 0) {
+            pc = pub_n < 64 ? (uint32_t)pub_n : 64;
+            for (pi = 0; pi < pc; pi++)
+                psamp[pi] = __atomic_load_n(
+                    &h->obs_pub_ring[(pub_n - pc + pi) % 64],
+                    __ATOMIC_RELAXED);
+            for (pi = 1; pi < pc; pi++) {
+                uint64_t v = psamp[pi];
+
+                pj = pi;
+                while (pj > 0 && psamp[pj - 1] > v) {
+                    psamp[pj] = psamp[pj - 1];
+                    pj--;
+                }
+                psamp[pj] = v;
+            }
+            pub_p50 = psamp[pc / 2];
+        }
         fprintf(stderr,
                 "raft-obs: wait_timeouts=%llu pump_hold_max=%lluus "
                 "lock_wait_max=%lluus drain_max=%lluus tick_max=%lluus "
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
                 "arc_miss=%llu arc_term_miss=%llu opid_replay=%llu "
-                "fin_q=%llu fin_done=%llu fin_drop=%llu fin_full=%llu\n",
+                "fin_q=%llu fin_done=%llu fin_drop=%llu fin_full=%llu "
+                "pub_p50=%lluus pub_max=%lluus\n",
                 (unsigned long long)h->obs_wait_timeouts,
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
@@ -4500,7 +4571,10 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)h->fin_queued,
                 (unsigned long long)h->fin_done,
                 (unsigned long long)h->fin_dropped,
-                (unsigned long long)h->fin_full);
+                (unsigned long long)h->fin_full,
+                (unsigned long long)pub_p50,
+                (unsigned long long)__atomic_exchange_n(&h->obs_pub_max_us, 0,
+                                                       __ATOMIC_RELAXED));
         h->obs_pump_hold_max_us = 0;
         h->obs_wait_max_us = 0;
         h->obs_drain_max_us = 0;
@@ -5860,6 +5934,7 @@ static void host_snap_import_pass(struct efs_raft_host *h)
                     snap_import_free_diff(&h->g[gi]);
                     h->g[gi].import_diff = diff;
                     h->g[gi].import_ni = ni;
+                    h->g[gi].import_at = 0;
                     h->g[gi].import_hold_a = ha;
                     h->g[gi].import_hold_b = hb;
                     h->g[gi].import_rc = EFS_OK;
@@ -6001,7 +6076,8 @@ int server_raft_host_start(struct efsd_server *s)
     }
     h->pump_efd = eventfd(0, EFD_NONBLOCK);
 
-    snprintf(dir, sizeof(dir), "%s/mdraft", s->storage_path);
+    snprintf(dir, sizeof(dir), "%s/mdraft",
+             s->meta_storage[0] ? s->meta_storage : s->storage_path);
     snprintf(h->mdraft, sizeof(h->mdraft), "%s", dir);
     if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
         fprintf(stderr, "raft-host: mkdir %s: %s\n", dir, strerror(errno));
@@ -10600,6 +10676,7 @@ struct host_pub_batch {
     uint32_t len;
     uint8_t *buf;
     uint64_t last_idx;
+    uint64_t t0; /* us, set when the last entry of this batch was proposed */
     uint64_t *idxs;
     uint64_t *terms; /* per idxs[i]; 0 = forwarded, index-only match */
     uint32_t nidx, cidx;
@@ -10628,6 +10705,7 @@ static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch
 
     if (!b->buf || !b->len)
         return EFS_OK;
+    b->t0 = now_us_();
     rc = host_propose(h, b->group, b->buf, b->len, &idx, &term, hint);
     b->len = 0;
     if (rc != EFS_OK)
@@ -10742,6 +10820,19 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
             saw_stale = 1;
         if (rc == EFS_OK && saw_stale)
             rc = EFS_ERR_STALE;
+    }
+    if (idx && b->t0) {
+        uint64_t dt = now_us_() - b->t0;
+        uint64_t n = __atomic_fetch_add(&h->obs_pub_n, 1, __ATOMIC_RELAXED);
+        uint64_t mx;
+
+        __atomic_store_n(&h->obs_pub_ring[n % 64], dt, __ATOMIC_RELAXED);
+        mx = __atomic_load_n(&h->obs_pub_max_us, __ATOMIC_RELAXED);
+        while (dt > mx &&
+               !__atomic_compare_exchange_n(&h->obs_pub_max_us, &mx, dt,
+                                            0, __ATOMIC_RELAXED,
+                                            __ATOMIC_RELAXED))
+            ;
     }
     host_pub_batch_reset(b);
     return rc;

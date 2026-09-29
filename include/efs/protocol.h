@@ -290,12 +290,16 @@ struct efs_msg_put_chunk {
     uint32_t data_len;
     /* Candidate identity. 0 = write the legacy `{ci}.{fi}` name. */
     uint64_t chunk_generation;
-    /* W14.4: 0 = no hint. Else the storage-root index from the previous
-     * PUT of this (ino, chunk, fragment), plus one. The server access()es
-     * that root first and walks the others only on a miss. */
+    /* W14.4: 0 = no hint (probe every root). Else the storage-root index
+     * from the previous PUT of this (ino, chunk, fragment), plus one.
+     * EFS_PATH_HINT_NEW means this generation has never been PUT: the
+     * server creates on the least-queued root and does not access().
+     * A retry of a failed reply sends 0, not NEW. */
     uint32_t path_hint;
     /* uint8_t data[data_len]; */
 };
+
+#define EFS_PATH_HINT_NEW    0xffffffffu
 
 #define EFS_PUT_CHUNK_OK     0
 #define EFS_PUT_CHUNK_ERROR  1

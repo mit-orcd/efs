@@ -1120,6 +1120,7 @@ struct path_hint_slot {
     uint8_t fi;
     uint8_t path;
     uint8_t valid;
+    uint8_t tried; /* sent once with no reply yet; a retry probes */
 };
 static struct path_hint_slot g_path_hint[PATH_HINT_N];
 
@@ -1136,10 +1137,22 @@ static uint32_t path_hint_get(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
 {
     struct path_hint_slot *e =
         &g_path_hint[path_hint_index(nid, ino, ci, fi)];
-    if (e->valid && e->nid == nid && e->ino == ino && e->ci == ci &&
-        e->fi == fi)
-        return (uint32_t)e->path + 1u;
-    return 0;
+    if (e->nid == nid && e->ino == ino && e->ci == ci && e->fi == fi &&
+        (e->valid || e->tried)) {
+        if (e->valid)
+            return (uint32_t)e->path + 1u;
+        return 0; /* retry of a PUT that has not been acknowledged */
+    }
+    /* First send of this (nid, ino, ci, fi). The server skips the
+     * probe and creates on its least-queued root. */
+    e->nid = nid;
+    e->ino = ino;
+    e->ci = ci;
+    e->fi = fi;
+    e->path = 0xff;
+    e->valid = 0;
+    e->tried = 1;
+    return EFS_PATH_HINT_NEW;
 }
 
 static void path_hint_put(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
