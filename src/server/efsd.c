@@ -100,7 +100,7 @@ static void usage(const char *prog)
             "Usage: %s --node-id <id> --addr <addr> --port <port> "
             "--storage <path>[,path...] [--storage <path> ...] "
             "[--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
-            "[--writers <n>] [--join <host:port>] [--no-persist] [--perf]\n"
+            "[--writers <n>] [--join <host:port>] [--no-persist] [--perf] [--strace]\n"
             "   or: %s --bench <path> --time <seconds> "
             "[--writers <n>] [--direct-io|--no-direct-io]\n"
             "  --storage        1..%d paths (comma and/or repeated).\n"
@@ -194,20 +194,78 @@ static pid_t start_perf_recorder(pid_t target, const char *perf_path)
     return pid;
 }
 
-static void stop_perf_recorder(void)
+static pid_t g_strace_pid = -1;
+
+/* --strace: `strace -f -tt -T -o <path> -p <pid>`. ptrace stops every
+ * syscall of every thread, so this is for one node and a wall question
+ * (where did a REPORT's finish_ms go), never for a bandwidth number.
+ * Needs kernel.yama.ptrace_scope=0 (runtime on the test hosts).
+ * EFS_STRACE_EXPR narrows it, e.g. "trace=fsync,fdatasync,pwrite64,futex"
+ * (passed as -e). */
+static pid_t start_strace_recorder(pid_t target, const char *path)
 {
-    if (g_perf_pid > 0) {
-        kill(g_perf_pid, SIGTERM);
-        /* Wait (up to ~5s) for perf to finalize and write perf.data. */
+    char log_dir[8192];
+    strncpy(log_dir, path, sizeof(log_dir) - 1);
+    log_dir[sizeof(log_dir) - 1] = '\0';
+    char *slash = strrchr(log_dir, '/');
+    if (slash) {
+        *slash = '\0';
+        mkdir_p(log_dir);
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork strace");
+        return -1;
+    }
+    if (pid == 0) {
+        char pid_str[32];
+        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
+        const char *expr = getenv("EFS_STRACE_EXPR");
+        const char *av[16];
+        int n = 0;
+        av[n++] = "strace";
+        av[n++] = "-f";
+        av[n++] = "-tt";
+        av[n++] = "-T";
+        av[n++] = "-qq";
+        av[n++] = "-o";
+        av[n++] = path;
+        av[n++] = "-p";
+        av[n++] = pid_str;
+        if (expr && *expr) {
+            av[n++] = "-e";
+            av[n++] = expr;
+        }
+        av[n] = NULL;
+        execvp("strace", (char *const *)av);
+        perror("exec strace");
+        _exit(1);
+    }
+    return pid;
+}
+
+/* SIGINT/SIGTERM makes perf finalize perf.data and strace detach; wait
+ * up to ~5 s, then SIGKILL. */
+static void stop_recorder(pid_t *pidp)
+{
+    if (*pidp > 0) {
+        kill(*pidp, SIGTERM);
         for (int i = 0; i < 50; i++) {
-            if (waitpid(g_perf_pid, NULL, WNOHANG) == g_perf_pid)
+            if (waitpid(*pidp, NULL, WNOHANG) == *pidp)
                 break;
             usleep(100000);
         }
-        kill(g_perf_pid, SIGKILL);
-        waitpid(g_perf_pid, NULL, 0);
-        g_perf_pid = -1;
+        kill(*pidp, SIGKILL);
+        waitpid(*pidp, NULL, 0);
+        *pidp = -1;
     }
+}
+
+static void stop_perf_recorder(void)
+{
+    stop_recorder(&g_strace_pid);
+    stop_recorder(&g_perf_pid);
 }
 
 static int parse_host_port(const char *str, char *host, size_t host_len, uint16_t *port)
@@ -339,6 +397,8 @@ int main(int argc, char **argv)
             server.persist_nodes = 0;
         } else if (strcmp(argv[i], "--perf") == 0) {
             server.perf = 1;
+        } else if (strcmp(argv[i], "--strace") == 0) {
+            server.strace = 1;
         } else if (strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
             return 0;
@@ -376,6 +436,15 @@ int main(int argc, char **argv)
             snprintf(perf_path, sizeof(perf_path), "%s", pp);
         else
             snprintf(perf_path, sizeof(perf_path), "%s/log/perf.data", server.storage_path);
+    }
+    char strace_path[8192];
+    strace_path[0] = '\0';
+    if (server.strace) {
+        const char *sp = getenv("EFS_STRACE_PATH");
+        if (sp && *sp)
+            snprintf(strace_path, sizeof(strace_path), "%s", sp);
+        else
+            snprintf(strace_path, sizeof(strace_path), "%s/log/strace.txt", server.storage_path);
     }
 
     for (uint32_t pi = 0; pi < server.storage_path_count; pi++) {
@@ -503,6 +572,13 @@ int main(int argc, char **argv)
         if (g_perf_pid < 0) {
             fprintf(stderr, "Warning: could not start perf recorder; continuing without profiling\n");
         }
+    }
+    if (server.strace) {
+        g_strace_pid = start_strace_recorder(getpid(), strace_path);
+        if (g_strace_pid < 0)
+            fprintf(stderr, "Warning: could not start strace; continuing without it\n");
+        else
+            fprintf(stderr, "efsd strace pid=%d -> %s\n", (int)g_strace_pid, strace_path);
     }
 
     while (server.running) {

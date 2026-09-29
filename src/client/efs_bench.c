@@ -261,6 +261,7 @@ static int put_chunk_fanout(efs_ino_t ino, uint32_t chunk_index,
         req->chunk_index = chunk_index;
         req->fragment_index = (uint32_t)i;
         req->data_len = bench_frag_len;
+        req->path_hint = 0;
         memcpy(req->checksum, checksum, EFS_HASH_SIZE);
         if (zero_frag)
             memcpy((uint8_t *)req + sizeof(*req), zero_frag, bench_frag_len);

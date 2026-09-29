@@ -42,7 +42,10 @@
 #include <unistd.h>
 
 #define EFS_RDMA_NRECV_DEFAULT 4 /* posted recv buffers per QP */
-#define EFS_RDMA_NSEND         2 /* pool send buffers per QP */
+/* One buffer per in-flight send on this QP. The write pipeline posts
+ * EFS_WRITE_PIPELINE chunks; with 2 buffers the third send spun in
+ * send_buf_pick (W14 step 5 / W15 step 4). */
+#define EFS_RDMA_NSEND         EFS_WRITE_PIPELINE
 #define EFS_RDMA_SPIN_US       200
 /* Floor for the adaptive recv-spin budget: low enough that idle/sparse conns
  * don't burn CPU, high enough to still catch a reply within ~2x the ~5 us HW
@@ -428,6 +431,7 @@ struct efs_rdma_conn {
     uint8_t **recv_bufs;
     uint8_t **send_bufs;
     int send_busy[EFS_RDMA_NSEND];
+    int64_t send_posted_us[EFS_RDMA_NSEND]; /* when send_busy was set */
     uint64_t n_posted; /* sends posted / send CQEs reaped on this conn; a */
     uint64_t n_reaped; /* reaped==posted at a "no CQE" timeout means the   */
                        /* completion arrived and the flag was missed.      */
@@ -685,7 +689,7 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
         goto fail;
     /* Send completions are reaped on every send/recv op; the send CQ only
      * ever holds a handful of unreaped entries. */
-    rc->send_cq = ibv_create_cq(dev->ctx, 64, NULL, NULL, 0);
+    rc->send_cq = ibv_create_cq(dev->ctx, EFS_RDMA_NSEND * 2, NULL, NULL, 0);
     if (!rc->send_cq)
         goto fail;
     cq_unmoderate(rc->send_cq);
@@ -985,13 +989,44 @@ static int reap_sends(struct efs_rdma_conn *rc)
                 return EFS_ERR_NET;
             }
             rc->n_reaped++;
-            if ((wc[i].wr_id & 0xF000u) == SEND_WRID_POOL)
-                rc->send_busy[wc[i].wr_id & 0xFF] = 0;
+            if ((wc[i].wr_id & 0xF000u) == SEND_WRID_POOL) {
+                int si = (int)(wc[i].wr_id & 0xFF);
+                if (si >= 0 && si < EFS_RDMA_NSEND)
+                    rc->send_busy[si] = 0;
+            }
         }
         if (n < 8)
             break;
     }
     return EFS_OK;
+}
+
+/* A posted send with no CQE after EFS_RDMA_SEND_WAIT_US is a dead QP.
+ * The reply wait uses this so a failed SEND becomes EIO there, without
+ * efs_rdma_send_frame waiting for its own CQE. */
+static int sends_overdue(struct efs_rdma_conn *rc)
+{
+    int i;
+    int64_t now = now_us();
+
+    for (i = 0; i < EFS_RDMA_NSEND; i++) {
+        if (!rc->send_busy[i] || rc->send_posted_us[i] == 0)
+            continue;
+        if (now - rc->send_posted_us[i] > EFS_RDMA_SEND_WAIT_US)
+            return 1;
+    }
+    return 0;
+}
+
+static int reap_or_dead(struct efs_rdma_conn *rc)
+{
+    if (reap_sends(rc) != 0)
+        return -1;
+    if (sends_overdue(rc)) {
+        rc->broken = 1;
+        return -1;
+    }
+    return 0;
 }
 
 /* Round-robin a pool send buffer, waiting (spin) if its previous send is
@@ -1030,17 +1065,6 @@ static int send_buf_pick(struct efs_rdma_conn *rc)
  * retried forever), which is indistinguishable from every other failure
  * without this. Three of the four failure paths below used to return
  * EFS_ERR_NET silently, so a looping client printed nothing at all. */
-static int qp_state_now(struct efs_rdma_conn *rc)
-{
-    struct ibv_qp_attr a;
-    struct ibv_qp_init_attr ia;
-    memset(&a, 0, sizeof(a));
-    memset(&ia, 0, sizeof(ia));
-    if (!rc->qp || ibv_query_qp(rc->qp, &a, IBV_QP_STATE, &ia) != 0)
-        return -1;
-    return (int)a.qp_state;
-}
-
 /* Read one IB port counter. Used to attribute a send failure to "the HCA
  * transmitted and got no ack" vs "the WR never went out at all", which no
  * amount of CQ inspection can distinguish. */
@@ -1251,59 +1275,13 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
         return EFS_ERR_NET;
     }
     rc->send_busy[idx] = 1;
-    /* Wait for the send CQE. Skipping this for non-INLINE left CREATE
-     * (name[256] is already > INLINE_MAX) fire-and-forget: a failed first
-     * SEND after upgrade hung the FUSE worker in recv instead of EIO. */
-    int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
-    int64_t spin_end = now_us() + 200;
-    while (rc->send_busy[idx]) {
-        if (reap_sends(rc) != 0) {
-            send_fail_dump2(rc, type, "reap: send CQE reported error", &ident);
-            return EFS_ERR_NET;
-        }
-        if (!rc->send_busy[idx])
-            break;
-        if (now_us() > end) {
-            rc->broken = 1;
-            send_fail_dump2(rc, type, "WAIT TIMEOUT: no send CQE",
-                            &ident);
-            if (rdma_first_log()) {
-                /* Keep polling past the deadline: whether the CQE is merely
-                 * LATE (and with what status) or never arrives at all is the
-                 * difference between "budget too short" and "completion
-                 * lost", and picks the fix. */
-                int64_t e2 = now_us() + 8000000;
-                struct ibv_wc w;
-                while (now_us() < e2) {
-                    int n = ibv_poll_cq(rc->send_cq, 1, &w);
-                    if (n > 0) {
-                        fprintf(stderr,
-                                "rdma-first: LATE send CQE after %lldus "
-                                "status=%d (%s) wr_id=0x%llx\n",
-                                (long long)(now_us() - end +
-                                            EFS_RDMA_SEND_WAIT_US),
-                                (int)w.status, ibv_wc_status_str(w.status),
-                                (unsigned long long)w.wr_id);
-                        break;
-                    }
-                    usleep(2000);
-                }
-                if (now_us() >= e2)
-                    fprintf(stderr, "rdma-first: NO send CQE after +8s "
-                                    "qp_state=%d\n", qp_state_now(rc));
-            }
-            return EFS_ERR_NET;
-        }
-        if (now_us() >= spin_end)
-            sched_yield();
-    }
-    if (rdma_first_log()) {
-        static int ndone;
-        int n = __sync_fetch_and_add(&ndone, 1);
-        if (n < 6)
-            fprintf(stderr, "rdma-first: send_frame type=%u rc=0 busy_cleared\n",
-                    type);
-    }
+    rc->send_posted_us[idx] = now_us();
+    /* W15.4: do not wait for this send's CQE. send_buf_pick reaps on the
+     * next send; the reply wait (efs_rdma_recv_wait / reply_ready*) reaps
+     * before it blocks and turns a send-CQE error, or a send still busy
+     * after EFS_RDMA_SEND_WAIT_US, into EFS_ERR_NET. Waiting here was one
+     * HCA round trip per fragment. */
+    (void)ident;
     return EFS_OK;
 }
 
@@ -1338,6 +1316,7 @@ int efs_rdma_send_commit(struct efs_rdma_conn *rc, void *buf, uint8_t type,
                   0) != 0)
         return EFS_ERR_NET;
     rc->send_busy[idx] = 1;
+    rc->send_posted_us[idx] = now_us();
     return EFS_OK;
 }
 
@@ -1389,6 +1368,8 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
             return EFS_OK;
         }
         if (rc->broken)
+            return EFS_ERR_NET;
+        if (reap_or_dead(rc) != 0)
             return EFS_ERR_NET;
         pend_drain_efd(rc);
         if (pend_pop(rc))
@@ -1500,7 +1481,7 @@ int efs_rdma_recv_repost(struct efs_rdma_conn *rc)
  * both client and server CPU under load is gone from the wait path. */
 int efs_rdma_reply_ready(struct efs_rdma_conn *rc)
 {
-    if (rc->broken)
+    if (rc->broken || reap_or_dead(rc) != 0)
         return -1;
     if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
         return 1;
@@ -1527,7 +1508,7 @@ int efs_rdma_reply_ready(struct efs_rdma_conn *rc)
 
 int efs_rdma_reply_ready_quick(struct efs_rdma_conn *rc)
 {
-    if (rc->broken)
+    if (rc->broken || reap_or_dead(rc) != 0)
         return -1;
     return __atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail;
 }
@@ -1541,7 +1522,7 @@ int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us)
 {
     uint32_t pauses, n = 16;
 
-    if (rc->broken)
+    if (rc->broken || reap_or_dead(rc) != 0)
         return -1;
     if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
         return 1;

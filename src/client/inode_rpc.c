@@ -1013,6 +1013,25 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
     return EFS_OK;
 }
 
+static __thread uint64_t tl_rpc_deadline_ms;
+
+void efs_client_rpc_set_deadline_ms(uint64_t mono_ms)
+{
+    tl_rpc_deadline_ms = mono_ms;
+}
+
+static int rpc_past_deadline(void)
+{
+    struct timespec ts;
+    uint64_t now;
+
+    if (!tl_rpc_deadline_ms)
+        return 0;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    now = (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
+    return now >= tl_rpc_deadline_ms;
+}
+
 /* rpc_send_recv_shard with the dual-host picker (raft mode reports). Same
  * NOT_PRIMARY hint-following; BUSY backs off and retries. */
 static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
@@ -1025,7 +1044,10 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
     for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
-        unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
+        unsigned long long t0;
+        if (rpc_past_deadline())
+            return saw_busy ? EFS_ERR_BUSY : EFS_ERR_IO;
+        t0 = prof ? rpc_prof_now_us() : 0;
         if (target != 0) {
             conn = efs_client_conn_get(target);
             nid = target;

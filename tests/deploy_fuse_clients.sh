@@ -12,7 +12,7 @@ set -u
 S="$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh"
 [ $# -gt 0 ] || { echo "usage: $0 <host>..." >&2; exit 2; }
 tmp=$(mktemp -d)
-fwd="EFS_NO_BUILD=${EFS_NO_BUILD:-0} EFS_FUSE_ENV=$(printf %q "${EFS_FUSE_ENV:-}") EFS_TRANSPORT=${EFS_TRANSPORT:-tcp}"
+fwd="EFS_NO_BUILD=${EFS_NO_BUILD:-0} EFS_FUSE_ENV=$(printf %q "${EFS_FUSE_ENV:-}") EFS_FUSE_ARGS=$(printf %q "${EFS_FUSE_ARGS:-}") EFS_STRACE_EXPR=$(printf %q "${EFS_STRACE_EXPR:-}") EFS_TRANSPORT=${EFS_TRANSPORT:-tcp}"
 for h in "$@"; do
     ( EFS_SSH_TIMEOUT=300 "$S" "$h.ib" "$fwd bash \$HOME/git/efs/tests/fuse_client_remount.sh" \
         2>&1 | grep -v '^Identity added' > "$tmp/$h" ) &

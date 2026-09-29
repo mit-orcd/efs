@@ -25,6 +25,98 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 29 2026 02:35Z — outbox coalesce, multi-chunk copy, post-and-return; IOR with perf and strace
+
+Rolled `bbcbcb5ad779-dirty` `--all` at 02:35Z with `EFSD_ARGS='--perf
+--strace'` and remounted fcstor007–015 the same way (`EFS_TRANSPORT=rdma`).
+Three items that had a fixed design went in with that roll: W14.2 (a)–(b)
+(AE reply and heartbeat coalesce in place; votes are not evicted; the
+sender drains that lane before entry AppendEntries), W15.3 for a
+multi-chunk write (one `fuse_buf_copy` per whole chunk inside a 1 MiB
+write), and W15.4 (`efs_rdma_send_frame` posts and returns; the reply
+wait reaps the send CQ). `efs-fuse --perf` now starts the recorder in
+the daemon child; `--strace` is `strace -f -tt -T`. IOR
+(`results/io500/20260929-023447-iorperf2`) aborted again on the first
+BUSY REPORT (`report-loop rounds=1 busy=1 ms=18246–19508 rc=-13` on
+fcstor007). No bandwidth. Recorders were SIGINT'd at 02:41Z so the
+files are finalized; they live on each node under `/tmp/efs-perf/`
+(`efsd.data` / `efsd.strace` on 003–006, `fuse.data` / `fuse.strace`
+on 007–015). Server straces are 1.9–2.4 GB because the trace was not
+narrowed.
+
+## Sep 29 2026 00:40Z — IOR abort on the W17–D2 tree, perf hot path
+
+Rolled `bbcbcb5ad779-dirty` `--all` at 00:28Z (`EFS_TRANSPORT=rdma
+EFS_RAFT_OBS=1`). fcstor006 did not catch up inside the roll's 180 s:
+it was installing a 2.3 GB group-2 snapshot (5796 ms) and compacting
+(L1 ~1000). It was commit==applied at 12083285 before the client
+remount. Clients fcstor007–015 remounted RDMA at 00:39Z with
+`perf record -F 499 -g`.
+
+`tests/perf/io500/run.sh ior` (stonewall 30 s) produced no bandwidth.
+`results/io500/20260929-002758-wimpl`: INVALID stonewall, `fsync`
+failed, `close` failed, rank 2 `MPI_ABORT`, ranks gone by 00:41:33Z
+with no D-state. `report-loop` on every client, one round, `busy=1
+rc=-13`, walls 8.2–26.1 s: the W17.1 bound returned EIO on the first
+BUSY REPORT where the old loop retried BUSY 8 times (the Sep 28 run's
+fsync succeeded after 328 s). The 8 s is checked between attempts;
+the rest is one RPC the server held. The `exhausted 16` lines are
+the non-sync close-kick path. fcstor004 `report-split nrec=90016` is
+BUSY nine times (`pack_ms=0`) then six `rc=0` with `pack_ms`
+0.86–2.77 s.
+
+Profiles (`cycles:P`, lost 0, ~100 s window overlapping compaction
+and a group-2 snapshot export) under `~/orcd/scratch/efs/perf/`.
+Leaders were fcstor003 (group 0) and fcstor006 (group 2). fcstor003
+(79K): `memmove` self 4.2% (was 18.5%), `send_ae` 2.5% (the one
+log→frame copy), `host_send` under 1.5%, `try_commit` self 0 (was
+4.0% / 10.5%) — W19. fcstor007 (14K ≈ 29 CPU-s, mostly off-CPU):
+`dcache_flush_slot_inner` self 0.1% (was 43.8%), `pthread_once`
+gone (was 25%), reclaim children 49.7% all in `dcache_put_now` —
+W18. `ll_write_buf` memmove 8.6% (W15.3 open). fcstor004 (127K,
+follower, REPORT target): fragment `open` 11.9% + `access` 8.7%
+(W14.4 open); `memcmp` 9.2% in `lsm_get` / compact / export,
+`vx_sift_down` 2.2% in the export heap.
+
+## Sep 28 2026 — decisions D1–D3 and the implementation order
+
+The user accepted three recommendations after the evening IOR runs.
+D1: the span publish commutes — `efs_meta_apply_publish` checks
+`expected_gen` only for full-image publishes, a sub-range writer
+publishes a span even with the base in hand, folded spans'
+`candidate_gen`s stay in the trailer so a replay is a no-op, and the
+fold is done by the publisher that fills the chain or by a reader.
+No distributed lock. D2: `open()` adopts the inode row only; chunk
+maps come from `pull_layout_miss` per lane group in parallel, one
+metadata window ahead of the prefetcher, size adaptive, no mount
+option. D3: the 5/s REAP_DONE idle gate stays. The order for the
+queue is W17.1, W16.1, W18, W19, W14.4, W15.3, the W14/W15 residuals,
+D1, D2, W16.2–3, then W8/W10 re-gates. Recorded in START-HERE
+("Decisions — taken and pending") and in the W1, W6, W17 items.
+
+## Sep 28 2026 — committed L1 list, IOR easy-write 0.769 GiB/s
+
+`bbcbcb5` rolled `--all` with `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`.
+Both groups were commit==applied before the run (group 0
+13626406 term 8016 leader 0, group 2 12052065 term 1917 leader 1).
+Clients fcstor007–015 mounted RDMA. The node build id is
+`bbcbcb5ad779-dirty` because rsync excludes `results/` and git
+then sees those tracked files deleted; all four servers printed
+the same id.
+
+`run.sh ior` (30 s stonewall) printed easy-write **0.769 GiB/s**
+in 393.014 s. fcstor007's fsync for that phase was
+`flush_ms=327885 report_ms=0 rc=0`, after REPORT type 67 exhausted
+16 BUSY retries. mdtest-easy-write printed 0.000 kIOPS in 0.000 s
+(the ini has `run=FALSE`). The next phase's `fsync` returned
+errors, `close` failed, and rank 8 `MPI_ABORT`. During that phase
+fcstor004 logged `apply publish rc=-14` (STALE) for ino 1166063
+across many chunk indexes. No easy-read, hard, or score. After
+the abort, io500 on fcstor007–010 and 012–014 stayed in D-state
+`request_wait_answer`. efsd and the mounts were left up. Perf
+reports: `~/orcd/scratch/efs/perf/fcstor00N/efsd-19810/` and
+`.../efs-mount/`.
+
 ## Sep 28 2026 — perf IOR, stopped after stat EBUSY
 
 Restarted 19810 with the real node ids (not `scripts/server.sh`,

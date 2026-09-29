@@ -1,4 +1,5 @@
 #include "efs/raft.h"
+#include "efs/wire.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,6 +99,16 @@ static void wr32(uint8_t *p, uint32_t v)
     p[1] = (uint8_t)(v >> 16);
     p[2] = (uint8_t)(v >> 8);
     p[3] = (uint8_t)v;
+}
+
+static void wr64(uint8_t *p, uint64_t v)
+{
+    int i;
+
+    for (i = 7; i >= 0; i--) {
+        p[i] = (uint8_t)v;
+        v >>= 8;
+    }
 }
 
 static uint32_t rd32(const uint8_t *p)
@@ -647,7 +658,6 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     struct efs_raft_msg m;
     uint64_t last_i = 0, last_t = 0, prev_t = 0;
     uint64_t ni;
-    uint8_t *arena = NULL;
     int rc;
 
     memset(&m, 0, sizeof(m));
@@ -709,63 +719,76 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
                 return send_commit_probe(r, to);
             return EFS_OK;
         }
-        arena = malloc(EFS_RAFT_AE_BYTES);
-        if (!arena)
-            return EFS_ERR_NOMEM;
-        while (m.nentries < EFS_RAFT_AE_MAX && ni + m.nentries <= end &&
-               off < EFS_RAFT_AE_BYTES) {
-            uint64_t eterm = 0;
-            uint32_t ec = EFS_RAFT_AE_BYTES - off;
-            rc = r->store->get(r->store_ctx, ni + m.nentries, &eterm,
-                               arena + off, &ec);
-            if (rc == EFS_ERR_INVAL) {
-                /* Entry larger than the remaining arena. */
-                if (m.nentries == 0) {
-                    /* Single oversized entry: its own dedicated buffer. */
-                    uint8_t *big = malloc(ec);
-                    if (!big) {
-                        free(arena);
-                        return EFS_ERR_NOMEM;
+        /* W19: the log read lands in the wire buffer. host_send writes
+         * the 80-byte header and queues this pointer. No second copy. */
+        {
+            uint32_t cap = EFS_WIRE_RAFT_HDR_LEN + EFS_RAFT_AE_BYTES;
+            uint8_t *frame = malloc(cap);
+
+            if (!frame)
+                return EFS_ERR_NOMEM;
+            off = EFS_WIRE_RAFT_HDR_LEN;
+            while (m.nentries < EFS_RAFT_AE_MAX && ni + m.nentries <= end &&
+                   off + 12 < cap) {
+                uint64_t eterm = 0;
+                uint32_t ec = cap - off - 12;
+                rc = r->store->get(r->store_ctx, ni + m.nentries, &eterm,
+                                   frame + off + 12, &ec);
+                if (rc == EFS_ERR_INVAL) {
+                    if (m.nentries == 0) {
+                        uint32_t need = EFS_WIRE_RAFT_HDR_LEN + 12u + ec;
+                        uint8_t *big = malloc(need);
+                        if (!big) {
+                            free(frame);
+                            return EFS_ERR_NOMEM;
+                        }
+                        rc = r->store->get(r->store_ctx, ni, &eterm,
+                                           big + EFS_WIRE_RAFT_HDR_LEN + 12,
+                                           &ec);
+                        if (rc == EFS_ERR_NOT_FOUND) {
+                            free(big);
+                            free(frame);
+                            return send_ae_behind(r, to, data_only, ni);
+                        }
+                        if (rc != EFS_OK) {
+                            free(big);
+                            free(frame);
+                            return rc;
+                        }
+                        free(frame);
+                        frame = big;
+                        wr64(frame + EFS_WIRE_RAFT_HDR_LEN, eterm);
+                        wr32(frame + EFS_WIRE_RAFT_HDR_LEN + 8, ec);
+                        m.entries[0].term = eterm;
+                        m.entries[0].clen = ec;
+                        m.entries[0].cmd = big + EFS_WIRE_RAFT_HDR_LEN + 12;
+                        m.nentries = 1;
+                        off = need;
                     }
-                    rc = r->store->get(r->store_ctx, ni, &eterm, big, &ec);
-                    if (rc == EFS_ERR_NOT_FOUND) {
-                        free(big);
-                        free(arena);
-                        return send_ae_behind(r, to, data_only, ni);
-                    }
-                    if (rc != EFS_OK) {
-                        free(big);
-                        free(arena);
-                        return rc;
-                    }
-                    free(arena);
-                    arena = big;
-                    m.entries[0].term = eterm;
-                    m.entries[0].clen = ec;
-                    m.entries[0].cmd = big;
-                    m.nentries = 1;
+                    break;
                 }
-                break; /* send the batch accumulated so far */
+                if (rc == EFS_ERR_NOT_FOUND) {
+                    free(frame);
+                    return send_ae_behind(r, to, data_only, ni);
+                }
+                if (rc != EFS_OK) {
+                    free(frame);
+                    return rc;
+                }
+                wr64(frame + off, eterm);
+                wr32(frame + off + 8, ec);
+                m.entries[m.nentries].term = eterm;
+                m.entries[m.nentries].clen = ec;
+                m.entries[m.nentries].cmd = frame + off + 12;
+                off += 12u + ec;
+                m.nentries++;
             }
-            if (rc == EFS_ERR_NOT_FOUND) {
-                free(arena);
-                return send_ae_behind(r, to, data_only, ni);
+            if (m.nentries == 0) {
+                free(frame);
+                return EFS_ERR_PROTO;
             }
-            if (rc != EFS_OK) {
-                free(arena);
-                return rc;
-            }
-            m.entries[m.nentries].term = eterm;
-            m.entries[m.nentries].clen = ec;
-            m.entries[m.nentries].cmd = arena + off;
-            off += ec;
-            m.nentries++;
-        }
-        if (m.nentries == 0) {
-            /* ni <= last_i but nothing read; don't send an empty batch that
-             * would look like a heartbeat with a stale prev_index. */
-            free(arena);
-            return EFS_ERR_PROTO;
+            m.wire = frame;
+            m.wire_len = off;
         }
         }
     }
@@ -773,7 +796,7 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     if (rc == EFS_OK)
         ae_inflight_set(r, to, m.nentries ? ni : 0,
                         m.nentries ? ni + m.nentries - 1 : m.prev_index);
-    free(arena);
+    free(m.wire);
     /* The entry is already in the leader log. A full outbox must not
      * fail the proposer's RPC, and must not mark a batch in flight
      * that the sender will never write. */
@@ -821,15 +844,58 @@ static int maybe_append_cold(struct efs_raft *r)
     return broadcast_ae(r);
 }
 
+/* Highest index both configs can already have a quorum for. Walking
+ * from last_log re-reads every index a lagging match cannot cover. */
+static uint64_t commit_ceiling(const struct efs_raft *r, uint64_t last_i)
+{
+    uint32_t sets[2];
+    int ns = 0, s;
+    uint64_t start = last_i;
+
+    sets[ns++] = r->log_old;
+    if (r->log_new)
+        sets[ns++] = r->log_new;
+    for (s = 0; s < ns; s++) {
+        uint64_t m[EFS_RAFT_MAX_PEERS];
+        int n = 0, i, need, a, b;
+
+        need = popc(sets[s]) / 2 + 1;
+        for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
+            if ((sets[s] & (1u << i)) == 0)
+                continue;
+            if (r->ae_capped && i == r->id &&
+                r->match_index[i] > r->durable_idx)
+                m[n++] = r->durable_idx;
+            else
+                m[n++] = r->match_index[i];
+        }
+        if (n < need)
+            return r->commit_index;
+        for (a = 1; a < n; a++) {
+            uint64_t v = m[a];
+            b = a;
+            while (b > 0 && m[b - 1] < v) {
+                m[b] = m[b - 1];
+                b--;
+            }
+            m[b] = v;
+        }
+        if (m[need - 1] < start)
+            start = m[need - 1];
+    }
+    return start;
+}
+
 static int try_commit(struct efs_raft *r)
 {
-    uint64_t last_i = 0, last_t = 0, n;
+    uint64_t last_i = 0, last_t = 0, n, start;
     int rc;
 
     rc = last_log(r, &last_i, &last_t);
     if (rc != EFS_OK)
         return rc;
-    for (n = last_i; n > r->commit_index; n--) {
+    start = commit_ceiling(r, last_i);
+    for (n = start; n > r->commit_index; n--) {
         uint64_t t = 0;
         unsigned bits = 0;
         int i;

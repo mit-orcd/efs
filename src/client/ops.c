@@ -167,6 +167,16 @@ void efs_client_table_unlock(void)
     pthread_mutex_unlock(&g_client.lock);
 }
 
+int efs_client_set_chunk(struct efs_export *ex, efs_ino_t ino,
+                         uint32_t chunk_index,
+                         const efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS],
+                         const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
+{
+    efs_dcache_yield_extra(ino, chunk_index);
+    return efs_export_set_chunk(ex, ino, chunk_index, fragment_nodes,
+                                checksums);
+}
+
 int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks)
 {
     (void)extra_inodes;
@@ -190,7 +200,7 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
     efs_client_lock_dir(lock_ino);
     pthread_mutex_lock(&g_client.idx_mu);
     for (uint32_t i = 0; i < n; i++) {
-        (void)efs_export_set_chunk(&g_client.export, recs[i].ino,
+        (void)efs_client_set_chunk(&g_client.export, recs[i].ino,
                                    recs[i].chunk_index, recs[i].nodes,
                                    recs[i].checksums);
         (void)efs_export_set_chunk_gen(&g_client.export, recs[i].ino,
@@ -258,17 +268,6 @@ int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
     return pull_chunks_range(ino, start_ci, end_ci);
 }
 
-static void pull_chunks_for_ino(efs_ino_t ino, uint64_t size)
-{
-    uint32_t cs = data_chunk_size();
-    uint32_t nci = 0;
-    if (cs && size)
-        nci = (uint32_t)((size + cs - 1) / cs);
-    if (!nci)
-        return;
-    pull_chunks_range(ino, 0, nci);
-}
-
 static void pull_file_layout(const struct efs_inode *rpc)
 {
     if ((rpc->mode & S_IFMT) != S_IFREG)
@@ -283,9 +282,9 @@ static void pull_file_layout(const struct efs_inode *rpc)
             c1 = (uint32_t)((hi - 1) / cs) + 1;
         }
         pull_chunks_range(rpc->pack_ino, c0, c1);
-    } else {
-        pull_chunks_for_ino(rpc->ino, rpc->size);
     }
+    /* D2: a regular file adopts the inode row only. pull_layout_miss
+     * is the chunk-map path. The 64-lane size stat stays at open. */
 }
 
 /* Read-miss resolution (Phase 2b follow-on, tightened Sep 19): the local
@@ -571,8 +570,9 @@ int efs_client_stat_ino(efs_ino_t ino, struct efs_inode *out)
     efs_client_unlock_dir(ino);
 
     struct efs_inode rpc;
-    if (efs_client_rpc_getattr(g_client.export_id, ino, &rpc) != EFS_OK)
-        return EFS_ERR_NOT_FOUND;
+    int grc = efs_client_rpc_getattr(g_client.export_id, ino, &rpc);
+    if (grc != EFS_OK)
+        return grc;
     adopt_rpc_inode(&rpc);
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
@@ -592,8 +592,9 @@ int efs_client_stat_refresh(efs_ino_t ino, struct efs_inode *out)
     if (!out || !ino)
         return EFS_ERR_INVAL;
     struct efs_inode rpc;
-    if (efs_client_rpc_getattr(g_client.export_id, ino, &rpc) != EFS_OK)
-        return EFS_ERR_NOT_FOUND;
+    int grc = efs_client_rpc_getattr(g_client.export_id, ino, &rpc);
+    if (grc != EFS_OK)
+        return grc;
     efs_client_adopt_lookup(&rpc, out);
     return EFS_OK;
 }

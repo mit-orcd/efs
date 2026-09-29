@@ -234,6 +234,9 @@ int efs_client_rpc_flock_range(efs_export_id_t export_id, efs_ino_t ino,
  * the whole batch locally. sync=1 is the fsync durability barrier. */
 struct efs_chunk_rec;
 struct efs_ino_size_rec;
+/* W17.1: monotonic ms. 0 clears. rpc_send_recv_dual stops before the
+ * next attempt once this passes. One in-flight recv still finishes. */
+void efs_client_rpc_set_deadline_ms(uint64_t mono_ms);
 int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
                                      const struct efs_chunk_rec *recs,
                                      uint32_t count,
@@ -262,6 +265,10 @@ void efs_client_lock_all_dirs(void);
 void efs_client_unlock_all_dirs(void);
 /* Table lock + every dir stripe: realloc / export-wide snapshot. */
 void efs_client_table_lock(void);
+int efs_client_set_chunk(struct efs_export *ex, efs_ino_t ino,
+                         uint32_t chunk_index,
+                         const efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS],
+                         const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
 void efs_client_table_unlock(void);
 
 extern struct efs_client g_client;
@@ -327,12 +334,18 @@ void efs_dcache_drop_if_clean(efs_ino_t ino, uint32_t ci);
  * 0 = cached (size updated if the write grew the file), -1 = cannot cache. */
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
                          const uint8_t *src);
+/* Whole 128 KiB chunk. `chunk` is efs_buf_alloc'd; stolen on success. */
+int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
+                                uint32_t cs);
+/* Clear a dcache present_extra count before the chunk enters the table. */
+void efs_dcache_yield_extra(efs_ino_t ino, uint32_t ci);
 /* O_APPEND: range-track until the first PUT, then keep have_base=1.
  * Flush merge-base is efs_client_fetch_published_chunk (not size-clamped
  * efs_client_read). */
 int efs_dcache_try_patch_sparse(efs_ino_t ino, uint64_t offset, uint32_t len,
                                 const uint8_t *src);
 /* If dirty assembled chunks exceed the cap, PUT them now. */
+void efs_dcache_init(void);
 void efs_dcache_maybe_reclaim(void);
 
 /* Enable coalesced metadata replication for the FUSE client. */

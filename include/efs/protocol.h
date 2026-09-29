@@ -290,6 +290,10 @@ struct efs_msg_put_chunk {
     uint32_t data_len;
     /* Candidate identity. 0 = write the legacy `{ci}.{fi}` name. */
     uint64_t chunk_generation;
+    /* W14.4: 0 = no hint. Else the storage-root index from the previous
+     * PUT of this (ino, chunk, fragment), plus one. The server access()es
+     * that root first and walks the others only on a miss. */
+    uint32_t path_hint;
     /* uint8_t data[data_len]; */
 };
 
@@ -749,6 +753,7 @@ int efs_recv_msg_into(int fd, uint8_t *type, uint8_t *status,
 /* Hot-path helper: receive a 1-byte status reply without malloc.
  * On success sets *type and *status. Returns EFS_OK or an error. */
 int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status);
+int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path);
 
 /* ---- transport-dispatching variants (struct efs_conn, network.h) ----
  * Same semantics as the fd-based originals. With a live RDMA QP, frames up
@@ -769,6 +774,10 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
                            void *hdr, uint32_t hdr_len,
                            void *body, uint32_t body_len);
 int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status);
+/* PUT reply: status byte, then an optional storage-root index (0xff = none).
+ * A one-byte reply leaves *path as 0xff. */
+int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
+                            uint8_t *path);
 
 /* Wait for the next request on either channel. Returns EFS_CONN_TCP /
  * EFS_CONN_RDMA, or -1 on error / peer close. Pure-TCP conns return

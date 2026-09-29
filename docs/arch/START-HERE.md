@@ -27,6 +27,10 @@ item payload (`kv_snap.c`), not a new dump format.
 
 **So there is no next §10 step.** What is left is the work queue in
 [§1a](#1a-the-work-queue) — measured gaps, in the order they should be taken.
+**The order as of Sep 28 2026 is the numbered table under "Decisions —
+taken and pending" in §1a** (W17.1, W16.1, W18, W19, W14.4, W15.3, the
+residuals, then D1 spans and D2 open windows). Two design decisions are
+taken there (D1, D2) and are to be implemented, not re-asked.
 **Every open measurement/bug-chasing item has a runbook + script in
 [runbooks.md](runbooks.md) (`tests/measure/*.sh`, pinned to build
 `b2184a5c7faf-dirty`); start there.** `tests/preflight.sh` is the deploy
@@ -52,7 +56,104 @@ Whoever picks the project up next does **this first**. Update or delete
 this block when done — an "in flight" block older than the last commit
 is a bug in this page.
 
-**L1 cap and the snapshot pump (Sep 28 evening, uncommitted).**
+**Sep 29 02:35Z: IOR with perf and strace on the outbox / multi-chunk / post-and-return tree** (`results/io500/20260929-023447-iorperf2`). No bandwidth. Same abort as 00:40Z: `report-loop rounds=1 busy=1 rc=-13` (18–19 s on fcstor007), fsync EBUSY, `close` failed, rank 3 `MPI_ABORT`. Ranks were gone by 02:41Z. Recorders were SIGINT'd then; files are node-local `/tmp/efs-perf/` (`efsd.data` 28–33 MB and `efsd.strace` 1.9–2.4 GB on fcstor003–006; `fuse.data` 4.1–5.0 MB and `fuse.strace` 241–245 MB on fcstor007–015). The client recorder attached to the daemon (fuse.log has `perf recorder pid=`). The strace was not narrowed, which is why the server files are ~2 GB.
+
+**Sep 29 00:40Z: first IOR on the W17–D2 tree
+(`results/io500/20260929-002758-wimpl`, `bbcbcb5ad779-dirty`
+rolled 00:28Z RDMA, clients remounted 00:39Z, perf on every daemon).**
+
+No bandwidth. 9-client `run.sh ior` (30 s stonewall, mdtest off)
+printed the usual `stonewall-time 30s != 300s` INVALID, then eight
+`fsync` warnings, `close(20) failed`, rank 2 `MPI_ABORT`; the ranks
+were gone by 00:41:33Z (no D-state this time — W17.1 did what it
+was specified to do). Every client logged one `report-loop … rounds=1
+stale=0 busy=1 rc=-13`, wall 8.2–26.1 s: the first sync REPORT came
+back BUSY and the loop did not retry. The old loop retried BUSY up to
+8 times, which is why the Sep 28 run's fsync succeeded after 328 s
+and this one returned EIO in under 30 s. The 8 s is checked between
+attempts; the extra is one in-flight RPC that the server holds (the
+`report-split nrec=90016` lines on fcstor004: nine `rc=-13` with
+`pack_ms=0`, then six `rc=0` with `pack_ms` 0.86–2.77 s). The
+`dual type=67 exhausted 16 BUSY/STALE retries (10.3 s)` lines are
+the close-kicked `report_dirty_ino(0)` path, which sets no deadline.
+The server-side BUSY on a 90016-record REPORT is W16 steps 2–3
+(attribute, then ask before touching the 400 ms / 10 s budgets);
+`fsync` returning EBUSY-mapped EIO on it is the decided behaviour.
+
+Profiles from that window (~100 s of writing; overlaps compaction
+and a group-2 snapshot export; `cycles:P`, lost 0; trees under
+`~/orcd/scratch/efs/perf/fcstor00N/`). Leaders were fcstor003
+(group 0) and fcstor006 (group 2); fcstor004 was a follower in both.
+
+| where | samples | now | was (Sep 28 run 3) | reads as |
+| --- | --- | --- | --- | --- |
+| fcstor003, group-0 leader both runs | 79K | `memmove` self 4.2%; `send_ae` 2.5% (the one log→frame copy); `host_send` under the 1.5% floor; `try_commit` self 0, 2.5% children all `host_apply`; `host_sender` 5.8% | `memmove` 18.5% (12.6% `host_send`←`send_ae`), `try_commit` 4.0% self / 10.5% | **W19 landed.** |
+| fcstor007 client | 14K ≈ 29 CPU-s in ~100 s, so mostly off-CPU | `dcache_flush_slot_inner` self 0.1%, `pthread_once` absent; `dcache_reclaim_main` children 49.7%, all `dcache_put_now` (blake3 ~17%, RDMA send 4.7%) | `dcache_flush_slot_inner` self 43.8%, `pthread_once` 25%, mutex 12% | **W18 landed.** Reclaim now spends its time on the PUT itself, which is the work. |
+| fcstor007 client | same | `memmove` in `ll_write_buf` 8.6% | 7.5% | W15 step 3, open |
+| fcstor004, follower, REPORT target | 127K | `open` 11.9% + `access` 8.7% + `write` 6.9% on the fragment PUT (`open` callers are unresolved frames whose bytes decode to the six `/data1/0N/efs` roots); `memcmp` 9.2% self in `lsm_get` under `efs_meta_apply_get_chunk` (REPORT pre-check) and publish, in `kv_compact_locked`, and in `efs_kv_lsm_view_export`; `kv_seg_probe` 3.1%; `vx_sift_down` 2.2% all export | `memmove` 20.5%, `copyout` 15.4% | W14 step 4, open. The `memcmp`/`kv_seg_probe` share is the point-get and export merge over a large L1 (fcstor006 had ~1000 L1 files at the roll); check L1 file counts before calling it a regression. |
+
+**Before the next run:** nothing is wedged. Clients fcstor007–015 are
+mounted RDMA on this build; all four `efsd` are up; perf recorders
+are stopped. Run `tests/preflight.sh` (idle gate) first.
+
+---
+
+**What the Sep 28 evening IOR runs established (kept for the
+comparison column above).**
+
+Two 9-client `run.sh ior` runs on `bbcbcb5` (and the same tree
+uncommitted before it), 30 s stonewall, RDMA, perf attached to every
+`efsd` and `efs-fuse`. Neither produced a score. Both finished
+easy-write: **1.048 GiB/s** in 397 s and **0.769 GiB/s** in 393 s.
+In each, the 30 s of writing is followed by a ~326–328 s `fsync`
+(`fsync-split … flush_ms=327885 report_ms=0 rc=0`). IOR's wear-out
+makes every rank write as many blocks as the fastest rank managed in
+30 s, so the wall is that flush, not the stonewall. Then:
+
+- run 1 (mdtest still on): `create file.mdtest.0.2236 failed (EIO)`
+  → abort. `run.sh ior` no longer runs mdtest.
+- run 2 (uncommitted tree, 22:00Z): `INODE_LOOKUP` on shard 3745 hit
+  the 16-retry BUSY budget → IOR `stat` failed → abort. That is W16.
+- run 3 (`bbcbcb5`, 22:14Z): ior-hard on the shared file. Nine ranks
+  publish the same inode (1166063); fcstor004 logged
+  `apply publish rc=-14` (STALE) for many chunk indexes; on the
+  clients `REPORT_CHUNKS` (type 67) hit the 16-retry BUSY budget
+  repeatedly, `fsync` returned EIO (`efs_rc=-13`), IOR `close` failed,
+  rank 8 aborted, and **io500 on seven clients stayed in D-state
+  `request_wait_answer`** after `MPI_ABORT` killed it. That is W17.
+
+What the profiles say (all `cycles:P`, `perf record -F 499 -g`;
+reports under `~/orcd/scratch/efs/perf/fcstor00N/efsd-19810/` and
+`.../fcstor00N/efs-mount/`):
+
+| where | run | share | what |
+| --- | --- | --- | --- |
+| client fcstor007 | 3 (917K samples, 40 min) | 44% + 25% + 12% | `dcache_flush_slot_inner` self, `pthread_once`, shard mutex — all on `dcache_reclaim_main` (73% of the client). Blake3 3%. **W18** |
+| client fcstor007 | 2 (36K, 5 min; report files since overwritten by run 3) | 27% + 19% | blake3 in `hash_write_fragments`; `memmove` in `ll_write_buf` (7.5%) and the RDMA send (6.3%). W15 steps 1 and 3 |
+| fcstor003 (group 0 leader) | 3 (1M) | 12.6% + 5.2% + 6.9% | `memmove` in `host_send` and `send_ae` on the **pump**, then `writev` copy-in on `host_sender` — every AppendEntries byte copied twice in user space and once by the kernel, over TCP. `try_commit` 10.5% (walks `last_i → commit_index` calling `log_term` per AE reply). **W19** |
+| fcstor004 (group 0 follower, group 2 leader) | 3 (2M) | 15.4% + 6.3% | `copyout` in `server_handle_conn` → `recv` (the other end of those AEs); `memcmp` in LSM `lookup` under publish apply, view export, compaction |
+
+Gone from the profiles: `send_snap` recopy, `kv_flush_locked` on the
+pump (`7eecf1d` + `bbcbcb5`), `efs_rdma_reply_ready_us` + vDSO
+(W15 step 2, done in `bbcbcb5`: vDSO 0.87%, the symbol under the
+0.5% floor), `recv_poller` (1.2%).
+
+| fstor007 `client.sh --perf` | 20:36–20:39 EDT (214K, 3 min) | 35% + 8.9% + 6.6% | `memmove` (14.6% dcache patch, ~17% `fuse_buf_copy` bounce with no frame pointer, 3.6% RDMA send); `ll_setattr` → `fill_stat_from_inode` walking every chunk of the file (**W20**); `efs_export_staged_bytes` on the evictor, 1024 passes per wake (**W21**). `send_buf_pick` spin (`EFS_RDMA_NSEND`=2) is 4.2% (W14 step 5). Details under W15's source. |
+| fstor007 `client.sh --perf` | 22:11–22:14 EDT (32K, 3 min), binary built 22:06 **with** W15.3 / W20 / W21 / `NSEND=EFS_WRITE_PIPELINE`, seven parallel `dd bs=1M` to new files in one dir | 39.5% + 8.2% + 6.9% | `memmove` still two copies per byte (16% `ll_write_buf`, ~19% unattributed `fuse_buf_copy`, 4.4% RDMA send): W15.3 takes the single-copy path only when `size == chunk`, and a 1 MiB write is eight chunks. vDSO 6.9% is `now_us()` + `pthread_spin_lock` in `efs_rdma_send_frame`'s **synchronous send-CQE wait**, not `send_buf_pick`; more send buffers did not move it. W20 and W21 are gone from the profile (dd does no setattr; evictor under cap). One `dd` failed `open` with EBUSY: fuse log has **249** `exhausted 16 BUSY/STALE` lines (LOOKUP 98, SETATTR 50, GETATTR 47, RENAME 31, CREATE 23), every retry `why=no-hint` — elections, not apply lag. Group 0 term 9309→9368 and group 2 2763→2789 since 00:39Z; fcstor004 `raft-obs: tx->3 enq=50698 drop=72114 sent=50695 hi=2048`. Review and fixes under W15, W14 step 2, W16. |
+| fstor007 `client.sh --perf` | 22:48–22:55 EDT (260K, 6.5 min, ~1.3 cores average), binary with the multi-chunk W15.3 and the W21 cursor; `dd bs=1M status=progress` to `/tmp/efs-mount/001/dat08`, killed at 1.7 GB | 29% + 12.8% + 9.9% | **W15 step 3 verified:** the `ll_write_buf` `memmove` is gone; `memmove` is 7.2% RDMA send copy + ~22% caller-less `fuse_buf_copy` — one user copy per byte now. vDSO is 0.8% (the send-CQE wait is below the floor on this run; keep W15 step 4's gate). **W21 not fixed:** `efs_export_staged_bytes` 7.4% self + `stage_evict_main` 5.4% self — the cursor limits the bands per wake, but every write over cap *kicks* a new wake, so the wake rate is the write rate. Fix under W21. blake3 9.9%, `xor_into` 5.3%, kernel `fuse_dev_read` 7% are the work. `~/orcd/scratch/efs/perf/dd.trace.txt`: 1667 × 1 MiB `write()` returned 1048576, the 1668th was in flight when `dd` got SIGKILL; no `-tt`/`-T`, so the trace does not say how long that write waited. |
+
+Those seven D-state `io500` processes were cleared by the 00:39Z
+remount. The `-dirty` suffix on the servers' build id is the node
+tree missing tracked `results/` (the deploy rsync excludes it); all
+four IDs match, so the HELLO gate is satisfied.
+
+**Sep 28 ~18:30 EDT: `df` on a fresh mount during the 9×4 IOR returned
+ENOENT.** Root GETATTR (shard 0, group 2) got BUSY for 10.3 s and the
+client maps that to ENOENT. Not data loss. Written up as **W16** in §1a
+with the fix order (mapping first, then attribute the BUSY stream with
+`raft-status` before touching the server). Start there.
+
+**L1 cap and the snapshot pump (Sep 28 evening, committed `bbcbcb5`).**
 The 64-slot L1 array is a growable list. The on-disk MANIFEST was
 already one `1 <seq>` line per file. `efs_kv_lsm_flush_nowait` returns
 BUSY without walking the memtable when L0 cannot take another full
@@ -74,12 +175,18 @@ mdtest in `config-ior-only.ini` is now `run=FALSE`. A later
 `client.sh --perf` IOR (22:00Z, daemons then stopped) produced no
 RESULT: fsync `flush_ms=202803` `rc=0`, then `INODE_LOOKUP` on
 shard 3745 exhausted 16 BUSY retries and IOR's `stat` aborted.
-Profiles from the run (`cycles:P`): fcstor003 top is kernel dentry
-lookup under `nvme_put` (5.6%); fcstor004 top is LSM `memcmp` in
-lookup (10.6%). `send_snap` / `kv_flush_locked` are not the stack.
-Client top is blake3 in the dcache reclaim thread (25%). efsd was
-left up; fcstor007–015 are mounted RDMA. W15's reply-wait change is
-in the same dirty tree. Do not commit unless asked.
+Committed as `bbcbcb5` and rolled 22:14Z (`bbcbcb5ad779-dirty`
+on every server; `-dirty` is the excluded `results/` tree).
+That IOR's easy-write is **0.769 GiB/s** in 393.014 s
+(`flush_ms=327885`, `rc=0`), then `fsync`/`close` failed and
+rank 8 aborted. Publish of ino 1166063 was returning STALE
+(`rc=-14`). No score. io500 on seven clients stayed in
+D-state `request_wait_answer`.
+Profiles from the first run (`cycles:P`): fcstor003 top is kernel
+dentry lookup under `nvme_put` (5.6%); fcstor004 top is LSM `memcmp`
+in lookup (10.6%). `send_snap` / `kv_flush_locked` are not the stack.
+efsd is up; fcstor007–015 are mounted RDMA (with the D-state io500
+leftovers noted above).
 
 **9-client dd profile cycle is done (Sep 28 afternoon).** Five
 rounds on RDMA, 8 GiB `dd bs=1M conv=fsync`, own file, every file
@@ -1312,13 +1419,50 @@ pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
 inside. `dd if=/dev/zero` is also invalid here: all-zero payloads skip PUTs.
 Use a non-zero source file.
 
-#### Decisions pending — recommended answers (Sep 26 2026)
+#### Decisions — taken and pending (Sep 28 2026)
 
-Three queue items still stop on a choice the spec does not make. Each
-item below carries a **Recommendation**, the reason, and the steps that
-follow from it. Nothing in the open rows is implemented until the user
-asks. W13 is done; its pinned segment view is the primitive W11's
-steps use.
+Each row is a choice the spec did not make. A row marked **decided**
+was accepted by the user and is now part of the design; implement it
+per the item it points at. A row marked **done** is history. Nothing
+in an open row is implemented until the user asks. W13 is done; its
+pinned segment view is the primitive W11's steps use.
+
+**Decided Sep 28 2026 (user accepted the recommendations):**
+
+| item | question | decision | why, in one line |
+| --- | --- | --- | --- |
+| **D1 · W6.1 / W17** | what do N-1 shared-file writes do under conflict? | **A span publish commutes; no lock; no CAS on the base generation for spans.** A sub-range writer always publishes a span (even when it holds the base). `expected_gen` applies to full-image publishes only. The trailer keeps the folded spans' `candidate_gen`s (≤ `EFS_CHUNK_DELTA_MAX`) so a replay of a folded span is a no-op. The fold is done by the publisher that fills the last slot, or by a reader — never on another rank's `fsync`. | the code already has commuting non-overlapping spans; what collapses at nine ranks is the base-gen check *before* the span path (one fold STALEs every in-flight span) and the `have_base → full CAS` branch. This is §7.2's commutative reduction applied to the chunk map, and P1 (no serialization point). A distributed chunk lock stays forbidden. Gate in W17 |
+| **D2 · W6.2** | may `open()` return before the chunk map is known; how big is the map window? | **Yes. `open()` adopts the inode row only.** Chunk maps are pulled per lane group, in parallel, by `pull_layout_miss` in a metadata window that runs one data window ahead of the prefetcher. Window size is internal and adaptive (start at the prefetch depth, grow while the read stays sequential). No mount option, no environment variable. | `performance.md` already says reads fetch chunk maps in per-lane windows; the code pulls the whole map sequentially at open and the server serializes 36 openers to 14.6 ms per GETCHUNKS. A row without a map is already the evictor's steady state (W9); a miss is pulled and an error is an error, never a zero-fill (I9) |
+| **D3 · idle gate** | may the 5/s REAP_DONE gate be raised to remeasure ior-hard 1/9/36? | **No.** Measure after the reaper drains. If it does not drain, that is a bug to file. | the tail is the reaper clearing deleted IOR data, and a measurement started during it measures the reaper |
+
+**Order for continued implementation (decided Sep 28 2026).** Correctness
+and truthfulness first because they are small and they are what "easiest
+to use" means; then the CPU items that need no decision and are most of
+both profiles; then the two design items above; W12 whenever a run dir is
+cited.
+
+| # | item | what | why now |
+| --- | --- | --- | --- |
+| 1 | **W17 step 1** | `fsync`/`release` return in bounded time; a killed writer never leaves a D-state FUSE request | seven clients wedged for 20 min after `kill -9` |
+| 2 | **W16 step 1** | RPC BUSY/NET/IO surface as EBUSY/EIO, never ENOENT | a busy filesystem must not claim a file is missing |
+| 3 | **W18** | dcache reclaim from a dirty list; init once | 73 % of the client's CPU walks a table looking for dirty chunks |
+| 4 | **W19** | encode each AppendEntries once; `try_commit` from the replying peer's match | 35 % of the leader is copying AEs on the pump |
+| 5 | **W14 step 4** | fragment `path_index` hint on PUT | six path walks per PUT |
+| 6 | **W15 step 3** | one `fuse_buf_copy` per whole chunk, for multi-chunk writes too | in tree only for `size == chunk`; `dd bs=1M` (eight chunks) still copies twice: 16 % + ~19 % in the 22:11 profile |
+| 7' | **W14 step 2 (a)–(b)** | outbox coalesces replies/heartbeats instead of dropping them | `drop=72114 > sent=50695` to one peer; terms +59 / +26 in two hours; every client BUSY is `no-hint` |
+| 7'' | **W15 step 4** | post the RDMA SEND and return; reap CQEs in `send_buf_pick` and the reply wait | 6.9 % of the client waits synchronously for its own send CQE; more send buffers did not change it |
+| 6a | **W20** | `st_blocks` from a per-inode counter; `ll_setattr` reads `size` from the row | a `stat` walks every chunk under two locks; 8.9 % of the client under `ll_setattr` |
+| 6b | **W21** | a kick does not wake a scan that cannot evict (1 s idle after a no-evict wake, cleared on unpin); cross-tab running total | in-tree cursor did not help: 12.8 % of the client on the 22:48 profile because every write over cap kicks a wake |
+| 6c | **W15 step 5** | `FUSE_CAP_SPLICE_READ` so the write payload is read from the pipe straight into the dcache buffer | after step 3 one user copy per byte remains (~22 % `fuse_buf_copy`) plus the kernel copy into libfuse's buffer (~9.5 %) |
+| 7 | **W14 steps 2, 3, 5; W15 step 4** | election trigger under import; reap `snap-*.kvx.tmp`; `send_buf_pick` | smaller residuals from the same profiles |
+| 8 | **D1 → W17 steps 2–3, W6.1** | commuting span publish | shared-file write rate must rise with ranks; the headline N-1 number |
+| 9 | **D2 → W6.2** | open adopts the row; maps in windows | 1 GiB open 1.6–2.5 s under 36 openers |
+| 10 | **W16 steps 2–3** | attribute the read starvation, then decide the read/wait policy | after 3–8 change the apply load |
+| 11 | **W8, W10** | 9-host posix 201/201; RDMA faster than TCP | gates re-run once 3–9 land |
+
+In tree and rolled (Sep 29 02:35Z, `bbcbcb5ad779-dirty`, RDMA, `--perf --strace`), not gated by a suite: 1 (sync report loop: 8 s checked between REPORT attempts, plus whatever one in-flight RPC takes; dirty set merged back; fsync returns EIO), 2 (`fuse_stat_errno`), 3 (dirty list + `dcache_ensure` so `pthread_once` is not on the lock), 4 (`send_ae` reads the log into the wire buffer; `try_commit` starts at the quorum match), 5 (PUT reply carries the storage root), 6 (a 1 MiB write walks chunk-aligned pieces; each whole chunk is one `fuse_buf_copy` into a dcache-owned buffer; a partial head or tail bounces its own length), 6a, 6b, 7's snap-tmp reap and `send_buf_pick`, 7' (an AE reply replaces an older queued reply to that peer, a heartbeat replaces an older heartbeat, a vote is not evicted, and the sender drains that lane before entry AppendEntries; a full entry lane returns AGAIN and does not increment `st_drop`), 7'' (`efs_rdma_send_frame` posts and returns; the reply wait reaps send CQEs and treats a send still busy after 5 s as a dead QP), 8, 9 step (a). Still open: 7 step 2 (c) (per-link rate — measure, then ask), 9's parallel windows, 10, 11. The three `test_meta_apply` cases named under W17 step 3 are not added yet. The 02:35Z IOR is in §1b.
+
+Prior recommended answers, for the record:
 
 | item | question | recommended | why, in one line |
 | --- | --- | --- | --- |
@@ -1351,6 +1495,11 @@ STALE bound is **64** with 2–20 ms backoff — 8 loses to 16 fsyncs/chunk.
   isolated PASS except known `concurrent_appends`. Honest 1-client
   `results/perf/20260918-w1-honest/`: sw-1m **758** (not a regression vs
   209); sw-50g **373** (was NET). `FIO_ONLY=1` skips the 4/9 sweeps.
+- **Amended Sep 28 2026 (D1):** the per-chunk CAS remains for
+  full-image publishes; span publishes no longer CAS on the base
+  generation (W17 step 3). The N-1 contract is: non-overlapping
+  concurrent writes to one chunk never conflict; overlapping ones
+  resolve in Raft order.
 - **Forbidden to reopen:** a distributed chunk lock; per-record report
   status arrays; sending `UINT64_MAX` from any path that read a base;
   wipe / `raft-mkfs` / inventing chunked SNAP.
@@ -1474,11 +1623,29 @@ Not a list submission (stonewall 1 s). Do not quote the Sep 19 easy-read
    69 / 82 MiB/s at 1 / 4 / 9 / 36**, about half of REPORTs
    `EFS_ERR_STALE`. The 4-rank point moved 33 → 482. 1/9/36 were not
    remeasured: group 2's REAP_DONE tail stayed ~11–16 entries/s
-   (distinct inodes) and preflight fails above 5/s. Do not raise it.
-   Do not add a chunk lock. Do not tune 47008.
+   (distinct inodes) and preflight fails above 5/s. Do not raise it
+   (**D3**). Do not add a chunk lock. Do not tune 47008.
+   **Sep 28, NP=9 via `run.sh ior`: STALE storm, fsync EIO, D-state
+   ranks — W17.** **Decision D1 (Sep 28): the span publish commutes
+   (no base-gen CAS for spans; sub-range writers always publish spans;
+   fold by the chain-filler or a reader). Implement as W17 step 3.**
 2. **1 GiB open costs 20 s of a 22 s easy-read** — 128 sequential
    GETCHUNKS + a 64-lane stat per open. Spec §8 per-lane range fetch
-   ([performance.md](performance.md)) is the fix; not implemented.
+   ([performance.md](performance.md)) is the fix. **Decision D2 (Sep
+   28): `open()` adopts the inode row only; `pull_layout_miss` is the
+   one pull path, one GETCHUNKS per lane group in parallel, a metadata
+   window one data window ahead of the prefetcher, size adaptive and
+   internal (no knob).** Steps: (a) remove `pull_file_layout` from
+   adopt for regular files; (b) make `pull_layout_miss` issue the
+   window's lane-group GETCHUNKS concurrently and record the covered
+   range per ino; (c) have the read prefetcher request the next
+   metadata window when the data window advances; (d) keep the 64-lane
+   size stat at open (size authority is not the map). Gate: 1 GiB cold
+   open under 10 ms with 36 concurrent openers
+   (`tests/measure/` open-cost script); easy-read not worse than
+   `results/io500/20260928-150609-rdma`; `-R` errors 0 on both reads;
+   posix 1 jobs=1 200/201. Forbidden: a whole-map pull anywhere;
+   zero-fill on a miss; a mount option or env var for the window.
 3. ~~mdtest `rmdir` ENOTEMPTY/EIO under load~~ — **FIXED Sep 21** (it was
    the parent-row lost update, not transient; §7.2 reductions). **Rate
    fixed Sep 27.** The flat 138 / 134 / 159 ops/s
@@ -1885,6 +2052,18 @@ Steps:
 
 #### W14 — Server: snapshot install and the fragment probe are on the write path
 
+**Status (Sep 28 evening).** Step 1 is done in `7eecf1d` (the diff is
+prepared on the GC thread; the pump applies it on the ack) and
+`bbcbcb5` (the pump's `host_snap_open` no longer flushes a memtable it
+cannot place; a no-progress snapshot ack waits one heartbeat). The
+`send_snap` and `kv_flush_locked` stacks are gone from the run-3
+profiles. Step 3's reap runs at `efsd` start. Step 4 carries
+`path_hint` on the next PUT and probes the other roots only on a
+miss. Step 5 sizes the send-buffer pool to `EFS_WRITE_PIPELINE`.
+Step 2 (the election trigger) is still open. The
+L1 cap that kept fcstor004/005 from compacting is removed in
+`bbcbcb5` (growable L1 list; L0 still 64).
+
 **Source (Sep 28 2026, 13:30–13:45 EDT).** `perf record -F 499 -g` attached
 to all four `efsd` on 19810 (RDMA, `2f086f5a0ef8-dirty`) while fstor007 ran
 `ecopy` and then a `dd` that did not start. Reports:
@@ -1931,6 +2110,46 @@ Steps, in this order; each is its own change with its own gate:
    same load, this is done. If not, the follower that cannot answer
    AppendEntries during an import needs the heartbeat answered from a
    thread that is not importing. Do not raise the election timeout.
+
+   **Measured cause candidate (Sep 28 22:19 EDT, after step 1 landed in
+   `bbcbcb5`).** Terms still move: group 0 9309 → 9368 and group 2
+   2763 → 2789 between 00:39Z and 02:19Z with no roll in between.
+   fcstor004 (`raft_id` 1; follower in group 2 whose leader is
+   fcstor006 = `raft_id` 3) prints
+   `raft-obs: tx->3 enq=50698 drop=72114 sent=50695 hi=2048`: the
+   per-peer outbox to the group 2 leader hit `HOST_OUTBOX_MAX` (2048)
+   and **dropped more frames than it sent**. `outbox_must_keep` protects
+   only `SNAP_REQ` and entry-carrying `AE_REQ`; the victims are
+   AppendEntries **replies**, heartbeats, and vote traffic. A leader
+   whose follower's replies are dropped re-sends after the `ae_inflight`
+   timeout and never sees the match advance; a follower whose heartbeats
+   are dropped on the way in campaigns. `rtt_avg=239us` on that link and
+   a synchronous request/reply `host_sender` bound one peer link to
+   roughly 4 000 frames/s, which the leader's AE rate under 36 writers
+   exceeds; the excess is dropped, not queued. `wait_timeouts=366`
+   on the same node are the client-visible BUSYs (W16).
+
+   Fixed implementation, in this order:
+
+   a. **Coalesce instead of drop.** An AE reply to peer P supersedes any
+      older AE reply to P still queued (only the latest `match`/`term`
+      matters); a heartbeat (empty `AE_REQ`) supersedes an older queued
+      heartbeat to P; a vote/pre-vote message is never dropped. When the
+      outbox is full, replace the superseded item in place; only if
+      nothing is replaceable return `EFS_ERR_AGAIN` to the caller (as
+      `send_ae` already handles for entry AEs). Gate: `drop=0` in every
+      `raft-obs tx->` line over a 9-client `run.sh ior`; both groups'
+      terms unchanged across the run.
+   b. **Do not let one peer's backlog hide a heartbeat.** If (a) leaves
+      `hi` at the cap, the sender needs the heartbeat ahead of queued
+      entry AEs: dequeue heartbeats and replies before entry AEs
+      (two-lane outbox), keeping entry AEs in order among themselves.
+   c. **The per-link rate is a design question.** `host_sender` waits
+      for `RAFT_REPLY` per frame. Letting more than the one in-flight
+      batch ride a link is pipelining and is forbidden below; batching
+      several reply frames into one RPC is not, but it changes the wire.
+      Measure after (a)+(b): if `hi` still reaches the cap with
+      `drop=0`, bring the frames/s and RTT numbers to the user.
 3. **Reap dead `snap-*.kvx.tmp`.** At `efsd` start, and whenever an export
    is abandoned (`send_snap` BUSY path, leader step-down), unlink every
    `snap-<group>-*.kvx.tmp` that is not the one in progress. Gate: after
@@ -1960,6 +2179,20 @@ Steps, in this order; each is its own change with its own gate:
 
 #### W15 — Client: copies and busy-waits are the write CPU
 
+**Status (Sep 29).** Step 2 is done in `bbcbcb5`
+(`efs_rdma_reply_ready_us` pauses at most 16 times, then the caller
+blocks on the CQ fd); on the run-3 profile the vDSO is 0.87% and the
+symbol is under the 0.5% floor. Step 1's fresh profile is run 2 /
+run 3 in §1b: `ll_write_buf` `memmove` 7.5%, RDMA send `memmove`
+6.3% (step 3 stands), and no `memmove` caller under
+`dcache_flush_slot_inner` above the 0.5% floor (the body-drop path is
+taken). Run 2's client report files were overwritten by run 3 (same
+`efs-mount` directory); those three numbers survive only here. The
+larger client item was the reclaim walk, W18, which is in tree.
+Step 3 hands a whole chunk to the dcache after one `fuse_buf_copy`
+(the request buffer does not outlive the reply). Step 4 is the
+same send-buffer pool as W14 step 5.
+
 **Source.** `client.sh --perf` on fstor007 during the same `ecopy`
 (`~/orcd/scratch/efs/perf/efs-mount/{flat,by_thread,callers}.txt`,
 371K samples). This profile is of the binary **before** the Sep 28
@@ -1981,6 +2214,32 @@ Kernel futex + schedule under 3%: the client is not lock-bound. It is
 copying and spinning. `ecopy` and `dd` on the same mount were not blocked
 by each other; the `dd` was blocked on the server (W14).
 
+**Re-profile, Sep 28 20:36–20:39 EDT (fstor007 `client.sh --perf`,
+214K samples, same report dir, binary with the body-drop and
+`dcache_ensure` changes).** `memmove` is still 35%. Resolved by call
+address (`perf report --no-children --symbol-filter=memmove -g
+caller,address` on fstor007): 14.6% under `ll_write_buf`
+efs_fuse.c:2569 (the `efs_dcache_try_patch` copy bounce → dcache),
+3.6% into the RDMA send buffer, and **~17% with no caller at all**.
+That last share is `fuse_buf_copy` in `efs_fuse_write_buf` (libfuse
+is built without frame pointers, so the chain stops at `memmove`).
+Every written byte is copied kernel → libfuse buffer (`memcpy_erms`
+1.6%), libfuse buffer → bounce (`fuse_buf_copy`, ~17%), bounce →
+dcache (14.6%), dcache → RDMA send buffer (3.6%). Step 3's gate counts
+the bounce copy too, not only the `ll_write_buf` line. `memmove` under
+`dcache_flush_slot_inner` is gone (body drop landed). The vDSO share is
+back at 5.7%, but from a different place: 2.5% `now_us()` in
+`send_buf_pick` (inlined into `efs_rdma_send_frame`) plus 1.7%
+`pthread_spin_lock` there — waiting for one of `EFS_RDMA_NSEND` = **2**
+pool send buffers per QP; a third 64 KiB PUT on the same conn spins.
+That is step 4 / W14 step 5, with its cause named. Two things in this
+profile are not on any item and are now **W20** and **W21** below:
+`ll_setattr` → `efs_fuse_getattr_ino` → `fill_stat_from_inode` is 8.9%
+(a stat walks every chunk of the file), and `efs_export_staged_bytes`
+is 6.6% self on the evictor thread (it was not replaced by a running
+total; the per-call loop over `shard_tabs` and up to 1024 passes per
+wake are still there).
+
 Steps:
 
 1. **Re-profile on the current binary** (one client, 8 GiB `dd bs=1M
@@ -2001,8 +2260,84 @@ Steps:
    path then sends it and frees it). Check `fuse_buf_copy` ownership in
    libfuse 3.10.2 before assuming the buffer outlives the reply. Gate:
    `ll_write_buf` `memmove` under 5%.
+
+   **Review of the in-tree version (Sep 28 22:00, `efs_fuse_write_buf`
+   "W15.3").** It copies once only when `size == cs && offset % cs == 0`,
+   i.e. a write of exactly one chunk. `max_write` is
+   `EFS_WRITE_PIPELINE × cs` (≥ 1 MiB), so `dd bs=1M`, IOR `-t 1m`, and
+   every `cp` deliver 1 MiB writes = eight chunks, and those all fall
+   through to the bounce + `efs_dcache_try_patch` path. The 22:11
+   profile of this binary shows it: `fuse_buf_copy` ~19% + `ll_write_buf`
+   16%. Fixed implementation: walk the write in chunk-aligned pieces.
+   For every whole chunk inside `[offset, offset+size)` allocate the
+   dcache-owned buffer (`efs_buf_alloc(cs)`), set `dst` to that one
+   buffer and call `fuse_buf_copy(&dst, buf, FUSE_BUF_NO_SPLICE)`;
+   `fuse_bufvec` keeps the source position (`buf->idx`, `buf->off`), so
+   successive calls consume the request buffer in order without a
+   bounce; store each with `efs_dcache_store_full_owned`. Only a partial
+   head or tail chunk goes through a bounce of its own length into
+   `efs_dcache_try_patch`. Keep the O_APPEND reservation and the
+   `stage_unpin` exactly where they are. If a mid-write store fails,
+   fall back to the old path for the rest of the request (no partial
+   success visible to the caller). Gate: on a 1-client `dd bs=1M`
+   profile, `memmove` under `ll_write_buf` under 2% and total `memmove`
+   with no caller under 5% (that is the single remaining copy); posix
+   2 `peer_shared_pwrite` / `concurrent_appends` unchanged.
 4. **`send_buf_pick` spin** — same as W14 step 5, one change for both
    sides.
+
+   **Review (22:11 profile, `NSEND = EFS_WRITE_PIPELINE` in the binary).**
+   The vDSO + `pthread_spin_lock` share did not move (6.9%). The
+   callers are `now_us()` and the spin at `efs_rdma_send_frame`
+   lines ~1257–1301: after `post_send` the sender **waits for its own
+   send CQE** (spin 200 µs, then `sched_yield` until `send_busy[idx]`
+   clears). More pool buffers cannot help; each PUT fragment still costs
+   the thread one HCA round trip before it can post the next. The
+   comment says the wait exists so a failed first SEND after upgrade
+   surfaces as EIO instead of hanging in recv. On the 22:48 single-`dd`
+   profile the vDSO share was 0.8%, so the wait costs CPU mainly when
+   several writers share one QP; the gate below still applies to the
+   seven-`dd` shape. Fixed implementation:
+   post and return; reap send CQEs where they are already reaped
+   (`send_buf_pick` on the next send, and in the reply wait —
+   `efs_rdma_recv_wait` / `efs_rdma_reply_ready*` call `reap_sends`
+   before blocking, and a send CQE with an error status marks
+   `rc->broken` and makes the pending reply wait return `EFS_ERR_NET`).
+   That preserves the "failed send becomes EIO on the reply path"
+   property without a synchronous wait. Keep the 5 s
+   `EFS_RDMA_SEND_WAIT_US` as the reply-wait's dead-QP bound. Gate:
+   vDSO + `pthread_spin_lock` under 1% on the dd profile;
+   `tests/test_rdma_xprt` and `tests/rdma_first_inode.sh` pass
+   (the first-SEND-after-upgrade case is the one the wait was added
+   for); 9-client dd not worse than 2551.5.
+5. **The last user-space copy: let the kernel fill the dcache buffer.**
+   After step 3 (verified 22:48: `ll_write_buf` `memmove` gone) every
+   written byte is still copied twice: kernel → libfuse request buffer
+   (`fuse_copy_page`/`memcpy_erms`, ~7% + 2.5% kernel) and libfuse
+   buffer → dcache (`fuse_buf_copy`, ~22% user, caller-less in perf
+   because libfuse has no frame pointers). libfuse 3 can receive a
+   write's payload through a pipe instead of its buffer
+   (`FUSE_CAP_SPLICE_READ`; `fuse_session_receive_buf` marks the
+   payload `FUSE_BUF_IS_FD`), and `fuse_buf_copy` from an fd buffer
+   into a memory buffer is one `read()` from the pipe into the
+   destination — the dcache buffer step 3 already allocates. Net: one
+   kernel copy per byte, none in user space. Do this as its own
+   change: in `efs_fuse_init` set `conn->want |= FUSE_CAP_SPLICE_READ`
+   when `conn->capable` has it; keep `FUSE_BUF_NO_SPLICE` on the
+   `fuse_buf_copy` calls (it only forbids `splice()` for fd→fd, which
+   we never do). Verify first, on fstor007, three things libfuse
+   3.10.2 decides at runtime: that a 1 MiB write is actually delivered
+   as an fd buffer (libfuse copies small requests to memory; check the
+   threshold in `fuse_session_receive_buf_int`), that the pipe can hold
+   `max_write` + header (`F_SETPIPE_SZ` vs `/proc/sys/fs/pipe-max-size`,
+   1 MiB default — if the cap is below `max_write` + 4 KiB the request
+   falls back to the buffer path and nothing changes), and that the
+   `write_buf` path is the only consumer (`efs_fuse_write` with a plain
+   pointer must not be reachable for fd buffers). Gate: on the 1-client
+   `dd bs=1M` profile, caller-less `memmove` under 3% and total
+   `memmove` under 12%; `fuse_copy_page` unchanged or lower; posix 1
+   jobs=1 200/201, posix 2 63/63 (`peer_shared_pwrite`, appends,
+   O_DIRECT tests); 1-client dd wall not worse than 947 RDMA.
 
 - **Gate:** posix 1 jobs=1 (200/201, `mmap_write_read` SKIP only), posix 2
   63/63, 1-client 8 GiB dd ≥ 977 MiB/s TCP / 947 RDMA (the Sep 27–28
@@ -2011,6 +2346,462 @@ Steps:
   replacing blake3 (the hash is not the wall; W3); putting the
   `sched_yield` loop back in `recv_poller` or the 200 µs clock spin back
   in `efs_rdma_recv_wait`.
+
+#### W16 — Under a write flood, a metadata read fails after 10 s and surfaces as ENOENT
+
+**Source (Sep 28 2026, ~18:30 EDT).** fstor007-mgmt mounted 19810 with
+`client.sh --perf` while the 9×4 IOR was writing. Mount succeeded
+(`fuse serving`, RDMA up). `df -h /tmp/efs-mount/` printed
+`No such file or directory`. The fuse log has one line for it:
+`inode-rpc: shard=0 type=47 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY`.
+Type 47 is `EFS_MSG_INODE_GETATTR`; shard 0 is the root's shard (even →
+group 2). The mount was alive; `client.sh stop` unmounted cleanly. Same
+class as the `INODE_LOOKUP` on shard 3745 that aborted IOR's `stat` in the
+22:00Z run (§1b). Not data loss, not a dead mount, not RDMA.
+
+Two defects, one visible and one underneath:
+
+1. **Error mapping.** `efs_client_stat_ino` and `efs_client_stat_refresh`
+   (`src/client/ops.c`) return `EFS_ERR_NOT_FOUND` for *any* RPC failure;
+   `ll_getattr` (`src/client/efs_fuse.c`) maps every non-ACCES failure to
+   `-ENOENT`. An overloaded cluster therefore looks like a missing
+   directory to `df`, `ls`, and every path walk. The comment above the
+   `no-hint` retry in `rpc_send_recv_shard` already names this.
+2. **The read starves.** A GETATTR is a linearizable read:
+   `host_read_index` records `commit` on arrival and waits for a read
+   round and `applied ≥ read_index`; `host_wait_applied` has the same
+   budget. Both give up after `HOST_READ_TRIES × HOST_TICK_US` = 400 ms
+   with BUSY (`obs_wait_timeouts` counts it). The client
+   (`rpc_send_recv_shard`) retries 16 times with `50 ms << min(attempt,4)`
+   backoff, ~10.35 s total, then returns `EFS_ERR_BUSY`. So the observed
+   line means group 2 could not satisfy a read for ten seconds straight:
+   either `applied` trailed `commit` by more than 400 ms the whole time
+   (36 ranks publishing; REPORT/publish applies on the pump; L1 pressure
+   from this same IOR is recorded in §1b), or group 2 was re-electing
+   (a hintless NOT_PRIMARY lands in the same BUSY/STALE bucket). A fresh
+   client is the victim because its first op is the root GETATTR and it
+   has no cached row; the IOR ranks mostly write and read their own
+   dcache.
+
+Steps, in this order:
+
+1. **Fix the mapping first (client, small).** Carry the RPC rc out of
+   `efs_client_stat_ino` / `efs_client_stat_refresh` (return it, do not
+   fold to NOT_FOUND). In `ll_getattr` and the `lookup_fill` path map
+   `EFS_ERR_BUSY` and `EFS_ERR_NOT_PRIMARY` to `-EBUSY` (rmdir/unlink
+   already use EBUSY for `EFS_ERR_BUSY`), `EFS_ERR_NET`/`EFS_ERR_IO` to
+   `-EIO`, and only a real `EFS_INODE_RPC_NOT_FOUND` to `-ENOENT`. Grep
+   every caller of both functions (there are ~10 in `efs_fuse.c`) —
+   some legitimately treat "cannot read parent" as ENOENT for a *child*
+   lookup; those need the same split. Gate: posix 1 jobs=1 200/201,
+   posix 2 63/63, and a forced 10 s BUSY (step 2's repro) makes `stat`
+   return EBUSY, never ENOENT. If the user prefers EIO over EBUSY for
+   stat, that is a one-line choice; ask before choosing EIO.
+2. **Reproduce and attribute, then decide which server fix applies.**
+   Script under `tests/measure/` (runbook in runbooks.md): start the 9×4
+   IOR (`run.sh debug`), mount a 10th client on node9901 or fstor007
+   (TCP or RDMA, whichever the cluster runs), and once a second run
+   `stat /tmp/efs-mount/` recording errno + wall, while sampling
+   `efs-mgmt raft-status` (`commit − applied`, `leader`, `term` per
+   group) and grepping the leaders' `efsd.log` for
+   `raft-host: read-sleep` / `apply-sleep us=` and `raft-obs`
+   `obs_wait_timeouts`. Outcome A: `commit − applied` on group 2 stays
+   above what 400 ms of apply covers for the whole IOR → the read is the
+   messenger and the fix is apply throughput (W14 step 1 plus the cost of
+   publish/REPORT apply under load; measure `apply_max` and per-cycle
+   apply count first). Outcome B: term changes line up with the BUSY
+   window → it is the W14 step 2 election trigger. Outcome C: lag is
+   bursty (compaction/flush stalls of ≥ 400 ms) → it is L1/L0 pressure
+   (§1b, W13's follow-on), not the read path. Record which; do not
+   guess.
+3. **Only after step 2:** if the lag is steady-state and apply throughput
+   cannot close it, bring the trade-off to the user: readers currently
+   wait for `applied ≥ commit-at-arrival`, which is the linearizable
+   contract; a read that gives up after 400 ms and a client that gives
+   up after 10 s are policy numbers the spec does not set. Do not change
+   either number on your own.
+
+**Step 2 outcome, first sample (Sep 28 22:11–22:19 EDT, no script yet).**
+Seven parallel `dd bs=1M` from fstor007 into new files in one directory;
+one `dd` got `open: Device or resource busy` (step 1's mapping is in
+the binary, so this is the same failure that printed ENOENT before).
+The fuse log for that mount holds **249** `exhausted 16 BUSY/STALE`
+lines: LOOKUP 98, SETATTR 50, GETATTR 47, RENAME 31, CREATE 23. Every
+`inode-rpc: retry … why=no-hint` line is a NOT_PRIMARY with no leader
+hint. `raft-status`: group 0 term 9368 (was 9309 at 00:39Z), group 2
+term 2789 (was 2763), both `commit == applied` when sampled;
+fcstor004 `raft-obs`: `wait_timeouts=366`, `apply_max=30us`,
+`apply-sleep` up to 57 ms on single entries, and the outbox
+`drop=72114 > sent=50695` to the group 2 leader. **That is Outcome B:
+elections, not apply lag.** The fix is W14 step 2 (a)–(c); W16 step 3's
+policy question does not arise until W14 step 2 is done and this is
+re-sampled with the script. Still write the script: it is the gate.
+
+- **Gate:** step 1's mapping gate; step 2's script committed with one
+  attributed run in `results/measure/`; §1b updated with the outcome.
+- **Forbidden:** raising `HOST_READ_TRIES`, `HOST_TICK_US`, or the
+  16-attempt client budget to make the symptom go away; serving a
+  GETATTR from the follower's or client's local state without the read
+  round (that is the linearizability I2/I10 guarantee); touching
+  `entry/attr_timeout`; clearing `FOPEN_DIRECT_IO`.
+
+#### W17 — Nine writers on one file: publish STALE storm, fsync EIO, and a FUSE request that outlives its process
+
+**Source (Sep 28 2026, 22:14–22:56Z, `bbcbcb5`).** ior-hard, 9 ranks,
+one file (ino 1166063), 47008-byte records, `run.sh ior`. Evidence:
+
+- fcstor004 `efsd.log`: a run of `raft-host: apply publish rc=-14
+  index=… ino=1166063 ci=…` with distinct chunk indexes (512867,
+  617329, 566269, 856797, …). `-14` is `EFS_ERR_STALE`: the CAS base
+  the client reported is no longer the published generation because
+  another rank published that chunk in between.
+- Every client `fuse.log`: `inode-rpc: retry type=67 … why=recv rc=-6`
+  then `inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries
+  (10.3 s) -> EBUSY`, several times per client. Type 67 is
+  `EFS_MSG_REPORT_CHUNKS`. The BUSY is the server's
+  `host_wait_applied` 400 ms budget inside `host_pub_batch_wait`
+  (group 2 apply lagging under nine clients' publish batches), and the
+  STALE is `host_pub_batch_wait` reporting any STALE verdict for the
+  batch.
+- fcstor013: `efs-fuse fsync: resource busy (efs_rc=-13) ino=1166063`
+  → `efs_fuse_fsync_ino` returns `-EIO`. IOR: `WARNING: fsync(19)
+  failed` ×8, `ERROR: close(20) failed`, rank 8 `MPI_ABORT`.
+- After the abort, `io500` on fcstor007–010 and 012–014 sat in
+  D-state `request_wait_answer` for 20+ min (SIGKILLed, still waiting
+  on a FUSE reply). The reply they wait for is a `flush`/`release`/
+  `fsync` whose `efs_client_report_dirty_ino(ino, sync=1)` is still in
+  its loop: up to 64 STALE rounds, each a `stale_repull_replay` (GET +
+  PUT of every moved chunk) plus a REPORT that can itself take the full
+  16-retry 10.3 s, and up to 8 BUSY rounds on top. The loop is bounded
+  in code and unbounded in practice.
+
+This is the W1 N-1 CAS shape (36-way sub-chunk CAS on Sep 21 gave
+hard-write 0.046 GiB/s) with nine whole ranks instead of sub-chunk
+writers. The 4-rank shared-file IOR passed on Sep 27 (481.56 MiB/s,
+`results/posix2/20260927-190509`); nine did not.
+
+What to implement, in this order:
+
+1. **A FUSE request returns.** `efs_client_report_dirty_ino` with
+   `sync=1` must have a wall-clock bound that is shorter than what the
+   kernel will wait, and the bound must cover the whole loop (STALE
+   rounds × REPORT retries × BUSY retries), not one leg. When the bound
+   is hit, `fsync` returns EIO with the dirty set merged back (the data
+   is not lost; the next fsync retries). Measure first: add a counter
+   line at loop exit (`report-loop ino= rounds= stale= busy= ms= rc=`)
+   and run ior-hard NP=9 once to record the distribution. Then bring the
+   number to the user — the 64-round and 16-retry budgets are policy
+   the spec does not set. Gate: after `pkill -9 -x io500` mid-ior-hard,
+   `pgrep -x io500` is empty within that bound on all nine clients
+   and `efs-fuse` is still serving (`stat` OK).
+2. **Attribute the STALE per chunk.** Log, on the server, how many
+   publishes of one `(ino, ci)` lost the CAS within one fsync window
+   (`raft-obs` counter `pub_stale` per group is enough), and on the
+   client how many bytes each `stale_repull_replay` re-PUT versus how
+   many bytes it owned. If a 47 KB record costs a 128 KiB GET + PUT +
+   re-REPORT per losing rank, that ratio is the number to show the user.
+   The `delta_off`/`delta_len` fields in `efs_chunk_rec` exist for a
+   sub-chunk span publish; check whether the replay path fills them or
+   always re-publishes the whole chunk, and record which.
+3. **Decided (D1, Sep 28): make the span publish commute.** Three
+   changes, in `efs_meta_apply_publish` and `dcache_flush_slot_inner`:
+   - **Server:** for `delta_len > 0`, drop the `expected_gen != committed
+     → STALE` check; a span attaches to whatever base is current. Keep
+     the check for full-image publishes (`delta_len == 0`), which still
+     require the live delta list to match exactly. When a fold replaces
+     the base, write the folded spans' `candidate_gen`s into the new
+     trailer (≤ `EFS_CHUNK_DELTA_MAX` entries); a span whose
+     `candidate_gen` is in that list is a replay → OK, no-op. Overlap
+     with a live span stays STALE (the client re-pulls that span's
+     bytes only). A full chain still returns STALE to the publisher,
+     who folds — that publisher, not the others.
+   - **Client:** a slot whose dirty ranges cover less than the chunk
+     publishes a span **even when `have_base` is set**
+     (`span_of` regardless of `have_base`); the full-image path is for
+     `dcache_full_overwrite` and for the fold. `stale_repull_replay`
+     on an overlap STALE re-pulls and re-publishes the overlapping span,
+     not the chunk.
+   - **Reader:** `efs_meta_apply_get_chunk_deltas` and the client's
+     base+spans overlay are unchanged; a reader that sees a full chain
+     may fold as a background PUT, off the read.
+   Gate: `test_meta_apply` gains "span after fold is OK",
+   "replay of folded span is no-op", "overlapping span is STALE";
+   `peer_shared_pwrite` and `concurrent_appends` pass; ior-hard NP=9
+   and NP=36 SEGS=3000 cold verify bad 0 with `pub_stale` per fsync
+   at 0 in steady state and the write rate rising from NP=4's 481.56
+   MiB/s.
+
+- **Gate:** step 1's bound + kill test; step 2's numbers in
+  `results/measure/` with the script under `tests/measure/`; step 3's
+  gate; ior-hard NP=4 SEGS=3000 cold verify still 12000 records bad 0;
+  posix 1 jobs=1 200/201; posix 2 63/63.
+- **Forbidden:** a distributed chunk lock; splitting REPORT into
+  several RPCs; widening the 16-attempt RPC budget or `HOST_READ_TRIES`;
+  making `fsync` return success on a merged-back (unpublished) dirty
+  set; `hard_remove`; raising `EFS_CHUNK_DELTA_MAX` to avoid the fold;
+  folding on a rank's `fsync` other than the one that filled the chain.
+
+#### W18 — Client: the dcache reclaim is a table walk, and it is most of the client's CPU under a long write
+
+**Source (Sep 28 2026, run 3, fcstor007 `efs-fuse`, 917K samples over
+~40 min).** `by_thread.txt`: `dcache_flush_slot_inner` 43.8% **self**,
+`pthread_once@GLIBC` 25.0% self, `pthread_mutex_lock` 8.3% +
+`unlock` 3.5%, blake3 3.3%, `memmove` 2.4%. `callers.txt`:
+`dcache_reclaim_main` is 73.5% of the process. The 5-minute profile
+from run 2 (36K samples) had blake3 at 27% and this function's self
+time under the floor; the long capture is the one that shows the
+steady state.
+
+Why it looks like this (`src/client/write.c`):
+
+- `DCACHE_SLOTS` is 65536 hash buckets of chained `dcache_ent`;
+  `DCACHE_RECLAIM_THREADS` is 16; each wake walks
+  `DCACHE_RECLAIM_SCAN` = 64 slots via a shared cursor and, in
+  `dcache_flush_slot_inner`, walks each slot's whole chain under the
+  shard mutex skipping clean entries (`!e->dirty || !e->data`). With
+  the staging table "over EFS_CLIENT_META_MB (256 MB) with nothing
+  evictable; growing" (every client logged this), the chains are long
+  and mostly clean. The self time is the chain walk.
+- `dcache_mu()` and `dcache_io_mu()` call
+  `pthread_once(&g_dcache_once, dcache_init)` on every call; the walk
+  calls them per slot. 25% of the client is that check.
+- 64 shard mutexes for 65536 slots, 16 walkers plus the FUSE write
+  threads (`efs_dcache_try_patch`) on the same locks: the 12% in
+  lock/unlock.
+
+What to implement:
+
+1. **Reclaim from a dirty list, not a table scan.** When an entry
+   becomes dirty (`dcache_note_dirty_bytes(+len)` call sites), put it on
+   a per-shard dirty list; reclaim pops from that list. A popped entry
+   that is no longer dirty is skipped in O(1). The chain walk in
+   `dcache_flush_slot_inner` stays only for `have_only=1` (close/fsync
+   of one inode), which can also use a per-inode index if the profile
+   still shows it. Gate: `dcache_flush_slot_inner` self under 5% and
+   `dcache_reclaim_main` under 15% of a 30 s-stonewall easy-write
+   profile; `dirty_bytes` accounting unchanged (posix 2 63/63;
+   `concurrent_appends` and `peer_shared_pwrite` pass).
+2. **Initialize the dcache once.** Call `dcache_init` from client
+   startup (the export mount path) and drop the `pthread_once` from
+   `dcache_mu` / `dcache_io_mu`. Gate: `pthread_once` gone from
+   `flat.txt`.
+3. **Re-measure W15 steps 1 and 3** on the same profile: `memmove` in
+   `ll_write_buf` (7.5% in run 2) and in the RDMA send (6.3%). Those
+   items stand; this one goes first because it is the larger share.
+
+- **Gate:** the two profile gates; 9-client 8 GiB dd not worse than
+  2551.5 MiB/s; 1-client dd not worse than 947 RDMA; posix 1 jobs=1
+  200/201, posix 2 63/63.
+- **Forbidden:** changing the 2 GiB reclaim limit or the 2× inline-help
+  cap to hide the walk; dropping the `have_base` guard for reclaim
+  (the `concurrent_appends` NULs); clearing `FOPEN_DIRECT_IO`.
+
+#### W19 — Server: the Raft pump copies every AppendEntries twice, and `try_commit` re-walks the log per reply
+
+**Source (Sep 28 2026, run 3, fcstor003 = group 0 leader, 1M
+samples).** `flat.txt`: `memmove` 18.5%, kernel `rep_movs_alternative`
+17.0%, `try_commit` 4.0% self, `__d_lookup_rcu` 2.6%. `callers.txt`:
+
+| share | stack |
+| --- | --- |
+| 12.6% | `host_pump` → `efs_raft_recv`/`efs_raft_flush` → `send_ae` → `host_send` → `memmove` |
+| 5.2% | same → `send_ae` → `memmove` (the arena fill) |
+| 6.9% | `host_sender` → `efs_conn_send_msg` → `writev` → `tcp_sendmsg` → `copyin` |
+| 10.5% | `host_pump` → `efs_raft_recv` → `try_commit` (4.0% self, `log_term` → `disk_get` → mutex) |
+
+On fcstor004 the receiving side is `server_handle_conn` → `recv` →
+`copyout` 15.4%. The peer connections are TCP for frames above the
+72 KiB RDMA buffer (`conn_pick_send_chan`), which is every catch-up
+AppendEntries batch.
+
+What the code does (`src/raft/raft.c`, `src/server/raft_host.c`):
+
+- `send_ae` mallocs an `EFS_RAFT_AE_BYTES` arena and `store->get`s each
+  entry into it (copy 1, `disk_get`). `host_send` encodes the message
+  into a stack buffer or a heap buffer (copy 2) and, when the stack
+  buffer sufficed, `malloc`+`memcpy`s it again (copy 3) before queueing
+  it for `host_sender`, which `writev`s it (kernel copy 4). All but the
+  last run on the pump thread, under whatever the pump holds.
+- `try_commit` runs on every AE reply and walks `n = last_i` down to
+  `commit_index`, calling `log_term` (a `disk_get` under the store
+  mutex) for each `n`, until it finds a quorum. When a follower is
+  behind, `last_i − commit_index` is large and the walk repeats per
+  reply.
+
+What to implement:
+
+1. **One user-space copy per AppendEntries.** Encode the wire frame
+   directly into the buffer `host_sender` will write: `send_ae` asks
+   `host_send` (or a new `net->alloc`) for a frame buffer sized from
+   the entries' `clen`, fills header + entries in place, and hands
+   ownership to the outbox. Drop the arena and the stack-then-heap
+   re-copy. Gate: `memmove` under `host_send` + `send_ae` under 3% of
+   the leader's profile during a 9-client write; `test_raft` OK.
+2. **`try_commit` from the reply's match index.** The only index whose
+   match changed is the replying peer's; a commit can only advance to
+   an `n` in `(commit_index, match_index[from]]` whose term is current.
+   Start the walk at `min(last_i, match_index[from])` and stop at the
+   first quorum; cache the term of the highest entry so the common case
+   is one `log_term`. Gate: `try_commit` self under 0.5%; `test_raft`
+   commit/term tests OK; no change in `commit_index` sequence on a
+   replayed unit log.
+3. **Measure, do not change, the transport choice.** Record how many
+   AE frames per second exceed 72 KiB and their size distribution
+   (`raft-obs` line). `EFS_RAFT_AE_BYTES` and the RDMA buffer size are
+   not to be tuned here; if the numbers say the peer path should ride
+   RDMA with a different framing, that is a design question for the
+   user.
+
+- **Gate:** the two profile gates; both groups commit==applied and no
+  term change during a 9-client 8 GiB dd; posix 1 9-host not worse
+  than `results/posix/20260928-034049`.
+- **Forbidden:** changing `EFS_RAFT_AE_BYTES`, `EFS_RAFT_AE_MAX`,
+  `HOST_PUB_BATCH_N`, `HOST_TICK_US`, or the heartbeat/election
+  timeouts; taking `h->mu` in `host_sender`; pipelining more than the
+  one in-flight batch per behind peer.
+
+#### W20 — Client: `stat` is O(chunks) — `st_blocks` walks every chunk of the file under two locks
+
+**Status (Sep 29, in tree, not measured).** `efs_inode_mem` keeps
+`present_chunks` (table inserts and removals) and `present_extra`
+(a dirty dcache slot that is not in the table). `st_blocks` reads
+that sum and probes only a partial tail. `ll_setattr` reads `size`
+from the row.
+
+**Source (Sep 28 2026, 20:36–20:39 EDT, fstor007 `client.sh --perf`,
+214K samples, `~/orcd/scratch/efs/perf/efs-mount/callers.txt`).**
+`ll_setattr` 8.9% of the process, all of it
+`efs_fuse_getattr_ino` → `fill_stat_from_inode` → `inode_allocated_bytes`
+(`src/client/efs_fuse.c`). Inside that: `efs_dcache_has` 3.7% self,
+`pthread_mutex_lock`/`unlock` 2.5%, `__lll_lock_wait` 2.0% (the futex
+sleeps under `fill_stat_from_inode` are 1.4% of the kernel time; the
+flush path holds `idx_mu` and the dcache shard mutexes).
+
+Why: `inode_allocated_bytes` computes `st_blocks` as "present chunks,
+not holes" by looping `ci = 0 .. size/128 KiB` and, per chunk, taking
+`efs_client_lock_dir` + `idx_mu` for `efs_export_get_chunk`, then the
+dcache shard mutex for `efs_dcache_has`. A 16 GiB IOR file is 131072
+chunks, so one `stat` is 262144 lock/unlock pairs and hash probes, and
+`ll_setattr` calls `efs_fuse_getattr_ino` **twice** (before, for
+`old_size`; after, for the reply). `ls -l`, `du`, `cp -p`/`ecopy`
+(utimes + chmod after each file), IOR's `stat`, and every `getattr`
+the kernel issues with `attr_timeout=0` pay this per file. It was ~0%
+when added (project-history: small files) and is now a scaling bug by
+the §1 rule: `stat` cost grows with file size.
+
+What to implement:
+
+1. **Make `st_blocks` O(1).** Keep a per-inode "present bytes" (or
+   present-chunk count) in the staged inode row, maintained where chunks
+   are inserted/removed in the client table (`efs_export_*chunk*` add /
+   remove / truncate) and where the dcache admits a dirty chunk that is
+   not yet in the table (`dcache_note_dirty_bytes` call sites already
+   count bytes per entry). `inode_allocated_bytes` reads that counter.
+   Holes stay holes: a chunk that is neither in the table nor dirty in
+   the dcache is not counted, same as today.
+2. **`ll_setattr` asks for `old_size` from the row, not a full
+   `getattr`.** Only `FUSE_SET_ATTR_SIZE` needs the old size, and it
+   needs `size`, not `st_blocks`.
+3. **Gate:** a `stat` of a 16 GiB file on an idle mount under 1 ms
+   (measure with `tests/measure/md_latency.py`'s stat row on a large
+   file, add that row); `ll_setattr`/`fill_stat_from_inode` under 0.5%
+   in the W15 re-profile; `st_blocks` unchanged for the posix suite
+   (`size_and_mtime`, sparse and truncate tests) — posix 1 jobs=1
+   200/201, posix 2 63/63.
+
+- **Forbidden:** reporting `st_blocks` from `size` alone (sparse files
+  and truncate stubs must still show holes); touching
+  `entry/attr_timeout`; caching a stale `st_blocks` across a peer's
+  REPORT (the counter is updated when the table adopts chunks, not
+  time-based).
+
+#### W21 — Client: the staging evictor recomputes the table size up to 1024 times per second and evicts nothing
+
+**Status (Sep 29, in tree, measured 22:48 — not fixed).** One
+`efs_export_staged_bytes` per wake. A wake walks at most four
+oldest bands; a fully pinned band advances a cursor for the next
+wake instead of looping 1024 times.
+
+**Re-review on the 22:48–22:55 profile (single `dd bs=1M`, 260K
+samples).** `efs_export_staged_bytes` **7.4% self** and
+`stage_evict_main` **5.4% self** (the inlined LRU scan in
+`evict_pass`) — 12.8% of the client, more than before. The per-wake
+cap works; the wake *rate* is the problem. `efs_client_stage_evict_kick`
+is called from the staging paths on every write and is gated only on
+`g_stage_bytes_seen > cap`. Once the table is over the cap with every
+entry pinned (the "growing" state every writer reaches), that gate is
+permanently true, so each 1 MiB write kicks the evictor, which wakes,
+walks up to 4096 `shard_tabs` in `efs_export_staged_bytes`, scans the
+LRU array up to four times, evicts nothing, goes back to
+`pthread_cond_timedwait`, and is kicked again by the next write. The
+1 s timer never gets to run because the kicks arrive faster.
+
+Fixed implementation (replaces steps 1–2 above):
+
+1. **A kick must not wake a scan that cannot evict.** Keep a
+   `g_evict_idle_until` (monotonic) set to now + 1 s whenever a wake
+   ends with `bytes > cap && evicted_total == 0`; `stage_evict_kick`
+   returns without signalling while now < that deadline. Clear the
+   deadline (set 0) where an entry becomes evictable — the unpin paths
+   (`efs_client_stage_unpin`, last close, dcache clean-and-unpinned
+   transitions) — so a real opportunity wakes the evictor at once.
+   Gate: with one writer over cap, the evictor wakes at most once per
+   second (count wakes in `EFS_STAGE_DBG` output).
+2. **`efs_export_staged_bytes` in O(1).** Maintain one cross-tab
+   running total in the root export, updated by `staged_slab_add` and
+   the child/name-arena accounting where each tab's counters change
+   (they already update per-tab totals); the shard-tab loop goes.
+   `efs_fuse.c:5047` (the mount log line) reads the same total.
+   Gate: `efs_export_staged_bytes` under 0.2% on any profile.
+3. **The LRU scan is the remaining cost per real wake** (5.4% here
+   because of the wake rate; with step 1 it is 1 scan/s). If it still
+   shows above 0.5% after step 1, keep the LRU in tick order (a
+   min-heap or a circular array indexed by tick) so "the 256 oldest
+   above a cursor" is a slice, not a pass over `g_lru_mask + 1` slots.
+   Do not do this before measuring after step 1.
+4. **Gate:** as below, plus `stage_evict_main` self + children under
+   0.5% on a 1-client `dd bs=1M` profile with the table over cap.
+
+**Source (same profile as W20).** `efs_export_staged_bytes` 6.6%
+**self**, caller `stage_evict_main` (`src/client/stage_evict.c`).
+`stage_evict_main` itself 2.4%. W15's table said this was "replaced by a
+running total Sep 28"; it was not. `export_staged_bytes_one` reads
+running totals for one tab, but `efs_export_staged_bytes` still loops
+`s = 1 .. shard_tab_cap` over `shard_tabs` (up to 4096) per call, and
+`evict_pass` calls it once per pass.
+
+Why the call count: when `bytes > cap` and the SCAN_BATCH (256) oldest
+LRU entries are all pinned, `evict_pass` returns `evicted=0,
+band_full=1`; `stage_evict_main` sets `min_tick = band_max` and loops,
+up to 1024 rounds per wake, each round recomputing staged bytes and
+scanning the **whole** LRU array (`for i in 0..g_lru_mask`) to find the
+next 256 candidates. Every client logged "staging table over
+EFS_CLIENT_META_MB (256 MB) with nothing evictable; growing" during the
+IOR, so this is the steady state under a write flood: O(rounds × (tabs
++ LRU)) per second, no eviction, on a core the writers wanted.
+
+What to implement:
+
+1. **One `staged_bytes` per wake.** Compute it once in
+   `stage_evict_main` before the round loop and adjust by what each
+   round actually freed (`evict_pass` knows the bytes it dropped), or
+   keep a true running total across tabs (`staged_slab_add` already
+   exists per tab; add the cross-tab sum there). Gate:
+   `efs_export_staged_bytes` under 0.5% in the W15 re-profile.
+2. **Stop the pinned-band loop from rescanning the LRU.** Walk the LRU
+   once per wake in tick order (or keep it ordered) so advancing past a
+   pinned band is a cursor move, not a fresh O(N) scan. If the whole
+   table is pinned, log the "growing" line once (already done) and
+   sleep until the next kick or 1 s — do not spend 1024 rounds proving
+   it. Gate: `stage_evict_main` + children under 1% while a client is
+   over cap with all entries pinned (the IOR steady state).
+3. **Gate:** W9's RSS result still holds (cold stat of 1M files levels
+   near 233 MB, `results/measure/20260927-w9-walk`); posix 1 jobs=1
+   200/201; posix 2 63/63.
+
+- **Forbidden:** raising `EFS_CLIENT_META_MB` to hide it; evicting
+  pinned (dirty or open) inodes; changing the 1 s wake period to
+  something longer so the walk is merely rarer.
 
 #### W12 — Repo hygiene
 

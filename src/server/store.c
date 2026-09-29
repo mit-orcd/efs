@@ -354,14 +354,25 @@ int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     char path[8192];
     uint32_t ri;
+    int hint = efs_tls_path_hint;
 
     /* Do not fall back to gen=0 when the caller asked for a candidate.
      * A per-fragment leftover hit mixed with gen-N siblings decodes as
      * EFS_ERR_DECODE (W1 two-client RMW).
      * Called without the writer-pool lock. Holding that lock across
      * these walks serialized every PUT. A thread-local directory fd
-     * removed the walk from the profile and slowed the 9-client dd. */
+     * removed the walk from the profile and slowed the 9-client dd.
+     * W14.4: a hint from the previous PUT of this (ino, ci) is one
+     * access(). The other roots are walked only when that misses. */
+    if (hint >= 0 && (uint32_t)hint < n) {
+        fragment_path_at(s, (uint32_t)hint, ex, ino, chunk_index,
+                         fragment_index, path, sizeof(path));
+        if (access(path, F_OK) == 0)
+            return hint;
+    }
     for (ri = 0; ri < n; ri++) {
+        if ((int)ri == hint)
+            continue;
         fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
         if (access(path, F_OK) == 0)

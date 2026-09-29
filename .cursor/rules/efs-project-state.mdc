@@ -50,7 +50,13 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   InstallSnapshot (W11), a distributed chunk lock (W1), splitting REPORT
   into several RPCs (W3/W4), publish-on-every-`write()` (W2), relaxing
   `entry/attr_timeout=0`, `hard_remove`. Bring the measured symptom to the
-  user.
+  user. **Decided Sep 28 (START-HERE "Decisions — taken and pending",
+  D1–D3): span publishes commute (no base-gen CAS for spans, fold by
+  the chain-filler or a reader, still no lock); `open()` adopts the row
+  only and chunk maps arrive in per-lane windows with no knob; the 5/s
+  idle gate stays. Implement those; do not re-ask. The implementation
+  order is the numbered table there: W17.1, W16.1, W18, W19, W14.4,
+  W15.3, residuals, D1, D2, W16.2–3, W8/W10.**
 - **EEXIST / `ino_dup` on a unique never-used name is an allocator bug,
   never benign.** Two names on one inode row = duplicate ino (Sep 19–20:
   IO-500 76108 read errors + 27 undeletable files; posix `cafeé`/`aaaa…`).
@@ -59,9 +65,28 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
-  (`7eecf1da00cd-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
-  Stopped after the Sep 28 22:05Z perf IOR: efsd and efs-fuse are
-  down on purpose. Restart is the usual no-`--join` start.
+  (`bbcbcb5ad779-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
+  Rolled `--all` 02:35Z Sep 29 with `--perf --strace` (RDMA). Group 0
+  leader 0 term 9370 commit==applied 13674381; group 2 leader 1 term
+  2792 commit==applied 12095245. Clients fcstor007–015 remounted
+  02:35Z, all FUSE_OK, perf and strace attached (the recorder starts
+  in the daemon child). IOR `results/io500/20260929-023447-iorperf2`
+  aborted on the first BUSY REPORT (rounds=1, rc=-13, 18–19 s); no
+  bandwidth. Trace files are node-local `/tmp/efs-perf/`
+  (`efsd.data`+`efsd.strace` on 003–006, `fuse.data`+`fuse.strace`
+  on 007–015); recorders were stopped at 02:41Z. Prior roll was
+  00:28Z.
+  At 00:39Z group 0 was commit==applied 13665609 (term 9309, leader 0)
+  and group 2 12085588 (term 2763, leader 3). fcstor006 lagged that
+  roll on a 2.3 GB group-2 snapshot (5796 ms) and was caught up
+  (12083285) before the client remount. The `-dirty` is the node tree
+  missing tracked `results/` (rsync excludes that dir), and all four
+  IDs match. Clients fcstor007–015 were remounted RDMA at 00:39Z.
+  The 00:40Z IOR aborted on fsync EIO (the W17.1 bound on the first
+  BUSY REPORT; the old loop retried BUSY 8×); ranks exited by 00:41Z,
+  no D-state. Profiles: W18 and W19 are out of the top of the client
+  and group-0 leader (`results/io500/20260929-002758-wimpl`, START-HERE
+  §1b). No IOR bandwidth from that run.
   L1 is a growable list (the MANIFEST was already one line per file).
   After the Sep 28 evening roll, fcstor004 L0 went 49→2 and fcstor005
   58→3 with `kv-compact` rc=0; during the following IOR, L1 grew to

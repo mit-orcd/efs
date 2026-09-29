@@ -1300,36 +1300,52 @@ static int file_chunk_present(efs_ino_t ino, uint32_t ci)
 
 static uint64_t inode_allocated_bytes(const struct efs_inode *ino)
 {
+    uint32_t cs, n;
+    uint64_t alloc, partial;
+    int tail;
     if (!ino || efs_mode_is_dir(ino->mode) || efs_mode_is_lnk(ino->mode))
         return ino ? ino->size : 0;
     if (ino->pack_ino && ino->pack_len)
         return ino->pack_len;
-    uint32_t cs = fuse_chunk_size();
+    cs = fuse_chunk_size();
     if (cs == 0 || ino->size == 0)
         return 0;
-    uint32_t nci = (uint32_t)((ino->size + (uint64_t)cs - 1) / cs);
-    uint64_t alloc = 0;
-    for (uint32_t ci = 0; ci < nci; ci++) {
-        int present = 0;
-        /* idx_mu then dcache_mu deadlocks the flush path (dcache then
-         * efs_client_read → idx_mu). Check the table and dcache separately. */
-        efs_client_lock_dir(ino->ino);
-        pthread_mutex_lock(&g_client.idx_mu);
-        present = (efs_export_get_chunk(&g_client.export, ino->ino, ci,
-                                        NULL) == 0);
-        pthread_mutex_unlock(&g_client.idx_mu);
-        efs_client_unlock_dir(ino->ino);
-        if (!present)
-            present = efs_dcache_has(ino->ino, ci);
-        if (present) {
-            uint64_t start = (uint64_t)ci * cs;
-            uint64_t end = start + cs;
-            if (end > ino->size)
-                end = ino->size;
-            alloc += end - start;
-        }
-    }
+    /* W20: one counter, not a walk of every chunk. A partial tail is
+     * the only chunk that is not a full cs, so it is one extra probe. */
+    efs_client_lock_dir(ino->ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    n = efs_export_present_count(&g_client.export, ino->ino);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino->ino);
+    partial = ino->size % cs;
+    if (partial == 0 || n == 0)
+        return (uint64_t)n * cs;
+    tail = file_chunk_present(ino->ino,
+                              (uint32_t)(ino->size / cs));
+    if (!tail)
+        return (uint64_t)n * cs;
+    alloc = (uint64_t)(n - 1) * cs + partial;
     return alloc;
+}
+
+/* W16.1: BUSY and NOT_PRIMARY are not a missing inode. */
+static int fuse_stat_errno(int rc)
+{
+    if (rc == EFS_OK)
+        return 0;
+    if (rc == EFS_ERR_ACCES)
+        return -EACCES;
+    if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_PRIMARY)
+        return -EBUSY;
+    if (rc == EFS_ERR_NOT_FOUND)
+        return -ENOENT;
+    if (rc == EFS_ERR_NOMEM)
+        return -ENOMEM;
+    if (rc == EFS_ERR_EXIST)
+        return -EEXIST;
+    if (rc == EFS_ERR_NAMETOOLONG)
+        return -ENAMETOOLONG;
+    return -EIO;
 }
 
 static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
@@ -1405,7 +1421,7 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
     if (rc == EFS_ERR_ACCES)
         return -EACCES;
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     fill_stat_from_inode(stbuf, &row);
     return 0;
 }
@@ -1476,7 +1492,7 @@ static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col)
     if (rc == EFS_ERR_ACCES)
         return -EACCES;
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(parent.mode))
         return -ENOTDIR;
     {
@@ -2520,36 +2536,158 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
         return 0;
     if (fuse_odirect_unaligned(fi, offset, size))
         return -EINVAL;
-    size_t copy_cap = 0;
-    char *copy = bounce_alloc(size, &copy_cap);
-    if (!copy)
-        return -ENOMEM;
-    struct fuse_bufvec dst = FUSE_BUFVEC_INIT(size);
-    dst.buf[0].mem = copy;
-    if (fuse_buf_copy(&dst, buf, FUSE_BUF_NO_SPLICE) < 0) {
-        bounce_release(copy, copy_cap);
-        return -EIO;
-    }
 
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
         pthread_mutex_lock(append_mu(ino));
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0) {
-            bounce_release(copy, copy_cap);
             pthread_mutex_unlock(append_mu(ino));
             return rc;
         }
     }
-    /* Sub-chunk 4k: patch the dirty chunk in memory. Sending every 4k
-     * through writeback did a 128 KiB RMW+PUT and EIO'd when the GET
-     * missed under load. O_APPEND tracks dirty ranges until the first
-     * PUT, then keeps have_base=1; flush merge-base is a published
-     * chunk GET, not a size-clamped efs_client_read. */
-    if ((append ? efs_dcache_try_patch_sparse
-                : efs_dcache_try_patch)(ino, (uint64_t)offset, (uint32_t)size,
-                                        (const uint8_t *)copy) == 0) {
-        bounce_release(copy, copy_cap);
+
+    /* W15.3: walk the write in chunk-sized pieces. Each whole chunk is
+     * one fuse_buf_copy into a pool buffer the dcache owns (libfuse
+     * 3.10.2 reclaims the request buffer at reply, so the slot cannot
+     * keep that pointer). fuse_bufvec advances buf->idx/off, so the
+     * next piece continues in the request. A partial head or tail is
+     * a bounce of its own length. A failed whole-chunk store falls
+     * back to the bounce path for the rest of the request; the caller
+     * still sees the full size or an error, never a short count. */
+    {
+        uint32_t cs = fuse_chunk_size();
+        uint64_t pos = (uint64_t)offset;
+        size_t left = size;
+        int failed = 0;
+
+        if (!cs) {
+            if (append)
+                pthread_mutex_unlock(append_mu(ino));
+            return -EIO;
+        }
+        while (left && !failed) {
+            uint32_t into = (uint32_t)(pos % cs);
+            uint32_t room = cs - into;
+            uint32_t n = left < room ? (uint32_t)left : room;
+
+            if (into == 0 && n == cs) {
+                uint8_t *chunk = efs_buf_alloc(cs);
+                struct fuse_bufvec dst = FUSE_BUFVEC_INIT(n);
+
+                if (!chunk) {
+                    failed = 1;
+                    rc = -ENOMEM;
+                    break;
+                }
+                dst.buf[0].mem = chunk;
+                if (fuse_buf_copy(&dst, buf, FUSE_BUF_NO_SPLICE) < 0) {
+                    efs_buf_free(chunk, cs);
+                    failed = 1;
+                    rc = -EIO;
+                    break;
+                }
+                if (efs_dcache_store_full_owned(
+                        ino, (uint32_t)(pos / cs), chunk, cs) == 0) {
+                    pos += n;
+                    left -= n;
+                    continue;
+                }
+                /* Store failed; the buffer is still ours. Patch it,
+                 * then bounce whatever the request still holds. */
+                if ((append ? efs_dcache_try_patch_sparse
+                            : efs_dcache_try_patch)(
+                        ino, pos, cs, chunk) != 0) {
+                    efs_buf_free(chunk, cs);
+                    failed = 1;
+                    rc = -EIO;
+                    break;
+                }
+                efs_buf_free(chunk, cs);
+                pos += n;
+                left -= n;
+                if (left) {
+                    size_t cap = 0;
+                    char *copy = bounce_alloc(left, &cap);
+                    struct fuse_bufvec rest = FUSE_BUFVEC_INIT(left);
+
+                    if (!copy) {
+                        failed = 1;
+                        rc = -ENOMEM;
+                        break;
+                    }
+                    rest.buf[0].mem = copy;
+                    if (fuse_buf_copy(&rest, buf, FUSE_BUF_NO_SPLICE) < 0) {
+                        bounce_release(copy, cap);
+                        failed = 1;
+                        rc = -EIO;
+                        break;
+                    }
+                    if ((append ? efs_dcache_try_patch_sparse
+                                : efs_dcache_try_patch)(
+                            ino, pos, (uint32_t)left,
+                            (const uint8_t *)copy) == 0) {
+                        bounce_release(copy, cap);
+                    } else {
+                        rc = efs_wb_enqueue_owned(ino, pos, left, copy, NULL,
+                                                  cap);
+                        if (rc != 0) {
+                            failed = 1;
+                            if (rc == EFS_ERR_QUOTA)
+                                rc = -ENOSPC;
+                            else
+                                rc = -EIO;
+                        }
+                    }
+                    left = 0;
+                }
+                continue;
+            }
+
+            {
+                size_t cap = 0;
+                char *copy = bounce_alloc(n, &cap);
+                struct fuse_bufvec dst = FUSE_BUFVEC_INIT(n);
+
+                if (!copy) {
+                    failed = 1;
+                    rc = -ENOMEM;
+                    break;
+                }
+                dst.buf[0].mem = copy;
+                if (fuse_buf_copy(&dst, buf, FUSE_BUF_NO_SPLICE) < 0) {
+                    bounce_release(copy, cap);
+                    failed = 1;
+                    rc = -EIO;
+                    break;
+                }
+                if ((append ? efs_dcache_try_patch_sparse
+                            : efs_dcache_try_patch)(
+                        ino, pos, n, (const uint8_t *)copy) == 0) {
+                    bounce_release(copy, cap);
+                } else {
+                    rc = efs_wb_enqueue_owned(ino, pos, n, copy, NULL, cap);
+                    if (rc != 0) {
+                        failed = 1;
+                        if (rc == EFS_ERR_QUOTA)
+                            rc = -ENOSPC;
+                        else
+                            rc = -EIO;
+                        break;
+                    }
+                }
+                pos += n;
+                left -= n;
+            }
+        }
+        if (failed) {
+            if (append) {
+                efs_client_stage_unpin(ino);
+                pthread_mutex_unlock(append_mu(ino));
+            }
+            efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
+            return rc;
+        }
         efs_dcache_maybe_reclaim();
         if (append) {
             efs_client_stage_unpin(ino);
@@ -2557,24 +2695,6 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
         }
         return (int)size;
     }
-
-    rc = efs_wb_enqueue_owned(ino, (uint64_t)offset, size, copy, NULL,
-                              copy_cap);
-    if (append) {
-        if (rc == 0)
-            (void)efs_wb_sync_ino(ino);
-        efs_client_stage_unpin(ino);
-        pthread_mutex_unlock(append_mu(ino));
-    }
-    if (rc == EFS_ERR_QUOTA) {
-        efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
-        return -ENOSPC;
-    }
-    if (rc != 0) {
-        efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
-        return -EIO;
-    }
-    return (int)size;
 }
 
 static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
@@ -2692,7 +2812,7 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
         return -EEXIST;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(parent.mode))
         return -ENOTDIR;
     int wx = check_dir_wx(&parent);
@@ -2760,7 +2880,7 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
         return -EEXIST;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(parent.mode))
         return -ENOTDIR;
     int wx = check_dir_wx(&parent);
@@ -2818,7 +2938,7 @@ static int efs_fuse_unlink_at(fuse_ino_t parent_ino, const char *name)
         return -EACCES;
     rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     int wx = check_dir_wx(&parent);
     if (wx != 0)
         return wx;
@@ -2830,7 +2950,7 @@ static int efs_fuse_rmdir_at(fuse_ino_t parent_ino, const char *name)
     struct efs_inode parent;
     int rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     int wx = check_dir_wx(&parent);
     if (wx != 0)
         return wx;
@@ -3014,7 +3134,7 @@ static int efs_fuse_symlink_at(const char *link, fuse_ino_t parent_ino,
     struct efs_inode parent;
     int rc = efs_client_stat_ino((efs_ino_t)parent_ino, &parent);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(parent.mode))
         return -ENOTDIR;
     int wx = check_dir_wx(&parent);
@@ -3045,7 +3165,7 @@ static int efs_fuse_readlink_ino(fuse_ino_t ino, char *buf, size_t size)
     struct efs_inode row;
     int rc = efs_client_stat_ino((efs_ino_t)ino, &row);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     if (!efs_mode_is_lnk(row.mode))
         return -EINVAL;
     if (size == 0)
@@ -3078,7 +3198,7 @@ static int efs_fuse_link_at(fuse_ino_t src_ino, fuse_ino_t newparent,
         return -EPERM;
     rc = efs_client_stat_ino((efs_ino_t)newparent, &parent);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     int wx = check_dir_wx(&parent);
     if (wx != 0)
         return wx;
@@ -3280,16 +3400,16 @@ static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
         return -EACCES;
     rc = efs_client_stat_ino((efs_ino_t)parent, &src_parent);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     int wx = check_dir_wx(&src_parent);
     if (wx != 0)
         return wx;
     rc = efs_client_rpc_lookup(g_client.export_id, (efs_ino_t)parent, name, &src);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     rc = efs_client_stat_ino((efs_ino_t)newparent, &dst_parent);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     wx = check_dir_wx(&dst_parent);
     if (wx != 0)
         return wx;
@@ -3688,6 +3808,7 @@ static int efs_fuse_wait_ready(int rfd, pid_t child, int timeout_ms)
 static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
 {
     (void)userdata;
+    efs_dcache_init();
     /* Timeouts are per lookup/getattr reply (always 0). There is no
      * fuse_config on the low-level API. */
     if (conn) {
@@ -3854,7 +3975,7 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
     if (rc != EFS_OK)
         rc = efs_client_stat_ino((efs_ino_t)parent, &prow);
     if (rc != EFS_OK)
-        return -ENOENT;
+        return fuse_stat_errno(rc);
     if (!efs_mode_is_dir(prow.mode))
         return -ENOTDIR;
     rc = check_dir_x(&prow);
@@ -4001,8 +4122,10 @@ static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     int rc;
     t_req = req;
     if (to_set & FUSE_SET_ATTR_SIZE) {
-        if (efs_fuse_getattr_ino(ino, &st, fi) == 0)
-            old_size = st.st_size;
+        struct efs_inode row;
+        /* Size only. st_blocks is not an input to truncate. */
+        if (efs_client_stat_ino((efs_ino_t)ino, &row) == EFS_OK)
+            old_size = (off_t)row.size;
     }
     rc = efs_fuse_setattr_ino(ino, attr, to_set, fi);
     if (rc == 0)
@@ -4610,6 +4733,8 @@ static int mkdir_p(const char *path)
 }
 
 static pid_t g_perf_pid = -1;
+static int g_perf_want;           /* --perf given; start after the fork */
+static char g_perf_path[512];
 
 static pid_t start_perf_recorder(pid_t target, const char *perf_path)
 {
@@ -4640,20 +4765,80 @@ static pid_t start_perf_recorder(pid_t target, const char *perf_path)
     return pid;
 }
 
-static void stop_perf_recorder(void)
+static pid_t g_strace_pid = -1;
+static int g_strace_want;         /* --strace given; start after the fork */
+static char g_strace_path[512];
+
+/* --strace: `strace -f -tt -T -o <path> -p <pid>` on the daemon. ptrace
+ * stops every syscall of every thread, so this is for one client and a
+ * wall question (where did an fsync's 8 s go), never for a bandwidth
+ * number. Needs kernel.yama.ptrace_scope=0 (runtime on the test hosts).
+ * EFS_STRACE_EXPR narrows it, e.g. "trace=fsync,writev,recvfrom,futex"
+ * (passed as -e). */
+static pid_t start_strace_recorder(pid_t target, const char *path)
 {
-    if (g_perf_pid > 0) {
-        kill(g_perf_pid, SIGTERM);
-        /* Wait (up to ~5s) for perf to finalize and write perf.data. */
+    char dir[8192];
+    strncpy(dir, path, sizeof(dir) - 1);
+    dir[sizeof(dir) - 1] = '\0';
+    char *slash = strrchr(dir, '/');
+    if (slash) {
+        *slash = '\0';
+        mkdir_p(dir);
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        perror("fork strace");
+        return -1;
+    }
+    if (pid == 0) {
+        char pid_str[32];
+        snprintf(pid_str, sizeof(pid_str), "%d", (int)target);
+        const char *expr = getenv("EFS_STRACE_EXPR");
+        const char *av[16];
+        int n = 0;
+        av[n++] = "strace";
+        av[n++] = "-f";
+        av[n++] = "-tt";
+        av[n++] = "-T";
+        av[n++] = "-qq";
+        av[n++] = "-o";
+        av[n++] = path;
+        av[n++] = "-p";
+        av[n++] = pid_str;
+        if (expr && *expr) {
+            av[n++] = "-e";
+            av[n++] = expr;
+        }
+        av[n] = NULL;
+        execvp("strace", (char *const *)av);
+        perror("exec strace");
+        _exit(1);
+    }
+    return pid;
+}
+
+/* SIGTERM makes perf finalize perf.data and strace detach; wait up to
+ * ~5 s, then SIGKILL. */
+static void stop_recorder(pid_t *pidp)
+{
+    if (*pidp > 0) {
+        kill(*pidp, SIGTERM);
         for (int i = 0; i < 50; i++) {
-            if (waitpid(g_perf_pid, NULL, WNOHANG) == g_perf_pid)
+            if (waitpid(*pidp, NULL, WNOHANG) == *pidp)
                 break;
             usleep(100000);
         }
-        kill(g_perf_pid, SIGKILL);
-        waitpid(g_perf_pid, NULL, 0);
-        g_perf_pid = -1;
+        kill(*pidp, SIGKILL);
+        waitpid(*pidp, NULL, 0);
+        *pidp = -1;
     }
+}
+
+static void stop_perf_recorder(void)
+{
+    stop_recorder(&g_strace_pid);
+    stop_recorder(&g_perf_pid);
 }
 
 /* Custom fuse_main replacement that uses fuse_loop_mt with max_idle_threads
@@ -4726,17 +4911,17 @@ int main(int argc, char **argv)
     setvbuf(stderr, NULL, _IOLBF, 0);
     efs_fuse_install_crash_handlers();
 
-    int perf = 0;
+    int perf = 0, strace_opt = 0;
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--perf") == 0) {
+        if (strcmp(argv[i], "--perf") == 0)
             perf = 1;
-            break;
-        }
+        else if (strcmp(argv[i], "--strace") == 0)
+            strace_opt = 1;
     }
 
     if (argc < 4) {
         fprintf(stderr,
-                "Usage: %s <node1:port> [<node2:port> ...] <export-name> <mountpoint> [fuse options] [--perf]\n"
+                "Usage: %s <node1:port> [<node2:port> ...] <export-name> <mountpoint> [fuse options] [--perf] [--strace]\n"
                 "       A single server address is enough; the client will discover the rest.\n",
                 argv[0]);
         return 1;
@@ -4874,7 +5059,8 @@ int main(int argc, char **argv)
     /* Timeouts are per lookup/getattr reply (always 0). High-level
      * attr_timeout= mount options are not valid for fuse_session_new. */
     while (arg_idx < argc && fuse_argc < 63) {
-        if (strcmp(argv[arg_idx], "--perf") == 0) {
+        if (strcmp(argv[arg_idx], "--perf") == 0 ||
+            strcmp(argv[arg_idx], "--strace") == 0) {
             arg_idx++;
             continue;
         }
@@ -4882,17 +5068,26 @@ int main(int argc, char **argv)
     }
     fuse_argv[fuse_argc] = NULL;
 
-    char perf_path[512];
     if (perf) {
+        /* The recorder is started inside efs_fuse_main_mt, AFTER the
+         * daemon fork: started here it attaches to the parent, which
+         * _exit()s once FUSE_INIT is answered, and perf dies with
+         * "Couldn't create thread/CPU maps: No such process" (the
+         * 20260929-021039-iorperf run recorded nothing on 9 clients). */
         const char *pp = getenv("EFS_PERF_PATH");
         if (pp && *pp)
-            snprintf(perf_path, sizeof(perf_path), "%s", pp);
+            snprintf(g_perf_path, sizeof(g_perf_path), "%s", pp);
         else
-            snprintf(perf_path, sizeof(perf_path), "/tmp/efs-fuse-perf-%d/perf.data", (int)getpid());
-        g_perf_pid = start_perf_recorder(getpid(), perf_path);
-        if (g_perf_pid < 0) {
-            fprintf(stderr, "Warning: could not start perf recorder; continuing without profiling\n");
-        }
+            snprintf(g_perf_path, sizeof(g_perf_path), "/tmp/efs-fuse-perf-%d/perf.data", (int)getpid());
+        g_perf_want = 1;
+    }
+    if (strace_opt) {
+        const char *sp = getenv("EFS_STRACE_PATH");
+        if (sp && *sp)
+            snprintf(g_strace_path, sizeof(g_strace_path), "%s", sp);
+        else
+            snprintf(g_strace_path, sizeof(g_strace_path), "/tmp/efs-fuse-strace-%d.txt", (int)getpid());
+        g_strace_want = 1;
     }
 
     int ret = efs_fuse_main_mt(fuse_argc, fuse_argv);
@@ -4968,6 +5163,26 @@ static int efs_fuse_main_mt(int argc, char *argv[])
         g_fuse_ready_wr = pfd[1];
         (void)setsid();
         fprintf(stderr, "efs-fuse daemon pid=%d\n", (int)getpid());
+        fflush(stderr);
+    }
+
+    /* This is the process that serves the mount (the child, or the only
+     * process under -f). Attach the recorder to it; the parent above has
+     * already been excluded. */
+    if (g_perf_want) {
+        g_perf_pid = start_perf_recorder(getpid(), g_perf_path);
+        if (g_perf_pid < 0)
+            fprintf(stderr, "Warning: could not start perf recorder; continuing without profiling\n");
+        else
+            fprintf(stderr, "efs-fuse perf recorder pid=%d -> %s\n", (int)g_perf_pid, g_perf_path);
+        fflush(stderr);
+    }
+    if (g_strace_want) {
+        g_strace_pid = start_strace_recorder(getpid(), g_strace_path);
+        if (g_strace_pid < 0)
+            fprintf(stderr, "Warning: could not start strace; continuing without it\n");
+        else
+            fprintf(stderr, "efs-fuse strace pid=%d -> %s\n", (int)g_strace_pid, g_strace_path);
         fflush(stderr);
     }
 

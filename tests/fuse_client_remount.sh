@@ -10,6 +10,10 @@
 #                    cluster version unchanged and only add an env var.
 # EFS_FUSE_ENV='A=1 B=2'  extra environment for the efs-fuse process
 #                    (e.g. EFS_RPC_PROF=1 for per-RPC counters in fuse.log).
+# EFS_FUSE_ARGS='--perf'  extra argv. --perf records to the node-local
+#                    /tmp/efs-perf/fuse.data; --strace writes
+#                    /tmp/efs-perf/fuse.strace (EFS_STRACE_EXPR narrows
+#                    it and is forwarded). One client only for strace.
 set -u
 SERVER="${EFS_SERVER:-172.16.223.57:19810}"
 EXPORT="${EFS_EXPORT:-efs-test}"
@@ -39,12 +43,29 @@ sleep 0.5
 timeout 3 fusermount3 -uz "$MNT" 2>/dev/null
 mkdir -p "$MNT"
 rm -f fuse.log
-(env EFS_TRANSPORT="${EFS_TRANSPORT:-tcp}" ${EFS_FUSE_ENV:-} setsid ./efs-fuse "$SERVER" "$EXPORT" "$MNT" >fuse.log 2>&1 </dev/null &)
+fuse_args="${EFS_FUSE_ARGS:-}"
+perf_env=""
+case " $fuse_args " in
+*" --perf "*)
+    mkdir -p /tmp/efs-perf
+    rm -f /tmp/efs-perf/fuse.data
+    perf_env="EFS_PERF_PATH=/tmp/efs-perf/fuse.data"
+    ;;
+esac
+case " $fuse_args " in
+*" --strace "*)
+    mkdir -p /tmp/efs-perf
+    rm -f /tmp/efs-perf/fuse.strace
+    perf_env="$perf_env EFS_STRACE_PATH=/tmp/efs-perf/fuse.strace"
+    [ -n "${EFS_STRACE_EXPR:-}" ] && perf_env="$perf_env EFS_STRACE_EXPR=$EFS_STRACE_EXPR"
+    ;;
+esac
+(env EFS_TRANSPORT="${EFS_TRANSPORT:-tcp}" ${EFS_FUSE_ENV:-} $perf_env setsid ./efs-fuse "$SERVER" "$EXPORT" "$MNT" $fuse_args >fuse.log 2>&1 </dev/null &)
 for _ in $(seq 1 40); do
     sleep 0.5
     findmnt -no FSTYPE "$MNT" 2>/dev/null | grep -q fuse.efs-fuse && break
 done
 fst=$(findmnt -no FSTYPE "$MNT" 2>/dev/null)
 ok=$(stat "$MNT/" >/dev/null 2>&1 && echo MOUNT_OK || echo MOUNT_BAD)
-echo "$(hostname -s): fstype=${fst:-none} $ok fuse=$(pgrep -x efs-fuse | wc -l) bin=$(stat -c %y efs-fuse | cut -c12-19) $(grep -o 'build=[^ ]*' fuse.log | head -1)"
+echo "$(hostname -s): fstype=${fst:-none} $ok fuse=$(pgrep -x efs-fuse | wc -l) perf=$(pgrep -x perf | wc -l) bin=$(stat -c %y efs-fuse | cut -c12-19) $(grep -o 'build=[^ ]*' fuse.log | head -1)"
 [ "$fst" = fuse.efs-fuse ] && [ "$ok" = MOUNT_OK ]

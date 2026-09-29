@@ -3378,7 +3378,9 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
      * matching the base generation is not a replay of this publish. */
     if (!p->delta_len && committed == p->candidate_gen)
         return EFS_OK;
-    if (p->expected_gen != committed)
+    /* D1: a span attaches to whatever base is current. expected_gen is
+     * the full-image CAS. Overlap and a chain of live spans still STALE. */
+    if (!p->delta_len && p->expected_gen != committed)
         return EFS_ERR_STALE;
     vn = sizeof(old_ln);
     rc = efs_kv_get(kv, k_ln, kl, old_ln, &vn);
@@ -3405,17 +3407,41 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
             rc = trailer_at(old_ch, ch_vlen, i, &dlist[i]);
             if (rc != EFS_OK)
                 return rc;
-            /* Replay of this same span object. */
+            /* Replay of this same span object, including a len-0
+             * tombstone left by a fold. */
             if (dlist[i].generation == p->candidate_gen)
                 return EFS_OK;
+            if (dlist[i].len == 0)
+                continue;
             if (ranges_overlap(dlist[i].off, dlist[i].len, p->delta_off,
                                p->delta_len))
                 return EFS_ERR_STALE;
         }
-        /* The chain is full: the client refetches and publishes one
-         * image that folds every span. That is the consolidation. */
-        if (nd_old >= EFS_CHUNK_DELTA_MAX)
-            return EFS_ERR_STALE;
+        {
+            uint32_t live = 0, tombs, room, drop, w;
+
+            for (i = 0; i < nd_old; i++)
+                if (dlist[i].len)
+                    live++;
+            /* Live spans fill the chain: the client folds one image.
+             * Tombstones do not count. Drop the oldest so this span fits. */
+            if (live >= EFS_CHUNK_DELTA_MAX)
+                return EFS_ERR_STALE;
+            tombs = nd_old - live;
+            room = EFS_CHUNK_DELTA_MAX - 1u - live;
+            drop = tombs > room ? tombs - room : 0;
+            w = 0;
+            for (i = 0; i < nd_old; i++) {
+                if (dlist[i].len == 0 && drop) {
+                    drop--;
+                    continue;
+                }
+                if (w != i)
+                    dlist[w] = dlist[i];
+                w++;
+            }
+            nd_old = w;
+        }
         appending = 1;
     } else {
         uint64_t newest = 0;
@@ -3474,7 +3500,23 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         stored.generation = p->candidate_gen;
         stored.coding_profile_id = p->coding_profile_id;
         stored.content_epoch = p->content_epoch;
-        ch_wlen = pack_chunk_value(v_ch, &stored, NULL, 0);
+        /* D1: the folded spans' candidate_gens stay in the trailer so a
+         * replay of one of them is a no-op. len 0 is not overlaid. */
+        {
+            uint32_t i, w = 0;
+
+            for (i = 0; i < nd_old && w < EFS_CHUNK_DELTA_MAX; i++) {
+                rc = trailer_at(old_ch, ch_vlen, i, &dlist[w]);
+                if (rc != EFS_OK)
+                    return rc;
+                if (dlist[w].generation == 0)
+                    continue;
+                dlist[w].off = 0;
+                dlist[w].len = 0;
+                w++;
+            }
+            ch_wlen = pack_chunk_value(v_ch, &stored, w ? dlist : NULL, w);
+        }
     }
     pack_lane(v_ln, &ln);
 

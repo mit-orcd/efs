@@ -188,6 +188,9 @@ static pthread_mutex_t g_evict_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_evict_cv = PTHREAD_COND_INITIALIZER;
 static int g_evict_stop;
 static int g_evict_kick;
+/* Oldest tick already proven pinned this drain. The next wake starts
+ * here instead of rescanning that prefix. */
+static uint64_t g_evict_cursor;
 /* Last staged-bytes reading, refreshed by every pass. Read lock-free by
  * the kick path so a create burst only wakes the evictor when the table
  * is actually over the cap. */
@@ -441,18 +444,23 @@ out:
  * ones behind them and the table grew without a bound. *band_full is
  * 1 when that window was full (newer entries may exist). *band_max is
  * the newest tick in the window. Returns the staged-bytes reading. */
-static uint64_t evict_pass(uint64_t cap, int *evicted, uint64_t min_tick,
-                           int *band_full, uint64_t *band_max)
+static uint64_t stage_bytes_now(void)
 {
     uint64_t bytes;
-    *evicted = 0;
-    *band_full = 0;
-    *band_max = min_tick;
-
     efs_client_table_lock();
     bytes = efs_export_staged_bytes(&g_client.export);
     efs_client_table_unlock();
     __atomic_store_n(&g_stage_bytes_seen, bytes, __ATOMIC_RELAXED);
+    return bytes;
+}
+
+static uint64_t evict_pass(uint64_t cap, int *evicted, uint64_t min_tick,
+                           int *band_full, uint64_t *band_max, uint64_t bytes)
+{
+    *evicted = 0;
+    *band_full = 0;
+    *band_max = min_tick;
+
     if (bytes <= cap)
         return bytes;
 
@@ -531,43 +539,51 @@ static void *stage_evict_main(void *arg)
         g_evict_kick = 0;
         pthread_mutex_unlock(&g_evict_mu);
 
-        /* Drain passes until under the cap or the whole LRU is pinned.
-         * min_tick walks past a pinned oldest window instead of treating
-         * that window as the entire table. */
-        uint64_t min_tick = 0;
-        for (int rounds = 0; rounds < 1024; rounds++) {
-            int evicted = 0;
-            int band_full = 0;
-            uint64_t band_max = 0;
-            uint64_t bytes = evict_pass(cap, &evicted, min_tick,
-                                        &band_full, &band_max);
-            if (bytes <= cap)
-                break;
-            if (evicted == 0) {
-                if (band_full) {
-                    min_tick = band_max;
-                    continue;
+        /* One staged-bytes reading per wake. A pinned oldest window is
+         * skipped by at most a few bands; if those are also pinned, the
+         * cursor is kept for the next wake instead of rescanning the
+         * LRU hundreds of times in this one. */
+        uint64_t bytes = stage_bytes_now();
+        int evicted_total = 0;
+        if (bytes > cap) {
+            for (int bands = 0; bands < 4; bands++) {
+                int evicted = 0;
+                int band_full = 0;
+                uint64_t band_max = 0;
+                evict_pass(cap, &evicted, g_evict_cursor, &band_full,
+                           &band_max, bytes);
+                evicted_total += evicted;
+                if (evicted > 0 || !band_full) {
+                    if (evicted == 0)
+                        g_evict_cursor = 0;
+                    break;
                 }
-                /* Every remaining LRU entry is pinned (or already gone):
-                 * grow — pinned data is real work, not cache. Log once. */
-                if (!logged_grow) {
-                    logged_grow = 1;
-                    fprintf(stderr,
-                            "efs-fuse: staging table over EFS_CLIENT_META_MB "
-                            "(%llu MB) with nothing evictable; growing "
-                            "(pinned data is real work, not cache)\n",
-                            (unsigned long long)(cap >> 20));
-                    fflush(stderr);
-                }
-                break;
+                g_evict_cursor = band_max;
             }
-            /* Reclaim index/array over-capacity left by the removals. */
+        } else {
+            g_evict_cursor = 0;
+        }
+        if (evicted_total > 0)
+            g_evict_cursor = 0;
+        if (bytes > cap && evicted_total == 0) {
+            /* Every band we looked at is pinned (or the table is
+             * already under the next reading). Log once and sleep. */
+            if (!logged_grow && g_evict_cursor == 0) {
+                logged_grow = 1;
+                fprintf(stderr,
+                        "efs-fuse: staging table over EFS_CLIENT_META_MB "
+                        "(%llu MB) with nothing evictable; growing "
+                        "(pinned data is real work, not cache)\n",
+                        (unsigned long long)(cap >> 20));
+                fflush(stderr);
+            }
+        }
+        if (evicted_total > 0) {
             efs_client_table_lock();
             pthread_mutex_lock(&g_client.idx_mu);
             efs_export_compact(&g_client.export);
             pthread_mutex_unlock(&g_client.idx_mu);
             efs_client_table_unlock();
-            sched_yield();
         }
 
         pthread_mutex_lock(&g_evict_mu);

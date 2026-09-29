@@ -35,6 +35,8 @@ struct writer_job {
 __thread int efs_tls_write_known_zero;
 /* Selected --storage root for the in-flight write (see store path helpers). */
 __thread int efs_tls_write_root = -1;
+__thread int efs_tls_path_hint = -1;
+__thread int efs_tls_path_used = -1;
 
 /* One shared queue + thread set for every --storage path. Path choice is a
  * property of the job (stripe / overwrite-in-place), not of the thread. */
@@ -161,6 +163,7 @@ static int run_job(struct writer_job *job)
         rc = EFS_ERR_INVAL;
         break;
     }
+    efs_tls_path_used = efs_tls_write_root;
     efs_tls_write_known_zero = saved_zero;
     efs_tls_write_root = saved_root;
     efs_tls_chunk_gen = saved_gen;
@@ -267,6 +270,7 @@ static int submit_and_wait(struct writer_job *job)
 
     pthread_mutex_destroy(&job->done_mu);
     pthread_cond_destroy(&job->done_cv);
+    efs_tls_path_used = (int)job->path_index;
     return rc;
 }
 

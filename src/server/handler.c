@@ -395,8 +395,13 @@ send_reply:
                             .chunk_generation = req->chunk_generation,
                         };
                         efs_store_nvme_bind(&st, &nctx, g_server, ex);
+                        efs_tls_path_used = -1;
+                        efs_tls_path_hint = (req->path_hint > 0)
+                                                ? (int)req->path_hint - 1
+                                                : -1;
                         rc = efs_store_put(&st, &fid, data, expect,
                                            req->checksum);
+                        efs_tls_path_hint = -1;
                         if (rc == 0) {
                             reply = EFS_PUT_CHUNK_OK;
                         } else if (rc == EFS_ERR_QUOTA) {
@@ -405,7 +410,16 @@ send_reply:
                     }
                 }
                 server_export_put(g_server, ex);
-                efs_conn_send_msg(conn, EFS_MSG_PUT_CHUNK_REPLY, &reply, 1);
+                {
+                    uint8_t rep[2];
+                    rep[0] = reply;
+                    rep[1] = (efs_tls_path_used >= 0 &&
+                              efs_tls_path_used < 256)
+                                 ? (uint8_t)efs_tls_path_used
+                                 : 0xff;
+                    efs_tls_path_used = -1;
+                    efs_conn_send_msg(conn, EFS_MSG_PUT_CHUNK_REPLY, rep, 2);
+                }
             }
             break;
         }

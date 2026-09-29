@@ -1703,6 +1703,7 @@ static void remove_chunk_at(struct efs_export *ex, uint64_t j)
     efs_ino_t ino = ex->chunks[j].ino;
     chunk_idx_del(ex, ino, cidx);
     icnt_dec(ex, ino);
+    efs_export_present_add(ex, ino, 0, -1);
     uint64_t clast = ex->chunk_count - 1;
     if (j != clast) {
         chunk_idx_del(ex, ex->chunks[clast].ino, ex->chunks[clast].chunk_index);
@@ -2028,6 +2029,7 @@ static struct efs_export *shard_tab_get_or_create(struct efs_export *ex,
         tab->chunk_size = ex->chunk_size;
         tab->features = ex->features;
         tab->shard_id = shard;
+        tab->owner = ex;
         ex->shard_tabs[shard] = tab;
     }
     return ex->shard_tabs[shard];
@@ -3043,7 +3045,49 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     memcpy(ce->checksums, checksums, EFS_HASH_SIZE * EFS_NUM_FRAGMENTS);
     chunk_idx_put(ex, ino, chunk_index, pos);
     icnt_inc(ex, ino);
+    efs_export_present_add(ex, ino, 0, 1);
     return EFS_OK;
+}
+
+void efs_export_present_add(struct efs_export *ex, efs_ino_t ino, int which,
+                            int32_t delta)
+{
+    struct efs_inode_mem *p;
+    uint32_t *f;
+    if (!ex || !ino || delta == 0)
+        return;
+    if (ex->owner)
+        ex = ex->owner;
+    p = inode_ptr(ex, ino);
+    if (!p)
+        return;
+    f = which ? &p->present_extra : &p->present_chunks;
+    if (delta > 0) {
+        __atomic_fetch_add(f, (uint32_t)delta, __ATOMIC_RELAXED);
+        return;
+    }
+    for (;;) {
+        uint32_t cur = __atomic_load_n(f, __ATOMIC_RELAXED);
+        uint32_t nxt = ((uint32_t)(-delta) >= cur) ? 0
+                                                   : cur - (uint32_t)(-delta);
+        if (__atomic_compare_exchange_n(f, &cur, nxt, 0, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED))
+            return;
+    }
+}
+
+uint32_t efs_export_present_count(const struct efs_export *ex, efs_ino_t ino)
+{
+    struct efs_inode_mem *p;
+    if (!ex || !ino)
+        return 0;
+    if (ex->owner)
+        ex = ex->owner;
+    p = inode_ptr((struct efs_export *)ex, ino);
+    if (!p)
+        return 0;
+    return __atomic_load_n(&p->present_chunks, __ATOMIC_RELAXED) +
+           __atomic_load_n(&p->present_extra, __ATOMIC_RELAXED);
 }
 
 int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,

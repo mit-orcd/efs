@@ -150,8 +150,14 @@ struct host_outbox {
      * queues behind forwarded client commands. Owned by the sender
      * thread only; reconnected on the next message after an error. */
     struct efs_conn *conn;
-    int n;
-    struct host_outbox_item q[HOST_OUTBOX_MAX];
+    /* W14.2: two lanes. pri is heartbeats, AE replies, votes; ent is
+     * entry-carrying AppendEntries and snapshot chunks, in order.
+     * The sender drains pri first so a full entry lane cannot hide a
+     * heartbeat. Depth is npri + nent, capped at HOST_OUTBOX_MAX. */
+    int npri;
+    int nent;
+    struct host_outbox_item pri[HOST_OUTBOX_MAX];
+    struct host_outbox_item ent[HOST_OUTBOX_MAX];
     /* EFS_RAFT_OBS counters (guarded by outbox_mu; stats are diagnostic
      * only, so the sender updates rtt/getwait without the lock — worst
      * case is a torn read in the dump). */
@@ -645,12 +651,15 @@ static void *host_sender(void *arg)
         int i;
 
         pthread_mutex_lock(&h->outbox_mu);
-        while (tx->n == 0 && h->tx_running)
+        while (tx->npri == 0 && tx->nent == 0 && h->tx_running)
             pthread_cond_wait(&tx->cv, &h->outbox_mu);
         if (!h->tx_running) {
-            for (i = 0; i < tx->n; i++)
-                free(tx->q[i].buf);
-            tx->n = 0;
+            for (i = 0; i < tx->npri; i++)
+                free(tx->pri[i].buf);
+            for (i = 0; i < tx->nent; i++)
+                free(tx->ent[i].buf);
+            tx->npri = 0;
+            tx->nent = 0;
             pthread_mutex_unlock(&h->outbox_mu);
             if (tx->conn) {
                 efs_conn_destroy(tx->conn);
@@ -658,10 +667,21 @@ static void *host_sender(void *arg)
             }
             return NULL;
         }
-        buf = tx->q[0].buf;
-        len = tx->q[0].len;
-        memmove(&tx->q[0], &tx->q[1], (size_t)(tx->n - 1) * sizeof(tx->q[0]));
-        tx->n--;
+        /* Heartbeats and replies go out before entry AppendEntries.
+         * Each lane stays FIFO. */
+        if (tx->npri > 0) {
+            buf = tx->pri[0].buf;
+            len = tx->pri[0].len;
+            memmove(&tx->pri[0], &tx->pri[1],
+                    (size_t)(tx->npri - 1) * sizeof(tx->pri[0]));
+            tx->npri--;
+        } else {
+            buf = tx->ent[0].buf;
+            len = tx->ent[0].len;
+            memmove(&tx->ent[0], &tx->ent[1],
+                    (size_t)(tx->nent - 1) * sizeof(tx->ent[0]));
+            tx->nent--;
+        }
         pthread_mutex_unlock(&h->outbox_mu);
 
         {
@@ -719,36 +739,98 @@ static void *host_sender(void *arg)
     }
 }
 
-/* Snapshot chunks must stay in order. An AppendEntries that carries
- * entries is the catch-up batch; a newer heartbeat must not evict it.
- * Heartbeats, vote traffic, and replies are safe to drop: the next
- * tick sends them again. nentries is the last big-endian u32 of the
- * raft header (src/wire/wire.c). */
-static int outbox_must_keep(const uint8_t *buf, uint32_t len)
+/* nentries is the last big-endian u32 of the raft header. -1 if the
+ * buffer is too short to say. */
+static int outbox_nentries(const uint8_t *buf, uint32_t len)
 {
-    uint32_t nent;
-
     if (!buf || len < EFS_WIRE_RAFT_HDR_LEN)
+        return -1;
+    return (int)(((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 4] << 24) |
+                 ((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 3] << 16) |
+                 ((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 2] << 8) |
+                 (uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 1]);
+}
+
+/* Entry-carrying AppendEntries and snapshot chunks stay in order on
+ * the entry lane. A heartbeat is an empty AE_REQ. */
+static int outbox_entry_lane(const uint8_t *buf, uint32_t len)
+{
+    if (!buf || len < 1)
         return 0;
     if (buf[0] == EFS_RAFT_MSG_SNAP_REQ)
         return 1;
-    if (buf[0] != EFS_RAFT_MSG_AE_REQ)
-        return 0;
-    nent = ((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 4] << 24) |
-           ((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 3] << 16) |
-           ((uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 2] << 8) |
-           (uint32_t)buf[EFS_WIRE_RAFT_HDR_LEN - 1];
-    return nent > 0;
+    return buf[0] == EFS_RAFT_MSG_AE_REQ && outbox_nentries(buf, len) > 0;
+}
+
+static int outbox_is_heartbeat(const uint8_t *buf, uint32_t len)
+{
+    return buf && buf[0] == EFS_RAFT_MSG_AE_REQ &&
+           outbox_nentries(buf, len) == 0;
+}
+
+static int outbox_is_ae_rep(const uint8_t *buf, uint32_t len)
+{
+    return buf && len >= 1 && buf[0] == EFS_RAFT_MSG_AE_REP;
+}
+
+/* Replace the first priority-lane item matching pred. The newest
+ * heartbeat / AE reply is the only one that matters. */
+static int outbox_pri_replace(struct host_outbox *tx,
+                              int (*pred)(const uint8_t *, uint32_t),
+                              uint8_t *buf, uint32_t len)
+{
+    int i;
+
+    for (i = 0; i < tx->npri; i++) {
+        if (!pred(tx->pri[i].buf, tx->pri[i].len))
+            continue;
+        free(tx->pri[i].buf);
+        tx->pri[i].buf = buf;
+        tx->pri[i].len = len;
+        return 1;
+    }
+    return 0;
 }
 
 /* Called under h->mu from the pump (tick) and from proposer threads
  * (efs_raft_propose), so it must NEVER do network I/O: it only encodes and
  * queues to the destination peer's outbox; the per-peer sender thread does
- * the blocking send. Queue full -> evict the oldest heartbeat or reply.
- * If every queued message is a snapshot chunk or an entry-carrying
- * AppendEntries, do not queue this one and return EFS_ERR_AGAIN so the
- * caller does not mark it in flight. send_ae turns that into success:
- * the entry is already in the leader log, and the next tick retries. */
+ * the blocking send. W14.2: an AE reply replaces any older AE reply to
+ * this peer still queued, and a heartbeat replaces an older heartbeat;
+ * a vote is never evicted. Only when the outbox is full of messages
+ * that cannot be replaced does this return EFS_ERR_AGAIN (no drop).
+ * send_ae turns that into success: the entry is already in the leader
+ * log, and the next tick retries. */
+/* Fill the fixed header of a buffer whose entry bytes are already at
+ * EFS_WIRE_RAFT_HDR_LEN (send_ae). */
+static void host_fill_ae_hdr(uint8_t *p, const struct efs_raft_msg *msg)
+{
+    uint8_t *q = p;
+
+    q[0] = msg->type;
+    q[1] = msg->group;
+    q[2] = (uint8_t)(msg->vote_granted ? 1 : 0);
+    q[3] = (uint8_t)(msg->success ? 1 : 0);
+    q += 4;
+    wr32be(q, (uint32_t)msg->from); q += 4;
+    wr32be(q, (uint32_t)msg->to); q += 4;
+    wr64be(q, msg->term); q += 8;
+    wr64be(q, msg->boot_id); q += 8;
+    wr64be(q, msg->last_log_index); q += 8;
+    wr64be(q, msg->last_log_term); q += 8;
+    wr64be(q, msg->prev_index); q += 8;
+    wr64be(q, msg->prev_term); q += 8;
+    wr64be(q, msg->leader_commit); q += 8;
+    wr64be(q, msg->match_index); q += 8;
+    wr32be(q, msg->nentries);
+}
+
+static void host_wire_taken(const struct efs_raft_msg *msg)
+{
+    if (msg && msg->wire)
+        ((struct efs_raft_msg *)msg)->wire = NULL;
+}
+
 static int host_send(void *net, const struct efs_raft_msg *msg)
 {
     struct efs_raft_host *h = net;
@@ -764,7 +846,14 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         return EFS_OK;
     if (msg->to == h->raft_id || msg->to < 0 || msg->to >= EFS_RAFT_MAX_PEERS)
         return EFS_OK;
-    rc = efs_wire_raft_encode(msg, buf, cap, &len);
+    if (msg->wire && msg->wire_len >= EFS_WIRE_RAFT_HDR_LEN) {
+        host_fill_ae_hdr(msg->wire, msg);
+        buf = msg->wire;
+        len = msg->wire_len;
+        heap = msg->wire;
+        rc = EFS_OK;
+    } else
+        rc = efs_wire_raft_encode(msg, buf, cap, &len);
     if (rc == EFS_ERR_NOMEM) {
         uint32_t i;
         cap = EFS_WIRE_RAFT_HDR_LEN;
@@ -777,6 +866,7 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         rc = efs_wire_raft_encode(msg, buf, cap, &len);
     }
     if (rc != EFS_OK) {
+        host_wire_taken(msg);
         free(heap);
         return EFS_ERR_AGAIN;
     }
@@ -791,46 +881,72 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
     if (!h->tx_running) {
         tx->st_drop++;
         pthread_mutex_unlock(&h->outbox_mu);
+        host_wire_taken(msg);
         free(heap);
         return EFS_ERR_AGAIN;
     }
-    if (tx->n >= HOST_OUTBOX_MAX) {
-        int vic = -1;
-        uint32_t i;
-
-        for (i = 0; i < (uint32_t)tx->n; i++) {
-            if (!outbox_must_keep(tx->q[i].buf, tx->q[i].len)) {
-                vic = (int)i;
-                break;
-            }
-        }
-        if (vic < 0) {
-            tx->st_drop++;
-            pthread_mutex_unlock(&h->outbox_mu);
-            free(heap);
-            return EFS_ERR_AGAIN;
-        }
-        free(tx->q[vic].buf);
-        if (vic < tx->n - 1)
-            memmove(&tx->q[vic], &tx->q[vic + 1],
-                    (size_t)(tx->n - vic - 1) * sizeof(tx->q[0]));
-        tx->n--;
-        tx->st_drop++;
+    if (outbox_is_ae_rep(heap, len) &&
+        outbox_pri_replace(tx, outbox_is_ae_rep, heap, len)) {
+        tx->st_enq++;
+        pthread_cond_signal(&tx->cv);
+        pthread_mutex_unlock(&h->outbox_mu);
+        host_wire_taken(msg);
+        return EFS_OK;
     }
-    tx->q[tx->n].buf = heap;
-    tx->q[tx->n].len = len;
-    tx->n++;
-    tx->st_enq++;
-    if ((uint32_t)tx->n > tx->st_hi)
-        tx->st_hi = (uint32_t)tx->n;
-    if (!tx->started) {
-        if (efsd_pthread_create(&tx->tid, host_sender, tx) == 0)
-            tx->started = 1;
-        else
-            tx->n--; /* no sender: drop rather than queue forever */
+    if (outbox_is_heartbeat(heap, len) &&
+        outbox_pri_replace(tx, outbox_is_heartbeat, heap, len)) {
+        tx->st_enq++;
+        pthread_cond_signal(&tx->cv);
+        pthread_mutex_unlock(&h->outbox_mu);
+        host_wire_taken(msg);
+        return EFS_OK;
+    }
+    if (tx->npri + tx->nent >= HOST_OUTBOX_MAX) {
+        /* A vote takes a heartbeat's slot rather than being dropped.
+         * Anything else (an entry AE behind a full lane) is retried
+         * by the caller; that is not a drop. */
+        int vote = heap[0] == EFS_RAFT_MSG_VOTE_REQ ||
+                   heap[0] == EFS_RAFT_MSG_VOTE_REP;
+        if (vote && outbox_pri_replace(tx, outbox_is_heartbeat, heap, len)) {
+            tx->st_enq++;
+            pthread_cond_signal(&tx->cv);
+            pthread_mutex_unlock(&h->outbox_mu);
+            host_wire_taken(msg);
+            return EFS_OK;
+        }
+        pthread_mutex_unlock(&h->outbox_mu);
+        host_wire_taken(msg);
+        free(heap);
+        return EFS_ERR_AGAIN;
+    }
+    {
+        int entry = outbox_entry_lane(heap, len);
+        struct host_outbox_item *slot;
+        int *np;
+
+        if (entry) {
+            slot = &tx->ent[tx->nent];
+            np = &tx->nent;
+        } else {
+            slot = &tx->pri[tx->npri];
+            np = &tx->npri;
+        }
+        slot->buf = heap;
+        slot->len = len;
+        (*np)++;
+        tx->st_enq++;
+        if ((uint32_t)(tx->npri + tx->nent) > tx->st_hi)
+            tx->st_hi = (uint32_t)(tx->npri + tx->nent);
+        if (!tx->started) {
+            if (efsd_pthread_create(&tx->tid, host_sender, tx) == 0)
+                tx->started = 1;
+            else
+                (*np)--; /* no sender: drop rather than queue forever */
+        }
     }
     pthread_cond_signal(&tx->cv);
     pthread_mutex_unlock(&h->outbox_mu);
+    host_wire_taken(msg);
     return EFS_OK;
 }
 
@@ -5592,8 +5708,12 @@ static void host_snap_drop_parts(struct efs_raft_host *h)
 
         if (strncmp(de->d_name, "snap-", 5) != 0)
             continue;
-        if (n < 5 || strcmp(de->d_name + n - 5, ".part") != 0)
-            continue;
+        if (n < 5 || strcmp(de->d_name + n - 5, ".part") != 0) {
+            /* W14.3: a killed export leaves snap-*.kvx.tmp. Nothing is
+             * in progress at start, so every one of these is stale. */
+            if (n < 8 || strcmp(de->d_name + n - 8, ".kvx.tmp") != 0)
+                continue;
+        }
         snprintf(path, sizeof(path), "%s/%s", h->mdraft, de->d_name);
         unlink(path);
     }

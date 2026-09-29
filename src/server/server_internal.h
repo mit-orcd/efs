@@ -83,6 +83,7 @@ struct efsd_server {
     int nwriters;
     int persist_nodes; /* persist cluster membership to disk */
     int perf; /* run under perf record when starting */
+    int strace; /* attach strace -f (EFS_STRACE_PATH / EFS_STRACE_EXPR) */
     int usage_dirty; /* local->used changed; flush meta/usage.bin soon */
     int nodes_dirty; /* membership changed; persist nodes.bin off the lock */
 
@@ -174,6 +175,11 @@ extern __thread int efs_tls_write_known_zero;
 /* Writer-thread: storage root index for the in-flight fragment write
  * (-1 = unset; store path helpers fall back to probing / round-robin). */
 extern __thread int efs_tls_write_root;
+
+/* W14.4. path_hint is the client's guess (-1 = none). path_used is the
+ * root the PUT landed on (-1 until the write picks one). */
+extern __thread int efs_tls_path_hint;
+extern __thread int efs_tls_path_used;
 
 /* Candidate generation for the in-flight fragment PUT/GET (0 = legacy
  * `{ci}.{fi}` path). Copied onto the writer job so the pool thread

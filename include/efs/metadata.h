@@ -98,6 +98,10 @@ struct efs_inode_mem {
     efs_ino_t pack_ino;
     uint32_t pack_off;
     uint32_t pack_len;
+    /* W20: chunks in this client's table, plus dirty dcache chunks that
+     * are not in the table yet. st_blocks reads the sum. Not serialized. */
+    uint32_t present_chunks;
+    uint32_t present_extra;
 };
 
 /* One slab == one serialized inode page. names is the slab's private name
@@ -198,6 +202,9 @@ struct efs_export {
     struct efs_export **shard_tabs;
     uint32_t shard_tab_cap;
     uint32_t shard_id;
+    /* Shard tab → the root export that holds the inode rows. NULL on the
+     * root. present_chunks lives on the root row. */
+    struct efs_export *owner;
     uint64_t shard_tick;
     /* Cross-client O_APPEND barrier (in-memory only, never serialized):
      * outstanding reserved-but-unflushed append end, open-addressed by ino.
@@ -367,6 +374,13 @@ int efs_export_rename_at(struct efs_export *ex, efs_ino_t old_parent,
 int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_index,
                          const efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS],
                          const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
+/* W20. which=0 updates present_chunks (table), which=1 updates
+ * present_extra (dirty dcache, not in the table). delta may be negative.
+ * No-op when the inode row is not staged. */
+void efs_export_present_add(struct efs_export *ex, efs_ino_t ino, int which,
+                            int32_t delta);
+/* present_chunks + present_extra. 0 when the row is not staged. */
+uint32_t efs_export_present_count(const struct efs_export *ex, efs_ino_t ino);
 /* Stamp the staging generation after set_chunk / GETCHUNKS adopt.
  * Replaces the delta list: a new base generation retires every delta
  * that was patched onto the previous one. The caller installs the

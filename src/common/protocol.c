@@ -76,18 +76,43 @@ int efs_recv_u8_reply(int fd, uint8_t *type, uint8_t *status)
 {
     uint32_t be;
     uint32_t nlen;
-    uint8_t buf[2];
     if (efs_recv_all(fd, &be, sizeof(be)) != 0)
         return EFS_ERR_NET;
     nlen = ntohl(be);
-    if (efs_wire_frame_check_nlen(nlen) != EFS_OK || nlen != 2)
+    /* nlen 2 is [type][status]. nlen 3 is a PUT reply with a path byte,
+     * which a status-only reader ignores. */
+    if (efs_wire_frame_check_nlen(nlen) != EFS_OK || nlen < 2 || nlen > 4)
         return EFS_ERR_PROTO;
-    if (efs_recv_all(fd, buf, 2) != 0)
+    uint8_t raw[4];
+    if (efs_recv_all(fd, raw, nlen) != 0)
         return EFS_ERR_NET;
     if (type)
-        *type = buf[0];
+        *type = raw[0];
     if (status)
-        *status = buf[1];
+        *status = raw[1];
+    return EFS_OK;
+}
+
+int efs_recv_put_reply(int fd, uint8_t *type, uint8_t *status, uint8_t *path)
+{
+    uint32_t be;
+    uint32_t nlen;
+    if (path)
+        *path = 0xff;
+    if (efs_recv_all(fd, &be, sizeof(be)) != 0)
+        return EFS_ERR_NET;
+    nlen = ntohl(be);
+    if (efs_wire_frame_check_nlen(nlen) != EFS_OK || nlen < 2 || nlen > 4)
+        return EFS_ERR_PROTO;
+    uint8_t raw[4];
+    if (efs_recv_all(fd, raw, nlen) != 0)
+        return EFS_ERR_NET;
+    if (type)
+        *type = raw[0];
+    if (status)
+        *status = raw[1];
+    if (path && nlen >= 3)
+        *path = raw[2];
     return EFS_OK;
 }
 
@@ -450,12 +475,41 @@ int efs_conn_recv_u8_reply(struct efs_conn *c, uint8_t *type, uint8_t *status)
         return efs_recv_u8_reply(c->fd, type, status);
     if (rc != EFS_OK)
         return rc;
-    if (plen != 1) {
+    /* plen 1 is status. plen 2 is a PUT reply (status, path); a status-only
+     * reader keeps the first byte. */
+    if (plen < 1 || plen > 4) {
         efs_rdma_recv_repost(c->rc);
         return EFS_ERR_PROTO;
     }
     if (status)
         *status = pl[0];
+    efs_rdma_recv_repost(c->rc);
+    return EFS_OK;
+}
+
+int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
+                            uint8_t *path)
+{
+    if (path)
+        *path = 0xff;
+    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
+        return efs_recv_put_reply(c->fd, type, status, path);
+
+    const uint8_t *pl = NULL;
+    uint32_t plen = 0;
+    int rc = conn_rdma_frame(c, type, &pl, &plen);
+    if (rc == EFS_ERR_AGAIN)
+        return efs_recv_put_reply(c->fd, type, status, path);
+    if (rc != EFS_OK)
+        return rc;
+    if (plen < 1 || plen > 4) {
+        efs_rdma_recv_repost(c->rc);
+        return EFS_ERR_PROTO;
+    }
+    if (status)
+        *status = pl[0];
+    if (path && plen >= 2)
+        *path = pl[1];
     efs_rdma_recv_repost(c->rc);
     return EFS_OK;
 }

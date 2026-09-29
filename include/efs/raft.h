@@ -82,6 +82,11 @@ struct efs_raft_msg {
     int success;
     uint32_t nentries;
     struct efs_raft_entry entries[EFS_RAFT_AE_MAX]; /* batched AE payloads */
+    /* W19: entry bytes already sit in this buffer at EFS_WIRE_RAFT_HDR_LEN.
+     * The send callback writes the header. host_send takes the pointer
+     * (sets wire to NULL). Any other callback leaves it; send_ae frees it. */
+    uint8_t *wire;
+    uint32_t wire_len;
 };
 
 struct efs_raft_store {

@@ -21,7 +21,22 @@ ALL=0; [ "${1:-}" = "--all" ] && { ALL=1; shift; }
 NODES=("$@"); [ ${#NODES[@]} -gt 0 ] || NODES=(1 2 3 4)
 # Environment for the efsd process, e.g. EFSD_ENV='EFS_TRANSPORT=tcp'
 # (peer pool + raft AE over TCP instead of the ungated RDMA upgrade).
+# EFSD_ARGS is extra argv, e.g. EFSD_ARGS=--perf. With --perf the
+# recorder writes the node-local /tmp/efs-perf/efsd.data; with --strace
+# the trace goes to /tmp/efs-perf/efsd.strace (EFS_STRACE_EXPR narrows
+# it, e.g. 'trace=fsync,fdatasync,pwrite64,futex'; it is forwarded).
 EFSD_ENV="${EFSD_ENV:-}"
+EFSD_ARGS="${EFSD_ARGS:-}"
+PERF_ENV=""
+case " $EFSD_ARGS " in
+*" --perf "*) PERF_ENV='EFS_PERF_PATH=/tmp/efs-perf/efsd.data' ;;
+esac
+case " $EFSD_ARGS " in
+*" --strace "*)
+    PERF_ENV="$PERF_ENV EFS_STRACE_PATH=/tmp/efs-perf/efsd.strace"
+    [ -n "${EFS_STRACE_EXPR:-}" ] && PERF_ENV="$PERF_ENV EFS_STRACE_EXPR=$EFS_STRACE_EXPR"
+    ;;
+esac
 STORAGE=/data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs
 host_of() { echo "fcstor00$(( $1 + 2 ))"; }
 addr_of() { echo "172.16.223.$(( $1 + 56 ))"; }
@@ -76,7 +91,7 @@ if [ $ALL = 1 ]; then
     echo "== start all four"
     for n in 1 2 3 4; do
         h=$(host_of $n); a=$(addr_of $n)
-        ssh_ 30 "$h" "cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l)"
+        ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
     done
     echo "== wait for both groups"
     for n in 1 2 3 4; do
@@ -106,7 +121,7 @@ for n in "${NODES[@]}"; do
         echo "FAIL: build id changed ($running -> $built): stop all four, then start all four"; exit 1
     fi
     echo "== node $n restart"
-    ssh_ 30 "$h" "pkill -9 -x efsd; sleep 1; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $join >efsd.log 2>&1 </dev/null &); sleep 2; echo up=\$(pgrep -x efsd | wc -l)"
+    ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; pkill -9 -x efsd; sleep 1; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $join $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 2; echo up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
     # Wait for catch-up: every hosted group commit==applied and within 2 of the cluster max.
     ok=0
     for i in $(seq 1 90); do

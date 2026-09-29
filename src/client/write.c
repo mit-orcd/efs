@@ -848,12 +848,40 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
      * locally). NOT_PRIMARY follows the hint; transient NET/NO_QUORUM/BUSY
      * retried a few times. On failure the whole snap is merged back. */
     int rc = EFS_ERR_NET;
+    /* W17.1: one sync report, 8s wall. The data flush is not capped.
+     * A killed writer used to sit in this loop (64 STALE rounds, each
+     * REPORT up to 16 retries) until the kernel FUSE request returned. */
+    struct timespec ts_budget;
+    uint64_t budget0 = 0;
+    int hit_budget = 0, nstale = 0, nbusy = 0, rounds = 0;
+    if (sync) {
+        clock_gettime(CLOCK_MONOTONIC, &ts_budget);
+        budget0 = (uint64_t)ts_budget.tv_sec * 1000ull +
+                  (uint64_t)ts_budget.tv_nsec / 1000000ull;
+        efs_client_rpc_set_deadline_ms(budget0 + 8000ull);
+    }
     /* STALE needs more than the NET budget: the peer fsyncs the same
      * chunk many times (n1 = 16 pwrite+fsync per 128 KiB) and each
      * publish invalidates this client's expected gen. */
     for (int attempt = 0; attempt < 64; attempt++) {
+        if (sync) {
+            struct timespec ts;
+            uint64_t now;
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            now = (uint64_t)ts.tv_sec * 1000ull +
+                  (uint64_t)ts.tv_nsec / 1000000ull;
+            if (now >= budget0 + 8000ull) {
+                hit_budget = 1;
+                break;
+            }
+        }
+        rounds++;
         rc = efs_client_rpc_report_dirty_raft(g_client.export_id, crecs,
                                               cn, irecs, in, sync);
+        if (rc == EFS_ERR_STALE)
+            nstale++;
+        else if (rc == EFS_ERR_BUSY)
+            nbusy++;
         if (rc == EFS_OK)
             break;
         if (rc == EFS_ERR_STALE) {
@@ -919,6 +947,21 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
         if (attempt >= 7)
             break;
         usleep(50000u << (attempt < 4 ? attempt : 3));
+    }
+    efs_client_rpc_set_deadline_ms(0);
+    if (hit_budget) {
+        struct timespec ts;
+        uint64_t now, ms;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (uint64_t)ts.tv_sec * 1000ull +
+              (uint64_t)ts.tv_nsec / 1000000ull;
+        ms = now > budget0 ? now - budget0 : 0;
+        fprintf(stderr, "report-loop ino=%llu rounds=%d stale=%d busy=%d "
+                "ms=%llu rc=%d\n",
+                (unsigned long long)only_ino, rounds, nstale, nbusy,
+                (unsigned long long)ms, rc);
+        if (rc == EFS_OK)
+            rc = EFS_ERR_IO;
     }
     if (rc == EFS_OK) {
         /* Every rec committed: its object gen is now the slot's CAS base.
@@ -1067,16 +1110,65 @@ int efs_client_note_meta_change(int force)
 /* Consume one PUT_CHUNK reply from a conn that reply_watch marked ready
  * (or whose poll fd fired). Returns 1 on OK ack, 0 on quota, -1 when the
  * conn was dropped. */
-static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn)
+/* W14.4: last storage root that accepted (nid, ino, ci, fi). A miss
+ * costs one extra access() on the server, so the slot is unsynchronized. */
+#define PATH_HINT_N 4096
+struct path_hint_slot {
+    efs_node_id_t nid;
+    efs_ino_t ino;
+    uint32_t ci;
+    uint8_t fi;
+    uint8_t path;
+    uint8_t valid;
+};
+static struct path_hint_slot g_path_hint[PATH_HINT_N];
+
+static uint32_t path_hint_index(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
+                                uint8_t fi)
 {
-    uint8_t reply_type = 0, status = 0;
-    if (efs_conn_recv_u8_reply(conn, &reply_type, &status) != 0 ||
+    uint32_t h = (uint32_t)ino * 1315423911u ^ (ci * 2654435761u) ^
+                 ((uint32_t)nid << 8) ^ fi;
+    return h % PATH_HINT_N;
+}
+
+static uint32_t path_hint_get(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
+                              uint8_t fi)
+{
+    struct path_hint_slot *e =
+        &g_path_hint[path_hint_index(nid, ino, ci, fi)];
+    if (e->valid && e->nid == nid && e->ino == ino && e->ci == ci &&
+        e->fi == fi)
+        return (uint32_t)e->path + 1u;
+    return 0;
+}
+
+static void path_hint_put(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
+                          uint8_t fi, uint8_t path)
+{
+    struct path_hint_slot *e;
+    if (path == 0xff)
+        return;
+    e = &g_path_hint[path_hint_index(nid, ino, ci, fi)];
+    e->nid = nid;
+    e->ino = ino;
+    e->ci = ci;
+    e->fi = fi;
+    e->path = path;
+    e->valid = 1;
+}
+
+static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
+                          efs_ino_t ino, uint32_t ci, uint8_t fi)
+{
+    uint8_t reply_type = 0, status = 0, path = 0xff;
+    if (efs_conn_recv_put_reply(conn, &reply_type, &status, &path) != 0 ||
         reply_type != EFS_MSG_PUT_CHUNK_REPLY) {
         efs_client_conn_drop(nid, conn);
         efs_client_node_note_fail(nid);
         return -1;
     }
     if (status == EFS_PUT_CHUNK_OK) {
+        path_hint_put(nid, ino, ci, fi, path);
         efs_client_node_note_ok(nid);
         efs_client_conn_release(nid, conn);
         return 1;
@@ -1144,6 +1236,8 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         memcpy(hdrs[i].checksum, checksums[i], EFS_HASH_SIZE);
         hdrs[i].chunk_generation = chunk_candidate_gen(nodes, checksums,
                                                        chunk_index);
+        hdrs[i].path_hint = path_hint_get(nodes[i], ino, chunk_index,
+                                          (uint8_t)i);
     }
 
     /* Send on every live conn before waiting (overlap RTTs). */
@@ -1205,7 +1299,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 continue;
             int w = efs_conn_reply_watch_quick(conns[i]);
             if (w == EFS_CONN_REPLY_READY) {
-                int r = put_recv_reply(nodes[i], conns[i]);
+                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                 if (r > 0)
                     acks++;
                 else if (r == 0)
@@ -1234,7 +1328,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 continue;
             int w = efs_conn_reply_watch_us(conns[i], 24);
             if (w == EFS_CONN_REPLY_READY) {
-                int r = put_recv_reply(nodes[i], conns[i]);
+                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                 if (r > 0)
                     acks++;
                 else if (r == 0)
@@ -1264,7 +1358,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 continue;
             int w = efs_conn_reply_watch_quick(conns[i]);
             if (w == EFS_CONN_REPLY_READY) {
-                int r = put_recv_reply(nodes[i], conns[i]);
+                int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                 if (r > 0)
                     acks++;
                 else if (r == 0)
@@ -1325,7 +1419,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             int i = map[p];
             if (!pending[i] || !conns[i])
                 continue;
-            int r = put_recv_reply(nodes[i], conns[i]);
+            int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
             if (r > 0)
                 acks++;
             else if (r == 0)
@@ -1359,7 +1453,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                     continue;
                 int w = efs_conn_reply_watch_quick(conns[i]);
                 if (w == EFS_CONN_REPLY_READY) {
-                    put_recv_reply(nodes[i], conns[i]);
+                    put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                     conns[i] = NULL;
                     pending[i] = 0;
                     continue;
@@ -1389,7 +1483,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 int i = map[p];
                 if (!conns[i])
                     continue;
-                put_recv_reply(nodes[i], conns[i]);
+                put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                 conns[i] = NULL;
                 pending[i] = 0;
             }
@@ -1749,6 +1843,12 @@ struct dcache_ent {
     uint32_t object_delta_base_n;
     uint64_t object_delta_base_seq;
     struct dcache_ent *next;
+    /* W18: per-shard dirty list. on_dirty is 1 while linked. */
+    struct dcache_ent *dirty_next;
+    struct dcache_ent *dirty_prev;
+    int on_dirty;
+    /* 1 = present_extra on the inode counts this slot (not in the table). */
+    uint8_t present_extra;
 };
 
 static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci);
@@ -1973,6 +2073,7 @@ static struct {
      * just-written ranges (concurrent-append data loss). */
     pthread_mutex_t shard_io[DCACHE_SHARDS];
     struct dcache_ent e[DCACHE_SLOTS];
+    struct dcache_ent *dirty_head[DCACHE_SHARDS];
     int inited;
     uint64_t dirty_bytes;
 } g_dcache;
@@ -2002,7 +2103,19 @@ static void dcache_init(void)
         pthread_mutex_init(&g_dcache.shard[i], NULL);
         pthread_mutex_init(&g_dcache.shard_io[i], NULL);
     }
-    g_dcache.inited = 1;
+    __atomic_store_n(&g_dcache.inited, 1, __ATOMIC_RELEASE);
+}
+
+static void dcache_ensure(void)
+{
+    if (__atomic_load_n(&g_dcache.inited, __ATOMIC_ACQUIRE))
+        return;
+    pthread_once(&g_dcache_once, dcache_init);
+}
+
+void efs_dcache_init(void)
+{
+    dcache_ensure();
 }
 
 static uint32_t dcache_slot(efs_ino_t ino, uint32_t ci)
@@ -2014,14 +2127,54 @@ static uint32_t dcache_slot(efs_ino_t ino, uint32_t ci)
 
 static pthread_mutex_t *dcache_mu(uint32_t slot)
 {
-    pthread_once(&g_dcache_once, dcache_init);
+    dcache_ensure();
     return &g_dcache.shard[slot & (DCACHE_SHARDS - 1)];
 }
 
 static pthread_mutex_t *dcache_io_mu(uint32_t slot)
 {
-    pthread_once(&g_dcache_once, dcache_init);
+    dcache_ensure();
     return &g_dcache.shard_io[slot & (DCACHE_SHARDS - 1)];
+}
+
+/* Caller holds the shard mutex for `slot`. */
+static void dcache_dirty_link(struct dcache_ent *e, uint32_t slot)
+{
+    uint32_t sh;
+
+    if (!e || e->on_dirty)
+        return;
+    sh = slot & (DCACHE_SHARDS - 1);
+    e->dirty_prev = NULL;
+    e->dirty_next = g_dcache.dirty_head[sh];
+    if (e->dirty_next)
+        e->dirty_next->dirty_prev = e;
+    g_dcache.dirty_head[sh] = e;
+    e->on_dirty = 1;
+}
+
+static void dcache_dirty_unlink(struct dcache_ent *e, uint32_t slot)
+{
+    uint32_t sh;
+
+    if (!e || !e->on_dirty)
+        return;
+    sh = slot & (DCACHE_SHARDS - 1);
+    if (e->dirty_prev)
+        e->dirty_prev->dirty_next = e->dirty_next;
+    else
+        g_dcache.dirty_head[sh] = e->dirty_next;
+    if (e->dirty_next)
+        e->dirty_next->dirty_prev = e->dirty_prev;
+    e->dirty_next = NULL;
+    e->dirty_prev = NULL;
+    e->on_dirty = 0;
+}
+
+static void dcache_set_dirty(struct dcache_ent *e, uint32_t slot)
+{
+    e->dirty = 1;
+    dcache_dirty_link(e, slot);
 }
 
 /* snap_seq: the slot's dcache_ent.snap_seq taken when `chunk` was copied
@@ -2146,7 +2299,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
             if (!have) {
                 memset(znodes, 0, sizeof(znodes));
                 memset(zck, 0, sizeof(zck));
-                efs_export_set_chunk(&g_client.export, ino, ci, znodes, zck);
+                efs_client_set_chunk(&g_client.export, ino, ci, znodes, zck);
                 (void)efs_export_set_chunk_gen(&g_client.export, ino, ci, 0);
             }
             memset(&d, 0, sizeof(d));
@@ -2163,7 +2316,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
                  * decision). A span can no longer be recorded, so the
                  * image replaces the base. Callers must not pass a buffer
                  * that is only the new range. */
-                efs_export_set_chunk(&g_client.export, ino, ci, nodes,
+                efs_client_set_chunk(&g_client.export, ino, ci, nodes,
                                      checksums);
                 (void)efs_export_set_chunk_gen(
                     &g_client.export, ino, ci,
@@ -2171,7 +2324,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
                 span = 0;
             }
         } else {
-            efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
+            efs_client_set_chunk(&g_client.export, ino, ci, nodes, checksums);
             /* Table gen is the object name (candidate), not the CAS base.
              * GET reads this; report still uses dcache.base_gen.
              * set_chunk_gen drops the span list this image folds. */
@@ -2256,6 +2409,7 @@ static uint8_t *dcache_steal_body(struct dcache_ent *e)
     e->data = NULL;
     e->len = 0;
     e->dirty = 0;
+    dcache_dirty_unlink(e, dcache_slot(e->ino, e->ci));
     if (len)
         dcache_note_dirty_bytes(-(int64_t)len);
     return p;
@@ -2481,6 +2635,7 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
 {
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
+    int extra = 0;
     pthread_mutex_lock(mu);
     struct dcache_ent *head = &g_dcache.e[s];
     if (head->ino == ino && head->ci == ci) {
@@ -2492,18 +2647,32 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
         DTRACE(head, "drop skip_dirty=%d", skip_dirty);
         if (head->dirty && head->len)
             dcache_note_dirty_bytes(-(int64_t)head->len);
+        if (head->present_extra) {
+            extra = 1;
+            head->present_extra = 0;
+        }
         dcache_pin_release(head);
+        dcache_dirty_unlink(head, s);
         efs_buf_free(head->data, head->len);
         if (head->next) {
             struct dcache_ent *n = head->next;
             /* n's pin (if any) travels with the copy into the head slot;
-             * head's own pin was released above. */
+             * head's own pin was released above. The copy must not
+             * inherit n's dirty-list links. */
+            dcache_dirty_unlink(n, s);
             *head = *n;
+            head->on_dirty = 0;
+            head->dirty_next = NULL;
+            head->dirty_prev = NULL;
+            if (head->dirty)
+                dcache_dirty_link(head, s);
             free(n);
         } else {
             memset(head, 0, sizeof(*head));
         }
         pthread_mutex_unlock(mu);
+        if (extra)
+            efs_export_present_add(&g_client.export, ino, 1, -1);
         return;
     }
     struct dcache_ent *prev = head;
@@ -2516,7 +2685,12 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
             DTRACE(e, "drop skip_dirty=%d", skip_dirty);
             if (e->dirty && e->len)
                 dcache_note_dirty_bytes(-(int64_t)e->len);
+            if (e->present_extra) {
+                extra = 1;
+                e->present_extra = 0;
+            }
             dcache_pin_release(e);
+            dcache_dirty_unlink(e, s);
             prev->next = e->next;
             efs_buf_free(e->data, e->len);
             free(e);
@@ -2524,6 +2698,8 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
         }
     }
     pthread_mutex_unlock(mu);
+    if (extra)
+        efs_export_present_add(&g_client.export, ino, 1, -1);
 }
 
 void efs_dcache_drop(efs_ino_t ino, uint32_t ci)
@@ -2618,7 +2794,7 @@ static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t 
              * falls through to load_and_patch, sees the not-yet-published chunk
              * (the in-flight PUT has not set the mapping), and builds a zeroed
              * have_base=1 entry that overwrites the in-flight data. */
-            e->dirty = 1;
+            dcache_set_dirty(e, s);
             dcache_pin_add(e); /* already held mid-flush; keeps dirty ⟹ pinned */
             dcache_note_dirty_bytes((int64_t)e->len);
         }
@@ -2748,6 +2924,33 @@ static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
     return 0;
 }
 
+/* Whole-chunk body. `chunk` is a pool buffer. Stolen on success.
+ * libfuse's request buffer does not outlive the write reply, so the
+ * caller copies into `chunk` once and hands that pointer here. */
+int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
+                                uint32_t cs)
+{
+    if (!chunk || !cs)
+        return -1;
+    if (dcache_patch(ino, ci, 0, chunk, cs) == 0) {
+        efs_buf_free(chunk, cs);
+    } else if (dcache_merge_owned(ino, ci, 0, chunk, cs, chunk, cs) < 0) {
+        return -1;
+    }
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(s, ino, ci);
+    if (e) {
+        e->have_base = 1;
+        e->nrange = 0;
+        e->base_gen = EFS_CHUNK_BASE_UNCOND;
+    }
+    pthread_mutex_unlock(mu);
+    dcache_note_size(ino, ((uint64_t)ci + 1) * cs);
+    return 0;
+}
+
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
                          const uint8_t *src)
 {
@@ -2794,7 +2997,7 @@ static int dcache_patch_sparse(efs_ino_t ino, uint32_t ci, uint32_t off,
     if (e && e->data && off + len <= e->len) {
         memcpy(e->data + off, src, len);
         if (!e->dirty) {
-            e->dirty = 1;
+            dcache_set_dirty(e, s);
             dcache_pin_add(e);
             dcache_note_dirty_bytes((int64_t)e->len);
         }
@@ -2921,7 +3124,7 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     memcpy(e->data, chunk, chunk_size);
     e->ino = ino;
     e->ci = ci;
-    e->dirty = 1;
+    dcache_set_dirty(e, dcache_slot(ino, ci));
     e->have_base = 1;
     e->nrange = 0;
     e->object_gen = 0;
@@ -2953,7 +3156,7 @@ static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     e->len = chunk_size;
     e->ino = ino;
     e->ci = ci;
-    e->dirty = 1;
+    dcache_set_dirty(e, dcache_slot(ino, ci));
     e->have_base = 1;
     e->nrange = 0;
     e->object_gen = 0;
@@ -2968,6 +3171,52 @@ static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
     return 0;
 }
 
+/* Count a dirty slot that is not in the chunk table yet. Called with no
+ * dcache mutex held. idx then dcache is the order the flush path uses. */
+static void dcache_account_extra(efs_ino_t ino, uint32_t ci)
+{
+    int in_table;
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    struct dcache_ent *e;
+
+    efs_client_lock_dir(ino);
+    pthread_mutex_lock(&g_client.idx_mu);
+    in_table = (efs_export_get_chunk(&g_client.export, ino, ci, NULL) == 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_unlock_dir(ino);
+
+    pthread_mutex_lock(mu);
+    e = dcache_find(s, ino, ci);
+    if (!e || e->present_extra || !e->dirty || in_table) {
+        pthread_mutex_unlock(mu);
+        return;
+    }
+    e->present_extra = 1;
+    pthread_mutex_unlock(mu);
+    efs_export_present_add(&g_client.export, ino, 1, 1);
+}
+
+/* The chunk is about to be inserted in the table. Drop the extra count
+ * so set_chunk's +1 does not double it. */
+void efs_dcache_yield_extra(efs_ino_t ino, uint32_t ci)
+{
+    uint32_t s = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(s);
+    int had = 0;
+    struct dcache_ent *e;
+
+    pthread_mutex_lock(mu);
+    e = dcache_find(s, ino, ci);
+    if (e && e->present_extra) {
+        e->present_extra = 0;
+        had = 1;
+    }
+    pthread_mutex_unlock(mu);
+    if (had)
+        efs_export_present_add(&g_client.export, ino, 1, -1);
+}
+
 /* 0 = cached, 1 = should not happen (chain grows), <0 = error. */
 static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
                         uint32_t chunk_size)
@@ -2979,6 +3228,8 @@ static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     if (e) {
         int rc = dcache_fill(e, ino, ci, chunk, chunk_size);
         pthread_mutex_unlock(mu);
+        if (rc == 0)
+            dcache_account_extra(ino, ci);
         return rc;
     }
     struct dcache_ent *head = &g_dcache.e[s];
@@ -2987,6 +3238,8 @@ static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     if (!head->ino && !head->dirty && !head->data) {
         int rc = dcache_fill(head, ino, ci, chunk, chunk_size);
         pthread_mutex_unlock(mu);
+        if (rc == 0)
+            dcache_account_extra(ino, ci);
         return rc;
     }
     struct dcache_ent *n = calloc(1, sizeof(*n));
@@ -3003,6 +3256,7 @@ static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     n->next = head->next;
     head->next = n;
     pthread_mutex_unlock(mu);
+    dcache_account_extra(ino, ci);
     return 0;
 }
 
@@ -3019,12 +3273,16 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
     if (e) {
         int rc = dcache_take(e, ino, ci, chunk, chunk_size);
         pthread_mutex_unlock(mu);
+        if (rc == 0)
+            dcache_account_extra(ino, ci);
         return rc;
     }
     struct dcache_ent *head = &g_dcache.e[s];
     if (!head->ino && !head->dirty && !head->data) {
         int rc = dcache_take(head, ino, ci, chunk, chunk_size);
         pthread_mutex_unlock(mu);
+        if (rc == 0)
+            dcache_account_extra(ino, ci);
         return rc;
     }
     struct dcache_ent *n = calloc(1, sizeof(*n));
@@ -3041,6 +3299,7 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
     n->next = head->next;
     head->next = n;
     pthread_mutex_unlock(mu);
+    dcache_account_extra(ino, ci);
     return 0;
 }
 
@@ -3246,6 +3505,7 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
         memcpy(copy, e->data, len);
         DTRACE(e, "snap-steal");
         e->dirty = 0;
+        dcache_dirty_unlink(e, s);
         dcache_note_dirty_bytes(-(int64_t)len);
     }
     pthread_mutex_unlock(mu);
@@ -3261,7 +3521,7 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
             pthread_mutex_lock(mu);
             e = dcache_find(s, ino, ci);
             if (e && e->ino == ino && e->ci == ci && e->data && !e->dirty) {
-                e->dirty = 1;
+                dcache_set_dirty(e, s);
                 dcache_note_dirty_bytes((int64_t)len);
             }
             pthread_mutex_unlock(mu);
@@ -3275,7 +3535,7 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
             pthread_mutex_lock(mu);
             e = dcache_find(s, ino, ci);
             if (e && e->ino == ino && e->ci == ci && e->data && !e->dirty) {
-                e->dirty = 1;
+                dcache_set_dirty(e, s);
                 dcache_note_dirty_bytes((int64_t)len);
             }
             pthread_mutex_unlock(mu);
@@ -3305,17 +3565,10 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
     *copy_out = copy;
     *len_out = len;
     *bg_out = bg;
-    /* A have_base buffer is the whole chunk this client has. Publishing
-     * another span and later folding a short copy of it is what turned
-     * concurrent appends into NUL records. The image replaces the chain. */
-    if (have_base) {
-        if (doff)
-            *doff = 0;
-        if (dlen)
-            *dlen = 0;
-    } else if (doff && dlen) {
+    /* D1: a sub-range is a span even with have_base. A full overwrite
+     * (span_of returns 0, or dcache_full_overwrite) replaces the chain. */
+    if (!dcache_full_overwrite(have_base, bg, nrange) && doff && dlen)
         span_of(ino, ci, bg, nrange, roff, rlen, len, doff, dlen);
-    }
     return 1;
 }
 
@@ -3336,7 +3589,7 @@ static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
         if (drop_body && e && !e->data) {
             e->data = copy;
             e->len = len;
-            e->dirty = 1;
+            dcache_set_dirty(e, s);
             e->have_base = 1;
             e->nrange = 0;
             e->base_gen = EFS_CHUNK_BASE_UNCOND;
@@ -3347,7 +3600,7 @@ static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
             return 1;
         }
         if (e && e->ino == ino && e->ci == ci && e->data && !e->dirty) {
-            e->dirty = 1;
+            dcache_set_dirty(e, s);
             dcache_note_dirty_bytes((int64_t)len);
             DTRACE(e, "keep-putfail");
         }
@@ -3488,6 +3741,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             memcpy(copy, e->data, len);
             DTRACE(e, "snap-inner");
             e->dirty = 0;
+            dcache_dirty_unlink(e, s);
             /* Un-count now, while the state transition is atomic. The old
              * code decremented only if the entry was still clean after the
              * network PUT; a re-dirty during the PUT re-added a full chunk,
@@ -3503,7 +3757,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                 efs_buf_free(copy, len);
                 pthread_mutex_lock(mu);
                 if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
-                    e->dirty = 1;
+                    dcache_set_dirty(e, s);
                     dcache_note_dirty_bytes((int64_t)len);
                 }
                 pthread_mutex_unlock(mu);
@@ -3517,7 +3771,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                 efs_buf_free(copy, len);
                 pthread_mutex_lock(mu);
                 if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
-                    e->dirty = 1;
+                    dcache_set_dirty(e, s);
                     dcache_note_dirty_bytes((int64_t)len);
                 }
                 pthread_mutex_unlock(mu);
@@ -3536,7 +3790,9 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                     slot_bg = ce.generation;
             }
         }
-        if (have_base)
+        /* D1: a partial write is a span even when this client holds the
+         * whole chunk. A full overwrite (UNCOND, no ranges) folds. */
+        if (full)
             doff = dlen = 0;
         else
             span_of(ino, ci, slot_bg, nrange, roff, rlen, len, &doff, &dlen);
@@ -3551,7 +3807,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                 if (back && !back->data) {
                     back->data = copy;
                     back->len = len;
-                    back->dirty = 1;
+                    dcache_set_dirty(back, s);
                     back->have_base = 1;
                     back->nrange = 0;
                     back->base_gen = EFS_CHUNK_BASE_UNCOND;
@@ -3561,7 +3817,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                 }
             } else if (e->ino == ino && e->ci == ci && e->data && !e->dirty) {
                 /* PUT failed: this slot is the only copy. Keep it dirty. */
-                e->dirty = 1;
+                dcache_set_dirty(e, s);
                 dcache_note_dirty_bytes((int64_t)len);
             }
             efs_buf_free(copy, len);
@@ -3609,7 +3865,7 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
 static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
 {
     int rc = EFS_OK;
-    pthread_once(&g_dcache_once, dcache_init);
+    dcache_ensure();
     /* Reclaim (have_only=0) stays serial: it skips unpublished
      * have_base=0 slots and shares shard_io with a live writer. fsync
      * (have_only=1) walks every slot looking for this ino and pipelines
@@ -3706,7 +3962,7 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     if (nci > DCACHE_SLOTS)
         return dcache_flush_all_slots(ino, 1);
 
-    pthread_once(&g_dcache_once, dcache_init);
+    dcache_ensure();
     flush_pipe_init(&pipe);
     for (ci = 0; ci < nci && pipe.rc == EFS_OK; ci++) {
         uint8_t *copy = NULL;
@@ -3741,7 +3997,7 @@ static uint64_t dcache_base_gen_of(efs_ino_t ino, uint32_t ci, uint64_t fallback
 
     if (!ino)
         return fallback;
-    pthread_once(&g_dcache_once, dcache_init);
+    dcache_ensure();
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find_meta(s, ino, ci);
@@ -3759,7 +4015,7 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
 
     if (!ino || !rec)
         return 0;
-    pthread_once(&g_dcache_once, dcache_init);
+    dcache_ensure();
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find_meta(s, ino, ci);
@@ -3800,7 +4056,7 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen)
 
     if (!ino)
         return 0;
-    pthread_once(&g_dcache_once, dcache_init);
+    dcache_ensure();
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find_meta(s, ino, ci);
@@ -3847,7 +4103,7 @@ int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci)
 
     if (!ino)
         return EFS_OK;
-    pthread_once(&g_dcache_once, dcache_init);
+    dcache_ensure();
     s = dcache_slot(ino, ci);
     io = dcache_io_mu(s);
     pthread_mutex_lock(io);
@@ -4014,13 +4270,31 @@ static void *dcache_reclaim_main(void *arg)
         pthread_mutex_unlock(&g_reclaim.mu);
 
         uint64_t low = g_reclaim.lim - g_reclaim.lim / 8;
+        /* W18: pop a dirty have_base slot instead of scanning 65536. */
         for (int i = 0; i < DCACHE_RECLAIM_SCAN; i++) {
+            uint32_t s = 0;
+            int found = 0;
+            int sh;
+
             if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
                 low)
                 break;
-            uint32_t s = __atomic_fetch_add(&g_reclaim.cursor, 1,
-                                            __ATOMIC_RELAXED) &
-                         (DCACHE_SLOTS - 1);
+            for (sh = 0; sh < DCACHE_SHARDS && !found; sh++) {
+                struct dcache_ent *e;
+
+                pthread_mutex_lock(&g_dcache.shard[sh]);
+                for (e = g_dcache.dirty_head[sh]; e; e = e->dirty_next) {
+                    if (!e->dirty || !e->data || !e->have_base)
+                        continue;
+                    s = dcache_slot(e->ino, e->ci);
+                    dcache_dirty_unlink(e, s);
+                    found = 1;
+                    break;
+                }
+                pthread_mutex_unlock(&g_dcache.shard[sh]);
+            }
+            if (!found)
+                break;
             (void)dcache_flush_slot(s, 0, 0);
         }
         pthread_mutex_lock(&g_reclaim.mu);
@@ -4419,7 +4693,7 @@ int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *bu
             export_reserve_chunks_locked(4096);
         efs_client_lock_dir(ino);
         pthread_mutex_lock(&g_client.idx_mu);
-        efs_export_set_chunk(&g_client.export, ino, ci, nodes, checksums);
+        efs_client_set_chunk(&g_client.export, ino, ci, nodes, checksums);
         (void)efs_export_set_chunk_gen(&g_client.export, ino, ci,
                                        chunk_candidate_gen(nodes, checksums,
                                                            ci));
@@ -4538,7 +4812,7 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                     memcmp(prev.checksums, jobs[i].checksums,
                            sizeof(prev.checksums)) == 0;
                 if (!same_nodes || !same_ck)
-                    efs_export_set_chunk(&g_client.export, ino, jobs[i].ci,
+                    efs_client_set_chunk(&g_client.export, ino, jobs[i].ci,
                                          jobs[i].nodes, jobs[i].checksums);
                 (void)efs_export_set_chunk_gen(&g_client.export, ino,
                                                jobs[i].ci,
