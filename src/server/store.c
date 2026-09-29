@@ -11,6 +11,28 @@
 #include <dirent.h>
 #include <pthread.h>
 
+/* mkdir -p, leaf first. `path` is writable and is restored before return.
+ * The top-down walk did mkdir("/data1"), mkdir("/data1/06"), ... on every
+ * new fragment directory: 9 304 mkdir for 2 360 fragment writes in one
+ * 120 s window, 8 176 of them EEXIST (Sep 29, fcstor003). An existing
+ * tree now costs one mkdir; only a missing parent recurses. */
+static void make_dir_up(char *path)
+{
+    char *slash;
+
+    if (mkdir(path, 0755) == 0 || errno == EEXIST)
+        return;
+    if (errno != ENOENT)
+        return;
+    slash = strrchr(path, '/');
+    if (!slash || slash == path)
+        return;
+    *slash = '\0';
+    make_dir_up(path);
+    *slash = '/';
+    (void)mkdir(path, 0755);
+}
+
 static void make_dir(const char *path)
 {
     size_t n = strlen(path) + 1;
@@ -18,15 +40,7 @@ static void make_dir(const char *path)
     if (!tmp)
         return;
     memcpy(tmp, path, n);
-
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = '\0';
-            mkdir(tmp, 0755);
-            *p = '/';
-        }
-    }
-    mkdir(tmp, 0755);
+    make_dir_up(tmp);
     free(tmp);
 }
 
@@ -387,12 +401,22 @@ int server_find_fragment_root(struct efsd_server *s, struct efs_export *ex,
     return -1;
 }
 
+static void frag_loc_note(efs_export_id_t export_id, efs_ino_t ino,
+                          uint32_t chunk_index, uint32_t fragment_index,
+                          uint64_t gen, uint32_t root);
+
 int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          efs_ino_t ino, uint32_t chunk_index, uint32_t fragment_index,
                          char *path, size_t path_len)
 {
-    fragment_path_at(s, write_root_index(s, chunk_index), ex, ino, chunk_index,
-                     fragment_index, path, path_len);
+    uint32_t root = write_root_index(s, chunk_index);
+
+    fragment_path_at(s, root, ex, ino, chunk_index, fragment_index, path,
+                     path_len);
+    /* The GET that follows (verify-after-write, a peer's read-modify-
+     * write) finds the root here instead of probing them in order. */
+    frag_loc_note(ex->id, ino, chunk_index, fragment_index,
+                  efs_tls_chunk_gen, root);
     return 0;
 }
 
@@ -685,7 +709,7 @@ static void *shard_io_thread(void *arg)
     return NULL;
 }
 
-/* Per-thread resolved-location cache for multi-root reads. Adaptive write
+/* Resolved-location cache for multi-root reads. Adaptive write
  * placement makes the root non-deterministic, so without a hint every GET
  * open()-probes roots×layouts through a deep dir walk — the top server CPU
  * cost at scale. A hit turns the probe into one open; the open itself
@@ -693,11 +717,18 @@ static void *shard_io_thread(void *arg)
  * overwrite left duplicate fragments on several roots, a cached entry may
  * return a different copy than canonical probe order would (both are
  * checksum-valid generations; the probe order itself is already arbitrary
- * in that case). */
-/* Sized so a conn thread's share of a multi-client streaming working set
- * (several thousand fragments) fits; a direct-mapped cache smaller than
- * the cyclical working set thrashes to ~0% hits. */
-#define FRAG_LOC_CACHE_SIZE 16384
+ * in that case).
+ *
+ * Process-wide, unlocked. It was per thread, and a GET is served by
+ * whichever of the hundreds of conn threads holds the conn, so nearly
+ * every GET re-probed (Sep 29 ecopy window on fcstor003: 149 770 openat,
+ * 51 130 of them ENOENT, for 845 pread). A torn entry is harmless: a
+ * mismatched key misses, a wrong root gets ENOENT from the open and is
+ * reprobed. PUT primes it (server_fragment_path). */
+/* Sized so a multi-client streaming working set (several thousand
+ * fragments) fits; a direct-mapped cache smaller than the cyclical
+ * working set thrashes to ~0% hits. */
+#define FRAG_LOC_CACHE_SIZE 65536
 struct frag_loc {
     efs_export_id_t export_id;
     efs_ino_t ino;
@@ -707,7 +738,7 @@ struct frag_loc {
     uint8_t root;
     uint8_t valid;
 };
-static __thread struct frag_loc frag_loc_cache[FRAG_LOC_CACHE_SIZE];
+static struct frag_loc frag_loc_cache[FRAG_LOC_CACHE_SIZE];
 
 static uint32_t frag_loc_slot(efs_export_id_t export_id, efs_ino_t ino,
                               uint32_t chunk_index, uint32_t fragment_index)
@@ -718,6 +749,29 @@ static uint32_t frag_loc_slot(efs_export_id_t export_id, efs_ino_t ino,
     h ^= (uint64_t)export_id * 0x2545f4914f6cdd1dull;
     h ^= h >> 29;
     return (uint32_t)h & (FRAG_LOC_CACHE_SIZE - 1);
+}
+
+static void frag_loc_note(efs_export_id_t export_id, efs_ino_t ino,
+                          uint32_t chunk_index, uint32_t fragment_index,
+                          uint64_t gen, uint32_t root)
+{
+    struct frag_loc *loc =
+        &frag_loc_cache[frag_loc_slot(export_id, ino, chunk_index,
+                                      fragment_index)];
+
+    if (root > 0xff)
+        return;
+    /* valid goes down first and up last so a reader racing this fill
+     * sees either the old entry or the new one, never a half-written
+     * one it would trust. */
+    loc->valid = 0;
+    loc->export_id = export_id;
+    loc->ino = ino;
+    loc->gen = gen;
+    loc->chunk_index = chunk_index;
+    loc->fragment_index = fragment_index;
+    loc->root = (uint8_t)root;
+    __atomic_store_n(&loc->valid, 1, __ATOMIC_RELEASE);
 }
 
 /* Combined fragment+checksum read. Single probe pass per GET: the data
@@ -767,15 +821,9 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                  fragment_index, path, sizeof(path));
                 plen = (int)strlen(path);
                 rc = read_file_bytes(path, data, want, &got, direct);
-                if (rc == EFS_OK) {
-                    loc->export_id = ex->id;
-                    loc->ino = ino;
-                    loc->gen = efs_tls_chunk_gen;
-                    loc->chunk_index = chunk_index;
-                    loc->fragment_index = fragment_index;
-                    loc->root = (uint8_t)ri;
-                    loc->valid = 1;
-                }
+                if (rc == EFS_OK)
+                    frag_loc_note(ex->id, ino, chunk_index, fragment_index,
+                                  efs_tls_chunk_gen, ri);
                 if (rc != EFS_ERR_NOT_FOUND)
                     break;
             }

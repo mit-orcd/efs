@@ -32,6 +32,7 @@
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
+#include "efs/rdma.h"
 
 #define HOST_TICK_US       5000
 #define HOST_HB_TICKS      10
@@ -193,6 +194,7 @@ struct host_group {
     uint32_t desired; /* operator target; actual follows via joint (I18) */
     uint64_t applied_saved;
     uint64_t applied_saved_us; /* pump-only: last applied-file write */
+    int applied_fd;            /* pump-only: applied.<g>, held open; -1 */
     /* Snapshot file for this group. The pump pins a view and the GC
      * thread writes snap-<group>-<incl>.kvx. part_* is the follower's
      * in-progress InstallSnapshot. fds are -1 when closed. */
@@ -635,26 +637,54 @@ static int peer_addr(struct efs_raft_host *h, int raft_id,
     return -1;
 }
 
+/* Frames one sender keeps unacked on the wire. TCP has socket buffers;
+ * RDMA is bounded by the peer's posted recv buffers (efs_rdma_conn_nrecv,
+ * both ends post the same count), minus one the peer may still be
+ * consuming. Never more than the pri + ent lanes can hold. */
+#define HOST_SENDER_PIPE_MAX 8
+
+static int host_sender_depth(struct efs_conn *pc)
+{
+    int d = HOST_SENDER_PIPE_MAX;
+
+    if (pc && pc->kind == EFS_CONN_RDMA && pc->rc) {
+        int n = efs_rdma_conn_nrecv(pc->rc) - 1;
+
+        if (n < d)
+            d = n;
+    }
+    return d < 1 ? 1 : d;
+}
+
 /* Per-peer sender: pops encoded messages FIFO and does the blocking
  * send + empty-ACK wait (dead-conn detection + backpressure) that used to
  * run under h->mu. Never touches h->mu; outbox_mu is never held across
  * I/O. On stop (tx_running=0) it drops whatever is queued and exits — the
- * server is going away and Raft retries from the next incarnation. */
+ * server is going away and Raft retries from the next incarnation.
+ *
+ * One frame per round trip was the commit latency (Sep 29): the peer's
+ * handler answers RAFT_REPLY at once, so the ~440 us rtt was pure wire +
+ * wakeup, and every ReadIndex round on the leader put two heartbeats in
+ * the lane ahead of the next entry AE. The lane reached 651 deep and a
+ * one-entry commit waited 20-149 ms (`apply-sleep`); 400 ms of it was a
+ * BUSY REPORT. Now a wake drains up to host_sender_depth frames, sends
+ * them back to back, then collects that many acks in order. The peer
+ * receives them on one conn and copies each into its inbox in order, so
+ * ordering within a lane is unchanged. */
 static void *host_sender(void *arg)
 {
     struct host_outbox *tx = arg;
     struct efs_raft_host *h = tx->h;
 
     for (;;) {
-        uint8_t *buf;
-        uint32_t len;
+        uint8_t *bufs[HOST_SENDER_PIPE_MAX];
+        uint32_t lens[HOST_SENDER_PIPE_MAX];
         char host[64];
         uint16_t port = 0;
         struct efs_conn *pc;
-        uint8_t rtype = 0;
-        void *reply = NULL;
-        uint32_t rlen = 0;
-        int i;
+        int i, n = 0, depth, sent = 0, acked = 0, bad = 0;
+        uint64_t t0 = 0, t1 = 0;
+        int obs = raft_obs_on();
 
         pthread_mutex_lock(&h->outbox_mu);
         while (tx->npri == 0 && tx->nent == 0 && h->tx_running)
@@ -673,74 +703,95 @@ static void *host_sender(void *arg)
             }
             return NULL;
         }
+        /* The depth depends on the conn, which only this thread touches;
+         * a conn that is not up yet is sized at one frame. */
+        depth = tx->conn ? host_sender_depth(tx->conn) : 1;
         /* Heartbeats and replies go out before entry AppendEntries.
          * Each lane stays FIFO. */
-        if (tx->npri > 0) {
-            buf = tx->pri[0].buf;
-            len = tx->pri[0].len;
+        while (n < depth && tx->npri > 0) {
+            bufs[n] = tx->pri[0].buf;
+            lens[n] = tx->pri[0].len;
             memmove(&tx->pri[0], &tx->pri[1],
                     (size_t)(tx->npri - 1) * sizeof(tx->pri[0]));
             tx->npri--;
-        } else {
-            buf = tx->ent[0].buf;
-            len = tx->ent[0].len;
+            n++;
+        }
+        while (n < depth && tx->nent > 0) {
+            bufs[n] = tx->ent[0].buf;
+            lens[n] = tx->ent[0].len;
             memmove(&tx->ent[0], &tx->ent[1],
                     (size_t)(tx->nent - 1) * sizeof(tx->ent[0]));
             tx->nent--;
+            n++;
         }
         pthread_mutex_unlock(&h->outbox_mu);
 
-        {
-            uint64_t t0 = 0, t1 = 0;
-            int obs = raft_obs_on();
-            if (obs)
-                t0 = now_us_();
-            if (peer_addr(h, tx->peer, host, sizeof(host), &port) != 0) {
-                free(buf);
-                continue;
+        if (obs)
+            t0 = now_us_();
+        if (peer_addr(h, tx->peer, host, sizeof(host), &port) != 0) {
+            for (i = 0; i < n; i++)
+                free(bufs[i]);
+            continue;
+        }
+        if (!tx->conn)
+            tx->conn = server_peer_conn_new(host, port);
+        pc = tx->conn;
+        if (!pc) {
+            tx->st_fail += (uint64_t)n;
+            for (i = 0; i < n; i++)
+                free(bufs[i]);
+            continue;
+        }
+        if (obs) {
+            uint64_t gw;
+            t1 = now_us_();
+            gw = t1 - t0;
+            tx->st_get_us += gw;
+            if (gw > tx->st_get_max_us)
+                tx->st_get_max_us = gw;
+        }
+        if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
+            efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+            efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+        }
+        /* A fresh conn was sized at 1 above; RDMA may allow fewer than
+         * the frames popped if the conn changed kind. Send what fits. */
+        depth = host_sender_depth(pc);
+        for (sent = 0; sent < n && sent < depth; sent++) {
+            if (efs_conn_send_msg(pc, EFS_MSG_RAFT, bufs[sent], lens[sent]) != 0) {
+                bad = 1;
+                break;
             }
-            if (!tx->conn)
-                tx->conn = server_peer_conn_new(host, port);
-            pc = tx->conn;
-            if (!pc) {
-                tx->st_fail++;
-                free(buf);
-                continue;
-            }
-            if (obs) {
-                uint64_t gw;
-                t1 = now_us_();
-                gw = t1 - t0;
-                tx->st_get_us += gw;
-                if (gw > tx->st_get_max_us)
-                    tx->st_get_max_us = gw;
-            }
-            if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
-                efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
-                efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
-            }
-            if (efs_conn_send_msg(pc, EFS_MSG_RAFT, buf, len) != 0) {
-                tx->st_fail++;
-                efs_conn_destroy(pc);
-                tx->conn = NULL;
-                free(buf);
-                continue;
-            }
+        }
+        for (acked = 0; acked < sent && !bad; acked++) {
+            uint8_t rtype = 0;
+            void *reply = NULL;
+            uint32_t rlen = 0;
+
             if (efs_conn_recv_msg(pc, &rtype, &reply, &rlen) != 0 ||
                 rtype != EFS_MSG_RAFT_REPLY) {
-                tx->st_fail++;
                 free(reply);
-                efs_conn_destroy(pc);
-                tx->conn = NULL;
-                free(buf);
-                continue;
+                bad = 1;
+                break;
             }
             free(reply);
-            free(buf);
-            if (obs) {
-                tx->st_sent++;
+        }
+        if (bad) {
+            /* Everything unacked is lost with the conn; Raft resends. */
+            tx->st_fail += (uint64_t)(n - acked);
+            efs_conn_destroy(pc);
+            tx->conn = NULL;
+        } else if (sent < n) {
+            /* Popped more than this conn may carry: the rest were not
+             * sent. Raft retries them (heartbeat / next AE). */
+            tx->st_fail += (uint64_t)(n - sent);
+        }
+        for (i = 0; i < n; i++)
+            free(bufs[i]);
+        if (obs) {
+            tx->st_sent += (uint64_t)acked;
+            if (acked)
                 tx->st_rtt_us += now_us_() - t1;
-            }
         }
     }
 }
@@ -4305,6 +4356,20 @@ static void set_inode_rc(struct efs_msg_inode_reply *out, int rc, int leader_hin
 {
     out->status = rc_to_inode_status(rc);
     out->primary_id = (leader_hint >= 0) ? (efs_node_id_t)(leader_hint + 1) : 0;
+    /* A NOT_PRIMARY with no hint makes the client back off as if an
+     * election were running (50 ms << n, 16 tries, EBUSY). On a cluster
+     * with stable leaders (Sep 29) that still happened; say which handler
+     * produced it, at most once a second. */
+    if (rc == EFS_ERR_NOT_PRIMARY && leader_hint < 0) {
+        static uint64_t last_us;
+        uint64_t now = now_us_();
+
+        if (now - last_us > 1000000ull) {
+            last_us = now;
+            fprintf(stderr, "raft-host: NOT_PRIMARY without hint from=%p "
+                    "(addr2line -e efsd)\n", __builtin_return_address(0));
+        }
+    }
 }
 
 static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
@@ -4406,15 +4471,22 @@ static void applied_path(struct efs_raft_host *h, uint8_t group,
  * file per group) ran under h->mu at ~290 cycles/s: persist_max ~1 ms
  * of every ~3 ms cycle with proposers queued on the lock. The saved
  * index is only a restart lower bound; apply is idempotent for the
- * replayed tail, so writing it every 10 ms is the same guarantee. */
+ * replayed tail, so writing it every 10 ms is the same guarantee.
+ *
+ * The record is 16 bytes: idx, then ~idx. It is pwritten in place at
+ * offset 0 of a file the pump keeps open, then fdatasync'd. The
+ * open + write + fsync + close + rename of a tmp file per write was
+ * 5 329 openat / 4 376 rename / 8 943 fsync on the pump thread in one
+ * 120 s posix window (Sep 29). A record whose second word is not the
+ * complement of the first is torn and reads as 0 (replay from the log
+ * floor, which apply tolerates). */
 #define HOST_APPLIED_PERSIST_US 10000ull
 
 static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
                            uint64_t now, int force)
 {
-    char path[EFS_MAX_PATH], tmp[EFS_MAX_PATH];
-    uint8_t buf[8];
-    int fd, n, rc;
+    uint8_t buf[16];
+    int n;
 
     if (!h->g[gi].hosted || !h->g[gi].r)
         return EFS_OK;
@@ -4423,21 +4495,20 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     if (!force && now - h->g[gi].applied_saved_us < HOST_APPLIED_PERSIST_US)
         return EFS_OK;
     h->g[gi].applied_saved_us = now;
-    applied_path(h, h->g[gi].group, path, sizeof(path));
-    snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-    wr64be(buf, idx);
-    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0)
-        return EFS_ERR_IO;
-    n = (int)write(fd, buf, 8);
-    rc = fsync(fd);
-    close(fd);
-    if (n != 8 || rc != 0) {
-        unlink(tmp);
-        return EFS_ERR_IO;
+    if (h->g[gi].applied_fd < 0) {
+        char path[EFS_MAX_PATH];
+
+        applied_path(h, h->g[gi].group, path, sizeof(path));
+        h->g[gi].applied_fd = open(path, O_RDWR | O_CREAT, 0644);
+        if (h->g[gi].applied_fd < 0)
+            return EFS_ERR_IO;
     }
-    if (rename(tmp, path) != 0) {
-        unlink(tmp);
+    wr64be(buf, idx);
+    wr64be(buf + 8, ~idx);
+    n = (int)pwrite(h->g[gi].applied_fd, buf, sizeof(buf), 0);
+    if (n != (int)sizeof(buf) || fdatasync(h->g[gi].applied_fd) != 0) {
+        close(h->g[gi].applied_fd);
+        h->g[gi].applied_fd = -1;
         return EFS_ERR_IO;
     }
     h->g[gi].applied_saved = idx;
@@ -4447,7 +4518,7 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
 static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
 {
     char path[EFS_MAX_PATH];
-    uint8_t buf[8];
+    uint8_t buf[16];
     int fd, n;
 
     *idx = 0;
@@ -4455,9 +4526,16 @@ static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
     fd = open(path, O_RDONLY);
     if (fd < 0)
         return EFS_OK;
-    n = (int)read(fd, buf, 8);
+    n = (int)read(fd, buf, sizeof(buf));
     close(fd);
-    if (n != 8)
+    if (n == 8) {
+        /* Written by the tmp+rename form; always whole. */
+        *idx = rd64be(buf);
+        return EFS_OK;
+    }
+    if (n != (int)sizeof(buf))
+        return EFS_OK;
+    if (rd64be(buf + 8) != ~rd64be(buf))
         return EFS_OK;
     *idx = rd64be(buf);
     return EFS_OK;
@@ -4937,6 +5015,7 @@ static int attach_group(struct efs_raft_host *h, int gi, uint8_t group)
     h->g[gi].hosted = 0;
     h->g[gi].snap_fd = -1;
     h->g[gi].part_fd = -1;
+    h->g[gi].applied_fd = -1;
     h->g[gi].snap_exporting = 0;
     h->g[gi].snap_ready = 0;
     h->g[gi].r = NULL;
@@ -6247,6 +6326,9 @@ void server_raft_host_stop(void)
             unlink(h->g[i].part_path);
         }
         h->g[i].part_fd = -1;
+        if (h->g[i].applied_fd >= 0)
+            close(h->g[i].applied_fd);
+        h->g[i].applied_fd = -1;
     }
     /* After the pump join (no new tick sends) and before the raft cores are
      * freed. A sender blocked on a dead peer exits within HOST_SEND_IO_MS. */

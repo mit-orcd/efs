@@ -1,0 +1,23 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 196
+  EFS BUGS         : 1  (baseline PASS, target FAIL)
+  both fail (match): 0
+  not equivalent   : 0  (status or detail differs)
+  target better    : 3
+  target skipped   : 1  (baseline PASS, target SKIP)
+  incomplete       : 0  (cut, missing, or NOTRUN)
+  target only      : 0
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_create_unlink_two_proc [FAIL] create/unlink child rc=1: Traceback (most recent call last):   File "<string>", line 5, in <module> OSError: [Errno 5] Input/output error: '/tmp/efs-mount/posix-fcstor009-yy32gb55/concurrent_create_unlink_two_proc/c0-4' 
+
+--- target passes where baseline does not ---
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             
+
+--- target skipped a check the baseline ran ---
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device

@@ -682,8 +682,15 @@ static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
     if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) != 0)
         ce.ndelta = 0;
     pthread_mutex_unlock(&g_client.idx_mu);
-    for (i = 0; i < ce.ndelta && rc == EFS_OK; i++)
+    for (i = 0; i < ce.ndelta && rc == EFS_OK; i++) {
+        /* A fold leaves a len-0 tombstone in the trailer (the apply keeps
+         * and skips it, meta_apply.c). It carries no bytes; painting it
+         * was EFS_ERR_INVAL, and every read of a once-folded chunk failed
+         * with EIO (posix basic_overwrite_middle, Sep 29). */
+        if (ce.deltas[i].len == 0)
+            continue;
         rc = overlay_one_delta(ino, ci, buf, chunk_len, &ce.deltas[i]);
+    }
     return rc;
 }
 

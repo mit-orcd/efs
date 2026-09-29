@@ -86,4 +86,11 @@ uint32_t efs_rdma_qpn(struct efs_rdma_conn *rc);
 /* Number of live RDMA conns in this process (tests/validation). */
 int efs_rdma_live_conns(void);
 
+/* Recv buffers posted on this conn's QP. Both ends post the same count,
+ * so a sender may keep at most this many unacked frames in flight before
+ * the peer's RQ runs dry (rnr_retry 7 then stalls the QP, it does not
+ * error). Frames the peer has harvested but not yet consumed still hold
+ * their buffer, so leave one spare. */
+int efs_rdma_conn_nrecv(struct efs_rdma_conn *rc);
+
 #endif

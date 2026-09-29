@@ -69,6 +69,20 @@ wait
 # 172.16.223.(56+N).
 mkfs_out=$(ssh_to 20 fcstor003.ib 'cd /tmp/efs && ./efs-mgmt mkfs 172.16.223.57:19810 efs-test') || true
 echo "$mkfs_out"
+# rc=-13 (BUSY) is the 400 ms apply wait timing out on a cluster that has
+# been up for seconds; the entry still commits (Sep 29 17:04Z: both mkfs
+# calls BUSY, root=1 and the table served). Read the table, do not retry
+# a mkfs that may already be in.
+if echo "$mkfs_out" | grep -q "rc=-13"; then
+    for _ in 1 2 3 4 5; do
+        sleep 1
+        if ssh_to 15 fcstor003.ib 'cd /tmp/efs && ./efs-mgmt raft-status 172.16.223.57:19810' 2>/dev/null | grep -q "root=1"; then
+            say "mkfs BUSY but raft-status root=1: table is up"
+            mkfs_out="rc=0 (root=1 after BUSY)"
+            break
+        fi
+    done
+fi
 if ! echo "$mkfs_out" | grep -q "rc=0"; then
     hint=$(echo "$mkfs_out" | sed -n 's/.*leader_hint=\([0-9-]*\).*/\1/p' | head -1)
     case "$hint" in

@@ -3868,6 +3868,17 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
          * kernel writeback back on. */
         conn->want &= ~FUSE_CAP_WRITEBACK_CACHE;
 #endif
+#ifdef FUSE_CAP_SPLICE_READ
+        /* W15.5 asked for this (Sep 29 15:40Z) and the first profile
+         * with it (fstor007 ecopy, 17:35Z) showed no gain: libfuse
+         * splices /dev/fuse into a pipe and the write handler's
+         * fuse_buf_copy then read()s the pipe into the dcache buffer,
+         * which is the same one kernel->user copy read(/dev/fuse) does,
+         * plus one splice per request (24 668 in 67 s, 17 072 of them
+         * header-sized). `copyout` under `pipe_read` was 5.2% of the
+         * client. Leave it off; fs.pipe-max-size no longer matters. */
+        conn->want &= ~FUSE_CAP_SPLICE_READ;
+#endif
         if (conn->congestion_threshold < 96)
             conn->congestion_threshold = 96;
     }

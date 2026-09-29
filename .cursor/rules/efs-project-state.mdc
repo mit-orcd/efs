@@ -95,17 +95,21 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
-  (`2dd77dac881c-dirty`, `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
-  **STOPPED 17:39Z Sep 29** (`~/efs-runs/stop35.log`): no efsd, no
-  efs-fuse anywhere. The table is the FRESH one from the 17:04Z
-  wipe + `raft-mkfs` (`~/efs-runs/wipeposix.log`); restart on it
-  needs no `--join`. Posix jobs=1 on that table: 194/201
-  (`results/posix/20260929-170457`); the 6 fails and their fixes
-  are START-HERE §1b 17:39Z, items 1–8, reduction
-  `results/measure/20260929-170457-wipeposix/ana`. Recorder files
-  are node-local `/tmp/efs-perf/`. The id is `2dd77da` plus
-  uncommitted W21.2, W17.3, and W15.5. D13, the shard-lock drop,
-  and the six 15:15Z fixes are in this binary, not gated.
+  (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
+  **UP 20:21Z Sep 29.** Rolled 19:10Z (`~/efs-runs/gate40.log`), no
+  recorders. Embedded id `33c7e29cd161-dirty`: commit `33c7e29c` plus
+  the 17:39Z items 1–7 (tombstone skip, pipelined sender, commit
+  probe, hintless-voter skip, 1 s CQ wait, splice off, leaf mkdir,
+  fragment-root cache, in-place `applied` fd) and still-dirty W21
+  in `metadata.c`. Fresh table from the 17:04Z wipe; restart needs
+  no `--join`. jobs=1 posix **200/201** in 28.2 s
+  (`results/posix/20260929-191140`). 9-host: 200/201 on five hosts,
+  five create EIO on four (`results/posix/20260929-202024`).
+  posix2 **60/63** (`results/posix2/20260929-202044`). Tail rtt ~23 µs,
+  `nohint=0`, `apply_max` under 300 µs. Open items are START-HERE
+  §1b 20:21Z (those EIOs, three posix2 fails, D14, libfuse threads).
+  The 17:04Z reduction (194/201, before these fixes) is
+  `results/measure/20260929-170457-wipeposix/ana`.
   Prior stop 13:53Z
   (`~/efs-runs/stop32.log`) after the 13:08Z roll. That reduction
   `results/measure/20260929-130800-ddposix/ana`: D12's file-cap

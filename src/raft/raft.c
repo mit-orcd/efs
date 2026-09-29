@@ -699,8 +699,19 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
 
         if (r->ae_capped && r->send_idx < end)
             end = r->send_idx;
-        if (data_only && ni > end)
+        if (data_only && ni > end) {
+            /* Caught up, nothing to ship. A commit that moved since this
+             * peer's last send (ae_inflight_set records it on every AE,
+             * heartbeat included) is still news: a follower waiting for
+             * a forwarded command's index otherwise learns it from the
+             * 50 ms heartbeat (Sep 29: fcstor004's apply-sleep sat at
+             * 25-100 ms). The probe is an empty AE; the sender lane
+             * replaces an older queued heartbeat, so this is one frame
+             * per peer per commit advance at most. */
+            if (r->commit_index > r->ae_inflight_commit[to])
+                return send_commit_probe(r, to);
             return EFS_OK;
+        }
         if (ni <= end) {
         /* Batch the catch-up: read up to EFS_RAFT_AE_MAX entries (byte-
          * capped at EFS_RAFT_AE_BYTES) into one arena so a behind follower

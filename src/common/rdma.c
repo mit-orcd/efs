@@ -561,13 +561,14 @@ static void ack_cq_events(struct efs_rdma_dev *dev)
 }
 
 /* Shared-CQ poller. A few empty polls spin; then the thread arms the
- * completion channel and waits at most 1 ms. The old live-QP path
+ * completion channel and blocks on it (1 s pulse). The old live-QP path
  * paused and sched_yield'd forever: during posix jobs=1 that thread
  * was 64% of efs-fuse and 31% of efsd, and the yield handed the core
  * away for a timeslice so the reply sat until the poller was
  * rescheduled. Do not sleep 100 ms after an event — that missed the
  * next completion and stalled mkdir. Heartbeats are 50 ms and the
- * election timeout is 500 ms, so a 1 ms wait cannot start an election.
+ * election timeout is 500 ms; the wait is event-driven, so its length
+ * cannot start an election.
  * Arm, drain the CQ, then wait. Ack only after poll() reports the
  * channel is readable — acking first disarms the notify. */
 static void *recv_poller(void *arg)
@@ -611,8 +612,15 @@ static void *recv_poller(void *arg)
             continue;
         }
         {
+            /* The CQ is armed and was drained after arming, so the next
+             * completion fires the channel; nothing is waiting on this
+             * thread's clock. A 1 ms timeout here was a 1 kHz timer on
+             * every idle process (Sep 29: 932 wakeups/s per idle client,
+             * recv_poller 34% of its samples, 14% of an idle efsd's, and
+             * 158 MB of strace per client in 35 min). One second is a
+             * pulse for a missed notify, not a poll interval. */
             struct pollfd p = { .fd = dev->recv_chan->fd, .events = POLLIN };
-            int pr = poll(&p, 1, 1);
+            int pr = poll(&p, 1, 1000);
             if (pr > 0 && (p.revents & POLLIN))
                 ack_cq_events(dev);
         }
@@ -962,6 +970,11 @@ uint32_t efs_rdma_max_frame(struct efs_rdma_conn *rc)
 uint32_t efs_rdma_qpn(struct efs_rdma_conn *rc)
 {
     return (rc && rc->qp) ? rc->qp->qp_num : 0;
+}
+
+int efs_rdma_conn_nrecv(struct efs_rdma_conn *rc)
+{
+    return rc ? rc->nrecv : 0;
 }
 
 /* ---------------- send path ---------------- */

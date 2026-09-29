@@ -277,27 +277,47 @@ static uint32_t raft_group_voters(uint8_t group, int n)
     return 0xeu;     /* nodes 2,3,4 = raft ids 1,2,3 */
 }
 
-static struct efs_conn *raft_voter_conn(uint32_t shard,
-                                        efs_node_id_t *nid_out)
+/* First live voter of the shard's group, not `skip`; the host bounces to
+ * the leader and the retry loop follows primary_id, so any voter is a
+ * fine entry point. `skip` is the voter that just answered NOT_PRIMARY
+ * with no hint: this pick is deterministic, so without it the same node
+ * was asked 16 times over 10.3 s and the op failed EBUSY (Sep 29, fstor007
+ * ecopy: 810 such lines, SETATTR/CREATE/RENAME_AT, both terms stable).
+ * When every other voter is down the skipped one is still the answer. */
+static struct efs_conn *raft_voter_conn_skip(uint32_t shard,
+                                             efs_node_id_t *nid_out,
+                                             efs_node_id_t skip)
 {
     uint8_t group = efs_raft_shard_group(shard);
     int n = (int)g_client.node_count;
     uint32_t voters = raft_group_voters(group, n);
-    /* First live voter of the group; the host bounces to the leader and the
-     * retry loop follows primary_id, so any voter is a fine entry point. */
-    for (int rid = 0; rid < n && rid < EFS_RAFT_MAX_PEERS; rid++) {
-        if (!(voters & (1u << rid)))
-            continue;
-        efs_node_id_t id = (efs_node_id_t)(rid + 1);
-        if (efs_client_node_is_down(id))
-            continue;
-        struct efs_conn *conn = efs_client_conn_get(id);
-        if (conn) {
-            *nid_out = id;
-            return conn;
+    int pass;
+
+    for (pass = 0; pass < 2; pass++) {
+        for (int rid = 0; rid < n && rid < EFS_RAFT_MAX_PEERS; rid++) {
+            if (!(voters & (1u << rid)))
+                continue;
+            efs_node_id_t id = (efs_node_id_t)(rid + 1);
+            if (pass == 0 && skip && id == skip)
+                continue;
+            if (efs_client_node_is_down(id))
+                continue;
+            struct efs_conn *conn = efs_client_conn_get(id);
+            if (conn) {
+                *nid_out = id;
+                return conn;
+            }
         }
+        if (!skip)
+            break;
     }
     return rpc_primary_conn(nid_out);
+}
+
+static struct efs_conn *raft_voter_conn(uint32_t shard,
+                                        efs_node_id_t *nid_out)
+{
+    return raft_voter_conn_skip(shard, nid_out, 0);
 }
 
 /* A voter of EVERY metadata group. Reports carry recs for many inos whose
@@ -366,6 +386,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t *copied)
 {
     efs_node_id_t target = 0; /* 0 = compute the owner from our view */
+    efs_node_id_t skip = 0;   /* answered NOT_PRIMARY with no hint */
     int prof = rpc_prof_enabled();
     int saw_busy = 0;
     for (int attempt = 0; attempt < 16; attempt++) {
@@ -376,7 +397,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             conn = efs_client_conn_get(target);
             nid = target;
         } else {
-            conn = rpc_owner_conn_shard(shard, &nid);
+            conn = raft_voter_conn_skip(shard, &nid, skip);
         }
         unsigned long long t1 = prof ? rpc_prof_now_us() : 0;
         if (!conn || efs_conn_send_msg(conn, type, req, req_len) != 0) {
@@ -482,8 +503,9 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             unsigned long long sleep_us = 50000ull << shift;
             saw_busy = 1;
             target = 0;
-            fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=no-hint\n",
-                    type, attempt);
+            skip = nid;
+            fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=no-hint from=%u\n",
+                    type, attempt, nid);
             usleep((useconds_t)sleep_us);
             continue;
         }
