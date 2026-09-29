@@ -1,0 +1,38 @@
+20260929-170457-wipeposix: wipe + raft-mkfs at 17:04Z, servers and all 13 clients
+with --perf --strace, build 2dd77dac881c-dirty, RDMA. Stopped 17:39Z (stop35).
+Windows (EDT): posix 13:05-13:07 (jobs=1 on fcstor007, 194/201), idle 13:10-13:34,
+ecopy 13:35-13:37 (fstor007 `ecopy --verify`; that client's profile is
+~/orcd/scratch/efs/perf/efs-mount/). Reduction script: ~/efs-runs/ana7-node.sh.
+~60% of server samples and ~50% of client samples are ptrace_* (strace attached).
+
+Files: perf-<host>-<efsd|fuse>-<all|posix|idle|ecopy>[-children].txt,
+strace-<host>-<tag>-<win>.txt (+ -top, -long), efsd-<host>-{events,raftobs,kinds,hostrc}.txt,
+fuse-<host>.log, node-<host>.txt.
+
+Servers were healthy: apply_max=0us, pump_hold_max 5-7us, fsync avg 0.28 ms max 4 ms,
+report-split rc=-13 only 4 (fcstor004, finish_ms 430-1024), kv-compact 59/172/172/59.
+
+Key numbers
+- apply-sleep (waiter 1-2 idx behind applied, >20 ms): fcstor003 477 (52 in 100-149 ms),
+  fcstor004 652 (6 at 400 ms = wait_timeouts=7 = the 4 BUSY REPORTs = client EIO),
+  fcstor006 511 (1 at 400 ms), fcstor005 3.
+- raft-obs lanes: fcstor003 tx->1 hi=651 tx->2 hi=244; fcstor006 tx->1 hi=92 tx->2 hi=519;
+  followers hi=1. rtt_avg 405-477us on every host = sender loop period.
+- fcstor003 sender thread 982200, posix window: read 309688 poll 180692 fstat 153330
+  futex 61123; 4 syscalls per frame; 14-18K syscalls/s 13:05:24-13:05:56.
+- fcstor003 pump thread 982191, posix window: poll 299225 read 266414 fsync 17583
+  openat 5329 rename 4376; no gap >15 ms; no futex >10 ms.
+- idle: fcstor003 efsd poll 1865573/1440 s, recv_poller 13.85% self; fcstor008 efs-fuse
+  poll 1342269/1440 s, recv_poller 34.4% self.
+- ecopy window fcstor003 efsd: openat 149770 (51130 ENOENT) close 98638 fstat 92353
+  mkdir 9304 (8176 EEXIST) fsync 6192 pwrite64 2360 pread64 845.
+- fcstor007 fuse posix window: work_s=1.25 of 120; futex 8733 s; splice 33508.
+- fcstor007 fuse.log: read INVAL ino=6216 len=11, ino=5722 len=65537; flush-meta EIO
+  ino 6079 x4, 6693, 6724; unmount dcache=-9 (DECODE). Cause: client overlay_one_delta
+  rejects the len==0 fold tombstone the apply keeps (meta_apply.c:3410).
+- fstor007 ecopy client (67 s): 664 threads, 657 clone3, 0 exits; splice 24668
+  (17072 header-sized, 7449 1 MiB); read(pipe) 59107 x 128K-1M; recv_poller thread
+  53845 poll(1 ms); blake3 7.8%, copyout 5.2%, memmove 4.6% (RDMA send), xor 3.6%,
+  page-fault/alloc churn ~7%. fuse log all day: 4160 retry why=no-hint, 810
+  exhausted->EBUSY (SETATTR 295 CREATE 247 RENAME_AT 145 LOOKUP 108 GETATTR 47);
+  5 SETATTR on the fresh table with stable terms.

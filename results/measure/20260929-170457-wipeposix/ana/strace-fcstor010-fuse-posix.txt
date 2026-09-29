@@ -1,0 +1,5 @@
+window posix 13:05:00-13:07:00 work_s=0.000 fsync_n=0 fsync_s=0.000 fsync_max=0.000
+syscall                 count      total_s      max_s
+futex                     240      120.007      1.000
+poll                   111832      118.256      0.001
+ERR futex ETIMEDOUT                     120

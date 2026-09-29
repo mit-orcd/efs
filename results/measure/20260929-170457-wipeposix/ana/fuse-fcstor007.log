@@ -1,0 +1,26 @@
+Discovered 4 cluster nodes from 172.16.223.57:19810
+  node id=1 172.16.223.57:19810
+  node id=4 172.16.223.60:19810
+  node id=2 172.16.223.58:19810
+  node id=3 172.16.223.59:19810
+fetching metadata...
+meta: raft host mounted export 'efs-test' (bits=12, no GET_META table)
+export id=1 name=efs-test
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=169120 root_get=0 mode=40755
+efs-fuse daemon pid=827325
+efs-fuse perf recorder pid=827326 -> /tmp/efs-perf/fuse.data
+efs-fuse strace pid=827327 -> /tmp/efs-perf/fuse.strace
+fuse serving
+efs: RDMA transport up on mlx5_2 port 1 (lid 2171, 36 x 72 KiB bufs/conn)
+efs-fuse read: invalid argument (efs_rc=-5) ino=6216 off=0 len=11
+efs: rename_at 1306/a -> 1306/b rc=-12 after 1 tries
+efs-fuse read: invalid argument (efs_rc=-5) ino=5722 off=0 len=65537
+efs-fuse flush-meta: I/O error (efs_rc=-1) ino=6079 off=0 len=0
+efs-fuse flush-meta: I/O error (efs_rc=-1) ino=6079 off=0 len=0
+efs-fuse flush-meta: I/O error (efs_rc=-1) ino=6079 off=0 len=0
+efs-fuse flush-meta: I/O error (efs_rc=-1) ino=6079 off=0 len=0
+efs-fuse flush-meta: I/O error (efs_rc=-1) ino=6693 off=0 len=0
+efs-fuse flush-meta: I/O error (efs_rc=-1) ino=6724 off=0 len=0
+efs-fuse: unmount: data flush incomplete (writeback=0 dcache=-9)
+[ perf record: Woken up 215409 times to write data ]
+[ perf record: Captured and wrote 1.405 MB /tmp/efs-perf/fuse.data (9894 samples) ]

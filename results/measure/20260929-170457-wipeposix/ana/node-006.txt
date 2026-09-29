@@ -1,0 +1,8 @@
+fcstor006 begin 17:50:07Z
+fcstor006 efsd posix window=--time 3709136.080,3709256.080
+fcstor006 efsd idle window=--time 3709436.080,3710876.080
+fcstor006 efsd ecopy window=--time 3710936.080,3711056.080
+fcstor006 fuse posix window=--time 3709136.428,3709256.428
+fcstor006 fuse idle window=--time 3709436.428,3710876.428
+fcstor006 fuse ecopy window=--time 3710936.428,3711056.428
+fcstor006 ANA_DONE 17:51:02Z

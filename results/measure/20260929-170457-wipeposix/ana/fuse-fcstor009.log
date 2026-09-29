@@ -1,0 +1,16 @@
+Discovered 4 cluster nodes from 172.16.223.57:19810
+  node id=1 172.16.223.57:19810
+  node id=4 172.16.223.60:19810
+  node id=2 172.16.223.58:19810
+  node id=3 172.16.223.59:19810
+fetching metadata...
+meta: raft host mounted export 'efs-test' (bits=12, no GET_META table)
+export id=1 name=efs-test
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=169120 root_get=0 mode=40755
+efs-fuse daemon pid=1880343
+efs-fuse perf recorder pid=1880344 -> /tmp/efs-perf/fuse.data
+efs-fuse strace pid=1880345 -> /tmp/efs-perf/fuse.strace
+fuse serving
+efs: RDMA transport up on mlx5_2 port 1 (lid 2163, 36 x 72 KiB bufs/conn)
+[ perf record: Woken up 14666 times to write data ]
+[ perf record: Captured and wrote 0.671 MB /tmp/efs-perf/fuse.data (5460 samples) ]

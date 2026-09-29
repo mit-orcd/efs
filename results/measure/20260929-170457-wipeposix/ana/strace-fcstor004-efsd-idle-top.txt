@@ -1,0 +1,9 @@
+window idle 13:10:00-13:34:00 work_s=3.232 fsync_n=0 fsync_s=0.000 fsync_max=0.000
+poll                  1862275    10027.739      2.001
+clock_nanosleep         72400     2876.249      2.000
+futex                  255737     2854.800      0.052
+read                   459683        4.176      0.000
+write                  172644        2.130      0.000
+fstat                  115958        1.102      0.000
+ERR read EAGAIN                      172986
+ERR futex EAGAIN                      44122
