@@ -14,7 +14,8 @@ report-split rc=-13 only 4 (fcstor004, finish_ms 430-1024), kv-compact 59/172/17
 
 Key numbers
 - apply-sleep (waiter 1-2 idx behind applied, >20 ms): fcstor003 477 (52 in 100-149 ms),
-  fcstor004 652 (6 at 400 ms = wait_timeouts=7 = the 4 BUSY REPORTs = client EIO),
+  fcstor004 652 (6 at 400 ms = wait_timeouts=7 = the 4 BUSY REPORTs; the client
+  retried those and they passed: no report-loop line in fuse-fcstor007.log),
   fcstor006 511 (1 at 400 ms), fcstor005 3.
 - raft-obs lanes: fcstor003 tx->1 hi=651 tx->2 hi=244; fcstor006 tx->1 hi=92 tx->2 hi=519;
   followers hi=1. rtt_avg 405-477us on every host = sender loop period.
@@ -29,7 +30,13 @@ Key numbers
 - fcstor007 fuse posix window: work_s=1.25 of 120; futex 8733 s; splice 33508.
 - fcstor007 fuse.log: read INVAL ino=6216 len=11, ino=5722 len=65537; flush-meta EIO
   ino 6079 x4, 6693, 6724; unmount dcache=-9 (DECODE). Cause: client overlay_one_delta
-  rejects the len==0 fold tombstone the apply keeps (meta_apply.c:3410).
+  rejects the len==0 fold tombstone the apply keeps (meta_apply.c:3410). Test map:
+  read(11) = basic_overwrite_middle, read(65537) = content_random_overwrite_append,
+  ino 6079 x4 = concurrent_appends (4 workers), 6693/6724 = concurrent_overlap_write and
+  mtime_monotonic_many_writes. dir_readdir_while_unlink (15 s) = 40 serial CREATE +
+  close REPORT at finish_ms ~135 each = item 2's lane latency.
+- raft-mkfs returned rc=-13 twice (index=2 then index=0) yet root=1: same 400 ms
+  wait_applied class; the harness should check raft-status root=1, not retry mkfs.
 - fstor007 ecopy client (67 s): 664 threads, 657 clone3, 0 exits; splice 24668
   (17072 header-sized, 7449 1 MiB); read(pipe) 59107 x 128K-1M; recv_poller thread
   53845 poll(1 ms); blake3 7.8%, copyout 5.2%, memmove 4.6% (RDMA send), xor 3.6%,
