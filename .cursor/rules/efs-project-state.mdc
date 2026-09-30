@@ -97,7 +97,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
  **UP 18:30Z Sep 30: servers `f2d3a7871b96-dirty`** (rolled `--all`,
- `~/efs-runs/roll337.log` ROLL_OK; span identity = (gen, off, len),
+ `~/efs-runs/roll337.log` ROLL_OK; the tree content is HEAD `3a17a503`,
+ committed after the roll, so the next server restart is a build-ID
+ change → `roll_efsd.sh --all`; span identity = (gen, off, len),
  learning below), clients fcstor007–015 on the same tree 18:32Z
  (`dep338`, all `fuse.efs-fuse`, one efs-fuse each). **IO-500 debug
  9×4 18:35Z (`results/io500/20260930-183504-rdma`): every phase
