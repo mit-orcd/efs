@@ -25,6 +25,55 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 30 2026 05:45Z — review of the 05:06Z roll under ecopy: the conn pool was the 5 s mode and the 30 s freezes
+
+The user ran `client.sh --perf` on fstor007 against the 05:06Z roll
+(F1/F2/utimens flush) and drove find, `ecopy --verify software/`,
+ecrawl and `rsync -avvvP ~/git` through it (05:10–05:19Z). Review in
+`results/measure/20260930-051000-review2/SUMMARY.txt`; fixes committed
+`e002771e`, rolled `--all` 05:43Z (`e002771e56e4-dirty`,
+`~/efs-runs/roll107.log`), fstor007 `/tmp/efs` rebuilt.
+
+1. **`dcache_reclaim_main` was 39.8 % of efs-fuse cycles.** The 16
+   reclaim threads pop only `have_base` dirty slots (W18); ecopy's dirty
+   set is fresh files, so with dirty_bytes over the 2 GiB limit every
+   kick re-walked all 64 dirty lists, popped nothing, and looped. Now a
+   sweep that pops nothing parks the threads until the next kick after a
+   10 ms nap; a sweep that pops re-arms immediately.
+2. **The 5.0 / 10 / 15 s RPC mode (244 `slow-ok`, `attempts=1
+   saw_busy=0`, every message type) was `efs_client_conn_get`**: 16
+   slots per node, a checkout holds a slot for the whole RPC, a PUT
+   holds three, a full pool waits `pthread_cond_timedwait` 5 s and
+   returns NULL silently. 400 ecopy threads on 16 conns. The earlier
+   attribution to `EFS_RDMA_SEND_WAIT_US` was wrong (IB hw_counters:
+   `out_of_buffer` 0 on all servers). Worse than the wait:
+   `put_fragments` and `fetch_fragment` called
+   `efs_client_node_note_fail()` on that NULL, and four of those mark a
+   live node DOWN for 30 s (`EFS_NODE_DOWN_FAILS`/`EFS_NODE_DOWN_MS`),
+   after which every RPC to it returns NULL immediately — the two 28 s
+   client-wide freezes in the ecopy strace (every syscall class parked,
+   then all released together) and the 12 `put_fragments ... no quorum`
+   lines against four live servers. Fix: log the timeout
+   (rate-limited, with the pool size), never count it as a node failure
+   (connect failures are already counted inside `conn_get`), default
+   pool 64 per node (`EFS_SERVER_MAX_CONNS` is 4096 now, not the 512
+   the old comment cited; one RDMA conn pins ≈ 2.6 MB per end; slots
+   connect lazily).
+3. Left as is: REPORT is one at a time with the whole dirty set, so a
+   slow RPC inside it parks every queued closer (1630 ecopy syscalls
+   ≥ 1 s) — splitting it is a design ask; re-measure after (2) first.
+   fcstor004's 2475 `apply-sleep` follower waits are D14. 1376 tiny
+   kv-compactions on 004/005 are log noise (4.3 s total).
+4. **"ecopy + atime": no new defect.** W25 item 2 (atime nanoseconds
+   end to end) landed in 2dd77dac; reads never move atime; the ecopy
+   strace has zero mismatch lines; rsync's 8504 `set modtime, atime of
+   <dir>` lines are its -vvv directory time set.
+5. Servers after the 05:06Z roll: terms stable but for one group-0
+   election at 05:11:19Z under load, `inbox_drop=0` everywhere, F1's
+   250 ms bound visible as `tx-> fail` +1 per stall (fcstor006 tx->1
+   fail=8, fcstor004 tx->2 fail=5). IB hw_counters snapshot saved as
+   the delta base for the next run.
+
 ## Sep 30 2026 05:13Z — F1, F2 and the utimens flush implemented and rolled
 
 User: "can you implement f1 f2 and the time bug?". All three are in the
