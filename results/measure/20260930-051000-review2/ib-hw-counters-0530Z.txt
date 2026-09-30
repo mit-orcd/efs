@@ -1,0 +1,274 @@
+== fstor007
+/sys/class/infiniband/mlx5_0/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_1/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        37
+  out_of_buffer                11
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                3165317
+  resp_cqe_error               29543758
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              4
+  rx_read_requests             262686865
+/sys/class/infiniband/mlx5_2/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                2
+  resp_cqe_error               265
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_3/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+216326540 12211683614 82052554 78508451 
+== fcstor003
+/tmp/efs/efsd.log:transport up on mlx5_2 port 1
+/sys/class/infiniband/mlx5_0/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_1/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_2/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        23170
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                3860
+  resp_cqe_error               5144
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             4049
+/sys/class/infiniband/mlx5_3/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+0 0 14754122547 0 
+== fcstor004
+/tmp/efs/efsd.log:transport up on mlx5_2 port 1
+/sys/class/infiniband/mlx5_0/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_1/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_2/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        16704
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                2781
+  resp_cqe_error               3949
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             6879
+/sys/class/infiniband/mlx5_3/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+0 0 34527169846 0 
+== fcstor005
+/tmp/efs/efsd.log:transport up on mlx5_2 port 1
+/sys/class/infiniband/mlx5_0/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_1/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_2/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        18043
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                2985
+  resp_cqe_error               4408
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             6001
+/sys/class/infiniband/mlx5_3/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+0 0 38095540646 0 
+== fcstor006
+/tmp/efs/efsd.log:transport up on mlx5_2 port 1
+/sys/class/infiniband/mlx5_0/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_1/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+/sys/class/infiniband/mlx5_2/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        17349
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                2849
+  resp_cqe_error               4401
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             3705
+/sys/class/infiniband/mlx5_3/ports/1/hw_counters
+  rnr_nak_retry_err            0
+  local_ack_timeout_err        0
+  out_of_buffer                0
+  packet_seq_err               0
+  implied_nak_seq_err          0
+  req_cqe_error                0
+  resp_cqe_error               0
+  req_remote_access_errors     0
+  resp_local_length_error      0
+  duplicate_request            0
+  out_of_sequence              0
+  rx_read_requests             0
+0 0 14725873215 0 

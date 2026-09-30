@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 252K of event 'cycles:P'
+# Event count (approx.): 1649202134739
+#
+# Overhead  Shared Object            Symbol                                        
+# ........  .......................  ..............................................
+#
+    39.80%  efs-fuse                 [.] dcache_reclaim_main
+    15.16%  libc.so.6                [.] __memmove_avx512_unaligned_erms
+     5.64%  efs-fuse                 [.] blake3_hash_many_avx512
+     3.31%  efs-fuse                 [.] xor_into
+     1.72%  [kernel.kallsyms]        [k] memcpy_erms
+     1.31%  efs-fuse                 [.] stage_evict_main
+     1.07%  efs-fuse                 [.] icnt_get
+     0.95%  libc.so.6                [.] __memset_avx512_unaligned_erms
+     0.81%  efs-fuse                 [.] forget_ino_on_tab.part.0
+     0.72%  [vdso]                   [.] 0x0000000000000b15
+     0.67%  libc.so.6                [.] _int_malloc
+     0.62%  libc.so.6                [.] __GI___pthread_mutex_unlock_usercnt
+     0.60%  [kernel.kallsyms]        [k] srso_alias_safe_ret
+     0.55%  libc.so.6                [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.54%  [fuse]                   [k] fuse_copy_fill
+     0.53%  [kernel.kallsyms]        [k] futex_wait_setup
+     0.50%  [kernel.kallsyms]        [k] srso_alias_return_thunk
+     0.49%  [kernel.kallsyms]        [k] select_task_rq_fair
+     0.48%  [kernel.kallsyms]        [k] entry_SYSCALL_64
+     0.44%  [kernel.kallsyms]        [k] gup_pte_range
+     0.40%  libc.so.6                [.] _int_free
+     0.40%  [kernel.kallsyms]        [k] do_syscall_64
+     0.39%  [kernel.kallsyms]        [k] dequeue_entity
+     0.33%  [kernel.kallsyms]        [k] eventfd_poll
+     0.33%  [kernel.kallsyms]        [k] native_queued_spin_lock_slowpath
+     0.32%  [kernel.kallsyms]        [k] futex_wake_mark
+     0.32%  efs-fuse                 [.] efs_rdma_recv_wait
+
+
+#
+# (Tip: For memory address profiling, try: perf mem record / perf mem report)
+#

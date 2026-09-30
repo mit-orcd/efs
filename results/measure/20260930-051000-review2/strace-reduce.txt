@@ -1,0 +1,61 @@
+===== find.strace.txt
+cmd: execve("/usr/bin/find", ["find", "/tmp/efs-mount/", "-ls"], 0x7fffccfcff18 /* 47 vars */) = 0 <0.000216>
+span: 01:10:48.752875 .. 01:10:59.803619  wall=11.1s  lines=85510
+efs syscalls: 4  time in efs syscalls: 0.00s (0% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+newfstatat            2      0.000      0.15       0.2
+execve                1      0.000      0.22       0.2
+openat                1      0.000      0.11       0.1
+slow (>= 0.2 s, work syscalls): 1
+     1.025s 01:10:48.760345 407563 getdents64(7, 0x7f5a74bdf040 /* 9 entries */, 131072) = 280 <1.025301>
+===== ecrawl.strace.txt
+cmd: execve("/tmp/ereport/ecrawl", ["/tmp/ereport/ecrawl", "--no-write", "--progress", "/tmp/efs-mount/"], 0x7ffed8bef900 /* 47 vars */) = 0 <0.000244>
+span: 01:12:24.208026 .. 01:12:27.960690  wall=3.8s  lines=54523
+efs syscalls: 2895  time in efs syscalls: 15.99s (426% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+openat             2890     15.985      5.53      35.6
+newfstatat            1      0.000      0.30       0.3
+faccessat2            1      0.000      0.27       0.3
+execve                1      0.000      0.24       0.2
+write                 1      0.000      0.01       0.0
+readlink              1      0.000      0.01       0.0
+efs errors:
+  readlink     EINVAL   1
+slow (>= 0.2 s, work syscalls): 0
+===== rsync.strace.txt
+cmd: execve("/usr/bin/rsync", ["rsync", "-avvvP", "/home/erbmi1/git/", "/tmp/efs-mount/git/"], 0x7ffcaecb5d00 /* 47 vars */) = 0 <0.000227>
+span: 01:13:36.088857 .. 01:15:51.907491  wall=135.8s  lines=521511
+efs syscalls: 15  time in efs syscalls: 0.01s (0% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+read                  7      0.005      0.73       2.2
+newfstatat            1      0.001      0.78       0.8
+write                 5      0.000      0.09       0.1
+chdir                 1      0.000      0.30       0.3
+execve                1      0.000      0.23       0.2
+slow (>= 0.2 s, work syscalls): 0
+===== ecopy.strace.txt
+cmd: execve("./ecopy", ["./ecopy", "--verify", "/data1/erbmi1/software/", "/tmp/efs-mount/software/"], 0x7ffd86e4af40 /* 47 vars */) = 0 <0.000670>
+span: 01:11:05.915641 .. 01:12:08.634953  wall=62.7s  lines=492328
+efs syscalls: 1922  time in efs syscalls: 258.52s (412% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+newfstatat          962    158.674    164.94   14938.0
+openat              836     49.945     59.74   10035.6
+mkdir               121     49.905    412.44   15053.2
+execve                1      0.001      0.67       0.7
+readlink              2      0.000      0.07       0.1
+efs errors:
+  newfstatat   ENOENT   121
+  readlink     EINVAL   2
+slow (>= 0.2 s, work syscalls): 722
+    26.341s 01:11:34.078472 407844 close(38) = 0 <26.340885>
+    26.296s 01:11:34.077882 408061 close(38) = 0 <26.295538>
+    26.022s 01:11:34.078105 407847 close(112) = 0 <26.022351>
+    26.019s 01:11:34.078119 407846 close(91) = 0 <26.018696>
+    25.894s 01:11:34.078492 407840 close(57) = 0 <25.894227>
+    25.894s 01:11:34.086104 407823 utimensat(117, NULL, [{tv_sec=1780077359, tv_nsec=788203951} /* 2026-05-29T13:55:59.788203951-0400 */, {tv_sec=1678225479, tv_nsec=667697770} /* 2023-03-07T16:44:39.667697770-0500 */], 0) = 0 <25.8935
+    25.881s 01:11:34.078010 408065 close(112) = 0 <25.880655>
+    25.459s 01:11:34.078039 407834 close(40) = 0 <25.459225>
+    25.407s 01:11:34.078380 408063 close(171) = 0 <25.407145>
+    24.738s 01:11:34.078482 407841 close(49) = 0 <24.738161>
+    24.681s 01:11:34.097876 407818 utimensat(5, NULL, [{tv_sec=1780077359, tv_nsec=381200160} /* 2026-05-29T13:55:59.381200160-0400 */, {tv_sec=1681491359, tv_nsec=568334709} /* 2023-04-14T12:55:59.568334709-0400 */], 0) = 0 <24.680759
+    24.645s 01:11:34.077965 408070 close(200) = 0 <24.645329>

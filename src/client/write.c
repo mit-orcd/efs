@@ -1251,7 +1251,14 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         }
         conns[i] = efs_client_conn_get(nodes[i]);
         if (!conns[i]) {
-            efs_client_node_note_fail(nodes[i]);
+            /* NULL is a connect failure (already counted inside
+             * conn_get), a node in cooldown (counting is a no-op), or
+             * the pool's 5 s checkout timeout. Counting that last one
+             * marked a live node DOWN for 30 s after four full pools —
+             * 400 ecopy threads on 16 conns did it twice in a minute and
+             * every RPC to the node returned NULL until the cooldown
+             * ran out (Sep 30 2026, the 28 s client-wide freezes in
+             * results/measure/20260930-051000-review2). */
             if (failed_out)
                 failed_out[i] = 1;
             continue;
@@ -4322,6 +4329,18 @@ static struct {
     uint64_t lim;
     int shutdown;
     int active;
+    /* Writer kicks (efs_dcache_maybe_reclaim) and the kick count the last
+     * EMPTY sweep saw. Only have_base slots are reclaimable here; a fresh
+     * file's chunks (no base) drain through the writer pipeline and close.
+     * Under ecopy every dirty slot was such a chunk, dirty_bytes sat above
+     * the limit, and 16 workers re-walked 64 dirty lists back to back:
+     * dcache_reclaim_main was 39.8 % of efs-fuse (Sep 30 2026,
+     * results/measure/20260930-051000-review2). A worker whose sweep
+     * found nothing now parks until a writer kicks again, and no sooner
+     * than RECLAIM_EMPTY_NAP_NS after the empty sweep. */
+    uint64_t kicks;
+    uint64_t empty_kicks;
+    int64_t empty_until_ns;
 } g_reclaim = {
     .mu = PTHREAD_MUTEX_INITIALIZER,
     .cv = PTHREAD_COND_INITIALIZER,
@@ -4351,17 +4370,55 @@ static uint64_t dcache_reclaim_limit(void)
     return lim;
 }
 
+#define RECLAIM_EMPTY_NAP_NS (10ll * 1000 * 1000)
+
+static int64_t reclaim_now_ns(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec * 1000000000ll + ts.tv_nsec;
+}
+
 static void *dcache_reclaim_main(void *arg)
 {
     (void)arg;
     pthread_mutex_lock(&g_reclaim.mu);
     for (;;) {
-        while (!g_reclaim.shutdown &&
-               __atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
-                   g_reclaim.lim)
-            pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
+        uint64_t kicks_seen;
+        int npopped = 0;
+
+        for (;;) {
+            int64_t now;
+
+            if (g_reclaim.shutdown)
+                break;
+            if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
+                g_reclaim.lim) {
+                pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
+                continue;
+            }
+            /* The last sweep found nothing and no writer has kicked
+             * since: the dirty set is fresh-file chunks, not our work. */
+            if (g_reclaim.kicks == g_reclaim.empty_kicks) {
+                pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
+                continue;
+            }
+            now = reclaim_now_ns();
+            if (now < g_reclaim.empty_until_ns) {
+                struct timespec ts;
+
+                ts.tv_sec = (time_t)(g_reclaim.empty_until_ns / 1000000000ll);
+                ts.tv_nsec = (long)(g_reclaim.empty_until_ns % 1000000000ll);
+                (void)pthread_cond_timedwait(&g_reclaim.cv, &g_reclaim.mu,
+                                             &ts);
+                continue;
+            }
+            break;
+        }
         if (g_reclaim.shutdown)
             break;
+        kicks_seen = g_reclaim.kicks;
         g_reclaim.active++;
         pthread_mutex_unlock(&g_reclaim.mu);
 
@@ -4391,10 +4448,21 @@ static void *dcache_reclaim_main(void *arg)
             }
             if (!found)
                 break;
+            npopped++;
             (void)dcache_flush_slot(s, 0, 0);
         }
         pthread_mutex_lock(&g_reclaim.mu);
         g_reclaim.active--;
+        if (npopped == 0) {
+            /* Kicks that arrived during the sweep stay unconsumed:
+             * kicks_seen was read before the walk. */
+            if ((int64_t)(g_reclaim.empty_kicks - kicks_seen) < 0)
+                g_reclaim.empty_kicks = kicks_seen;
+            g_reclaim.empty_until_ns = reclaim_now_ns() + RECLAIM_EMPTY_NAP_NS;
+        } else {
+            /* There was work; let the pool go straight back in. */
+            g_reclaim.empty_kicks = g_reclaim.kicks - 1;
+        }
         pthread_cond_broadcast(&g_reclaim.cv);
     }
     pthread_mutex_unlock(&g_reclaim.mu);
@@ -4428,6 +4496,7 @@ void efs_dcache_maybe_reclaim(void)
         return;
     pthread_once(&g_reclaim_once, dcache_reclaim_start);
     pthread_mutex_lock(&g_reclaim.mu);
+    g_reclaim.kicks++;
     pthread_cond_signal(&g_reclaim.cv);
     pthread_mutex_unlock(&g_reclaim.mu);
     /* Hard cap at 2x: the background pool is drain-limited (a sparse-entry

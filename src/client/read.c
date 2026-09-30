@@ -421,7 +421,9 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
     for (int attempt = 1; attempt <= 3; attempt++) {
         struct efs_conn *conn = efs_client_conn_get(node_id);
         if (!conn) {
-            efs_client_node_note_fail(node_id);
+            /* Not a node failure: conn_get counts connect failures
+             * itself, and a pool checkout timeout is load, not death
+             * (see put_fragments). */
             if (attempt < 3) {
                 usleep(50000u * (unsigned)attempt);
                 continue;

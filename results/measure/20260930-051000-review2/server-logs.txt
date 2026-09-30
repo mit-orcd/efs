@@ -1,0 +1,138 @@
+===== fcstor003
+2287
+-- classes
+    320 raft-host: applied session i
+    316 kv-compact: start lN=N inpu
+    270 kv-compact: end bytes=N
+    264 raft-obs: wait_timeouts=N pu
+    206 raft-obs: tx->N enq=N dr
+    193 kv-compact: start lN=N inp
+    132 raft-obs: tx->N enq=N d
+    118 kv-compact: end bytes=N 
+     99 raft-host: apply publish rc=
+     92 kv-compact: end bytes=N m
+     68 raft-obs: tx->N enq=N dro
+     67 raft-host: apply-sleep us=N
+     65 raft-obs: tx->N enq=N drop=N
+     25 kv-compact: end bytes=N ms
+-- term changes
+6
+raft-obs: g0 term 90->91 role FOLLOWER->CANDIDATE leader=-1 commit=462410 applied=462410 t=1790744760193ms
+raft-obs: g0 term 91->92 role CANDIDATE->CANDIDATE leader=-1 commit=462410 applied=462410 t=1790744761199ms
+raft-obs: g0 term 92->93 role CANDIDATE->CANDIDATE leader=-1 commit=462410 applied=462410 t=1790744761815ms
+raft-obs: g0 term 93->94 role CANDIDATE->FOLLOWER leader=-1 commit=462410 applied=462410 t=1790744762428ms
+-- last obs
+raft-obs: wait_timeouts=0 pump_hold_max=304us lock_wait_max=1us drain_max=304us tick_max=1us apply_max=38us persist_max=496us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->2 enq=170351 drop=0 sent=145633 fail=2 hi=1 rtt_avg=24us get_avg=6us get_max=974ms
+raft-obs: tx->1 enq=11666 drop=0 sent=10496 fail=0 hi=1 rtt_avg=25us get_avg=129us get_max=1360ms
+raft-obs: tx->2 enq=170456 drop=0 sent=145738 fail=2 hi=1 rtt_avg=24us get_avg=6us get_max=974ms
+-- apply-sleep max
+67 267334
+-- kv-compact
+509
+bytes=0.5GB ms_total=1425 ms_max=24
+-- rdma/conn/inbox/slow
+      1 efs: RDMA transport up on mlxN_N port N (lid N, N x N KiB bufs/conn)
+      1 efsd: RDMA transport up on mlxN_N port N (lid N)
+===== fcstor004
+7080
+-- classes
+   2475 raft-host: apply-sleep us=N
+   1376 kv-compact: start lN=N inp
+    700 kv-compact: end bytes=N
+    600 raft-host: applied session i
+    331 kv-compact: end bytes=N 
+    278 kv-compact: end bytes=N m
+    275 raft-obs: tx->N enq=N dr
+    265 raft-obs: tx->N enq=N d
+    243 raft-obs: wait_timeouts=N pu
+    209 raft-host: apply publish rc=
+    153 raft-obs: tx->N enq=N dro
+     59 kv-compact: end bytes=N ms
+     29 report-split nrec=N pack_
+     27 raft-obs: tx->N enq=N drop
+-- term changes
+11
+raft-obs: g2 term 670->671 role CANDIDATE->CANDIDATE leader=-1 commit=468347 applied=468347 t=1790744762851ms
+raft-obs: g2 term 671->672 role CANDIDATE->CANDIDATE leader=-1 commit=468347 applied=468347 t=1790744763666ms
+raft-obs: g2 term 672->673 role CANDIDATE->FOLLOWER leader=-1 commit=468347 applied=468347 t=1790744764340ms
+raft-obs: g0 term 94->95 role LEADER->FOLLOWER leader=2 commit=464771 applied=464771 t=1790745080166ms
+-- last obs
+raft-obs: wait_timeouts=5 pump_hold_max=271us lock_wait_max=1us drain_max=271us tick_max=1us apply_max=82us persist_max=502us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=1 fin_q=2 fin_done=2 fin_drop=0 fin_full=0 pub_p50=828us pub_max=0us inbox_drop=0
+raft-obs: tx->0 enq=11668 drop=0 sent=11663 fail=3 hi=15 rtt_avg=71us get_avg=1us get_max=3ms
+raft-obs: tx->2 enq=169148 drop=0 sent=141403 fail=5 hi=47 rtt_avg=30us get_avg=5us get_max=680ms
+raft-obs: tx->3 enq=150806 drop=0 sent=135641 fail=1 hi=1 rtt_avg=25us get_avg=3us get_max=430ms
+-- apply-sleep max
+2475 400057
+-- kv-compact
+1376
+bytes=1.4GB ms_total=4310 ms_max=32
+-- rdma/conn/inbox/slow
+      1 efs: RDMA transport up on mlxN_N port N (lid N, N x N KiB bufs/conn)
+      1 efsd: RDMA transport up on mlxN_N port N (lid N)
+===== fcstor005
+4583
+-- classes
+   1387 kv-compact: start lN=N inp
+    699 kv-compact: end bytes=N
+    600 raft-host: applied session i
+    401 raft-obs: tx->N enq=N d
+    336 kv-compact: end bytes=N 
+    279 kv-compact: end bytes=N m
+    243 raft-obs: wait_timeouts=N pu
+    209 raft-host: apply publish rc=
+    120 raft-obs: tx->N enq=N dro
+    117 raft-obs: tx->N enq=N dr
+     65 kv-compact: end bytes=N ms
+     64 raft-obs: tx->N enq=N drop=N
+     20 raft-obs: tx->N enq=N drop
+     10 raft-host: apply-sleep us=N
+-- term changes
+9
+raft-obs: g0 term 94->95 role FOLLOWER->CANDIDATE leader=-1 commit=464770 applied=464770 t=1790745079722ms
+-- last obs
+raft-obs: wait_timeouts=0 pump_hold_max=274us lock_wait_max=1us drain_max=274us tick_max=5us apply_max=54us persist_max=498us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=1 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=2339us pub_max=0us inbox_drop=0
+raft-obs: tx->0 enq=170511 drop=0 sent=170509 fail=1 hi=5 rtt_avg=25us get_avg=0us get_max=3ms
+raft-obs: tx->1 enq=169143 drop=0 sent=167728 fail=1 hi=6 rtt_avg=22us get_avg=0us get_max=3ms
+raft-obs: tx->3 enq=160376 drop=0 sent=133732 fail=0 hi=1 rtt_avg=22us get_avg=0us get_max=3ms
+-- apply-sleep max
+10 90368
+-- kv-compact
+1387
+bytes=1.4GB ms_total=4009 ms_max=31
+-- rdma/conn/inbox/slow
+      1 efs: RDMA transport up on mlxN_N port N (lid N, N x N KiB bufs/conn)
+      1 efsd: RDMA transport up on mlxN_N port N (lid N)
+===== fcstor006
+2090
+-- classes
+    341 kv-compact: start lN=N inpu
+    280 raft-host: applied session i
+    267 raft-obs: tx->N enq=N d
+    255 kv-compact: end bytes=N
+    243 raft-obs: wait_timeouts=N pu
+    115 kv-compact: start lN=N inp
+    110 raft-host: apply publish rc=
+    105 kv-compact: end bytes=N 
+    102 raft-obs: tx->N enq=N dro
+     93 raft-obs: tx->N enq=N dr
+     77 kv-compact: end bytes=N m
+     44 raft-host: apply-sleep us=N
+     18 raft-obs: tx->N enq=N drop
+     16 kv-compact: end bytes=N ms
+-- term changes
+5
+raft-obs: g2 term 672->673 role FOLLOWER->CANDIDATE leader=-1 commit=468348 applied=468348 t=1790744764339ms
+-- last obs
+raft-obs: wait_timeouts=0 pump_hold_max=36us lock_wait_max=1us drain_max=36us tick_max=5us apply_max=31us persist_max=494us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->2 enq=160284 drop=0 sent=160279 fail=2 hi=8 rtt_avg=24us get_avg=0us get_max=3ms
+raft-obs: tx->1 enq=150920 drop=0 sent=150833 fail=8 hi=76 rtt_avg=35us get_avg=0us get_max=3ms
+raft-obs: tx->2 enq=160389 drop=0 sent=160384 fail=2 hi=8 rtt_avg=24us get_avg=0us get_max=3ms
+-- apply-sleep max
+44 263119
+-- kv-compact
+456
+bytes=0.6GB ms_total=1442 ms_max=23
+-- rdma/conn/inbox/slow
+      1 efs: RDMA transport up on mlxN_N port N (lid N, N x N KiB bufs/conn)
+      1 efsd: RDMA transport up on mlxN_N port N (lid N)

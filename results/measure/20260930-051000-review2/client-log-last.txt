@@ -1,0 +1,293 @@
+Discovered 4 cluster nodes from fcstor003.ib:19810
+  node id=1 172.16.223.57:19810
+  node id=4 172.16.223.60:19810
+  node id=2 172.16.223.58:19810
+  node id=3 172.16.223.59:19810
+fetching metadata...
+meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+export id=1 name=fs
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=169120 root_get=0 mode=40755
+efs-fuse daemon pid=407513
+fuse serving
+efs: RDMA transport up on mlx5_1 port 1 (lid 1911, 36 x 72 KiB bufs/conn)
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1441374
+efs-fuse: staging table over EFS_CLIENT_META_MB (256 MB) with nothing evictable; growing (pinned data is real work, not cache)
+inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=3030995
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=7509134
+inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=5035790
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1375068
+mtime-pin: table full (256), ino=54336 not pinned
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+put_fragments ino=75714 chunk=5234 nodes=2,3,4 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4866897
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4869933
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4879303
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5001321
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4871165
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999096
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999554
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4876284
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4875948
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4886362
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4883632
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000395
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4881224
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4875947
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4865309
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4878112
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4864330
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4876159
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4875644
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4873065
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4873119
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4888260
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4870359
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4875862
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4867498
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4869793
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4867576
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4867145
+inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+inode-rpc: slow-ok type=83 attempts=1 saw_busy=0 status=0 us=4878701
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4875818
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4877428
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4880526
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4872613
+inode-rpc: slow-ok type=83 attempts=1 saw_busy=0 status=0 us=4868666
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4894470
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4870840
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4886337
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4884844
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4872079
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4880423
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4886516
+inode-rpc: slow-ok type=83 attempts=1 saw_busy=0 status=0 us=4884237
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4883189
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4883118
+inode-rpc: slow-ok type=83 attempts=1 saw_busy=0 status=0 us=4889713
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4899398
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4891447
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4887608
+inode-rpc: slow-ok type=83 attempts=1 saw_busy=0 status=0 us=4885052
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4896116
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4906326
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000982
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5000939
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4990517
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997145
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999731
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5004278
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4993979
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000967
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4992886
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4999017
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5005753
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4997248
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5016695
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997173
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4997120
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4995704
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5008474
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5008318
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4996143
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4996679
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4996837
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5027663
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4996706
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4996765
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4996840
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4991742
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4991904
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5029630
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4995573
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=9909262
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5033614
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5037636
+inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=5000668
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5006059
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5007193
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5041823
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5031825
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5044266
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5043087
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5031239
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5032929
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5032764
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5033213
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5046190
+inode-rpc: slow-ok type=63 attempts=2 saw_busy=1 status=0 us=9944427
+inode-rpc: slow-ok type=63 attempts=2 saw_busy=1 status=0 us=9931796
+put_fragments ino=62363 chunk=1299 nodes=3,4,1 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5000048
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4992990
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4998402
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4987942
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4987656
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4987963
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4986829
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4989665
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4988042
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4986336
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4986248
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4986291
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4986298
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4986318
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4985696
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4987470
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4984370
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4978980
+inode-rpc: slow-ok type=63 attempts=1 saw_busy=0 status=0 us=4988715
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4977967
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4977539
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4987053
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5002305
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4987119
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4986381
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4987155
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4979432
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4973263
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4973204
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5004367
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4989929
+put_fragments ino=42204 chunk=2 nodes=4,1,2 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5029881
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4989920
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4988162
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5001508
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4988951
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4988755
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4988716
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4988822
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4988077
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4989338
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997165
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5000071
+put_fragments ino=75714 chunk=5251 nodes=3,4,1 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4995891
+put_fragments ino=58267 chunk=1587 nodes=3,4,1 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4991400
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4986337
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999686
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997752
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4984202
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4996973
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4995858
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999760
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4997450
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4996218
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000417
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997275
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997500
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997999
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4996889
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5003847
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4985356
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5004363
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5004509
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5004981
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4992784
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5004733
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4822528
+inode-rpc: slow-ok type=45 attempts=1 saw_busy=0 status=0 us=5000459
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5004117
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999668
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4995464
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5003540
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5006656
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4997044
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5001044
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5007628
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5007672
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000981
+inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=5013026
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4999631
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4999833
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4998170
+put_fragments ino=40186 chunk=623 nodes=3,4,1 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5003807
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4999318
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999107
+inode-rpc: slow-ok type=45 attempts=1 saw_busy=0 status=0 us=5000760
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4998667
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5003503
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4997349
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4997202
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4992256
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4992347
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4992402
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4992530
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997873
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4990983
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4988929
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999943
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4992819
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000762
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4999863
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5000787
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5003545
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5003609
+put_fragments ino=66459 chunk=1189 nodes=4,1,2 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=10004361
+put_fragments ino=40186 chunk=624 nodes=4,1,2 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5004800
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5004943
+put_fragments ino=36090 chunk=10248 nodes=4,1,2 attempt 1/4 failed: network error (efs_rc=-6) — retrying
+put_fragments ino=103734 chunk=42 nodes=4,1,2 attempt 1/4 failed: network error (efs_rc=-6) — retrying
+put_fragments ino=91035 chunk=421 nodes=4,1,2 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+put_fragments ino=103734 chunk=46 nodes=4,1,2 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+put_fragments ino=95131 chunk=357 nodes=4,1,2 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4997932
+put_fragments ino=36090 chunk=4552 nodes=4,1,2 attempt 1/4 failed: no quorum (efs_rc=-8) — retrying
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5000280
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4998812
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=9999113
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4990126
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000197
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=10001425
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=10002807
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5002175
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000567
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5000961
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=4993263
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5001534
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5002973
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000989
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=9994555
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5002845
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=10005956
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=10005839
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4995172
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=4999094
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5000449
+inode-rpc: slow-ok type=83 attempts=1 saw_busy=0 status=0 us=5010418
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5008613
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5011534
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=10011171
+inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=10006408
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5008519
+inode-rpc: slow-ok type=47 attempts=1 saw_busy=0 status=0 us=5015938
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5009704
+inode-rpc: slow-ok type=43 attempts=1 saw_busy=0 status=0 us=5017366
+inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=10025152
+inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=5036452
+inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=5043728
+inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=3807123

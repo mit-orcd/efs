@@ -1,0 +1,84 @@
+Review of the 05:06Z roll (06916bc7e5c1-dirty: F1, F2, mtime flush) under
+the user's fstor007 load, Sep 30 2026 05:10–05:19Z (local 01:10–01:19).
+Client: fstor007 `client.sh --perf` (perf record + strace of find,
+ecopy --verify software/, ecrawl, rsync -avvvP ~/git). Servers: no
+recorders; efsd.log only. Inputs here:
+
+  client-log-last.txt       fuse log of that session (293 lines)
+  client-perf-flat.txt      perf report, efs-fuse, 252K samples
+  client-perf-callers.txt   callers of the top symbols
+  strace-reduce.txt         per-syscall reduction of the four straces
+  server-logs.txt           efsd.log reductions, fcstor003–006
+  ib-hw-counters-0530Z.txt  mlx5 hw_counters snapshot (delta base)
+
+Findings, in the order they cost time
+-------------------------------------
+
+1. HOT PATH: `dcache_reclaim_main` = 39.8 % of efs-fuse cycles.
+   16 reclaim threads pop only `have_base` dirty slots (W18). Under
+   ecopy the dirty set is fresh files (no base) and dirty_bytes sits
+   above the 2 GiB limit, so every kick re-walked all 64 dirty lists
+   and found nothing, in a loop. FIX (src/client/write.c): a sweep that
+   pops nothing parks the threads until the next kick after a 10 ms
+   nap (`kicks`/`empty_kicks`/`empty_until_ns`); a sweep that pops
+   re-arms at once.
+
+2. ISSUE: 244 `inode-rpc: slow-ok ... attempts=1 saw_busy=0` with a
+   mode at exactly 5.0 s (178), then 10 s (10), max 15.7 s, on every
+   RPC type (43/45/47/63/67/83/87). Not the network: the client conn
+   pool (`efs_client_conn_get`, node_cache.c) has 16 slots per node,
+   a checkout holds a slot for the whole RPC and a PUT holds three, and
+   a full pool waits `pthread_cond_timedwait` 5 s, returns NULL, and
+   was silent. 400 ecopy threads on 16 conns = the wait. Worse:
+   `put_fragments` (write.c) and `fetch_fragment` (read.c) called
+   `efs_client_node_note_fail()` on that NULL, and four of them mark a
+   live node DOWN for 30 s (`EFS_NODE_DOWN_FAILS`/`EFS_NODE_DOWN_MS`)
+   — every RPC to it returns NULL at once until the cooldown expires.
+   That is the shape of the two 28 s client-wide freezes in the ecopy
+   strace (01:11:06–:34, 01:11:36–01:12:04: close, utimensat,
+   newfstatat, pwrite all parked, then all released together) and of
+   the 12 `put_fragments ... no quorum (efs_rc=-8)` lines against four
+   live servers. FIX: pool timeouts are logged (rate-limited, with the
+   pool size) and no longer counted as node failures; default pool 16
+   → 64 per node (server cap is 4096 conns, 13 clients × 64 = 832;
+   one RDMA conn pins ≈ 2.6 MB per end, slots connect lazily).
+   `EFS_CLIENT_CONNS_PER_NODE` still overrides.
+
+3. ISSUE (follows from 2): REPORT is one at a time (`report_mu`) and
+   carries the whole dirty set; queued closers are satisfied by one
+   REPORT, so a slow RPC inside it parks every close. 1630 ecopy
+   syscalls ≥ 1 s (close 139, utimensat 69, newfstatat 68, pwrite 45).
+   Splitting REPORT is a design change (forbidden without the user);
+   the pool fix removes the 5–30 s RPCs it was waiting on. Re-measure
+   before asking.
+
+4. "ecopy + atime": checked, no new defect. W25 item 2 (atime
+   nanoseconds end to end) landed in 2dd77dac; `host_utimens` stores
+   `atime*1e9 + atime_nsec`, `efs_meta_apply_get_inode_attrs` returns
+   `base_atime`, reads never move it, the FUSE getattr fills
+   `st_atim.tv_nsec`. The ecopy strace has zero "mismatch" writes; the
+   436 "atime" lines are ecopy's own O_NOATIME opens. rsync's 8504
+   `set modtime, atime of <dir>` lines are its normal -vvv directory
+   time set. Gate below re-checks the futimens(atime.nsec) → stat
+   round trip on the new build.
+
+5. Servers (server-logs.txt): terms stable after the roll (one group-0
+   election 05:11:19Z under the load), `inbox_drop=0` on all four,
+   fcstor004 2475 `apply-sleep` (follower reads waiting for
+   applied+1, max 400 ms, `wait_timeouts=5`), 1376 tiny kv-compactions
+   on 004/005 (4.3 s total; log noise, not time), fcstor006 tx->1
+   fail=8 hi=76 and fcstor004 tx->2 fail=5 hi=47 — each fail is now a
+   250 ms bounded wait (F1), not 30 s.
+
+6. Per-tool: ecrawl `openat` mean 5.5 ms (2890 opens, 16 s CPU-time in
+   3.8 s wall — the D2 row adopt + chunk-map windows); find one 1.0 s
+   `getdents64` (root readdir behind the election); rsync clean.
+
+7. IB hw_counters: `out_of_buffer` 0 on all servers (no RNR / empty
+   RQ), `rnr_nak_retry_err` 0 (infinite rnr_retry); servers carry
+   cumulative `local_ack_timeout_err` 16–23K and `req_cqe_error` ~3K
+   since boot (QP teardown at restarts). Compare deltas against this
+   snapshot after the next run before reading anything into them.
+
+Not changed: REPORT serialization (3), follower `apply-sleep` waits
+(D14), compaction cadence (D9/D10), the 5 s checkout timeout itself.

@@ -86,9 +86,14 @@ static int pool_size(void)
 void efs_client_conn_init(void)
 {
     const char *env = getenv("EFS_CLIENT_CONNS_PER_NODE");
-    /* Default 16: 9 clients × 256 × 4 nodes overflows EFS_SERVER_MAX_CONNS
-     * (512 on the running cluster) and accept() starts dropping fds. */
-    int n = 16;
+    /* Default 64. It was 16 when EFS_SERVER_MAX_CONNS was 512 (9 clients
+     * × 256 × 4 nodes overflowed accept()); the server cap is 4096 now,
+     * and 13 clients × 64 is 832 conns per server. Every checkout holds
+     * one conn for the whole RPC, a PUT holds three, so 400 ecopy
+     * threads on 16 conns queued metadata RPCs behind chunk PUTs for the
+     * full 5 s checkout timeout (Sep 30 2026). Slots connect lazily; one
+     * RDMA conn pins 4 × 76 KiB + 32 × 72 KiB ≈ 2.6 MB on each end. */
+    int n = 64;
     if (env && *env) {
         int v = atoi(env);
         if (v >= 1 && v <= EFS_CLIENT_CONNS_PER_NODE)
@@ -272,7 +277,19 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
             int wrc = pthread_cond_timedwait(&g_client.conn_cv[idx],
                                              &g_client.conn_lock[idx], &ts);
             if (wrc == ETIMEDOUT) {
+                /* Silent until Sep 30 2026: 244 RPCs at exactly 5.0 s
+                 * (and 10, 15) in one ecopy were this, not the network.
+                 * Say so, rate-limited, with the pool size. */
+                static int n;
+                int k = __sync_fetch_and_add(&n, 1);
+
                 pthread_mutex_unlock(&g_client.conn_lock[idx]);
+                if (k < 10 || (k % 100) == 0)
+                    fprintf(stderr,
+                            "efs: conn pool node=%u exhausted for 5 s "
+                            "(pool=%d per node, EFS_CLIENT_CONNS_PER_NODE; "
+                            "timeout #%d)\n",
+                            (unsigned)node_id, n, k + 1);
                 return NULL;
             }
             continue;

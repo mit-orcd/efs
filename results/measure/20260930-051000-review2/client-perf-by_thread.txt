@@ -1,0 +1,32 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 252K of event 'cycles:P'
+# Event count (approx.): 1649202134739
+#
+# Overhead  Command   Symbol                                        
+# ........  ........  ..............................................
+#
+    39.80%  efs-fuse  [.] dcache_reclaim_main
+    15.16%  efs-fuse  [.] __memmove_avx512_unaligned_erms
+     5.64%  efs-fuse  [.] blake3_hash_many_avx512
+     3.31%  efs-fuse  [.] xor_into
+     1.72%  efs-fuse  [k] memcpy_erms
+     1.31%  efs-fuse  [.] stage_evict_main
+     1.07%  efs-fuse  [.] icnt_get
+     0.95%  efs-fuse  [.] __memset_avx512_unaligned_erms
+     0.81%  efs-fuse  [.] forget_ino_on_tab.part.0
+     0.72%  efs-fuse  [.] 0x0000000000000b15
+     0.67%  efs-fuse  [.] _int_malloc
+     0.62%  efs-fuse  [.] __GI___pthread_mutex_unlock_usercnt
+     0.60%  efs-fuse  [k] srso_alias_safe_ret
+     0.55%  efs-fuse  [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.54%  efs-fuse  [k] fuse_copy_fill
+     0.53%  efs-fuse  [k] futex_wait_setup
+
+
+#
+# (Tip: To show inline functions in call traces add --inline to perf report)
+#
