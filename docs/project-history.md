@@ -25,6 +25,90 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 30 2026 05:13Z — F1, F2 and the utimens flush implemented and rolled
+
+User: "can you implement f1 f2 and the time bug?". All three are in the
+tree, uncommitted, rolled `--all` at 05:06Z as `06916bc7e5c1-dirty`
+(`~/efs-runs/roll78.log`, no recorders).
+
+**F1 — bound the RDMA peer reply wait.** `struct efs_conn` gained
+`recv_timeout_ms` (`include/efs/network.h`); `efs_conn_set_recv_timeout()`
+(`src/common/network.c`) stores it and sets `SO_RCVTIMEO` on the TCP
+side-channel; `conn_rdma_frame` (`src/common/protocol.c`) waits
+`recv_timeout_ms` when set instead of `EFS_IO_TIMEOUT_MS` (30 s);
+`host_sender` (`src/server/raft_host.c`) calls it with `HOST_SEND_IO_MS`
+(250 ms) for every conn kind — the old block was `if (pc->kind ==
+EFS_CONN_TCP)`. The sender's conn comes from `server_peer_conn_new`
+(private, not the pool), so nothing has to be restored.
+
+**F2 — count inbox drops.** `server_raft_host_inbox` increments
+`h->inbox_drop` on the inbox-full `EFS_ERR_BUSY` path, logs the first ten
+(`raft-host: inbox full, dropped frame type= group= from= len=`), and the
+`raft-obs: wait_timeouts=` line ends with `inbox_drop=`. `from` is the
+big-endian s32 at wire offset 4 (`efs_raft_msg` codec, `wire.h`).
+
+**Mtime — flush before a SETATTR that sets mtime.** `efs_fuse_utimens_ino`
+calls `efs_utimens_flush_dirty(ino)`: if the inode has writeback jobs
+pending (`efs_wb_ino_pending_locked`) or is in the client's dirty set
+(`efs_client_ino_is_dirty`), it runs `efs_append_flush_report(NULL, ino)`
+— the same flush + REPORT that close runs — so the publish reaches the
+server under the old `mtime_gen` and the SETATTR that follows bumps it and
+fences the lanes. A clean inode pays one hash lookup. No wire or server
+change; `EFS_INO_REC_F_TIMES` is still read by nothing. `efs_client_mtime_pin`
+says `mtime-pin: table full` once instead of dropping pins silently.
+
+**Gate.** `mtime_repro.py` on the user's live fstor007 mount (FUSE_OK,
+`~/efs-runs/rec-gate84.log`): `write→futimens→close→rename`,
+`write→futimens→close`, `write→close→utimens`, `write→futimens→fsync→close`
+all end at 1380661863. `futimens→write→close` ends at the write time
+(correct). An earlier run of the same gate (`gate81`) started 30 s before
+the user's mount came up and wrote into the plain dir under the
+mountpoint; those rows are local XFS and are not a result — the dir
+`/tmp/efs-mount/measure/mtime-repro2` is still there under the mount.
+
+**Unit tests** (fcstor007, `/tmp/efs-build69`): 14 of the 15 `make test`
+binaries pass, `test_raft` OK with `test_ae_reply_match_stops_at_prev` and
+`test_noop_over_stale_tail`. `test_raft_store` fails four assertions
+(`snap index should report its term`, `compacted prefix differs`,
+`snapshot did not shrink the log`, `reopen after rotation`) on a clean
+`git archive HEAD` build as well (`~/efs-runs/rs77.log`) — W22.1's
+retained log window changed what a snapshot does to the log and the test
+was not updated. `docs/check-architecture.py` fails on the regen diff and
+on the repeated decision-table headers in START-HERE §1.
+
+**After the roll, under the user's load (05:06–05:14Z):** fcstor004
+`tx->2 fail=5 hi=47`, `wait_timeouts=5`, `inbox_drop=0` on every node; one
+group-0 election (term 94→95 at 05:11:19Z, fcstor005 campaigned and
+fcstor004 stepped down); 256 `kv-compact: start` lines and 120–270 ms
+`apply-sleep` waits on group 2 in one log window. F1 turned each lost
+reply into a 250 ms `fail` + reconnect instead of a 30 s freeze; it does
+not say which side lost the reply, and it does not stop `on_vote_req` from
+deposing the leader (D15/D16 pending).
+
+## Sep 30 2026 04:45Z — ecopy's mtime mismatches: a utimens between write and close is lost
+
+The 153 "ecopy: verification metadata mismatch" lines at the start of the 04:03:51Z ecopy are all `(mtime)` (message lengths against the paths the same threads had just stat'd; `mis_ctx.py`). The copier thread does `openat(tmp, O_CREAT)` → `pwrite` → `utimensat(fd, [atime, mtime 2013])` → `close` → `renameat`; the verifier's `lstat` then sees a 2026 mtime. Reproduced from one python process on fstor007 against the idle cluster (`results/measure/20260930-044100-mtime-utimens-close/repro-fstor007.txt`): `write→futimens→close` gives the close time, `write→futimens→fsync→close` too (2013 survives the fsync, not the close), `write→close→utimens` is right, XFS is right in all three. Cause: the buffered write's PUBLISH reaches the server in the close REPORT after the SETATTR; `host_utimens` bumped `mtime_gen` and fenced the lanes, but the publish is packed with the *current* `mtime_gen` and `p.now`, so `meta_apply.c:3467` stamps the lane and the stat at `:4175` takes the MAX. The client-side pin (`efs_client_mtime_pin`, `EFS_INO_REC_F_TIMES` on the REPORT rec) was meant to cover this; the server never reads the flag, and the pin table is 256 entries dropped silently. Consequence for the user's copies: every already-copied file fails ecopy's `same_size_and_mtime`, so each rerun re-copies the whole tree (22.4 GiB this time) and fails verification again. Documented in SUMMARY.txt with the recommended fix (flush dirty dcache before a MTIME/ATIME SETATTR, client only) and the server-side alternative; nothing written. The repro client was stopped afterwards; `/tmp/efs-mount/measure/mtime-repro/` holds five 7-byte files.
+
+## Sep 30 2026 04:20Z — post-fix review: per-op references, and a 30 s RDMA peer wait behind the election storms
+
+The user ran `ls`, `find -ls`, `du`, a re-sync of `~/git`, `ecrawl` and `ecopy --verify` (22.4 GiB, 400 threads) from fstor007 against the 03:56Z roll (`06916bc7e5c1-dirty`, servers `--perf` only, client `client.sh --perf`). Reduction and raw pulls: `results/measure/20260930-040600-postfix-review/`. The first five are clean and give the per-op references for this build with no server strace: stat 0.33 ms, openat 0.60, close 0.34, utimensat 1.05, chmod 0.49, rename 6.2 ms (max 36 ms), `ls` 0.015 s, `find` of the tree 6.5 s with no call over 0.2 s. ecopy put both groups into an election storm: group 0 63 terms, group 2 426 (fcstor006) in 13 minutes, 12 `newfstatat` of 55–59.5 s, 513 over 0.2 s, 21 `shard=0` LOOKUPs and 8 REPORTs exhausted 16 BUSY retries, fcstor004 `wait_timeouts` 0→1290, and the 96 727-record REPORT answered NOT_PRIMARY four times by fcstor005 before fcstor004 packed it (846 ms). Group 2 settled at term 669 (leader fcstor005) at 04:09:39Z with all voters commit==applied.
+
+Cause, from `raft-obs tx->` and the code: `host_sender` blocks for a `RAFT_REPLY` per batch, and on an RDMA peer conn that wait is `EFS_IO_TIMEOUT_MS` = 30 s (`conn_rdma_frame`, protocol.c:380) — the 250 ms `HOST_SEND_IO_MS` bound at raft_host.c ~757 is applied to TCP conns only, although the comment at raft_host.c:45 states the rule for any peer. `sent` froze for 10–30 s on fcstor004→005, fcstor006→004 and 006→005 while `enq` grew, then `fail` +1 and the conn was rebuilt. The frames of the frozen batch are processed by the peer (fcstor006 won votes through a frozen lane); the reply is what does not come back, and which side loses it (the peer's reply send waiting on a credit, or the sender node's shared `recv_poller` behind ~400 client conns) needs a stack sample of the sender and peer-conn threads in a storm; on-CPU perf cannot show it. The unheard peer campaigns every 0.5–0.9 s and `on_vote_req` → `maybe_step_down` deposes the live leader each time (no Pre-Vote, no leader stickiness); the leader re-wins 0.6 s later. The 01:21Z `~/git` ecopy (`20260930-012100-ecopy-git`, terms 18→253, `hi=2048`) was the same thing. No CQE-error, `retry counter` or QP line on any node; `pump_hold_max` ≤ 2.7 ms, `apply_max` ≤ 67 µs; `ping` 0.03 ms.
+
+Documented in SUMMARY.txt and START-HERE: F1 bound the RDMA peer reply wait like TCP (per-conn recv timeout on `efs_conn`, set by `host_sender`), F2 count `server_raft_host_inbox` BUSY drops (a dropped Raft frame today has no line and no counter, and `server_handle_conn` still replies), both mechanical; D15 leader stickiness / Pre-Vote and D16 a separate credit class or poller for peer frames are questions for the user. Client profile: 27 % memmove, 10 % blake3, 4 % XOR — the write payload, nothing new on the metadata side; the 59 s stat walls are off-CPU in the RPC retry loop.
+
+## Sep 30 2026 03:57Z — group-0 wedge: a stale tail was a "match"; the leader's no-op never shipped
+
+The 23:16Z rsync froze and a 23:51Z `ls` returned EBUSY after 16.76 s (`~/logs/ls.strace.txt`, `results/measure/20260930-032400-g0-wedge`). Group 0's leader fcstor005 had armed `send_idx` at attach with the replayed `last_i` = 437637 and never shipped its own term-41 no-op 437638; fcstor004 held a stale pre-restart 437638 (term 34) and, because `on_ae_req` answered an empty heartbeat with `match = last_i`, reported 437638 as matched. When `durable_idx` reached 437638, `try_commit` committed it with {self, fcstor004} — a false commit; fcstor004 then truncated, the reject/accept ping-pong ran every heartbeat, and every follower-served group-0 ReadIndex waited for 437638 → 400 ms → BUSY → 16× → EBUSY/ENOENT. Fix in `src/raft/raft.c`: the success reply reports `match = prev_index + nentries`, never the follower's last log index; `send_idx_cover` advances `send_idx` in `become_leader`, `maybe_append_cold` and `efs_raft_change` the way `efs_raft_propose` does. `test_raft` gained `test_ae_reply_match_stops_at_prev` and `test_noop_over_stale_tail`; both pass (`~/efs-runs/raftfix62.log`). Rolled `--all` 03:56Z with `--perf` only (`~/efs-runs/ready65.log`): group 0 elected fcstor003 at term 43 with all voters at 437638; `ls`/`stat`/mkdir from fstor007 returned at once, zero `apply-sleep`.
+
+## Sep 29 2026 16:09Z — servers rolled with perf and strace, no clients
+
+`tests/roll_efsd.sh --all` (`~/efs-runs/rollw34.log`), `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`, `EFSD_ARGS='--perf --strace'`. All four built `2dd77dac881c-dirty` and came up; group 0 leader 0 term 9454 commit==applied 13775244, group 2 leader 3 term 2925 commit==applied 12187894. The 1 s start check printed `perf=0`; a second check (`~/efs-runs/chk34.log`) is `perf=1` `strace=1` on fcstor003–006 and `efs-fuse` 0 on fcstor003–015. Storage was kept. The strace files were already 0.8–1.5 GB two minutes in.
+
+## Sep 29 2026 15:40Z — W21 step 2, W17 step 3 tests, W15 step 5 blocked
+
+`efs_export_staged_bytes` is a running total (`staged_refresh` at every capacity change; `test_stage_evict` checks it across compaction). `test_chunk_deltas` gained the three W17.3 cases and drops the pre-D1 "trailer gone" assertion (a fold keeps tombstones). W15.5 checked on fstor007: `fs.pipe-max-size` 1 MiB < `max_write` 4 MiB + 4 KiB, so libfuse 3.10.2 never used the pipe. The user set `fs.pipe-max-size=8388608` on all 15 hosts (runtime, reverts on reboot) and `efs_fuse_init` now sets `FUSE_CAP_SPLICE_READ`. Not rolled, not gated.
+
 ## Sep 29 2026 15:15Z — 24 h review: six fixes to the unrolled tree
 
 `kv_flush_locked` capped runs at 256 while `KV_RANGE_N` is 512 (a wide memtable was BUSY forever under D9). `kv_seg_data_bytes` is cached at open and `kv_l0_bytes` is hoisted out of the compactor's range loop (was O(blocks) per L1 file and per range under `l->mu`). The D13 fold's output is installed at the newest input's position, not at the head (a same-range file flushed during the merge stays ahead). The merge iterator reads a block over 1 MiB whole instead of returning IO. `maybe_prefetch` asks the layout-miss path only when the chunk map is absent. `dcache_flush_slot_inner` re-finds its entry after the unlocked GET/PUT instead of dereferencing a pointer a drop may have freed. `lane_bits` moved into `pack_utimens_cmd`. Two `test_kv_lsm` assertions updated to the byte rule. Not rolled, not gated.

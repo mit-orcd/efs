@@ -1,0 +1,119 @@
+Sep 30 2026 04:41Z — ecopy "verification metadata mismatch": a utimens
+between the last write and close is lost; mtime becomes the close time
+=======================================================================
+
+Question: what are the 153 "ecopy: verification metadata mismatch" lines
+at the start of the 00:03:51 (04:03:51Z) ecopy in
+`~/orcd/scratch/efs/perf/efs-mount/ecopy.strace.txt`, and do F1/F2 (the
+RDMA peer-lane timeout and the inbox-drop counter from
+`20260930-040600-postfix-review`) fix them?
+
+Answer: no. F1/F2 are Raft transport fixes. This is a metadata semantics
+bug in the write path, reproducible on an idle cluster from one client in
+one process, no elections involved.
+
+What the message is
+-------------------
+`~/git/direct_copy/verify.c:340`: `ecopy: verification metadata mismatch:
+<dst path> (<field>)`, field ∈ type/size/mode/atime/mtime/uid/gid. strace
+`-s 32` cut the text; the write(2) lengths give the field: prefix 39 +
+path + " (mtime)\n" 9. For the first three: `software/cm/CLUSTERMANAGERID`
+(43 chars) → 91 ✓, `software/modulefiles/deprecated-modules.lua` (58) →
+106 ✓, `software/cm/README` (33) → 81 ✓. All 153 are **mtime**
+(ecopy-strace-context.txt).
+
+What ecopy did (copier thread 380423, verifier 380680, same file)
+-----------------------------------------------------------------
+  00:03:51.784  openat(src) ; openat(dstdir, ".ecopy.tmp.380421.1", O_CREAT|O_EXCL, 0644)
+  00:03:51.786  pread64(src) ; pwrite64(tmp, 7 bytes, 0)
+  00:03:51.787  utimensat(tmpfd, NULL, [atime 2026-05-29, mtime 2013-10-01T17:11:03], 0)   13.5 ms
+  00:03:51.800  close(tmpfd)                                                                  5.4 ms
+  00:03:51.806  fstatat(tmp) ; fstatat(final) ; renameat(tmp → CLUSTERMANAGERID)
+  00:03:51.820  [verifier] newfstatat(final) → mtime ≠ 2013 → "metadata mismatch (mtime)"
+
+That is `write → futimens → close → rename`, which is POSIX-valid (the
+XFS control below keeps 2013) and is what `preserve_fd_metadata_impl`
+(fs_util.c:772, `futimens(fd, ts)` on the open temp fd) always does. The
+dst existed from the earlier ecopy runs; `same_size_and_mtime` was false
+for exactly the same reason, so every existing file was re-copied
+(22.4 GiB of payload again) and then failed verification again.
+
+Reproduction (repro-fstor007.txt; `mtime_repro.py`, fstor007 mounted
+RDMA, `06916bc7e5c1-dirty`, then unmounted; XFS control in /tmp)
+-----------------------------------------------------------------
+| order                               | efs                           | XFS   |
+| write → futimens → close            | mtime = close time  **WRONG** | 2013  |
+| write → futimens → fsync → close    | 2013 after fsync, close time after close  **WRONG** | 2013 |
+| write → close → utimens (rsync)     | 2013  OK                      | 2013  |
+| write → futimens → close → rename   | 2013 from this client (local row; not checked from a second client) | 2013 |
+| futimens → write → close            | now — correct by spec         | now   |
+
+Mechanism
+---------
+1. `write()` is client-buffered (W2). The data reaches the server as a
+   PUBLISH inside the REPORT at fsync/close, i.e. AFTER the utimens RPC
+   that ecopy issued between the write and the close.
+2. `efs_client_setattr` (ops.c ~1030) sends SETATTR; the server's
+   `host_utimens` (raft_host.c:9212) sets the row's mtime, bumps
+   `mtime_gen` and fences the lanes ("so a REPORT cannot stamp now over
+   the set time" — that comment covers a REPORT that was proposed
+   *before* the utimens).
+3. The later PUBLISH packs `p.now = now_ns()` and `p.mtime_gen =
+   row.mtime_gen` (raft_host.c ~10869/10894, the *current* gen). Apply
+   (meta_apply.c:3467): `ln.mtime_gen == mtime_gen` → `max_mtime =
+   max(max_mtime, p->now)`; stat (meta_apply.c:4175): lane gen ≥ row gen
+   → `mtime = max(base_mtime 2013, lane now)` = now. The server cannot
+   tell that the bytes were written before the utimens: the publish
+   carries the publish time, not the write time.
+4. Client side, `efs_client_mtime_pin` keeps the local row at 2013 (that
+   is why the stat right after `futimens` and after `fsync` shows 2013;
+   the pin is cleared only by a later write, write.c:4698); after close
+   the client answers with the server's reduced row, and that is the
+   publish time. `EFS_INO_REC_F_TIMES` (protocol.h:667, "apply mtime/atime
+   even if older … piggybacks them on the close REPORT") is set by the
+   client (write.c:827) and **read by nothing on the server** (`grep
+   EFS_INO_REC_F_TIMES src/server` is empty); `irecs[].mtime` is used
+   only for the size (raft_host.c:11225). Also `MTIME_PIN_MAX` is 256
+   pins, silently dropped when full (write.c:307) — with 400 ecopy
+   threads that alone would lose pins, but the repro shows the bug with
+   one pin.
+
+Consequences
+------------
+- Any tool that sets times on the open fd before close (ecopy, cp -p via
+  futimens? — cp uses utimensat after close; tar and rsync set after
+  close; ecopy, GNU `install`, some archivers set before) gets mtime =
+  close time on efs. ecopy's incremental mode then re-copies the whole
+  tree every run.
+- Not a data problem: sizes and contents verified; only mtime.
+
+Fix (recommended; not implemented; not F1/F2)
+---------------------------------------------
+A. **Client: flush before a time-setting SETATTR.** In the FUSE setattr
+   path, when the mask has MTIME (or ATIME) and the inode has dirty
+   dcache data, run the same flush the close would run (REPORT →
+   publishes applied, lanes stamped with "now" under the OLD `mtime_gen`),
+   then send SETATTR (utimens bumps `mtime_gen`, fences the lanes, stat =
+   set time). Ordering is then the POSIX order. No wire or server change.
+   ecopy pays the flush at futimens instead of at close (the close REPORT
+   is then empty and is skipped, write.c:837), so no extra RPC. This is
+   what NFS/CIFS clients do (write-back flush on setattr). Gate:
+   `mtime_repro.py` rows 1–2 print 2013, posix suite's
+   `mtime_monotonic_many_writes` and the utimens tests unchanged, and
+   a second ecopy of an already-copied tree copies 0 bytes.
+B. Alternative, server side: make the REPORT apply honour
+   `EFS_INO_REC_F_TIMES` — after the batch's publishes, apply the rec's
+   mtime/atime as a utimens (bump `mtime_gen`, fence lanes, cross-group
+   lanes via the other group as `host_utimens` already does). Fixes the
+   fsync-between case's window too, but it is a second utimens path in
+   the apply and a per-REPORT extra entry; A is smaller and sufficient.
+
+Either way the `MTIME_PIN_MAX` 256 cap should fail loudly or grow; a
+dropped pin is a silently wrong local mtime until the next refresh.
+
+Cleanup: fstor007 client stopped again after the repro (pgrep 0);
+`/tmp/efs-mount/measure/mtime-repro/` (5 small files) left on the export.
+
+## Fix A written and gated, Sep 30 05:12Z
+
+efs_fuse_utimens_ino -> efs_utimens_flush_dirty(ino): flush + REPORT (the close path) before a SETATTR that sets mtime when the inode has writeback pending or is in the dirty set. Rolled 05:06Z as 06916bc7e5c1-dirty. Gate on the live fstor007 mount (FUSE_OK, ~/efs-runs/rec-gate84.log): ecopy-order, ecopy-order-nosleep-stat, rsync-order, fsync-between all 1380661863; futimens-then-write ends at the write time (POSIX).

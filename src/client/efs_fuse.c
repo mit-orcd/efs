@@ -2386,6 +2386,25 @@ static int efs_file_data_sync_fh(struct fuse_file_info *fi)
     return efs_file_data_sync_for_ino(ino);
 }
 
+/* utimens(mtime) on an inode with buffered writes: publish them first
+ * (the same flush+REPORT close would run) so the SETATTR that follows
+ * is the later event on the server. Clean inode: nothing. */
+static int efs_utimens_flush_dirty(efs_ino_t ino)
+{
+    int pending = 0;
+
+    if (!ino || virt_kind(ino))
+        return EFS_OK;
+    if (g_wb.ready) {
+        pthread_mutex_lock(&g_wb.mu);
+        pending = efs_wb_ino_pending_locked(ino);
+        pthread_mutex_unlock(&g_wb.mu);
+    }
+    if (!pending && !efs_client_ino_is_dirty(ino))
+        return EFS_OK;
+    return efs_append_flush_report(NULL, ino);
+}
+
 /* O_APPEND writes: the kernel sets the offset from its i_size but does not
  * serialize concurrent appends to a FUSE file (no i_rwsem around the
  * read-i_size + write + update-i_size sequence), so two racing appends can
@@ -3296,6 +3315,20 @@ static int efs_fuse_utimens_ino(fuse_ino_t ino, const struct timespec tv[2])
      * both wrong and undiagnosable — chmod hits the same SETATTR handler
      * and reported the ENOENT correctly. */
     int rc;
+    /* Order the buffered data ahead of the time it must not disturb.
+     * write() is client-buffered; its PUBLISH reaches the server in the
+     * close REPORT with the publish time and the row's CURRENT mtime_gen,
+     * so a utimens issued between the last write and close was overruled
+     * by the stat MAX (ecopy's write → futimens → close → rename gave
+     * every file its close time, results/measure/20260930-044100-*).
+     * Flushing here lands the publish under the old generation; the
+     * SETATTR then bumps it and fences the lanes. A clean inode skips
+     * this; ecopy's close REPORT afterwards is empty and is skipped. */
+    if (set_m) {
+        rc = efs_utimens_flush_dirty((efs_ino_t)ino);
+        if (rc != EFS_OK)
+            return efs_rc_to_errno(rc);
+    }
     if (set_a && set_m) {
         rc = efs_client_utimens_both(ino, msec, nsec, asec, ansec);
         return efs_rc_to_errno(rc);

@@ -1,4 +1,5 @@
 #include "efs/network.h"
+#include "efs/common.h"
 #include "efs/rdma.h"
 #include <arpa/inet.h>
 #include <netinet/in.h>
@@ -303,6 +304,15 @@ struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server)
     c->rc = NULL;
     conn_capture_fd(c);
     return c;
+}
+
+void efs_conn_set_recv_timeout(struct efs_conn *c, int ms)
+{
+    if (!c)
+        return;
+    c->recv_timeout_ms = ms > 0 ? ms : 0;
+    if (c->fd >= 0)
+        (void)efs_set_recv_timeout(c->fd, ms > 0 ? ms : EFS_IO_TIMEOUT_MS);
 }
 
 void efs_conn_destroy(struct efs_conn *c)

@@ -1,0 +1,55 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 34K of event 'cycles:P'
+# Event count (approx.): 207226543996
+#
+# Overhead  Shared Object            Symbol                                        
+# ........  .......................  ..............................................
+#
+    27.08%  libc.so.6                [.] __memmove_avx512_unaligned_erms
+    10.09%  efs-fuse                 [.] blake3_hash_many_avx512
+     3.92%  efs-fuse                 [.] xor_into
+     2.86%  [kernel.kallsyms]        [k] memcpy_erms
+     1.69%  [vdso]                   [.] 0x0000000000000b15
+     1.46%  efs-fuse                 [.] efs_rdma_recv_wait
+     1.13%  [kernel.kallsyms]        [k] do_syscall_64
+     1.01%  efs-fuse                 [.] recv_poller
+     0.99%  [kernel.kallsyms]        [k] srso_alias_safe_ret
+     0.96%  [kernel.kallsyms]        [k] srso_alias_return_thunk
+     0.84%  libc.so.6                [.] __memset_avx512_unaligned_erms
+     0.77%  efs-fuse                 [.] forget_ino_on_tab.part.0
+     0.76%  [kernel.kallsyms]        [k] dequeue_entity
+     0.76%  [fuse]                   [k] fuse_copy_fill
+     0.73%  [kernel.kallsyms]        [k] gup_pte_range
+     0.69%  [kernel.kallsyms]        [k] select_task_rq_fair
+     0.67%  [kernel.kallsyms]        [k] do_sys_poll
+     0.64%  efs-fuse                 [.] icnt_get
+     0.62%  libc.so.6                [.] _int_malloc
+     0.60%  efs-fuse                 [.] efs_export_forget_ino
+     0.59%  [kernel.kallsyms]        [k] entry_SYSCALL_64
+     0.58%  libc.so.6                [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.51%  [kernel.kallsyms]        [k] eventfd_poll
+     0.51%  [fuse]                   [k] fuse_copy_do
+     0.48%  libc.so.6                [.] __GI___libc_write
+     0.48%  efs-fuse                 [.] stage_evict_main
+     0.48%  [kernel.kallsyms]        [k] __audit_syscall_entry
+     0.47%  [kernel.kallsyms]        [k] gup_pgd_range
+     0.47%  [kernel.kallsyms]        [k] copyin
+     0.47%  [fuse]                   [k] fuse_copy_page
+     0.47%  [kernel.kallsyms]        [k] pollwake
+     0.40%  [kernel.kallsyms]        [k] do_poll.constprop.0
+     0.38%  [kernel.kallsyms]        [k] clear_page_erms
+     0.36%  efs-fuse                 [.] blake3_compress_in_place_avx512
+     0.32%  [kernel.kallsyms]        [k] set_page_dirty_lock
+     0.32%  [fuse]                   [k] fuse_dev_do_read
+     0.32%  [kernel.kallsyms]        [k] __iov_iter_get_pages_alloc
+     0.32%  [kernel.kallsyms]        [k] eventfd_write
+     0.30%  efs-fuse                 [.] name_idx_put.isra.0
+
+
+#
+# (Tip: See assembly instructions with percentage: perf annotate <symbol>)
+#

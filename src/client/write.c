@@ -304,8 +304,19 @@ void efs_client_mtime_pin(efs_ino_t ino)
             return;
         }
     }
-    if (mtime_pin_n < MTIME_PIN_MAX)
+    if (mtime_pin_n < MTIME_PIN_MAX) {
         mtime_pin[mtime_pin_n++] = ino;
+    } else {
+        /* Only a write() unpins, so a copy of many files fills this
+         * and every later pin is dropped. Say so once instead of
+         * silently (Sep 30 2026). */
+        static int said;
+        if (!said) {
+            said = 1;
+            fprintf(stderr, "mtime-pin: table full (%d), ino=%llu not pinned\n",
+                    MTIME_PIN_MAX, (unsigned long long)ino);
+        }
+    }
     pthread_mutex_unlock(&g_client.dirty_mu);
 }
 

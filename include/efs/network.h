@@ -52,10 +52,20 @@ struct efs_conn {
     uint64_t gen_seen;
     uint64_t *gen_live;
     int64_t last_ok_ms;
+    /* Reply wait bound for this conn, ms. 0 = EFS_IO_TIMEOUT_MS (30 s).
+     * TCP conns carry it as SO_RCVTIMEO too; on an RDMA conn it bounds
+     * efs_rdma_recv_wait, which used to be the 30 s pool default on every
+     * conn (Sep 30 2026: a Raft peer lane sat 30 s on one lost RAFT_REPLY
+     * and the unheard peer deposed the leader). */
+    int recv_timeout_ms;
 };
 
 /* Take ownership of fd. */
 struct efs_conn *efs_conn_wrap_tcp(int fd, int is_server);
+
+/* Bound every reply wait on this conn (RDMA frame wait and the TCP
+ * side-channel). ms <= 0 restores the EFS_IO_TIMEOUT_MS default. */
+void efs_conn_set_recv_timeout(struct efs_conn *c, int ms);
 
 /* 1 if this handle still owns fd. Pool conns compare a generation the
  * pool bumps on destroy; everyone else fstats. */

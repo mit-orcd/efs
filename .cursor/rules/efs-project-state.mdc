@@ -96,12 +96,35 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
-  **UP 01:45Z Sep 30.** Servers restarted 01:45Z with `--perf`
-  and `--strace` (`~/efs-runs/restart53.log`); recorders are
-  `/tmp/efs-perf/efsd.data` and `efsd.strace` on fcstor003–006.
-  Clients are stopped (fcstor003–015 and fstor007, `fuse=0`).
-  Embedded id `bd57b7e74a91-dirty` (HEAD `bd57b7e7` plus
-  the uncommitted tree). Fresh table from the 17:04Z wipe; restart
+  **UP 05:06Z Sep 30.** Rolled `--all`, no recorders
+  (`~/efs-runs/roll78.log`, ROLL_OK): `06916bc7e5c1-dirty` = HEAD
+  `06916bc7` + uncommitted raft wedge fix + F1 (RDMA peer reply
+  wait bounded to 250 ms) + F2 (`inbox_drop=` on the raft-obs line)
+  + the utimens flush. The user mounted fstor007 at 05:10:32Z with
+  `client.sh` on the same tree (`fuse.efs-fuse`, FUSE_OK); the mtime
+  gate passed on it (`~/efs-runs/rec-gate84.log`). fcstor003–015
+  clients are stopped. g0 term 95 leader fcstor005 (one election
+  05:11:19Z under the user's load), g2 term 673 leader fcstor005,
+  commit==applied. The 03:56Z `--perf` data of the previous run is
+  `/tmp/efs-perf/efsd.data` on fcstor003–006, now readable.
+  Prior 03:56Z roll was `--perf` only
+  (`~/efs-runs/ready65.log`), fstor007's client stopped by the user
+  at 04:05Z after ls/find/du/rsync/ecrawl/ecopy. Both groups are up (04:11Z: g0 leader
+  fcstor003 term 90, g2 leader fcstor005 term 669,
+  commit==applied) after a 13-minute election storm during ecopy
+  (`results/measure/20260930-040600-postfix-review/SUMMARY.txt`,
+  learning below; START-HERE D15/D16 pending, F1/F2 mechanical).
+  Per-op references from that review, one client, no server strace:
+  stat 0.33 ms, openat 0.60, close 0.34, utimensat 1.05, chmod 0.49,
+  rename 6.2 ms. The 03:10Z roll had wedged group 0: the
+  term-41 no-op (437638) was committed on the leader only, so
+  every group-0 read served by a follower (including root
+  GETATTR through its odd lanes) was BUSY → EBUSY/ENOENT after
+  16.76 s (`results/measure/20260930-032400-g0-wedge`). Fixed in
+  `src/raft/raft.c` (learning below); `ls`, `stat`, mkdir OK
+  after the roll.
+  Prior 01:45Z restart was `--perf` and `--strace`
+  on `bd57b7e74a91-dirty` (`~/efs-runs/restart53.log`). Fresh table from the 17:04Z wipe; restart
   needs no `--join`. 9-host posix **200/201** on all nine, 15.6–17.3 s
   (`results/posix/20260930-000428`). posix2 **63/63** in 47.2 s
   (`results/posix2/20260930-005552`): first open of an existing file
@@ -473,6 +496,20 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  start. Do not put compaction back under the pump. Partitioned
  flush is the unread follow-on. A point get still pins the segment
  and preads outside `l->mu` (`5d3e603`).
+- **An AppendEntries success reply reports `prev_index + nentries`,
+  never the follower's last log index (Sep 30, `raft.c on_ae_req`).**
+  A follower's uncommitted stale tail at the leader's next index
+  answered an empty heartbeat with `match = last_i`; the leader took
+  it, committed its own term-41 no-op (437638) with a quorum that did
+  not hold it, and every follower-served group-0 read waited for that
+  index and returned BUSY (rsync stat 16.76 s → ENOENT, `ls` EBUSY).
+  Second half of the same wedge: `append_local` does not move
+  `send_idx`; the leader no-op, cold entry, and joint entry go
+  through `send_idx_cover` now, or `send_ae` never ships them
+  (`results/measure/20260930-032400-g0-wedge`, `test_raft`
+  `test_noop_over_stale_tail`). A follower waiting in `apply-sleep`
+  for an index above its own `last_i` on a stable term is this class:
+  gdb the leader's `send_idx`/`match_index` before anything else.
 - **A Raft proposal is identified by `(index, term)`, never by index
   (I17 root cause, fixed `46d54e6`):** the apply ring matched by index;
   after a leader change the truncated entry's index is reused and the
@@ -533,6 +570,30 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  conns are RDMA (`peer_pool.c`), a restarted node's QPs die on its peers
  with `transport retry counter exceeded` and block senders. Pre-existing,
  converges; not the flow-control bug (that one is fixed).
+- **An RDMA peer lane waits 30 s for a RAFT_REPLY; TCP waits 250 ms
+ (Sep 30, `results/measure/20260930-040600-postfix-review`).**
+ `host_sender` sends a batch and blocks per reply; the
+ `HOST_SEND_IO_MS` bound is set only `if (pc->kind == EFS_CONN_TCP)`,
+ so an RDMA conn goes through `conn_rdma_frame` →
+ `efs_rdma_recv_wait(EFS_IO_TIMEOUT_MS)`. Signature on `raft-obs
+ tx->N`: `sent` frozen across 5 s samples while `enq` grows, then
+ `fail` +1; the peer keeps processing the batch (it grants votes
+ through a frozen lane) but its reply is late. Every unheard peer
+ campaigns and `on_vote_req` → `maybe_step_down` deposes the live
+ leader (no Pre-Vote, no stickiness): 426 group-2 terms in 13 min
+ under a 400-thread ecopy, each cycle 400 ms of BUSY for every
+ client read (`wait_timeouts` 0→1290 on fcstor004, 21 LOOKUPs and 8
+ REPORTs exhausted, `newfstatat` up to 59.5 s). A term storm with
+ `apply_max` under 100 µs and no CQE-error line is this class: read
+ the `tx->` lines before the pump. **F1 and F2 are in tree (05:06Z
+ roll):** `efs_conn.recv_timeout_ms` / `efs_conn_set_recv_timeout()`
+ bound `conn_rdma_frame`'s wait, `host_sender` sets it to
+ `HOST_SEND_IO_MS` on every conn kind; `server_raft_host_inbox`
+ counts drops (`raft-host: inbox full` for the first ten,
+ `inbox_drop=` on the obs line). A stalled lane now shows as `fail`
+ +1 every 250 ms, not a 30 s freeze; it still does not say which
+ side lost the reply. Stickiness (D15) and a separate peer credit
+ class (D16) are asks.
 - Raft catch-up: follower dedupes same index+term entries; leader keeps
   one AE batch in flight per peer (`ae_inflight`). Before this, 005
   rewrote the same 128-entry window ~30×/s with an fsync each and never
@@ -574,6 +635,27 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - A read whose layout pull fails must FAIL, not zero-fill (I9). The old
   1/s rate-limited `pull_layout_miss` returned 38054 zero 1 MiB reads in
   1.36 s and looked like 4 GiB/s.
+- **A utimens between the last `write()` and `close()` is lost: mtime
+ becomes the close time (Sep 30,
+ `results/measure/20260930-044100-mtime-utimens-close`).** The write
+ is client-buffered, its PUBLISH arrives in the close REPORT after the
+ SETATTR, carries `p.now` and the current `mtime_gen`, and the lane
+ stamp wins the stat MAX (`meta_apply.c:3467`, `:4175`). ecopy's
+ `write→futimens→close→rename` hits it on every file (153 "metadata
+ mismatch (mtime)" lines, and every already-copied file is re-copied
+ on the next run); rsync's `write→close→utimens` does not.
+ `EFS_INO_REC_F_TIMES` is set by the client and read by no server code;
+ `MTIME_PIN_MAX` 256 drops pins silently. Repro: `mtime_repro.py` in
+ that dir, one process, idle cluster. **Fixed 05:06Z (client
+ side):** `efs_fuse_utimens_ino` → `efs_utimens_flush_dirty` runs the
+ close path's `efs_append_flush_report` before a SETATTR that sets
+ mtime when the inode has writeback pending or is in the dirty set;
+ the publish lands under the old `mtime_gen` and the utimens fences
+ it. Gate: `mtime_repro.py` rows `ecopy-order*` and `fsync-between`
+ print 1380661863 (`~/efs-runs/rec-gate84.log`). The server still
+ reads nothing from `EFS_INO_REC_F_TIMES`; `efs_client_mtime_pin`
+ now logs once when its table is full. Not F1/F2, not the election
+ storm.
 - `adopt_rpc_inode` drops dcache only on SHRINK; dropping on
   same-size/newer-mtime discarded the only replay source of an in-flight
   O_APPEND object (`concurrent_appends` lost lines).

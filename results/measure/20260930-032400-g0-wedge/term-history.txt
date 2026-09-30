@@ -1,0 +1,35 @@
+-----
+efs-rec: start 2026-09-30T03:32:48Z pid=106030 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; for h in fcstor003 fcstor004 fcstor005; do echo "=== $h"; EFS_SSH_TIMEOUT=15 "$S" $h.ib "cd /tmp/efs; grep -nE \"term=|leader|elect|step\" efsd.log | grep -v \"tx->\" | grep -v wait_timeouts | head -30"; done
+=== fcstor003
+18:raft-obs: g0 term 0->34 role FOLLOWER->FOLLOWER leader=-1 commit=437635 applied=437635 t=1790737793629ms
+46:raft-obs: g0 term 34->35 role FOLLOWER->CANDIDATE leader=-1 commit=437635 applied=437635 t=1790737794556ms
+51:raft-obs: g0 term 35->36 role CANDIDATE->CANDIDATE leader=-1 commit=437635 applied=437635 t=1790737795335ms
+54:raft-obs: g0 term 36->37 role CANDIDATE->CANDIDATE leader=-1 commit=437635 applied=437635 t=1790737795928ms
+55:raft-obs: g0 term 37->38 role CANDIDATE->CANDIDATE leader=-1 commit=437635 applied=437635 t=1790737796689ms
+56:raft-obs: g0 term 38->39 role CANDIDATE->CANDIDATE leader=-1 commit=437635 applied=437635 t=1790737797218ms
+57:raft-obs: g0 term 39->40 role CANDIDATE->CANDIDATE leader=-1 commit=437635 applied=437635 t=1790737797749ms
+58:raft-obs: g0 term 40->41 role CANDIDATE->FOLLOWER leader=-1 commit=437635 applied=437635 t=1790737798497ms
+=== fcstor004
+11:raft-obs: g0 term 0->36 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737795763ms
+12:raft-obs: g2 term 0->258 role FOLLOWER->FOLLOWER leader=-1 commit=436932 applied=436932 t=1790737795763ms
+19:raft-obs: g0 term 36->37 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737795930ms
+21:raft-obs: g2 term 258->259 role FOLLOWER->CANDIDATE leader=-1 commit=436932 applied=436932 t=1790737796602ms
+22:raft-obs: g0 term 37->38 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737796689ms
+23:raft-obs: g0 term 38->39 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737797218ms
+24:raft-obs: g2 term 259->260 role CANDIDATE->CANDIDATE leader=-1 commit=436932 applied=436932 t=1790737797223ms
+25:raft-obs: g0 term 39->40 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737797749ms
+26:raft-obs: g2 term 260->261 role CANDIDATE->FOLLOWER leader=-1 commit=436932 applied=436932 t=1790737798185ms
+27:raft-obs: g0 term 40->41 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737798496ms
+=== fcstor005
+11:raft-obs: g0 term 0->38 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737797175ms
+12:raft-obs: g2 term 0->258 role FOLLOWER->FOLLOWER leader=-1 commit=436933 applied=436933 t=1790737797175ms
+18:raft-obs: g2 term 258->259 role FOLLOWER->FOLLOWER leader=-1 commit=436933 applied=436933 t=1790737797188ms
+21:raft-obs: g0 term 38->39 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737797218ms
+22:raft-obs: g2 term 259->260 role FOLLOWER->FOLLOWER leader=-1 commit=436933 applied=436933 t=1790737797223ms
+23:raft-obs: g0 term 39->40 role FOLLOWER->FOLLOWER leader=-1 commit=437637 applied=437637 t=1790737797749ms
+24:raft-obs: g2 term 260->261 role FOLLOWER->CANDIDATE leader=-1 commit=436933 applied=436933 t=1790737798185ms
+25:raft-obs: g2 term 261->261 role CANDIDATE->LEADER leader=2 commit=436933 applied=436933 t=1790737798186ms
+26:raft-obs: g0 term 40->41 role FOLLOWER->CANDIDATE leader=-1 commit=437637 applied=437637 t=1790737798496ms
+27:raft-obs: g0 term 41->41 role CANDIDATE->LEADER leader=2 commit=437637 applied=437637 t=1790737798497ms
+efs-rec: end 2026-09-30T03:32:49Z rc=0

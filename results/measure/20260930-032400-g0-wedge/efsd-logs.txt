@@ -1,0 +1,142 @@
+-----
+efs-rec: start 2026-09-30T03:25:39Z pid=4173183 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; for h in fcstor003 fcstor004 fcstor005 fcstor006; do echo "=== $h"; EFS_SSH_TIMEOUT=15 "$S" $h.ib "cd /tmp/efs; wc -l efsd.log; grep -n raft-obs efsd.log | grep wait_timeouts | awk -F\"wait_timeouts=\" \"{split(\\\$2,a,\\\" \\\"); print a[1]}\" | uniq -c | tail -8; echo -- non-obs lines; grep -v raft-obs efsd.log | grep -v \"^  node\" | tail -25; echo -- tx; grep \"tx->\" efsd.log | tail -3; ls -l /tmp/efs-perf/"; done
+=== fcstor003
+737 efsd.log
+      1 80
+      1 86
+      1 90
+      1 94
+      1 101
+      1 105
+      1 109
+     83 112
+-- non-obs lines
+raft-host: apply-sleep us=400055 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400030 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400029 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400030 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400029 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400034 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400030 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400032 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400030 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400049 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400036 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400037 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400050 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400032 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400032 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400030 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400031 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400040 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400034 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400030 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400035 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400050 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400030 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400030 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400031 group=0 idx=437638 applied=437637
+-- tx
+raft-obs: tx->2 enq=18469 drop=0 sent=18467 fail=2 hi=1 rtt_avg=30us get_avg=68us get_max=1258ms
+raft-obs: tx->1 enq=6 drop=0 sent=6 fail=0 hi=1 rtt_avg=50us get_avg=202652us get_max=1215ms
+raft-obs: tx->2 enq=18568 drop=0 sent=18566 fail=2 hi=1 rtt_avg=30us get_avg=67us get_max=1258ms
+total 160172
+-rw------- 1 erbmi1 erbmi1   1233080 Sep 29 23:25 efsd.data
+-rw------- 1 erbmi1 erbmi1    949128 Sep 29 13:39 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1 160899641 Sep 29 13:39 fuse.strace
+=== fcstor004
+859 efsd.log
+      1 32
+      1 42
+      1 51
+      1 59
+      1 69
+      1 73
+      1 77
+     68 80
+-- non-obs lines
+raft-host: apply-sleep us=400057 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400038 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400032 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400053 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400041 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400056 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400031 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400055 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400039 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400058 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400039 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400055 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400056 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400056 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400053 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400054 group=0 idx=437638 applied=437637
+raft-host: apply-sleep us=400053 group=0 idx=437638 applied=437637
+-- tx
+raft-obs: tx->0 enq=6 drop=0 sent=6 fail=0 hi=1 rtt_avg=34us get_avg=514us get_max=3ms
+raft-obs: tx->2 enq=55465 drop=0 sent=55465 fail=0 hi=1 rtt_avg=29us get_avg=10us get_max=583ms
+raft-obs: tx->3 enq=2 drop=0 sent=1 fail=1 hi=1 rtt_avg=44us get_avg=396734us get_max=793ms
+total 162752
+-rw------- 1 erbmi1 erbmi1   2609664 Sep 29 23:23 efsd.data
+-rw------- 1 erbmi1 erbmi1    989216 Sep 29 13:39 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1 162713695 Sep 29 13:39 fuse.strace
+=== fcstor005
+779 efsd.log
+    191 0
+-- non-obs lines
+Loaded 4 persisted cluster node(s) from /data1/01/efs/meta/cluster_nodes.bin
+  persisted node 1: 172.16.223.57:19810
+  persisted node 4: 172.16.223.60:19810
+  persisted node 2: 172.16.223.58:19810
+  persisted node 3: 172.16.223.59:19810
+Trying to rejoin via persisted peer 172.16.223.57:19810 (node 1)...
+efs: RDMA transport up on mlx5_2 port 1 (lid 2161, 36 x 72 KiB bufs/conn)
+Joined cluster with 4 nodes
+Rejoined cluster via 172.16.223.57:19810
+heartbeat: enabled (2000 ms interval)
+raft-host: up raft_id=2 n=4 boot=4074010231027932 salt=5488352606225137087 g0=hosted g2=hosted
+efsd node 3 listening on 172.16.223.59:19810, storage=/data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs (6 paths, stripe=leastq), used=29359144960, quota=39582418599936, direct_io=on, writers=20 shared, build=06916bc7e5c1-dirty
+efsd: RDMA transport up on mlx5_2 port 1 (lid 2161)
+-- tx
+raft-obs: tx->0 enq=18519 drop=0 sent=18519 fail=0 hi=2 rtt_avg=34us get_avg=0us get_max=3ms
+raft-obs: tx->1 enq=55549 drop=0 sent=55549 fail=0 hi=1 rtt_avg=31us get_avg=0us get_max=4ms
+raft-obs: tx->3 enq=18521 drop=0 sent=18521 fail=0 hi=1 rtt_avg=33us get_avg=0us get_max=3ms
+total 161744
+-rw------- 1 erbmi1 erbmi1   1793240 Sep 29 23:24 efsd.data
+-rw------- 1 erbmi1 erbmi1    914564 Sep 29 13:39 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1 162739699 Sep 29 13:39 fuse.strace
+=== fcstor006
+584 efsd.log
+    191 0
+-- non-obs lines
+Loaded 4 persisted cluster node(s) from /data1/01/efs/meta/cluster_nodes.bin
+  persisted node 1: 172.16.223.57:19810
+  persisted node 4: 172.16.223.60:19810
+  persisted node 2: 172.16.223.58:19810
+  persisted node 3: 172.16.223.59:19810
+Trying to rejoin via persisted peer 172.16.223.57:19810 (node 1)...
+efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 36 x 72 KiB bufs/conn)
+Joined cluster with 4 nodes
+Rejoined cluster via 172.16.223.57:19810
+heartbeat: enabled (2000 ms interval)
+raft-host: up raft_id=3 n=4 boot=2920143153441695 salt=5360651811230475217 g0=off g2=hosted
+efsd node 4 listening on 172.16.223.60:19810, storage=/data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs (6 paths, stripe=leastq), used=29291184128, quota=39582418599936, direct_io=on, writers=20 shared, build=06916bc7e5c1-dirty
+efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+-- tx
+raft-obs: tx->2 enq=18439 drop=0 sent=18439 fail=0 hi=1 rtt_avg=28us get_avg=0us get_max=3ms
+raft-obs: tx->1 enq=1 drop=0 sent=1 fail=0 hi=1 rtt_avg=37us get_avg=3074us get_max=3ms
+raft-obs: tx->2 enq=18537 drop=0 sent=18537 fail=0 hi=1 rtt_avg=28us get_avg=0us get_max=3ms
+total 159832
+-rw------- 1 erbmi1 erbmi1     46456 Sep 29 23:09 efsd.data
+-rw------- 1 erbmi1 erbmi1    843956 Sep 29 13:39 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1 162769246 Sep 29 13:39 fuse.strace
+efs-rec: end 2026-09-30T03:25:41Z rc=0

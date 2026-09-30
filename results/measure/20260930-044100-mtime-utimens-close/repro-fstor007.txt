@@ -1,0 +1,27 @@
+-----
+efs-rec: start 2026-09-30T04:41:03Z pid=1495530 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; scp -q ~/efs-runs/mtime_repro.py fstor007.ib:/tmp/mtime_repro.py 2>/dev/null || EFS_SSH_TIMEOUT=10 "$S" fstor007.ib "cat > /tmp/mtime_repro.py" < ~/efs-runs/mtime_repro.py; EFS_SSH_TIMEOUT=60 "$S" fstor007.ib "set -e; pgrep -x efs-fuse >/dev/null && { echo CLIENT_ALREADY_UP; exit 3; }; cd /tmp/efs && rm -f fuse.log && (EFS_TRANSPORT=rdma setsid ./efs-fuse 172.16.223.57:19810 efs-test /tmp/efs-mount >fuse.log 2>&1 </dev/null &); for i in \$(seq 1 40); do [ \"\$(findmnt -no FSTYPE /tmp/efs-mount)\" = fuse.efs-fuse ] && stat /tmp/efs-mount/ >/dev/null 2>&1 && break; sleep 0.25; done; findmnt -no FSTYPE /tmp/efs-mount; echo FUSE_OK; python3 /tmp/mtime_repro.py /tmp/efs-mount/measure/mtime-repro; echo --- local xfs control; python3 /tmp/mtime_repro.py /tmp/mtime-repro-local | head -6; rm -rf /tmp/mtime-repro-local; echo --- stop client; killall -9 efs-fuse; sleep 0.3; timeout 3 fusermount3 -uz /tmp/efs-mount; pgrep -x efs-fuse | wc -l; grep -cE \"exhausted|EIO\" fuse.log || true"
+fuse.efs-fuse
+FUSE_OK
+ecopy-order                      write=1790743264.604660080 futimens=1380661863.000000000 close=1790743264.609469082 rename=1380661863.000000000  -> final 1380661863.000000000 OK
+ecopy-order-nosleep-stat         write=1790743264.617995124 futimens=1380661863.000000000 close=1790743264.619220088  -> final 1790743264.619220088 WRONG
+rsync-order                      write=1790743264.621574996 close=1790743264.622100992 utimens=1380661863.000000000  -> final 1380661863.000000000 OK
+fsync-between                    write=1790743264.625240327 futimens=1380661863.000000000 fsync=1380661863.000000000 close=1790743264.626291254  -> final 1790743264.626291254 WRONG
+futimens-then-write              futimens=1380661863.000000000 write=1790743264.629666674 close=1790743264.633972247  -> final 1790743264.633972247 WRONG
+after 1 s:
+  ecopy-order.final            1380661863.000000000
+  ecopy-order-nosleep-stat     1790743264.619220088
+  rsync-order                  1380661863.000000000
+  fsync-between                1790743264.626291254
+  futimens-then-write          1790743264.633972247
+--- local xfs control
+ecopy-order                      write=1790743265.652845295 futimens=1380661863.000000000 close=1380661863.000000000 rename=1380661863.000000000  -> final 1380661863.000000000 OK
+ecopy-order-nosleep-stat         write=1790743265.652845295 futimens=1380661863.000000000 close=1380661863.000000000  -> final 1380661863.000000000 OK
+rsync-order                      write=1790743265.652845295 close=1790743265.652845295 utimens=1380661863.000000000  -> final 1380661863.000000000 OK
+fsync-between                    write=1790743265.652845295 futimens=1380661863.000000000 fsync=1380661863.000000000 close=1380661863.000000000  -> final 1380661863.000000000 OK
+futimens-then-write              futimens=1380661863.000000000 write=1790743265.652845295 close=1790743265.652845295  -> final 1790743265.652845295 WRONG
+after 1 s:
+--- stop client
+0
+0
+efs-rec: end 2026-09-30T04:41:07Z rc=0

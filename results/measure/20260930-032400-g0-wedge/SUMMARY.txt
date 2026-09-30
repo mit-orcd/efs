@@ -1,0 +1,64 @@
+Sep 30 03:16-03:19Z: rsync from fstor007 froze. Group 0 reads on the two
+followers returned BUSY for 10 s per op (16 retries x 400 ms apply-wait).
+
+Client (fuse-and-strace-tails.txt, rsync-long-syscalls.txt)
+  fuse.log: inode-rpc: shard=2761 type=43 (LOOKUP) exhausted 16 BUSY/STALE
+  retries (10.3 s) -> EBUSY  x6; shard=0 type=47 (GETATTR) x5.
+  rsync generator: newfstatat = ENOENT after 16.76 s, five in a row
+  (23:16:51, 23:17:24, 23:17:58, 23:18:14, 23:18:48 local); ^C at 23:18:45.
+  Servers: no election, no term change (g0 term 41, g2 term 261), fsync
+  fine, wait_timeouts 80 (fcstor004) / 112 (fcstor003), 0 on fcstor005.
+  fcstor003/004 efsd.log: raft-host: apply-sleep us=400030 group=0
+  idx=437638 applied=437637, repeating.
+
+Raft state (gdb-raft-state.txt, raft-status.txt, raft-log-tails.txt)
+  leader fcstor005 (id 2) g0: commit=437638 applied=437638
+    next_index={437638, 437639, 437638} match_index={437637, 437638, 437638}
+    ae_capped=1 send_idx=437637 durable_idx=437638 read_index=437638
+  follower fcstor003 (id 0): commit=applied=last_i=437637, log mtime 23:09
+    boot last_i 437635 (send_idx/durable_idx 437635 from attach_group).
+  follower fcstor004 (id 1): commit=applied=last_i=437637; its log has a
+    437638 record followed by a TRUNC (the stale tail from before the
+    restart; boot last_i was 437638, see send_idx=437638).
+  Entry 437638 on the leader is the term-41 no-op (empty). Neither
+  follower has it.
+
+Cause (src/raft/raft.c)
+  1. attach_group arms send_idx = durable_idx = replayed last_i (437637 on
+     fcstor005). become_leader appends the no-op with append_local and
+     never advances send_idx (only efs_raft_propose / efs_raft_submit do).
+     send_ae caps every batch at send_idx, so the no-op at 437638 is
+     never shipped: every AppendEntries to both followers is empty with
+     prev_index 437637 and leader_commit 437638; the follower caps its
+     commit at its own last_i 437637.
+  2. on_ae_req answers success with match_index = the follower's last_i,
+     not prev_index + nentries. fcstor004 had a stale 437638 (term 34,
+     never committed) and answered the empty heartbeat with match 437638.
+     The leader took it (on_ae_rep: match_index[1] = 437638), and when
+     durable_idx reached 437638 (23:16Z, the group-2 UTIMENS released the
+     fsync hold and host_durable_synced covered g0) try_commit found
+     {self, fcstor004} for an entry fcstor004 does not hold. That is a
+     false commit. The next heartbeat (prev 437638 term 41) made
+     fcstor004 truncate its stale entry (TRUNC record) and reject; the
+     leader lowered next_index to 437638 but match_index is never
+     lowered, so the following success reply set next_index back to
+     437639: a reject/accept ping-pong on every heartbeat since.
+  Every ReadIndex from a follower now waits for 437638 and times out
+  after 400 ms -> BUSY -> client EBUSY/ENOENT. The leader's own reads
+  are fine (wait_timeouts=0). A group-0 write would unwedge it (submit
+  advances send_idx past the no-op, both entries ship) but the false
+  commit stays possible on every term change.
+
+Fix (standard Raft, no design decision)
+  a. on_ae_req success reply: m.match_index = in->prev_index +
+     in->nentries. Rejections keep last_i as the next_index hint.
+  b. become_leader / maybe_append_cold / efs_raft_change: after
+     append_local, if (ae_capped && last_i > send_idx) send_idx = last_i,
+     as efs_raft_propose does.
+  Regression: tests/test_raft.c case with a follower holding a stale
+  uncommitted tail at the new leader's no-op index; the leader must ship
+  the no-op and must not commit it on that follower's reply.
+
+Not the cause: the user's client perf (4141 samples, efs_rdma_recv_wait
+4.3 %, forget_ino_on_tab 3.2 % from the 1M-entry ecrawl), fsync, the
+compactor, RDMA link (rtt_avg 30 us, drop=0 on every lane).

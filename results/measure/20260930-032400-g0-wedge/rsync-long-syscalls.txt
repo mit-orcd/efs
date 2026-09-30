@@ -1,0 +1,47 @@
+-----
+efs-rec: start 2026-09-30T03:25:36Z pid=4172438 host=login007
+efs-rec: cmd cd ~/orcd/scratch/efs/perf/efs-mount; echo "== rsync syscalls >= 0.5 s"; awk "match(\$0,/<([0-9]+\\.[0-9]+)>\$/,m){ if (m[1]+0>=0.5) print }" rsync.strace.txt | head -40; echo "== count by second of syscalls >=0.5s"; awk "match(\$0,/<([0-9]+\\.[0-9]+)>\$/,m){ if (m[1]+0>=0.5) print substr(\$2,1,8)}" rsync.strace.txt | sort | uniq -c | head -40; echo "== last 30 syscalls before 23:17:30 of generator 371638"; grep "^371638 23:17:2" rsync.strace.txt | tail -30
+== rsync syscalls >= 0.5 s
+371637 23:16:43.377966 <... pselect6 resumed>) = 1 (in [5], left {tv_sec=58, tv_nsec=763564301}) <1.236445>
+371639 23:16:43.732735 <... pselect6 resumed>) = 1 (in [0], left {tv_sec=58, tv_nsec=412122339}) <1.587889>
+371637 23:16:44.614281 <... pselect6 resumed>) = 1 (in [5], left {tv_sec=59, tv_nsec=118471284}) <0.881549>
+371639 23:16:44.897231 <... pselect6 resumed>) = 1 (in [0], left {tv_sec=58, tv_nsec=848450094}) <1.151569>
+371637 23:16:45.972480 <... pselect6 resumed>) = 1 (in [5], left {tv_sec=59, tv_nsec=320912405}) <0.679099>
+371639 23:16:46.061342 <... pselect6 resumed>) = 1 (in [0], left {tv_sec=59, tv_nsec=232349303}) <0.767656>
+371637 23:16:47.092654 <... pselect6 resumed>) = 1 (in [5], left {tv_sec=59, tv_nsec=463726816}) <0.536284>
+371639 23:16:47.168722 <... pselect6 resumed>) = 1 (in [0], left {tv_sec=59, tv_nsec=388069298}) <0.611942>
+371637 23:16:47.873544 <... pselect6 resumed>) = 1 (in [5], left {tv_sec=59, tv_nsec=295188321}) <0.704823>
+371639 23:16:48.090934 <... pselect6 resumed>) = 1 (in [0], left {tv_sec=59, tv_nsec=78033013}) <0.921977>
+371637 23:16:49.194882 <... pselect6 resumed>) = 1 (in [5], left {tv_sec=59, tv_nsec=74982087}) <0.925026>
+371639 23:16:49.308699 <... pselect6 resumed>) = 1 (in [0], left {tv_sec=58, tv_nsec=961364701}) <1.038648>
+371637 23:16:50.403150 <... pselect6 resumed>) = 1 (in [5], left {tv_sec=59, tv_nsec=107019983}) <0.892988>
+371639 23:16:50.479974 <... pselect6 resumed>) = 1 (in [0], left {tv_sec=59, tv_nsec=30374204}) <0.969639>
+371638 23:16:51.160454 newfstatat(AT_FDCWD, "efs-wt-495/results/posix/20260828-193119/compare-fcstor007-0.txt", 0x7ffc0305d800, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory) <33.531697>
+371638 23:17:24.692254 newfstatat(AT_FDCWD, "efs-wt-495/results/posix/20260828-192933", 0x7ffc0305e860, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory) <16.755934>
+371639 23:17:50.707431 <... pselect6 resumed>) = 0 (Timeout) <60.000308>
+371637 23:17:50.767005 <... pselect6 resumed>) = 0 (Timeout) <60.060054>
+371638 23:17:58.204095 <... newfstatat resumed>0x7ffc0305d800, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory) <16.755695>
+371638 23:17:58.204179 newfstatat(AT_FDCWD, "efs-wt-495/results/posix/20260828-193119/compare-fcstor007-2.txt", 0x7ffc0305d800, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory) <16.755967>
+371638 23:18:14.960227 newfstatat(AT_FDCWD, "efs-wt-495/results/posix/20260828-193119/compare-fcstor007-3.txt", 0x7ffc0305d800, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory) <16.755960>
+371637 23:18:45.052822 <... pselect6 resumed>) = ? ERESTARTNOHAND (To be restarted if no handler) <54.285704>
+371639 23:18:45.052888 <... pselect6 resumed>) = ? ERESTARTNOHAND (To be restarted if no handler) <54.345340>
+371638 23:18:48.471611 <... newfstatat resumed>0x7ffc0305d800, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory) <16.755229>
+== count by second of syscalls >=0.5s
+      2 23:16:43
+      2 23:16:44
+      1 23:16:45
+      1 23:16:46
+      3 23:16:47
+      1 23:16:48
+      2 23:16:49
+      2 23:16:50
+      1 23:16:51
+      1 23:17:24
+      2 23:17:50
+      2 23:17:58
+      1 23:18:14
+      2 23:18:45
+      1 23:18:48
+== last 30 syscalls before 23:17:30 of generator 371638
+371638 23:17:24.692254 newfstatat(AT_FDCWD, "efs-wt-495/results/posix/20260828-192933", 0x7ffc0305e860, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory) <16.755934>
+efs-rec: end 2026-09-30T03:25:36Z rc=0

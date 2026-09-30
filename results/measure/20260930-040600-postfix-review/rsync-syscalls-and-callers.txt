@@ -1,0 +1,96 @@
+-----
+efs-rec: start 2026-09-30T04:14:22Z pid=737295 host=login007
+efs-rec: cmd cd ~/orcd/scratch/efs/perf/efs-mount; echo -- ecopy mismatch text; grep -m3 -oE "verification metadata mis[^\"]*" ecopy.strace.txt; grep -c "verification metadata" ecopy.strace.txt; echo -- ecopy final progress; grep "write(1," ecopy.strace.txt | tail -1 | cut -c1-260; echo -- ecopy exit; tail -3 ecopy.strace.txt | cut -c1-160; echo -- rsync tail; tail -4 rsync.strace.txt | cut -c1-200; echo -- rsync per-syscall all pids; grep -oE "^[0-9]+ [0-9:.]+ [a-z_0-9]+\(.*<[0-9.]+>$" rsync.strace.txt | awk "{n=\$3; sub(/\(.*/,\"\",n); d=\$NF; gsub(/[<>]/,\"\",d); c[n]++; t[n]+=d; if(d>m[n])m[n]=d} END{for(k in c) if(t[k]>0.05) printf \"%-14s %7d %9.3fs max %7.3fs\n\", k, c[k], t[k], m[k]}" | sort -k3 -rn | head -14; echo -- rsync mkdir/open/rename timeline per 10s; grep -E "^[0-9]+ [0-9:.]+ (mkdir|openat|rename|utimensat|chmod|lchown|fchmod|close)\(" rsync.strace.txt | awk "{print substr(\$2,1,5)}" | uniq -c | head -20; echo -- callers memmove; grep -n -A14 "__memmove_avx512_unaligned_erms" callers.txt | head -60
+-- ecopy mismatch text
+verification metadata mis
+verification metadata mis
+verification metadata mis
+153
+-- ecopy final progress
+380679 00:05:11.325386 write(1, "\r\33[2K22.42 GiB payload, 25.12 Ki"..., 143) = 143 <0.000037>
+-- ecopy exit
+380679 00:05:11.364990 +++ exited with 130 +++
+380684 00:05:11.905118 <... pread64 resumed> <unfinished ...>) = ?
+380684 00:05:11.905236 +++ exited with 130 +++
+-- rsync tail
+380259 00:03:26.545564 +++ exited with 20 +++
+380260 00:03:26.553347 <... clock_nanosleep resumed>0x7ffcd6bf4ef0) = 0 <0.100081>
+380260 00:03:26.553389 exit_group(19)   = ?
+380260 00:03:26.553784 +++ exited with 19 +++
+-- rsync per-syscall all pids
+rename            3103    19.208s max   0.036s
+newfstatat       27347     9.060s max   0.009s
+openat           13281     8.020s max   0.009s
+close            10379     3.538s max   0.015s
+utimensat         2824     2.962s max   0.009s
+chmod             3265     1.598s max   0.002s
+fchmod            3537     0.218s max   0.002s
+write            13564     0.168s max   0.000s
+getdents64        2340     0.091s max   0.015s
+read              5448     0.066s max   0.002s
+mkdir               21     0.053s max   0.009s
+-- rsync mkdir/open/rename timeline per 10s
+  18483 00:02
+  24813 00:03
+-- callers memmove
+166:    31.66%    27.08%  [.] __memmove_avx512_unaligned_erms
+167-            |          
+168:             --30.69%--__memmove_avx512_unaligned_erms
+169-                       |          
+170-                        --6.84%--efs_rdma_send_frame
+171-                                  |          
+172-                                   --6.84%--efs_conn_send_msg_parts
+173-                                             put_fragments_parallel_once
+174-                                             efs_client_put_fragments_parallel
+175-                                             |          
+176-                                              --6.83%--dcache_put_now.constprop.0
+177-                                                        |          
+178-                                                         --6.41%--dcache_flush_slot_inner.constprop.0
+179-                                                                   |          
+180-                                                                   |--4.26%--efs_dcache_maybe_reclaim
+181-                                                                   |          ll_write_buf
+182-                                                                   |          0x7f74a05850f8
+--
+939:                        --3.88%--__memmove_avx512_unaligned_erms
+940-
+941-     4.97%     0.12%  [k] schedule_hrtimeout_range_clock
+942-            |          
+943-             --4.84%--schedule_hrtimeout_range_clock
+944-                       poll_schedule_timeout.constprop.0
+945-                       |          
+946-                        --4.84%--do_poll.constprop.0
+947-                                  do_sys_poll
+948-                                  __x64_sys_poll
+949-                                  do_syscall_64
+950-                                  entry_SYSCALL_64_after_hwframe
+951-                                  __poll
+952-                                  |          
+953-                                  |--2.17%--start_thread
+--
+996:                        --3.42%--__memmove_avx512_unaligned_erms
+997-
+998-     4.26%     0.10%  [k] do_user_addr_fault
+999-            |          
+1000-             --4.17%--do_user_addr_fault
+1001-                       exc_page_fault
+1002-                       asm_exc_page_fault
+1003-                       |          
+1004:                        --3.30%--__memmove_avx512_unaligned_erms
+1005-
+1006-     4.25%     3.92%  [.] xor_into
+1007-            |          
+1008-             --4.15%--xor_into
+1009-                       |          
+1010-                        --4.14%--efs_encode_chunk
+1011-                                  dcache_put_now.constprop.0
+1012-                                  |          
+1013-                                  |--3.19%--dcache_flush_slot_inner.constprop.0
+1014-                                  |          |          
+1015-                                  |          |--2.13%--efs_dcache_maybe_reclaim
+1016-                                  |          |          ll_write_buf
+1017-                                  |          |          0x7f74a05850f8
+1018-                                  |          |          
+--
+1091:                                   --2.90%--__memmove_avx512_unaligned_erms
+1092-
+efs-rec: end 2026-09-30T04:14:23Z rc=0

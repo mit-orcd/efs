@@ -1,0 +1,45 @@
+-----
+efs-rec: start 2026-09-30T03:27:53Z pid=28062 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; for n in 3 4 5; do echo "=== fcstor00$n"; EFS_SSH_TIMEOUT=20 "$S" fcstor00$n.ib "ls -la /data1/01/efs/mdraft/log/; for f in /data1/01/efs/mdraft/log/*; do echo -- \$f; python3 ~/git/efs/tests/tools/raft_log_tail.py \$f 65536 2>&1 | tail -15; done; xxd /data1/01/efs/mdraft/applied.0"; done
+=== fcstor003
+total 104720
+drwxr-xr-x 2 erbmi1 erbmi1        22 Sep 29 13:04 .
+drwxr-xr-x 4 erbmi1 erbmi1        80 Sep 29 13:36 ..
+-rw-r--r-- 1 erbmi1 erbmi1 107225977 Sep 29 23:09 raft.log
+-- /data1/01/efs/mdraft/log/raft.log
+file /data1/01/efs/mdraft/log/raft.log size 107225977, parsed 65536 bytes from offset 107160441, records {'ENTRY': 169, 'HARD': 8}
+group 0: 169 entries, index 437469..437637
+  GC_ACK                     168   99.4%
+  empty                        1    0.6%
+00000000: 0000 0000 0006 ad85 ffff ffff fff9 527a  ..............Rz
+=== fcstor004
+total 209764
+drwxr-xr-x 2 erbmi1 erbmi1        30 Sep 29 13:04 .
+drwxr-xr-x 4 erbmi1 erbmi1       101 Sep 29 13:36 ..
+-rw-r--r-- 1 erbmi1 erbmi1 214791991 Sep 29 23:16 raft.log
+-- /data1/01/efs/mdraft/log/raft.log
+file /data1/01/efs/mdraft/log/raft.log size 214791991, parsed 65536 bytes from offset 214726455, records {'ENTRY': 171, 'HARD': 12, 'TRUNC': 1}
+group 0: 85 entries, index 437554..437638
+  GC_ACK                      83   97.6%
+  empty                        2    2.4%
+group 2: 86 entries, index 436850..436935
+  GC_ACK                      84   97.7%
+  empty                        1    1.2%
+  UTIMENS                      1    1.2%
+00000000: 0000 0000 0006 ad85 ffff ffff fff9 527a  ..............Rz
+=== fcstor005
+total 209764
+drwxr-xr-x 2 erbmi1 erbmi1        30 Sep 29 13:04 .
+drwxr-xr-x 4 erbmi1 erbmi1       101 Sep 29 13:36 ..
+-rw-r--r-- 1 erbmi1 erbmi1 214791595 Sep 29 23:16 raft.log
+-- /data1/01/efs/mdraft/log/raft.log
+file /data1/01/efs/mdraft/log/raft.log size 214791595, parsed 65536 bytes from offset 214726059, records {'ENTRY': 171, 'HARD': 11}
+group 0: 85 entries, index 437554..437638
+  GC_ACK                      83   97.6%
+  empty                        2    2.4%
+group 2: 86 entries, index 436850..436935
+  GC_ACK                      84   97.7%
+  empty                        1    1.2%
+  UTIMENS                      1    1.2%
+00000000: 0000 0000 0006 ad86 ffff ffff fff9 5279  ..............Ry
+efs-rec: end 2026-09-30T03:27:54Z rc=0

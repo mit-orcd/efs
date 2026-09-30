@@ -1,0 +1,177 @@
+-----
+efs-rec: start 2026-09-30T04:08:10Z pid=640557 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; EFS_SSH_TIMEOUT=20 "$S" fstor007.ib "date -u; echo fuse=\$(pgrep -x efs-fuse | wc -l) perf=\$(pgrep -x perf | wc -l) strace=\$(pgrep -x strace | wc -l); findmnt -no FSTYPE /tmp/efs-mount; ls -la /tmp/efs-fuse-efs-mount.log; awk \"/efs-fuse daemon pid=378525/{f=1} f\" /tmp/efs-fuse-efs-mount.log | grep -vE \"^  node|^Discovered|^fetching|^meta|^export|^fuse serving|^efs: RDMA\" | sort | uniq -c | sort -rn | head -30"; echo --- servers; for h in fcstor003 fcstor004 fcstor005 fcstor006; do EFS_SSH_TIMEOUT=15 "$S" $h.ib "echo == \$(hostname -s); cd /tmp/efs; grep -c apply-sleep efsd.log; grep raft-obs efsd.log | grep wait_timeouts | tail -1; grep \"tx->\" efsd.log | tail -3; grep -vE \"raft-obs|^  node\" efsd.log | tail -5; ./efs-mgmt raft-status \$(hostname -i | awk \"{print \\\$1}\"):19810 2>/dev/null | grep hosted=1"; done
+Wed Sep 30 04:08:10 UTC 2026
+fuse=0 perf=0 strace=0
+-rw-r--r-- 1 erbmi1 erbmi1 312599 Sep 30 00:06 /tmp/efs-fuse-efs-mount.log
+     21 inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      8 inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      6 inode-rpc: retry type=43 attempt=11 why=no-hint from=2
+      5 inode-rpc: shard=324 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      5 inode-rpc: shard=1927 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      5 inode-rpc: retry type=43 attempt=4 why=no-hint from=3
+      5 inode-rpc: retry type=43 attempt=3 why=no-hint from=2
+      5 inode-rpc: retry type=43 attempt=15 why=no-hint from=3
+      5 inode-rpc: retry type=43 attempt=10 why=no-hint from=3
+      4 inode-rpc: retry type=43 attempt=7 why=no-hint from=2
+      4 inode-rpc: retry type=43 attempt=6 why=no-hint from=3
+      4 inode-rpc: retry type=43 attempt=2 why=no-hint from=2
+      4 inode-rpc: retry type=43 attempt=15 why=no-hint from=2
+      4 inode-rpc: retry type=43 attempt=14 why=no-hint from=2
+      4 inode-rpc: retry type=43 attempt=1 why=no-hint from=2
+      3 inode-rpc: shard=3318 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      3 inode-rpc: shard=197 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      3 inode-rpc: shard=1453 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      3 inode-rpc: retry type=63 attempt=0 why=no-hint from=1
+      3 inode-rpc: retry type=43 attempt=7 why=no-hint from=3
+      3 inode-rpc: retry type=43 attempt=6 why=no-hint from=2
+      3 inode-rpc: retry type=43 attempt=13 why=no-hint from=3
+      3 inode-rpc: retry type=43 attempt=12 why=no-hint from=3
+      3 inode-rpc: retry type=43 attempt=0 why=no-hint from=2
+      2 inode-rpc: shard=4076 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      2 inode-rpc: shard=1088 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+      2 inode-rpc: retry type=63 attempt=13 why=no-hint from=2
+      2 inode-rpc: retry type=43 attempt=9 why=no-hint from=2
+      2 inode-rpc: retry type=43 attempt=8 why=no-hint from=3
+      2 inode-rpc: retry type=43 attempt=8 why=no-hint from=2
+--- servers
+== fcstor003
+8
+raft-obs: wait_timeouts=0 pump_hold_max=54us lock_wait_max=1us drain_max=54us tick_max=9us apply_max=50us persist_max=512us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1331us pub_max=0us
+raft-obs: tx->2 enq=62949 drop=0 sent=62753 fail=3 hi=357 rtt_avg=510us get_avg=19us get_max=1223ms
+raft-obs: tx->1 enq=62751 drop=0 sent=62585 fail=3 hi=275 rtt_avg=992us get_avg=10us get_max=660ms
+raft-obs: tx->2 enq=63053 drop=0 sent=62858 fail=3 hi=357 rtt_avg=510us get_avg=19us get_max=1223ms
+kv-compact: start l0=90 inputs=2 range=369 l0only=1
+kv-compact: end bytes=39132 ms=1 l0=89 l1=143 rc=0
+kv-compact: start l0=89 inputs=2 range=425 l0only=1
+kv-compact: end bytes=1189 ms=1 l0=88 l1=143 rc=0
+raft-host: applied session index=458878 kind=9 shard=0 ino=37033
+== fcstor004
+1389
+raft-obs: wait_timeouts=1290 pump_hold_max=313us lock_wait_max=1us drain_max=313us tick_max=5us apply_max=49us persist_max=501us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=6118us pub_max=0us
+raft-obs: tx->0 enq=62618 drop=0 sent=53230 fail=0 hi=1 rtt_avg=29us get_avg=0us get_max=3ms
+raft-obs: tx->2 enq=90018 drop=0 sent=75990 fail=7 hi=649 rtt_avg=2409us get_avg=8us get_max=589ms
+raft-obs: tx->3 enq=87404 drop=0 sent=86682 fail=3 hi=2048 rtt_avg=401us get_avg=8us get_max=743ms
+raft-host: applied session index=464836 kind=9 shard=0 ino=16772
+raft-host: applied session index=458878 kind=9 shard=0 ino=37033
+raft-host: applied session index=464837 kind=9 shard=0 ino=54336
+raft-host: applied session index=464838 kind=9 shard=0 ino=101352
+raft-host: apply-sleep us=400055 group=2 idx=464876 applied=464875
+== fcstor005
+61
+raft-obs: wait_timeouts=57 pump_hold_max=2677us lock_wait_max=1us drain_max=2677us tick_max=4us apply_max=53us persist_max=493us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=54860us pub_max=0us
+raft-obs: tx->0 enq=63100 drop=0 sent=55262 fail=0 hi=3 rtt_avg=30us get_avg=0us get_max=12ms
+raft-obs: tx->1 enq=89936 drop=0 sent=77989 fail=3 hi=247 rtt_avg=1209us get_avg=0us get_max=3ms
+raft-obs: tx->3 enq=2362 drop=0 sent=1766 fail=0 hi=3 rtt_avg=29us get_avg=2us get_max=3ms
+kv-compact: end bytes=287 ms=1 l0=170 l1=271 rc=0
+raft-host: applied session index=458878 kind=9 shard=0 ino=37033
+raft-host: applied session index=464836 kind=9 shard=0 ino=16772
+raft-host: applied session index=464837 kind=9 shard=0 ino=54336
+raft-host: applied session index=464838 kind=9 shard=0 ino=101352
+== fcstor006
+10
+raft-obs: wait_timeouts=4 pump_hold_max=298us lock_wait_max=1us drain_max=3us tick_max=298us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+raft-obs: tx->2 enq=2955 drop=0 sent=2292 fail=10 hi=625 rtt_avg=92389us get_avg=9us get_max=3ms
+raft-obs: tx->1 enq=87577 drop=0 sent=64550 fail=9 hi=545 rtt_avg=2833us get_avg=0us get_max=3ms
+raft-obs: tx->2 enq=2961 drop=0 sent=2333 fail=12 hi=625 rtt_avg=103712us get_avg=10us get_max=3ms
+raft-host: read-sleep us=400036 group=2 want=464766 read_idx=464766 applied=464766 pending=1
+raft-host: read-sleep us=190487 group=2 want=464766 read_idx=464766 applied=464766 pending=1
+raft-host: apply-sleep us=400046 group=2 idx=464789 applied=464766
+raft-host: read-sleep us=174130 group=2 want=464766 read_idx=464766 applied=464766 pending=1
+raft-host: apply-sleep us=400044 group=2 idx=464791 applied=464766
+efs-rec: end 2026-09-30T04:08:11Z rc=1
+-----
+efs-rec: start 2026-09-30T04:10:00Z pid=674746 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; EFS_SSH_TIMEOUT=20 "$S" fstor007.ib "awk \"/efs-fuse daemon pid=378525/{f=1} f\" /tmp/efs-fuse-efs-mount.log | grep -nE \"exhausted|report|fsync|EIO|error|warn|adopt|split\" | head -60; echo -- total lines; awk \"/efs-fuse daemon pid=378525/{f=1} f\" /tmp/efs-fuse-efs-mount.log | wc -l"; cd ~/orcd/scratch/efs/perf/efs-mount; echo -- ecopy stderr/stdout writes; grep -E "write\(2," ecopy.strace.txt | head -20; grep -E "write\(1," ecopy.strace.txt | tail -6; echo -- ENOENT/EEXIST; grep -E "ENOENT|EEXIST" ecopy.strace.txt | grep efs-mount | head; echo -- slow-call time histogram; grep -oE "efs-mount.*<[0-9]+\.[0-9]+>$" ecopy.strace.txt | grep -oE "<[0-9]+\.[0-9]+>$" | tr -d "<>" | awk "{ if(\$1<0.01)a++; else if(\$1<0.1)b++; else if(\$1<1)c++; else if(\$1<10)d++; else if(\$1<20)e++; else f++ } END{print \"<10ms\",a,\"<100ms\",b,\"<1s\",c,\"<10s\",d,\"<20s\",e,\">=20s\",f}"; echo -- slow-call start times; grep -E "efs-mount.*<[1-9][0-9]*\.[0-9]+>$" ecopy.strace.txt | awk "{print substr(\$2,1,7)}" | sort | uniq -c
+30:inode-rpc: shard=4076 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+31:inode-rpc: shard=911 type=63 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+32:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+33:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+34:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+35:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+36:inode-rpc: shard=2345 type=63 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+37:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+38:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+39:inode-rpc: shard=3170 type=63 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+40:inode-rpc: shard=2262 type=63 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+42:inode-rpc: shard=1679 type=63 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+44:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+45:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+46:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+49:inode-rpc: shard=1453 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+50:inode-rpc: shard=3318 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+51:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+52:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+53:inode-rpc: shard=1088 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+54:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+55:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+56:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+57:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+60:inode-rpc: shard=1927 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+61:inode-rpc: shard=197 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+62:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+65:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+66:inode-rpc: shard=1927 type=63 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+67:inode-rpc: shard=1927 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+68:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+69:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+75:inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+97:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+98:inode-rpc: shard=4076 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+103:inode-rpc: shard=1453 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+108:inode-rpc: shard=3318 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+109:inode-rpc: shard=1927 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+110:inode-rpc: shard=197 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+111:inode-rpc: shard=1088 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+123:inode-rpc: shard=1927 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+127:inode-rpc: shard=324 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+128:inode-rpc: shard=324 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+137:inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+140:inode-rpc: shard=324 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+146:inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+153:inode-rpc: shard=1453 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+156:inode-rpc: shard=3318 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+157:inode-rpc: shard=197 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+160:inode-rpc: shard=1927 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+166:inode-rpc: shard=324 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+168:inode-rpc: shard=324 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+169:inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+170:inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+171:inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+172:inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+173:inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+174:inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+-- total lines
+175
+-- ecopy stderr/stdout writes
+380680 00:03:51.830927 write(2, "ecopy: verification metadata mis"..., 91 <unfinished ...>
+380681 00:03:51.836129 write(2, "ecopy: verification metadata mis"..., 106) = 106 <0.000021>
+380682 00:03:51.866766 write(2, "ecopy: verification metadata mis"..., 107 <unfinished ...>
+380683 00:03:51.867549 write(2, "ecopy: verification metadata mis"..., 81 <unfinished ...>
+380684 00:03:51.867839 write(2, "ecopy: verification metadata mis"..., 107 <unfinished ...>
+380685 00:03:51.892586 write(2, "ecopy: verification metadata mis"..., 98 <unfinished ...>
+380686 00:03:51.892693 write(2, "ecopy: verification metadata mis"..., 103 <unfinished ...>
+380687 00:03:51.922363 write(2, "ecopy: verification metadata mis"..., 99 <unfinished ...>
+380691 00:03:51.929030 write(2, "ecopy: verification metadata mis"..., 94) = 94 <0.000015>
+380688 00:03:51.929663 write(2, "ecopy: verification metadata mis"..., 109 <unfinished ...>
+380690 00:03:51.930210 write(2, "ecopy: verification metadata mis"..., 104 <unfinished ...>
+380689 00:03:51.931484 write(2, "ecopy: verification metadata mis"..., 107) = 107 <0.000014>
+380692 00:03:51.934387 write(2, "ecopy: verification metadata mis"..., 107 <unfinished ...>
+380693 00:03:51.940486 write(2, "ecopy: verification metadata mis"..., 98 <unfinished ...>
+380694 00:03:51.940865 write(2, "ecopy: verification metadata mis"..., 100 <unfinished ...>
+380695 00:03:51.941855 write(2, "ecopy: verification metadata mis"..., 84 <unfinished ...>
+380680 00:03:51.973280 write(2, "ecopy: verification metadata mis"..., 107 <unfinished ...>
+380684 00:03:51.975234 write(2, "ecopy: verification metadata mis"..., 99) = 99 <0.000014>
+380681 00:03:51.976791 write(2, "ecopy: verification metadata mis"..., 99 <unfinished ...>
+380682 00:03:51.983161 write(2, "ecopy: verification metadata mis"..., 99) = 99 <0.000017>
+380679 00:05:10.323450 write(1, "\r\33[2K22.42 GiB payload, 0 B/s, 0"..., 137) = 137 <0.000021>
+380679 00:05:10.523840 write(1, "\r\33[2K22.42 GiB payload, 0 B/s, 0"..., 137) = 137 <0.000021>
+380679 00:05:10.724237 write(1, "\r\33[2K22.42 GiB payload, 0 B/s, 0"..., 137) = 137 <0.000021>
+380679 00:05:10.924637 write(1, "\r\33[2K22.42 GiB payload, 0 B/s, 0"..., 137) = 137 <0.000021>
+380679 00:05:11.125025 write(1, "\r\33[2K22.42 GiB payload, 0 B/s, 0"..., 137) = 137 <0.000021>
+380679 00:05:11.325386 write(1, "\r\33[2K22.42 GiB payload, 25.12 Ki"..., 143) = 143 <0.000037>
+-- ENOENT/EEXIST
+-- slow-call time histogram
+<10ms 19 <100ms  <1s  <10s  <20s  >=20s 
+-- slow-call start times
+efs-rec: end 2026-09-30T04:10:00Z rc=0

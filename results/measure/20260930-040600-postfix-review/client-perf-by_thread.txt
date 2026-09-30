@@ -1,0 +1,40 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 34K of event 'cycles:P'
+# Event count (approx.): 207226543996
+#
+# Overhead  Command   Symbol                                        
+# ........  ........  ..............................................
+#
+    27.08%  efs-fuse  [.] __memmove_avx512_unaligned_erms
+    10.09%  efs-fuse  [.] blake3_hash_many_avx512
+     3.92%  efs-fuse  [.] xor_into
+     2.86%  efs-fuse  [k] memcpy_erms
+     1.69%  efs-fuse  [.] 0x0000000000000b15
+     1.46%  efs-fuse  [.] efs_rdma_recv_wait
+     1.13%  efs-fuse  [k] do_syscall_64
+     1.01%  efs-fuse  [.] recv_poller
+     0.99%  efs-fuse  [k] srso_alias_safe_ret
+     0.96%  efs-fuse  [k] srso_alias_return_thunk
+     0.84%  efs-fuse  [.] __memset_avx512_unaligned_erms
+     0.77%  efs-fuse  [.] forget_ino_on_tab.part.0
+     0.76%  efs-fuse  [k] dequeue_entity
+     0.76%  efs-fuse  [k] fuse_copy_fill
+     0.73%  efs-fuse  [k] gup_pte_range
+     0.69%  efs-fuse  [k] select_task_rq_fair
+     0.67%  efs-fuse  [k] do_sys_poll
+     0.64%  efs-fuse  [.] icnt_get
+     0.62%  efs-fuse  [.] _int_malloc
+     0.60%  efs-fuse  [.] efs_export_forget_ino
+     0.59%  efs-fuse  [k] entry_SYSCALL_64
+     0.58%  efs-fuse  [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.51%  efs-fuse  [k] eventfd_poll
+     0.51%  efs-fuse  [k] fuse_copy_do
+
+
+#
+# (Tip: To trace only single function with Processor Trace use perf record --filter 'filter func @ program' -e intel_pt//u ./program ; perf script --insn-trace)
+#

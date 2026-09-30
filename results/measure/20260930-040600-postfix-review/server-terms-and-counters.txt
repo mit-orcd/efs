@@ -1,0 +1,187 @@
+-----
+efs-rec: start 2026-09-30T04:08:54Z pid=655018 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; for n in 3 4 5 6; do a=$((n+54)); EFS_SSH_TIMEOUT=15 "$S" fcstor00$n.ib "echo == fcstor00$n; cd /tmp/efs; ./efs-mgmt raft-status 172.16.223.$a:19810 | grep hosted=1; grep -E \"g[02] term\" efsd.log | tail -6; echo -- sleeps; grep -c read-sleep efsd.log; grep -c apply-sleep efsd.log; grep -oE \"(apply|read)-sleep us=[0-9]+ group=[0-9]\" efsd.log | sed \"s/us=[0-9]*//\" | sort | uniq -c; echo -- other; grep -vE \"raft-obs|^  node|sleep|kv-compact|applied session\" efsd.log | tail -8; echo -- wait_timeouts progression; grep -o \"wait_timeouts=[0-9]*\" efsd.log | uniq | tr \"\\n\" \" \" | tail -c 400; echo; echo -- obs lines total; grep -c raft-obs efsd.log"; done
+== fcstor003
+  group 0 hosted=1 role=LEADER leader=0 term=90 commit=458992 applied=458992 voters=0x7 joint=0
+raft-obs: g0 term 85->86 role LEADER->FOLLOWER leader=-1 commit=458703 applied=458703 t=1790741124464ms
+raft-obs: g0 term 86->87 role FOLLOWER->FOLLOWER leader=-1 commit=458703 applied=458703 t=1790741125349ms
+raft-obs: g0 term 87->88 role FOLLOWER->FOLLOWER leader=-1 commit=458703 applied=458703 t=1790741126108ms
+raft-obs: g0 term 88->89 role FOLLOWER->FOLLOWER leader=-1 commit=458706 applied=458706 t=1790741126898ms
+raft-obs: g0 term 89->90 role FOLLOWER->CANDIDATE leader=-1 commit=458706 applied=458706 t=1790741127854ms
+raft-obs: g0 term 90->90 role CANDIDATE->LEADER leader=0 commit=458706 applied=458706 t=1790741127855ms
+-- sleeps
+0
+8
+      8 apply-sleep  group=0
+-- other
+raft-host: up raft_id=0 n=4 boot=4351855839501053 salt=1093667739366300878 g0=hosted g2=off
+efsd node 1 listening on 172.16.223.57:19810, storage=/data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs (6 paths, stripe=leastq), used=29355343872, quota=39582418599936, direct_io=on, writers=20 shared, build=06916bc7e5c1-dirty
+efsd: RDMA transport up on mlx5_2 port 1 (lid 2159)
+heartbeat: node 4 (172.16.223.60:19810) unresponsive — marked down for 30s
+efs: RDMA transport up on mlx5_2 port 1 (lid 2159, 36 x 72 KiB bufs/conn)
+raft-host: NOT_PRIMARY without hint from=0x40f475 (addr2line -e efsd)
+raft-host: NOT_PRIMARY without hint from=0x40f475 (addr2line -e efsd)
+raft-host: NOT_PRIMARY without hint from=0x40f475 (addr2line -e efsd)
+-- wait_timeouts progression
+wait_timeouts=0 
+-- obs lines total
+524
+== fcstor004
+  group 0 hosted=1 role=FOLLOWER leader=0 term=90 commit=458992 applied=458992 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=1 term=588 commit=464954 applied=464954 voters=0xe joint=0
+raft-obs: g2 term 572->573 role FOLLOWER->FOLLOWER leader=-1 commit=464925 applied=464925 t=1790741307526ms
+raft-obs: g2 term 573->574 role FOLLOWER->CANDIDATE leader=-1 commit=464925 applied=464925 t=1790741308045ms
+raft-obs: g2 term 574->574 role CANDIDATE->LEADER leader=1 commit=464925 applied=464925 t=1790741308046ms
+raft-obs: g2 term 574->587 role LEADER->FOLLOWER leader=-1 commit=464937 applied=464937 t=1790741318801ms
+raft-obs: g2 term 587->588 role FOLLOWER->CANDIDATE leader=-1 commit=464937 applied=464937 t=1790741319378ms
+raft-obs: g2 term 588->588 role CANDIDATE->LEADER leader=1 commit=464937 applied=464937 t=1790741319379ms
+-- sleeps
+0
+1389
+   1342 apply-sleep  group=0
+     47 apply-sleep  group=2
+-- other
+report-split nrec=96727 pack_ms=846 push_ms=217 finish_ms=201 rc=0
+report-split nrec=2468 pack_ms=25 push_ms=0 finish_ms=123 rc=0
+report-split nrec=1057 pack_ms=12 push_ms=0 finish_ms=19 rc=0
+report-split nrec=1376 pack_ms=14 push_ms=0 finish_ms=27 rc=0
+report-split nrec=454 pack_ms=5 push_ms=0 finish_ms=12 rc=0
+report-split nrec=6656 pack_ms=69 push_ms=36 finish_ms=117 rc=0
+report-split nrec=1567 pack_ms=9 push_ms=0 finish_ms=27 rc=0
+report-split nrec=1020 pack_ms=6 push_ms=0 finish_ms=18 rc=0
+-- wait_timeouts progression
+wait_timeouts=0 wait_timeouts=99 wait_timeouts=311 wait_timeouts=532 wait_timeouts=704 wait_timeouts=863 wait_timeouts=1010 wait_timeouts=1084 wait_timeouts=1116 wait_timeouts=1151 wait_timeouts=1189 wait_timeouts=1234 wait_timeouts=1275 wait_timeouts=1287 wait_timeouts=1288 wait_timeouts=1289 wait_timeouts=1290 
+-- obs lines total
+917
+== fcstor005
+  group 0 hosted=1 role=FOLLOWER leader=0 term=90 commit=458992 applied=458992 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=1 term=588 commit=464954 applied=464954 voters=0xe joint=0
+raft-obs: g2 term 537->547 role FOLLOWER->FOLLOWER leader=-1 commit=464906 applied=464906 t=1790741288548ms
+raft-obs: g2 term 547->548 role FOLLOWER->FOLLOWER leader=-1 commit=464906 applied=464906 t=1790741289123ms
+raft-obs: g2 term 548->574 role FOLLOWER->FOLLOWER leader=-1 commit=464925 applied=464925 t=1790741308045ms
+raft-obs: g2 term 574->576 role FOLLOWER->FOLLOWER leader=-1 commit=464937 applied=464937 t=1790741318753ms
+raft-obs: g2 term 576->587 role FOLLOWER->FOLLOWER leader=-1 commit=464937 applied=464937 t=1790741318756ms
+raft-obs: g2 term 587->588 role FOLLOWER->FOLLOWER leader=-1 commit=464937 applied=464937 t=1790741319378ms
+-- sleeps
+0
+61
+      5 apply-sleep  group=0
+     56 apply-sleep  group=2
+-- other
+report-split nrec=96727 pack_ms=0 push_ms=0 finish_ms=0 rc=-15
+raft-host: NOT_PRIMARY without hint from=0x40e1b8 (addr2line -e efsd)
+report-split nrec=96727 pack_ms=0 push_ms=0 finish_ms=0 rc=-15
+raft-host: NOT_PRIMARY without hint from=0x40e1b8 (addr2line -e efsd)
+report-split nrec=96727 pack_ms=0 push_ms=0 finish_ms=0 rc=-15
+raft-host: NOT_PRIMARY without hint from=0x40e1b8 (addr2line -e efsd)
+report-split nrec=96727 pack_ms=0 push_ms=0 finish_ms=0 rc=-15
+raft-host: NOT_PRIMARY without hint from=0x40e1b8 (addr2line -e efsd)
+-- wait_timeouts progression
+wait_timeouts=0 wait_timeouts=1 wait_timeouts=2 wait_timeouts=7 wait_timeouts=11 wait_timeouts=21 wait_timeouts=25 wait_timeouts=31 wait_timeouts=36 wait_timeouts=43 wait_timeouts=49 wait_timeouts=52 wait_timeouts=54 wait_timeouts=55 wait_timeouts=56 wait_timeouts=57 
+-- obs lines total
+797
+== fcstor006
+  group 2 hosted=1 role=CANDIDATE leader=-1 term=611 commit=464766 applied=464766 voters=0xe joint=0
+raft-obs: g2 term 605->606 role CANDIDATE->CANDIDATE leader=-1 commit=464766 applied=464766 t=1790741331699ms
+raft-obs: g2 term 606->607 role CANDIDATE->CANDIDATE leader=-1 commit=464766 applied=464766 t=1790741332494ms
+raft-obs: g2 term 607->608 role CANDIDATE->CANDIDATE leader=-1 commit=464766 applied=464766 t=1790741333242ms
+raft-obs: g2 term 608->609 role CANDIDATE->CANDIDATE leader=-1 commit=464766 applied=464766 t=1790741334112ms
+raft-obs: g2 term 609->610 role CANDIDATE->CANDIDATE leader=-1 commit=464766 applied=464766 t=1790741334633ms
+raft-obs: g2 term 610->611 role CANDIDATE->CANDIDATE leader=-1 commit=464766 applied=464766 t=1790741335407ms
+-- sleeps
+4
+10
+     10 apply-sleep  group=2
+      4 read-sleep  group=2
+-- other
+efs: RDMA transport up on mlx5_2 port 1 (lid 2160, 36 x 72 KiB bufs/conn)
+Joined cluster with 4 nodes
+Rejoined cluster via 172.16.223.57:19810
+heartbeat: enabled (2000 ms interval)
+raft-host: up raft_id=3 n=4 boot=2920143153441696 salt=11072284039978529961 g0=off g2=hosted
+efsd node 4 listening on 172.16.223.60:19810, storage=/data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs (6 paths, stripe=leastq), used=29291184128, quota=39582418599936, direct_io=on, writers=20 shared, build=06916bc7e5c1-dirty
+efsd: RDMA transport up on mlx5_2 port 1 (lid 2160)
+raft-host: NOT_PRIMARY without hint from=0x40f780 (addr2line -e efsd)
+-- wait_timeouts progression
+wait_timeouts=0 wait_timeouts=1 wait_timeouts=2 wait_timeouts=3 wait_timeouts=4 
+-- obs lines total
+727
+efs-rec: end 2026-09-30T04:08:55Z rc=0
+-----
+efs-rec: start 2026-09-30T04:09:52Z pid=672302 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; EFS_SSH_TIMEOUT=15 "$S" fcstor003.ib "cd /tmp/efs; addr2line -f -e efsd 0x40f475 0x40e1b8 0x40f780 | paste - -"; for n in 3 4 5 6; do EFS_SSH_TIMEOUT=15 "$S" fcstor00$n.ib "echo == fcstor00$n; cd /tmp/efs; grep -E \"g[02] term\" efsd.log | awk \"{t=substr(\\\$NF,3)+0; printf \\\"%s %s %s %s %s %s %s\\n\\\", strftime(\\\"%H:%M:%S\\\", int(t/1000), 1), \\\$2, \\\$4, \\\$6, \\\$7, \\\$8, \\\$9}\" | awk \"{k=\\\$2; c[k]++; if(!(k in f)) f[k]=\\\$1; l[k]=\\\$1} END{for(k in c) print k, c[k], f[k], l[k]}\"; echo -- leader changes; grep -E \"g[02] term\" efsd.log | grep -E \"LEADER\" | awk \"{t=substr(\\\$NF,3)+0; print strftime(\\\"%H:%M:%S\\\", int(t/1000), 1), \\\$2, \\\$3, \\\$4, \\\$5, \\\$6, \\\$7, \\\$8}\" | tail -12; echo -- rdma/peer; grep -iE \"retry counter|peer|QP|reap|unresponsive|conn |rdma.*err|disconnect\" efsd.log | grep -v \"^  node\" | tail -8"; done
+server_handle_conn	/tmp/efs/src/server/handler.c:662
+server_handle_conn	/tmp/efs/src/server/handler.c:839
+server_handle_conn	/tmp/efs/src/server/handler.c:630
+== fcstor003
+g0 63 03:56:35 04:05:27
+-- leader changes
+04:05:08 g0 term 64->65 role LEADER->FOLLOWER leader=-1 commit=458684
+04:05:11 g0 term 69->69 role CANDIDATE->LEADER leader=0 commit=458687
+04:05:12 g0 term 69->70 role LEADER->FOLLOWER leader=-1 commit=458689
+04:05:13 g0 term 71->71 role CANDIDATE->LEADER leader=0 commit=458689
+04:05:13 g0 term 71->72 role LEADER->FOLLOWER leader=-1 commit=458691
+04:05:19 g0 term 80->80 role CANDIDATE->LEADER leader=0 commit=458697
+04:05:20 g0 term 80->81 role LEADER->FOLLOWER leader=-1 commit=458699
+04:05:21 g0 term 83->83 role CANDIDATE->LEADER leader=0 commit=458699
+04:05:22 g0 term 83->84 role LEADER->FOLLOWER leader=-1 commit=458701
+04:05:23 g0 term 85->85 role CANDIDATE->LEADER leader=0 commit=458701
+04:05:24 g0 term 85->86 role LEADER->FOLLOWER leader=-1 commit=458703
+04:05:27 g0 term 90->90 role CANDIDATE->LEADER leader=0 commit=458706
+-- rdma/peer
+Cannot connect to peer 172.16.223.60:19810
+Trying to rejoin via persisted peer 172.16.223.58:19810 (node 2)...
+Cannot connect to peer 172.16.223.58:19810
+Trying to rejoin via persisted peer 172.16.223.59:19810 (node 3)...
+Cannot connect to peer 172.16.223.59:19810
+Could not rejoin any of the 3 persisted peer(s)
+Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+heartbeat: node 4 (172.16.223.60:19810) unresponsive — marked down for 30s
+== fcstor004
+g0 58 03:56:37 04:05:27
+g2 281 03:56:37 04:09:39
+-- leader changes
+04:08:09 g2 term 548->548 role CANDIDATE->LEADER leader=1 commit=464906
+04:08:27 g2 term 548->550 role LEADER->FOLLOWER leader=-1 commit=464925
+04:08:28 g2 term 574->574 role CANDIDATE->LEADER leader=1 commit=464925
+04:08:38 g2 term 574->587 role LEADER->FOLLOWER leader=-1 commit=464937
+04:08:39 g2 term 588->588 role CANDIDATE->LEADER leader=1 commit=464937
+04:08:57 g2 term 588->590 role LEADER->FOLLOWER leader=-1 commit=464956
+04:08:58 g2 term 614->614 role CANDIDATE->LEADER leader=1 commit=464956
+04:09:09 g2 term 614->628 role LEADER->FOLLOWER leader=-1 commit=464967
+04:09:09 g2 term 629->629 role CANDIDATE->LEADER leader=1 commit=464967
+04:09:27 g2 term 629->630 role LEADER->FOLLOWER leader=-1 commit=464986
+04:09:28 g2 term 654->654 role CANDIDATE->LEADER leader=1 commit=464986
+04:09:39 g2 term 654->668 role LEADER->FOLLOWER leader=-1 commit=464997
+-- rdma/peer
+Trying to rejoin via persisted peer 172.16.223.57:19810 (node 1)...
+heartbeat: node 4 (172.16.223.60:19810) unresponsive — marked down for 30s
+== fcstor005
+g0 49 03:56:38 04:05:27
+g2 253 03:56:38 04:09:39
+-- leader changes
+04:03:56 g0 term 46->46 role CANDIDATE->LEADER leader=2 commit=458184
+04:04:54 g0 term 46->47 role LEADER->FOLLOWER leader=-1 commit=458633
+04:06:57 g2 term 492->492 role CANDIDATE->LEADER leader=2 commit=464766
+04:06:59 g2 term 492->493 role LEADER->FOLLOWER leader=-1 commit=464789
+04:09:39 g2 term 669->669 role CANDIDATE->LEADER leader=2 commit=464997
+-- rdma/peer
+Trying to rejoin via persisted peer 172.16.223.57:19810 (node 1)...
+== fcstor006
+g2 426 03:56:39 04:09:39
+-- leader changes
+04:04:55 g2 term 326->326 role CANDIDATE->LEADER leader=3 commit=464746
+04:04:56 g2 term 326->327 role LEADER->FOLLOWER leader=-1 commit=464766
+04:05:26 g2 term 368->368 role CANDIDATE->LEADER leader=3 commit=464766
+04:05:26 g2 term 368->369 role LEADER->FOLLOWER leader=-1 commit=464766
+04:05:37 g2 term 383->383 role CANDIDATE->LEADER leader=3 commit=464766
+04:05:38 g2 term 383->384 role LEADER->FOLLOWER leader=-1 commit=464766
+04:05:56 g2 term 409->409 role CANDIDATE->LEADER leader=3 commit=464766
+04:05:57 g2 term 409->410 role LEADER->FOLLOWER leader=-1 commit=464766
+04:06:07 g2 term 424->424 role CANDIDATE->LEADER leader=3 commit=464766
+04:06:08 g2 term 424->425 role LEADER->FOLLOWER leader=-1 commit=464766
+04:06:37 g2 term 464->464 role CANDIDATE->LEADER leader=3 commit=464766
+04:06:38 g2 term 464->465 role LEADER->FOLLOWER leader=-1 commit=464766
+-- rdma/peer
+Trying to rejoin via persisted peer 172.16.223.57:19810 (node 1)...
+efs-rec: end 2026-09-30T04:09:53Z rc=0

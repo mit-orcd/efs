@@ -396,6 +396,19 @@ static int append_local(struct efs_raft *r, uint64_t term, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* append_local does not move send_idx: a caller that fsyncs first
+ * (efs_raft_submit) raises the cap itself. The leader no-op, a cold
+ * config entry, and a joint-config entry are appended and broadcast
+ * with no submit. Left under the cap, send_ae never ships them, and a
+ * follower whose stale tail sits at that index answers match = last_i.
+ * try_commit then commits an entry that follower does not hold
+ * (Sep 30, group 0 index 437638). */
+static void send_idx_cover(struct efs_raft *r, uint64_t ix)
+{
+    if (r->ae_capped && ix > r->send_idx)
+        r->send_idx = ix;
+}
+
 static void ae_inflight_set(struct efs_raft *r, int to, uint64_t ni,
                             uint64_t end);
 
@@ -839,6 +852,7 @@ static int broadcast_ae(struct efs_raft *r)
 static int maybe_append_cold(struct efs_raft *r)
 {
     uint8_t cmd[5];
+    uint64_t ix = 0;
     int rc;
 
     if (r->role != EFS_RAFT_LEADER || !r->log_new)
@@ -849,9 +863,10 @@ static int maybe_append_cold(struct efs_raft *r)
         return EFS_OK;
     cmd[0] = EFS_RAFT_CMD_COLD;
     wr32(cmd + 1, r->log_new);
-    rc = append_local(r, r->current_term, cmd, 5, NULL);
+    rc = append_local(r, r->current_term, cmd, 5, &ix);
     if (rc != EFS_OK)
         return rc;
+    send_idx_cover(r, ix);
     return broadcast_ae(r);
 }
 
@@ -973,6 +988,7 @@ static int become_leader(struct efs_raft *r)
     if (rc != EFS_OK)
         return rc;
     r->match_index[r->id] = last_i;
+    send_idx_cover(r, last_i);
     if (solo(r)) {
         r->commit_index = last_i;
         apply_committed(r);
@@ -1178,9 +1194,15 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         r->commit_index = in->leader_commit < cap ? in->leader_commit : cap;
         apply_committed(r);
     }
-    last_log(r, &last_i, &last_t);
     m.success = 1;
-    m.match_index = last_i;
+    /* prev matched, and every entry in this request is in the log.
+     * last_i can still sit past that: an uncommitted tail this request
+     * did not replace. Reporting last_i made the leader count those
+     * entries as replicated, then commit its own entry at that index
+     * on a follower that truncated it on the next heartbeat (Sep 30,
+     * group 0 index 437638). A rejection still carries last_i, which
+     * is the hint for next_index. */
+    m.match_index = in->prev_index + (uint64_t)in->nentries;
     return send_msg(r, &m);
 }
 
@@ -1617,8 +1639,7 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
             return rc;
         return maybe_append_cold(r);
     }
-    if (r->ae_capped && ix > r->send_idx)
-        r->send_idx = ix;
+    send_idx_cover(r, ix);
     return broadcast_ae(r);
 }
 
@@ -1703,7 +1724,7 @@ int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
 {
     uint32_t add;
     uint8_t cmd[9];
-    uint64_t last_i = 0, last_t = 0;
+    uint64_t last_i = 0, last_t = 0, ix = 0;
     int i, rc;
 
     if (!r)
@@ -1738,9 +1759,10 @@ int efs_raft_change(struct efs_raft *r, uint32_t new_voters)
     cmd[0] = EFS_RAFT_CMD_JOINT;
     wr32(cmd + 1, r->log_old);
     wr32(cmd + 5, new_voters);
-    rc = append_local(r, r->current_term, cmd, 9, NULL);
+    rc = append_local(r, r->current_term, cmd, 9, &ix);
     if (rc != EFS_OK)
         return rc;
+    send_idx_cover(r, ix);
     if (solo(r)) {
         last_log(r, &last_i, &last_t);
         r->commit_index = last_i;

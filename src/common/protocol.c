@@ -377,7 +377,9 @@ int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *payload,
 static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
                            const uint8_t **payload, uint32_t *payload_len)
 {
-    int wr = efs_rdma_recv_wait(c->rc, EFS_IO_TIMEOUT_MS);
+    int wr = efs_rdma_recv_wait(c->rc, c->recv_timeout_ms > 0
+                                           ? c->recv_timeout_ms
+                                           : EFS_IO_TIMEOUT_MS);
     /* A real byte on the TCP side-channel (reply larger than the RDMA
      * pool, or a request the server answered on TCP). Caller reads it
      * with the TCP recv. Anything else is a dead conn. */

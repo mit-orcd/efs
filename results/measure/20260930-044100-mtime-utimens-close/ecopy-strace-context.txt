@@ -1,0 +1,88 @@
+-----
+efs-rec: start 2026-09-30T04:33:40Z pid=1333097 host=login007
+efs-rec: cmd python3 ~/efs-runs/mis_ctx.py ~/orcd/scratch/efs/perf/efs-mount/ecopy.strace.txt
+=== #1 pid 380680 00:03:51.830927
+    00:03:51.820084 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/cm/CLUSTERMANAGERID",  <unfinished ...>
+=== #2 pid 380681 00:03:51.836129
+    00:03:51.835625 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/deprecated-modules.lua",  <unfinished ...>
+=== #3 pid 380682 00:03:51.866766
+    00:03:51.847566 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/miniforge/25.11.0-0.lua",  <unfinished ...>
+=== #4 pid 380683 00:03:51.867549
+    00:03:51.859609 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/cm/README",  <unfinished ...>
+=== #5 pid 380684 00:03:51.867839
+    00:03:51.861022 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/spack/modulefiles/module-index.yaml",  <unfinished ...>
+=== #6 pid 380685 00:03:51.892586
+    00:03:51.884074 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/dua/2.29.0.lua",  <unfinished ...>
+=== #7 pid 380686 00:03:51.892693
+    00:03:51.884015 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/apptainer/1.4.2.lua",  <unfinished ...>
+=== #8 pid 380687 00:03:51.922363
+    00:03:51.909254 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/cuda/13.1.0.lua",  <unfinished ...>
+=== #9 pid 380691 00:03:51.929030
+    00:03:51.923030 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/StdEnv.lua",  <unfinished ...>
+=== #10 pid 380688 00:03:51.929663
+    00:03:51.923162 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/cudnn/9.8.0.87-cuda12.lua",  <unfinished ...>
+=== #11 pid 380690 00:03:51.930210
+    00:03:51.922752 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/mathematica/14.2.lua",  <unfinished ...>
+=== #12 pid 380689 00:03:51.931484
+    00:03:51.922439 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/modulefiles/matlab/matlab-2023b.lua",  <unfinished ...>
+total mismatch writes: 153
+message lengths: [(81, 1), (84, 1), (85, 1), (87, 2), (89, 2), (91, 3), (92, 3), (93, 2), (94, 8), (95, 1), (96, 4), (97, 5), (98, 2), (99, 7), (100, 4), (101, 5), (102, 3), (103, 6), (104, 5), (105, 5), (106, 6), (107, 8), (108, 8), (109, 2), (110, 1), (111, 3), (112, 1), (113, 3), (114, 3), (115, 4), (116, 4), (117, 5), (118, 4), (119, 4), (120, 3), (121, 6), (122, 4), (123, 2), (124, 2), (125, 2), (126, 2), (127, 1), (128, 2), (132, 1), (133, 1), (136, 1)]
+efs-rec: end 2026-09-30T04:33:40Z rc=0
+-----
+efs-rec: start 2026-09-30T04:35:30Z pid=1390659 host=login007
+efs-rec: cmd F=~/orcd/scratch/efs/perf/efs-mount/ecopy.strace.txt; awk "\$1==380423 && \$2>=\"00:03:51.784\" && \$2<=\"00:03:51.81\"" $F | grep -vE "futex|resumed>\)? = [0-9]+ <" | cut -c1-260 | head -50
+380423 00:03:51.784268 openat(5, "CLUSTERMANAGERID", O_RDONLY|O_NOFOLLOW|O_CLOEXEC <unfinished ...>
+380423 00:03:51.784426 fstat(23,  <unfinished ...>
+380423 00:03:51.784491 <... fstat resumed>{st_mode=S_IFREG|0644, st_size=7, ...}) = 0 <0.000060>
+380423 00:03:51.784687 getpid( <unfinished ...>
+380423 00:03:51.784793 openat(18, ".ecopy.tmp.380421.1", O_WRONLY|O_CREAT|O_EXCL|O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC, 0644 <unfinished ...>
+380423 00:03:51.785586 fstat(31,  <unfinished ...>
+380423 00:03:51.785702 <... fstat resumed>{st_mode=S_IFREG|0644, st_size=0, ...}) = 0 <0.000110>
+380423 00:03:51.785756 fcntl(31, F_SETFL, O_WRONLY|O_CREAT|O_EXCL|O_NOFOLLOW|O_CLOEXEC <unfinished ...>
+380423 00:03:51.785876 fadvise64(31, 0, 0, POSIX_FADV_SEQUENTIAL <unfinished ...>
+380423 00:03:51.786011 mmap(NULL, 1056768, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0 <unfinished ...>
+380423 00:03:51.786064 <... mmap resumed>) = 0x7f0fd01fb000 <0.000047>
+380423 00:03:51.786122 copy_file_range(23, [0], 31, [0], 7, 0 <unfinished ...>
+380423 00:03:51.786180 <... copy_file_range resumed>) = -1 EXDEV (Invalid cross-device link) <0.000046>
+380423 00:03:51.786244 fadvise64(23, 0, 0, POSIX_FADV_SEQUENTIAL <unfinished ...>
+380423 00:03:51.786376 fadvise64(23, 0, 0, POSIX_FADV_WILLNEED <unfinished ...>
+380423 00:03:51.786483 pread64(23,  <unfinished ...>
+380423 00:03:51.786536 <... pread64 resumed>"000002\n", 7, 0) = 7 <0.000048>
+380423 00:03:51.786584 pwrite64(31, "000002\n", 7, 0 <unfinished ...>
+380423 00:03:51.786712 fadvise64(23, 0, 7, POSIX_FADV_DONTNEED <unfinished ...>
+380423 00:03:51.786777 geteuid( <unfinished ...>
+380423 00:03:51.786834 getegid( <unfinished ...>
+380423 00:03:51.786883 getgroups(64,  <unfinished ...>
+380423 00:03:51.786909 <... getgroups resumed>[1045, 1184, 36571, 53459, 54472, 81917, 135814, 149488, 151131, 151132, 151370, 152031, 166255, 166256, 167043, 167044, 167045, 167046, 167047, 167723, 168458, 168459, 169168, 169233, 169549, 169550, 184906, 18490
+380423 00:03:51.787010 utimensat(31, NULL, [{tv_sec=1780070211, tv_nsec=542829730} /* 2026-05-29T11:56:51.542829730-0400 */, {tv_sec=1380661863, tv_nsec=0} /* 2013-10-01T17:11:03-0400 */], 0 <unfinished ...>
+380423 00:03:51.800488 close(31 <unfinished ...>
+380423 00:03:51.805893 newfstatat(18, ".ecopy.tmp.380421.1",  <unfinished ...>
+380423 00:03:51.806397 <... newfstatat resumed>{st_mode=S_IFREG|0644, st_size=7, ...}, AT_SYMLINK_NOFOLLOW) = 0 <0.000496>
+380423 00:03:51.806428 newfstatat(18, "CLUSTERMANAGERID",  <unfinished ...>
+380423 00:03:51.806765 <... newfstatat resumed>{st_mode=S_IFREG|0644, st_size=7, ...}, AT_SYMLINK_NOFOLLOW) = 0 <0.000329>
+380423 00:03:51.806783 renameat(18, ".ecopy.tmp.380421.1", 18, "CLUSTERMANAGERID" <unfinished ...>
+efs-rec: end 2026-09-30T04:35:30Z rc=0
+-----
+efs-rec: start 2026-09-30T04:34:53Z pid=1373873 host=login007
+efs-rec: cmd awk "\$1==380680 && \$2>=\"00:03:51.81\" && \$2<=\"00:03:51.84\"" ~/orcd/scratch/efs/perf/efs-mount/ecopy.strace.txt | cut -c1-250
+380680 00:03:51.819709 <... futex resumed>) = 0 <0.046449>
+380680 00:03:51.819799 futex(0x660a20, FUTEX_WAKE_PRIVATE, 1 <unfinished ...>
+380680 00:03:51.819897 <... futex resumed>) = 0 <0.000091>
+380680 00:03:51.820084 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/cm/CLUSTERMANAGERID",  <unfinished ...>
+380680 00:03:51.830832 <... newfstatat resumed>{st_mode=S_IFREG|0644, st_size=7, ...}, AT_SYMLINK_NOFOLLOW) = 0 <0.010741>
+380680 00:03:51.830862 write(1, "\r\33[2K", 5 <unfinished ...>
+380680 00:03:51.830895 <... write resumed>) = 5 <0.000025>
+380680 00:03:51.830927 write(2, "ecopy: verification metadata mis"..., 91 <unfinished ...>
+380680 00:03:51.830962 <... write resumed>) = 91 <0.000027>
+380680 00:03:51.830998 openat(AT_FDCWD, "/data1/erbmi1/software/cm/CLUSTERMANAGERID", O_RDONLY|O_NOFOLLOW|O_NOATIME|O_CLOEXEC <unfinished ...>
+380680 00:03:51.831037 <... openat resumed>) = 27 <0.000031>
+380680 00:03:51.831063 openat(AT_FDCWD, "/tmp/efs-mount/software/cm/CLUSTERMANAGERID", O_RDONLY|O_NOFOLLOW|O_NOATIME|O_CLOEXEC <unfinished ...>
+380680 00:03:51.838540 <... openat resumed>) = 30 <0.007469>
+380680 00:03:51.838568 fadvise64(27, 0, 0, POSIX_FADV_RANDOM <unfinished ...>
+380680 00:03:51.838590 <... fadvise64 resumed>) = 0 <0.000015>
+380680 00:03:51.838608 fadvise64(30, 0, 0, POSIX_FADV_RANDOM) = 0 <0.000014>
+380680 00:03:51.838645 fstat(27, {st_mode=S_IFREG|0644, st_size=7, ...}) = 0 <0.000012>
+380680 00:03:51.838689 pread64(27,  <unfinished ...>
+380680 00:03:51.838980 <... pread64 resumed>"000002\n", 7, 0) = 7 <0.000285>
+380680 00:03:51.839016 pread64(30,  <unfinished ...>
+efs-rec: end 2026-09-30T04:34:53Z rc=0

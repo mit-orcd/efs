@@ -31,6 +31,10 @@ struct net {
     int snap_restart_watch;
     uint64_t snap_restart_off;
     int snap_restart_seen;
+    int cap_rep;          /* record AE_REP match_index */
+    int cap_n;
+    int cap_ok;
+    uint64_t cap_match;
 };
 
 static void msg_free_deep(struct efs_raft_msg *m)
@@ -198,6 +202,11 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
             msg_free_deep(n->keep);
             n->keep = msg_copy_deep(msg);
         }
+    }
+    if (msg->type == EFS_RAFT_MSG_AE_REP && n->cap_rep) {
+        n->cap_n++;
+        n->cap_ok = msg->success;
+        n->cap_match = msg->match_index;
     }
     if (msg->type == EFS_RAFT_MSG_SNAP_REQ) {
         n->snap_chunks++;
@@ -1135,6 +1144,117 @@ static void test_snap_chunks(void)
     free_n(&n, st, 3);
 }
 
+/* Empty AppendEntries that matches prev must not report a stale
+ * uncommitted tail as replicated. */
+static void test_ae_reply_match_stops_at_prev(void)
+{
+    struct net n = { .n = 3, .cap_rep = 1 };
+    struct efs_raft_store *st;
+    struct app app;
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg ae;
+    uint8_t prefix = 'C', junk = 'S';
+
+    memset(&app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    st = efs_raft_mem_create();
+    CHECK(st && st->append(st, 1, 1, &prefix, 1) == EFS_OK, "prefix");
+    CHECK(st->append(st, 2, 1, &junk, 1) == EFS_OK, "stale tail");
+    CHECK(st->save_hard(st, 1, -1) == EFS_OK, "hard");
+    cfg.n = 3;
+    cfg.id = 1;
+    cfg.store = st;
+    cfg.store_ctx = st;
+    cfg.send = send_now;
+    cfg.net = &n;
+    cfg.apply = apply_cmd;
+    cfg.app = &app;
+    cfg.election_ticks = 10;
+    cfg.heartbeat_ticks = 2;
+    n.drop[0] = 1;
+    n.r[1] = efs_raft_new(&cfg);
+    CHECK(n.r[1] != NULL, "follower");
+    efs_raft_allow_campaign(n.r[1], 0);
+    memset(&ae, 0, sizeof(ae));
+    ae.type = EFS_RAFT_MSG_AE_REQ;
+    ae.from = 0;
+    ae.to = 1;
+    ae.term = 4;
+    ae.prev_index = 1;
+    ae.prev_term = 1;
+    ae.leader_commit = 1;
+    CHECK(efs_raft_recv(n.r[1], &ae) == EFS_OK, "empty ae");
+    CHECK(n.cap_n == 1, "one reply");
+    CHECK(n.cap_ok == 1, "prev matched");
+    CHECK(n.cap_match == 1, "match stops at prev, not the stale tail");
+    CHECK(app.last != 'S', "stale command was not applied");
+    efs_raft_free(n.r[1]);
+    efs_raft_mem_free(st);
+}
+
+/* New leader's no-op is above the send cap armed at attach. A follower
+ * that still holds a stale tail at that index must receive the no-op,
+ * and the leader must not commit it off the stale reply. */
+static void test_noop_over_stale_tail(void)
+{
+    struct net n = { .n = 3 };
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    int i, lid, stale = 1;
+    uint64_t last = 0, lterm = 0, et = 0;
+    uint32_t clen;
+    uint8_t buf[8];
+    uint8_t prefix = 'C', junk = 'S';
+
+    memset(app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.n = 3;
+    cfg.send = send_now;
+    cfg.net = &n;
+    cfg.apply = apply_cmd;
+    cfg.heartbeat_ticks = 1;
+    for (i = 0; i < 3; i++) {
+        st[i] = efs_raft_mem_create();
+        CHECK(st[i] && st[i]->append(st[i], 1, 1, &prefix, 1) == EFS_OK, "prefix");
+        CHECK(st[i]->save_hard(st[i], 1, -1) == EFS_OK, "hard");
+        cfg.id = i;
+        cfg.store = st[i];
+        cfg.store_ctx = st[i];
+        cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.app = &app[i];
+        n.r[i] = efs_raft_new(&cfg);
+        CHECK(n.r[i] != NULL, "raft");
+        efs_raft_arm_durable(n.r[i]);
+    }
+    CHECK(st[stale]->append(st[stale], 2, 1, &junk, 1) == EFS_OK, "stale tail");
+    n.drop[stale] = 1;
+    CHECK(elect(&n, 30) == 1, "elect without the stale node");
+    lid = leader_id(&n);
+    CHECK(lid >= 0 && lid != stale, "leader is not the stale node");
+    CHECK(st[lid]->last(st[lid], &last, &lterm) == EFS_OK, "leader last");
+    CHECK(last == 2, "leader appended the no-op");
+    CHECK(lterm == efs_raft_term(n.r[lid]), "no-op is in the leader term");
+    n.drop[stale] = 0;
+    CHECK(elect(&n, 8) == 1, "heartbeats");
+    CHECK(efs_raft_durable(n.r[lid], last) == EFS_OK, "durable");
+    CHECK(elect(&n, 4) == 1, "after durable");
+    clen = sizeof(buf);
+    CHECK(st[stale]->get(st[stale], 2, &et, buf, &clen) == EFS_OK, "stale get");
+    CHECK(et == efs_raft_term(n.r[lid]), "stale tail replaced by the no-op");
+    CHECK(clen == 0, "no-op carries no command");
+    CHECK(app[stale].last != 'S', "stale command was not applied");
+    CHECK(efs_raft_commit(n.r[lid]) >= last, "no-op committed");
+    for (i = 0; i < 3; i++) {
+        uint64_t et2 = 0;
+        uint32_t c2 = sizeof(buf);
+        CHECK(st[i]->get(st[i], last, &et2, buf, &c2) == EFS_OK, "no-op present");
+        CHECK(et2 == lterm && c2 == 0, "every log has this no-op");
+        efs_raft_free(n.r[i]);
+        efs_raft_mem_free(st[i]);
+    }
+}
+
 int main(void)
 {
     test_election_i1();
@@ -1145,6 +1265,8 @@ int main(void)
     test_grow_3_to_5();
     test_i18_joint_quorum();
     test_stale_boot_id();
+    test_ae_reply_match_stops_at_prev();
+    test_noop_over_stale_tail();
     test_ae_batch_catchup();
     test_ae_catchup_flow_control();
     test_install_snapshot();

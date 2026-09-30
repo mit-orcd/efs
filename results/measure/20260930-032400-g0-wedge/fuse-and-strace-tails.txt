@@ -1,0 +1,111 @@
+-----
+efs-rec: start 2026-09-30T03:24:47Z pid=4155676 host=login007
+efs-rec: cmd D=~/orcd/scratch/efs/perf/efs-mount; cd $D; echo "== fuse.stderr"; cat fuse.stderr; echo "== rsync-perf fuse.stderr"; cat ../rsync-perf/efs-mount/fuse.stderr; echo "== rsync.strace head"; head -3 rsync.strace.txt; echo "== rsync.strace tail"; tail -25 rsync.strace.txt; echo "== ecrawl head"; head -3 ecrawl.strace.txt; echo "== ecrawl tail"; tail -25 ecrawl.strace.txt; echo "== fuse log tail"; tail -40 efs-fuse-efs-mount.log
+== fuse.stderr
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.625 MB /home/erbmi1/orcd/scratch/efs/perf/efs-mount/fuse.data (4141 samples) ]
+== rsync-perf fuse.stderr
+[ perf record: Woken up 272 times to write data ]
+[ perf record: Captured and wrote 0.049 MB /home/erbmi1/orcd/scratch/efs/perf/rsync-perf/efs-mount/fuse.data (40 samples) ]
+== rsync.strace head
+371637 23:16:41.905161 execve("/usr/bin/rsync", ["rsync", "-aP", "/home/erbmi1/git/", "/tmp/efs-mount/git/"], 0x7ffc1e5160e0 /* 47 vars */) = 0 <0.000233>
+371637 23:16:41.905510 brk(NULL)        = 0x5577faa75000 <0.000005>
+371637 23:16:41.905534 arch_prctl(0x3001 /* ARCH_??? */, 0x7ffc03063c20) = -1 EINVAL (Invalid argument) <0.000005>
+== rsync.strace tail
+371639 23:18:45.453356 <... pselect6 resumed>) = 1 (out [6], left {tv_sec=59, tv_nsec=999992749}) <0.000021>
+371637 23:18:45.453373 <... write resumed>) = 90 <0.000018>
+371639 23:18:45.453379 write(6, "Y\0\0\nrsync error: received SIGINT"..., 101 <unfinished ...>
+371637 23:18:45.453388 exit_group(20)   = ?
+371639 23:18:45.453403 <... write resumed>) = 101 <0.000016>
+371639 23:18:45.453414 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=100000000},  <unfinished ...>
+371637 23:18:45.453903 +++ exited with 20 +++
+371639 23:18:45.553535 <... clock_nanosleep resumed>0x7ffc0305ae90) = 0 <0.100099>
+371639 23:18:45.553766 exit_group(20)   = ?
+371639 23:18:45.554229 +++ exited with 20 +++
+371638 23:18:48.471611 <... newfstatat resumed>0x7ffc0305d800, AT_SYMLINK_NOFOLLOW) = -1 ENOENT (No such file or directory) <16.755229>
+371638 23:18:48.471696 --- SIGINT {si_signo=SIGINT, si_code=SI_KERNEL} ---
+371638 23:18:48.471718 --- SIGUSR1 {si_signo=SIGUSR1, si_code=SI_USER, si_pid=371637, si_uid=246111} ---
+371638 23:18:48.471734 --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=371639, si_uid=246111, si_status=20, si_utime=0, si_stime=0} ---
+371638 23:18:48.471755 wait4(-1, [{WIFEXITED(s) && WEXITSTATUS(s) == 20}], WNOHANG, NULL) = 371639 <0.000085>
+371638 23:18:48.471873 wait4(-1, 0x7ffc0305b194, WNOHANG, NULL) = -1 ECHILD (No child processes) <0.000005>
+371638 23:18:48.471893 rt_sigreturn({mask=[INT USR1]}) = 0 <0.000006>
+371638 23:18:48.471915 rt_sigaction(SIGUSR1, {sa_handler=SIG_IGN, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd92aa3fc30}, NULL, 8) = 0 <0.000005>
+371638 23:18:48.471944 rt_sigaction(SIGUSR2, {sa_handler=SIG_IGN, sa_mask=[], sa_flags=SA_RESTORER, sa_restorer=0x7fd92aa3fc30}, NULL, 8) = 0 <0.000004>
+371638 23:18:48.471963 getpid()         = 371638 <0.000004>
+371638 23:18:48.471980 kill(371639, SIGUSR1) = -1 ESRCH (No such process) <0.000005>
+371638 23:18:48.472019 write(2, "rsync error: received SIGUSR1 (c"..., 74) = 74 <0.000016>
+371638 23:18:48.472053 clock_nanosleep(CLOCK_REALTIME, 0, {tv_sec=0, tv_nsec=100000000}, 0x7ffc0305bd30) = 0 <0.100121>
+371638 23:18:48.572259 exit_group(19)   = ?
+371638 23:18:48.572811 +++ exited with 19 +++
+== ecrawl head
+371581 23:16:29.784957 execve("/tmp/ereport/ecrawl", ["/tmp/ereport/ecrawl", "--no-write", "--progress", "/tmp/efs-mount/"], 0x7fff545b08c0 /* 47 vars */) = 0 <0.000212>
+371581 23:16:29.785701 brk(NULL)        = 0xbee000 <0.000006>
+371581 23:16:29.785725 arch_prctl(0x3001 /* ARCH_??? */, 0x7ffd53c285f0) = -1 EINVAL (Invalid argument) <0.000005>
+== ecrawl tail
+371581 23:16:32.233194 write(1, "other=0\n", 8) = 8 <0.000008>
+371581 23:16:32.233219 write(1, "byte_accounting=unique_regular_f"..., 37) = 37 <0.000009>
+371581 23:16:32.233245 write(1, "hardlink_files=0\n", 17) = 17 <0.000008>
+371581 23:16:32.233270 write(1, "total_bytes=3629299865458\n", 26) = 26 <0.000009>
+371581 23:16:32.233296 write(1, "st_blocks_bytes_unit=512\n", 25) = 25 <0.000008>
+371581 23:16:32.233321 write(1, "total_allocated_bytes=0\n", 24) = 24 <0.000009>
+371581 23:16:32.233353 write(1, "files_sparse_heuristic=9483\n", 28) = 28 <0.000008>
+371581 23:16:32.233379 write(1, "dir_apparent_bytes=0\n", 21) = 21 <0.000008>
+371581 23:16:32.233404 write(1, "symlink_apparent_bytes=1801\n", 28) = 28 <0.000008>
+371581 23:16:32.233429 write(1, "other_apparent_bytes=0\n", 23) = 23 <0.000008>
+371581 23:16:32.233455 write(1, "apparent_bytes_total=36292998672"..., 35) = 35 <0.000009>
+371581 23:16:32.233480 write(1, "avg_ops_per_sec=5.05K\n", 22) = 22 <0.000008>
+371581 23:16:32.233506 write(1, "elapsed_sec=2.445\n", 18) = 18 <0.000009>
+371581 23:16:32.233532 write(1, "errors=0\n", 9) = 9 <0.000008>
+371581 23:16:32.233557 write(1, "writer_failed=0\n", 16) = 16 <0.000009>
+371581 23:16:32.233583 write(1, "task_queue_pushes=115\n", 22) = 22 <0.000009>
+371581 23:16:32.233609 write(1, "queue_lock_waits=111\n", 21) = 21 <0.000008>
+371581 23:16:32.233634 write(1, "donate_calls=114\n", 17) = 17 <0.000009>
+371581 23:16:32.233660 write(1, "writer_queue_wait_ns=0\n", 23) = 23 <0.000008>
+371581 23:16:32.233685 write(1, "wait_crawl_tasks=111\n", 21) = 21 <0.000008>
+371581 23:16:32.233710 write(1, "wait_writer_push=0\n", 19) = 19 <0.000008>
+371581 23:16:32.233736 write(1, "wait_writer_pop=0\n", 18) = 18 <0.000008>
+371581 23:16:32.233761 write(1, "crawl_idle_ns=3463944652\n", 25) = 25 <0.000009>
+371581 23:16:32.233811 exit_group(0)    = ?
+371581 23:16:32.234242 +++ exited with 0 +++
+== fuse log tail
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=169120 root_get=0 mode=40755
+efs-fuse daemon pid=361177
+fuse serving
+efs: RDMA transport up on mlx5_1 port 1 (lid 1911, 36 x 72 KiB bufs/conn)
+Discovered 4 cluster nodes from 172.16.223.57:19810
+  node id=1 172.16.223.57:19810
+  node id=4 172.16.223.60:19810
+  node id=2 172.16.223.58:19810
+  node id=3 172.16.223.59:19810
+fetching metadata...
+meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+export id=1 name=fs
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=169120 root_get=0 mode=40755
+efs-fuse daemon pid=369792
+fuse serving
+efs: RDMA transport up on mlx5_1 port 1 (lid 1911, 36 x 72 KiB bufs/conn)
+Discovered 4 cluster nodes from fcstor003.ib:19810
+  node id=1 172.16.223.57:19810
+  node id=4 172.16.223.60:19810
+  node id=2 172.16.223.58:19810
+  node id=3 172.16.223.59:19810
+fetching metadata...
+meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+export id=1 name=fs
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=169120 root_get=0 mode=40755
+efs-fuse daemon pid=370573
+fuse serving
+efs: RDMA transport up on mlx5_1 port 1 (lid 1911, 36 x 72 KiB bufs/conn)
+inode-rpc: shard=2761 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=2761 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=2761 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=2761 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=2761 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=2761 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=2761 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=47 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=47 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=47 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=47 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=47 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+efs-rec: end 2026-09-30T03:24:47Z rc=0

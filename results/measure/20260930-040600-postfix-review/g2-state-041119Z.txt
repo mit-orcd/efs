@@ -1,0 +1,64 @@
+-----
+efs-rec: start 2026-09-30T04:11:18Z pid=701763 host=login007
+efs-rec: cmd S=~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh; EFS_SSH_TIMEOUT=20 "$S" fcstor006.ib "cd /tmp/efs; date -u; uptime; ./efs-mgmt raft-status 172.16.223.60:19810 | grep hosted=1; echo -- gdb; timeout 20 gdb -q -batch -p \$(pgrep -x efsd) -ex \"set pagination off\" -ex \"p g_host->g[0].group\" -ex \"p g_host->g[0].hosted\" -ex \"p g_host->g[1].group\" -ex \"p g_host->g[1].hosted\" -ex \"p *g_host->g[1].r\" -ex detach 2>&1 | grep -vE \"^\\[|^Reading|^Using|^Loaded|Downloading|^0x|^Missing\" | tr -s \" \" | tr \"\\n\" \" \" | fold -w 200; echo; echo -- dmesg; dmesg -T 2>/dev/null | tail -5; echo -- ping 004 005; ping -c 3 -i 0.2 172.16.223.58 | tail -2; ping -c 3 -i 0.2 172.16.223.59 | tail -2; echo -- tcp; ss -tn | grep -c 19810; echo -- threads; ps -L -o tid,stat,pcpu,comm -p \$(pgrep -x efsd) | sort -k3 -rn | head -8"; echo; EFS_SSH_TIMEOUT=20 "$S" fcstor004.ib "cd /tmp/efs; ./efs-mgmt raft-status 172.16.223.58:19810 | grep hosted=1; timeout 20 gdb -q -batch -p \$(pgrep -x efsd) -ex \"set pagination off\" -ex \"p g_host->g[1].group\" -ex \"p *g_host->g[1].r\" -ex detach 2>&1 | grep -vE \"^\\[|^Reading|^Using|^Loaded|Downloading|^0x|^Missing\" | tr -s \" \" | tr \"\\n\" \" \" | fold -w 200; echo; echo -- tx3 progression; grep -o \"tx->3 enq=[0-9]* drop=[0-9]* sent=[0-9]* fail=[0-9]* hi=[0-9]* rtt_avg=[0-9]*us\" efsd.log | awk \"NR%20==1\" | tail -12; echo -- ib; ibstat 2>/dev/null | grep -E \"State|Rate\" | head -4"
+Wed Sep 30 04:11:19 AM UTC 2026
+ 00:11:19 up 43 days,  9:24,  0 users,  load average: 2.06, 1.10, 0.44
+  group 2 hosted=1 role=FOLLOWER leader=2 term=669 commit=465094 applied=465094 voters=0xe joint=0
+-- gdb
+$1 = 0 '\000' $2 = 0 '\000' $3 = 2 '\002' $4 = 1 '\001' $5 = {id = 3, role = 0, leader = 2, group = 2 '\002', boot_id = 2920143153441696, current_term = 669, voted_for = 2, commit_index = 465094, last
+_applied = 465094, snap_idx = 0, snap_term = 0, next_index = {0, 464790, 1, 464790, 0, 0, 0}, match_index = {0, 0, 0, 464791, 0, 0, 0}, ae_inflight = {0, 464790, 1, 0, 0, 0, 0}, ae_inflight_tick = {0,
+ 117177, 117177, 0, 0, 0, 0}, ae_inflight_commit = {0, 464766, 464766, 0, 0, 0, 0}, ae_inflight_end = {0, 464791, 128, 0, 0, 0, 0}, ticks = 171657, peer_boot = {0, 3896953012548662, 4074010231027933, 
+0, 0, 0, 0}, vote_bits = 0, election_elapsed = 0, election_ticks = 100, election_deadline = 129, rng = 3453835713762226707, hb_elapsed = 0, heartbeat_ticks = 10, read_index = 464766, read_acks = 8, re
+ad_in_flight = 0, log_old = 14, log_new = 0, app_old = 14, app_new = 0, learners = 0, joint_idx = 0, cold_idx = 0, store = 0x1f75d70, store_ctx = 0x1f75d70, send = 0x415f70 <host_send>, net = 0x7f91c0
+2e6010, apply = 0x41fd70 <host_apply>, app = 0x7f91c0322178, snap_open = 0x413ec0 <host_snap_open>, snap_read = 0x413e60 <host_snap_read>, snap_close = 0x413230 <host_snap_close>, snap_chunk = 0x4192c
+0 <host_snap_chunk>, snap_chunk_bytes = 0, snap_handle = 0x0, snap_total = 0, snap_handle_incl = 0, snap_off = {0, 0, 0, 0, 0, 0, 0}, snap_peer_incl = {0, 0, 0, 0, 0, 0, 0}, snap_retry_tick = {0, 0, 0
+, 0, 0, 0, 0}, rx_incl = 0, rx_term = 0, rx_off = 0, rx_old = 0, rx_new = 0, allow_campaign = 1, ae_capped = 1, send_idx = 464791, durable_idx = 464791} 
+-- dmesg
+[Mon Sep 28 22:55:15 2026] __common_interrupt: 7.71 No irq handler for vector
+[Mon Sep 28 22:55:45 2026] __common_interrupt: 10.62 No irq handler for vector
+[Tue Sep 29 00:34:06 2026] __common_interrupt: 8.69 No irq handler for vector
+[Tue Sep 29 01:11:38 2026] rcu_tasks_wait_gp: rcu_tasks grace period number 24441 (since boot) is 10248 jiffies old.
+[Wed Sep 30 00:04:55 2026] __common_interrupt: 9.75 No irq handler for vector
+-- ping 004 005
+3 packets transmitted, 3 received, 0% packet loss, time 410ms
+rtt min/avg/max/mdev = 0.021/0.028/0.043/0.010 ms
+3 packets transmitted, 3 received, 0% packet loss, time 415ms
+rtt min/avg/max/mdev = 0.015/0.026/0.048/0.015 ms
+-- tcp
+21
+-- threads
+ 680790 Ssl   2.3 efsd
+ 680426 Ssl   0.8 efsd
+ 680403 Ssl   0.2 efsd
+ 680791 Ssl   0.1 efsd
+    TID STAT %CPU COMMAND
+ 681020 Ssl   0.0 efsd
+ 680800 Ssl   0.0 efsd
+ 680797 Ssl   0.0 efsd
+
+  group 0 hosted=1 role=FOLLOWER leader=0 term=90 commit=459136 applied=459136 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=2 term=669 commit=465096 applied=465096 voters=0xe joint=0
+$1 = 2 '\002' $2 = {id = 1, role = 0, leader = 2, group = 2 '\002', boot_id = 3896953012548662, current_term = 669, voted_for = 2, commit_index = 465096, last_applied = 465096, snap_idx = 0, snap_term
+ = 0, next_index = {0, 464987, 464998, 464987, 0, 0, 0}, match_index = {0, 464997, 464997, 0, 0, 0, 0}, ae_inflight = {0, 0, 0, 464987, 0, 0, 0}, ae_inflight_tick = {0, 0, 150935, 150553, 0, 0, 0}, ae
+_inflight_commit = {0, 0, 464997, 464995, 0, 0, 0}, ae_inflight_end = {0, 0, 464997, 464995, 0, 0, 0}, ticks = 170574, peer_boot = {0, 0, 4074010231027933, 2920143153441696, 0, 0, 0}, vote_bits = 0, e
+lection_elapsed = 4, election_ticks = 100, election_deadline = 178, rng = 13241380023327879419, hb_elapsed = 0, heartbeat_ticks = 10, read_index = 464997, read_acks = 6, read_in_flight = 0, log_old = 
+14, log_new = 0, app_old = 14, app_new = 0, learners = 0, joint_idx = 0, cold_idx = 0, store = 0x21a2e60, store_ctx = 0x21a2e60, send = 0x415f70 <host_send>, net = 0x7f552ef02010, apply = 0x41fd70 <ho
+st_apply>, app = 0x7f552ef3e178, snap_open = 0x413ec0 <host_snap_open>, snap_read = 0x413e60 <host_snap_read>, snap_close = 0x413230 <host_snap_close>, snap_chunk = 0x4192c0 <host_snap_chunk>, snap_ch
+unk_bytes = 0, snap_handle = 0x0, snap_total = 0, snap_handle_incl = 0, snap_off = {0, 0, 0, 0, 0, 0, 0}, snap_peer_incl = {0, 0, 0, 0, 0, 0, 0}, snap_retry_tick = {0, 0, 0, 0, 0, 0, 0}, rx_incl = 0, 
+rx_term = 0, rx_off = 0, rx_old = 0, rx_new = 0, allow_campaign = 1, ae_capped = 1, send_idx = 464997, durable_idx = 464997} 
+-- tx3 progression
+tx->3 enq=76 drop=0 sent=75 fail=1 hi=14 rtt_avg=35us
+tx->3 enq=2052 drop=0 sent=2051 fail=1 hi=14 rtt_avg=33us
+tx->3 enq=4028 drop=0 sent=4027 fail=1 hi=14 rtt_avg=32us
+tx->3 enq=6004 drop=0 sent=6003 fail=1 hi=14 rtt_avg=32us
+tx->3 enq=68355 drop=0 sent=68354 fail=1 hi=14 rtt_avg=21us
+tx->3 enq=77954 drop=0 sent=77693 fail=1 hi=14 rtt_avg=21us
+tx->3 enq=78361 drop=0 sent=78005 fail=1 hi=14 rtt_avg=21us
+tx->3 enq=87706 drop=0 sent=86682 fail=3 hi=2048 rtt_avg=401us
+tx->3 enq=89460 drop=0 sent=86816 fail=8 hi=2048 rtt_avg=1791us
+-- ib
+		State: Active
+		Rate: 25
+		State: Down
+		Rate: 40
+efs-rec: end 2026-09-30T04:11:20Z rc=0

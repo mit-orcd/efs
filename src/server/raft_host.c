@@ -409,6 +409,12 @@ struct efs_raft_host {
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
+    /* Raft frames a peer handler could not queue (inbox full): the frame
+     * is lost and the peer still gets its RAFT_REPLY. Counted since Sep 30
+     * 2026; before that a drop had no line and no counter. Not gated on
+     * EFS_RAFT_OBS — the first ten are logged, the total is printed on
+     * the raft-obs line. */
+    uint64_t inbox_drop;
     /* Last 64 publish-batch waits (propose → apply), microseconds. */
     uint64_t obs_pub_ring[64];
     uint64_t obs_pub_n;
@@ -754,10 +760,14 @@ static void *host_sender(void *arg)
             if (gw > tx->st_get_max_us)
                 tx->st_get_max_us = gw;
         }
-        if (pc->kind == EFS_CONN_TCP && pc->fd >= 0) {
-            efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+        /* Every conn kind. Until Sep 30 2026 this was TCP-only, so an
+         * RDMA lane waited EFS_IO_TIMEOUT_MS (30 s) for one RAFT_REPLY
+         * while every heartbeat behind it sat in the queue; the unheard
+         * peer campaigned and deposed the leader (426 group-2 terms in
+         * 13 min under one ecopy, results/measure/20260930-040600-*). */
+        efs_conn_set_recv_timeout(pc, HOST_SEND_IO_MS);
+        if (pc->fd >= 0)
             efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
-        }
         /* A fresh conn was sized at 1 above; RDMA may allow fewer than
          * the frames popped if the conn changed kind. Send what fits. */
         depth = host_sender_depth(pc);
@@ -4648,6 +4658,7 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
     }
     if (any || h->obs_wait_timeouts || h->obs_pump_hold_max_us ||
         h->obs_arc_miss || h->obs_arc_term_miss || h->obs_opid_replay ||
+        __atomic_load_n(&h->inbox_drop, __ATOMIC_RELAXED) ||
         __atomic_load_n(&h->obs_pub_n, __ATOMIC_RELAXED)) {
         uint64_t pub_n = __atomic_load_n(&h->obs_pub_n, __ATOMIC_RELAXED);
         uint64_t pub_p50 = 0;
@@ -4678,7 +4689,7 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 "apply_max=%lluus persist_max=%lluus applies_in_worst=%llu "
                 "arc_miss=%llu arc_term_miss=%llu opid_replay=%llu "
                 "fin_q=%llu fin_done=%llu fin_drop=%llu fin_full=%llu "
-                "pub_p50=%lluus pub_max=%lluus\n",
+                "pub_p50=%lluus pub_max=%lluus inbox_drop=%llu\n",
                 (unsigned long long)h->obs_wait_timeouts,
                 (unsigned long long)h->obs_pump_hold_max_us,
                 (unsigned long long)h->obs_wait_max_us,
@@ -4697,7 +4708,9 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
                 (unsigned long long)h->fin_full,
                 (unsigned long long)pub_p50,
                 (unsigned long long)__atomic_exchange_n(&h->obs_pub_max_us, 0,
-                                                       __ATOMIC_RELAXED));
+                                                       __ATOMIC_RELAXED),
+                (unsigned long long)__atomic_load_n(&h->inbox_drop,
+                                                    __ATOMIC_RELAXED));
         h->obs_pump_hold_max_us = 0;
         h->obs_wait_max_us = 0;
         h->obs_drain_max_us = 0;
@@ -6420,7 +6433,20 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
     memcpy(copy, payload, plen);
     pthread_mutex_lock(&h->inbox_mu);
     if (h->inbox_n >= HOST_INBOX_MAX) {
+        uint64_t n;
+
         pthread_mutex_unlock(&h->inbox_mu);
+        n = __atomic_add_fetch(&h->inbox_drop, 1, __ATOMIC_RELAXED);
+        if (n <= 10)
+            fprintf(stderr,
+                    "raft-host: inbox full, dropped frame type=%u group=%u "
+                    "from=%d len=%u (drop #%llu)\n",
+                    (unsigned)copy[0], (unsigned)copy[1],
+                    (int)(int32_t)(((uint32_t)copy[4] << 24) |
+                                   ((uint32_t)copy[5] << 16) |
+                                   ((uint32_t)copy[6] << 8) |
+                                   (uint32_t)copy[7]),
+                    plen, (unsigned long long)n);
         free(copy);
         return EFS_ERR_BUSY;
     }

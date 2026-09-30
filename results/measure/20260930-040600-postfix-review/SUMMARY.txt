@@ -1,0 +1,186 @@
+Sep 30 2026 04:06Z — review of the user's post-fix runs from fstor007
+=====================================================================
+
+Cluster: fcstor003–006 `06916bc7e5c1-dirty` (HEAD 06916bc7 + the uncommitted
+raft.c wedge fix), rolled `--all` 03:56Z with `--perf` only,
+`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`. fstor007 mounted `client.sh --perf`
+(daemon pid 378525, RDMA, FUSE_OK). No other client. Files reviewed are
+~/orcd/scratch/efs/perf/efs-mount/{ls,find,du,rsync,ecrawl,ecopy}.strace.txt
+(all copied 00:06:59 local; their content is 00:01–00:05 local =
+04:01–04:05Z) plus flat/by_thread/callers.txt from the 00:05:24 perf stop.
+Reduction script: strace_reduce.py (here). Raw pulls: the other .txt here.
+
+What the user ran (local time = UTC−4)             wall     efs syscall shape
+--------------------------------------------------------------------------------
+00:01:21  ls -l /tmp/efs-mount/                    0.015 s  8 statx, max 0.4 ms
+00:01:52  find /tmp/efs-mount/ -ls                 6.5 s    72 600 lines, no call ≥ 0.2 s
+00:02:15  du -hs /tmp/efs-mount/                   5.8 s    no call ≥ 0.2 s
+00:02:35  rsync -aP ~/git/ /tmp/efs-mount/git/     50.8 s   Ctrl-C (exit 20/19). Re-sync
+                                                            over the earlier partial tree:
+                                                            rename 3103 × 6.2 ms (19.2 s),
+                                                            stat 27 347 × 0.33 ms, openat
+                                                            13 281 × 0.60 ms, close 0.34 ms,
+                                                            utimensat 1.05 ms, chmod 0.49 ms;
+                                                            max single call 36 ms. Clean.
+00:03:35  ecrawl --no-write --progress             2.8 s    2770 openat, 4.5 ms mean,
+                                                            32 ms max, threads in parallel.
+00:03:51  ecopy --verify /data1/erbmi1/software/   80 s     Ctrl-C (exit 130). 22.42 GiB
+          → /tmp/efs-mount/software/                        payload, then 0 B/s. 611
+                                                            newfstatat totalling 1122 s
+                                                            across threads; 513 calls
+                                                            ≥ 0.2 s; 12 of them 55–59.5 s;
+                                                            one mkdir 7.6 s (EEXIST); 153
+                                                            "verification metadata mis…"
+                                                            lines at start — all "(mtime)";
+                                                            a utimens between write and
+                                                            close is lost on efs, see
+                                                            ../20260930-044100-mtime-utimens-close.
+
+The first four commands are the healthy per-op numbers for this build with
+no server strace: stat 0.3 ms, open 0.6 ms, close 0.3 ms, utimensat 1.0 ms,
+rename 6 ms (a rename is a cross-shard txn), all from one client with a
+warm server. These are the "true per-op numbers" the rerun was for.
+
+What went wrong: both Raft groups flapped while ecopy ran
+--------------------------------------------------------
+
+Term changes since the 03:56Z roll (server-terms-and-counters.txt):
+group 0: 63 (03:56:35–04:05:27Z), group 2: 426 on fcstor006, 281 on
+fcstor004, 253 on fcstor005 (03:56:37–04:09:39Z). Group 2 settled at term
+669 with leader fcstor005 at 04:09:39Z and was still there at 04:11:19Z
+(g2-state-041119Z.txt: all three voters commit==applied 465094–465096).
+
+The window (server-window-040435Z.txt, 04:04:35–04:05:35Z):
+
+- fcstor004 (g2 leader) logs `LEADER->FOLLOWER leader=-1` and is re-elected
+  0.6 s later, every 1–2 s, each cycle advancing commit by ~2. From
+  04:04:51Z fcstor006 joins in: FOLLOWER→CANDIDATE→LEADER→FOLLOWER, then
+  CANDIDATE→CANDIDATE every 0.5–0.9 s for a minute with commit frozen at
+  464766 while terms run 328→379. It became leader six more times at
+  04:05:26, 04:05:37, 04:05:56, 04:06:07, 04:06:37Z, each for ≤ 1 s.
+- fcstor005 was g0 leader 04:03:56–04:04:54Z; fcstor003 flapped as g0
+  leader 04:05:08–04:05:27Z (terms 64→90, one per second).
+- The senders: fcstor004 `tx->2` (to fcstor005) `sent=73557` frozen across
+  two 5 s samples while `enq` grew 83859→85114, `hi` 300→354. fcstor006
+  `tx->2` `sent=1401` frozen from 04:04:5xZ to 04:05:09Z (then fail 1→3),
+  `rtt_avg` 21.8 ms → 36.6 ms; its `tx->1` (to fcstor004) `sent=64046`
+  frozen 04:04:5xZ→04:05:29Z, then `fail` 0→1. At 04:08Z fcstor004 `tx->3`
+  went `sent 86682→86816` while `enq` +1754, `fail` 3→8, `hi=2048` (cap),
+  `rtt_avg` 401 µs → 1.8 ms; fcstor006 `tx->2` `rtt_avg=92–104 ms`.
+- No `efs: RDMA recv CQE error`, no `retry counter`, no QP line on any
+  node. `ping` fcstor006→004/005 0.03 ms. `pump_hold_max` ≤ 2.7 ms,
+  `apply_max` ≤ 67 µs on every node — the pump is not the stall.
+
+Mechanism, from the code:
+
+1. `host_sender` (raft_host.c ~690–800) sends up to `depth` frames and then
+   blocks in `efs_conn_recv_msg` for each `RAFT_REPLY`. For a TCP peer conn
+   it sets `HOST_SEND_IO_MS` = 250 ms (the comment at raft_host.c:45–49
+   says why: "a dead peer must not sit on the 30 s pool SO_RCVTIMEO or its
+   outbox becomes a 30 s/message drip"). For an RDMA peer conn that branch
+   is skipped (`if (pc->kind == EFS_CONN_TCP …)`) and the wait is
+   `conn_rdma_frame` → `efs_rdma_recv_wait(c->rc, EFS_IO_TIMEOUT_MS)` =
+   **30 000 ms** (protocol.c:380, common.h:64). A peer frame that is not
+   answered holds the whole lane — heartbeats included — for 30 s, then
+   `fail++` and the conn is rebuilt. That is exactly the `sent`-frozen /
+   `fail+1` pairs above, and 30 s is 60 election timeouts.
+2. During that hold the peer hears no heartbeat, campaigns (`election_ticks`
+   100 × 5 ms), and its VOTE_REQ (which does get through — votes replace a
+   queued heartbeat in `host_send` and the other lanes are alive) carries a
+   higher term. `on_vote_req` → `maybe_step_down` steps the live leader
+   down unconditionally (raft.c:1051); there is no Pre-Vote and no
+   "heard from the leader within the election timeout → refuse" check. The
+   leader re-wins 0.6 s later, the stalled peer campaigns again, repeat.
+   fcstor006 at 04:04:56–04:06:38Z is the textbook disruptive server: a
+   behind, half-connected node that inflates the term 50× and takes the
+   leader down each time.
+3. Client cost of each cycle: every group-2 read waits `HOST_READ_TRIES`
+   400 ms → BUSY (`wait_timeouts`: fcstor004 0→1290 in the ecopy window,
+   fcstor005 57), the client retries 16× (10.3 s) and returns EBUSY. fuse
+   log for pid 378525 (client-log-and-ecopy.txt): 21 `shard=0 type=43`
+   (LOOKUP) exhausted, 8 `dual type=67` (REPORT) exhausted, ~20 more
+   LOOKUP/SETATTR shards exhausted, and a stream of `retry type=43
+   why=no-hint from=2/3` (hintless NOT_PRIMARY from fcstor005/006 during
+   the elections — legitimate this time; `addr2line`: LOOKUP
+   handler.c:630, UNLINK :662, REPORT :839). The 55–59 s `newfstatat`
+   walls in ecopy are LOOKUP → 16 × 400 ms + backoff, several times per
+   path component. The 96 727-record REPORT (`report-split nrec=96727
+   pack_ms=846 push_ms=217 finish_ms=201 rc=0` on fcstor004) was first
+   answered `rc=-15` NOT_PRIMARY four times by fcstor005.
+
+Why this did not show before: the 02:13Z rsync (`20260930-021317`) ran
+with zero elections because it is one rsync process (~20 RPCs in flight);
+ecopy runs 400 threads and a 22 GiB payload, so every server's RDMA lanes,
+including the peer lanes, see queueing at once. The 01:21Z ecopy of ~/git
+(`20260930-012100-ecopy-git`) had the same g2 signature (terms 18→253,
+`hi=2048`) and was written off as "no quiet path"; it was this.
+
+What is not known yet: where the RAFT_REPLY goes for 30 s. The frames of
+the blocked batch DO reach the peer and are processed: fcstor006 won
+elections (04:04:55, 04:05:26, …) while both of its lanes showed `sent`
+frozen, so its VOTE_REQ was in a batch whose sends completed and whose
+replies never came. `st_sent` counts acked frames only, which is why it
+freezes. The receiver's handler is non-blocking (`server_raft_host_inbox`
+copies into a 256-slot inbox and returns BUSY when full — silently
+dropping the frame; `server_handle_conn` still sends RAFT_REPLY; drops
+are not counted). `pend_push` ring overflow marks the conn broken and
+wakes the waiter at once, so it is not a silent 30 s either. What is left:
+the peer's `efs_conn_send_msg(RAFT_REPLY)` on its conn thread (a send
+that waits for a credit or a send-CQ completion), or the sender node's
+shared `recv_poller` not harvesting that reply's completion (one poller
+per device, `g_reg_lock` per WC, shared with ~400 client conns under
+ecopy). A stack sample of the four sender threads and of the peer-conn
+handler threads on the other node during a storm (`eu-stack -p`, or
+`perf record -e sched:sched_switch -g`) decides it; the server `--perf`
+recorders now running are on-CPU only and will not.
+
+Fixes
+-----
+
+Rolled (03:56Z, in tree, uncommitted): the group-0 wedge — `on_ae_req`
+replies `match = prev_index + nentries`; `send_idx_cover` in
+`become_leader`, `maybe_append_cold`, `efs_raft_change`. Verified by this
+review: `ls`/`find`/`du`/rsync above, group 0 commit==applied on all
+voters, zero `apply-sleep` before the ecopy.
+
+Mechanical, not yet in tree (the decision already exists in the
+raft_host.c:45–49 comment; it was only applied to TCP):
+  F1. Bound the RDMA peer lane's reply wait to `HOST_SEND_IO_MS` like the
+      TCP lane: give `efs_conn` a per-conn recv timeout that
+      `conn_rdma_frame` passes to `efs_rdma_recv_wait` instead of
+      `EFS_IO_TIMEOUT_MS`, and have `host_sender` set it on every peer
+      conn. Gate: `sent` never frozen across a 5 s `raft-obs` sample while
+      `enq` grows; no `fail` step of exactly one after a 30 s gap.
+  F2. Count inbox drops: `server_raft_host_inbox` returning BUSY is a lost
+      Raft message today with no line and no counter; print it on the
+      `raft-obs` line (`inbox_drop=`) and log the first ten.
+
+Design, ask before writing (Raft §4.2.3 / §9.6, not in the spec):
+  D15. Leader stickiness: a voter that received an AppendEntries from the
+       current leader within the last election timeout does not grant a
+       vote and does not step down on a higher-term VOTE_REQ (Pre-Vote or
+       CheckQuorum are the two standard shapes). Without it, F1 shortens
+       each disruption from 30 s to 250 ms but a stalled peer still takes
+       the leader down once per stall.
+  D16. Whether peer (Raft) frames should share the RDMA device's single
+       shared recv CQ / poller and the per-conn credit scheme with client
+       traffic at all, or get their own QP class with reserved credits.
+       Depends on the stack sample above; do not pick before it.
+
+Client profile (client-perf-*.txt; 34K samples, cycles, all threads)
+-------------------------------------------------------------------
+27.1 % `__memmove_avx512_unaligned_erms` (fstor007 is Intel; the fp call
+graph attributes 6.8 % to `efs_rdma_send_frame` ← `put_fragments_parallel`
+← `dcache_flush_slot_inner`, 3.3 % under `do_user_addr_fault` = first
+touch of fresh buffers, the rest unattributed), 10.1 % blake3
+(`hash_write_fragments` 6.3 %), 3.9 % `xor_into` (EC), 2.9 % kernel memcpy
+(FUSE copy-in), 1.5 % `efs_rdma_recv_wait`, 1.0 % `recv_poller`, 0.8 %
+`forget_ino_on_tab`, 0.6 % `efs_export_forget_ino`, 0.6 % `icnt_get`.
+That is the 22 GiB write payload of ecopy — the copy/hash/XOR pipeline
+already known from Sep 17–18 — and it is on-CPU only; the 59 s stat walls
+are off-CPU in the RPC retry loop and do not appear here. Nothing new on
+the metadata side of the client.
+
+Do not quote a rate from any of these runs (perf and strace on the client;
+both Ctrl-C'd). The per-op latencies of ls/find/du/rsync are valid
+references for this build.

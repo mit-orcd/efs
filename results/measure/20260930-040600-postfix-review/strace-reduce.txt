@@ -1,0 +1,90 @@
+-----
+efs-rec: start 2026-09-30T04:08:02Z pid=639867 host=login007
+efs-rec: cmd cd ~/orcd/scratch/efs/perf/efs-mount && for f in ls du find ecrawl rsync ecopy; do echo "===== $f.strace.txt"; python3 ~/efs-runs/strace_reduce.py $f.strace.txt; done 2>&1
+===== ls.strace.txt
+cmd: execve("/usr/bin/ls", ["ls", "-l", "/tmp/efs-mount/"], 0x7ffc472d5378 /* 47 vars */) = 0 <0.000216>
+span: 00:01:21.883458 .. 00:01:21.898683  wall=0.0s  lines=301
+efs syscalls: 13  time in efs syscalls: 0.00s (17% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+statx                 8      0.002      0.27       0.4
+execve                1      0.000      0.22       0.2
+lgetxattr             1      0.000      0.13       0.1
+getxattr              2      0.000      0.02       0.0
+openat                1      0.000      0.05       0.0
+efs errors:
+  getxattr     EOPNOTSUPP 2
+  lgetxattr    EOPNOTSUPP 1
+slow (>= 0.2 s, work syscalls): 0
+===== du.strace.txt
+cmd: execve("/usr/bin/du", ["du", "-hs", "/tmp/efs-mount/"], 0x7ffc1138a098 /* 47 vars */) = 0 <0.000227>
+span: 00:02:15.998377 .. 00:02:21.757834  wall=5.8s  lines=39149
+efs syscalls: 5  time in efs syscalls: 0.00s (0% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+newfstatat            2      0.000      0.17       0.2
+execve                1      0.000      0.23       0.2
+openat                1      0.000      0.04       0.0
+write                 1      0.000      0.01       0.0
+slow (>= 0.2 s, work syscalls): 0
+===== find.strace.txt
+cmd: execve("/usr/bin/find", ["find", "/tmp/efs-mount/", "-ls"], 0x7ffdfcb1cab8 /* 47 vars */) = 0 <0.000208>
+span: 00:01:52.992662 .. 00:01:59.476560  wall=6.5s  lines=72600
+efs syscalls: 4  time in efs syscalls: 0.00s (0% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+newfstatat            2      0.000      0.17       0.3
+execve                1      0.000      0.21       0.2
+openat                1      0.000      0.04       0.0
+slow (>= 0.2 s, work syscalls): 0
+===== ecrawl.strace.txt
+cmd: execve("/tmp/ereport/ecrawl", ["/tmp/ereport/ecrawl", "--no-write", "--progress", "/tmp/efs-mount/"], 0x7ffe289c1660 /* 47 vars */) = 0 <0.000221>
+span: 00:03:35.825706 .. 00:03:38.596408  wall=2.8s  lines=52742
+efs syscalls: 2775  time in efs syscalls: 12.59s (454% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+openat             2770     12.588      4.54      32.3
+execve                1      0.000      0.22       0.2
+newfstatat            1      0.000      0.22       0.2
+faccessat2            1      0.000      0.20       0.2
+write                 1      0.000      0.01       0.0
+readlink              1      0.000      0.01       0.0
+efs errors:
+  readlink     EINVAL   1
+slow (>= 0.2 s, work syscalls): 0
+===== rsync.strace.txt
+cmd: execve("/usr/bin/rsync", ["rsync", "-aP", "/home/erbmi1/git/", "/tmp/efs-mount/git/"], 0x7fff6bb5c3d0 /* 47 vars */) = 0 <0.000224>
+span: 00:02:35.752985 .. 00:03:26.553784  wall=50.8s  lines=139342
+efs syscalls: 21  time in efs syscalls: 0.00s (0% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+newfstatat            1      0.001      0.60       0.6
+execve                1      0.000      0.22       0.2
+read                 16      0.000      0.01       0.0
+chdir                 1      0.000      0.17       0.2
+write                 2      0.000      0.02       0.0
+slow (>= 0.2 s, work syscalls): 0
+===== ecopy.strace.txt
+cmd: execve("./ecopy", ["./ecopy", "--verify", "/data1/erbmi1/software/", "/tmp/efs-mount/software/"], 0x7ffcd8c551c0 /* 47 vars */) = 0 <0.000750>
+span: 00:03:51.717008 .. 00:05:11.905236  wall=80.2s  lines=159074
+efs syscalls: 1234  time in efs syscalls: 1134.20s (1414% of wall)
+efs syscall       count    total_s   mean_ms    max_ms
+newfstatat          611   1121.913   1836.19   59473.0
+mkdir                 1      7.646   7646.06    7646.1
+openat              607      4.642      7.65      47.9
+execve                1      0.001      0.75       0.8
+write                12      0.000      0.02       0.0
+readlink              2      0.000      0.10       0.2
+efs errors:
+  newfstatat   ENOENT   3
+  readlink     EINVAL   2
+  mkdir        EEXIST   1
+slow (>= 0.2 s, work syscalls): 513
+    59.473s 00:04:55.367422 380689 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/cm/local/modulefiles/module-info", {st_mode=S_IFREG|0644, st_size=1990, ...}, AT_SYMLINK_NOFOLLOW) = 0 <59.473031>
+    59.465s 00:04:55.364110 380680 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/home/software/cerbero/.gitattributes", {st_mode=S_IFREG|0644, st_size=126, ...}, AT_SYMLINK_NOFOLLOW) = 0 <59.465186>
+    59.462s 00:04:55.364583 380701 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/pkg/mpc/1.2.1", {st_mode=S_IFDIR|0775, st_size=0, ...}, AT_SYMLINK_NOFOLLOW) = 0 <59.462045>
+    58.609s 00:04:55.364253 380695 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/pkg/gcc/src/4.9", {st_mode=S_IFREG|0664, st_size=502, ...}, AT_SYMLINK_NOFOLLOW) = 0 <58.609288>
+    58.239s 00:04:55.365425 380692 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/home/software-r8-x86_64/spack-20230328/LICENSE-APACHE", {st_mode=S_IFREG|0664, st_size=11358, ...}, AT_SYMLINK_NOFOLLOW) = 0 <58.239373>
+    57.332s 00:04:55.369140 380694 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/home/software-r8-x86_64/spack-v0.19.1.old/NOTICE", {st_mode=S_IFREG|0664, st_size=1167, ...}, AT_SYMLINK_NOFOLLOW) = 0 <57.331724>
+    57.322s 00:04:55.364023 380681 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/pkg/matlab/R2025b/license_agreement.txt", {st_mode=S_IFREG|0444, st_size=84026, ...}, AT_SYMLINK_NOFOLLOW) = 0 <57.322385>
+    56.859s 00:04:55.364599 380693 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/cm/shared/rpms/cm-iperf-2.0.5-26_cm6.1.x86_64.rpm", {st_mode=S_IFREG|0644, st_size=36556, ...}, AT_SYMLINK_NOFOLLOW) = 0 <56.858616>
+    55.218s 00:04:55.366372 380683 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/home/software-r8-x86_64/spack-20230328/.codecov.yml", {st_mode=S_IFREG|0664, st_size=963, ...}, AT_SYMLINK_NOFOLLOW) = 0 <55.217831>
+    55.205s 00:04:55.367283 380688 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/pkg/julia/1.12.6/LICENSE.md", {st_mode=S_IFREG|0644, st_size=1321, ...}, AT_SYMLINK_NOFOLLOW) = 0 <55.205229>
+    55.205s 00:04:55.367003 380697 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/pkg/miniforge/24.3.0-0", {st_mode=S_IFDIR|0755, st_size=0, ...}, AT_SYMLINK_NOFOLLOW) = 0 <55.204787>
+    55.203s 00:04:55.366920 380687 newfstatat(AT_FDCWD, "/tmp/efs-mount/software/cm/local/modulefiles/cmsh", {st_mode=S_IFREG|0644, st_size=372, ...}, AT_SYMLINK_NOFOLLOW) = 0 <55.202643>
+efs-rec: end 2026-09-30T04:08:04Z rc=0

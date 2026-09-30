@@ -1,0 +1,17 @@
+-----
+efs-rec: start 2026-09-30T05:12:48Z pid=1915292 host=login007
+efs-rec: cmd ~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh fstor007.ib "findmnt -no FSTYPE /tmp/efs-mount && stat /tmp/efs-mount/ >/dev/null && echo FUSE_OK; grep -o \"build=[^ ]*\" /tmp/efs-mount/../efs/fuse.log | head -1; timeout 12 python3 /tmp/mtime_repro.py /tmp/efs-mount/measure/mtime-repro3"
+fuse.efs-fuse
+FUSE_OK
+ecopy-order                      write=1790745169.325277236 futimens=1380661863.000000000 close=1380661863.000000000 rename=1380661863.000000000  -> final 1380661863.000000000 OK
+ecopy-order-nosleep-stat         write=1790745169.356635626 futimens=1380661863.000000000 close=1380661863.000000000  -> final 1380661863.000000000 OK
+rsync-order                      write=1790745169.371517771 close=1790745169.373105171 utimens=1380661863.000000000  -> final 1380661863.000000000 OK
+fsync-between                    write=1790745169.388412938 futimens=1380661863.000000000 fsync=1380661863.000000000 close=1380661863.000000000  -> final 1380661863.000000000 OK
+futimens-then-write              futimens=1380661863.000000000 write=1790745169.408755497 close=1790745169.409579732  -> final 1790745169.409579732 WRONG
+after 1 s:
+  ecopy-order.final            1380661863.000000000
+  ecopy-order-nosleep-stat     1380661863.000000000
+  rsync-order                  1380661863.000000000
+  fsync-between                1380661863.000000000
+  futimens-then-write          1790745169.409579732
+efs-rec: end 2026-09-30T05:12:50Z rc=0
