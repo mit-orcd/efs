@@ -104,9 +104,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  256/128 batches, `gc-pass` line; learnings below;
  `results/measure/20260930-063500-perf-dir-review`). g0 leader
  fcstor005, g2 leader fcstor006 (term 686), commit==applied, lane
- `fail=0`, `inbox_drop=0`. fcstor007 is mounted (`/tmp/efs` =
- tree with the client evictor fix, 07:07Z, `fuse.efs-fuse`,
- MOUNT_OK); 003–006 and 008–015 have no client. fstor007's client
+ `fail=0`, `inbox_drop=0`. No client is mounted on 003–015
+ (fcstor007's `/tmp/efs` tree has the client evictor fix, `5ea397fd`,
+ and was unmounted cleanly 07:12Z). fstor007's client
  runs the 06:16Z tree (`85f5b31c`) — it does not have the evictor
  fix; the stat-side fixes are server-side and reach it. Prior
  06:16Z roll (`~/efs-runs/roll126.log`): `85f5b31c…-dirty`
