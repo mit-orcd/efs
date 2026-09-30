@@ -58,6 +58,13 @@ struct efs_conn {
      * conn (Sep 30 2026: a Raft peer lane sat 30 s on one lost RAFT_REPLY
      * and the unheard peer deposed the leader). */
     int recv_timeout_ms;
+    /* Channel the last efs_conn_recv_msg* delivered on. A pipelined
+     * sender that mixed an RDMA-sized message with a TCP-sized one gets
+     * its replies on two channels and must count them per channel
+     * (Sep 30 2026: the Raft peer lane between the two dual-group hosts
+     * read TCP only after a big AppendEntries, left the RDMA reply in the
+     * ring, and timed out every batch). */
+    int last_recv_chan;
 };
 
 /* Take ownership of fd. */

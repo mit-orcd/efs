@@ -411,6 +411,7 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
 {
     if (!c->rc || c->recv_chan == EFS_CONN_TCP) {
         int rc = efs_recv_msg(c->fd, type, payload, payload_len);
+        c->last_recv_chan = EFS_CONN_TCP;
         if (rc == 0)
             efs_conn_note_ok(c);
         return rc;
@@ -419,10 +420,13 @@ int efs_conn_recv_msg(struct efs_conn *c, uint8_t *type, void **payload,
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
-    if (rc == EFS_ERR_AGAIN)
+    if (rc == EFS_ERR_AGAIN) {
+        c->last_recv_chan = EFS_CONN_TCP;
         return efs_recv_msg(c->fd, type, payload, payload_len);
+    }
     if (rc != EFS_OK)
         return rc;
+    c->last_recv_chan = EFS_CONN_RDMA;
     if (payload_len)
         *payload_len = plen;
     if (plen == 0 || !payload) {
@@ -448,18 +452,23 @@ int efs_conn_recv_msg_into(struct efs_conn *c, uint8_t *type, uint8_t *status,
                            void *hdr, uint32_t hdr_len,
                            void *body, uint32_t body_len)
 {
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
+    if (!c->rc || c->recv_chan == EFS_CONN_TCP) {
+        c->last_recv_chan = EFS_CONN_TCP;
         return efs_recv_msg_into(c->fd, type, status, hdr, hdr_len,
                                  body, body_len);
+    }
 
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
     int rc = conn_rdma_frame(c, type, &pl, &plen);
-    if (rc == EFS_ERR_AGAIN)
+    if (rc == EFS_ERR_AGAIN) {
+        c->last_recv_chan = EFS_CONN_TCP;
         return efs_recv_msg_into(c->fd, type, status, hdr, hdr_len,
                                  body, body_len);
+    }
     if (rc != EFS_OK)
         return rc;
+    c->last_recv_chan = EFS_CONN_RDMA;
     if (plen != 1 && plen != 1 + hdr_len + body_len) {
         efs_rdma_recv_repost(c->rc);
         return EFS_ERR_PROTO;
