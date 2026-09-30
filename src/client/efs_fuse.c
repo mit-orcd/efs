@@ -1547,6 +1547,7 @@ static pthread_mutex_t g_open_mu = PTHREAD_MUTEX_INITIALIZER;
 struct efs_open_ref {
     efs_ino_t ino;
     uint64_t n;
+    int leased; /* first open took HOLD; last close must release it */
     struct efs_open_ref *next;
 };
 static struct efs_open_ref *g_open_refs;
@@ -1635,18 +1636,36 @@ static int efs_open_note(efs_ino_t ino)
     return first;
 }
 
-/* Returns 1 when this was the last close (caller must release the HOLD). */
-static int efs_close_note(efs_ino_t ino)
+static void efs_open_set_leased(efs_ino_t ino)
+{
+    struct efs_open_ref *r;
+
+    pthread_mutex_lock(&g_open_mu);
+    for (r = g_open_refs; r; r = r->next)
+        if (r->ino == ino) {
+            r->leased = 1;
+            break;
+        }
+    pthread_mutex_unlock(&g_open_mu);
+}
+
+/* Returns 1 when this was the last close. *leased is 1 when that close
+ * must release the HOLD taken on the first open. */
+static int efs_close_note(efs_ino_t ino, int *leased)
 {
     struct efs_open_ref **pp, *r;
     int last = 0;
 
+    if (leased)
+        *leased = 0;
     pthread_mutex_lock(&g_open_mu);
     for (pp = &g_open_refs; (r = *pp); pp = &r->next) {
         if (r->ino == ino) {
             if (r->n > 0)
                 r->n--;
             if (r->n == 0) {
+                if (leased)
+                    *leased = r->leased;
                 *pp = r->next;
                 free(r);
                 last = 1;
@@ -1766,8 +1785,25 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         if (trc != 0)
             return trc;
     }
-    if (fi)
-        (void)efs_open_note(row.ino);
+    /* First open of an existing file takes the server hold so a peer
+     * unlink keeps the row (nlink 0) until this fd's last close.
+     * CREATE does not: a hold per new file is the names_crazy wall.
+     * Without the hold, the peer's later read pulls a deleted layout
+     * and returns EIO (peer_unlink_while_b_has_fd). */
+    if (fi && !efs_mode_is_dir(row.mode)) {
+        int first = efs_open_note(row.ino);
+
+        if (first) {
+            int hrc = efs_client_rpc_hold(g_client.export_id, row.ino, 1,
+                                          g_client.flock_token);
+
+            if (hrc != EFS_OK) {
+                (void)efs_close_note(row.ino, NULL);
+                return fuse_stat_errno(hrc);
+            }
+            efs_open_set_leased(row.ino);
+        }
+    }
     return 0;
 }
 
@@ -2827,6 +2863,9 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
                                          uid, gid,
                                          0);
     if (ino == 0) {
+        /* fuse_create_errno's lookup overwrites last_err. Keep the
+         * create's rc: the 20:21Z EIO line did not say which. */
+        int create_rc = g_client.last_err;
         int e = fuse_create_errno(parent.ino, name);
         if (e == -EEXIST && fi && !(fi->flags & O_EXCL)) {
             struct efs_inode exist;
@@ -2846,14 +2885,14 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
                 (void)efs_open_note(ino);
             } else {
                 if (e != -EEXIST)
-                    fprintf(stderr, "create %s failed (%s)\n", name,
-                            e == -EIO ? "EIO" : "err");
+                    fprintf(stderr, "create %s failed (%s efs_rc=%d)\n", name,
+                            e == -EIO ? "EIO" : "err", create_rc);
                 return e;
             }
         } else {
             if (e != -EEXIST)
-                fprintf(stderr, "create %s failed (%s)\n", name,
-                        e == -EIO ? "EIO" : "err");
+                fprintf(stderr, "create %s failed (%s efs_rc=%d)\n", name,
+                        e == -EIO ? "EIO" : "err", create_rc);
             return e;
         }
     }
@@ -3312,8 +3351,9 @@ static int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
 static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
 {
     efs_ino_t fh = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+    int leased = 0;
     efs_client_note_meta_change(0);
-    if (!(fh && efs_close_note(fh)))
+    if (!(fh && efs_close_note(fh, &leased)))
         return 0;
     {
         uint64_t lk = fi ? fi->lock_owner : 0;
@@ -3333,8 +3373,12 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
                                           g_client.flock_token);
                 (void)efs_client_rpc_flock(g_client.export_id, fh,
                                            EFS_FLOCK_UN, locked_owner);
+                leased = 0; /* same owner; the unlock already closed it */
             }
         }
+        if (leased)
+            (void)efs_client_rpc_hold(g_client.export_id, fh, 0,
+                                      g_client.flock_token);
         efs_client_stage_evict_ino(fh);
     }
     return 0;

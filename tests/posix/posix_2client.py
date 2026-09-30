@@ -1707,16 +1707,25 @@ try:
     status = b"FAIL"
     err = b"go timeout"
     while time.monotonic() < deadline:
-        if os.path.exists(go):
-            if mode == "holdfd":
-                nlink = os.fstat(fd).st_nlink
-                os.lseek(fd, 0, os.SEEK_SET)
-                data = os.read(fd, 4096)
-            elif mode == "pwrite1m":
-                os.pwrite(fd, b"Y", 1 << 20)
-                data = b"ok\n"
-            else:
-                data = b"ok\n"
+        try:
+            seen = os.path.exists(go)
+        except OSError as e:
+            err = ("exists %s: errno %s" % (go, e.errno)).encode()
+            break
+        if seen:
+            try:
+                if mode == "holdfd":
+                    nlink = os.fstat(fd).st_nlink
+                    os.lseek(fd, 0, os.SEEK_SET)
+                    data = os.read(fd, 4096)
+                elif mode == "pwrite1m":
+                    os.pwrite(fd, b"Y", 1 << 20)
+                    data = b"ok\n"
+                else:
+                    data = b"ok\n"
+            except OSError as e:
+                err = ("after go: errno %s" % e.errno).encode()
+                break
             status = b"OK"
             err = b""
             rc = 0
@@ -2053,14 +2062,21 @@ def run_remote(host_a, host_b, mnt, ssh, script, results_file, filt):
         d = testdir(mnt, name)
         try:
             for i, (side, _fn) in enumerate(steps):
-                if side == "ab":
-                    _remote_ab(ssh, script, host_a, host_b, name, i, d)
-                    continue
-                host = host_a if side == "a" else host_b
-                cmd = "python3 %s --exec %s %d %s" % (
-                    _q(script), _q(name), i, _q(d))
-                rc, out, err = ssh_cmd(ssh, host, cmd)
-                _check_exec_result(side, i, rc, out, err)
+                tstep = time.time()
+                try:
+                    if side == "ab":
+                        _remote_ab(ssh, script, host_a, host_b, name, i, d)
+                    else:
+                        host = host_a if side == "a" else host_b
+                        cmd = "python3 %s --exec %s %d %s" % (
+                            _q(script), _q(name), i, _q(d))
+                        rc, out, err = ssh_cmd(ssh, host, cmd)
+                        _check_exec_result(side, i, rc, out, err)
+                finally:
+                    el = time.time() - tstep
+                    if el >= 2.0:
+                        print("slow-step %s %s %d %.2fs" %
+                              (name, side, i, el), flush=True)
         except Fail as e:
             nfail += 1
             RESULTS.append((name, "FAIL", str(e)))

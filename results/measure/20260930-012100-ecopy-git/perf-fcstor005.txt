@@ -1,0 +1,80 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 78K of event 'cpu-clock'
+# Event count (approx.): 19715500000
+#
+# Overhead       Samples  Command  Shared Object            Symbol                                          
+# ........  ............  .......  .......................  ................................................
+#
+     8.47%          6680  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--4.01%--0x43dd94
+               |          0x43e280
+               |          |          
+               |          |--0.81%--0x4612ef
+               |          |          0x4207f5
+               |          |          0x4746b2
+               |          |          |          
+               |          |           --0.71%--0x4759fa
+               |          |                     0x413e48
+               |          |                     |          
+               |          |                      --0.70%--0x41aec3
+               |          |                                start_thread
+               |          |          
+               |          |--0.67%--0x467a0b
+               |          |          0x46af71
+               |          |          0x41ff90
+               |          |          0x4746b2
+               |          |          |          
+               |          |           --0.66%--0x4759fa
+               |          |                     0x413e48
+               |          |                     0x41aec3
+               |          |                     start_thread
+               |          |          
+               |           --0.62%--0x457ac8
+               |                     |          
+               |                      --0.62%--0x461595
+               |                                0x4207f5
+               |                                0x4746b2
+               |                                |          
+               |                                 --0.52%--0x4759fa
+               |                                           0x413e48
+               |                                           0x41aec3
+               |                                           start_thread
+               |          
+               |--2.98%--0x43f4c5
+               |          0x43fb71
+               |          |          
+               |          |--1.04%--0x46785e
+               |          |          |          
+               |          |           --0.69%--0x467a3b
+               |          |                     0x46af71
+               |          |                     0x41ff90
+               |          |                     0x4746b2
+               |          |                     |          
+               |          |                      --0.67%--0x4759fa
+               |          |                                0x413e48
+               |          |                                0x41aec3
+               |          |                                start_thread
+               |          |          
+               |           --0.71%--0x46bdb9
+               |                     0x422a76
+               |                     0x4746b2
+               |                     |          
+               |                      --0.69%--0x4759fa
+               |                                0x413e48
+               |                                0x41aec3
+               |                                start_thread
+               |          
+                --0.56%--0x4462a6
+                          0x43dd94
+                          0x43e280
+
+     4.29%          3382  efsd     [kernel.kallsyms]        [k] _raw_spin_unlock_irq
+            |
+            ---_raw_spin_unlock_irq

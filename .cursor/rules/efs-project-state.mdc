@@ -96,18 +96,26 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
-  **UP 20:21Z Sep 29.** Rolled 19:10Z (`~/efs-runs/gate40.log`), no
-  recorders. Embedded id `33c7e29cd161-dirty`: commit `33c7e29c` plus
-  the 17:39Z items 1–7 (tombstone skip, pipelined sender, commit
-  probe, hintless-voter skip, 1 s CQ wait, splice off, leaf mkdir,
-  fragment-root cache, in-place `applied` fd) and still-dirty W21
-  in `metadata.c`. Fresh table from the 17:04Z wipe; restart needs
-  no `--join`. jobs=1 posix **200/201** in 28.2 s
-  (`results/posix/20260929-191140`). 9-host: 200/201 on five hosts,
-  five create EIO on four (`results/posix/20260929-202024`).
-  posix2 **60/63** (`results/posix2/20260929-202044`). Tail rtt ~23 µs,
-  `nohint=0`, `apply_max` under 300 µs. Open items are START-HERE
-  §1b 20:21Z (those EIOs, three posix2 fails, D14, libfuse threads).
+  **UP 01:45Z Sep 30.** Servers restarted 01:45Z with `--perf`
+  and `--strace` (`~/efs-runs/restart53.log`); recorders are
+  `/tmp/efs-perf/efsd.data` and `efsd.strace` on fcstor003–006.
+  Clients are stopped (fcstor003–015 and fstor007, `fuse=0`).
+  Embedded id `bd57b7e74a91-dirty` (HEAD `bd57b7e7` plus
+  the uncommitted tree). Fresh table from the 17:04Z wipe; restart
+  needs no `--join`. 9-host posix **200/201** on all nine, 15.6–17.3 s
+  (`results/posix/20260930-000428`). posix2 **63/63** in 47.2 s
+  (`results/posix2/20260930-005552`): first open of an existing file
+  takes HOLD, last close releases it, CREATE does not. The 60/63
+  before that hold is `results/posix2/20260930-000915`. `nohint=0`,
+  `create-miss=0`. fstor007 8 GiB dd+fsync **661 MiB/s**
+  (12.396 s, `results/measure/20260930-005700-dd-fstor007`).
+  The `~/git` ecopy did not finish in 240 s
+  (`results/measure/20260930-012100-ecopy-git`): group 2 terms
+  18→253, `hi=2048`. Group 2 had a leader again at 01:30Z
+  (leader 3, term 253, commit==applied). Partial tree
+  `/tmp/efs-mount/measure/ecopy-git` on fstor007. Prior 9-host with
+  five create EIOs:
+  `results/posix/20260929-202024`.
   The 17:04Z reduction (194/201, before these fixes) is
   `results/measure/20260929-170457-wipeposix/ana`.
   Prior stop 13:53Z

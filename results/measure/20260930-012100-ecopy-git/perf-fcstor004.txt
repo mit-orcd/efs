@@ -1,0 +1,80 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 132K of event 'cpu-clock'
+# Event count (approx.): 33099500000
+#
+# Overhead       Samples  Command  Shared Object            Symbol                                        
+# ........  ............  .......  .......................  ..............................................
+#
+    12.11%         16037  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--6.60%--0x43dd94
+               |          0x43e280
+               |          |          
+               |          |--1.43%--0x457ac8
+               |          |          |          
+               |          |           --0.78%--0x4645a6
+               |          |          
+               |          |--0.80%--0x456f51
+               |          |          |          
+               |          |           --0.80%--0x4592b9
+               |          |                     |          
+               |          |                      --0.64%--0x4272ae
+               |          |                                0x40f780
+               |          |                                0x405374
+               |          |                                start_thread
+               |          |          
+               |          |--0.57%--0x4612ef
+               |          |          0x4207f5
+               |          |          0x4746b2
+               |          |          |          
+               |          |           --0.52%--0x4759fa
+               |          |                     0x413e48
+               |          |                     0x41aec3
+               |          |                     start_thread
+               |          |          
+               |          |--0.56%--0x46760d
+               |          |          |          
+               |          |           --0.50%--0x43769b
+               |          |                     0x40e1b8
+               |          |                     0x405374
+               |          |                     start_thread
+               |          |          
+               |           --0.52%--0x458166
+               |          
+               |--3.61%--0x43f4c5
+               |          0x43fb71
+               |          |          
+               |          |--1.71%--0x46bc4e
+               |          |          0x464344
+               |          |          |          
+               |          |           --0.55%--0x425658
+               |          |                     0x40f796
+               |          |                     0x405374
+               |          |                     start_thread
+               |          |          
+               |           --0.67%--0x46785e
+               |          
+                --0.99%--0x4462a6
+                          0x43dd94
+                          0x43e280
+
+     4.46%          5900  efsd     [kernel.kallsyms]        [k] _raw_spin_unlock_irq
+            |
+            ---_raw_spin_unlock_irq
+               |          
+                --3.64%--eventfd_write
+                          vfs_write
+                          ksys_write
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___libc_write
+                          |          
+                           --3.49%--0x47e3c1
+                                     start_thread
+

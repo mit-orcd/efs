@@ -547,8 +547,11 @@ static uint64_t now_us_(void)
 /* A directory op that ends BUSY or STALE is normal under contention and
  * must never be persistent on an idle cluster (Sep 21: one of nine
  * fresh-parent mkdirs ate the client's whole 10.4 s retry budget with no
- * server line to say why). Log those two outcomes always, at most 20 lines
- * per second per process; every other failure stays behind EFS_RAFT_DBG. */
+ * server line to say why). Log those two at most 20 lines per second.
+ * EXIST / NOT_FOUND / NOT_EMPTY are the op's real answer (EXIST is every
+ * O_CREAT of a name that is already there) and stay quiet. Anything else
+ * (IO, INVAL, PROTO, NOT_PRIMARY, …) was silent and is how the 20:21Z
+ * 9-host creates failed with no server line — log those always. */
 static int dirop_fail_on(int rc)
 {
     static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
@@ -557,12 +560,13 @@ static int dirop_fail_on(int rc)
     uint64_t now;
     int ok;
 
-    if (rc == EFS_OK)
+    if (rc == EFS_OK || rc == EFS_ERR_EXIST || rc == EFS_ERR_NOT_FOUND ||
+        rc == EFS_ERR_NOT_EMPTY)
         return 0;
     if (raft_dbg_on())
         return 1;
     if (rc != EFS_ERR_BUSY && rc != EFS_ERR_STALE)
-        return 0;
+        return 1;
     now = now_us_();
     pthread_mutex_lock(&mu);
     if (now - win_us >= 1000000ull) {
@@ -1055,8 +1059,11 @@ static int apply_salt_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 }
 
 /* Same encoding as sim pack_create / apply_create_cmd. S_IFDIR is mkdir
- * (same-group fast path). EXIST is replay (idempotent). Apply always
- * returns OK so a name clash cannot stall the log. */
+ * (same-group fast path). A replay of this command is the opid probe
+ * inside the apply (recorded OK). EXIST from the name lookup is a
+ * different creator and must stay EXIST: rewriting it to OK made both
+ * O_EXCL racers win. host_apply still returns OK to the raft core for
+ * CREATE, so the verdict does not stall the log. */
 static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                             uint32_t clen, uint64_t index)
 {
@@ -1107,12 +1114,6 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             rc = efs_meta_apply_create_file_log_op(h->kv, &at, parent, mode,
                                                    name, want, lay, qp, &ino);
         }
-    }
-    if (rc == EFS_ERR_EXIST) {
-        struct efs_meta_dentry dent;
-        if (efs_meta_apply_lookup(h->kv, parent, name, &dent) == EFS_OK)
-            ino = dent.ino;
-        rc = EFS_OK;
     }
     if (rc == EFS_OK && ino && !S_ISDIR(mode)) {
         const uint8_t *uuid = cmd + HOST_CREATE_NAME_OFF + nl;
@@ -3234,9 +3235,10 @@ static int host_wait_verdict(struct efs_raft_host *h, uint8_t group,
 }
 
 /* Wait for (idx, term) to apply; only checks that OUR entry is the one that
- * applied (NOT_PRIMARY otherwise). The verdict itself is not returned —
- * for the callers that historically ignored it (CREATE/APPEND-style single
- * commands whose apply cannot reject). */
+ * applied (NOT_PRIMARY otherwise). The verdict itself is not returned.
+ * CREATE must not use this: its apply rejects with BUSY (alloc intent)
+ * and EXIST (lost the name), and ignoring those answered the client
+ * NOT_FOUND (EIO) or OK (both O_EXCL winners). */
 static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
                              uint64_t idx, uint64_t term, int *hint)
 {
@@ -4372,6 +4374,31 @@ static void set_inode_rc(struct efs_msg_inode_reply *out, int rc, int leader_hin
     }
 }
 
+/* 1 when every active lane (file) or used dir-shard (hashed dir) of row
+ * is a group this host serves. A lane on the other group is why a
+ * single-group host answered NOT_PRIMARY with no hint after the op had
+ * already committed (Sep 29, fstor007: setattr and rename). */
+static int host_row_lanes_hosted(struct efs_raft_host *h, efs_ino_t ino,
+                                 const struct efs_meta_row *row)
+{
+    uint64_t bits;
+    uint32_t i;
+
+    bits = S_ISDIR(row->mode) && row->layout != EFS_META_LAYOUT_LOCAL
+               ? row->used_shards
+               : row->active_lanes;
+    for (i = 0; i < EFS_META_LANES; i++) {
+        uint8_t lg;
+
+        if ((bits & (1ULL << i)) == 0)
+            continue;
+        lg = efs_raft_shard_group(efs_kv_lane_shard(ino, (uint8_t)i));
+        if (!host_hosts(h, lg))
+            return 0;
+    }
+    return 1;
+}
+
 static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
                                  int *leader_hint)
 {
@@ -4404,6 +4431,17 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
         lg = efs_raft_shard_group(lsh);
         if (lg == ig)
             continue;
+        /* This host has no view of the lane's group. host_read_index
+         * would return NOT_PRIMARY with hint -1 (!v.has), and the client
+         * cannot follow that. Name a dual host instead. */
+        if (!host_hosts(h, lg)) {
+            uint8_t need[2];
+
+            host_need_both(need);
+            if (leader_hint)
+                *leader_hint = host_pick_peer(h, need, 2, -1);
+            return EFS_ERR_NOT_PRIMARY;
+        }
         rc = host_read_index(h, lg, &hint);
         if (rc != EFS_OK) {
             *leader_hint = hint;
@@ -7394,10 +7432,22 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         if (rc == EFS_OK)
             rc = host_propose(h, dg, cmd, clen, &idx, &term, &hint);
         if (rc == EFS_OK)
-            rc = host_wait_settled(h, dg, idx, term, &hint);
+            rc = host_wait_verdict(h, dg, idx, term, &hint);
     }
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
+    if (rc == EFS_OK) {
+        int lrc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord,
+                                           h, &dent);
+
+        /* The command committed and the name is not there. That is a
+         * committed create answered as failure (the I16 class); the
+         * client's create then returns EIO. */
+        if (lrc == EFS_ERR_NOT_FOUND)
+            fprintf(stderr, "raft-host: create committed but lookup missed "
+                    "parent=%llu name=%s idx=%llu term=%llu\n",
+                    (unsigned long long)parent, name,
+                    (unsigned long long)idx, (unsigned long long)term);
+        rc = lrc;
+    }
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, dent.ino, &prow);
     if (rc == EFS_OK && hashed && hold) {
@@ -8856,6 +8906,13 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     ish = (rc == EFS_OK) ? efs_kv_inode_shard(row.ino) : 0;
     if (rc == EFS_OK && efs_raft_shard_group(ish) != efs_raft_shard_group(dsh))
         rc = host_read_index(h, efs_raft_shard_group(ish), &hint);
+    if (rc == EFS_OK && !host_row_lanes_hosted(h, row.ino, &row)) {
+        uint8_t need[2];
+
+        host_need_both(need);
+        host_fwd_unlink(h, parent, name, 0, q, out, need, 2);
+        return;
+    }
     /* The file row's nlink-- (or the held last-link's nlink=0) is a delta
      * too: PUBLISH and setattr write the same row on the log path, and a
      * full image from this read snapshot would overwrite them. */
@@ -9113,6 +9170,13 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
         }
         if (rc == EFS_OK)
             rc = efs_meta_apply_resolve_tx(h->kv, parent, name, host_txn_coord, h, &dent, &row);
+        if (rc == EFS_OK && !host_row_lanes_hosted(h, row.ino, &row)) {
+            uint8_t need[2];
+
+            host_need_both(need);
+            host_fwd_unlink(h, parent, name, 0, q, out, need, 2);
+            return;
+        }
         if (rc == EFS_OK) {
             if (row.nlink > 1 || ig != dg ||
                 (prow.layout == EFS_META_LAYOUT_SPLITTING && pg != dg)) {
@@ -9569,6 +9633,16 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
     rc = host_read_index(h, g, &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    /* A lane on the other group: do the setattr on a dual host, before
+     * this one commits it and then fails the post-commit lane read. */
+    if (rc == EFS_OK && !host_row_lanes_hosted(h, ino, &row)) {
+        uint8_t need[2];
+
+        host_need_both(need);
+        host_fwd_setattr(h, ino, mask, mode, uid, gid, size, mtime,
+                         mtime_nsec, atime, atime_nsec, out, need, 2);
+        return;
+    }
     if (rc == EFS_OK)
         rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
     if (rc == EFS_OK)
@@ -9817,6 +9891,18 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         bounce_add(gs, &ngs, 8, efs_raft_shard_group(psh));
         bounce_add(gs, &ngs, 8, efs_raft_shard_group(ish));
         bounce_add(gs, &ngs, 8, efs_raft_shard_group(dsh));
+        {
+            uint32_t li;
+            uint64_t lbits = row.active_lanes;
+
+            for (li = 0; li < EFS_META_LANES; li++) {
+                if ((lbits & (1ull << li)) == 0)
+                    continue;
+                bounce_add(gs, &ngs, 8,
+                           efs_raft_shard_group(efs_kv_lane_shard(
+                               src_ino, (uint8_t)li)));
+            }
+        }
         if (!host_hosts_all(h, gs, ngs)) {
             uint8_t need[2];
 
@@ -10172,8 +10258,31 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
      * no open leases; parent loses a subdir). File dest: unlink rules
      * (nlink--, or DEL on last link; a leased last link keeps an nlink=0
      * row for open fds). */
-    if (rc == EFS_OK && xist)
+    if (rc == EFS_OK && !host_row_lanes_hosted(h, row.ino, &row)) {
+        uint8_t need[2];
+
+        host_need_both(need);
+        host_fwd_rename(h, old_parent, old_name, new_parent, new_name, q,
+                        out, need, 2);
+        return;
+    }
+    if (rc == EFS_OK && xist) {
         rc = efs_meta_apply_get_inode(h->kv, ndent.ino, &nrow);
+        /* The dest dentry was here; an unlink of it committing between
+         * that read and this one is the dest moving under the txn.
+         * NOT_FOUND would be ENOENT for a rename whose source is alive
+         * (peer_rename_vs_unlink_dst). STALE makes the client re-run. */
+        if (rc == EFS_ERR_NOT_FOUND)
+            rc = EFS_ERR_STALE;
+    }
+    if (rc == EFS_OK && xist && !host_row_lanes_hosted(h, ndent.ino, &nrow)) {
+        uint8_t need[2];
+
+        host_need_both(need);
+        host_fwd_rename(h, old_parent, old_name, new_parent, new_name, q,
+                        out, need, 2);
+        return;
+    }
     if (rc == EFS_OK && xist && efs_raft_shard_group(nsh) !=
         efs_raft_shard_group(psh) && efs_raft_shard_group(nsh) !=
         efs_raft_shard_group(ish))
@@ -10538,10 +10647,23 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
             rc = host_txn_commit(h, &t, &parts, coord, &hint);
         }
     }
-    if (rc == EFS_OK)
-        rc = host_read_inode_lanes(h, row.ino, &hint);
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_getattr(h->kv, row.ino, host_txn_coord, h, &st);
+    /* Only a commit that returned OK may be answered OK when the row is
+     * gone. A NOT_FOUND from the commit itself is the loser of
+     * peer_rename_same_src_two_dst (source already moved); turning that
+     * into OK made both renames report success. */
+    {
+        int committed = (rc == EFS_OK);
+
+        if (rc == EFS_OK)
+            rc = host_read_inode_lanes(h, row.ino, &hint);
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_getattr(h->kv, row.ino, host_txn_coord, h, &st);
+        if (committed && rc == EFS_ERR_NOT_FOUND) {
+            memset(&st, 0, sizeof(st));
+            st.ino = row.ino;
+            rc = EFS_OK;
+        }
+    }
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);

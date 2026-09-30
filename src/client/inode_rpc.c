@@ -39,6 +39,25 @@ static unsigned long long rpc_prof_now_us(void)
            (unsigned long long)ts.tv_nsec / 1000ull;
 }
 
+/* An inode RPC that returned OK only after the retry loop had already
+ * spent a second. attempts is the try that succeeded (1 = first try, so
+ * the second was a single slow round, not the BUSY ladder). The holder
+ * go-timeouts had no line at all. */
+static void rpc_note_slow_ok(uint8_t type, int attempt, int saw_busy,
+                             int status, unsigned long long t0)
+{
+    unsigned long long us;
+
+    if (status != EFS_INODE_RPC_OK || t0 == 0)
+        return;
+    us = rpc_prof_now_us() - t0;
+    if (us < 1000000ull)
+        return;
+    fprintf(stderr, "inode-rpc: slow-ok type=%u attempts=%d saw_busy=%d "
+            "status=%d us=%llu\n",
+            type, attempt + 1, saw_busy, status, us);
+}
+
 static int rpc_prof_enabled(void)
 {
     if (efs_rpc_prof_on < 0)
@@ -389,6 +408,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
     efs_node_id_t skip = 0;   /* answered NOT_PRIMARY with no hint */
     int prof = rpc_prof_enabled();
     int saw_busy = 0;
+    unsigned long long t_start = rpc_prof_now_us();
     for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
@@ -434,6 +454,9 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         }
         efs_client_conn_release(nid, conn);
         if (rtype != expect || plen < reply_len) {
+            fprintf(stderr, "inode-rpc: proto type=%u rtype=%u plen=%u "
+                    "reply_len=%u nid=%u\n",
+                    type, rtype, plen, reply_len, nid);
             free(payload);
             return EFS_ERR_PROTO;
         }
@@ -489,8 +512,10 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         if (t3 > t2 && t3 - t2 > 10000)
             fprintf(stderr, "inode-rpc: slow-recv type=%u us=%llu\n",
                     type, t3 - t2);
-        if (r->status != EFS_INODE_RPC_NOT_PRIMARY)
+        if (r->status != EFS_INODE_RPC_NOT_PRIMARY) {
+            rpc_note_slow_ok(type, attempt, saw_busy, r->status, t_start);
             return EFS_OK;
+        }
         /* NOT_PRIMARY: retry on the server-reported primary. No hint (or
          * the hint is the node that just answered) = an election is in
          * progress or a stale leader just stepped down and has not heard
@@ -955,6 +980,13 @@ int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
 {
     struct efs_msg_inode_hold req;
     memset(&req, 0, sizeof(req));
+    if (!g_client.flock_token) {
+        g_client.flock_token = ((uint64_t)getpid() << 1) ^ 1ull;
+        if (!g_client.flock_token)
+            g_client.flock_token = 1;
+    }
+    if (!owner)
+        owner = g_client.flock_token;
     req.export_id = export_id;
     req.ino = ino;
     req.flags = open ? 1u : 0u;
@@ -1075,6 +1107,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
     efs_node_id_t skip = 0;
     int saw_busy = 0;
     int prof = rpc_prof_enabled();
+    unsigned long long t_start = rpc_prof_now_us();
     for (int attempt = 0; attempt < 16; attempt++) {
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
@@ -1118,6 +1151,9 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         }
         efs_client_conn_release(nid, conn);
         if (rtype != expect || plen < reply_len) {
+            fprintf(stderr, "inode-rpc: proto type=%u rtype=%u plen=%u "
+                    "reply_len=%u nid=%u\n",
+                    type, rtype, plen, reply_len, nid);
             free(payload);
             return EFS_ERR_PROTO;
         }
@@ -1147,6 +1183,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         }
         if (r->status != EFS_INODE_RPC_NOT_PRIMARY) {
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
+            rpc_note_slow_ok(type, attempt, saw_busy, r->status, t_start);
             return EFS_OK;
         }
         if (r->primary_id == 0 || r->primary_id == nid) {

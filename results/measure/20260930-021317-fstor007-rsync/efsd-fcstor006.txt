@@ -1,0 +1,74 @@
+host=fcstor006 size=545586151 lines_total=6582422
+window 22:14:30..22:19:40 lines=1965413
+syscall                 count      total_s      max_s
+futex                  257726    43385.946   1871.290
+poll                   484990     2841.961     16.204
+accept                     18     1821.804   1771.215
+clock_nanosleep         15585      619.598      2.000
+fsync                   63983       15.976      0.003
+read                   588087        4.937      0.001
+write                  269266        3.403      0.000
+fdatasync               14329        3.204      0.001
+fstat                  151290        1.220      0.000
+pwrite64                46345        0.543      0.000
+openat                  29614        0.526      0.000
+recvfrom                   54        0.448      0.058
+mkdir                   11248        0.254      0.000
+access                  11308        0.125      0.000
+close                   10659        0.114      0.000
+unlink                   4625        0.079      0.000
+pread64                  1739        0.025      0.000
+ioctl                     126        0.025      0.001
+newfstatat               2258        0.016      0.000
+mprotect                 1187        0.016      0.000
+rename                    147        0.004      0.000
+recvmsg                   108        0.002      0.000
+mmap                       74        0.002      0.000
+lseek                     206        0.002      0.000
+writev                     18        0.001      0.000
+setsockopt                108        0.001      0.000
+sendto                     36        0.001      0.000
+rt_sigprocmask             54        0.001      0.000
+getsockname                36        0.001      0.000
+clone3                     18        0.001      0.000
+
+slow non-wait >= 20 ms: 0
+
+--- raft-obs (whole log since 01:45Z start) ---
+1479
+raft-obs: g2 term 0->253 role FOLLOWER->FOLLOWER leader=-1 commit=401958 applied=401958 t=1790732710978ms
+raft-obs: g2 term 253->255 role FOLLOWER->FOLLOWER leader=-1 commit=401958 applied=401958 t=1790732710990ms
+raft-obs: g2 term 255->256 role FOLLOWER->FOLLOWER leader=-1 commit=401958 applied=401958 t=1790732711450ms
+raft-obs: g2 term 256->257 role FOLLOWER->FOLLOWER leader=-1 commit=401958 applied=401958 t=1790732712213ms
+raft-obs: g2 term 257->258 role FOLLOWER->FOLLOWER leader=-1 commit=401958 applied=401958 t=1790732712939ms
+--- last 9 obs lines ---
+raft-obs: tx->1 enq=3 drop=0 sent=3 fail=0 hi=1 rtt_avg=355us get_avg=1415us get_max=4ms
+raft-obs: tx->2 enq=147251 drop=0 sent=146150 fail=0 hi=1 rtt_avg=387us get_avg=0us get_max=13ms
+raft-obs: wait_timeouts=0 pump_hold_max=378us lock_wait_max=1us drain_max=378us tick_max=1us apply_max=156us persist_max=564us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+raft-obs: tx->1 enq=3 drop=0 sent=3 fail=0 hi=1 rtt_avg=355us get_avg=1415us get_max=4ms
+raft-obs: tx->2 enq=147351 drop=0 sent=146250 fail=0 hi=1 rtt_avg=387us get_avg=0us get_max=13ms
+raft-obs: wait_timeouts=0 pump_hold_max=429us lock_wait_max=7us drain_max=429us tick_max=1us apply_max=125us persist_max=585us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+raft-obs: tx->1 enq=3 drop=0 sent=3 fail=0 hi=1 rtt_avg=355us get_avg=1415us get_max=4ms
+raft-obs: tx->2 enq=147454 drop=0 sent=146353 fail=0 hi=1 rtt_avg=387us get_avg=0us get_max=13ms
+raft-obs: wait_timeouts=0 pump_hold_max=396us lock_wait_max=1us drain_max=396us tick_max=1us apply_max=154us persist_max=565us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us
+--- max apply/pump_hold over the log ---
+1369 4190 59993 
+4212 6372 60021 
+0
+0
+92
+kv-compact: end bytes=877 ms=3 l0=90 l1=143 rc=0
+kv-compact: start l0=90 inputs=2 range=312 l0only=1
+kv-compact: end bytes=849 ms=2 l0=89 l1=143 rc=0
+kv-compact: start l0=89 inputs=2 range=500 l0only=1
+kv-compact: end bytes=697 ms=3 l0=88 l1=143 rc=0
+kv-compact: start l0=88 inputs=2 range=410 l0only=1
+kv-compact: end bytes=422 ms=2 l0=87 l1=143 rc=0
+kv-compact: start l0=87 inputs=2 range=450 l0only=1
+kv-compact: end bytes=360 ms=3 l0=86 l1=143 rc=0
+kv-compact: start l0=86 inputs=2 range=444 l0only=1
+kv-compact: end bytes=332 ms=2 l0=85 l1=143 rc=0
+kv-compact: start l0=85 inputs=2 range=280 l0only=1
+kv-compact: end bytes=326 ms=3 l0=84 l1=143 rc=0
+kv-compact: start l0=84 inputs=2 range=268 l0only=1
+kv-compact: end bytes=278 ms=2 l0=83 l1=143 rc=0

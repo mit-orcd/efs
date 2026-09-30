@@ -1,0 +1,80 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 81K of event 'cpu-clock'
+# Event count (approx.): 20257750000
+#
+# Overhead       Samples  Command  Shared Object         Symbol                                        
+# ........  ............  .......  ....................  ..............................................
+#
+     8.14%          6599  efsd     [kernel.kallsyms]     [k] _raw_spin_unlock_irq
+            |
+            ---_raw_spin_unlock_irq
+               |          
+               |--6.69%--eventfd_write
+               |          vfs_write
+               |          ksys_write
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __GI___libc_write
+               |          |          
+               |          |--5.21%--0x47e3c1
+               |          |          start_thread
+               |          |          
+               |           --1.08%--0x40e000
+               |          
+                --0.84%--blk_insert_flush
+                          blk_mq_submit_bio
+                          __submit_bio
+                          submit_bio_noacct_nocheck
+                          |          
+                           --0.83%--xlog_state_release_iclog
+                                     xlog_force_lsn
+                                     |          
+                                      --0.54%--xfs_log_force_seq
+                                                |          
+                                                 --0.54%--xfs_file_fsync
+                                                           __x64_sys_fsync
+                                                           do_syscall_64
+                                                           entry_SYSCALL_64_after_hwframe
+                                                           fsync
+
+     6.69%          5422  efsd     libc.so.6             [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--3.37%--0x43dd94
+               |          0x43e280
+               |          |          
+               |          |--0.59%--0x457ac8
+               |          |          
+               |           --0.54%--0x456f51
+               |                     0x4592b9
+               |          
+               |--1.70%--0x43f4c5
+               |          0x43fb71
+               |          |          
+               |           --0.79%--0x46bc4e
+               |                     0x464344
+               |          
+                --0.84%--0x4462a6
+                          0x43dd94
+                          0x43e280
+
+     2.58%          2091  efsd     [kernel.kallsyms]     [k] _raw_spin_unlock_irqrestore
+            |
+            ---_raw_spin_unlock_irqrestore
+               |          
+                --1.17%--try_to_wake_up
+                          wake_up_q
+                          |          
+                           --1.15%--futex_wake
+                                     do_futex
+                                     __x64_sys_futex
+                                     do_syscall_64
+                                     entry_SYSCALL_64_after_hwframe
+                                     |          
+                                      --0.72%--pthread_cond_signal@@GLIBC_2.3.2
+

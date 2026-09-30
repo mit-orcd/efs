@@ -608,9 +608,11 @@ int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
             *out = rpc;
         return EFS_OK;
     }
-    /* No server lease on open, so the last unlink deletes the row
-     * instead of storing nlink 0. This fd still has the ghost. A
-     * transport error is not that: keep the local count. */
+    /* An open() of an existing file holds a lease, so the last unlink
+     * stores nlink 0 and this getattr sees it. CREATE does not hold
+     * (a propose per new file), so a create'd fd can still see
+     * NOT_FOUND here and keeps the local ghost. A transport error is
+     * not that: keep the local count. */
     if (rpc_ok == EFS_ERR_NOT_FOUND)
         rpc.nlink = 0;
     else if (rpc_ok != EFS_OK) {
@@ -1264,7 +1266,10 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
     pthread_mutex_lock(&g_client.idx_mu);
     if (efs_export_rename_at(&g_client.export, old_parent, old_name,
                              new_parent, new_name) != EFS_OK &&
-        efs_export_rename(&g_client.export, ino, new_parent, new_name) != EFS_OK)
+        efs_export_rename(&g_client.export, ino, new_parent, new_name) != EFS_OK &&
+        out.mode != 0)
+        /* mode 0 is a committed rename whose inode was unlinked before
+         * the reply (zero stat). Do not plant that over a real row. */
         efs_export_upsert_inode(&g_client.export, &out);
     efs_client_stage_touch(ino);
     /* Before the unlock: the evictor takes every stripe, then the dirty

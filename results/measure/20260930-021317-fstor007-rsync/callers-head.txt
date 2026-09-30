@@ -1,0 +1,400 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 10K of event 'cycles:P'
+# Event count (approx.): 75363144439
+#
+# Children      Self  Symbol                                          
+# ........  ........  ................................................
+#
+    82.30%     0.32%  [k] entry_SYSCALL_64_after_hwframe
+            |          
+             --82.08%--entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--40.24%--read
+                       |          |          
+                       |          |--14.01%--conn_rdma_frame.constprop.0
+                       |          |          |          
+                       |          |           --13.65%--efs_conn_recv_msg
+                       |          |                     |          
+                       |          |                     |--13.07%--rpc_send_recv_shard
+                       |          |                     |          |          
+                       |          |                     |          |--9.61%--efs_client_rpc_lookup
+                       |          |                     |          |          |          
+                       |          |                     |          |           --9.31%--ll_lookup
+                       |          |                     |          |                     0x7feab55ddf5f
+                       |          |                     |          |          
+                       |          |                     |          |--2.13%--efs_client_rpc_getattr
+                       |          |                     |          |          |          
+                       |          |                     |          |          |--1.51%--efs_client_stat_refresh
+                       |          |                     |          |          |          efs_fuse_getattr_ino
+                       |          |                     |          |          |          |          
+                       |          |                     |          |          |          |--0.93%--ll_getattr
+                       |          |                     |          |          |          |          0x7feab55d0c68
+                       |          |                     |          |          |          |          
+                       |          |                     |          |          |           --0.55%--ll_setattr
+                       |          |                     |          |          |                     0x7feab55d0d8e
+                       |          |                     |          |          |          
+                       |          |                     |          |           --0.63%--efs_client_stat_open
+                       |          |                     |          |                     efs_fuse_getattr_ino
+                       |          |                     |          |          
+                       |          |                     |           --0.71%--efs_client_rpc_setattr
+                       |          |                     |          
+                       |          |                      --0.58%--rpc_send_recv_dual.constprop.0
+                       |          |                                |          
+                       |          |                                 --0.55%--efs_client_rpc_report_dirty_raft
+                       |          |                                           efs_client_report_dirty_ino
+                       |          |          
+                       |          |--13.74%--0x300000000
+                       |          |          0x746e756f6d2d
+                       |          |          
+                       |           --12.49%--0x100010000000a
+                       |          
+                       |--20.32%--__poll
+                       |          |          
+                       |          |--10.01%--start_thread
+                       |          |          
+                       |           --9.94%--conn_rdma_frame.constprop.0
+                       |                     efs_conn_recv_msg
+                       |                     |          
+                       |                      --9.48%--rpc_send_recv_shard
+                       |                                |          
+                       |                                |--6.91%--efs_client_rpc_lookup
+                       |                                |          |          
+                       |                                |           --6.73%--ll_lookup
+                       |                                |                     0x7feab55ddf5f
+                       |                                |          
+                       |                                |--1.50%--efs_client_rpc_getattr
+                       |                                |          |          
+                       |                                |           --1.03%--efs_client_stat_refresh
+                       |                                |                     efs_fuse_getattr_ino
+                       |                                |                     |          
+                       |                                |                      --0.53%--ll_getattr
+                       |                                |                                0x7feab55d0c68
+                       |                                |          
+                       |                                 --0.54%--efs_client_rpc_setattr
+                       |          
+                       |--11.84%--__GI___writev
+                       |          0x10
+                       |          
+                       |--7.71%--__GI___libc_write
+                       |          |          
+                       |           --7.70%--recv_poller
+                       |                     start_thread
+                       |          
+                        --0.91%--__mprotect
+
+    82.06%     0.51%  [k] do_syscall_64
+            |          
+             --81.74%--do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--40.17%--read
+                       |          |          
+                       |          |--13.97%--conn_rdma_frame.constprop.0
+                       |          |          |          
+                       |          |           --13.62%--efs_conn_recv_msg
+                       |          |                     |          
+                       |          |                     |--13.04%--rpc_send_recv_shard
+                       |          |                     |          |          
+                       |          |                     |          |--9.59%--efs_client_rpc_lookup
+                       |          |                     |          |          |          
+                       |          |                     |          |           --9.29%--ll_lookup
+                       |          |                     |          |                     0x7feab55ddf5f
+                       |          |                     |          |          
+                       |          |                     |          |--2.12%--efs_client_rpc_getattr
+                       |          |                     |          |          |          
+                       |          |                     |          |          |--1.51%--efs_client_stat_refresh
+                       |          |                     |          |          |          efs_fuse_getattr_ino
+                       |          |                     |          |          |          |          
+                       |          |                     |          |          |          |--0.92%--ll_getattr
+                       |          |                     |          |          |          |          0x7feab55d0c68
+                       |          |                     |          |          |          |          
+                       |          |                     |          |          |           --0.56%--ll_setattr
+                       |          |                     |          |          |                     0x7feab55d0d8e
+                       |          |                     |          |          |          
+                       |          |                     |          |           --0.62%--efs_client_stat_open
+                       |          |                     |          |                     efs_fuse_getattr_ino
+                       |          |                     |          |          
+                       |          |                     |           --0.71%--efs_client_rpc_setattr
+                       |          |                     |          
+                       |          |                      --0.58%--rpc_send_recv_dual.constprop.0
+                       |          |                                |          
+                       |          |                                 --0.55%--efs_client_rpc_report_dirty_raft
+                       |          |                                           efs_client_report_dirty_ino
+                       |          |          
+                       |          |--13.74%--0x300000000
+                       |          |          0x746e756f6d2d
+                       |          |          
+                       |           --12.45%--0x100010000000a
+                       |          
+                       |--20.12%--__poll
+                       |          |          
+                       |          |--9.95%--conn_rdma_frame.constprop.0
+                       |          |          efs_conn_recv_msg
+                       |          |          |          
+                       |          |           --9.50%--rpc_send_recv_shard
+                       |          |                     |          
+                       |          |                     |--6.93%--efs_client_rpc_lookup
+                       |          |                     |          |          
+                       |          |                     |           --6.75%--ll_lookup
+                       |          |                     |                     0x7feab55ddf5f
+                       |          |                     |          
+                       |          |                     |--1.50%--efs_client_rpc_getattr
+                       |          |                     |          |          
+                       |          |                     |           --1.03%--efs_client_stat_refresh
+                       |          |                     |                     efs_fuse_getattr_ino
+                       |          |                     |                     |          
+                       |          |                     |                      --0.53%--ll_getattr
+                       |          |                     |                                0x7feab55d0c68
+                       |          |                     |          
+                       |          |                      --0.54%--efs_client_rpc_setattr
+                       |          |          
+                       |           --9.81%--start_thread
+                       |          
+                       |--11.81%--__GI___writev
+                       |          0x10
+                       |          
+                       |--7.66%--__GI___libc_write
+                       |          recv_poller
+                       |          start_thread
+                       |          
+                        --0.91%--__mprotect
+
+    55.94%     1.07%  [k] ptrace_notify
+            |          
+             --54.94%--ptrace_notify
+                       |          
+                       |--27.83%--syscall_exit_work
+                       |          syscall_exit_to_user_mode
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          |          
+                       |          |--15.52%--read
+                       |          |          |          
+                       |          |          |--5.91%--conn_rdma_frame.constprop.0
+                       |          |          |          |          
+                       |          |          |           --5.79%--efs_conn_recv_msg
+                       |          |          |                     |          
+                       |          |          |                      --5.55%--rpc_send_recv_shard
+                       |          |          |                                |          
+                       |          |          |                                |--3.96%--efs_client_rpc_lookup
+                       |          |          |                                |          |          
+                       |          |          |                                |           --3.85%--ll_lookup
+                       |          |          |                                |                     0x7feab55ddf5f
+                       |          |          |                                |          
+                       |          |          |                                 --0.90%--efs_client_rpc_getattr
+                       |          |          |                                           |          
+                       |          |          |                                            --0.67%--efs_client_stat_refresh
+                       |          |          |                                                      efs_fuse_getattr_ino
+                       |          |          |          
+                       |          |          |--5.41%--0x100010000000a
+                       |          |          |          
+                       |          |           --4.20%--0x300000000
+                       |          |                     0x746e756f6d2d
+                       |          |          
+                       |          |--5.97%--__poll
+                       |          |          |          
+                       |          |          |--3.38%--start_thread
+                       |          |          |          
+                       |          |           --2.50%--conn_rdma_frame.constprop.0
+                       |          |                     efs_conn_recv_msg
+                       |          |                     |          
+                       |          |                      --2.30%--rpc_send_recv_shard
+                       |          |                                |          
+                       |          |                                 --1.62%--efs_client_rpc_lookup
+                       |          |                                           |          
+                       |          |                                            --1.58%--ll_lookup
+                       |          |                                                      0x7feab55ddf5f
+                       |          |          
+                       |          |--3.27%--__GI___writev
+                       |          |          0x10
+                       |          |          
+                       |           --2.68%--__GI___libc_write
+                       |                     recv_poller
+                       |                     start_thread
+                       |          
+                        --27.11%--syscall_trace_enter.constprop.0
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  |          
+                                  |--14.06%--read
+                                  |          |          
+                                  |          |--5.71%--conn_rdma_frame.constprop.0
+                                  |          |          |          
+                                  |          |           --5.56%--efs_conn_recv_msg
+                                  |          |                     |          
+                                  |          |                      --5.28%--rpc_send_recv_shard
+                                  |          |                                |          
+                                  |          |                                |--3.90%--efs_client_rpc_lookup
+                                  |          |                                |          |          
+                                  |          |                                |           --3.77%--ll_lookup
+                                  |          |                                |                     0x7feab55ddf5f
+                                  |          |                                |          
+                                  |          |                                 --0.95%--efs_client_rpc_getattr
+                                  |          |                                           |          
+                                  |          |                                            --0.67%--efs_client_stat_refresh
+                                  |          |                                                      efs_fuse_getattr_ino
+                                  |          |          
+                                  |          |--4.83%--0x100010000000a
+                                  |          |          
+                                  |           --3.52%--0x300000000
+                                  |                     0x746e756f6d2d
+                                  |          
+                                  |--5.80%--__poll
+                                  |          |          
+                                  |          |--3.13%--conn_rdma_frame.constprop.0
+                                  |          |          efs_conn_recv_msg
+                                  |          |          |          
+                                  |          |           --3.08%--rpc_send_recv_shard
+                                  |          |                     |          
+                                  |          |                      --2.33%--efs_client_rpc_lookup
+                                  |          |                                |          
+                                  |          |                                 --2.25%--ll_lookup
+                                  |          |                                           0x7feab55ddf5f
+                                  |          |          
+                                  |           --2.56%--start_thread
+                                  |          
+                                  |--3.73%--__GI___writev
+                                  |          0x10
+                                  |          
+                                   --3.16%--__GI___libc_write
+                                             recv_poller
+                                             start_thread
+
+    55.82%     2.43%  [k] ptrace_do_notify
+            |          
+             --53.99%--ptrace_do_notify
+                       |          
+                        --53.99%--ptrace_notify
+                                  |          
+                                  |--27.54%--syscall_exit_work
+                                  |          syscall_exit_to_user_mode
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          |          
+                                  |          |--15.50%--read
+                                  |          |          |          
+                                  |          |          |--5.85%--conn_rdma_frame.constprop.0
+                                  |          |          |          |          
+                                  |          |          |           --5.75%--efs_conn_recv_msg
+                                  |          |          |                     |          
+                                  |          |          |                      --5.52%--rpc_send_recv_shard
+                                  |          |          |                                |          
+                                  |          |          |                                |--3.93%--efs_client_rpc_lookup
+                                  |          |          |                                |          |          
+                                  |          |          |                                |           --3.82%--ll_lookup
+                                  |          |          |                                |                     0x7feab55ddf5f
+                                  |          |          |                                |          
+                                  |          |          |                                 --0.89%--efs_client_rpc_getattr
+                                  |          |          |                                           |          
+                                  |          |          |                                            --0.66%--efs_client_stat_refresh
+                                  |          |          |                                                      efs_fuse_getattr_ino
+                                  |          |          |          
+                                  |          |          |--5.34%--0x100010000000a
+                                  |          |          |          
+                                  |          |           --4.31%--0x300000000
+                                  |          |                     0x746e756f6d2d
+                                  |          |          
+                                  |          |--5.79%--__poll
+                                  |          |          |          
+                                  |          |          |--3.30%--start_thread
+                                  |          |          |          
+                                  |          |           --2.40%--conn_rdma_frame.constprop.0
+                                  |          |                     efs_conn_recv_msg
+                                  |          |                     |          
+                                  |          |                      --2.21%--rpc_send_recv_shard
+                                  |          |                                |          
+                                  |          |                                 --1.56%--efs_client_rpc_lookup
+                                  |          |                                           |          
+                                  |          |                                            --1.52%--ll_lookup
+                                  |          |                                                      0x7feab55ddf5f
+                                  |          |          
+                                  |          |--3.19%--__GI___writev
+                                  |          |          0x10
+                                  |          |          
+                                  |           --2.69%--__GI___libc_write
+                                  |                     recv_poller
+                                  |                     start_thread
+                                  |          
+                                   --26.44%--syscall_trace_enter.constprop.0
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             |          
+                                             |--13.82%--read
+                                             |          |          
+                                             |          |--5.55%--conn_rdma_frame.constprop.0
+                                             |          |          |          
+                                             |          |           --5.41%--efs_conn_recv_msg
+                                             |          |                     |          
+                                             |          |                      --5.13%--rpc_send_recv_shard
+                                             |          |                                |          
+                                             |          |                                |--3.79%--efs_client_rpc_lookup
+                                             |          |                                |          |          
+                                             |          |                                |           --3.68%--ll_lookup
+                                             |          |                                |                     0x7feab55ddf5f
+                                             |          |                                |          
+                                             |          |                                 --0.92%--efs_client_rpc_getattr
+                                             |          |                                           |          
+                                             |          |                                            --0.64%--efs_client_stat_refresh
+                                             |          |                                                      efs_fuse_getattr_ino
+                                             |          |          
+                                             |          |--4.80%--0x100010000000a
+                                             |          |          
+                                             |           --3.48%--0x300000000
+                                             |                     0x746e756f6d2d
+                                             |          
+                                             |--5.64%--__poll
+                                             |          |          
+                                             |          |--3.10%--conn_rdma_frame.constprop.0
+                                             |          |          efs_conn_recv_msg
+                                             |          |          |          
+                                             |          |           --3.04%--rpc_send_recv_shard
+                                             |          |                     |          
+                                             |          |                      --2.28%--efs_client_rpc_lookup
+                                             |          |                                |          
+                                             |          |                                 --2.20%--ll_lookup
+                                             |          |                                           0x7feab55ddf5f
+                                             |          |          
+                                             |           --2.44%--start_thread
+                                             |          
+                                             |--3.58%--__GI___writev
+                                             |          0x10
+                                             |          
+                                              --3.06%--__GI___libc_write
+                                                        recv_poller
+                                                        start_thread
+
+    52.22%     3.24%  [k] ptrace_stop.part.0
+            |          
+            |--49.51%--ptrace_stop.part.0
+            |          ptrace_do_notify
+            |          |          
+            |           --49.51%--ptrace_notify
+            |                     |          
+            |                     |--25.17%--syscall_exit_work
+            |                     |          syscall_exit_to_user_mode
+            |                     |          do_syscall_64
+            |                     |          entry_SYSCALL_64_after_hwframe
+            |                     |          |          
+            |                     |          |--14.16%--read
+            |                     |          |          |          
+            |                     |          |          |--5.40%--conn_rdma_frame.constprop.0
+            |                     |          |          |          |          
+            |                     |          |          |           --5.29%--efs_conn_recv_msg
+            |                     |          |          |                     |          
+            |                     |          |          |                      --5.07%--rpc_send_recv_shard
+            |                     |          |          |                                |          
+            |                     |          |          |                                |--3.57%--efs_client_rpc_lookup
+            |                     |          |          |                                |          |          
+            |                     |          |          |                                |           --3.47%--ll_lookup
+            |                     |          |          |                                |                     0x7feab55ddf5f
+            |                     |          |          |                                |          
+            |                     |          |          |                                 --0.83%--efs_client_rpc_getattr
+            |                     |          |          |                                           |          
+            |                     |          |          |                                            --0.59%--efs_client_stat_refresh
+            |                     |          |          |                                                      efs_fuse_getattr_ino
+            |                     |          |          |          
+            |                     |          |          |--5.01%--0x100010000000a

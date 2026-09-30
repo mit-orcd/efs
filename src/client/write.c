@@ -2598,8 +2598,20 @@ int efs_dcache_copy_unpub(efs_ino_t ino, uint32_t ci, uint32_t off,
  * peers had long since overwritten. */
 void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 {
+    int spans = 0;
+
     if (!dst || !len)
         return;
+    {
+        struct efs_chunk_entry ce;
+
+        /* Same rule as efs_dcache_copy: a whole image is the base, and a
+         * span hanging off it (this client's or a peer's, folded into the
+         * fetch) is not in that image. Stamping the image over the fetch
+         * hid the peer span (peer_overlap_pwrite_partial). */
+        if (export_chunk_copy(ino, ci, &ce) == 0 && ce.ndelta > 0)
+            spans = 1;
+    }
     uint64_t tg = export_chunk_gen_of(ino, ci);
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
@@ -2609,7 +2621,7 @@ void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
         pthread_mutex_unlock(mu);
         return;
     }
-    if (dcache_image_current(e, tg) && len <= e->len) {
+    if (!spans && dcache_image_current(e, tg) && len <= e->len) {
         memcpy(dst, e->data, len);
         pthread_mutex_unlock(mu);
         return;
