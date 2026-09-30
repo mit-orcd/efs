@@ -1,0 +1,8 @@
+efs-bg: start 2026-09-30T08:30:51Z host=fcstor007 name=sz193 screen=efs-sz193
+files=5760 threads=48 wall=13.4s errors=0 mismatches(same client)=0
+files=5760 threads=48 wall=14.1s errors=0 mismatches(same client)=0
+files=5760 threads=48 wall=13.8s errors=0 mismatches(same client)=0
+files=5760 threads=48 wall=13.2s errors=0 mismatches(same client)=0
+0
+0
+efs-bg: end 2026-09-30T08:31:55Z rc=1

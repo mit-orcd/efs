@@ -25,6 +25,7 @@ static void inode_bump_ctime(struct efs_inode_mem *p)
     time_now(&p->ctime);
     if (p->ctime <= old)
         p->ctime = old + 1;
+    p->ctime_nsec = 0;
 }
 
 static struct efs_inode_mem *inode_ptr(struct efs_export *ex, efs_ino_t ino);
@@ -316,7 +317,9 @@ static void inode_copy_attr(struct efs_inode_mem *d, const struct efs_inode *s)
     d->mtime = s->mtime;
     d->mtime_nsec = s->mtime_nsec;
     d->ctime = s->ctime;
+    d->ctime_nsec = s->ctime_nsec;
     d->atime = s->atime;
+    d->atime_nsec = s->atime_nsec;
     d->nlink = s->nlink;
     d->imm_files = s->imm_files;
     d->imm_dirs = s->imm_dirs;
@@ -348,7 +351,9 @@ static void inode_to_rpc_p(const struct efs_export *ex,
     out->mtime = p->mtime;
     out->mtime_nsec = p->mtime_nsec;
     out->ctime = p->ctime;
+    out->ctime_nsec = p->ctime_nsec;
     out->atime = p->atime;
+    out->atime_nsec = p->atime_nsec;
     out->nlink = p->nlink;
     out->imm_files = p->imm_files;
     out->imm_dirs = p->imm_dirs;
@@ -483,12 +488,14 @@ static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct
     struct efs_inode_mem *p = inode_ptr(ex, ino);
     if (p) {
         p->ctime = ct;
+        p->ctime_nsec = 0;
         if (p->nlink <= 1)
             return;
     }
     for (uint64_t i = 0; i < ex->inode_count; i++) {
         if (inode_at(ex, i)->ino == ino) {
             inode_at(ex, i)->ctime = ct;
+            inode_at(ex, i)->ctime_nsec = 0;
         }
     }
     if (!ex->shard_tabs)
@@ -500,6 +507,7 @@ static void stamp_ctime_loaded(struct efs_export *ex, efs_ino_t ino, uint64_t ct
         for (uint64_t i = 0; i < t->inode_count; i++) {
             if (inode_at(t, i)->ino == ino) {
                 inode_at(t, i)->ctime = ct;
+                inode_at(t, i)->ctime_nsec = 0;
             }
         }
     }
@@ -513,6 +521,7 @@ static void parent_touch(struct efs_export *ex, efs_ino_t parent)
     time_now(&p->mtime);
     p->ctime = p->mtime;
     p->mtime_nsec = 0;
+    p->ctime_nsec = 0;
 }
 
 static uint64_t hash_mix(uint64_t x)
@@ -2932,6 +2941,7 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
         time_now(&p->ctime);
         if (p->ctime <= old)
             p->ctime = old + 1;
+        p->ctime_nsec = 0;
     }
     sync_hardlink_attrs(ex, ino, p);
     rollup_expand_parents_of(ex, ino); /* ctime=now: expand */
@@ -3004,7 +3014,8 @@ int efs_export_set_mtime(struct efs_export *ex, efs_ino_t ino, uint64_t mtime)
     return efs_export_set_mtime_ns(ex, ino, mtime, 0);
 }
 
-int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime)
+int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime,
+                         uint32_t atime_nsec)
 {
     if (!ex)
         return EFS_ERR_INVAL;
@@ -3013,7 +3024,10 @@ int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime)
     struct efs_inode_mem *p = inode_ptr(ex, ino);
     if (!p)
         return EFS_ERR_NOT_FOUND;
+    if (atime_nsec >= 1000000000u)
+        atime_nsec = 0;
     p->atime = atime;
+    p->atime_nsec = atime_nsec;
     sync_hardlink_attrs(ex, ino, p);
     rollup_expand_parents_of(ex, ino);
     return EFS_OK;

@@ -1829,7 +1829,6 @@ static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
                              uint64_t offset, size_t size, const char *path);
 static int efs_wb_sync(void);
 static int efs_file_data_sync_for_ino(efs_ino_t ino);
-static int efs_file_data_sync_fh(struct fuse_file_info *fi);
 
 static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offset,
                              struct fuse_file_info *fi)
@@ -2110,6 +2109,21 @@ static void *efs_wb_thread(void *arg)
         g_wb.count--;
         g_wb.inflight++;
         pthread_cond_signal(&g_wb.not_full);
+        /* Own the inode from the pop on. A job that was waiting below
+         * for an overlapping in-flight job was in neither the queue nor
+         * busy_ino[], so efs_wb_ino_pending_locked() said "nothing
+         * pending" between the first job's finish and this worker
+         * re-taking the mutex: utimens flushed + SETATTR, then this
+         * job's PUT re-dirtied the chunk and close published it under
+         * the new mtime_gen — the ecopy write(32k) + pwrite(tail) →
+         * futimens → close files whose mtime was the close time
+         * (Sep 30, ecopy.strace 03:17:43, 29 of ~10k files).
+         * busy_len stays 0 until the claim, so wb_overlap_inflight()
+         * skips this slot and two waiters cannot deadlock on each
+         * other. */
+        g_wb.busy_ino[wid] = job.ino;
+        g_wb.busy_off[wid] = 0;
+        g_wb.busy_len[wid] = 0;
         /* Claim the range only after overlapping in-flight jobs finish.
          * writeback_cache can deliver an unaligned window while a full
          * overwrite of the same chunks is still PUTting; RMW GET then
@@ -2121,7 +2135,6 @@ static void *efs_wb_thread(void *arg)
         wb_claim_span(job.offset, job.size, claim_cs, &claim_off, &claim_len);
         while (wb_overlap_inflight(wid, job.ino, claim_off, claim_len))
             pthread_cond_wait(&g_wb.idle, &g_wb.mu);
-        g_wb.busy_ino[wid] = job.ino;
         g_wb.busy_off[wid] = claim_off;
         g_wb.busy_len[wid] = claim_len;
         pthread_mutex_unlock(&g_wb.mu);
@@ -2378,14 +2391,6 @@ static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
     return rc;
 }
 
-static int efs_file_data_sync_fh(struct fuse_file_info *fi)
-{
-    efs_ino_t ino = 0;
-    if (fuse_file_ino(NULL, fi, &ino) != 0)
-        return EFS_OK;
-    return efs_file_data_sync_for_ino(ino);
-}
-
 /* utimens(mtime) on an inode with buffered writes: publish them first
  * (the same flush+REPORT close would run) so the SETATTR that follows
  * is the later event on the server. Clean inode: nothing. */
@@ -2400,7 +2405,18 @@ static int efs_utimens_flush_dirty(efs_ino_t ino)
         pending = efs_wb_ino_pending_locked(ino);
         pthread_mutex_unlock(&g_wb.mu);
     }
-    if (!pending && !efs_client_ino_is_dirty(ino))
+    /* The dirty SET is not "has unpublished data": a threshold REPORT
+     * (only_ino=0) snapshots the ino mark that dcache_note_size set and
+     * ships an irec-only record while the bytes are still a dirty dcache
+     * entry; the set is then clean, the data is not. The dcache pin is
+     * held exactly while such entries exist (the evictor keys on the
+     * same predicate). Without it this returned early, the SETATTR went
+     * out, and the close published the chunk under the new mtime_gen
+     * (1–2 of 5760 files per ecopy-shaped burst, Sep 30 trace: the
+     * flush line printed with no report, the steal came after the
+     * setattr). */
+    if (!pending && !efs_client_ino_is_dirty(ino) &&
+        !efs_dcache_ino_pinned(ino))
         return EFS_OK;
     return efs_append_flush_report(NULL, ino);
 }
@@ -3326,11 +3342,17 @@ static int efs_fuse_utimens_ino(fuse_ino_t ino, const struct timespec tv[2])
      * this; ecopy's close REPORT afterwards is empty and is skipped. */
     if (set_m) {
         rc = efs_utimens_flush_dirty((efs_ino_t)ino);
+        if (efs_dcache_trace_on())
+            fprintf(stderr, "utimens ino=%llu flush rc=%d\n",
+                    (unsigned long long)ino, rc);
         if (rc != EFS_OK)
             return efs_rc_to_errno(rc);
     }
     if (set_a && set_m) {
         rc = efs_client_utimens_both(ino, msec, nsec, asec, ansec);
+        if (efs_dcache_trace_on())
+            fprintf(stderr, "utimens ino=%llu setattr rc=%d\n",
+                    (unsigned long long)ino, rc);
         return efs_rc_to_errno(rc);
     }
     if (set_a) {
@@ -4424,7 +4446,11 @@ static void ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 {
     int rc;
     t_req = req;
+    if (efs_dcache_trace_on())
+        fprintf(stderr, "release ino=%llu begin\n", (unsigned long long)ino);
     rc = efs_fuse_release_ino(ino, fi);
+    if (efs_dcache_trace_on())
+        fprintf(stderr, "release ino=%llu rc=%d\n", (unsigned long long)ino, rc);
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }

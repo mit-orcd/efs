@@ -1,0 +1,98 @@
+ecopy --verify metadata mismatches + client perf review (Sep 30 2026, 07:45–08:40Z)
+=====================================================================================
+
+Input: ~/orcd/scratch/efs/perf/efs-mount/ (user's 07:17–07:21Z session on fstor007,
+client tree 85f5b31c = 06:16Z build, 05:06Z mtime fix present, evictor fix absent):
+ecopy.out.txt (149 "verification metadata mismatch": 119 atime, 29 mtime, 1 size),
+ecopy.strace.txt (305 MB), fuse.data / flat.txt / callers.txt / by_thread.txt (perf of
+efs-fuse during the copy), strace-summary.txt (the Sep 29 22:13 window, not this run).
+
+Four client bugs, all fixed on the client, none needing a wire or server change.
+Server truth (a stat from a second client) was checked for each.
+
+1. atime nanoseconds dropped by the staged table (119 mismatches)
+   `struct efs_inode_mem` had no atime_nsec / ctime_nsec; inode_copy_attr and
+   inode_to_rpc_p dropped them, efs_export_set_atime took seconds only. A stat
+   served from the local row (after the rename, `ll_lookup` of the final name)
+   returned atime with nsec 0 while the server had 1780070101.301824970.
+   Baseline on the old client (fcstor008, atime_repro.py): after-close OK,
+   after-rename a=1780070101.000000000 WRONG. Fixed: fields added in the
+   struct's padding (sizeof unchanged, 192 B), copied in both directions,
+   efs_export_set_atime(…, atime, atime_nsec), local ctime bumps zero ctime_nsec.
+   Gate: atime_repro.py 10/10 OK on fcstor007 (new), server truth matches.
+
+2. mtime = close time (29 mismatches in ecopy; 1–2 per 5760 in the burst)
+   Three distinct ways a chunk publish reached the server after the SETATTR,
+   all under "utimens thought nothing was pending":
+   a. efs_wb_thread: a job waiting in wb_overlap_inflight() was in neither the
+      queue nor busy_ino[]; efs_wb_ino_pending_locked() said clean. Fixed:
+      busy_ino[] is set at the pop (busy_len 0 until the claim so
+      wb_overlap_inflight skips the slot).
+   b. PUT window: every flusher marks the dcache entry clean BEFORE its PUT and
+      marks the chunk dirty (put-record) AFTER. In between the chunk is in no
+      set a REPORT snapshot or efs_dcache_flush_ino reads. Fixed: put_win_open /
+      put_win_close per inode around the window (dcache_steal_dirty →
+      flush_pipe_drain/add; dcache_flush_slot_inner); efs_dcache_flush_ino waits
+      for the inode's windows (8 s bound → BUSY) and re-passes.
+   c. The predicate itself (the one the burst kept hitting after a and b):
+      efs_client_ino_is_dirty() is the dirty SET, not "has unpublished data". A
+      threshold REPORT (only_ino=0) snapshots the ino mark that dcache_note_size
+      set and ships an irec-only record while the bytes are still a dirty dcache
+      entry. Trace (EFS_DCACHE_TRACE=1, burst-3-traced.txt run, ino 1756394):
+        utimens ino=1756394 flush rc=0          <- no report lines before it
+        report-irec ino=1756394 size=1000 only=1756394 sync=1 rc=0   (setattr drain)
+        utimens ino=1756394 setattr rc=0
+        dcache ino=1756394 ci=0 snap-steal | dirty=1 ... r=[0,1000)  <- data still dirty
+        dcache ino=1756394 ci=0 put-record ...
+        report ino=1756394 ci=0 only=0 sync=0 rc=0                  <- published after
+      Fixed: efs_utimens_flush_dirty also checks efs_dcache_ino_pinned(ino)
+      (held exactly while dirty entries exist; the evictor keys on the same).
+   Gate: size_gate.py, 48 threads × 120 files × 8 sizes (1000 … 300000 B),
+   write → futimens(ns) → close → rename, stat from the same client and from
+   fcstor008:
+     wb fix only (burst-1):            2 mtime mismatches / 5760
+     + put window (burst-2, 3 runs):   2, 1, 1
+     + predicate (burst-4, 4 runs):    0, 0, 0, 0   (server truth 0, 0, 0, 0)
+
+3. size rounded to the chunk end (1 mismatch: mpfr Makefile.in 32398 → 131072)
+   write_chunks_no_replicate marked the chunk dirty first and the ino (size)
+   only at the end of the function; a threshold REPORT between the two shipped
+   the crec with no irec; raft_host.c "sz == 0 → (ci+1)×128 KiB"; irecs are
+   newer-only so the size never shrank back. Fixed: local size grown and ino
+   marked in the same locked block as the chunk mark; the REPORT builder
+   appends an irec for every crec whose ino has none (logs "no staged row"
+   when it cannot). Server fallback unchanged. Gate: 4 × 5760 files, sizes
+   1000/4097/23192/32398/65541/131071/131073/300000, 0 size mismatches.
+
+4. `efs_file_data_sync_fh` dead (unused-function warning) — removed.
+
+Perf review of fuse.data (976K samples, ecopy 400 threads, fstor007):
+  memmove 21.9 % — 6.4 % efs_rdma_send_frame bounce copy under
+    put_fragments_parallel_once (fragment → registered send buffer), ~2 %
+    efs_client_get_fragment, the rest libfuse fuse_buf_copy + dcache patch
+    (FUSE request → dcache entry). Zero-copy RDMA from registered dcache
+    memory is a design item, not a fix — ask.
+  blake3 10.2 % + xor_into 7.3 % (efs_encode_chunk): dcache_put_now 35 %
+    inclusive. Media work; the wall is off-CPU (REPORT / fsync), as before.
+  stage_evict_main 5.9 % self / 7.8 % inclusive: the evictor bug fixed in
+    5ea397fd (fcstor007–015 have it); fstor007's 06:16Z client does not.
+    D18 (per-tab floor above the cap) still stands — ask.
+  efs_dcache_yield_extra 1.26 %, dcache_steal_dirty 0.57 %, poll/futex/
+    fuse_dev_read ~12 %: idle threads waiting, not a hot path.
+
+Not changed, worth knowing:
+  - tests/test_raft_store fails 4 checks since W22.1 (Sep 29, retained log
+    window): "snap index should report its term", "compacted prefix differs",
+    "snapshot did not shrink the log", "reopen after rotation". Pre-existing;
+    the test encodes the pre-W22.1 save_snap semantics.
+  - `make test` also fails docs/check-architecture.py: architecture-full.md /
+    architecture.html stale (regen) and START-HERE decision tables repeated
+    (single-home). Pre-existing.
+  - efs_dcache_flush_ino flushes chunk 0 only when the local row is gone
+    (nci = 1). The row is pinned while dirty entries exist, so today this
+    does not fire; noted for the evictor design (D18).
+  - MTIME_PIN_MAX 256 fills after 256 copied files (only a write unpins);
+    the pin affects local presentation only, server times were right.
+
+Files: size_gate.py / size_gate_check.py / atime_repro.py (the gates),
+burst-1..4 logs, unit-tests.txt (14/14 rc=0 with test_raft_store excluded).

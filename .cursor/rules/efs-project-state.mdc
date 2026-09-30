@@ -104,8 +104,12 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  256/128 batches, `gc-pass` line; learnings below;
  `results/measure/20260930-063500-perf-dir-review`). g0 leader
  fcstor005 (term 124), g2 leader fcstor006 (term 686), commit==applied.
- Clients fcstor007–015 mounted RDMA 07:17Z on the evictor-fix tree
- (`5ea397fd`), all `fuse.efs-fuse`. **Gate 07:20–07:33Z (START-HERE
+ Clients fcstor007–015 remounted RDMA 08:35Z on the ecopy-times tree
+ (atime nsec, utimens flush predicate, put windows, crec irec;
+ `results/measure/20260930-080000-ecopy-times-review`), all
+ `fuse.efs-fuse`; posix jobs=1 fcstor007 200/201 29.1 s
+ (`results/posix/20260930-083309`). Before that, 07:17Z on the
+ evictor-fix tree (`5ea397fd`). **Gate 07:20–07:33Z (START-HERE
  §1b):** posix jobs=1 200/201 (7.1 s idle, 16.8 s under ecopy),
  posix2 63/63, 9-host 200/201 on eight hosts + fcstor012 199/201
  (`dir_deep_nesting` rmdir ENOTEMPTY on a dir the KV shows empty;
@@ -727,6 +731,23 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  reads nothing from `EFS_INO_REC_F_TIMES`; `efs_client_mtime_pin`
  now logs once when its table is full. Not F1/F2, not the election
  storm.
+- **"Nothing to flush" has three sources, and the dirty SET is not one
+ of them (Sep 30, `results/measure/20260930-080000-ecopy-times-review`).**
+ Unpublished bytes live in (a) the wb queue + `busy_ino[]` (a job
+ waiting in `wb_overlap_inflight` must already be in `busy_ino`), (b) a
+ dirty dcache entry (`efs_dcache_ino_pinned`), (c) a PUT window — every
+ flusher marks the entry clean before the PUT and the chunk dirty after
+ it (`put_win_open/close`, `efs_dcache_flush_ino` waits). The dirty set
+ is what a REPORT snapshot consumes; a threshold REPORT ships an
+ irec-only record and leaves the bytes in (b). Any "flush before X"
+ (utimens, truncate, a future fsync shortcut) checks all three or X
+ overtakes the publish (mtime = close time). A chunk rec without an
+ irec makes the server size the file to the chunk end and it never
+ shrinks: mark the ino in the same locked block as the chunk. The
+ staged row has `atime_nsec`/`ctime_nsec` now; copy them wherever a
+ row is copied. `EFS_DCACHE_TRACE=1` prints `utimens`/`report`/
+ `release` lines beside the slot transitions — read those before
+ theorizing about a time mismatch.
 - **A client RPC at exactly 5.0 / 10 / 15 s with `attempts=1
  saw_busy=0` is the conn pool, not the network (Sep 30,
  `results/measure/20260930-051000-review2`).** `efs_client_conn_get`

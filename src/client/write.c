@@ -5,6 +5,7 @@
 #include "efs/checksum.h"
 #include "efs/placement.h"
 #include "efs/meta_apply.h"
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -763,12 +764,25 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
     struct efs_chunk_rec *crecs = NULL;
     struct efs_ino_size_rec *irecs = NULL;
     uint32_t cn = 0, in = 0;
+    /* A chunk rec whose ino has no irec makes the server guess the size
+     * as the chunk end ((ci+1) × 128 KiB, raft_host.c "sz == 0"), and a
+     * later irec cannot shrink it: ecopy's mpfr Makefile.in was 32398
+     * bytes on XFS and 131072 on efs (Sep 30 03:18:27, ecopy.strace).
+     * The ino mark trails the chunk mark on every write path, so a
+     * snapshot taken between the two ships the chunk alone. Count the
+     * chunk inos that are not in the ino set and reserve irecs for them. */
+    uint64_t extra_cap = 0;
+    for (uint64_t i = 0; i < ds.chunk_count; i++) {
+        if (ds.chunk_inos[i] &&
+            !dirty_set_has(ds.ino_keys, ds.ino_mask, ds.chunk_inos[i]))
+            extra_cap++;
+    }
     /* calloc: flags/padding must be zero on the wire. */
     if (ds.chunk_count)
         crecs = calloc(ds.chunk_count, sizeof(*crecs));
-    if (ds.ino_count)
-        irecs = calloc(ds.ino_count, sizeof(*irecs));
-    if ((ds.chunk_count && !crecs) || (ds.ino_count && !irecs)) {
+    if (ds.ino_count + extra_cap)
+        irecs = calloc(ds.ino_count + extra_cap, sizeof(*irecs));
+    if ((ds.chunk_count && !crecs) || ((ds.ino_count + extra_cap) && !irecs)) {
         free(crecs);
         free(irecs);
         pub_ino_clear();
@@ -839,6 +853,42 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
         irecs[in].atime = inode.atime;
         /* pack fields stay zero: there is no packing. */
         in++;
+    }
+    /* Every chunk rec travels with its ino's size (see extra_cap). Inos in
+     * the ino set were handled above (the set test is O(1); the irec scan
+     * runs only for the rare chunk-only ino). */
+    for (uint32_t c = 0; c < cn && extra_cap; c++) {
+        efs_ino_t cino = crecs[c].ino;
+        uint32_t k;
+        struct efs_inode inode;
+
+        if (dirty_set_has(ds.ino_keys, ds.ino_mask, cino))
+            continue;
+        for (k = 0; k < in; k++)
+            if (irecs[k].ino == cino)
+                break;
+        if (k < in)
+            continue;
+        if (efs_export_get_inode(&g_client.export, cino, &inode) != 0) {
+            static int logged;
+            if (logged < 10) {
+                logged++;
+                fprintf(stderr,
+                        "efs: report chunk rec ino=%llu ci=%u has no staged "
+                        "row; server will size it to the chunk end\n",
+                        (unsigned long long)cino, crecs[c].chunk_index);
+            }
+            continue;
+        }
+        irecs[in].ino = cino;
+        irecs[in].size = inode.size;
+        irecs[in].mtime = inode.mtime;
+        irecs[in].mtime_nsec = inode.mtime_nsec;
+        if (efs_client_mtime_is_pinned(cino))
+            irecs[in].flags = EFS_INO_REC_F_TIMES;
+        irecs[in].atime = inode.atime;
+        in++;
+        extra_cap--;
     }
     efs_client_table_unlock();
 
@@ -978,6 +1028,17 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
                 (unsigned long long)ms, rc);
         if (rc == EFS_OK)
             rc = EFS_ERR_IO;
+    }
+    if (dcache_trace_on()) {
+        for (uint32_t k = 0; k < cn; k++)
+            fprintf(stderr, "report ino=%llu ci=%u only=%llu sync=%d rc=%d\n",
+                    (unsigned long long)crecs[k].ino, crecs[k].chunk_index,
+                    (unsigned long long)only_ino, sync, rc);
+        for (uint32_t k = 0; k < in; k++)
+            fprintf(stderr, "report-irec ino=%llu size=%llu only=%llu sync=%d rc=%d\n",
+                    (unsigned long long)irecs[k].ino,
+                    (unsigned long long)irecs[k].size,
+                    (unsigned long long)only_ino, sync, rc);
     }
     if (rc == EFS_OK) {
         /* Every rec committed: its object gen is now the slot's CAS base.
@@ -1926,6 +1987,11 @@ static int dcache_trace_on(void)
     return on;
 }
 
+int efs_dcache_trace_on(void)
+{
+    return dcache_trace_on();
+}
+
 static void dcache_trace_ranges(const struct dcache_ent *e, char *buf, size_t n)
 {
     size_t k = 0;
@@ -2437,6 +2503,106 @@ static int dcache_full_overwrite(int have_base, uint64_t bg, uint8_t nrange)
 
 /* Hand the slot body to the PUT. No second buffer: a sequential writer
  * fills the next chunk, not this one, while the send is in flight. */
+/* PUT windows. A flusher marks a dcache entry clean before its PUT and
+ * records the chunk in the dirty set only after it (dcache_put_now's
+ * put-record). Between the two the chunk is in no set a REPORT snapshot
+ * reads: a utimens flush for the inode found nothing dirty, its REPORT
+ * carried nothing, the SETATTR went out, and the in-flight PUT's chunk
+ * was published by the close under the new mtime_gen — mtime = close
+ * time (ecopy write→futimens→close, 2 of 5760 files, Sep 30 burst).
+ * Every window is counted per inode; efs_dcache_flush_ino waits for the
+ * inode's windows to close before it returns. Bounded wait: a PUT that
+ * hangs is the RPC deadline's problem, not this one. */
+#define PUT_WIN_SLOTS 512
+static struct {
+    efs_ino_t ino;
+    uint32_t n;
+} put_win[PUT_WIN_SLOTS];
+static uint32_t put_win_overflow;
+static pthread_mutex_t put_win_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t put_win_cv = PTHREAD_COND_INITIALIZER;
+
+static void put_win_open(efs_ino_t ino)
+{
+    int free_i = -1, i;
+
+    pthread_mutex_lock(&put_win_mu);
+    for (i = 0; i < PUT_WIN_SLOTS; i++) {
+        if (put_win[i].n && put_win[i].ino == ino) {
+            put_win[i].n++;
+            pthread_mutex_unlock(&put_win_mu);
+            return;
+        }
+        if (free_i < 0 && put_win[i].n == 0)
+            free_i = i;
+    }
+    if (free_i >= 0) {
+        put_win[free_i].ino = ino;
+        put_win[free_i].n = 1;
+    } else {
+        put_win_overflow++;
+    }
+    pthread_mutex_unlock(&put_win_mu);
+}
+
+static void put_win_close(efs_ino_t ino)
+{
+    int i, found = 0;
+
+    pthread_mutex_lock(&put_win_mu);
+    for (i = 0; i < PUT_WIN_SLOTS; i++) {
+        if (put_win[i].n && put_win[i].ino == ino) {
+            put_win[i].n--;
+            found = 1;
+            break;
+        }
+    }
+    if (!found && put_win_overflow)
+        put_win_overflow--;
+    pthread_cond_broadcast(&put_win_cv);
+    pthread_mutex_unlock(&put_win_mu);
+}
+
+static int put_win_busy_locked(efs_ino_t ino)
+{
+    int i;
+
+    if (put_win_overflow)
+        return 1;
+    for (i = 0; i < PUT_WIN_SLOTS; i++)
+        if (put_win[i].n && put_win[i].ino == ino)
+            return 1;
+    return 0;
+}
+
+/* 0 = no window was open, 1 = waited and they closed, EFS_ERR_BUSY =
+ * still open after max_ms. */
+static int put_win_wait(efs_ino_t ino, unsigned max_ms)
+{
+    struct timespec dl;
+    int rc = 0;
+
+    clock_gettime(CLOCK_REALTIME, &dl);
+    dl.tv_sec += max_ms / 1000u;
+    dl.tv_nsec += (long)(max_ms % 1000u) * 1000000L;
+    if (dl.tv_nsec >= 1000000000L) {
+        dl.tv_sec++;
+        dl.tv_nsec -= 1000000000L;
+    }
+    pthread_mutex_lock(&put_win_mu);
+    while (put_win_busy_locked(ino)) {
+        rc = 1;
+        if (pthread_cond_timedwait(&put_win_cv, &put_win_mu, &dl) ==
+            ETIMEDOUT) {
+            if (put_win_busy_locked(ino))
+                rc = EFS_ERR_BUSY;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&put_win_mu);
+    return rc;
+}
+
 static uint8_t *dcache_steal_body(struct dcache_ent *e)
 {
     uint8_t *p = e->data;
@@ -3556,6 +3722,9 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
         dcache_dirty_unlink(e, s);
         dcache_note_dirty_bytes(-(int64_t)len);
     }
+    /* Window open: the entry is clean, the chunk not yet in the dirty
+     * set. Closed by flush_pipe_drain / flush_pipe_add after the PUT. */
+    put_win_open(ino);
     pthread_mutex_unlock(mu);
     pthread_mutex_unlock(io);
     int merged = 0;
@@ -3573,6 +3742,7 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
                 dcache_note_dirty_bytes((int64_t)len);
             }
             pthread_mutex_unlock(mu);
+            put_win_close(ino);
             return EFS_ERR_NOMEM;
         }
         if (efs_client_fetch_published_chunk(ino, ci, base, len) != EFS_OK &&
@@ -3587,6 +3757,7 @@ static int dcache_steal_dirty(efs_ino_t ino, uint32_t ci, uint8_t **copy_out,
                 dcache_note_dirty_bytes((int64_t)len);
             }
             pthread_mutex_unlock(mu);
+            put_win_close(ino);
             return EFS_ERR_IO;
         }
         for (i = 0; i < nrange; i++) {
@@ -3697,6 +3868,7 @@ static int flush_pipe_drain(struct flush_pipe *p)
                                p->drop[i]))
             efs_buf_free(p->copies[i], p->lens[i]);
         p->copies[i] = NULL;
+        put_win_close(p->jobs[i].ino);
         if (!pok && p->rc == EFS_OK)
             p->rc = p->jobs[i].rc;
     }
@@ -3719,6 +3891,7 @@ static int flush_pipe_add(struct flush_pipe *p, efs_ino_t ino, uint32_t ci,
                 dcache_flush_keep(ino, ci, copy, len, 0, seq, 1))
                 copy = NULL;
             efs_buf_free(copy, len);
+            put_win_close(ino);
             p->rc = drc;
             return drc;
         }
@@ -3818,6 +3991,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
              * and pinned it above the reclaim limit. */
             dcache_note_dirty_bytes(-(int64_t)len);
         }
+        put_win_open(ino);
         pthread_mutex_unlock(mu);
         pthread_mutex_unlock(io);
         if (dcache_need_published_merge(have_base, slot_bg, object_gen,
@@ -3834,6 +4008,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                 }
                 pthread_mutex_unlock(mu);
                 pthread_mutex_unlock(io);
+                put_win_close(ino);
                 return EFS_ERR_NOMEM;
             }
             int rrc = efs_client_fetch_published_chunk(ino, ci, base, len);
@@ -3851,6 +4026,7 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                 }
                 pthread_mutex_unlock(mu);
                 pthread_mutex_unlock(io);
+                put_win_close(ino);
                 return rrc;
             }
             for (uint8_t i = 0; i < nrange; i++) {
@@ -3876,6 +4052,11 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
                                  dlen);
         pthread_mutex_lock(io);
         pthread_mutex_lock(mu);
+        /* The put-record (or the re-dirty below on failure) is what the
+         * next snapshot reads; either way the window is closed once we
+         * hold the locks again. A failed PUT re-dirties under these
+         * locks before any snapshot can run. */
+        put_win_close(ino);
         if (!dcache_chain_has(s, e)) {
             /* The node was dropped while the PUT ran. Whatever holds
              * (ino,ci) now, if anything, gets the result; the walk
@@ -4031,7 +4212,7 @@ static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
     }
 }
 
-int efs_dcache_flush_ino(efs_ino_t ino)
+static int dcache_flush_ino_pass(efs_ino_t ino)
 {
     uint32_t cs = data_chunk_size();
     uint32_t nci = 1;
@@ -4085,6 +4266,26 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     }
     (void)flush_pipe_drain(&pipe);
     return pipe.rc;
+}
+
+int efs_dcache_flush_ino(efs_ino_t ino)
+{
+    int rc = dcache_flush_ino_pass(ino);
+    int w;
+
+    if (rc != EFS_OK)
+        return rc;
+    /* Another flusher (reclaim, a second close) may hold this inode's
+     * chunks in a PUT window: entry clean, chunk not yet in the dirty
+     * set. Wait for those windows; a failed PUT re-dirties the entry, so
+     * one more pass picks it up. Then the caller's REPORT snapshot sees
+     * every chunk this inode has written. */
+    w = put_win_wait(ino, 8000u);
+    if (w == EFS_ERR_BUSY)
+        return EFS_ERR_BUSY;
+    if (w == 1)
+        rc = dcache_flush_ino_pass(ino);
+    return rc;
 }
 
 int efs_dcache_flush_all(void)
@@ -4985,6 +5186,23 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                                                    jobs[i].nodes,
                                                    jobs[i].checksums,
                                                    jobs[i].ci));
+                /* The row must already cover this chunk's bytes when the
+                 * chunk mark below makes it reportable: a REPORT snapshot
+                 * between the mark and the size update at the end of this
+                 * function shipped the chunk with a size-0 irec (fresh
+                 * file), and the server sized the file to the chunk end
+                 * (ecopy Makefile.in 32398 → 131072, Sep 30). */
+                {
+                    struct efs_inode cur;
+                    uint64_t cend = ((uint64_t)jobs[i].ci + 1) * chunk_size;
+
+                    if (cend > end)
+                        cend = end;
+                    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 &&
+                        cur.size < cend)
+                        efs_export_set_size_norollup(&g_client.export, ino,
+                                                     cend);
+                }
                 pthread_mutex_unlock(&g_client.idx_mu);
                 efs_client_unlock_dir(ino);
                 putid_note(ino, jobs[i].ci,
@@ -4998,8 +5216,14 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                  * generation. Skipping REPORT left KV on the ftruncate
                  * stub gen while PUT wrote `{ci}.{fi}.{G}` — remount
                  * GET of the stub missed (W1 DECODE). */
-                if (!same_nodes || !same_ck)
+                if (!same_nodes || !same_ck) {
                     efs_client_mark_chunk_dirty(ino, jobs[i].ci);
+                    /* Ino mark right behind the chunk mark, as in the
+                     * dcache put-record path, so the irec is in the same
+                     * snapshot as the chunk (the mark at the end of the
+                     * function is too late for a concurrent REPORT). */
+                    efs_client_mark_ino_dirty(ino);
+                }
             }
         }
         base += batch;

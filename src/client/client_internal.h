@@ -129,6 +129,8 @@ int efs_client_ino_is_dirty(efs_ino_t ino);
 void efs_client_mtime_pin(efs_ino_t ino);
 void efs_client_mtime_unpin(efs_ino_t ino);
 int efs_client_mtime_is_pinned(efs_ino_t ino);
+/* EFS_DCACHE_TRACE=1 set (dcache/report/utimens stderr trace). */
+int efs_dcache_trace_on(void);
 void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index);
 int efs_client_ensure_meta_room(uint64_t extra_inodes, uint64_t extra_chunks);
 

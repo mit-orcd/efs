@@ -1055,8 +1055,10 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
         out.mtime = mtime;
         out.mtime_nsec = mtime_nsec;
     }
-    if (mask & EFS_SETATTR_ATIME)
+    if (mask & EFS_SETATTR_ATIME) {
         out.atime = atime;
+        out.atime_nsec = atime_nsec;
+    }
     if (mask & EFS_SETATTR_MODE)
         efs_export_set_mode(&g_client.export, ino, mode);
     if (mask & (EFS_SETATTR_UID | EFS_SETATTR_GID))
@@ -1068,7 +1070,7 @@ static int setattr_rpc_dual_apply(efs_ino_t ino, uint32_t mask, uint32_t mode,
         efs_client_mtime_pin(ino);
     }
     if (mask & EFS_SETATTR_ATIME)
-        efs_export_set_atime(&g_client.export, ino, atime);
+        efs_export_set_atime(&g_client.export, ino, atime, atime_nsec);
     efs_client_stage_touch(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);

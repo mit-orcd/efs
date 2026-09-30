@@ -1,0 +1,17 @@
+efs-bg: start 2026-09-30T08:16:41Z host=fcstor007 name=ut187 screen=efs-ut187
+BUILD_RC=0
+test_wire rc=0
+test_data rc=0
+test_kv rc=0
+test_kv_lsm rc=0
+test_meta_apply rc=0
+test_raft rc=0
+test_sim rc=0
+test_txn rc=0
+test_session rc=0
+test_erasure rc=0
+test_placement rc=0
+test_lock rc=0
+test_stage_evict rc=0
+test_conn_fd rc=0
+efs-bg: end 2026-09-30T08:16:45Z rc=0

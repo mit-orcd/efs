@@ -25,6 +25,63 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 30 2026 08:40Z — ecopy's 149 metadata mismatches: four client bugs, none on the server
+
+The user's 07:17Z `ecopy --verify` on fstor007 (`85f5b31c` client) left 149
+"verification metadata mismatch" lines: 119 atime, 29 mtime, 1 size. The
+05:06Z mtime fix (flush before SETATTR) had closed the common case; these
+were what remained. All four are client-side; a stat from a second client
+confirmed the server held the wrong value only where the client had sent
+it. Review, gates and traces:
+`results/measure/20260930-080000-ecopy-times-review/SUMMARY.txt`.
+
+**atime (119).** `struct efs_inode_mem` had no `atime_nsec` / `ctime_nsec`.
+`inode_copy_attr` and `inode_to_rpc_p` dropped them and `efs_export_set_atime`
+took seconds. ecopy's post-rename stat is a lookup filled from the staged
+row: nsec 0. The old client reproduced it on the first try
+(`atime_repro.py`: after-close OK, after-rename `.000000000`). The fields
+went into the struct's padding (still 192 B), both copies carry them, the
+setter takes nsec, and the second-resolution local ctime bumps zero
+`ctime_nsec`.
+
+**mtime = close time (29).** Three holes in "utimens has nothing to
+flush", found one at a time with an ecopy-shaped burst (`size_gate.py`, 48
+threads × 120 files, write → futimens(ns) → close → rename, then stat from
+the same and a second client). (a) A wb job waiting in
+`wb_overlap_inflight` was in neither the queue nor `busy_ino[]`;
+`efs_wb_ino_pending_locked` said clean. `busy_ino` is set at the pop.
+2 of 5760 files still wrong. (b) Every flusher marks the dcache entry clean
+before its PUT and the chunk dirty after (the put-record); in that window
+the chunk is invisible to a REPORT snapshot and to `efs_dcache_flush_ino`.
+`put_win_open/close` count windows per inode; `efs_dcache_flush_ino` waits
+for them (8 s → BUSY) and re-passes. Still 1–2 per run. (c) The predicate
+itself: `efs_client_ino_is_dirty` is the dirty SET. A threshold REPORT
+(`only_ino=0`) snapshots the ino mark `dcache_note_size` set and ships an
+irec-only record while the bytes are still a dirty dcache entry. With
+`EFS_DCACHE_TRACE=1` (new `utimens` / `report` / `release` lines) the bad
+inode showed `utimens ... flush rc=0` with no report before it, the setattr,
+then `snap-steal` of a `dirty=1 r=[0,1000)` entry and a `only=0 sync=0`
+publish. `efs_utimens_flush_dirty` now also checks `efs_dcache_ino_pinned`,
+the predicate the evictor already uses. Four bursts: 0 / 5760 each, same
+client and fcstor008.
+
+**size (1).** mpfr's `Makefile.in`, 32398 bytes on XFS, 131072 on efs.
+`write_chunks_no_replicate` marked the chunk dirty and the ino only at the
+end of the function; a threshold REPORT between the two shipped the crec
+with no irec; `raft_host.c` sizes a crec without an irec to `(ci+1) ×
+128 KiB` and irecs are newer-only. The ino mark and a local size grow sit
+in the chunk's locked block now, and the REPORT builder appends an irec for
+every crec whose ino has none. Server fallback left as is.
+
+Perf of the same session (`fuse.data`, 976K samples): memmove 21.9 % (6.4 %
+the `efs_rdma_send_frame` bounce copy, ~14 % FUSE → dcache), blake3 10.2 %,
+`xor_into` 7.3 %, `stage_evict_main` 5.9 % — the evictor bug fixed in
+`5ea397fd`, which fstor007's client did not have. Zero-copy RDMA from
+registered dcache memory would be a design decision. Deployed to
+fcstor007–015 08:35Z; fstor007's `/tmp/efs` rebuilt; posix jobs=1 200/201.
+Pre-existing, untouched: `test_raft_store` 4 W22.1 assertions,
+`check-architecture.py` regen / single-home.
+
 ## Sep 30 2026 07:40Z — gate of the 06:50Z roll: posix green (one ENOTEMPTY), IO-500 hard-write fsyncs fail, hard-read EIO
 
 Servers `44f397b4ca2e-dirty` (rolled `--all` 06:50Z), clients fcstor007–015

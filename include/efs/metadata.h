@@ -84,6 +84,7 @@ struct efs_inode_mem {
     uint64_t size;
     uint64_t mtime;
     uint32_t mtime_nsec;
+    uint32_t ctime_nsec; /* was padding; sizeof unchanged (192 B) */
     uint64_t ctime;
     uint64_t atime;
     uint32_t nlink;
@@ -92,6 +93,9 @@ struct efs_inode_mem {
     /* Owning slab, so a row pointer resolves to its arena and its slot in
      * O(1). Bounded by EFS_META_INO_PAGE_MAX slabs, which fits u16. */
     uint16_t slab_idx;
+    /* A stat served from this table returned atime with nsec 0 until
+     * Sep 30 2026 (ecopy --verify: 119 "(atime)" mismatches). */
+    uint32_t atime_nsec; /* was padding */
     uint64_t imm_files, imm_dirs, tree_files, tree_dirs;
     uint64_t imm_bytes, tree_bytes;
     uint64_t imm_tmin, imm_tmax, tree_tmin, tree_tmax;
@@ -370,8 +374,9 @@ int efs_export_set_mtime_ns_norollup(struct efs_export *ex, efs_ino_t ino,
 /* If rollups_stale, rebuild directory rollups and clear the flag. */
 void efs_export_ensure_rollups(struct efs_export *ex);
 
-/* Set inode access time (seconds). Not bumped on read. */
-int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime);
+/* Set inode access time (seconds + nanoseconds). Not bumped on read. */
+int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime,
+                         uint32_t atime_nsec);
 
 /* Rename/move an inode. If a destination inode already exists, it is replaced
    only when the source and destination are both regular files or both empty
