@@ -25,6 +25,81 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 30 2026 07:40Z — gate of the 06:50Z roll: posix green (one ENOTEMPTY), IO-500 hard-write fsyncs fail, hard-read EIO
+
+Servers `44f397b4ca2e-dirty` (rolled `--all` 06:50Z), clients fcstor007–015
+mounted RDMA 07:17Z on the `5ea397fd` tree (evictor fix). The user's
+ecopy from fstor007 was still running for the first suite and stopped
+~07:22Z.
+
+**Posix.** jobs=1 on fcstor007: 200/201 in 16.8 s under the ecopy
+(`results/posix/20260930-072042`), 200/201 in 7.1 s idle
+(`20260930-072224`); `mmap_write_read` SKIP only. posix2
+fcstor007/008 63/63 in 47.6 s (`results/posix2/20260930-072241`).
+9-host (`results/posix/20260930-072501`): eight hosts 200/201 in
+18.0–19.1 s, fcstor012 199/201 — `dir_deep_nesting` failed `rmdir
+d50` with `[Errno 39] Directory not empty`. From that client the rmdir
+kept returning ENOTEMPTY 1–2 min later (`d50-probes-012.txt`); a KV
+copy from fcstor005 at 07:28Z (`kv_dir_dump`, `d50-kv-dump.txt`) shows
+d50 = ino 56024 `nlink=2 nents=0`, parent d49 = 164529 `nlink=3
+nents=1` with the one `d50` dentry, no intent/guard/reduce; `rmdir`
+from fcstor007 succeeded at once (`d50-rmdir-from-007.txt`). gdb on
+fcstor012's `efs-fuse` afterwards (`d50-client012-childvec.txt`):
+`child_vec_get(&g_client.export, 56024, 0)` on the **root tab**
+returns a vector with `count=0 cap=4` — a row with parent 56024 was
+on the root tab at some point. `efs_client_unlink` (`ops.c:1303`)
+refuses a rmdir locally when `efs_export_dir_empty(&g_client.export,
+ino)` says non-empty, and that function reads only the root tab's
+`child_vecs`; nothing logs the refusal. The server pre-check
+(`raft_host.c:8776`, `row.nlink > 2` or one readdir entry) reads the
+raw row, so a pending `REDUCE_INO` from d51's rmdir would also give a
+transient ENOTEMPTY, but the client retries that only 20 × 1 ms
+(`efs_fuse_rmdir_at`), and "transient" does not cover the later
+probes. No `dir_deep_nesting` failure in the Sep 28–30 history; this
+is the first 9-host run with the evictor fix (the evictor is active
+during the suite — D18). Open. Two ways forward: log which tab/slot
+made the fast path say non-empty, or remove the local emptiness check
+(the server is authoritative, and the fast path saves one RPC on a
+non-empty rmdir only) — the second is a decision, ask.
+
+**IO-500 debug 9×4** (`results/io500/20260930-072824-rdma`, launched
+07:28:24Z, cluster idle, terms unchanged through the run):
+
+| phase | Sep 30 | Sep 28 (`20260928-150609-rdma`) |
+| --- | --- | --- |
+| ior-easy-write | 3.148 GiB/s | 2.917 |
+| mdtest-easy-write | 3.696 kIOPS | 3.418 |
+| ior-hard-write | 0.261 GiB/s, 133 s, 16 fsync failed | 0.291, 73 s, 0 |
+| mdtest-hard-write | 2.126 kIOPS | 0.757 |
+| ior-easy-read | 2.976 GiB/s | 3.092 |
+| mdtest-easy-stat | 3.600 kIOPS | 3.248 |
+| ior-hard-read | ABORT, read EIO | 1.525 |
+
+Every client's `fuse.log` has the same pair on the shared file ino
+84857: `report-loop rounds=1 stale=0 busy=1 ms≈9000–11600 rc=-13`
+(fsync EBUSY — W17.1 returns the first BUSY REPORT) and `rounds=1
+stale=1 busy=0 ms≈58000–68600 rc=-14` (fsync EIO). ior-hard-read
+then read those unpublished spans: `read(23, …, 47008) failed
+Input/output error` on ranks 22/23 (fcstor012 and others) →
+`MPI_ABORT` 07:32Z; nothing after that ran. I9 behaves as specified
+(fail, do not zero-fill). Server side (`servers-after.txt`):
+`apply_max` 0 µs and `pump_hold_max` ≤ 10 µs on all four (the pump is
+not held), but `inbox_drop` 978 / 3102 / 223 on fcstor004/005/006 —
+`raft-host: inbox full, dropped frame type=3 group=2 from=3
+len=949540`: 950 KB AppendEntries from the group-2 leader (fcstor006)
+dropped at fcstor005's 256-frame `HOST_INBOX_MAX`; `wait_timeouts` 619
+on fcstor004, `apply-sleep` 20–127 ms everywhere, `pub_p50` 544 ms on
+fcstor005 (3 ms at D8's IOR). L0 is 113–231 files per node and does
+not drain at idle: ~10 000 `kv-compact` lines per node since the
+roll, each 50–270 KB in 1–2 ms (`inputs=2 … l0only=1`, D10's
+per-range trigger), while `gc-pass ms=244 frag=244` on both leaders
+keeps flushing memtables with `GC_ACK` entries (the run's garbage).
+The F2 drop counter did not exist on Sep 28, so that run cannot say
+whether its inbox dropped too; the hard-write fsync failures are the
+regression (0 warnings on 09-28, before W17.1/D9). No code changed
+for this. The aborted run's data and two stale Sep 29 `posix-*` dirs
+were removed from the mount; the nine clients stay mounted.
+
 ## Sep 30 2026 07:10Z — the rest of the perf dir: du 52K, a 1 Hz client stall, 10 ms stats, 16 fragments/s
 
 `results/measure/20260930-063500-perf-dir-review/SUMMARY.txt`. The user

@@ -1,0 +1,28 @@
+IOR-4.0.0: MPI Coordinated Test of Parallel I/O
+Began               : Wed Sep 30 03:31:32 2026
+Command line        : ./ior --dataPacketType=timestamp -C -Q 1 -g -G=1904148227 -k -e -o /tmp/efs-mount/io500/2026.09.30-03.28.40/ior-hard/file -O stoneWallingStatusFile=/tmp/efs-mount/io500-results/2026.09.30-03.28.40/ior-hard.stonewall -t 47008 -b 47008 -s 100000 -r -R -a POSIX -O saveRankPerformanceDetailsCSV=/tmp/efs-mount/io500-results/2026.09.30-03.28.40/ior-hard-read.csv
+Machine             : Linux fcstor007
+TestID              : 0
+StartTime           : Wed Sep 30 03:31:32 2026
+Path                : /tmp/efs-mount/io500/2026.09.30-03.28.40/ior-hard/file
+FS                  : 72.0 TiB   Used FS: 1.1%   Inodes: 4096.0 Mi   Used Inodes: 0.0%
+
+Options: 
+api                 : POSIX
+apiVersion          : 
+test filename       : /tmp/efs-mount/io500/2026.09.30-03.28.40/ior-hard/file
+access              : single-shared-file
+type                : independent
+segments            : 100000
+ordering in a file  : sequential
+ordering inter file : constant task offset
+task offset         : 1
+nodes               : 9
+tasks               : 36
+clients per node    : 4
+repetitions         : 1
+xfersize            : 47008 bytes
+blocksize           : 47008 bytes
+aggregate filesize  : 157.61 GiB
+
+Results: 

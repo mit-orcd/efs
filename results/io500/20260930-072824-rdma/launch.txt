@@ -1,0 +1,7 @@
+-----
+efs-rec: start 2026-09-30T07:28:34Z pid=70596 host=login007
+efs-rec: cmd cd /home/erbmi1/git/efs && ~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh fcstor003.ib 'cd /tmp/efs && ./efs-mgmt raft-status 172.16.223.57:19810 | grep -E "group [02] hosted=1"; sleep 5; ./efs-mgmt raft-status 172.16.223.57:19810 | grep -E "group [02] hosted=1"' && SLOTS=4 EFS_SSH_TIMEOUT=60 bash tests/perf/io500/run.sh debug 2>&1 | grep -v 'Agent pid'
+  group 0 hosted=1 role=FOLLOWER leader=2 term=124 commit=796731 applied=796731 voters=0x7 joint=0
+  group 0 hosted=1 role=FOLLOWER leader=2 term=124 commit=796731 applied=796731 voters=0x7 joint=0
+started; log: /home/erbmi1/orcd/scratch/efs-io500/last-run.log
+efs-rec: end 2026-09-30T07:28:40Z rc=0

@@ -1,0 +1,41 @@
+-----
+== fcstor003
+raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=3us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: g0 term 122->123 role CANDIDATE->CANDIDATE leader=-1 commit=563442 applied=563442 t=1790751057555ms
+raft-obs: g0 term 123->124 role CANDIDATE->FOLLOWER leader=-1 commit=563442 applied=563442 t=1790751058095ms
+kv-compact: start l0=119 inputs=2 range=11 l0only=1
+2096
+raft-host: apply-sleep us=51107 group=0 idx=802493 applied=802492
+raft-host: apply-sleep us=27290 group=0 idx=802532 applied=802531
+raft-host: apply-sleep us=20141 group=0 idx=802533 applied=802532
+raft-host: gc-pass ms=17 reap=0 frag=0 spread=0 recover=0
+== fcstor004
+raft-obs: wait_timeouts=619 pump_hold_max=10us lock_wait_max=1us drain_max=10us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1227us pub_max=0us inbox_drop=978
+raft-obs: g2 term 685->686 role CANDIDATE->FOLLOWER leader=-1 commit=566774 applied=566774 t=1790751057854ms
+raft-obs: g0 term 123->124 role FOLLOWER->FOLLOWER leader=-1 commit=563443 applied=563443 t=1790751058094ms
+kv-compact: start l0=229 inputs=2 range=370 l0only=1
+5004
+raft-host: apply-sleep us=48563 group=2 idx=788378 applied=788351
+raft-host: apply-sleep us=48570 group=2 idx=788366 applied=788351
+raft-host: apply-sleep us=48571 group=2 idx=788369 applied=788351
+raft-host: gc-pass ms=5 reap=0 frag=0 spread=0 recover=0
+== fcstor005
+raft-obs: wait_timeouts=38 pump_hold_max=4us lock_wait_max=1us drain_max=4us tick_max=4us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=544567us pub_max=0us inbox_drop=3102
+raft-obs: g0 term 123->124 role FOLLOWER->CANDIDATE leader=-1 commit=563443 applied=563443 t=1790751058094ms
+raft-obs: g0 term 124->124 role CANDIDATE->LEADER leader=2 commit=563443 applied=563443 t=1790751058095ms
+kv-compact: start l0=231 inputs=2 range=370 l0only=1
+5061
+raft-host: apply-sleep us=53694 group=0 idx=802487 applied=802486
+raft-host: apply-sleep us=127067 group=0 idx=802492 applied=802491
+raft-host: apply-sleep us=115593 group=0 idx=802495 applied=802493
+raft-host: gc-pass ms=244 reap=0 frag=244 spread=0 recover=0
+== fcstor006
+raft-obs: wait_timeouts=0 pump_hold_max=4us lock_wait_max=1us drain_max=2us tick_max=4us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=223
+raft-obs: g2 term 685->686 role FOLLOWER->CANDIDATE leader=-1 commit=566775 applied=566775 t=1790751057853ms
+raft-obs: g2 term 686->686 role CANDIDATE->LEADER leader=3 commit=566775 applied=566775 t=1790751057854ms
+kv-compact: start l0=113 inputs=2 range=486 l0only=1
+2061
+raft-host: apply-sleep us=33680 group=2 idx=783521 applied=783519
+raft-host: apply-sleep us=57808 group=2 idx=783522 applied=783521
+raft-host: apply-sleep us=29194 group=2 idx=783524 applied=783523
+raft-host: gc-pass ms=242 reap=0 frag=241 spread=0 recover=0

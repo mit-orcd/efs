@@ -103,10 +103,21 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  group in `host_read_inode_lanes`, block-sized KV scan reads, GC
  256/128 batches, `gc-pass` line; learnings below;
  `results/measure/20260930-063500-perf-dir-review`). g0 leader
- fcstor005, g2 leader fcstor006 (term 686), commit==applied, lane
- `fail=0`, `inbox_drop=0`. No client is mounted on 003–015
- (fcstor007's `/tmp/efs` tree has the client evictor fix, `5ea397fd`,
- and was unmounted cleanly 07:12Z). fstor007's client
+ fcstor005 (term 124), g2 leader fcstor006 (term 686), commit==applied.
+ Clients fcstor007–015 mounted RDMA 07:17Z on the evictor-fix tree
+ (`5ea397fd`), all `fuse.efs-fuse`. **Gate 07:20–07:33Z (START-HERE
+ §1b):** posix jobs=1 200/201 (7.1 s idle, 16.8 s under ecopy),
+ posix2 63/63, 9-host 200/201 on eight hosts + fcstor012 199/201
+ (`dir_deep_nesting` rmdir ENOTEMPTY on a dir the KV shows empty;
+ open, `results/posix/20260930-072501/d50-*`). IO-500 debug 9×4
+ (`results/io500/20260930-072824-rdma`): easy-write **3.148 GiB/s**,
+ mdtest-easy-write **3.696 kIOPS**, hard-write **0.261** with 16
+ fsync failures (fsync EBUSY at ~10 s then EIO/STALE at ~65 s on
+ every client, ino 84857), mdtest-hard-write **2.126**, easy-read
+ **2.976**, easy-stat **3.600**, **hard-read aborted on read EIO**
+ (the unpublished spans). `inbox_drop` 978/3102/223 on 004/005/006:
+ 950 KB group-2 AEs dropped at the 256-frame inbox; `pub_p50` 544 ms;
+ L0 113–231 files steady with 50–270 KB compactions. fstor007's client
  runs the 06:16Z tree (`85f5b31c`) — it does not have the evictor
  fix; the stat-side fixes are server-side and reach it. Prior
  06:16Z roll (`~/efs-runs/roll126.log`): `85f5b31c…-dirty`
@@ -341,6 +352,10 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   9-client **1326.6**, walls 28.55–55.57 s
   (`results/measure/20260928-033420-dd-wall`, `db2b88c4802a-dirty`).
   99/108 report-split lines BUSY. Slower than TCP 1478.
+  **Latest IO-500 is Sep 30 07:28Z** (`results/io500/20260930-072824-rdma`,
+  cluster-facts above): easy-write 3.148, mdtest-easy-write 3.696,
+  hard-write 0.261 with fsync failures, hard-read aborted. Do not
+  quote a hard-read or a score from it. Prior complete run:
   Sep 28 9×4 IO-500 debug (1 s stonewall, same-mount reads,
   `db2b88c4802a-dirty`): RDMA easy-write **2.917 GiB/s**,
   hard-write **0.291**, easy-read **3.092**, hard-read **1.525**,
