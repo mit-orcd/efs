@@ -126,6 +126,41 @@ int main(void)
     assert(efs_export_lookup(&ex, TROOT, "post", &out) == EFS_OK);
     assert(chunk_present(&ex, 17, 0));
 
+    /* efs_export_evict_ino: the targeted two-phase evictor. Pass 1 drops
+     * the chunk maps and keeps the rows; pass 2 drops the rows. */
+    assert(efs_export_create_with_ino(&ex, 16, TROOT, S_IFDIR | 0755,
+                                      0, 0, "d2") == 16);   /* shard 0 */
+    stage_file(&ex, 25, 16, "small", 3);                    /* shard 1 */
+    /* Size drives the chunk-group tabs visited; set it like a stat would. */
+    assert(efs_export_set_size(&ex, 25, 3ull * ex.chunk_size) == EFS_OK);
+    assert(efs_export_evict_ino(&ex, 25) == 1);
+    assert(!chunk_present(&ex, 25, 0) && !chunk_present(&ex, 25, 2));
+    assert(efs_export_get_inode(&ex, 25, &out) == EFS_OK);
+    assert(efs_export_lookup(&ex, 16, "small", &out) == EFS_OK);
+    assert(efs_export_evict_ino(&ex, 25) == 2);
+    assert(efs_export_get_inode(&ex, 25, &out) != EFS_OK);
+    assert(efs_export_lookup(&ex, 16, "small", &out) != EFS_OK);
+    /* A hard link falls back to the fan-out and still drops both names. */
+    stage_file(&ex, 26, 16, "h1", 1);                       /* shard 2 */
+    assert(efs_export_link(&ex, 26, 16, "h2") == EFS_OK);
+    assert(efs_export_evict_ino(&ex, 26) == 1);
+    assert(efs_export_evict_ino(&ex, 26) == 2);
+    assert(efs_export_lookup(&ex, 16, "h1", &out) != EFS_OK);
+    assert(efs_export_lookup(&ex, 16, "h2", &out) != EFS_OK);
+    /* A file whose chunk groups reach every shard fans out too. */
+    stage_file(&ex, 27, 16, "big", 8u << EFS_CHUNK_GROUP_SHIFT); /* shard 3 */
+    assert(efs_export_set_size(&ex, 27,
+                               (8ull << EFS_CHUNK_GROUP_SHIFT) * ex.chunk_size)
+           == EFS_OK);
+    assert(efs_export_evict_ino(&ex, 27) == 1);
+    for (uint32_t c = 0; c < (8u << EFS_CHUNK_GROUP_SHIFT); c += 7)
+        assert(!chunk_present(&ex, 27, c));
+    assert(efs_export_evict_ino(&ex, 27) == 2);
+    assert(efs_export_get_inode(&ex, 27, &out) != EFS_OK);
+    /* Unknown ino: nothing to do, table intact. */
+    assert(efs_export_evict_ino(&ex, 7654321) == 2);
+    assert(efs_export_get_inode(&ex, 17, &out) == EFS_OK);
+
     efs_export_free(&ex);
     printf("test_stage_evict: OK\n");
     return 0;

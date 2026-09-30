@@ -1,0 +1,25 @@
+-----
+== fcstor003
+build=44f397b4ca2e-dirty
+0
+apply_max=0 inbox_drop=0 tx->1 enq=7 drop=0 sent=7 fail=0 tx->2 enq=2885 drop=0 sent=2885 fail=0 apply_max=0 inbox_drop=0
+== fcstor004
+build=44f397b4ca2e-dirty
+0
+inbox_drop=0 tx->0 enq=7 drop=0 sent=7 fail=0 tx->2 enq=2838 drop=0 sent=2838 fail=0 tx->3 enq=2843 drop=0 sent=2843 fail=0 apply_max=0 inbox_drop=0
+== fcstor005
+build=44f397b4ca2e-dirty
+32
+raft-host: gc-pass ms=71 reap=0 frag=0 spread=0 recover=70
+raft-host: gc-pass ms=71 reap=0 frag=0 spread=0 recover=70
+raft-host: gc-pass ms=71 reap=0 frag=0 spread=0 recover=70
+raft-host: gc-pass ms=71 reap=0 frag=0 spread=0 recover=70
+inbox_drop=0 tx->0 enq=2856 drop=0 sent=2856 fail=0 tx->1 enq=2850 drop=0 sent=2850 fail=0 tx->3 enq=2854 drop=0 sent=2854 fail=0 apply_max=0 inbox_drop=0
+== fcstor006
+build=44f397b4ca2e-dirty
+32
+raft-host: gc-pass ms=70 reap=0 frag=0 spread=0 recover=69
+raft-host: gc-pass ms=70 reap=0 frag=0 spread=0 recover=69
+raft-host: gc-pass ms=70 reap=0 frag=1 spread=0 recover=69
+raft-host: gc-pass ms=70 reap=0 frag=0 spread=0 recover=69
+apply_max=0 inbox_drop=0 tx->1 enq=2862 drop=0 sent=2862 fail=0 tx->2 enq=2861 drop=0 sent=2861 fail=0 apply_max=0 inbox_drop=0

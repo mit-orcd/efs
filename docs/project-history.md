@@ -25,6 +25,76 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 30 2026 07:10Z — the rest of the perf dir: du 52K, a 1 Hz client stall, 10 ms stats, 16 fragments/s
+
+`results/measure/20260930-063500-perf-dir-review/SUMMARY.txt`. The user
+asked about the other files in `~/orcd/scratch/efs/perf/efs-mount`
+(ls, ls -lart, rsync, ecrawl, three finds, du, dd bs=16k and their
+straces), starting from `du -hs` = 52K for 3.8 TB.
+
+**du 52K.** du sums `st_blocks`; 52K = 103 symlinks × 512 B. Every
+regular file reports 0 blocks (`find -ls` block column, ecrawl
+`total_allocated_bytes=0`, `files_sparse_heuristic=21150/21503`).
+`inode_allocated_bytes` (efs_fuse.c) counts the client-local
+present-chunk table (W20), which since D2 is empty for a file the mount
+did not write. The server row has no chunk count and W20 forbids
+size-based `st_blocks`. Design ask D17 (per-lane present-chunk stamp
+reduced at getattr). Not implemented.
+
+**1 Hz stall.** du, find1 and find2 each show one syscall of 13–14 ms
+every 1.014 s on whatever op was in flight; the 01:10 find on a fresh
+mount does not. First suspect was the server GC loop (1 s cadence,
+prefix scans under `l->mu`); a `gc-pass` timing line went in, the
+servers were rolled, and the stall was still there, larger (17–27 ms).
+Straced both sides at once during a stat loop: servers idle apart from
+50 ms heartbeat waits; on the client, thread `stage_evict_main` leaves
+its 1 s timedwait and then takes and releases the client table lock 58
+times in 21 ms while the RPC workers sit in FUTEX_WAIT on it. gdb on
+the live client: staged estimate 412 MB against the 256 MB cap with
+10780 rows — the root export has 5 rows, ~2400 shard tabs have 1–3
+each and are booked at ~170 KB apiece (a 256-row slab counted at the
+512 B on-disk row size though calloc got 192 B rows, 16 × 1232 B chunk
+entries, 512-slot indexes). So the evictor was over cap forever and
+each of its 64 `evict_one` per second ran `ino_has_chunks` +
+`drop_chunks_from` + `forget_ino` = three walks over every loaded tab
+(250 µs), then `efs_export_compact` rebuilt every tab's index to the
+same size (the 25 % load test always passes at 1–3 rows against the
+256-row floor). Fixed on the client: `efs_export_evict_ino` visits the
+tabs the row names (ino, parent, hashed dentry, chunk groups by size;
+fan-out for a missing row, a hard link, or a file spanning most
+shards), compact reindexes only when the rebuild shrinks, slab bytes at
+`sizeof(struct efs_inode_mem)`; `test_stage_evict` covers the two-phase
+evict. fcstor007 remounted on it: two du runs, 0 syscalls over 10 ms.
+The floor itself (up to 4096 tabs × 90–170 KB > the cap before any data
+is staged, evictor churning 64 hot rows/s) is D18.
+
+**Big-file stat 5–10 ms.** `host_read_inode_lanes` issued a ReadIndex
+per active foreign lane (32 peer round trips on a follower) and every
+per-lane `efs_txn_reduce_read_ex` prefix scan opened an iterator per
+covering segment whose `iter_load` pulled a 1 MiB readahead window —
+22 × 1 MiB pread per RPC, twice per stat (LOOKUP + GETATTR), fcstor004
+strace, servers at 2 % CPU. Fixed and rolled `--all` 06:50Z
+(`44f397b4`): one ReadIndex per group; `kv_seg` iterators read one
+block unless `kv_seg_iter_set_seq` (compaction and export keep the
+readahead). 9.8 → 4.7 ms per stat; the remainder is the 64-lane double
+collect.
+
+**GC 16 fragments/s.** `host_gc_frag_pass` scanned 32 records and
+proposed one 16-ack `GC_ACK` per group per second: 70–86 unlink per
+server per 5 s, 21 hours per 100 GiB file. Now 256 per scan, 128 acks
+per entry (`EFS_META_GC_ACK_MAX`, apply scratch on the heap), rescan
+while full within 200 ms per group per loop, 1 ms yield between scans.
+`raft-host: gc-pass ms=` prints when a GC iteration exceeds 5 ms
+(leaders: `recover=70`, 64 ms of it the per-shard yield sleep).
+
+Also read: rsync's `getcwd ENOENT` at 01:53 was the invoking shell's
+cwd (re-run at 02:31 from `/tmp/direct_copy` worked); dd bs=16k is
+20–40 µs per 16 KiB FUSE write (~500 MB/s single stream, direct_io
+shape); readlink p50 0.85 ms; ecrawl's 16 threads had 718 calls over
+10 ms in 4.8 s; the 01:10 find's 1.025 s getdents was the 05:11Z
+election. Servers were rolled twice under the user's live `client.sh
+--perf` on fstor007 (06:35Z, 06:50Z).
+
 ## Sep 30 2026 06:17Z — the wedged mount after a 100 GiB dd: a pipelined peer lane read its replies on the wrong channel
 
 The user ran ls/rsync/ecrawl/find/du (all fine), then a 100 GiB `dd

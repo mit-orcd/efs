@@ -1,0 +1,180 @@
+Review of the rest of ~/orcd/scratch/efs/perf/efs-mount (Sep 30 2026, 06:30–07:00Z)
+=====================================================================================
+
+The wedge (dd_1m, sha256sum, ecopy at 02:00–02:04 local) is
+results/measure/20260930-060000-dd-wedge. This is everything else in the
+directory: ls, ls -lart, rsync, ecrawl, find ×3, du, dd_16k, and the
+straces behind them. Local times below are UTC-4 (the strace clock).
+
+1. `du -hs /tmp/efs-mount` = 52K for 3.83 TB of files (du.out.txt)
+--------------------------------------------------------------------
+du sums st_blocks. The 52K is exactly the 103 symlinks × 512 B (strace:
+103 S_IFLNK stats); every regular file reports st_blocks = 0, and
+ecrawl agrees (total_allocated_bytes=0, files_sparse_heuristic=21150 of
+21503 files). `find -ls` (find1/find2.out.txt) shows 0 in the blocks
+column for the 100 GiB files too.
+
+Cause: `inode_allocated_bytes` (src/client/efs_fuse.c) reports the
+CLIENT's present-chunk count (W20's `present_chunks`, the client table).
+Since D2 (`open()` adopts the row only; chunk maps arrive in per-lane
+windows) that count is 0 for any file this mount has not written and
+partial for one it has opened. The server row (`efs_meta_row`) carries
+no allocated-bytes or chunk-count field, and the spec routes per-write
+state through the lanes, not the row. START-HERE W20 forbids "st_blocks
+from size alone" (sparse files and truncate stubs must show holes).
+There is no correct value the client can produce today without a
+server-side count; a per-lane present-chunk stamp (reduced like
+max_end/max_mtime at getattr) is the shape that fits §7.3. NOT CHANGED:
+metadata design — see START-HERE D17.
+
+2. A 14 ms stall exactly once per 1.014 s on every metadata op
+---------------------------------------------------------------
+du (01:56), find1 and find2 (01:55) each show one syscall of 13–14 ms
+every 1.013–1.014 s, on whatever op was in flight: stat of a 59-byte
+file, fstat of a dir fd, getdents, openat (du-1hz-stalls.txt,
+find1-1hz-stalls.txt). The 01:10 find (previous server build/state)
+does not show it. Period = 1000 ms sleep + ~14 ms of work.
+
+First suspect was the server GC loop (GC_LOOP_MS = 1000; gc-pass lines
+after the 06:35Z roll in rec-gc137.log: fcstor004 frag=8..46 ms,
+fcstor005 recover=86 ms). After the 06:50Z roll the stall was still
+there and larger (meas144.log: 17 stalls of 17–27 ms in one du), so it
+was traced on both sides at once (cst146.log, sst146-*.log): the
+servers show only the 50 ms heartbeat waits; the CLIENT shows it.
+fcstor007 `fuse.strace`, thread 881431 = `stage_evict_main`:
+`futex … ETIMEDOUT <1.000>` (its 1 s timedwait), then 58 lock/unlock
+cycles on the mutex at g_client+0x5f00 (the client table lock) over
+21 ms with RPC worker 881447 in FUTEX_WAIT on it the whole time and
+the in-flight RPC reads/polls resuming 22 ms late. gdb on the live
+client: staged estimate 412 MB vs the 256 MB cap with 10780 LRU rows,
+inode_count 5 on the root and 1–3 per shard tab, ~2400 of 4096 tabs
+loaded, each booked at ~170 KB (slab 132096 = 256 rows x 512 B on-disk
+row size, though calloc got 256 x 192 B; 16 x 1232 B chunk entries;
+512-slot ino/name indexes).
+
+So every second the evictor ran 64 `evict_one`, each = `ino_has_chunks`
++ `drop_chunks_from` + `forget_ino` = three walks over every loaded tab
+(3 x 2400 hash probes, ~250 us) under the table lock, then
+`efs_export_compact` walked every tab and rebuilt its ino/name indexes
+to the same 512 slots (the 25 % load test always passes at 1–3 rows;
+`inode_idx_hint` floors at the 256-row slab). RPC threads queued behind
+it. Absent on the 01:10 mount only because that table was still under
+the cap.
+
+Fixed (client, in tree 07:07Z, fcstor007 remounted on it,
+remount148.log): `efs_export_evict_ino` visits the tabs the row names
+(ino tab, parent tab, hashed dentry tab, chunk-group tabs the size
+reaches; fan-out only for a missing row, nlink > 1, or a file spanning
+most shards; `test_stage_evict`), compact reindexes only when the
+rebuild is smaller, slab bytes are booked at sizeof(struct
+efs_inode_mem). Two du runs on the new client: 0 syscalls over 10 ms
+(were 17 per run), estimate 262 MB at 30318 rows, RSS 301 MB.
+
+Still true: the per-tab floor (~90–170 KB x up to 4096 tabs) is above
+the cap before any data is staged, so the evictor evicts 64 hot rows a
+second forever and never reaches the cap — START-HERE D18.
+
+3. GC reclaims 16 fragments per second
+--------------------------------------
+`host_gc_frag_pass`: one scan of GC_SCAN_MAX = 32 records, then at most
+GC_ACK_MAX = 16 acks (one per fragment) in one GC_ACK entry, once per
+group per second. strace on all four servers during 5 s (st138.log):
+70–86 unlink() per server = 16/s. A 100 GiB file is 819200 chunks ×
+3 fragments = 2.46M fragments → 21 hours per file; the user's deleted
+100 GiB dd files and this session's 32 GiB gate file are in that queue
+now, and each second of it is another scan under l->mu.
+
+4. stat of a big file: 5–7 ms in the user's traces, 9.8 ms measured
+--------------------------------------------------------------------
+du strace: stat by size class — 0 B 0.22 ms, <128K 0.29 ms, <10M 1.10,
+<1G 5.26, ≥1G 5.29 ms (max 20 ms). The 01:10 find: every 100 GiB
+.ecopy.tmp file 6.3–6.8 ms. Remeasured 06:36Z on fcstor007 with the
+servers idle (meas135.log): .ecopy.tmp.296331.1 9.8–10.7 ms per `stat`,
+a 2930-byte file 0.8–0.9 ms; 800 stats in 7.86 s with the servers at
+~2 % CPU (prof136.log) — waiting, not computing.
+
+fcstor004 strace of the conn thread serving fcstor007 (st140.log): one
+`stat` = LOOKUP + GETATTR, and each of the two ran the lane collect
+(`efs_meta_apply_getattr`, 64 active lanes on a file written through all
+lanes): per lane `efs_txn_reduce_read_ex` (a prefix scan) + 2 gets;
+the scans opened the same ~22 segments and each `iter_load` was a
+1 MiB pread (22 × 1048576 B, 100–170 µs each, ≈ 4 ms) — twice per stat.
+Before the collect, `host_read_inode_lanes` did a `host_read_index` per
+active lane in the other group: 32 peer round trips on a host that
+follows that group (fstat/read pairs on the peer sockets at ~200 µs
+each in the first trace).
+
+5. dd bs=16k (dd_16k.strace.txt, 01:18, killed by the user after 25 s)
+-----------------------------------------------------------------------
+251654 write(16384): 82 % in 20–40 µs, 16 % in 40–100 µs, 2 % 0.1–1 ms,
+2 over 1 ms. ≈ 450–500 MB/s single stream vs 1.0–1.2 GB/s at bs=1M:
+one FUSE request per write() under FOPEN_DIRECT_IO, no writeback
+cache, libfuse 3.10.2 has no PARALLEL_DIRECT_WRITES. The 4.3 s
+close(1) is the flush of the 3.9 GiB written. Known shape; no change.
+
+6. rsync (rsync.out.txt, 01:53): `getcwd(): No such file or directory`
+-----------------------------------------------------------------------
+strace line 151: getcwd() = ENOENT immediately after execve, before
+rsync touched /tmp/efs-mount. The invoking shell's cwd no longer
+resolved (a directory removed, or a directory on the previous mount
+instance — the client was restarted at 01:45). Not an efs I/O error;
+the same rsync re-run at 02:31 from /tmp/direct_copy proceeded.
+
+7. Smaller items
+----------------
+- readlinkat: p50 0.85 ms, max 33 ms (103 symlinks) vs 0.2–0.3 ms for
+  a stat. A readlink is an extra round trip for the target; the 33 ms
+  outliers coincide with item 2's stall. Not changed.
+- 01:10 find: one getdents64 of the root took 1.025 s at 01:10:48 — the
+  05:10:32Z mount's first readdir, during the 05:11Z election of that
+  build (results/measure/20260930-040600-postfix-review). Not new.
+- ecrawl 16 threads: 25626 lstat + 33665 readdir in 4.79 s (5.35K/s,
+  crawl_idle 6.2 %); 718 syscalls over 10 ms in 4.8 s — the client's
+  16-way concurrency through one RPC path, plus items 2 and 4.
+- `efs-fuse: staging table over EFS_CLIENT_META_MB (256 MB) with nothing
+  evictable; growing` in the client log: the 100 GiB dd's own chunk
+  map (819200 entries) is pinned while the file is open; expected.
+- Every message on a peer/client conn does fstat(sock) (`fd_id_ok`) and
+  host_sender does setsockopt per send (F1's recv timeout): 400–600
+  setsockopt per server in 5 s. µs each; noise, not changed.
+
+After the 06:50Z roll (meas144.log, servers `44f397b4ca2e-dirty`)
+------------------------------------------------------------------
+stat .ecopy.tmp.296331.1 (64 lanes): 4.7 ms (was 9.8–10.7);
+300 stats 1.654 s (was 7.86 s for 800 = 9.8 ms each);
+du by size class: 0 B 0.22 ms, <128K 0.26, <10M 1.23, <1G 4.04, >=1G 4.48
+(was 0.22 / 0.29 / 1.10 / 5.26 / 5.29 through the client-side stall).
+gc-pass: fcstor003/004 none over 5 ms; fcstor005/006 (leaders)
+`recover=70` each second, 64 ms of it HOST_REC_YIELD_US sleeps.
+Lane fail=0 everywhere, inbox_drop=0, apply_max=0.
+
+Changed (commit 44f397b4, rolled --all 06:50Z)
+----------------------------------------------
+a. `host_read_inode_lanes`: one ReadIndex per group, not per lane.
+b. `kv_seg` iterators load one block; the 1 MiB readahead is opt-in
+   (`kv_seg_iter_set_seq`) for compaction and snapshot export only.
+   Covers every prefix scan under l->mu: getattr's per-lane pending
+   scan, GC/REAP/txn-recover, dir lookups.
+c. GC frag pass: 256 records per scan, 128 acks per GC_ACK entry
+   (EFS_META_GC_ACK_MAX; apply accepts it, scratch on the heap), rescan
+   while the scan is full within a 200 ms budget per group per loop,
+   1 ms yield between scans.
+d. `raft-host: gc-pass ms= reap= frag= spread= recover=` when a loop
+   iteration exceeds 5 ms; `gc-frag group= scans= records= ms=` under
+   EFS_RAFT_OBS.
+
+e. Client (in tree, fcstor007 only): `efs_export_evict_ino`, compact
+   reindex guard, slab bytes at sizeof(struct efs_inode_mem). Servers
+   do not run the evictor; no roll needed for it.
+
+Not changed (design)
+--------------------
+- st_blocks needs a server-side present-chunk count (D17).
+- The client staging table's per-tab floor vs the 256 MB cap (D18).
+- The 64-lane collect per stat is the spec's double collect; after (b)
+  it is 64 × (scan + 2 gets) of block-sized reads. If a stat of a big
+  file must be a small file's cost, the lane reads need a fold or a
+  cached collect — a design item, not attempted.
+- GC rate beyond (c): remote fragment deletes are one GC_FRAGMENT RPC
+  each; batching them per node is the next step if 21 h → ~20 min is
+  still too slow.

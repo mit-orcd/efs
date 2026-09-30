@@ -1,0 +1,17 @@
+efs-bg: start 2026-09-30T07:07:46Z host=fcstor007 name=remount148 screen=efs-remount148
+fuse.efs-fuse
+MOUNT_OK
+Wed Sep 30 07:07:50 AM UTC 2026
+268K	/tmp/efs-mount/
+Wed Sep 30 07:08:07 AM UTC 2026
+--- du1 stalls >10ms:
+0
+--- second du (table warm, evictor active):
+268K	/tmp/efs-mount/
+--- du2 stalls >10ms:
+0
+VmRSS:	  301088 kB
+$1 = 262370816
+$2 = 30318
+REMOUNT_DONE
+efs-bg: end 2026-09-30T07:08:24Z rc=0

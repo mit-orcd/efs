@@ -833,10 +833,70 @@ static void test_chunk_deltas(void)
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
               got.generation == 0xE1,
           "folded gen");
+    /* D1: the fold keeps the folded spans' candidate_gens as len-0
+     * tombstones so a late replay of one of them is a no-op. */
     CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
                                           &nd, &newest) == EFS_OK &&
-              nd == 0,
-          "trailer gone");
+              nd == 2 && ds[0].len == 0 && ds[1].len == 0 &&
+              ds[0].generation == 0xD1 && ds[1].generation == 0xD2,
+          "fold left two tombstones");
+    /* W17 step 3 (a): replay of a folded span is a no-op. */
+    p.delta_off = 0;
+    p.delta_len = 47008;
+    p.candidate_gen = 0xD1;
+    p.expected_gen = 0;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "replay of folded span");
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
+                                          &nd, &newest) == EFS_OK &&
+              nd == 2,
+          "folded replay did not append");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xE1,
+          "folded replay kept the base");
+    /* W17 step 3 (b): a span after the fold attaches to the new base
+     * without naming it (expected_gen is the full-image CAS only). */
+    p.delta_off = 47008;
+    p.delta_len = 1000;
+    p.candidate_gen = 0xE2;
+    p.expected_gen = 0;
+    ch.checksums[0][0] = 0x33;
+    p.ch = ch;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "span after fold");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xE1,
+          "span after fold kept base E1");
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
+                                          &nd, &newest) == EFS_OK &&
+              nd == 3 && ds[2].generation == 0xE2 && ds[2].len == 1000,
+          "one live span over the fold");
+    /* W17 step 3 (c): overlap with that live span is STALE; a
+     * tombstone's old range is not an overlap. */
+    p.delta_off = 47500;
+    p.delta_len = 100;
+    p.candidate_gen = 0xE3;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE,
+          "overlap after fold");
+    p.delta_off = 10;
+    p.delta_len = 100;
+    p.candidate_gen = 0xE4;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK,
+          "tombstone range is free");
+    /* A full-image CAS after the fold must name the current base. */
+    CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
+                                          &nd, &newest) == EFS_OK,
+          "list after fold");
+    p.delta_len = 0;
+    p.delta_base_n = nd;
+    p.delta_base_seq = newest;
+    p.candidate_gen = 0xF1;
+    p.expected_gen = 0;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE,
+          "full image with the wrong base");
+    p.expected_gen = 0xE1;
+    CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "second fold");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+              got.generation == 0xF1,
+          "second fold landed");
 
     /* A fresh file fills the chain and refuses the next span. */
     efs_kv_mem_free(kv);

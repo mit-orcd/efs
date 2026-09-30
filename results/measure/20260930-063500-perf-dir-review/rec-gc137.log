@@ -1,0 +1,53 @@
+-----
+efs-rec: start 2026-09-30T06:40:10Z pid=3696881 host=login007
+efs-rec: cmd for h in fcstor003 fcstor004 fcstor005 fcstor006; do echo == $h; ~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh $h.ib 'grep -c gc-pass /tmp/efs/efsd.log; grep gc-pass /tmp/efs/efsd.log | tail -4; grep -o "tx->[0-9]* [^|]*fail=[0-9]*" /tmp/efs/efsd.log | tail -3; ls /data1/01/efs/mdraft/kv | wc -l; ls /data1/01/efs/mdraft/kv | grep -c "^l0"; cat /tmp/efs-perf/stat.rec.log | tail -2'; done
+== fcstor003
+1
+raft-host: gc-pass ms=6 reap=0 frag=0 spread=0 recover=0
+tx->2 enq=7072 drop=0 sent=6757 fail=0
+tx->1 enq=3600 drop=0 sent=3024 fail=0
+tx->2 enq=7176 drop=0 sent=6861 fail=0
+255
+0
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.061 MB /tmp/efs-perf/stat.data (98 samples) ]
+== fcstor004
+39
+raft-host: gc-pass ms=429 reap=0 frag=8 spread=0 recover=19
+raft-host: gc-pass ms=21 reap=0 frag=14 spread=0 recover=6
+raft-host: gc-pass ms=919 reap=3 frag=46 spread=0 recover=0
+raft-host: gc-pass ms=7 reap=0 frag=0 spread=0 recover=0
+tx->0 enq=3600 drop=0 sent=3600 fail=0
+tx->2 enq=10712 drop=0 sent=10304 fail=0
+tx->3 enq=11051 drop=0 sent=10209 fail=0
+487
+0
+[ perf record: Woken up 18 times to write data ]
+[ perf record: Captured and wrote 4.586 MB /tmp/efs-perf/stat.data (27686 samples) ]
+== fcstor005
+34
+raft-host: gc-pass ms=90 reap=0 frag=3 spread=0 recover=86
+raft-host: gc-pass ms=90 reap=0 frag=3 spread=0 recover=87
+raft-host: gc-pass ms=91 reap=0 frag=3 spread=0 recover=87
+raft-host: gc-pass ms=5 reap=0 frag=3 spread=0 recover=1
+tx->0 enq=7254 drop=0 sent=7254 fail=0
+tx->1 enq=10724 drop=0 sent=9996 fail=0
+tx->3 enq=10389 drop=0 sent=10116 fail=0
+490
+0
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.108 MB /tmp/efs-perf/stat.data (283 samples) ]
+== fcstor006
+49
+raft-host: gc-pass ms=11 reap=0 frag=4 spread=0 recover=6
+raft-host: gc-pass ms=7 reap=0 frag=4 spread=0 recover=3
+raft-host: gc-pass ms=23 reap=0 frag=4 spread=0 recover=18
+raft-host: gc-pass ms=12 reap=0 frag=7 spread=0 recover=5
+tx->2 enq=10293 drop=0 sent=10288 fail=0
+tx->1 enq=11069 drop=0 sent=11067 fail=0
+tx->2 enq=10398 drop=0 sent=10393 fail=0
+254
+0
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.099 MB /tmp/efs-perf/stat.data (263 samples) ]
+efs-rec: end 2026-09-30T06:40:11Z rc=0

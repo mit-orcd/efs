@@ -96,15 +96,26 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
- **UP 06:16Z Sep 30.** Rolled `--all`, no recorders
- (`~/efs-runs/roll126.log`, ROLL_OK): `85f5b31c…-dirty` = HEAD
- `85f5b31c` (pipelined-sender reply channel fix, learning below;
- `results/measure/20260930-060000-dd-wedge`). fstor007 `/tmp/efs`
- rebuilt on the same tree. Gate 06:19Z (`~/efs-runs/gate130.log`):
+ **UP 06:51Z Sep 30.** Rolled `--all` twice under the user's live
+ fstor007 `client.sh --perf` (06:35Z `~/efs-runs/roll134.log`,
+ 06:51Z `~/efs-runs/roll143.log`, both ROLL_OK, no recorders):
+ servers `44f397b4ca2e-dirty` = HEAD `44f397b4` (one ReadIndex per
+ group in `host_read_inode_lanes`, block-sized KV scan reads, GC
+ 256/128 batches, `gc-pass` line; learnings below;
+ `results/measure/20260930-063500-perf-dir-review`). g0 leader
+ fcstor005, g2 leader fcstor006 (term 686), commit==applied, lane
+ `fail=0`, `inbox_drop=0`. fcstor007 is mounted (`/tmp/efs` =
+ tree with the client evictor fix, 07:07Z, `fuse.efs-fuse`,
+ MOUNT_OK); 003–006 and 008–015 have no client. fstor007's client
+ runs the 06:16Z tree (`85f5b31c`) — it does not have the evictor
+ fix; the stat-side fixes are server-side and reach it. Prior
+ 06:16Z roll (`~/efs-runs/roll126.log`): `85f5b31c…-dirty`
+ (pipelined-sender reply channel fix;
+ `results/measure/20260930-060000-dd-wedge`). Gate 06:19Z
+ (`~/efs-runs/gate130.log`):
  fcstor007 32 GiB non-zero dd+fsync **~1000 MiB/s** (32.85 s, rc 0,
  size 34359738368), lane `fail=0` on 004/005 before and after,
- terms g0 106 / g2 680 unchanged, commit==applied; fcstor007
- unmounted cleanly afterwards. No client is mounted on 003–015.
+ terms g0 106 / g2 680 unchanged, commit==applied.
  Prior 05:43Z roll
  (`~/efs-runs/roll107.log`): `e002771e56e4-dirty` = HEAD `e002771e`
  (F1/F2/utimens flush in `a5e3d5fe`; conn-pool and reclaim fixes in
@@ -450,6 +461,22 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   hold, not CPU. Check `python3 tests/measure/md_latency.py` (reference
   medians 6.1/4.0/6.2/0.3/1.5/5.2 ms since `84a2a55`) after any change
   that adds background KV work.
+- **A `kv_seg` iterator reads one block; the 1 MiB readahead is opt-in
+ (`kv_seg_iter_set_seq`, compaction and export only; Sep 30,
+ `44f397b4`).** Every prefix scan under `l->mu` (getattr's per-lane
+ `efs_txn_reduce_read_ex`, GC/REAP/txn-recover, dir lookups) opened
+ an iterator per covering segment and each `iter_load` pulled 1 MiB:
+ one stat of a 64-lane file was 2 × 22 × 1 MiB of pread on the
+ server (9.8 ms, servers at 2 % CPU). Same review:
+ `host_read_inode_lanes` did a ReadIndex per active foreign lane (32
+ peer round trips per stat on a follower) — one per group now. A
+ big-file stat is 4.7 ms after both; the rest is the 64-lane double
+ collect (design). GC frag pass was 32 records + one 16-ack entry
+ per group per second = 16 fragments/s (21 h per 100 GiB file); now
+ 256/128 (`EFS_META_GC_ACK_MAX`), rescan while full within 200 ms.
+ `raft-host: gc-pass ms= reap= frag= spread= recover=` prints when a
+ GC iteration exceeds 5 ms; leaders show `recover=70`, 64 ms of it
+ `HOST_REC_YIELD_US` sleeps.
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
  no lane with >64 chunks was ever swept. Check this in any new scan user.
@@ -701,6 +728,32 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (connect failures are counted inside). `dcache_reclaim_main` at the
  top of a client profile under fresh-file writes is the same review:
  the threads now park when a sweep pops nothing.
+- **A stall on every client RPC exactly once a second is the staging
+ evictor, not the servers (Sep 30,
+ `results/measure/20260930-063500-perf-dir-review`).**
+ `stage_evict_main` wakes on a 1 s timedwait; once the staging
+ estimate is over `EFS_CLIENT_META_MB` (256 MB) it evicts 64 rows
+ per pass under the client table lock. Each `evict_one` ran three
+ walks over every loaded shard tab (2400 of 4096 after one du,
+ 250 µs) and `efs_export_compact` rebuilt every tab's 512-slot index
+ to the same size: 14–27 ms per second with every RPC thread queued
+ on the lock (strace: 58 futex hand-offs on `g_client` after the
+ `ETIMEDOUT <1.000>`). Fixed: `efs_export_evict_ino` visits the tabs
+ the row names, compact reindexes only when the rebuild shrinks,
+ slab bytes are booked at `sizeof(struct efs_inode_mem)`
+ (`test_stage_evict`). Two du runs after: 0 syscalls over 10 ms.
+ Still true (D18, ask): the per-tab floor (~90–170 KB × up to 4096
+ tabs) is above the cap before any data is staged, so the evictor
+ churns 64 hot rows a second and never reaches it (412 MB estimate,
+ 330 MB RSS at 10780 rows). Trace the client (`strace -f -T` on
+ `efs-fuse`, look for the 1 s `ETIMEDOUT`) before the servers for
+ any 1 Hz pattern.
+- **`st_blocks` is 0 for every regular file this client did not
+ write** (`du` 52K for 3.8 TB = 103 symlinks × 512 B; ecrawl
+ `files_sparse_heuristic` = nearly all). `inode_allocated_bytes`
+ counts the client-local present-chunk table (W20), empty since D2
+ for unopened files; the row has no chunk count and W20 forbids
+ size-based `st_blocks`. Design ask D17 — do not fake it from size.
 - `adopt_rpc_inode` drops dcache only on SHRINK; dropping on
   same-size/newer-mtime discarded the only replay source of an in-flight
   O_APPEND object (`concurrent_appends` lost lines).

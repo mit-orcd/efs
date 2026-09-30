@@ -1,0 +1,121 @@
+efs-bg: start 2026-09-30T06:38:09Z host=node9901 name=prof136 screen=efs-prof136
+STATS=800 ELAPSED=7.863260453
+=== fcstor003
+--- children
+=== fcstor004
+--- children
+=== fcstor005
+     8.48%            24  efsd     [kernel.kallsyms]     [k] _raw_spin_unlock_irq
+     6.36%            18  efsd     [kernel.kallsyms]     [k] __fget_light
+     6.01%            17  efsd     libc.so.6             [.] __memcmp_avx2_movbe
+     3.89%            11  efsd     [kernel.kallsyms]     [k] syscall_enter_from_user_mode
+     3.53%            10  efsd     [kernel.kallsyms]     [k] _raw_spin_unlock_irqrestore
+     2.83%             8  efsd     efsd                  [.] recv_poller
+     2.47%             7  efsd     efsd                  [.] efs_rdma_recv_wait
+     2.12%             6  efsd     [kernel.kallsyms]     [k] rep_movs_alternative
+     2.12%             6  efsd     [vdso]                [.] 0x0000000000000b18
+     2.12%             6  efsd     efsd                  [.] efs_rdma_recv_repost
+     2.12%             6  efsd     efsd                  [.] host_pump
+     1.77%             5  efsd     [kernel.kallsyms]     [k] __d_lookup_rcu
+     1.77%             5  efsd     [kernel.kallsyms]     [k] __pollwait
+     1.77%             5  efsd     [kernel.kallsyms]     [k] _copy_from_user
+--- children
+    82.69%     0.00%  efsd     libc.so.6                [.] start_thread
+    50.18%     1.06%  efsd     [kernel.kallsyms]        [k] do_syscall_64
+    50.18%     0.00%  efsd     [kernel.kallsyms]        [k] entry_SYSCALL_64_after_hwframe
+    18.02%     2.83%  efsd     efsd                     [.] recv_poller
+    17.31%     0.00%  efsd     efsd                     [.] conn_thread
+    17.31%     0.00%  efsd     efsd                     [.] server_handle_conn
+    16.61%     0.00%  efsd     libc.so.6                [.] __GI___libc_write
+    15.90%     0.35%  efsd     efsd                     [.] host_gc_thread
+    15.19%     0.35%  efsd     [kernel.kallsyms]        [k] ksys_write
+    13.43%     1.06%  efsd     libc.so.6                [.] __poll
+    13.43%     0.00%  efsd     efsd                     [.] host_gc_frag_pass
+    11.66%     0.00%  efsd     efsd                     [.] lsm_scan_prefix
+    10.25%     0.35%  efsd     [kernel.kallsyms]        [k] __x64_sys_poll
+    10.25%     0.00%  efsd     [kernel.kallsyms]        [k] vfs_write
+     9.54%     0.71%  efsd     [kernel.kallsyms]        [k] do_sys_poll
+     8.83%     2.12%  efsd     efsd                     [.] host_pump
+     8.83%     0.00%  efsd     [kernel.kallsyms]        [k] eventfd_write
+     8.48%     8.48%  efsd     [kernel.kallsyms]        [k] _raw_spin_unlock_irq
+     8.13%     1.41%  efsd     efsd                     [.] merge_scan
+     7.77%     0.00%  efsd     [kernel.kallsyms]        [k] do_poll.constprop.0
+     7.77%     0.00%  efsd     efsd                     [.] host_sender
+     7.07%     1.41%  efsd     libc.so.6                [.] read
+     6.36%     6.36%  efsd     [kernel.kallsyms]        [k] __fget_light
+     6.01%     6.01%  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+     6.01%     0.71%  efsd     efsd                     [.] efs_conn_recv_msg
+     6.01%     0.35%  efsd     [kernel.kallsyms]        [k] __fdget_pos
+     5.30%     0.35%  efsd     efsd                     [.] conn_rdma_frame.constprop.0
+     5.30%     0.00%  efsd     efsd                     [.] efs_conn_send_msg
+     4.24%     0.00%  efsd     efsd                     [.] drain_inbox
+     3.89%     3.89%  efsd     [kernel.kallsyms]        [k] syscall_enter_from_user_mode
+     3.89%     0.00%  efsd     [unknown]                [.] 0000000000000000
+     3.53%     3.53%  efsd     [kernel.kallsyms]        [k] _raw_spin_unlock_irqrestore
+     3.53%     0.35%  efsd     efsd                     [.] kv_msrc_advance
+     3.53%     0.00%  efsd     [kernel.kallsyms]        [k] vfs_read
+     3.53%     0.00%  efsd     efsd                     [.] nvme_del_if_sum
+     3.18%     0.71%  efsd     [kernel.kallsyms]        [k] __x64_sys_futex
+     3.18%     0.71%  efsd     libc.so.6                [.] __fstat64
+     3.18%     0.35%  efsd     libc.so.6                [.] __GI___libc_open
+=== fcstor006
+     7.60%            20  efsd     efsd                  [.] recv_poller
+     6.84%            18  efsd     [kernel.kallsyms]     [k] _raw_spin_unlock_irq
+     5.32%            14  efsd     libc.so.6             [.] __memcmp_avx2_movbe
+     4.94%            13  efsd     [kernel.kallsyms]     [k] __d_lookup_rcu
+     4.56%            12  efsd     [kernel.kallsyms]     [k] syscall_enter_from_user_mode
+     3.42%             9  efsd     [vdso]                [.] 0x0000000000000b18
+     2.66%             7  efsd     efsd                  [.] efs_rdma_recv_wait
+     2.28%             6  efsd     [kernel.kallsyms]     [k] do_poll.constprop.0
+     2.28%             6  efsd     [kernel.kallsyms]     [k] futex_wake_mark
+     2.28%             6  efsd     [kernel.kallsyms]     [k] read_tsc
+     2.28%             6  efsd     libmlx5.so.1.27.63.0  [.] 0x00000000000484b0
+     1.90%             5  efsd     [kernel.kallsyms]     [k] _raw_spin_unlock_irqrestore
+     1.90%             5  efsd     efsd                  [.] host_pump
+     1.52%             4  efsd     [kernel.kallsyms]     [k] rep_movs_alternative
+     1.52%             4  efsd     efsd                  [.] merge_scan
+     1.52%             4  efsd     libc.so.6             [.] __GI___pthread_enable_asynccancel
+     1.52%             4  efsd     libmlx5.so.1.27.63.0  [.] 0x00000000000222f7
+--- children
+    79.09%     0.00%  efsd     libc.so.6             [.] start_thread
+    47.53%     0.00%  efsd     [kernel.kallsyms]     [k] do_syscall_64
+    47.53%     0.00%  efsd     [kernel.kallsyms]     [k] entry_SYSCALL_64_after_hwframe
+    20.15%     0.76%  efsd     efsd                  [.] server_handle_conn
+    20.15%     0.00%  efsd     efsd                  [.] host_gc_thread
+    17.49%     0.00%  efsd     efsd                  [.] host_gc_frag_pass
+    17.11%     0.00%  efsd     efsd                  [.] conn_thread
+    15.21%     0.38%  efsd     libc.so.6             [.] __poll
+    13.31%     7.60%  efsd     efsd                  [.] recv_poller
+    12.17%     0.00%  efsd     efsd                  [.] lsm_scan_prefix
+    11.79%     0.38%  efsd     [kernel.kallsyms]     [k] __x64_sys_poll
+     9.89%     1.14%  efsd     [kernel.kallsyms]     [k] do_sys_poll
+     9.13%     0.00%  efsd     efsd                  [.] nvme_del_if_sum
+     8.75%     1.52%  efsd     efsd                  [.] merge_scan
+     7.22%     2.28%  efsd     [kernel.kallsyms]     [k] do_poll.constprop.0
+     7.22%     0.38%  efsd     libc.so.6             [.] __GI___libc_write
+     6.84%     6.84%  efsd     [kernel.kallsyms]     [k] _raw_spin_unlock_irq
+     6.46%     1.14%  efsd     libc.so.6             [.] read
+     6.46%     0.00%  efsd     [kernel.kallsyms]     [k] ksys_write
+     6.46%     0.00%  efsd     [kernel.kallsyms]     [k] vfs_write
+     6.08%     0.38%  efsd     [kernel.kallsyms]     [k] vfs_read
+     5.70%     0.00%  efsd     [kernel.kallsyms]     [k] eventfd_write
+     5.32%     5.32%  efsd     libc.so.6             [.] __memcmp_avx2_movbe
+     5.32%     0.38%  efsd     libc.so.6             [.] clock_gettime@@GLIBC_2.17
+     5.32%     0.00%  efsd     efsd                  [.] host_sender
+     4.94%     4.94%  efsd     [kernel.kallsyms]     [k] __d_lookup_rcu
+     4.56%     4.56%  efsd     [kernel.kallsyms]     [k] syscall_enter_from_user_mode
+     4.56%     1.90%  efsd     efsd                  [.] host_pump
+     4.56%     0.00%  efsd     [kernel.kallsyms]     [k] __x64_sys_futex
+     4.56%     0.00%  efsd     [kernel.kallsyms]     [k] do_futex
+     4.56%     0.00%  efsd     [kernel.kallsyms]     [k] ksys_read
+     4.56%     0.00%  efsd     [kernel.kallsyms]     [k] lookup_fast
+     4.56%     0.00%  efsd     [kernel.kallsyms]     [k] walk_component
+     4.18%     0.00%  efsd     [kernel.kallsyms]     [k] filename_lookup
+     4.18%     0.00%  efsd     [kernel.kallsyms]     [k] path_lookupat
+     4.18%     0.00%  efsd     efsd                  [.] efs_conn_recv_msg
+     4.18%     0.00%  efsd     libc.so.6             [.] __GI___libc_open
+     3.80%     0.38%  efsd     [kernel.kallsyms]     [k] do_unlinkat
+     3.80%     0.38%  efsd     [kernel.kallsyms]     [k] link_path_walk.part.0.constprop.0
+     3.80%     0.00%  efsd     [kernel.kallsyms]     [k] __x64_sys_openat
+PROF_DONE
+efs-bg: end 2026-09-30T06:38:25Z rc=0

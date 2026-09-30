@@ -1,0 +1,84 @@
+efs-bg: start 2026-09-30T06:42:19Z host=node9901 name=st138 screen=efs-st138
+63
+=== fcstor003
+1041 /tmp/efs-perf/stat.strace
+    366 1002925
+    306 1002927
+    210 1002928
+    104 1003023
+     26 1002920
+      8 1002912
+    252 fstat(
+    215 openat(
+    204 setsockopt(
+    178 access(
+     72 unlink(
+     36 newfstatat(
+     36 close(
+     13 restart_syscall(
+      8 pwrite64(
+      8 fsync(
+      4 fdatasync(
+      1 accept(
+=== fcstor004
+2028 /tmp/efs-perf/stat.strace
+    513 918128
+    418 918031
+    309 917811
+    308 917810
+    150 917809
+    105 917813
+    561 fstat(
+    410 setsockopt(
+    401 pread64(
+    210 openat(
+    175 access(
+     70 unlink(
+     45 restart_syscall(
+     35 newfstatat(
+     35 close(
+     18 pwrite64(
+     18 fsync(
+      9 fdatasync(
+=== fcstor005
+2529 /tmp/efs-perf/stat.strace
+    519 934674
+    518 934678
+    476 934667
+    312 934680
+    226 934917
+    117 934677
+    731 fstat(
+    622 setsockopt(
+    240 openat(
+    200 access(
+     80 unlink(
+     40 newfstatat(
+     40 close(
+     38 restart_syscall(
+     21 pread64(
+     20 pwrite64(
+     20 fsync(
+     10 fdatasync(
+=== fcstor006
+2112 /tmp/efs-perf/stat.strace
+    518 685460
+    518 685427
+    485 685410
+    258 685711
+    108 685420
+    106 685461
+    537 fstat(
+    412 setsockopt(
+    258 openat(
+    215 access(
+     86 unlink(
+     43 newfstatat(
+     43 close(
+     33 restart_syscall(
+     16 pread64(
+     10 pwrite64(
+     10 fsync(
+      5 fdatasync(
+ST_DONE
+efs-bg: end 2026-09-30T06:42:28Z rc=0

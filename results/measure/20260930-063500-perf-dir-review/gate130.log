@@ -1,0 +1,15 @@
+efs-bg: start 2026-09-30T06:19:05Z host=fcstor007 name=gate130 screen=efs-gate130
+fuse.efs-fuse
+MOUNT_OK
+Wed Sep 30 06:19:08 AM UTC 2026
+DD_RC=0
+
+real	0m32.853s
+user	0m0.100s
+sys	0m19.001s
+Wed Sep 30 06:19:41 AM UTC 2026
+SIZE=34359738368
+0
+inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=7378753
+GATE_DONE
+efs-bg: end 2026-09-30T06:19:42Z rc=0

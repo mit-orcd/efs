@@ -1,0 +1,41 @@
+efs-bg: start 2026-09-30T06:55:21Z host=fcstor004 name=sst146-004 screen=efs-sst146-004
+strace: Process 918951 detached
+lines=24095
+--- >10ms by syscall:
+   1183 <...
+--- >10ms non-idle lines:
+919041 02:55:21.175732 <... restart_syscall resumed>) = 1 <0.011917>
+919039 02:55:21.175870 <... futex resumed>) = 0 <0.012036>
+919024 02:55:21.180905 <... restart_syscall resumed>) = 0 <0.017015>
+918953 02:55:21.221619 <... poll resumed>) = 1 ([{fd=7, revents=POLLIN}]) <0.045341>
+919040 02:55:21.221698 <... poll resumed>) = 1 ([{fd=529, revents=POLLIN}]) <0.050976>
+919038 02:55:21.221843 <... futex resumed>) = 0 <0.050800>
+919041 02:55:21.227300 <... poll resumed>) = 1 ([{fd=531, revents=POLLIN}]) <0.051412>
+919039 02:55:21.227420 <... futex resumed>) = 0 <0.051109>
+918953 02:55:21.273417 <... poll resumed>) = 1 ([{fd=7, revents=POLLIN}]) <0.045553>
+919040 02:55:21.273490 <... poll resumed>) = 1 ([{fd=529, revents=POLLIN}]) <0.051647>
+919038 02:55:21.273695 <... futex resumed>) = 0 <0.051368>
+919041 02:55:21.279051 <... poll resumed>) = 1 ([{fd=531, revents=POLLIN}]) <0.051611>
+919039 02:55:21.279180 <... futex resumed>) = 0 <0.051285>
+918953 02:55:21.325706 <... poll resumed>) = 1 ([{fd=7, revents=POLLIN}]) <0.046131>
+919040 02:55:21.325823 <... poll resumed>) = 1 ([{fd=529, revents=POLLIN}]) <0.052099>
+919038 02:55:21.325983 <... futex resumed>) = 0 <0.051780>
+919041 02:55:21.331036 <... poll resumed>) = 1 ([{fd=531, revents=POLLIN}]) <0.051837>
+919039 02:55:21.331159 <... futex resumed>) = 0 <0.051550>
+918953 02:55:21.377163 <... poll resumed>) = 1 ([{fd=7, revents=POLLIN}]) <0.045397>
+919040 02:55:21.377228 <... poll resumed>) = 1 ([{fd=529, revents=POLLIN}]) <0.051224>
+919038 02:55:21.377353 <... futex resumed>) = 0 <0.050892>
+919041 02:55:21.382777 <... poll resumed>) = 1 ([{fd=531, revents=POLLIN}]) <0.051598>
+919039 02:55:21.382910 <... futex resumed>) = 0 <0.051114>
+918953 02:55:21.428968 <... poll resumed>) = 1 ([{fd=7, revents=POLLIN}]) <0.045598>
+919040 02:55:21.429074 <... poll resumed>) = 1 ([{fd=529, revents=POLLIN}]) <0.051700>
+919038 02:55:21.429286 <... futex resumed>) = 0 <0.051480>
+919041 02:55:21.434533 <... poll resumed>) = 1 ([{fd=531, revents=POLLIN}]) <0.051600>
+919039 02:55:21.434658 <... futex resumed>) = 0 <0.051258>
+918953 02:55:21.480834 <... poll resumed>) = 1 ([{fd=7, revents=POLLIN}]) <0.045630>
+919040 02:55:21.480901 <... poll resumed>) = 1 ([{fd=529, revents=POLLIN}]) <0.051579>
+--- futex >10ms count by tid:
+    232 919039
+    231 919038
+SST_DONE
+efs-bg: end 2026-09-30T06:55:33Z rc=0

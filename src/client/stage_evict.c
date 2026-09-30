@@ -433,17 +433,15 @@ static int evict_one(efs_ino_t ino, uint64_t tick)
         goto out;
     }
     /* Chunk maps first. A later pass drops the row once the maps are
-     * gone. A stale chunk count that survives the drop falls through
-     * to the row drop so a pass cannot spin on an empty map. */
-    if (efs_export_ino_has_chunks(&g_client.export, ino)) {
-        efs_export_drop_chunks_from(&g_client.export, ino, 0);
-        if (!efs_export_ino_has_chunks(&g_client.export, ino)) {
-            pthread_mutex_unlock(&g_lru_mu);
-            dropped = 1;
-            goto out;
-        }
+     * gone. efs_export_evict_ino visits the tabs the row names (three
+     * walks over every loaded tab per ino were 250 us under the table
+     * lock and a 14–27 ms once-a-second stall on every client RPC,
+     * Sep 30 2026). */
+    if (efs_export_evict_ino(&g_client.export, ino) == 1) {
+        pthread_mutex_unlock(&g_lru_mu);
+        dropped = 1;
+        goto out;
     }
-    efs_export_forget_ino(&g_client.export, ino);
     lru_remove_locked(ino);
     pthread_mutex_unlock(&g_lru_mu);
     dropped = 1;

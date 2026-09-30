@@ -1,0 +1,44 @@
+efs-bg: start 2026-09-30T06:36:12Z host=fcstor007 name=meas135 screen=efs-meas135
+fuse.efs-fuse
+MOUNT_OK
+Wed Sep 30 06:36:12 AM UTC 2026
+268K	/tmp/efs-mount/
+Wed Sep 30 06:36:32 AM UTC 2026
+--- stalls >10ms:
+15
+02:36:12.686448 <0.013288>
+02:36:12.849886 <0.012484>
+02:36:13.139646 <0.010109>
+02:36:21.452242 <0.025131>
+02:36:23.492994 <0.018762>
+02:36:24.511724 <0.018718>
+02:36:25.527666 <0.022902>
+02:36:26.548572 <0.025722>
+02:36:27.569965 <0.020704>
+02:36:28.590658 <0.021300>
+02:36:29.575845 <0.010029>
+02:36:29.604236 <0.028649>
+02:36:30.632871 <0.021527>
+02:36:31.653840 <0.027899>
+02:36:32.677474 <0.023526>
+--- big-file stats:
+efs-mount/001/.ecopy.tmp.296331.1 <0.010723>
+efs-mount/001/.ecopy.tmp.296331.1 <0.009811>
+efs-mount/001/.ecopy.tmp.296331.1 <0.009900>
+efs-mount/001/.ecopy.tmp.296331.10 <0.009083>
+efs-mount/001/.ecopy.tmp.296331.10 <0.008740>
+efs-mount/001/.ecopy.tmp.296331.10 <0.008775>
+efs-mount/software/spack/pkg/bin/sbang <0.000921>
+efs-mount/software/spack/pkg/bin/sbang <0.000803>
+efs-mount/software/spack/pkg/bin/sbang <0.000881>
+efs-mount/software/spack/pkg/.spack-db/prefix_lock <0.000787>
+efs-mount/software/spack/pkg/.spack-db/prefix_lock <0.000920>
+efs-mount/software/spack/pkg/.spack-db/prefix_lock <0.000761>
+--- fuse.log:
+export id=1 name=efs-test
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=169120 root_get=0 mode=40755
+efs-fuse daemon pid=881424
+fuse serving
+efs: RDMA transport up on mlx5_2 port 1 (lid 2171, 36 x 72 KiB bufs/conn)
+MEAS_DONE
+efs-bg: end 2026-09-30T06:36:32Z rc=0

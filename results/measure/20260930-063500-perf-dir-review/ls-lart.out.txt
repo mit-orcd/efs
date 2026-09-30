@@ -1,0 +1,10 @@
+total 4
+drwxrwxr-x  27 erbmi1 erbmi1    0 Sep 11 07:20 git
+drwx------   3 erbmi1 erbmi1    0 Sep 29 13:06 posix-fcstor007-n7_7jfvh
+drwxrwxrwx  10 erbmi1 erbmi1    0 Sep 29 13:35 software
+drwxrwxrwx   2 erbmi1 erbmi1    0 Sep 29 16:41 002
+drwx------   2 erbmi1 erbmi1    0 Sep 29 20:04 posix-fcstor011-1awp306v
+drwxrwxrwx   2 erbmi1 erbmi1    0 Sep 30 01:18 001
+drwxr-xr-x   9 root   root      0 Sep 30 01:45 .
+drwxr-xr-x   4 erbmi1 erbmi1    0 Sep 30 01:46 measure
+drwxrwxrwt.  5 root   root   4096 Sep 30 01:50 ..

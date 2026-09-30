@@ -1,0 +1,44 @@
+efs-bg: start 2026-09-30T06:52:09Z host=fcstor007 name=meas144 screen=efs-meas144
+fuse.efs-fuse
+MOUNT_OK
+Wed Sep 30 06:52:29 AM UTC 2026
+268K	/tmp/efs-mount/
+Wed Sep 30 06:52:46 AM UTC 2026
+--- stalls >10ms:
+17
+02:52:29.663902 <0.016694>
+02:52:30.680302 <0.018639>
+02:52:31.698822 <0.018797>
+02:52:32.717448 <0.019100>
+02:52:33.736221 <0.020215>
+02:52:34.756060 <0.020319>
+02:52:35.776146 <0.019929>
+02:52:36.795934 <0.013951>
+02:52:37.819272 <0.021220>
+02:52:38.840167 <0.022411>
+02:52:39.862386 <0.022177>
+02:52:40.884537 <0.023065>
+02:52:41.902743 <0.026978>
+02:52:42.928532 <0.025787>
+02:52:43.951253 <0.024869>
+02:52:44.974040 <0.022523>
+02:52:45.996468 <0.022121>
+--- stat by size class
+<1G n=469 avg_ms=4.04 max_ms=27.0
+>=1G n=187 avg_ms=4.48 max_ms=25.8
+<10M n=552 avg_ms=1.23 max_ms=23.1
+<128K n=23389 avg_ms=0.26 max_ms=21.2
+0 n=11077 avg_ms=0.22 max_ms=22.5
+--- big-file stats:
+efs-mount/001/.ecopy.tmp.296331.1 <0.005162>
+efs-mount/001/.ecopy.tmp.296331.1 <0.004711>
+efs-mount/001/.ecopy.tmp.296331.1 <0.004726>
+efs-mount/001/.ecopy.tmp.296331.10 <0.004752>
+efs-mount/001/.ecopy.tmp.296331.10 <0.004717>
+efs-mount/001/.ecopy.tmp.296331.10 <0.004713>
+efs-mount/software/spack/pkg/bin/sbang <0.000835>
+efs-mount/software/spack/pkg/bin/sbang <0.000808>
+efs-mount/software/spack/pkg/bin/sbang <0.000796>
+STATS=300 ELAPSED=1.654126129
+MEAS_DONE
+efs-bg: end 2026-09-30T06:52:48Z rc=0

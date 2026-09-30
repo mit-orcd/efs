@@ -38,18 +38,39 @@ static uint32_t slab_of_row(const struct efs_export *ex,
 static void remove_inode_slot(struct efs_export *ex, uint64_t i,
                               int expect_survivor);
 
+static uint64_t export_staged_bytes_one(const struct efs_export *ex);
+
+/* Re-derive this table's estimate and move the difference into the
+ * root's running total. Called after any capacity or arena change. */
+static void staged_refresh(struct efs_export *ex)
+{
+    struct efs_export *root;
+    uint64_t now;
+
+    if (!ex)
+        return;
+    root = ex->owner ? ex->owner : ex;
+    now = export_staged_bytes_one(ex);
+    if (root->staged_total >= ex->staged_est)
+        root->staged_total -= ex->staged_est;
+    else
+        root->staged_total = 0;
+    root->staged_total += now;
+    ex->staged_est = now;
+}
+
 static void staged_slab_add(struct efs_export *ex, int64_t delta)
 {
     if (!ex || delta == 0)
         return;
     if (delta > 0) {
         ex->staged_slab_bytes += (uint64_t)delta;
-        return;
-    }
-    if ((uint64_t)(-delta) >= ex->staged_slab_bytes)
+    } else if ((uint64_t)(-delta) >= ex->staged_slab_bytes) {
         ex->staged_slab_bytes = 0;
-    else
+    } else {
         ex->staged_slab_bytes -= (uint64_t)(-delta);
+    }
+    staged_refresh(ex);
 }
 
 static int slab_names_grow(struct efs_export *ex, struct efs_ino_slab *sl,
@@ -152,6 +173,7 @@ static int inode_ensure_cap(struct efs_export *ex, uint64_t need)
         }
         free(old);
     }
+    staged_refresh(ex);
     return EFS_OK;
 }
 
@@ -172,7 +194,12 @@ static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
                                     sizeof(struct efs_inode_mem));
     if (!ex->ino_slabs[si].rows)
         return -1;
-    staged_slab_add(ex, (int64_t)EFS_INO_SLAB_ROWS * EFS_INODE_ROW_SIZE);
+    /* Count what calloc got (sizeof(struct efs_inode_mem), 192 B), not
+     * the 512 B on-disk row size: a one-row shard tab was booked at
+     * 132 KB and 2400 such tabs (one du) put the client's estimate at
+     * 412 MB against a 256 MB cap (Sep 30 2026). */
+    staged_slab_add(ex, (int64_t)EFS_INO_SLAB_ROWS *
+                            (int64_t)sizeof(struct efs_inode_mem));
     ex->ino_slabs_resident++;
     slab_rows_tag(ex, si);
     ex->ino_slabs[si].tick = ++ex->ino_slab_tick;
@@ -513,11 +540,17 @@ static uint64_t hash_chunk_key(efs_ino_t ino, uint32_t chunk_index)
     return hash_mix(ino ^ ((uint64_t)chunk_index * 0x9E3779B97F4A7C15ULL));
 }
 
-static int idx_init(uint64_t **keys, uint64_t **vals, uint64_t *mask, uint64_t n_hint)
+static uint64_t idx_cap_for(uint64_t n_hint)
 {
     uint64_t cap = 16;
     while (cap < n_hint * 2)
         cap *= 2;
+    return cap;
+}
+
+static int idx_init(uint64_t **keys, uint64_t **vals, uint64_t *mask, uint64_t n_hint)
+{
+    uint64_t cap = idx_cap_for(n_hint);
     free(*keys);
     free(*vals);
     *keys = calloc(cap, sizeof(uint64_t));
@@ -944,6 +977,7 @@ static int export_reindex_inodes(struct efs_export *ex)
         idx_put(ex->ino_keys, ex->ino_vals, ex->ino_mask, inode_at(ex, i)->ino, i);
         name_idx_put(ex, inode_at(ex, i)->parent, efs_export_inode_name(ex, i), i);
     }
+    staged_refresh(ex);
     return 0;
 }
 
@@ -959,6 +993,7 @@ static int export_reindex_chunks(struct efs_export *ex)
         chunk_idx_put(ex, ex->chunks[i].ino, ex->chunks[i].chunk_index, i);
         icnt_inc(ex, ex->chunks[i].ino);
     }
+    staged_refresh(ex);
     return 0;
 }
 
@@ -1026,6 +1061,7 @@ static void child_vecs_free(struct efs_export *ex)
     ex->child_vec_cap = 0;
     ex->staged_child_bytes = 0;
     idx_free(&ex->child_keys, &ex->child_vals, &ex->child_mask);
+    staged_refresh(ex);
 }
 
 /* idx_init() frees the destination arrays — detach first, rehash, then free. */
@@ -1051,6 +1087,7 @@ static int child_idx_rehash(struct efs_export *ex, uint64_t n_hint)
         free(ok);
         free(ov);
     }
+    staged_refresh(ex);
     return 0;
 }
 
@@ -1063,6 +1100,7 @@ static struct efs_child_vec *child_vec_get(struct efs_export *ex, efs_ino_t pare
         uint64_t hint = ex->inode_count ? ex->inode_count : 16;
         if (idx_init(&ex->child_keys, &ex->child_vals, &ex->child_mask, hint) != 0)
             return NULL;
+        staged_refresh(ex);
     }
     uint64_t vi = 0;
     if (idx_get(ex->child_keys, ex->child_vals, ex->child_mask, parent, &vi) == 0 &&
@@ -1081,6 +1119,7 @@ static struct efs_child_vec *child_vec_get(struct efs_export *ex, efs_ino_t pare
                    (ncap - ex->child_vec_cap) * sizeof(*n));
         ex->child_vecs = n;
         ex->child_vec_cap = ncap;
+        staged_refresh(ex);
     }
     /* Grow open-addressing table if load is high.
      * idx_init() frees the key/val arrays — detach old pointers first so
@@ -1110,6 +1149,7 @@ static int child_idx_add(struct efs_export *ex, efs_ino_t parent, uint64_t slot)
         v->slots = ns;
         ex->staged_child_bytes += (ncap - v->cap) * sizeof(uint64_t);
         v->cap = ncap;
+        staged_refresh(ex);
     }
     v->slots[v->count++] = slot;
     return 0;
@@ -1837,6 +1877,114 @@ void efs_export_forget_ino(struct efs_export *ex, efs_ino_t ino)
     }
 }
 
+/* The tabs that can hold ino's staged state, read off its own row:
+ * the row's tab, the parent's tab and the hashed dentry tab (a create
+ * stages a dentry stub there), and the chunk-group tabs its size
+ * reaches. Returns the count, or -1 when the row is absent or the ino
+ * has more than one link (other names on unknown tabs) — the caller
+ * then fans out over every loaded tab as before.
+ *
+ * Sep 30 2026: the client evictor (stage_evict.c) ran has_chunks +
+ * drop_chunks + forget = three walks over every loaded tab (2400 of
+ * 4096 after one du) per evicted ino, ~250 us under the table lock,
+ * 64 inos per second: every RPC on the client stalled 14–27 ms once a
+ * second (results/measure/20260930-063500-perf-dir-review). */
+static int ino_tabs_for(struct efs_export *ex, efs_ino_t ino,
+                        struct efs_export **tabs, int max)
+{
+    struct efs_inode row;
+    uint32_t bits = ex->root.shard_bits;
+    uint32_t sc = ex->root.shard_count ? ex->root.shard_count : 1;
+    uint32_t sh = efs_export_shard_of(ino, bits);
+    struct efs_export *t = sh == 0 ? ex : efs_export_shard_tab(ex, sh);
+    int n = 0;
+    uint64_t nchunks, ngroups, g;
+
+    if (!t || efs_export_get_inode(t, ino, &row) != EFS_OK)
+        return -1;
+    if (row.nlink > 1)
+        return -1;
+    tabs[n++] = t;
+    sh = efs_export_shard_of(row.parent, bits);
+    t = sh == 0 ? ex : efs_export_shard_tab(ex, sh);
+    if (t && n < max)
+        tabs[n++] = t;
+    sh = efs_export_dentry_shard_of(row.parent, row.name, bits);
+    t = sh == 0 ? ex : efs_export_shard_tab(ex, sh);
+    if (t && n < max)
+        tabs[n++] = t;
+    if (!S_ISREG(row.mode) || row.size == 0)
+        return n;
+    nchunks = (row.size + ex->chunk_size - 1) / ex->chunk_size;
+    ngroups = (nchunks + (1u << EFS_CHUNK_GROUP_SHIFT) - 1) >>
+              EFS_CHUNK_GROUP_SHIFT;
+    if (ngroups >= sc || ngroups + (uint64_t)n > (uint64_t)max)
+        return -1; /* a big file touches most tabs: fan out */
+    for (g = 0; g < ngroups; g++) {
+        sh = efs_export_chunk_shard_of(ino, (uint32_t)(g << EFS_CHUNK_GROUP_SHIFT),
+                                       bits);
+        t = sh == 0 ? ex : efs_export_shard_tab(ex, sh);
+        if (t)
+            tabs[n++] = t;
+    }
+    return n;
+}
+
+int efs_export_evict_ino(struct efs_export *ex, efs_ino_t ino)
+{
+    struct efs_export *tabs[EFS_EVICT_TABS_MAX];
+    int n, i, j, stale = 0;
+    uint32_t had = 0;
+
+    if (!ex || !ino)
+        return 0;
+    /* A chunk count that survives its drop (stale) falls through to the
+     * row drop so a pass cannot spin on an empty map. */
+    if (!export_is_sharded_root(ex) || !ex->shard_tabs) {
+        if (icnt_get(ex, ino)) {
+            drop_chunks_scan(ex, ino, 0);
+            if (!icnt_get(ex, ino))
+                return 1;
+        }
+        forget_ino_on_tab(ex, ino);
+        return 2;
+    }
+    n = ino_tabs_for(ex, ino, tabs, EFS_EVICT_TABS_MAX);
+    if (n < 0) {
+        if (efs_export_ino_has_chunks(ex, ino)) {
+            efs_export_drop_chunks_from(ex, ino, 0);
+            if (!efs_export_ino_has_chunks(ex, ino))
+                return 1;
+        }
+        efs_export_forget_ino(ex, ino);
+        return 2;
+    }
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < i; j++)
+            if (tabs[j] == tabs[i])
+                break;
+        if (j < i)
+            continue;
+        if (icnt_get(tabs[i], ino)) {
+            drop_chunks_scan(tabs[i], ino, 0);
+            had++;
+            if (icnt_get(tabs[i], ino))
+                stale = 1; /* stale count: drop the rows too */
+        }
+    }
+    if (had && !stale)
+        return 1;
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < i; j++)
+            if (tabs[j] == tabs[i])
+                break;
+        if (j < i)
+            continue;
+        forget_ino_on_tab(tabs[i], ino);
+    }
+    return 2;
+}
+
 void efs_export_drop_chunks_from(struct efs_export *ex, efs_ino_t ino,
                                  uint32_t first_chunk)
 {
@@ -1946,6 +2094,16 @@ void efs_export_free(struct efs_export *ex)
 {
     if (!ex)
         return;
+    /* Leave the root's total first; the frees below refresh this
+     * table's own (soon zeroed) total, not the root's. */
+    if (ex->owner) {
+        if (ex->owner->staged_total >= ex->staged_est)
+            ex->owner->staged_total -= ex->staged_est;
+        else
+            ex->owner->staged_total = 0;
+        ex->staged_est = 0;
+        ex->owner = NULL;
+    }
     if (ex->shard_tabs) {
         for (uint32_t i = 0; i < ex->shard_tab_cap; i++) {
             if (!ex->shard_tabs[i])
@@ -2031,6 +2189,10 @@ static struct efs_export *shard_tab_get_or_create(struct efs_export *ex,
         tab->shard_id = shard;
         tab->owner = ex;
         ex->shard_tabs[shard] = tab;
+        /* The tab was built before it had an owner; its estimate sat in
+         * its own total. Move it to the root's. */
+        ex->staged_total += tab->staged_est;
+        tab->staged_total = 0;
     }
     return ex->shard_tabs[shard];
 }
@@ -3032,6 +3194,7 @@ int efs_export_set_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
             return EFS_ERR_NOMEM;
         ex->chunks = new;
         ex->chunk_capacity = new_cap;
+        staged_refresh(ex);
     }
     if (export_ensure_chunk_idx(ex) != 0)
         return EFS_ERR_NOMEM;
@@ -3303,6 +3466,7 @@ int efs_export_reserve_chunks(struct efs_export *ex, uint64_t extra)
             return EFS_ERR_NOMEM;
         ex->chunks = n;
         ex->chunk_capacity = new_cap;
+        staged_refresh(ex);
     }
     if (export_ensure_chunk_idx(ex) != 0)
         return EFS_ERR_NOMEM;
@@ -3342,16 +3506,16 @@ static uint64_t export_staged_bytes_one(const struct efs_export *ex)
     return b;
 }
 
-/* Total staged bytes over the main table and every loaded shard tab. */
+/* Total staged bytes over the main table and every loaded shard tab.
+ * A running total (staged_refresh at every capacity change); the
+ * evictor used to walk up to 4096 tabs per pass for this. */
 uint64_t efs_export_staged_bytes(const struct efs_export *ex)
 {
-    uint64_t b = export_staged_bytes_one(ex);
-    if (ex && ex->shard_tabs) {
-        for (uint32_t s = 1; s < ex->shard_tab_cap; s++)
-            if (ex->shard_tabs[s])
-                b += export_staged_bytes_one(ex->shard_tabs[s]);
-    }
-    return b;
+    if (!ex)
+        return 0;
+    if (ex->owner)
+        ex = ex->owner;
+    return ex->staged_total;
 }
 
 /* Reclaim one tab's over-capacity after mass removal (client staging-cache
@@ -3371,7 +3535,7 @@ static void compact_one_tab(struct efs_export *ex)
             for (uint64_t si = need; si < ex->ino_slab_n; si++) {
                 if (ex->ino_slabs[si].rows)
                     staged_slab_add(ex, -(int64_t)EFS_INO_SLAB_ROWS *
-                                            EFS_INODE_ROW_SIZE);
+                                            (int64_t)sizeof(struct efs_inode_mem));
                 staged_slab_add(ex, -(int64_t)ex->ino_slabs[si].names_cap);
                 free(ex->ino_slabs[si].rows);
                 free(ex->ino_slabs[si].names);
@@ -3405,14 +3569,19 @@ static void compact_one_tab(struct efs_export *ex)
             ex->chunk_capacity = nc;
         }
     }
-    /* 3. Rebuild hash indexes whose load factor dropped under 25%.
-     * export_reindex_inodes rebuilds ino + name; export_reindex_chunks
-     * rebuilds chunk + icnt. Hints key off count/capacity, both already
-     * shrunk above. */
-    if (ex->ino_keys && ex->inode_count * 4 < ex->ino_mask + 1)
+    /* 3. Rebuild hash indexes whose load factor dropped under 25% AND
+     * whose rebuild would be smaller. The hint floors at the slab
+     * capacity (256 rows -> 512 slots), so a tab with a few rows is
+     * always under 25% and used to be rebuilt to the same size on
+     * every evictor pass: 2400 tabs x 4 calloc+rehash per second under
+     * the client table lock (Sep 30 2026). */
+    if (ex->ino_keys && ex->inode_count * 4 < ex->ino_mask + 1 &&
+        idx_cap_for(inode_idx_hint(ex)) < ex->ino_mask + 1)
         (void)export_reindex_inodes(ex);
-    if (ex->chunk_keys && ex->chunk_count * 4 < ex->chunk_mask + 1)
+    if (ex->chunk_keys && ex->chunk_count * 4 < ex->chunk_mask + 1 &&
+        idx_cap_for(chunk_idx_hint(ex)) < ex->chunk_mask + 1)
         (void)export_reindex_chunks(ex);
+    staged_refresh(ex);
 }
 
 void efs_export_compact(struct efs_export *ex)

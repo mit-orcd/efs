@@ -182,6 +182,11 @@ struct efs_export {
      * The evictor used to recompute the walks on every pass. */
     uint64_t staged_slab_bytes;
     uint64_t staged_child_bytes;
+    /* W21: this table's last resident-byte estimate, and on the root
+     * the sum over itself and every shard tab. Refreshed where a
+     * capacity changes, so efs_export_staged_bytes is one load. */
+    uint64_t staged_est;
+    uint64_t staged_total;
 
     /* Size/mtime updated via *_norollup; parent dir tree stats/times need
      * efs_export_ensure_rollups before serialize or incremental rollups. */
@@ -327,6 +332,13 @@ int efs_export_ino_has_chunks(const struct efs_export *ex, efs_ino_t ino);
  * re-fetchable from the server (getattr/GETCHUNKS/LOOKUP). Caller holds the
  * table locks. */
 void efs_export_forget_ino(struct efs_export *ex, efs_ino_t ino);
+/* Client staging-cache eviction of one ino, visiting only the tabs its
+ * row names (falls back to every loaded tab for a missing row, a
+ * hard link, or a file whose chunk groups reach most shards). Returns
+ * 1 when chunk maps were dropped (rows kept for a later pass), 2 when
+ * the rows were dropped (or nothing was staged), 0 for ino 0. */
+#define EFS_EVICT_TABS_MAX 256
+int efs_export_evict_ino(struct efs_export *ex, efs_ino_t ino);
 
 /* Approximate resident bytes of the staging cache: slab rows, name arenas,
  * chunk array, indexes, child vectors — main table + loaded shard tabs.

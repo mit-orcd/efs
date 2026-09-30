@@ -9,6 +9,24 @@ Blake3 is vendored (`deps/blake3/`). The FUSE client links the OS **fuse3**
 library (`fuse3-devel` ≥ 3.3.0, plus `fusermount3` and the kernel `fuse`
 module). Needs `gcc` and `make`.
 
+**Client hosts: set `fs.pipe-max-size` to at least 8 MiB.** `efs-fuse`
+asks libfuse for `FUSE_CAP_SPLICE_READ`, which delivers each write's
+payload through a pipe and lets the client read it straight into its
+own buffer (one kernel copy per written byte, none in user space).
+libfuse uses that pipe only if an unprivileged process may grow it to
+`max_write` + 4 KiB; `efs-fuse` sets `max_write` to 4 MiB, and the
+kernel default cap is 1 MiB. Below the cap libfuse falls back to a
+buffer copy without any message, so the mount works but every write
+costs an extra copy. Make it permanent:
+
+```bash
+# /etc/sysctl.d/98-efs-pipe.conf
+fs.pipe-max-size = 8388608
+```
+
+then `sysctl -p /etc/sysctl.d/98-efs-pipe.conf`. Server hosts do not
+need it.
+
 | Binary | Role |
 |---|---|
 | `efsd` | storage server |
