@@ -110,6 +110,52 @@ int kv_wal_replay(const char *path,
 #define KV_LSM_RANGE_MAX 16u
 #define KV_LSM_PATH_MAX  1024
 
+/* key[0] is the range, except key[0]==0, which was 1.8 GB. That one
+ * splits on key[1] (256 subranges, ids 256..511) now that L0 is bounded
+ * by bytes rather than 64 files. A file written before the split still
+ * spans several ids and is compacted whole once, then cut here.
+ *
+ * Every segment records the range ids of its first and last key at open
+ * (kv_seg_range). A point get compares one int per segment against the
+ * key's range instead of two key compares: with 230 L0 + 277 L1 files
+ * the walk was 10.6 us per get on a warm block cache, and a publish
+ * apply is four gets.
+ *
+ * Ids are monotonic in key order — key[0]==0 keys sort first, so their
+ * subranges are 0..255 and key[0]>=1 is 255+key[0] — because a segment
+ * written before the split covers [first key, last key] and the filter
+ * takes that as an id interval. With 0's subranges numbered above the
+ * others, a wide segment's interval was inverted and clamped, and every
+ * key[0]>=1 key it held was skipped (wrong NOT_FOUND). */
+#define KV_RANGE_N 512
+
+static inline int kv_key_range(const uint8_t *key, uint32_t klen)
+{
+    if (!klen)
+        return 0;
+    if (key[0] == 0)
+        return klen >= 2 ? (int)key[1] : 0;
+    return 255 + (int)key[0];
+}
+
+/* Range ids a key with this prefix can fall in. A one-byte prefix of 0
+ * covers every subrange of range 0. */
+static inline void kv_prefix_ranges(const uint8_t *prefix, uint32_t plen,
+                                    int *rlo, int *rhi)
+{
+    if (!plen) {
+        *rlo = 0;
+        *rhi = KV_RANGE_N - 1;
+        return;
+    }
+    if (prefix[0] == 0 && plen < 2) {
+        *rlo = 0;
+        *rhi = 255;
+        return;
+    }
+    *rlo = *rhi = kv_key_range(prefix, plen);
+}
+
 struct kv_ent {
     uint8_t op;
     uint32_t klen;
@@ -131,7 +177,25 @@ struct seg_slot {
     struct kv_seg *seg;
     uint64_t seq;
     int level;
+    /* kv_seg_range of seg, copied here so the point-get walk reads a
+     * contiguous array: one deref per segment struct was a cache miss
+     * per segment (513 of them, 1.5 us per get). Set by seg_slot_set. */
+    int rlo;
+    int rhi;
 };
+
+void kv_seg_range(const struct kv_seg *s, int *rlo, int *rhi);
+
+static inline void seg_slot_set(struct seg_slot *sl, struct kv_seg *s)
+{
+    sl->seg = s;
+    kv_seg_range(s, &sl->rlo, &sl->rhi);
+}
+
+static inline int seg_slot_excludes(const struct seg_slot *sl, int r)
+{
+    return r < sl->rlo || r > sl->rhi;
+}
 
 struct kv_lsm {
     uint32_t magic;
@@ -248,6 +312,10 @@ const char *kv_seg_filepath(const struct kv_seg *s);
 int kv_seg_first_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
 uint64_t kv_seg_data_bytes(const struct kv_seg *s);
 int kv_seg_last_key(struct kv_seg *s, const uint8_t **key, uint32_t *klen);
+/* Range ids (kv_key_range) of the first and last key, fixed at open. An
+ * unknown last key reports KV_RANGE_N - 1. (Declared above seg_slot.)
+ * 1 when no key of the segment can fall in [rlo, rhi]: */
+int kv_seg_range_excludes(const struct kv_seg *s, int rlo, int rhi);
 /* 1 when the segment holds no key >= seek with the prefix (either may be
  * empty = unconstrained). Caller holds the LSM lock. */
 int kv_seg_excludes(struct kv_seg *s, const uint8_t *seek, uint32_t slen,

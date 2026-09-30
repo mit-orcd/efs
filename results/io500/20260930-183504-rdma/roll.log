@@ -1,0 +1,42 @@
+efs-bg: start 2026-09-30T18:29:53Z host=node9901 name=roll337 screen=efs-roll337
+== build all four (parallel)
+-- node 1
+BUILD_OK
+build=f2d3a7871b96-dirty
+build=f2d3a7871b96-dirty
+-- node 2
+BUILD_OK
+build=f2d3a7871b96-dirty
+build=f2d3a7871b96-dirty
+-- node 3
+BUILD_OK
+build=f2d3a7871b96-dirty
+build=f2d3a7871b96-dirty
+-- node 4
+BUILD_OK
+build=f2d3a7871b96-dirty
+build=f2d3a7871b96-dirty
+== built build=f2d3a7871b96-dirty build=f2d3a7871b96-dirty build=f2d3a7871b96-dirty build=f2d3a7871b96-dirty
+== stop all four
+fcstor003 up=0
+fcstor004 up=0
+fcstor005 up=0
+fcstor006 up=0
+== start all four
+fcstor003 up=1 perf=0
+fcstor004 up=1 perf=0
+fcstor005 up=1 perf=0
+fcstor006 up=1 perf=0
+== wait for both groups
+  group 0 hosted=1 role=CANDIDATE leader=-1 term=184 commit=1654732 applied=1654732 voters=0x7 joint=0
+== node 1 caught up
+  group 0 hosted=1 role=FOLLOWER leader=-1 term=196 commit=1654732 applied=1654732 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=719 commit=1580384 applied=1580384 voters=0xe joint=0
+== node 2 caught up
+  group 0 hosted=1 role=FOLLOWER leader=1 term=197 commit=1654734 applied=1654734 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=719 commit=1580384 applied=1580384 voters=0xe joint=0
+== node 3 caught up
+  group 2 hosted=1 role=LEADER leader=3 term=719 commit=1580384 applied=1580384 voters=0xe joint=0
+== node 4 caught up
+ROLL_OK
+efs-bg: end 2026-09-30T18:30:25Z rc=0

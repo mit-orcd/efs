@@ -818,6 +818,38 @@ static void test_chunk_deltas(void)
                                           &nd, &newest) == EFS_OK &&
               nd == 2,
           "replay did not append");
+    /* The same object under another, disjoint range is another
+     * client's record of the identical merged image (content-hash
+     * names): it is a new span, not a replay (IOR hard, Sep 30). */
+    {
+        struct efs_meta_row row;
+        uint64_t cur = 0;
+
+        CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "row");
+        CHECK(efs_meta_apply_chunk_holds(kv, ino, row.generation, 0, 0xD2,
+                                         47008, 47008, &cur) == 1,
+              "holds D2 at its range");
+        CHECK(efs_meta_apply_chunk_holds(kv, ino, row.generation, 0, 0xD2,
+                                         94016, 1000, &cur) == 0,
+              "does not hold D2 at another range");
+        CHECK(efs_meta_apply_chunk_holds(kv, ino, row.generation, 0, 0xD2,
+                                         0, 0, &cur) == 0,
+              "a span gen is not the base");
+        p.candidate_gen = 0xD2;
+        p.delta_off = 94016;
+        p.delta_len = 1000;
+        CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "same object, new range");
+        CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds,
+                                              EFS_CHUNK_DELTA_MAX, &nd,
+                                              &newest) == EFS_OK &&
+                  nd == 3 && ds[2].generation == 0xD2 && ds[2].off == 94016,
+              "second range of one object appended");
+        CHECK(efs_meta_apply_chunk_holds(kv, ino, row.generation, 0, 0xD2,
+                                         94016, 1000, &cur) == 1,
+              "now held");
+        p.delta_base_n = nd;
+        p.delta_base_seq = newest;
+    }
     p.candidate_gen = 0xD3;
     p.delta_off = 100;
     p.delta_len = 50;
@@ -837,9 +869,10 @@ static void test_chunk_deltas(void)
      * tombstones so a late replay of one of them is a no-op. */
     CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
                                           &nd, &newest) == EFS_OK &&
-              nd == 2 && ds[0].len == 0 && ds[1].len == 0 &&
-              ds[0].generation == 0xD1 && ds[1].generation == 0xD2,
-          "fold left two tombstones");
+              nd == 3 && ds[0].len == 0 && ds[1].len == 0 &&
+              ds[2].len == 0 && ds[0].generation == 0xD1 &&
+              ds[1].generation == 0xD2 && ds[2].generation == 0xD2,
+          "fold left three tombstones");
     /* W17 step 3 (a): replay of a folded span is a no-op. */
     p.delta_off = 0;
     p.delta_len = 47008;
@@ -848,7 +881,7 @@ static void test_chunk_deltas(void)
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "replay of folded span");
     CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
                                           &nd, &newest) == EFS_OK &&
-              nd == 2,
+              nd == 3,
           "folded replay did not append");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
               got.generation == 0xE1,
@@ -867,7 +900,7 @@ static void test_chunk_deltas(void)
           "span after fold kept base E1");
     CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds, EFS_CHUNK_DELTA_MAX,
                                           &nd, &newest) == EFS_OK &&
-              nd == 3 && ds[2].generation == 0xE2 && ds[2].len == 1000,
+              nd == 4 && ds[3].generation == 0xE2 && ds[3].len == 1000,
           "one live span over the fold");
     /* W17 step 3 (c): overlap with that live span is STALE; a
      * tombstone's old range is not an overlap. */

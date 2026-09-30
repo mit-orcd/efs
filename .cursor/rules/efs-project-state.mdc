@@ -96,6 +96,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
+ **UP 18:30Z Sep 30: servers `f2d3a7871b96-dirty`** (rolled `--all`,
+ `~/efs-runs/roll337.log` ROLL_OK; span identity = (gen, off, len),
+ learning below), clients fcstor007–015 on the same tree 18:32Z
+ (`dep338`, all `fuse.efs-fuse`, one efs-fuse each). **IO-500 debug
+ 9×4 18:35Z (`results/io500/20260930-183504-rdma`): every phase
+ completed, 0 fsync failures, 0 read errors, cold hardscan of the
+ 36 GB hard file bad=0** — easy-write 4.563 GiB/s, mdtest-easy-write
+ 4.632 kIOPS, hard-write 0.640 (52.6 s), mdtest-hard-write 2.612,
+ easy-read 16.8 (same-mount), easy-stat 16.478, hard-read 1.034.
+ Its data (`io500/2026.09.30-14.35.04`) is still on the mount.
+ Earlier the same day:
  **UP 06:51Z Sep 30.** Rolled `--all` twice under the user's live
  fstor007 `client.sh --perf` (06:35Z `~/efs-runs/roll134.log`,
  06:51Z `~/efs-runs/roll143.log`, both ROLL_OK, no recorders):
@@ -356,10 +367,13 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   9-client **1326.6**, walls 28.55–55.57 s
   (`results/measure/20260928-033420-dd-wall`, `db2b88c4802a-dirty`).
   99/108 report-split lines BUSY. Slower than TCP 1478.
-  **Latest IO-500 is Sep 30 07:28Z** (`results/io500/20260930-072824-rdma`,
-  cluster-facts above): easy-write 3.148, mdtest-easy-write 3.696,
-  hard-write 0.261 with fsync failures, hard-read aborted. Do not
-  quote a hard-read or a score from it. Prior complete run:
+ **Latest IO-500 is Sep 30 18:35Z** (`results/io500/20260930-183504-rdma`,
+ cluster-facts above): every phase, 0 fsync failures, 0 read errors,
+ cold hardscan bad=0; easy-write 4.563, hard-write 0.640, hard-read
+ 1.034, mdtest-easy-write 4.632 kIOPS. The 07:28Z run
+ (`20260930-072824-rdma`: hard-write 0.261 with fsync failures,
+ hard-read aborted) is superseded; do not quote a hard-read or a
+ score from it. Prior complete run:
   Sep 28 9×4 IO-500 debug (1 s stonewall, same-mount reads,
   `db2b88c4802a-dirty`): RDMA easy-write **2.917 GiB/s**,
   hard-write **0.291**, easy-read **3.092**, hard-read **1.525**,
@@ -697,7 +711,40 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - `EFS_MSG_INODE_LOOKUP` reply carries the full row; LOOKUP_PATH batches
   ≤64 ancestors; readdir cursor is `(src, name)`, not `after_ino`.
 
+- **A span record's identity is (object gen, off, len), never the gen
+ alone (Sep 30, `results/io500/20260930-183504-rdma`).** The object
+ name is a content hash of the 128 KiB PUT image; two clients that
+ merge a shared chunk to the same image PUT one object under two
+ ranges. `apply_publish` took the second range as "replay of this
+ same span object" and the REPORT pack skipped it as held
+ (`efs_meta_apply_chunk_holds` now takes off/len; a full image is held
+ only by the base gen). Every ior-hard-read loss on Sep 30 (40–208
+ records per run, always the client-boundary piece of a chunk shared
+ by two hosts, server row = the peer's range under the missing
+ client's gen, no apply line, `report-split skip=N`) was this. A rec
+ the pack "skips" must be provably in the row at the rec's range.
+- **The client table conflates "server row" with "our unreported
+ PUT"** (`dcache_put_now` sets the table gen to the candidate and adds
+ our span to the list). Three consumers were fooled: the STALE
+ classifier (`ours == ce.generation → done`), `span_of` (our own span
+ "covered" a range, so the next flush published only the tail and
+ putid — one object per chunk — forgot the first span), and the
+ replay's fetch (read our own object back as the committed base).
+ Now `pull_chunks_range` reports chunks the host has NO ROW for
+ (absence bitmap, `efs_client_pull_chunks_range_absent`); such a chunk
+ is never "committed", its replay starts from zeros with an empty
+ observation and expected gen 0 (`dcache_replay_stale_ex`), and
+ `span_of` ignores the putid object's own span. Do not neutralize the
+ table entry outside that replay: reads between PUT and REPORT use it.
+
 **Client / FUSE**
+- **A dcache store installs have_base/base_gen/range under the same
+ lock as the buffer (`dcache_init`, Sep 30).** `dcache_take` marks the
+ slot dirty; the second locked section of `dcache_load_and_patch` /
+ `dcache_load_sparse` came after, and a flusher in between snapshotted
+ `dirty=1 nrange=0` (`snap-inner | dirty=1 hb=1 bg=0 obj=0 r=`), PUT
+ the buffer as a full image, and the merge overlay (walks nrange)
+ dropped the write. Any new store path goes through `dcache_init`.
 - Timeouts stay **0** (entry/attr/negative). `notify_inval_*` from a
   request handler deadlocks — queue after reply on a dedicated thread.
   `FOPEN_DIRECT_IO` on every open; libfuse 3.10.2 cannot emit

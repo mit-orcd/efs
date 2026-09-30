@@ -228,7 +228,37 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
  * the end of the file. Returns the first RPC error; the table is then
  * partial for the range and the caller must not treat a missing row as a
  * hole. */
-static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
+/* Absence bitmap: bit (ci - base) set for every chunk in the pulled range
+ * the server returned no row for. The local table keeps whatever it held
+ * for those chunks — usually this client's own unreported PUT — so a
+ * caller that must tell "the host committed our object" from "we only
+ * PUT it" (the STALE classifier) reads this, not the table generation. */
+struct pull_absent {
+    uint8_t *bits;
+    uint32_t base;
+    uint32_t end;
+};
+
+static void pull_absent_mark(struct pull_absent *ab, uint32_t lo, uint32_t hi)
+{
+    uint32_t ci;
+
+    if (!ab || !ab->bits)
+        return;
+    if (lo < ab->base)
+        lo = ab->base;
+    if (hi > ab->end)
+        hi = ab->end;
+    /* Atomic: the pull fan marks disjoint groups, but a byte can hold
+     * bits of two groups when `base` is not 8-aligned. */
+    for (ci = lo; ci < hi; ci++)
+        (void)__atomic_fetch_or(&ab->bits[(ci - ab->base) >> 3],
+                                (uint8_t)(1u << ((ci - ab->base) & 7)),
+                                __ATOMIC_RELAXED);
+}
+
+static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
+                             struct pull_absent *ab)
 {
     if (!ino || start_ci >= end_ci)
         return EFS_OK;
@@ -247,15 +277,28 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
                                                recs, &n);
             if (grc != EFS_OK)
                 return grc;
-            if (n == 0)
+            if (n == 0) {
+                pull_absent_mark(ab, cur, group_end);
                 break;
+            }
+            if (ab && ab->bits) {
+                uint32_t i, at = cur;
+
+                for (i = 0; i < n; i++) {
+                    if (recs[i].chunk_index > at)
+                        pull_absent_mark(ab, at, recs[i].chunk_index);
+                    at = recs[i].chunk_index + 1;
+                }
+            }
             apply_chunk_recs(ino, recs, n);
             uint32_t next = recs[n - 1].chunk_index + 1;
             if (next <= cur)
                 break;
             cur = next;
-            if (n < EFS_GETCHUNKS_MAX)
+            if (n < EFS_GETCHUNKS_MAX) {
+                pull_absent_mark(ab, cur, group_end);
                 break;
+            }
         }
         start = group_end;
     }
@@ -263,70 +306,103 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
 }
 
 /* One GETCHUNKS per chunk group, concurrent. A 1 GiB file is 128 groups;
- * issuing them one after another is the open-time stall D2 removes. */
-struct pull_group_job {
+ * issuing them one after another is the open-time stall D2 removes.
+ * Up to PULL_FAN threads take groups from a shared cursor until the
+ * range is covered. The STALE repull of a 36-rank shared-file fsync
+ * walks the whole file (1600 groups of a 12 GiB IOR hard file); one
+ * RPC at a time that was 12 s of the 8 s REPORT budget
+ * (`report-stale … pull_ms=12115`, Sep 30 IO-500). */
+#define PULL_FAN 16
+
+struct pull_fan {
     efs_ino_t ino;
-    uint32_t start;
+    uint32_t next;
     uint32_t end;
     int rc;
-    int started;
-    pthread_t th;
+    pthread_mutex_t mu;
+    struct pull_absent *ab;
 };
 
-static void *pull_group_thread(void *arg)
+static void *pull_fan_thread(void *arg)
 {
-    struct pull_group_job *j = arg;
+    struct pull_fan *f = arg;
 
-    j->rc = pull_chunks_range(j->ino, j->start, j->end);
+    for (;;) {
+        uint32_t s, ge;
+        int rc;
+
+        pthread_mutex_lock(&f->mu);
+        if (f->rc != EFS_OK || f->next >= f->end) {
+            pthread_mutex_unlock(&f->mu);
+            break;
+        }
+        s = f->next;
+        ge = (s | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
+        if (ge > f->end)
+            ge = f->end;
+        f->next = ge;
+        pthread_mutex_unlock(&f->mu);
+        rc = pull_chunks_range(f->ino, s, ge, f->ab);
+        if (rc != EFS_OK) {
+            pthread_mutex_lock(&f->mu);
+            if (f->rc == EFS_OK)
+                f->rc = rc;
+            pthread_mutex_unlock(&f->mu);
+        }
+    }
     return NULL;
 }
 
-static int pull_groups_parallel(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci)
+static int pull_groups_parallel(efs_ino_t ino, uint32_t start_ci,
+                                uint32_t end_ci, struct pull_absent *ab)
 {
-    struct pull_group_job jobs[8];
-    uint32_t s = start_ci;
-    int n = 0, i, rc = EFS_OK;
+    struct pull_fan f;
+    pthread_t th[PULL_FAN];
+    int started[PULL_FAN];
+    uint32_t ngroups;
+    int nth, i;
 
     if (start_ci >= end_ci)
         return EFS_OK;
-    while (s < end_ci && n < 8) {
-        uint32_t ge = (s | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
-
-        if (ge > end_ci)
-            ge = end_ci;
-        jobs[n].ino = ino;
-        jobs[n].start = s;
-        jobs[n].end = ge;
-        jobs[n].rc = EFS_OK;
-        jobs[n].started = 0;
-        n++;
-        s = ge;
-    }
-    if (n <= 1) {
-        rc = pull_chunks_range(ino, start_ci, end_ci);
-        return rc;
-    }
-    for (i = 0; i < n; i++) {
-        if (pthread_create(&jobs[i].th, NULL, pull_group_thread, &jobs[i]) == 0)
-            jobs[i].started = 1;
-        else
-            jobs[i].rc = pull_chunks_range(jobs[i].ino, jobs[i].start, jobs[i].end);
-    }
-    for (i = 0; i < n; i++) {
-        if (jobs[i].started)
-            pthread_join(jobs[i].th, NULL);
-        if (jobs[i].rc != EFS_OK && rc == EFS_OK)
-            rc = jobs[i].rc;
-    }
-    if (rc == EFS_OK && s < end_ci)
-        rc = pull_groups_parallel(ino, s, end_ci);
-    return rc;
+    ngroups = ((end_ci - 1) >> EFS_CHUNK_GROUP_SHIFT) -
+              (start_ci >> EFS_CHUNK_GROUP_SHIFT) + 1u;
+    if (ngroups <= 1)
+        return pull_chunks_range(ino, start_ci, end_ci, ab);
+    f.ino = ino;
+    f.next = start_ci;
+    f.end = end_ci;
+    f.rc = EFS_OK;
+    f.ab = ab;
+    pthread_mutex_init(&f.mu, NULL);
+    nth = ngroups < PULL_FAN ? (int)ngroups : PULL_FAN;
+    for (i = 1; i < nth; i++)
+        started[i] = pthread_create(&th[i], NULL, pull_fan_thread, &f) == 0;
+    pull_fan_thread(&f); /* the caller is worker 0 */
+    for (i = 1; i < nth; i++)
+        if (started[i])
+            pthread_join(th[i], NULL);
+    pthread_mutex_destroy(&f.mu);
+    return f.rc;
 }
 
 int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
                                  uint32_t end_ci)
 {
-    return pull_chunks_range(ino, start_ci, end_ci);
+    return pull_groups_parallel(ino, start_ci, end_ci, NULL);
+}
+
+/* Same pull; `absent` (caller-zeroed, (end_ci - start_ci + 7) / 8 bytes)
+ * gets bit (ci - start_ci) for every chunk the host has no row for. On
+ * an RPC error the bitmap is partial like the table. */
+int efs_client_pull_chunks_range_absent(efs_ino_t ino, uint32_t start_ci,
+                                        uint32_t end_ci, uint8_t *absent)
+{
+    struct pull_absent ab;
+
+    ab.bits = absent;
+    ab.base = start_ci;
+    ab.end = end_ci;
+    return pull_groups_parallel(ino, start_ci, end_ci, absent ? &ab : NULL);
 }
 
 static void pull_file_layout(const struct efs_inode *rpc)
@@ -342,7 +418,7 @@ static void pull_file_layout(const struct efs_inode *rpc)
             uint64_t hi = (uint64_t)rpc->pack_off + span;
             c1 = (uint32_t)((hi - 1) / cs) + 1;
         }
-        pull_chunks_range(rpc->pack_ino, c0, c1);
+        pull_chunks_range(rpc->pack_ino, c0, c1, NULL);
     }
     /* D2: a regular file adopts the inode row only. pull_layout_miss
      * is the chunk-map path. The 64-lane size stat stays at open. */
@@ -420,7 +496,7 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
         return EFS_OK;
     int rc = EFS_OK;
     if (pull_from < ahead)
-        rc = pull_groups_parallel(ino, pull_from, ahead);
+        rc = pull_groups_parallel(ino, pull_from, ahead, NULL);
     if (rc != EFS_OK)
         return rc;
     pthread_mutex_lock(&mu);

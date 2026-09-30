@@ -464,6 +464,17 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
  * never strand the chunks. */
 int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
+/* Which rule STALEd the last efs_meta_apply_publish on this thread. */
+enum {
+    EFS_PUB_STALE_NONE = 0,
+    EFS_PUB_STALE_ROW_EPOCH = 1,  /* content_epoch < row's (truncate) */
+    EFS_PUB_STALE_BASE_CAS = 2,   /* full image: expected_gen != committed */
+    EFS_PUB_STALE_LANE_EPOCH = 3, /* content_epoch < lane fenced_epoch */
+    EFS_PUB_STALE_OVERLAP = 4,    /* span overlaps a live span */
+    EFS_PUB_STALE_CHAIN_FULL = 5, /* EFS_CHUNK_DELTA_MAX live spans */
+    EFS_PUB_STALE_FOLD_LIST = 6,  /* fold: delta_base_n/seq moved */
+};
+int efs_meta_apply_publish_stale_why(void);
 int efs_meta_apply_epoch_fence(struct efs_kv *kv, efs_ino_t ino);
 /* SETATTR(size): content_epoch bump, base_size, per-lane epoch fence +
  * range-delete of chunk-map entries beyond the new size, optional tail
@@ -606,10 +617,28 @@ int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_in
 /* Deltas layered on the base image. *n is the count (capped by `cap`).
  * *newest is the last delta's seq, or 0 when there are none. NOT_FOUND
  * when the chunk row itself is absent. */
+/* One KV get: 1 when the row already holds this publish, 0 when it does
+ * not, NOT_FOUND when the chunk row is absent. A full image
+ * (span_len == 0) is held when `gen` is the base generation. A span is
+ * held when a trailer entry has `gen` AND the same [off,len) (or is a
+ * len-0 tombstone of it). Gen alone is not identity: the object name is
+ * a content hash, and two clients that merge to the same image PUT one
+ * object under two ranges (IOR hard 9x4, Sep 30: the second range was
+ * "held" and never recorded). *committed (optional) gets the base
+ * generation. The caller supplies the inode generation. */
+int efs_meta_apply_chunk_holds(struct efs_kv *kv, efs_ino_t ino,
+                               uint64_t inode_gen, uint32_t chunk_index,
+                               uint64_t gen, uint32_t span_off,
+                               uint32_t span_len, uint64_t *committed);
 int efs_meta_apply_get_chunk_deltas(struct efs_kv *kv, efs_ino_t ino,
                                     uint32_t chunk_index,
                                     struct efs_meta_delta *out, uint32_t cap,
                                     uint32_t *n, uint64_t *newest);
+int efs_meta_apply_get_chunk_row(struct efs_kv *kv, efs_ino_t ino,
+                                 uint64_t inode_gen, uint32_t chunk_index,
+                                 struct efs_meta_chunk *out,
+                                 struct efs_meta_delta *ds, uint32_t cap,
+                                 uint32_t *n, uint64_t *newest);
 uint64_t efs_meta_candidate_gen(const uint8_t uuid[16], uint32_t session_epoch,
                                 uint64_t seq, uint32_t chunk_index,
                                 uint32_t retry);

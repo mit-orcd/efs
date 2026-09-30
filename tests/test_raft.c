@@ -1255,9 +1255,78 @@ static void test_noop_over_stale_tail(void)
     }
 }
 
+/* Sep 30 2026: with the durable ceiling armed, a propose that extends
+ * send_idx past the outstanding batch re-sends that window (the Sep 29
+ * latency rule). When the window already hit EFS_RAFT_AE_BYTES the resend
+ * carries the same entries again: 300 KiB entries × N proposes to a
+ * silent follower must stay at one window per heartbeat interval, not
+ * one per propose. Small entries keep the replacement behaviour. */
+static void test_ae_full_window_not_resent_per_propose(void)
+{
+    struct net n = { .n = 3 };
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    int i, lid, fol, before;
+    uint64_t idx = 0;
+    static uint8_t big[300u * 1024u];
+
+    memset(app, 0, sizeof(app));
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.n = 3;
+    cfg.send = send_now;
+    cfg.net = &n;
+    cfg.apply = apply_cmd;
+    cfg.heartbeat_ticks = 1;
+    for (i = 0; i < 3; i++) {
+        st[i] = efs_raft_mem_create();
+        cfg.id = i;
+        cfg.store = st[i];
+        cfg.store_ctx = st[i];
+        cfg.election_ticks = (uint32_t)(4 + i * 4);
+        cfg.app = &app[i];
+        n.r[i] = efs_raft_new(&cfg);
+        CHECK(n.r[i] != NULL, "raft");
+    }
+    CHECK(elect(&n, 20) == 1, "elect");
+    lid = leader_id(&n);
+    CHECK(lid >= 0, "leader");
+    fol = (lid + 1) % 3;
+    efs_raft_arm_durable(n.r[lid]);
+    memset(big, 'b', sizeof(big));
+    n.drop[fol] = 1;
+    /* Fill one window (3 × 300 KiB < 1 MiB, the 4th does not fit), then
+     * keep proposing: each propose_local + submit + durable + flush is
+     * the pump's sequence. */
+    before = n.batches[fol];
+    for (i = 0; i < 12; i++) {
+        CHECK(efs_raft_propose_local(n.r[lid], big, sizeof(big), &idx) == EFS_OK,
+              "propose_local");
+        CHECK(efs_raft_submit(n.r[lid], idx) == EFS_OK, "submit");
+        CHECK(efs_raft_durable(n.r[lid], idx) == EFS_OK, "durable");
+        CHECK(efs_raft_flush(n.r[lid]) == EFS_OK, "flush");
+    }
+    /* Window 1 (entries 1..3) went out on the first flushes; while it
+     * is unanswered and full, proposes 4..12 must not re-send it. Allow
+     * the replacement sends that built the window up to full. */
+    CHECK(n.batches[fol] - before <= 4,
+          "full window is not re-sent on every propose");
+    /* Small entries: the replacement rule still applies (one resend per
+     * propose while the window is not full). */
+    n.drop[fol] = 0;
+    for (i = 0; i < 6; i++)
+        CHECK(efs_raft_tick(n.r[lid]) == EFS_OK, "tick");
+    CHECK(efs_raft_applied(n.r[fol]) >= idx, "fol caught up after undrop");
+    for (i = 0; i < 3; i++) {
+        efs_raft_free(n.r[i]);
+        efs_raft_mem_free(st[i]);
+    }
+}
+
 int main(void)
 {
     test_election_i1();
+    test_ae_full_window_not_resent_per_propose();
     test_step_down_no_campaign();
     test_replicate_and_readindex();
     test_i3_i4_and_restart();

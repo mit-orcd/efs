@@ -1,0 +1,3 @@
+efs-bg: start 2026-09-30T18:40:31Z host=fcstor008 name=scan342 screen=efs-scan342
+DONE records=766980 bad=0 short=0
+efs-bg: end 2026-09-30T18:51:33Z rc=0

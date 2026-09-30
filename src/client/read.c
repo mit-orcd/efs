@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <pthread.h>
+#include <time.h>
 
 static uint32_t data_chunk_size(void)
 {
@@ -31,6 +32,9 @@ static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FR
 
 static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                                 uint32_t chunk_len);
+static int overlay_chunk_deltas_ce(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                                   uint32_t chunk_len,
+                                   const struct efs_chunk_entry *cep);
 
 struct frag_batch {
     pthread_mutex_t mu;
@@ -211,7 +215,8 @@ static uint8_t *decode_frag_scratch(uint32_t need)
 static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk_index,
                                                    uint8_t *chunk_out, uint32_t chunk_size,
                                                    uint32_t frag_len, int max_attempts,
-                                                   int treat_zero_cksum_as_hole)
+                                                   int treat_zero_cksum_as_hole,
+                                                   const struct efs_chunk_entry *cep)
 {
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     uint8_t *frag_buf;
@@ -233,10 +238,17 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     frag_ptrs(frag_buf, frag_len, frags);
 
     memset(&ce, 0, sizeof(ce));
-    pthread_mutex_lock(&g_client.idx_mu);
-    have_ce = (efs_export_get_chunk(&g_client.export, ino, chunk_index,
-                                    &ce) == 0);
-    pthread_mutex_unlock(&g_client.idx_mu);
+    if (cep) {
+        /* The caller's row: the same one its span overlay and its
+         * publish observation use (fetch_published_once). */
+        ce = *cep;
+        have_ce = 1;
+    } else {
+        pthread_mutex_lock(&g_client.idx_mu);
+        have_ce = (efs_export_get_chunk(&g_client.export, ino, chunk_index,
+                                        &ce) == 0);
+        pthread_mutex_unlock(&g_client.idx_mu);
+    }
     if (have_ce) {
         uint8_t zck[EFS_HASH_SIZE];
         efs_hash_zero_fragment_len(frag_len, zck);
@@ -355,8 +367,79 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     return rc;
 }
 
+static int fetch_published_once(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                                uint32_t len, struct efs_chunk_entry *obs,
+                                int *have_obs);
+
+/* A fold or a CAS supersedes the chunk's base and every span it observed,
+ * and the reaper deletes those objects within a second of the apply (L7,
+ * no grace). A fetch against the map this client pulled before that fold
+ * then gets NOT_FOUND on a fragment that is legitimately gone. That is a
+ * stale map, not a lost chunk: pull the chunk's current row once and read
+ * against it. A second failure is the caller's error (never zero-fill). */
 int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
                                      uint8_t *buf, uint32_t len)
+{
+    return efs_client_fetch_published_chunk_obs(ino, ci, buf, len, NULL,
+                                                NULL);
+}
+
+/* obs/have_obs: the chunk row (base generation, span list, newest seq)
+ * this image was built from. A fold's publish must name THAT row, not a
+ * later read of the table — a GETCHUNKS window pulled for a neighbouring
+ * chunk (D2 lanes) can refresh this row between the fetch and the PUT,
+ * and a fold that names the refreshed list while holding the old image
+ * passes the server's FOLD_LIST check and drops the newer peer span
+ * (IOR hard 36-rank cold verify: 7 of 288000 records wrong, Sep 30). */
+int efs_client_fetch_published_chunk_obs(efs_ino_t ino, uint32_t ci,
+                                         uint8_t *buf, uint32_t len,
+                                         struct efs_chunk_entry *obs,
+                                         int *have_obs)
+{
+    int rc = fetch_published_once(ino, ci, buf, len, obs, have_obs);
+
+    if (rc == EFS_OK || rc == EFS_ERR_INVAL || rc == EFS_ERR_NOMEM)
+        return rc;
+    {
+        struct efs_chunk_entry b, a;
+        int hb, ha, prc, rc2;
+        static uint64_t last_log_us;
+        struct timespec ts;
+        uint64_t now;
+
+        memset(&b, 0, sizeof(b));
+        memset(&a, 0, sizeof(a));
+        pthread_mutex_lock(&g_client.idx_mu);
+        hb = (efs_export_get_chunk(&g_client.export, ino, ci, &b) == 0);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        prc = efs_client_pull_chunks_range(ino, ci, ci + 1);
+        rc2 = fetch_published_once(ino, ci, buf, len, obs, have_obs);
+        if (rc2 == EFS_OK)
+            return EFS_OK;
+        pthread_mutex_lock(&g_client.idx_mu);
+        ha = (efs_export_get_chunk(&g_client.export, ino, ci, &a) == 0);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000;
+        if (now - last_log_us > 1000000ull) {
+            last_log_us = now;
+            fprintf(stderr,
+                    "efs: fetch published ino=%llu ci=%u rc=%d then pull rc=%d "
+                    "rc=%d map before gen=%llx nd=%u seq=%llx (%d) after "
+                    "gen=%llx nd=%u seq=%llx (%d)\n",
+                    (unsigned long long)ino, ci, rc, prc, rc2,
+                    (unsigned long long)b.generation, b.ndelta,
+                    (unsigned long long)b.delta_seq, hb,
+                    (unsigned long long)a.generation, a.ndelta,
+                    (unsigned long long)a.delta_seq, ha);
+        }
+        return rc2;
+    }
+}
+
+static int fetch_published_once(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                                uint32_t len, struct efs_chunk_entry *obs,
+                                int *have_obs)
 {
     uint32_t cs = data_chunk_size();
     if (!buf || !cs || len != cs)
@@ -367,9 +450,16 @@ int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
     uint32_t frag_len = data_frag_size();
     uint8_t zck[EFS_HASH_SIZE];
 
+    memset(&ce, 0, sizeof(ce));
     pthread_mutex_lock(&g_client.idx_mu);
     published = (efs_export_get_chunk(&g_client.export, ino, ci, &ce) == 0);
     pthread_mutex_unlock(&g_client.idx_mu);
+    /* One read of the row serves the base decode, the span overlay and
+     * the caller's observation. */
+    if (obs)
+        *obs = ce;
+    if (have_obs)
+        *have_obs = published;
     /* Hole, not a GET. Reasons a GET here is DECODE:
      *  - truncate stubs (zero digest / all-zero checksums, no objects)
      *  - size grown with no chunk map (ftruncate)
@@ -392,15 +482,34 @@ int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
                 stub = 1;
         }
     }
+    if (obs && !published) {
+        /* A flush merging onto "no row" builds its image on zeros. With
+         * the local table a cache (D2 windows, the evictor) this can be
+         * a dropped row, not a first write. Count it. */
+        static uint64_t n, last_us;
+        struct timespec ts;
+        uint64_t now;
+
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000;
+        __sync_fetch_and_add(&n, 1);
+        if (now - last_us > 1000000ull) {
+            last_us = now;
+            fprintf(stderr, "efs: merge base norow ino=%llu ci=%u n=%llu\n",
+                    (unsigned long long)ino, ci, (unsigned long long)n);
+        }
+    }
     if (stub || !published)
         memset(buf, 0, len);
     else {
         int rc = efs_client_decode_placed_chunk_attempts(ino, ci, buf, cs,
-                                                         frag_len, 2, 0);
+                                                         frag_len, 2, 0, &ce);
         if (rc != EFS_OK)
             return rc;
     }
-    return overlay_chunk_deltas(ino, ci, buf, len);
+    if (!published)
+        return EFS_OK;
+    return overlay_chunk_deltas_ce(ino, ci, buf, len, &ce);
 }
 
 
@@ -672,18 +781,14 @@ static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
     return EFS_OK;
 }
 
-static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
-                                uint32_t chunk_len)
+static int overlay_chunk_deltas_ce(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                                   uint32_t chunk_len,
+                                   const struct efs_chunk_entry *cep)
 {
-    struct efs_chunk_entry ce;
+    struct efs_chunk_entry ce = *cep;
     uint32_t i;
     int rc = EFS_OK;
 
-    memset(&ce, 0, sizeof(ce));
-    pthread_mutex_lock(&g_client.idx_mu);
-    if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) != 0)
-        ce.ndelta = 0;
-    pthread_mutex_unlock(&g_client.idx_mu);
     for (i = 0; i < ce.ndelta && rc == EFS_OK; i++) {
         /* A fold leaves a len-0 tombstone in the trailer (the apply keeps
          * and skips it, meta_apply.c). It carries no bytes; painting it
@@ -694,6 +799,19 @@ static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
         rc = overlay_one_delta(ino, ci, buf, chunk_len, &ce.deltas[i]);
     }
     return rc;
+}
+
+static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                                uint32_t chunk_len)
+{
+    struct efs_chunk_entry ce;
+
+    memset(&ce, 0, sizeof(ce));
+    pthread_mutex_lock(&g_client.idx_mu);
+    if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) != 0)
+        ce.ndelta = 0;
+    pthread_mutex_unlock(&g_client.idx_mu);
+    return overlay_chunk_deltas_ce(ino, ci, buf, chunk_len, &ce);
 }
 
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
@@ -823,7 +941,12 @@ static void *chunk_get_worker(void *arg)
          * (peer_overlap_pwrite_chunk_straddle). */
         job->rc = overlay_chunk_deltas(job->ino, job->ci, job->chunk,
                                        chunk_size);
-        return NULL;
+        if (job->rc == EFS_OK)
+            return NULL;
+        /* A span this map names is gone (folded and reaped): the cached
+         * base is stale too. Drop it and fetch against a fresh row. */
+        efs_rdcache_invalidate(job->ino, job->ci);
+        job->have_ce = 1;
     }
     if (!job->have_ce) {
         /* have_ce was snapshotted by the reader thread before this worker
@@ -839,6 +962,23 @@ static void *chunk_get_worker(void *arg)
         pthread_mutex_unlock(&g_client.idx_mu);
     }
     if (!job->have_ce) {
+        /* A hole inside the file: no row after the batch's layout pull.
+         * Legit for sparse files; on an IOR file it is a lost row.
+         * Count it, one line per second (Sep 30 IO-500 easy-read 1869
+         * wrong 1 MiB reads with no client error line at all). */
+        static uint64_t holes, last_us;
+        struct timespec ts;
+        uint64_t now;
+
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        now = (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000;
+        __sync_fetch_and_add(&holes, 1);
+        if (now - last_us > 1000000ull) {
+            last_us = now;
+            fprintf(stderr, "efs: read hole ino=%llu ci=%u holes=%llu\n",
+                    (unsigned long long)job->ino, job->ci,
+                    (unsigned long long)holes);
+        }
         memset(job->chunk, 0, chunk_size);
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         job->rc = EFS_OK;

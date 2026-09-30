@@ -1,0 +1,33 @@
+-- started at 09/30/2026 14:36:09 --
+
+mdtest-4.0.0 was launched with 36 total task(s) on 9 node(s)
+Command line used: ./mdtest '--dataPacketType=timestamp' '-n' '1000000' '-t' '-w' '3901' '-e' '3901' '-P' '-G=-1504620743' '-N' '1' '-F' '-d' '/tmp/efs-mount/io500/2026.09.30-14.35.04/mdtest-hard' '-x' '/tmp/efs-mount/io500-results/2026.09.30-14.35.04/mdtest-hard.stonewall' '-C' '-Y' '-W' '1' '--saveRankPerformanceDetails=/tmp/efs-mount/io500-results/2026.09.30-14.35.04/mdtest-hard-write.csv' '-a' 'POSIX'
+Path                : /tmp/efs-mount/io500/2026.09.30-14.35.04/mdtest-hard
+FS                  : 72.0 TiB   Used FS: 2.7%   Inodes: 4096.0 Mi   Used Inodes: 0.0%
+Nodemap: 111100000000000000000000000000000000
+V-0: Rank   0 Line  2537 Shifting ranks by 4 for each phase.
+36 tasks, 36000000 files
+Continue stonewall hit min: 71 max: 76 avg: 73.9 
+
+
+SUMMARY rate: (of 1 iterations)
+   Operation                     Max            Min           Mean        Std Dev
+   ---------                     ---            ---           ----        -------
+   File creation                2611.669       2611.669       2611.669          0.000
+   File stat                       0.000          0.000          0.000          0.000
+   File read                       0.000          0.000          0.000          0.000
+   File removal                    0.000          0.000          0.000          0.000
+   Tree creation                 180.602        180.602        180.602          0.000
+   Tree removal                    0.000          0.000          0.000          0.000
+
+SUMMARY time: (of 1 iterations)
+   Operation                     Max            Min           Mean        Std Dev
+   ---------                     ---            ---           ----        -------
+   File creation                   1.048          1.048          1.048          0.000
+   File stat                       0.000          0.000          0.000          0.000
+   File read                       0.000          0.000          0.000          0.000
+   File removal                    0.000          0.000          0.000          0.000
+   Tree creation                   0.006          0.006          0.006          0.000
+   Tree removal                    0.000          0.000          0.000          0.000
+-- finished at 09/30/2026 14:36:11 --
+

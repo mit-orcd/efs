@@ -1,0 +1,36 @@
+-----
+efs-rec: start 2026-09-30T18:40:53Z pid=1354521 host=login008
+efs-rec: cmd for h in fcstor003 fcstor004 fcstor005 fcstor006; do echo "== $h"; ~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh $h.ib "cd /tmp/efs; grep -a -c \"apply publish rc=-14\" efsd.log; grep -a -o \"why=[0-9]*\" efsd.log | sort | uniq -c | tr \"\\n\" \" \"; echo; grep -a report-split efsd.log | awk \"{n++; for(i=1;i<=NF;i++){split(\\\$i,a,\\\"=\\\"); if(a[1]==\\\"skip\\\")s+=a[2]; if(a[1]==\\\"stale\\\")st+=a[2]; if(a[1]==\\\"inval\\\")iv+=a[2]; if(a[1]==\\\"rc\\\"&&a[2]!=0)bad++}} END{print \\\"report-split n=\\\"n\\\" skip=\\\"s\\\" stale=\\\"st\\\" inval=\\\"iv\\\" nonzero_rc=\\\"bad}\"; grep -a -o \"fail=[a-z]*/-[0-9]*\" efsd.log | sort | uniq -c | tr \"\\n\" \" \"; echo; grep -a raft-obs efsd.log | tail -n 1 | grep -a -o \"inbox_drop=[0-9]*\\|pub_p50=[0-9]*\\|pub_max=[0-9]*\" | tr \"\\n\" \" \"; echo; grep -a -c \"getchunks slow\" efsd.log; grep -a -c \"gc-pass\" efsd.log"; done
+== fcstor003
+220
+    220 why=6 
+report-split n= skip= stale= inval= nonzero_rc=
+
+pub_p50=0 pub_max=0 inbox_drop=0 
+0
+4
+== fcstor004
+463
+    463 why=6 
+report-split n=80 skip=126140 stale=0 inval=0 nonzero_rc=22
+      4 fail=act/-13      15 fail=wait/-13       3 fail=wait/-14 
+pub_p50=813 pub_max=0 inbox_drop=0 
+24
+279
+== fcstor005
+463
+    463 why=6 
+report-split n=19 skip=189136 stale=0 inval=0 nonzero_rc=6
+      5 fail=act/-13       1 fail=wait/-13 
+pub_p50=596629 pub_max=0 inbox_drop=171 
+0
+17
+== fcstor006
+243
+    243 why=6 
+report-split n= skip= stale= inval= nonzero_rc=
+
+pub_p50=0 pub_max=0 inbox_drop=0 
+0
+186
+efs-rec: end 2026-09-30T18:40:55Z rc=0

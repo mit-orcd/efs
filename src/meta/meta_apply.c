@@ -3277,6 +3277,21 @@ static int load_append_cur(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     return unpack_append_cur(val, vlen, c);
 }
 
+/* Which rule STALEd the last publish on this thread (raft_host logs it
+ * beside the rc; the apply's verdict is the same either way). */
+static __thread int pub_stale_why;
+
+int efs_meta_apply_publish_stale_why(void)
+{
+    return pub_stale_why;
+}
+
+#define PUB_STALE(why)                 \
+    do {                               \
+        pub_stale_why = (why);         \
+        return EFS_ERR_STALE;          \
+    } while (0)
+
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 {
     struct efs_meta_row row;
@@ -3338,7 +3353,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         if (!S_ISREG(row.mode) && !S_ISLNK(row.mode))
             return EFS_ERR_INVAL;
         if (p->content_epoch < row.content_epoch)
-            return EFS_ERR_STALE;
+            PUB_STALE(EFS_PUB_STALE_ROW_EPOCH);
         {
             struct append_cur cur;
 
@@ -3381,7 +3396,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     /* D1: a span attaches to whatever base is current. expected_gen is
      * the full-image CAS. Overlap and a chain of live spans still STALE. */
     if (!p->delta_len && p->expected_gen != committed)
-        return EFS_ERR_STALE;
+        PUB_STALE(EFS_PUB_STALE_BASE_CAS);
     vn = sizeof(old_ln);
     rc = efs_kv_get(kv, k_ln, kl, old_ln, &vn);
     if (rc == EFS_OK) {
@@ -3394,7 +3409,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         return rc;
     }
     if (p->content_epoch < ln.fenced_epoch)
-        return EFS_ERR_STALE;
+        PUB_STALE(EFS_PUB_STALE_LANE_EPOCH);
     if (ln.append_bar && p->new_size > ln.append_bar)
         return EFS_ERR_BUSY;
     nd_old = trailer_n(old_ch, ch_vlen);
@@ -3407,15 +3422,21 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
             rc = trailer_at(old_ch, ch_vlen, i, &dlist[i]);
             if (rc != EFS_OK)
                 return rc;
-            /* Replay of this same span object, including a len-0
-             * tombstone left by a fold. */
-            if (dlist[i].generation == p->candidate_gen)
+            /* Replay of this same span record (object AND range),
+             * including a len-0 tombstone left by a fold. The same
+             * object under another range is another client's record
+             * of the identical merged image: it is appended below like
+             * any span (efs_meta_apply_chunk_holds). */
+            if (dlist[i].generation == p->candidate_gen &&
+                (dlist[i].len == 0 ||
+                 (dlist[i].off == p->delta_off &&
+                  dlist[i].len == p->delta_len)))
                 return EFS_OK;
             if (dlist[i].len == 0)
                 continue;
             if (ranges_overlap(dlist[i].off, dlist[i].len, p->delta_off,
                                p->delta_len))
-                return EFS_ERR_STALE;
+                PUB_STALE(EFS_PUB_STALE_OVERLAP);
         }
         {
             uint32_t live = 0, tombs, room, drop, w;
@@ -3426,7 +3447,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
             /* Live spans fill the chain: the client folds one image.
              * Tombstones do not count. Drop the oldest so this span fits. */
             if (live >= EFS_CHUNK_DELTA_MAX)
-                return EFS_ERR_STALE;
+                PUB_STALE(EFS_PUB_STALE_CHAIN_FULL);
             tombs = nd_old - live;
             room = EFS_CHUNK_DELTA_MAX - 1u - live;
             drop = tombs > room ? tombs - room : 0;
@@ -3457,7 +3478,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
         /* The merged image covers exactly the deltas the writer read.
          * A span that landed after that read must not be deleted. */
         if (nd_old != p->delta_base_n || newest != p->delta_base_seq)
-            return EFS_ERR_STALE;
+            PUB_STALE(EFS_PUB_STALE_FOLD_LIST);
     }
     ln.max_end = max_u64(ln.max_end, p->new_size);
     /* A write updates mtime AND ctime, and both live here rather than on the
@@ -5470,6 +5491,54 @@ int efs_meta_apply_append_drain_file(struct efs_kv *kv, efs_ino_t ino)
     return rc;
 }
 
+int efs_meta_apply_chunk_holds(struct efs_kv *kv, efs_ino_t ino,
+                               uint64_t inode_gen, uint32_t chunk_index,
+                               uint64_t gen, uint32_t span_off,
+                               uint32_t span_len, uint64_t *committed)
+{
+    struct efs_meta_chunk ch;
+    uint8_t lane;
+    uint8_t key[EFS_KV_KEY_MAX], val[CHUNK_VAL_MAX];
+    uint32_t klen = 0, vlen, nd, i;
+    int rc;
+
+    if (!kv || ino == 0)
+        return EFS_ERR_INVAL;
+    if (committed)
+        *committed = 0;
+    lane = (uint8_t)(chunk_index % EFS_META_LANES);
+    rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, inode_gen, lane,
+                          chunk_index, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vlen = sizeof(val);
+    rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = unpack_chunk(val, vlen, &ch);
+    if (rc != EFS_OK)
+        return rc;
+    if (committed)
+        *committed = ch.generation;
+    if (gen == 0)
+        return 0;
+    if (span_len == 0)
+        return ch.generation == gen ? 1 : 0;
+    nd = trailer_n(val, vlen);
+    for (i = 0; i < nd; i++) {
+        struct efs_meta_delta d;
+
+        rc = trailer_at(val, vlen, i, &d);
+        if (rc != EFS_OK)
+            return rc;
+        if (d.generation != gen)
+            continue;
+        if (d.len == 0 || (d.off == span_off && d.len == span_len))
+            return 1;
+    }
+    return 0;
+}
+
 int efs_meta_apply_get_chunk_deltas(struct efs_kv *kv, efs_ino_t ino,
                                     uint32_t chunk_index,
                                     struct efs_meta_delta *out, uint32_t cap,
@@ -5543,6 +5612,57 @@ int efs_meta_apply_get_chunk(struct efs_kv *kv, efs_ino_t ino, uint32_t chunk_in
     if (rc != EFS_OK)
         return rc;
     return unpack_chunk(val, vlen, out);
+}
+
+/* One KV get for the image and the span trailer, keyed by a row the
+ * caller already holds. GETCHUNKS did get_chunk + get_chunk_deltas per
+ * chunk = four point gets (two of them the inode row) for one value;
+ * a 64-chunk window under a hard-write was 68 ms (Sep 30). */
+int efs_meta_apply_get_chunk_row(struct efs_kv *kv, efs_ino_t ino,
+                                 uint64_t inode_gen, uint32_t chunk_index,
+                                 struct efs_meta_chunk *out,
+                                 struct efs_meta_delta *ds, uint32_t cap,
+                                 uint32_t *n, uint64_t *newest)
+{
+    uint8_t lane;
+    uint8_t key[EFS_KV_KEY_MAX], val[CHUNK_VAL_MAX];
+    uint32_t klen = 0, vlen, nd, i, wr;
+    int rc;
+
+    if (!kv || !out || !n || ino == 0)
+        return EFS_ERR_INVAL;
+    *n = 0;
+    if (newest)
+        *newest = 0;
+    lane = (uint8_t)(chunk_index % EFS_META_LANES);
+    rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, inode_gen, lane,
+                          chunk_index, key, &klen);
+    if (rc != EFS_OK)
+        return rc;
+    vlen = sizeof(val);
+    rc = kv_get_copy(kv, key, klen, val, sizeof(val), &vlen);
+    if (rc != EFS_OK)
+        return rc;
+    rc = unpack_chunk(val, vlen, out);
+    if (rc != EFS_OK)
+        return rc;
+    nd = trailer_n(val, vlen);
+    wr = nd < cap ? nd : cap;
+    for (i = 0; i < wr && ds; i++) {
+        rc = trailer_at(val, vlen, i, &ds[i]);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    *n = nd;
+    if (newest && nd) {
+        struct efs_meta_delta last;
+
+        rc = trailer_at(val, vlen, nd - 1, &last);
+        if (rc != EFS_OK)
+            return rc;
+        *newest = last.seq;
+    }
+    return EFS_OK;
 }
 
 struct check_scan {

@@ -388,12 +388,12 @@ static int manifest_load(struct kv_lsm *l)
         if (rc != EFS_OK)
             break;
         if (level == 0) {
-            l->l0[l->n_l0].seg = s;
+            seg_slot_set(&l->l0[l->n_l0], s);
             l->l0[l->n_l0].seq = seq;
             l->l0[l->n_l0].level = 0;
             l->n_l0++;
         } else {
-            l->l1[l->n_l1].seg = s;
+            seg_slot_set(&l->l1[l->n_l1], s);
             l->l1[l->n_l1].seq = seq;
             l->l1[l->n_l1].level = 1;
             l->n_l1++;
@@ -460,16 +460,21 @@ static int lookup_locked(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
                          struct kv_buf *out, uint8_t *op)
 {
     uint32_t i;
+    int kr = kv_key_range(key, klen);
     int rc = lookup_mt(l, key, klen, out, op);
 
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
     for (i = 0; i < l->n_l0; i++) {
+        if (seg_slot_excludes(&l->l0[i], kr))
+            continue;
         rc = kv_seg_get(l->l0[i].seg, key, klen, out, op);
         if (rc != EFS_ERR_NOT_FOUND)
             return rc;
     }
     for (i = 0; i < l->n_l1; i++) {
+        if (seg_slot_excludes(&l->l1[i], kr))
+            continue;
         rc = kv_seg_get(l->l1[i].seg, key, klen, out, op);
         if (rc != EFS_ERR_NOT_FOUND)
             return rc;
@@ -481,6 +486,7 @@ static int lookup(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
                   struct kv_buf *out, uint8_t *op)
 {
     int guard = 0;
+    int kr = kv_key_range(key, klen);
 
     for (;;) {
         struct lsm_view snap;
@@ -495,12 +501,19 @@ static int lookup(struct kv_lsm *l, const uint8_t *key, uint32_t klen,
         lsm_view_get(l, &snap);
         n = l->n_l0 + l->n_l1;
         for (i = 0; i < n; i++) {
-            struct kv_seg *s = i < l->n_l0 ? l->l0[i].seg
-                                           : l->l1[i - l->n_l0].seg;
+            const struct seg_slot *sl = i < l->n_l0 ? &l->l0[i]
+                                                    : &l->l1[i - l->n_l0];
+            struct kv_seg *s;
             struct kv_seg_io io;
             uint8_t *blk = NULL;
             int need_io = 0;
 
+            /* One int compare against the slot's range span; the two
+             * key compares inside the probe are for the segments that
+             * survive it. */
+            if (seg_slot_excludes(sl, kr))
+                continue;
+            s = sl->seg;
             rc = kv_seg_probe(s, key, klen, out, op, &need_io, &io);
             if (rc != EFS_OK || !need_io) {
                 if (rc != EFS_ERR_NOT_FOUND)

@@ -38,6 +38,14 @@ struct efs_raft {
     uint64_t ae_inflight_tick[EFS_RAFT_MAX_PEERS];
     uint64_t ae_inflight_commit[EFS_RAFT_MAX_PEERS];
     uint64_t ae_inflight_end[EFS_RAFT_MAX_PEERS]; /* last index that batch carried */
+    /* The batch stopped at EFS_RAFT_AE_MAX / EFS_RAFT_AE_BYTES with more
+     * entries behind it. A replacement batch for a later send_idx would
+     * carry the same window again (nothing new fits): under a publish
+     * storm (2048-pub entries, ~400 KiB each) every propose re-sent the
+     * outstanding ~1 MiB window and the follower's inbox dropped them
+     * (Sep 30 IO-500: inbox_drop 3102 on fcstor005, 950 KB AEs). A full
+     * batch waits for its reply or the heartbeat-interval resend. */
+    uint8_t ae_inflight_full[EFS_RAFT_MAX_PEERS];
     uint64_t ticks; /* efs_raft_tick count, for ae_inflight aging */
     uint64_t peer_boot[EFS_RAFT_MAX_PEERS];
     unsigned vote_bits;
@@ -582,7 +590,7 @@ static int ae_inflight_fresh(const struct efs_raft *r, int to, uint64_t ni)
      * index behind while every raft ACK was still ~10 us. Resend from
      * the same next_index with the longer end; that is a replacement
      * batch, not a second window. */
-    if (r->send_idx > r->ae_inflight_end[to])
+    if (r->send_idx > r->ae_inflight_end[to] && !r->ae_inflight_full[to])
         return 0;
     return 1;
 }
@@ -594,6 +602,7 @@ static void ae_inflight_set(struct efs_raft *r, int to, uint64_t ni,
     r->ae_inflight_tick[to] = r->ticks;
     r->ae_inflight_commit[to] = r->commit_index;
     r->ae_inflight_end[to] = end;
+    r->ae_inflight_full[to] = 0;
 }
 
 /* Follower already has the outstanding batch (this is queued behind that
@@ -817,9 +826,15 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
         }
     }
     rc = send_msg(r, &m);
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
         ae_inflight_set(r, to, m.nentries ? ni : 0,
                         m.nentries ? ni + m.nentries - 1 : m.prev_index);
+        /* Entries were left behind this window: it hit the entry or
+         * byte cap, and a later send_idx has nothing new that fits. */
+        if (m.nentries && ni + m.nentries - 1 < last_i &&
+            (!r->ae_capped || ni + m.nentries - 1 < r->send_idx))
+            r->ae_inflight_full[to] = 1;
+    }
     free(m.wire);
     /* The entry is already in the leader log. A full outbox must not
      * fail the proposer's RPC, and must not mark a batch in flight

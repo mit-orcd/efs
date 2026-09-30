@@ -59,6 +59,9 @@ struct kv_seg {
     uint32_t nblocks;
     uint8_t *last_key;
     uint32_t last_klen;
+    /* kv_key_range of idx[0] and of last_key, fixed at open. */
+    int rlo;
+    int rhi;
     /* Sum of block lengths, fixed at open. The compactor asks for it
      * per range per pass; a walk of 230K index entries under the LSM
      * lock is not what a byte count should cost. */
@@ -455,7 +458,12 @@ int kv_seg_open(const char *path, struct kv_seg **out)
         const uint8_t *lk = NULL;
         uint32_t ll = 0;
 
-        (void)kv_seg_last_key(s, &lk, &ll);
+        s->rlo = kv_key_range(s->idx[0].key, s->idx[0].klen);
+        s->rhi = KV_RANGE_N - 1;
+        if (kv_seg_last_key(s, &lk, &ll) == EFS_OK)
+            s->rhi = kv_key_range(lk, ll);
+        if (s->rhi < s->rlo)
+            s->rhi = s->rlo;
     }
     *out = s;
     return EFS_OK;
@@ -768,6 +776,19 @@ int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,
 /* True when no key of this segment can be >= seek and carry prefix.
  * The range test is the one compaction uses (first key from the block
  * index, last key learned once per segment). Unknown = not excluded. */
+void kv_seg_range(const struct kv_seg *s, int *rlo, int *rhi)
+{
+    *rlo = s ? s->rlo : 0;
+    *rhi = s ? s->rhi : KV_RANGE_N - 1;
+}
+
+int kv_seg_range_excludes(const struct kv_seg *s, int rlo, int rhi)
+{
+    if (!s)
+        return 1;
+    return rhi < s->rlo || rlo > s->rhi;
+}
+
 int kv_seg_excludes(struct kv_seg *s, const uint8_t *seek, uint32_t slen,
                     const uint8_t *prefix, uint32_t plen)
 {
@@ -776,6 +797,13 @@ int kv_seg_excludes(struct kv_seg *s, const uint8_t *seek, uint32_t slen,
 
     if (!s || !s->nblocks)
         return 1;
+    if (plen && prefix) {
+        int prlo, prhi;
+
+        kv_prefix_ranges(prefix, plen, &prlo, &prhi);
+        if (kv_seg_range_excludes(s, prlo, prhi))
+            return 1;
+    }
     if (plen && prefix) {
         if (kv_seg_first_key(s, &fk, &fl) == EFS_OK &&
             !kv_has_prefix(fk, fl, prefix, plen) &&

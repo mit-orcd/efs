@@ -1,0 +1,85 @@
+IO-500 debug 9x4 (36 ranks, fcstor007-015, 1 s stonewall, config-debug.ini),
+RDMA, launched 18:35:04Z Sep 30 2026 (rec-ior340), IO500_KEEP_DATA=1.
+Servers f2d3a7871b96-dirty rolled --all 18:30Z (roll.log, ROLL_OK); clients
+deployed 18:32Z on the same tree (deploy.log, nine fuse.efs-fuse MOUNT_OK,
+one efs-fuse each). Item 10 of START-HERE: "one 9-client IO-500 that
+completes ior-hard-write".
+
+Every phase completed. No fsync failure. No read error in ior-hard-read
+or ior-easy-read (grep error/incorrect over the IOR result files = 0).
+Every number is [INVALID] only because the debug stonewall is 1 s.
+
+                     this run            20260930-072824   20260928-150609
+ior-easy-write       4.563 GiB/s         3.148             2.917
+mdtest-easy-write    4.632 kIOPS         3.696             3.418
+ior-hard-write       0.640 GiB/s (52.6 s) 0.261 (133 s, 16 fsync fail) 0.291 (73 s)
+mdtest-hard-write    2.612 kIOPS         2.126             0.757
+ior-easy-read        16.807 GiB/s        2.976             3.092
+mdtest-easy-stat     16.478 kIOPS        3.600             3.248
+ior-hard-read        1.034 GiB/s         ABORT (read EIO)  1.525
+mdtest-hard-stat     23.763 kIOPS        -                 5.683
+mdtest-easy-delete   4.987 kIOPS         -                 2.223
+mdtest-hard-read     5.577 kIOPS         -                 4.895
+mdtest-hard-delete   4.182 kIOPS         -                 0.538
+
+Reads here are same-mount after write (dcache/rdcache), as in the two
+comparison runs; do not quote ior-easy-read as a cold number.
+
+Hard file: /tmp/efs-mount/io500/2026.09.30-14.35.04/ior-hard/file,
+ino 66734, 36054195840 B, seed -G=1904168759, stonewalling pairs max 21305.
+Cold full-file verification from fcstor008 (a client that wrote 1/9 of
+it): /tmp/hardscan file 36 21305 1904168759 (18:40-18:51Z, hardscan.txt):
+  DONE records=766980 bad=0 short=0. ior330 (13:36Z) scanned bad=80 on
+  the same tool; ior327 bad=140.
+
+Server side (servers-after.txt; efsd.log is this run only, the roll
+truncated it):
+  apply publish rc=-14 (STALE) 220 / 463 / 463 / 243 on 003-006, all why=6
+  (FOLD_LIST). The 13:36Z run (ior330) had 3238 / 6573 / 6573 / 3335.
+  report-split: fcstor004 n=80 skip=126140 stale=0 inval=0, 22 non-zero rc
+  (4 act/-13, 15 wait/-13, 3 wait/-14); fcstor005 n=19 skip=189136 stale=0,
+  6 non-zero (5 act/-13, 1 wait/-13). Every BUSY/STALE REPORT was retried
+  by the client inside the 8 s wall; no fsync EIO.
+  inbox_drop 171 on fcstor005 (was 3102), 0 elsewhere. getchunks slow 24
+  lines on fcstor004. pub_p50 on fcstor005's last raft-obs line reads
+  596629 - not read yet (D8's remeasure is a separate item).
+Client side (clients-after.txt): three STALE rounds in total (fcstor008
+16 replayed / 32151 committed / pull 951 ms; fcstor009 113 / 28036 /
+732 ms; fcstor012 334 / 29807 / 1167 ms). ior330 had one round per
+client with ~891 replays and pull_ms ~7000. putid miss 0, merge base
+norow 0, exhausted 0, conn pool 0, read hole 0 on all nine.
+
+What changed (all in this tree, commit after this run):
+ 1. Server identity of a span record is (object gen, off, len), not the
+    gen alone. The object name is a content hash; two clients that merge
+    to the same 128 KiB image PUT one object under two ranges. The apply
+    took the second range as a replay ("same span object") and the REPORT
+    pack skipped it as held (efs_meta_apply_chunk_holds) -> its bytes were
+    never recorded. That is the ior-hard-read loss of every run today
+    (40-208 records per run, always the client-boundary piece of a chunk
+    shared by two hosts; the server row showed the peer's range under
+    the missing client's object gen, e.g. ino 547783 chunk 238434:
+    span off=25344 len=47008 gen=0xe990ec58f2c8212d = fcstor009's object,
+    whose own piece was [0,25344)). test_meta_apply covers it.
+ 2. Client STALE classifier: a span is "committed" only if the row holds
+    its gen at its range; a full image only if the base gen is ours; and
+    a chunk the repull found NO ROW for is never "committed" - the local
+    table's generation there is our own unreported PUT (pull_chunks_range
+    returns an absence bitmap; the replay for an absent chunk starts from
+    zeros with an empty observation and publishes our ranges / span /
+    image with expected gen 0). This was the 41745-class loss: base CAS
+    STALE against no row, then "committed == ours, done=1", dropped.
+ 3. First partial write into a chunk installs have_base/base_gen/range
+    under the same lock as the buffer (dcache_init). A flusher between
+    dcache_take and the second locked section saw dirty=1 nrange=0, PUT
+    the buffer as a full image, and the merge overlay dropped the bytes
+    (`snap-inner | dirty=1 hb=1 bg=0 obj=0 r=` in fcstor009's trace).
+ 4. span_of: contiguous coverage from the range start (a span extends
+    cover only if it starts at or before it; head-uncovered + tail-
+    covered folds instead of "covered"), and this client's own unreported
+    span in the table covers nothing (one object per chunk in the REPORT;
+    a tail-only publish replaced it in putid and its bytes never reached
+    the host).
+Also in this tree since roll325 (already described in the 13:xx notes):
+follower ReadIndex coalescer, single-get GETCHUNKS, report-split
+fail=/inval= counters, growable putid table, PULL_FAN/REPLAY_THREADS.

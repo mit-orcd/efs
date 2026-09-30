@@ -1,0 +1,22 @@
+-----
+efs-rec: start 2026-09-30T18:41:39Z pid=1358445 host=login008
+efs-rec: cmd for h in fcstor007 fcstor008 fcstor009 fcstor010 fcstor011 fcstor012 fcstor013 fcstor014 fcstor015; do ~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh $h.ib "cd /tmp/efs; echo \"$h stale=\$(grep -a -c report-stale fuse.log) putidmiss=\$(grep -a -c \"putid miss\" fuse.log) norow=\$(grep -a -c \"merge base norow\" fuse.log) exhausted=\$(grep -a -c exhausted fuse.log) eio=\$(grep -a -c -i \"fsync.*EIO\\|rc=-1 \" fuse.log) hole=\$(grep -a -c \"read hole\" fuse.log) conn=\$(grep -a -c \"conn pool\" fuse.log)\"; grep -a report-stale fuse.log | awk \"{for(i=1;i<=NF;i++){split(\\\$i,a,\\\"=\\\"); if(a[1]==\\\"replayed\\\")r+=a[2]; if(a[1]==\\\"committed\\\")c+=a[2]; if(a[1]==\\\"pull_ms\\\"&&a[2]>m)m=a[2]; if(a[1]==\\\"replay_ms\\\"&&a[2]>rm)rm=a[2]}} END{print \\\"  replayed=\\\"r\\\" committed=\\\"c\\\" max_pull_ms=\\\"m\\\" max_replay_ms=\\\"rm}\""; done
+fcstor007 stale=0 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed= committed= max_pull_ms= max_replay_ms=
+fcstor008 stale=1 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed=16 committed=32151 max_pull_ms=951 max_replay_ms=13
+fcstor009 stale=1 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed=113 committed=28036 max_pull_ms=732 max_replay_ms=47
+fcstor010 stale=0 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed= committed= max_pull_ms= max_replay_ms=
+fcstor011 stale=0 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed= committed= max_pull_ms= max_replay_ms=
+fcstor012 stale=1 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed=334 committed=29807 max_pull_ms=1167 max_replay_ms=42
+fcstor013 stale=0 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed= committed= max_pull_ms= max_replay_ms=
+fcstor014 stale=0 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed= committed= max_pull_ms= max_replay_ms=
+fcstor015 stale=0 putidmiss=0 norow=0 exhausted=0 eio=0 hole=0 conn=0
+  replayed= committed= max_pull_ms= max_replay_ms=
+efs-rec: end 2026-09-30T18:41:42Z rc=0

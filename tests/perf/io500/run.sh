@@ -102,10 +102,11 @@ launch() { # extra-args...  ini-path
             . /tmp/efs-io500-agent.env
         fi
         cd '$SRC'
+        export IO500_KEEP_DATA='${IO500_KEEP_DATA:-}'
         if [ $detach = 1 ]; then
             setsid $MPIRUN --hostfile '$IO500_DIR/hosts' -np $NP \
             --prefix \"\$(dirname \"\$(dirname \"\$(command -v mpicc)\")\")\" \
-            -x PATH -x LD_LIBRARY_PATH \
+            -x PATH -x LD_LIBRARY_PATH -x IO500_KEEP_DATA \
             --mca plm_rsh_agent '$HERE/mpi-ssh.sh' \
             --mca plm_rsh_no_tree_spawn 1 \
             ./io500 '$ini' ${extra[*]+"${extra[*]}"} >'$IO500_DIR/last-run.log' 2>&1 </dev/null &

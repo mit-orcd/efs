@@ -23,20 +23,9 @@
 #include <time.h>
 #include <unistd.h>
 
-/* key[0] is the range, except key[0]==0, which was 1.8 GB. That one
- * splits on key[1] (256 subranges, ids 256..511) now that L0 is bounded
- * by bytes rather than 64 files. A file written before the split still
- * spans several ids and is compacted whole once, then cut here. */
-#define KV_RANGE_N 512
-
-static int key_range(const uint8_t *key, uint32_t klen)
-{
-    if (!klen)
-        return 0;
-    if (key[0] == 0 && klen >= 2)
-        return 256 + (int)key[1];
-    return (int)key[0];
-}
+/* Range ids: kv_key_range / KV_RANGE_N in kv_lsm_internal.h (the point
+ * get filters segments by the same ids). */
+#define key_range kv_key_range
 
 static void flush_drop_new(struct kv_lsm *l, struct seg_slot *neu, uint32_t n)
 {
@@ -96,7 +85,7 @@ int kv_flush_locked(struct kv_lsm *l)
                     unlink(path);
                     goto fail;
                 }
-                neu[nneu].seg = s;
+                seg_slot_set(&neu[nneu], s);
                 neu[nneu].level = 0;
                 nneu++;
             }
@@ -136,7 +125,7 @@ int kv_flush_locked(struct kv_lsm *l)
             unlink(path);
             goto fail;
         }
-        neu[nneu].seg = s;
+        seg_slot_set(&neu[nneu], s);
         neu[nneu].level = 0;
         nneu++;
     }
@@ -623,6 +612,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         rc = kv_seg_open(path, &c.out[i].seg);
         if (rc != EFS_OK)
             goto out;
+        seg_slot_set(&c.out[i], c.out[i].seg);
     }
     if (!held) {
         pthread_mutex_lock(&l->mu);

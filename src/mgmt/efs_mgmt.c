@@ -2072,14 +2072,33 @@ static int cmd_raft_getchunks(int argc, char **argv)
         printf("%u", r->recs[i].chunk_index);
     }
     printf("\n");
-    for (i = 0; i < r->count && i < 4; i++) {
-        printf("  ci=%u nodes=%u,%u,%u base_gen=%llu obj_gen=%llu ck0=%02x%02x%02x%02x\n",
-               r->recs[i].chunk_index,
-               r->recs[i].nodes[0], r->recs[i].nodes[1], r->recs[i].nodes[2],
-               (unsigned long long)r->recs[i].base_gen,
-               (unsigned long long)r->recs[i].chunk_generation,
-               r->recs[i].checksums[0][0], r->recs[i].checksums[0][1],
-               r->recs[i].checksums[0][2], r->recs[i].checksums[0][3]);
+    /* EFS_MGMT_CHUNKS=N prints the first N rows (default 4) with the
+     * span trailer: which pieces of a shared chunk the server holds. */
+    {
+        const char *e = getenv("EFS_MGMT_CHUNKS");
+        uint32_t lim = e ? (uint32_t)strtoul(e, NULL, 0) : 4u;
+
+        for (i = 0; i < r->count && i < lim; i++) {
+            uint32_t d;
+
+            printf("  ci=%u nodes=%u,%u,%u base_gen=%llu obj_gen=%llu ck0=%02x%02x%02x%02x spans=%u seq=%llu\n",
+                   r->recs[i].chunk_index,
+                   r->recs[i].nodes[0], r->recs[i].nodes[1], r->recs[i].nodes[2],
+                   (unsigned long long)r->recs[i].base_gen,
+                   (unsigned long long)r->recs[i].chunk_generation,
+                   r->recs[i].checksums[0][0], r->recs[i].checksums[0][1],
+                   r->recs[i].checksums[0][2], r->recs[i].checksums[0][3],
+                   r->recs[i].delta_base_n,
+                   (unsigned long long)r->recs[i].delta_base_seq);
+            for (d = 0; d < r->recs[i].delta_base_n && d < EFS_CHUNK_DELTA_MAX; d++)
+                printf("    span off=%u len=%u gen=%llu seq=%llu nodes=%u,%u,%u\n",
+                       r->recs[i].deltas[d].off, r->recs[i].deltas[d].len,
+                       (unsigned long long)r->recs[i].deltas[d].generation,
+                       (unsigned long long)r->recs[i].deltas[d].seq,
+                       r->recs[i].deltas[d].nodes[0],
+                       r->recs[i].deltas[d].nodes[1],
+                       r->recs[i].deltas[d].nodes[2]);
+        }
     }
     free(reply);
     return 0;

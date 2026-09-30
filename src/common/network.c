@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <fcntl.h>
-#include <sys/select.h>
+#include <poll.h>
 #include <signal.h>
 #include <pthread.h>
 #include <stdlib.h>
@@ -59,11 +59,17 @@ static int connect_sockaddr(const struct sockaddr *addr, socklen_t addrlen)
 
     int rc = connect(fd, addr, addrlen);
     if (rc < 0 && errno == EINPROGRESS) {
-        fd_set fds;
-        FD_ZERO(&fds);
-        FD_SET(fd, &fds);
-        struct timeval tv = {EFS_CONNECT_TIMEOUT_SEC, 0};
-        rc = select(fd + 1, NULL, &fds, NULL, &tv);
+        /* poll, never select: FD_SET and the kernel's result copy-out
+         * write past a 128-byte fd_set once fd >= 1024. A dual host with
+         * nine clients x 64 pooled conns crossed that; every new peer
+         * conn then smashed the connecting thread's saved registers
+         * (heartbeat_thread s=0x4000000000 = bit 38 = fd 1062, conn
+         * handlers returning to rip 0; Sep 30 2026 IO-500). */
+        struct pollfd pfd;
+        pfd.fd = fd;
+        pfd.events = POLLOUT;
+        pfd.revents = 0;
+        rc = poll(&pfd, 1, EFS_CONNECT_TIMEOUT_SEC * 1000);
         if (rc > 0) {
             int so_error = 0;
             socklen_t len = sizeof(so_error);

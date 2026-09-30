@@ -25,6 +25,74 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 30 2026 18:55Z — item 10: a 9-client IO-500 that completes, and the ior-hard-read loss was a naming bug
+
+Goal for the afternoon: one 9×4 IO-500 that completes ior-hard-write
+(every IOR since Sep 29 had aborted on fsync EIO). Seven debug runs today
+completed every phase once the REPORT path stopped exhausting the 8 s
+wall (single-get GETCHUNKS, follower ReadIndex coalescer, PULL_FAN /
+REPLAY_THREADS, growable putid table). What remained was ior-hard-read:
+40–208 records wrong per run (`/tmp/hardscan` cold scan of the 36 GB
+file; IOR itself reported 80–140 read errors), always the client-boundary
+piece of a chunk two hosts share, the server row showing no base image
+and the missing piece's span absent.
+
+The trace (fcstor009 with `EFS_DCACHE_TRACE=1 EFS_REPORT_DBG=1`, run
+ior330, ino 547783) gave two chunks with different shapes:
+
+- **238434 / 239622** — one full-image put-record after a
+  `snap-inner | dirty=1 hb=1 bg=0 obj=0 r=` (nrange 0 on a first partial
+  write), one `report … rc=0`, no server apply line, and the server span
+  `off=25344 len=47008 gen=0xe990ec58f2c8212d nodes=2,3,4`. That gen
+  **is fcstor009's object** (16830211674258022701 decimal) — under the
+  *peer's* range. Object names are content hashes of the 128 KiB PUT
+  image; the two clients had merged the shared chunk to the identical
+  image, so fcstor010's span record and fcstor009's carried the same
+  gen. `apply_publish` treated the second as "replay of this same span
+  object" and, on the retry path, the REPORT pack skipped it as held
+  (`efs_meta_apply_chunk_holds` matched gen alone) — the `report-split
+  skip=N` counts. The bytes were never recorded; the read saw zeros.
+  The nrange-0 snapshot is a second, independent bug: `dcache_take`
+  marks the slot dirty and the have_base/base_gen/range came in a second
+  locked section, so a flusher in between PUT the buffer as a full image
+  and the merge overlay (which walks nrange) dropped the write.
+- **41745** — three objects (span, then two full images), the slot base
+  became its own first object gen through `dcache_need_published_merge`
+  → pull → `export_chunk_copy` returning the *local* gen; the pack STALEd
+  on base CAS against no row; the classifier read
+  `stale-class committed=94a3… ours=94a3… done=1` because the GETCHUNKS
+  reply had no row for the chunk, the local table kept our candidate
+  gen, and "committed == ours" was taken as done. Dropped as committed.
+  `span_of` had the same confusion: our own unreported span in the table
+  "covered" the range, so a widened flush published only the tail, and
+  putid (one object per chunk) forgot the first span. Its cover logic
+  was also wrong on its own terms (any overlapping span extended cover,
+  so an uncovered head with a covered tail counted as covered).
+
+Fixes, all in `f2d3a7871b96-dirty`, rolled 18:30Z, clients 18:32Z:
+span identity is (gen, off, len) on the server (apply replay check and
+`chunk_holds`; `test_meta_apply` publishes the same object under a
+second range and expects a third span); the STALE classifier matches a
+span by range and a full image by base gen and treats a chunk the repull
+found **no row** for as never committed (`pull_chunks_range` fills an
+absence bitmap, `efs_client_pull_chunks_range_absent`); the replay of an
+absent chunk drops the table's gen/list, starts from zeros with an empty
+observation and publishes our ranges / span / image with expected 0
+(`dcache_replay_stale_ex`); `dcache_init` installs have_base / base_gen /
+range with the buffer under one lock; `span_of` grows cover only
+contiguously from the range start and ignores the putid object's own
+span.
+
+Result (`results/io500/20260930-183504-rdma`): every phase, **0 fsync
+failures, 0 read errors, cold hardscan 766980 records bad=0**.
+ior-easy-write 4.563 GiB/s, mdtest-easy-write 4.632 kIOPS, ior-hard-write
+0.640 GiB/s in 52.6 s, mdtest-hard-write 2.612, ior-hard-read 1.034,
+mdtest-easy-stat 16.478. Server apply STALE (all FOLD_LIST) 220–463 per
+node against 3238–6573 in ior330; three client STALE rounds in total with
+pull ≤ 1.2 s against one per client at ~7 s. `inbox_drop` 171 on fcstor005
+(3102 before). Not read: `pub_p50` 596629 on fcstor005's last raft-obs
+line, 24 `getchunks slow` lines on fcstor004.
+
 ## Sep 30 2026 08:40Z — ecopy's 149 metadata mismatches: four client bugs, none on the server
 
 The user's 07:17Z `ecopy --verify` on fstor007 (`85f5b31c` client) left 149

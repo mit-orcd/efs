@@ -199,6 +199,10 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
  * error the local table may be PARTIAL for the range. */
 int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,
                                  uint32_t end_ci);
+/* Same, plus bit (ci - start_ci) in `absent` for every chunk the host
+ * has no row for (caller zeroes (end - start + 7) / 8 bytes). */
+int efs_client_pull_chunks_range_absent(efs_ino_t ino, uint32_t start_ci,
+                                        uint32_t end_ci, uint8_t *absent);
 int efs_dcache_replay_stale(efs_ino_t ino, uint32_t ci);
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
                           const char *name, int is_dir);
@@ -329,6 +333,10 @@ int efs_dcache_copy_kept(efs_ino_t ino, uint32_t ci, uint32_t off,
  * inode.size. Unpublished → zeros + EFS_OK. */
 int efs_client_fetch_published_chunk(efs_ino_t ino, uint32_t ci,
                                      uint8_t *buf, uint32_t len);
+int efs_client_fetch_published_chunk_obs(efs_ino_t ino, uint32_t ci,
+                                         uint8_t *buf, uint32_t len,
+                                         struct efs_chunk_entry *obs,
+                                         int *have_obs);
 /* Overlay dirty dcache bytes onto a fetched/zero chunk (have_base=0 ranges). */
 void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 int efs_dcache_flush_all(void);
