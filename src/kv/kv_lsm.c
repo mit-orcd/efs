@@ -1444,6 +1444,7 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
         rc = kv_seg_iter_open(src[nsrc].seg, &src[nsrc].it);
         if (rc != EFS_OK)
             goto out;
+        kv_seg_iter_set_seq(src[nsrc].it, 1);
         rc = kv_seg_iter_seek(src[nsrc].it, NULL, 0);
         if (rc != EFS_OK)
             goto out;

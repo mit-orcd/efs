@@ -1542,7 +1542,7 @@ static int apply_reap_done_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                             uint32_t clen, uint64_t index)
 {
-    struct efs_gc_ack_item items[16];
+    struct efs_gc_ack_item items[EFS_META_GC_ACK_MAX];
     uint32_t cnt, i, off;
     int rc;
 
@@ -1550,7 +1550,7 @@ static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (clen < 3)
         return EFS_OK;
     cnt = (uint32_t)((cmd[1] << 8) | cmd[2]);
-    if (cnt > 16 || clen < 3 + cnt * 22)
+    if (cnt > EFS_META_GC_ACK_MAX || clen < 3 + cnt * 22)
         return EFS_OK;
     off = 3;
     for (i = 0; i < cnt; i++) {
@@ -4471,6 +4471,14 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
     bits = S_ISDIR(row.mode) && row.layout != EFS_META_LAYOUT_LOCAL
                ? row.used_shards
                : row.active_lanes;
+    /* One ReadIndex per GROUP, not per lane. Lanes straddle the two
+     * groups, so a file written through all 64 lanes has 32 in the
+     * other group; on a host that follows that group each
+     * host_read_index is a round trip to its leader plus a wait, and
+     * this loop issued it 32 times for one stat (Sep 30, du/find on
+     * fstor007: 5–7 ms per stat of a >10 MiB file, 0.2 ms for a small
+     * one). The read index is a property of the group, not the lane. */
+    uint8_t seen = (uint8_t)(1u << ig);
     for (i = 0; i < EFS_META_LANES; i++) {
         uint32_t lsh;
         uint8_t lg;
@@ -4480,8 +4488,9 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
             continue;
         lsh = efs_kv_lane_shard(ino, (uint8_t)i);
         lg = efs_raft_shard_group(lsh);
-        if (lg == ig)
+        if (lg == ig || (seen & (1u << lg)))
             continue;
+        seen |= (uint8_t)(1u << lg);
         /* This host has no view of the lane's group. host_read_index
          * would return NOT_PRIMARY with hint -1 (!v.has), and the client
          * cannot follow that. Name a dual host instead. */
@@ -5224,10 +5233,18 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
  * holding it across every raft RTT starved LOOKUP/CREATE — the posix
  * jobs=16 collapse). Scans and fragment I/O stay outside every host lock. */
 
-#define GC_SCAN_MAX   32 /* records collected per GC pass */
-#define REAP_SCAN_MAX 32 /* markers collected per REAP pass */
-#define GC_ACK_MAX    16 /* items per GC_ACK entry (3+22*16=355 <= 512) */
+/* Sep 30: one scan of 32 records and one 16-ack entry per group per
+ * second reclaimed 16 fragments/s — 21 hours for one 100 GiB file (2.46M
+ * fragments), while every scan held the KV lock. A scan is paid per
+ * segment opened, not per record, so it collects 256; the pass repeats
+ * while the scan is full and the budget lasts, yielding the lock between
+ * scans; an entry carries 128 acks (3+22*128 = 2819 B, no wire cap). */
+#define GC_SCAN_MAX   256 /* records collected per scan */
+#define REAP_SCAN_MAX 32  /* markers collected per REAP pass */
+#define GC_ACK_MAX    EFS_META_GC_ACK_MAX /* 128 items per GC_ACK entry */
 #define GC_LOOP_MS    1000
+#define GC_FRAG_BUDGET_US 200000 /* frag work per group per loop */
+#define GC_FRAG_YIELD_US  1000   /* between scans: let the apply have l->mu */
 
 #define GC_KEY_LEN   24u /* [anchor:2][GC:1][ino:8][gen:8][lane:1][ci:4] */
 #define REAP_KEY_LEN 11u /* [anchor:2][REAP:1][ino:8] */
@@ -5860,57 +5877,88 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
 
 /* GC pass over one group's anchor shard: delete fragments for each dead
  * chunk generation, then batch the acks into one GC_ACK entry. */
+static int host_gc_ack_flush(struct efs_raft_host *h, uint8_t group,
+                             struct efs_gc_ack_item *acks, int *nack)
+{
+    uint8_t cmd[3 + GC_ACK_MAX * 22];
+    int j, off = 3, rc;
+
+    if (*nack <= 0)
+        return EFS_OK;
+    cmd[0] = EFS_MD_CMD_GC_ACK;
+    cmd[1] = (uint8_t)(*nack >> 8);
+    cmd[2] = (uint8_t)*nack;
+    for (j = 0; j < *nack; j++) {
+        wr64be(cmd + off, acks[j].ino);
+        wr64be(cmd + off + 8, acks[j].gen);
+        cmd[off + 16] = acks[j].lane;
+        wr32be(cmd + off + 17, acks[j].ci);
+        cmd[off + 21] = acks[j].frag;
+        off += 22;
+    }
+    rc = host_gc_propose(h, group, cmd, (uint32_t)off);
+    *nack = 0;
+    return rc;
+}
+
 static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
                               uint32_t anchor)
 {
-    struct gc_scan_ctx c;
+    static struct gc_scan_ctx c; /* one GC thread; 35 KB */
     struct efs_gc_ack_item acks[GC_ACK_MAX];
-    struct efs_export *ex;
+    struct efs_export *ex = NULL;
     uint8_t prefix[3];
     uint32_t plen = 0;
-    int nack = 0;
+    uint64_t t0 = now_us_();
+    int nack = 0, scans = 0, recs = 0;
     int i;
 
     int prc, src;
 
     prc = efs_kv_key_gc_prefix(anchor, prefix, &plen);
-    memset(&c, 0, sizeof(c));
-    src = (prc == EFS_OK)
-          ? efs_kv_scan_prefix(h->kv, prefix, plen, gc_scan_cb, &c)
-          : -999;
-    ex = host_gc_export(h);
-    if (env_on("EFS_GC_DBG"))
-        fprintf(stderr, "raft-host: gc frag pass group=%u anchor=%u prc=%d src=%d records=%d ex=%p\n",
-                group, anchor, prc, src, c.n, (void *)ex);
-    /* src > 0 is the scan callback's "batch full" stop, not an error. */
-    if (prc != EFS_OK || src < 0 || c.n == 0) {
-        if (ex)
-            server_export_put(h->s, ex);
+    if (prc != EFS_OK)
         return;
-    }
-    if (!ex)
-        return; /* no export yet (pre-mkfs): nothing to delete under */
-    for (i = 0; i < c.n && h->gc_running && h->running && nack < GC_ACK_MAX;
-         i++)
-        host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
-    server_export_put(h->s, ex);
-    if (nack > 0) {
-        uint8_t cmd[3 + GC_ACK_MAX * 22];
-        int j, off = 3;
-
-        cmd[0] = EFS_MD_CMD_GC_ACK;
-        cmd[1] = (uint8_t)(nack >> 8);
-        cmd[2] = (uint8_t)nack;
-        for (j = 0; j < nack; j++) {
-            wr64be(cmd + off, acks[j].ino);
-            wr64be(cmd + off + 8, acks[j].gen);
-            cmd[off + 16] = acks[j].lane;
-            wr32be(cmd + off + 17, acks[j].ci);
-            cmd[off + 21] = acks[j].frag;
-            off += 22;
+    for (;;) {
+        memset(&c, 0, sizeof(c));
+        src = efs_kv_scan_prefix(h->kv, prefix, plen, gc_scan_cb, &c);
+        scans++;
+        if (!ex)
+            ex = host_gc_export(h);
+        if (env_on("EFS_GC_DBG"))
+            fprintf(stderr, "raft-host: gc frag pass group=%u anchor=%u prc=%d src=%d records=%d ex=%p\n",
+                    group, anchor, prc, src, c.n, (void *)ex);
+        /* src > 0 is the scan callback's "batch full" stop, not an error.
+         * No export yet (pre-mkfs): nothing to delete under. */
+        if (src < 0 || c.n == 0 || !ex)
+            break;
+        for (i = 0; i < c.n && h->gc_running && h->running; i++) {
+            /* Room for one whole record's acks, so a record is never
+             * split across two entries (the apply folds a record's
+             * fragments within one batch). */
+            if (nack + EFS_NUM_FRAGMENTS > GC_ACK_MAX &&
+                host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
+                goto out;
+            host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
+            recs++;
         }
-        (void)host_gc_propose(h, group, cmd, (uint32_t)off);
+        if (host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
+            break;
+        /* The records just acked are still in the KV until the entry
+         * applies; a rescan now would re-delete them (harmless, wasted).
+         * Stop when the scan was not full, the budget is spent, or the
+         * host is going down; otherwise yield the KV lock and rescan. */
+        if (!c.full || !h->gc_running || !h->running ||
+            now_us_() - t0 > GC_FRAG_BUDGET_US)
+            break;
+        usleep(GC_FRAG_YIELD_US);
     }
+out:
+    if (ex)
+        server_export_put(h->s, ex);
+    if (recs > 0 && env_on("EFS_RAFT_OBS"))
+        fprintf(stderr, "raft-host: gc-frag group=%u scans=%d records=%d ms=%llu\n",
+                group, scans, recs,
+                (unsigned long long)((now_us_() - t0) / 1000));
 }
 
 static void host_dir_spread_pass(struct efs_raft_host *h);
@@ -6154,11 +6202,15 @@ static void *host_gc_thread(void *arg)
     int g;
 
     while (h->gc_running) {
+        uint64_t t0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
+
         host_snap_export_pass(h);
         host_snap_import_pass(h);
+        t0 = now_us_();
         for (g = 0; g < HOST_NGROUPS && h->gc_running; g++) {
             uint32_t anchor;
             int lead = 0;
+            uint64_t ta;
 
             if (!h->g[g].hosted)
                 continue;
@@ -6175,11 +6227,31 @@ static void *host_gc_thread(void *arg)
             /* Group 0 owns the odd shards (anchor 1), group 2 the even
              * ones (anchor 2) — efs_kv_anchor_shard's parity rule. */
             anchor = (h->g[g].group == 0) ? 1u : 2u;
+            ta = now_us_();
             host_gc_reap_pass(h, h->g[g].group, anchor);
+            t_reap += now_us_() - ta;
+            ta = now_us_();
             host_gc_frag_pass(h, h->g[g].group, anchor);
+            t_frag += now_us_() - ta;
         }
+        t_spread = now_us_();
         host_dir_spread_pass(h);
+        t_spread = now_us_() - t_spread;
+        t_rec = now_us_();
         host_txn_recover_pass(h);
+        t_rec = now_us_() - t_rec;
+        t_all = now_us_() - t0;
+        /* A pass that holds the KV for a while is a periodic stall on
+         * every metadata op (Sep 30: du/find on fstor007 stalled 14 ms
+         * once per 1.014 s). Name the slow part. */
+        if (t_all > 5000)
+            fprintf(stderr, "raft-host: gc-pass ms=%llu reap=%llu frag=%llu "
+                    "spread=%llu recover=%llu\n",
+                    (unsigned long long)(t_all / 1000),
+                    (unsigned long long)(t_reap / 1000),
+                    (unsigned long long)(t_frag / 1000),
+                    (unsigned long long)(t_spread / 1000),
+                    (unsigned long long)(t_rec / 1000));
         /* ~1s between passes, in 20 ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
         for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++) {

@@ -3976,21 +3976,48 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
     return efs_kv_batch(kv, it, n);
 }
 
+struct gc_ack_scratch {
+    struct efs_kv_item batch[EFS_META_GC_ACK_MAX];
+    uint8_t keys[EFS_META_GC_ACK_MAX][EFS_KV_KEY_MAX];
+    uint8_t vals[EFS_META_GC_ACK_MAX][EFS_META_GC_VAL];
+    uint8_t retired[EFS_META_GC_ACK_MAX];
+};
+
+static int gc_ack_apply(struct efs_kv *kv, const struct efs_gc_ack_item *it,
+                        uint32_t n, struct gc_ack_scratch *sc);
+
 int efs_meta_apply_gc_ack(struct efs_kv *kv, const struct efs_gc_ack_item *it,
                           uint32_t n)
 {
-    struct efs_kv_item batch[16];
-    uint8_t keys[16][EFS_KV_KEY_MAX];
-    uint8_t vals[16][EFS_META_GC_VAL];
-    uint8_t retired[16];
-    uint32_t i, j, bn = 0;
+    struct gc_ack_scratch *sc;
     int rc;
 
     if (!kv || (!it && n))
         return EFS_ERR_INVAL;
-    if (n > 16)
+    if (n > EFS_META_GC_ACK_MAX)
         return EFS_ERR_INVAL;
-    memset(retired, 0, sizeof(retired));
+    if (n == 0)
+        return EFS_OK;
+    /* ~60 KB: off the apply thread's stack. */
+    sc = malloc(sizeof(*sc));
+    if (!sc)
+        return EFS_ERR_NOMEM;
+    rc = gc_ack_apply(kv, it, n, sc);
+    free(sc);
+    return rc;
+}
+
+static int gc_ack_apply(struct efs_kv *kv, const struct efs_gc_ack_item *it,
+                        uint32_t n, struct gc_ack_scratch *sc)
+{
+    struct efs_kv_item *batch = sc->batch;
+    uint8_t (*keys)[EFS_KV_KEY_MAX] = sc->keys;
+    uint8_t (*vals)[EFS_META_GC_VAL] = sc->vals;
+    uint8_t *retired = sc->retired;
+    uint32_t i, j, bn = 0;
+    int rc;
+
+    memset(retired, 0, EFS_META_GC_ACK_MAX);
     for (i = 0; i < n; i++) {
         efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
         uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];

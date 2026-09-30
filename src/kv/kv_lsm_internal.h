@@ -254,6 +254,9 @@ int kv_seg_excludes(struct kv_seg *s, const uint8_t *seek, uint32_t slen,
                     const uint8_t *prefix, uint32_t plen);
 
 int kv_seg_iter_open(struct kv_seg *s, struct kv_seg_iter **out);
+/* 1 MiB readahead for a reader that walks the whole segment (compaction,
+ * snapshot export). Off by default: a prefix scan reads one block. */
+void kv_seg_iter_set_seq(struct kv_seg_iter *it, int seq);
 void kv_seg_iter_close(struct kv_seg_iter *it);
 /* Positions at the first key >= seek (whole segment when plen is 0). */
 int kv_seg_iter_seek(struct kv_seg_iter *it, const uint8_t *seek, uint32_t plen);

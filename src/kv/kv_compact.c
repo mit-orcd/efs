@@ -553,6 +553,7 @@ int kv_compact_locked(struct kv_lsm *l, int async)
         rc = kv_seg_iter_open(priv[i], &src[nsrc].it);
         if (rc != EFS_OK)
             goto out;
+        kv_seg_iter_set_seq(src[nsrc].it, 1);
         nsrc++;
     }
     for (i = 0; i < nsrc; i++) {

@@ -557,7 +557,9 @@ struct efs_gc_ack_item {
 /* EFS_MD_CMD_GC_ACK: fragment `frag` of each item was deleted (or was
  * already gone) on its target node. Sets the ack bit; when all
  * EFS_NUM_FRAGMENTS bits are set the GC record is deleted. Missing records
- * are skipped (replay after retirement). */
+ * are skipped (replay after retirement). At most EFS_META_GC_ACK_MAX items
+ * per entry (was 16; entries written before Sep 30 2026 are all under it). */
+#define EFS_META_GC_ACK_MAX 128
 int efs_meta_apply_gc_ack(struct efs_kv *kv, const struct efs_gc_ack_item *it,
                           uint32_t n);
 

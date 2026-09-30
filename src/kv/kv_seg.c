@@ -799,11 +799,22 @@ struct kv_seg_iter {
     uint8_t *blk;
     uint32_t blk_len;
     int loaded;
-    /* Sequential readahead for compaction. Point gets do not use this. */
+    /* Sequential readahead for compaction and snapshot export, enabled
+     * by kv_seg_iter_set_seq. A prefix scan under the LSM lock reads
+     * one block: with the 1 MiB window on every iterator, one stat of a
+     * 64-lane file pulled 28 MiB through pread (Sep 30, fcstor004
+     * strace: 1048576-byte preads, 150 µs each, ~4 ms per stat). */
+    int seq;
     uint8_t *ra;
     uint64_t ra_off;
     uint32_t ra_len;
 };
+
+void kv_seg_iter_set_seq(struct kv_seg_iter *it, int seq)
+{
+    if (it)
+        it->seq = seq;
+}
 
 int kv_seg_iter_open(struct kv_seg *s, struct kv_seg_iter **out)
 {
@@ -857,9 +868,10 @@ static int iter_load(struct kv_seg_iter *it)
     if (it->ra && r->off >= it->ra_off &&
         r->off + r->len <= it->ra_off + it->ra_len) {
         memcpy(it->blk, it->ra + (uint32_t)(r->off - it->ra_off), r->len);
-    } else if (r->len > (1u << 20)) {
-        /* Entries never split, so one value up to KV_LSM_VLEN_MAX is one
-         * block. Read it whole; the 1 MiB window cannot hold it. */
+    } else if (!it->seq || r->len > (1u << 20)) {
+        /* One block. Entries never split, so one value up to
+         * KV_LSM_VLEN_MAX is one block; a scan reads exactly what it
+         * needs. The 1 MiB window is for the sequential readers only. */
         if (pread_all(it->s->fd, it->blk, r->len, r->off) != EFS_OK)
             return EFS_ERR_IO;
     } else {
