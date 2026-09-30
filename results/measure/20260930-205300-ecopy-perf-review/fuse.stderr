@@ -1,0 +1,4 @@
+[ perf record: Woken up 87164828 times to write data ]
+Warning:
+8 out of order events recorded.
+[ perf record: Captured and wrote 2232.780 MB /home/erbmi1/orcd/scratch/efs/perf/efs-mount/fuse.data (13054269 samples) ]

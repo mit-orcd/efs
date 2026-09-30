@@ -1,0 +1,1097 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 13M of event 'cycles:P'
+# Event count (approx.): 18442602460630
+#
+# Children      Self  Symbol                                          
+# ........  ........  ................................................
+#
+    60.83%     0.00%  [.] start_thread
+            |          
+             --60.83%--start_thread
+
+    33.04%    31.63%  [.] stage_evict_main
+            |          
+             --32.98%--stage_evict_main
+                       |          
+                        --32.97%--start_thread
+
+    26.02%     0.00%  [.] 0x0000746e756f6d2d
+    26.02%     0.00%  [.] 0x0000000300000000
+            |
+            ---0x746e756f6d2d
+
+    21.76%     0.19%  [k] entry_SYSCALL_64_after_hwframe
+            |          
+             --21.59%--entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--4.42%--__poll
+                       |          |          
+                       |          |--1.54%--start_thread
+                       |          |          
+                       |          |--1.47%--efs_client_put_fragments_parallel
+                       |          |          |          
+                       |          |           --1.46%--dcache_put_now.constprop.0
+                       |          |                     |          
+                       |          |                     |--0.90%--put_pool_thread
+                       |          |                     |          start_thread
+                       |          |                     |          
+                       |          |                      --0.54%--dcache_flush_slot_inner.constprop.0
+                       |          |          
+                       |           --1.41%--conn_rdma_frame.constprop.0
+                       |                     |          
+                       |                      --0.92%--efs_conn_recv_msg
+                       |                                |          
+                       |                                 --0.61%--rpc_send_recv_shard
+                       |          
+                       |--3.92%--read
+                       |          |          
+                       |           --3.00%--0x300000000
+                       |                     0x746e756f6d2d
+                       |          
+                       |--3.55%--__GI___lll_lock_wait
+                       |          
+                       |--2.10%--__GI___lll_lock_wake
+                       |          
+                       |--1.80%--clone3
+                       |          
+                       |--1.58%--__libc_recv
+                       |          |          
+                       |           --1.38%--efs_recv_msg
+                       |                     |          
+                       |                      --1.38%--efs_conn_recv_msg
+                       |                                |          
+                       |                                 --1.37%--efs_client_rpc_getchunks
+                       |                                           pull_chunks_range.part.0
+                       |                                           |          
+                       |                                            --0.70%--efs_client_read
+                       |                                                      efs_fuse_read_ino
+                       |                                                      ll_read
+                       |                                                      0x7f375a9ae1fa
+                       |          
+                       |--1.50%--__GI___libc_write
+                       |          |          
+                       |           --1.50%--recv_poller
+                       |                     start_thread
+                       |          
+                       |--0.87%--__futex_abstimed_wait_common
+                       |          
+                        --0.69%--__GI___writev
+                                  |          
+                                   --0.66%--0x10
+
+    21.61%     0.41%  [k] do_syscall_64
+            |          
+             --21.40%--do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--4.38%--__poll
+                       |          |          
+                       |          |--1.52%--start_thread
+                       |          |          
+                       |          |--1.46%--efs_client_put_fragments_parallel
+                       |          |          |          
+                       |          |           --1.46%--dcache_put_now.constprop.0
+                       |          |                     |          
+                       |          |                     |--0.90%--put_pool_thread
+                       |          |                     |          start_thread
+                       |          |                     |          
+                       |          |                      --0.53%--dcache_flush_slot_inner.constprop.0
+                       |          |          
+                       |           --1.40%--conn_rdma_frame.constprop.0
+                       |                     |          
+                       |                      --0.91%--efs_conn_recv_msg
+                       |                                |          
+                       |                                 --0.61%--rpc_send_recv_shard
+                       |          
+                       |--3.89%--read
+                       |          |          
+                       |           --2.99%--0x300000000
+                       |                     0x746e756f6d2d
+                       |          
+                       |--3.50%--__GI___lll_lock_wait
+                       |          
+                       |--2.07%--__GI___lll_lock_wake
+                       |          
+                       |--1.80%--clone3
+                       |          
+                       |--1.58%--__libc_recv
+                       |          |          
+                       |           --1.37%--efs_recv_msg
+                       |                     |          
+                       |                      --1.37%--efs_conn_recv_msg
+                       |                                |          
+                       |                                 --1.37%--efs_client_rpc_getchunks
+                       |                                           pull_chunks_range.part.0
+                       |                                           |          
+                       |                                            --0.70%--efs_client_read
+                       |                                                      efs_fuse_read_ino
+                       |                                                      ll_read
+                       |                                                      0x7f375a9ae1fa
+                       |          
+                       |--1.49%--__GI___libc_write
+                       |          |          
+                       |           --1.49%--recv_poller
+                       |                     start_thread
+                       |          
+                       |--0.86%--__futex_abstimed_wait_common
+                       |          
+                        --0.68%--__GI___writev
+                                  |          
+                                   --0.66%--0x10
+
+    17.68%     0.05%  [.] dcache_put_now.constprop.0
+            |          
+             --17.63%--dcache_put_now.constprop.0
+                       |          
+                       |--11.20%--put_pool_thread
+                       |          start_thread
+                       |          
+                        --6.16%--dcache_flush_slot_inner.constprop.0
+                                  |          
+                                   --5.67%--dcache_reclaim_main
+                                             start_thread
+
+    12.22%     0.02%  [.] put_pool_thread
+            |          
+             --12.21%--put_pool_thread
+                       |          
+                        --12.21%--start_thread
+
+    11.39%    10.67%  [.] __memmove_avx512_unaligned_erms
+            |          
+             --11.05%--__memmove_avx512_unaligned_erms
+                       |          
+                       |--2.64%--efs_rdma_send_frame
+                       |          |          
+                       |           --2.64%--efs_conn_send_msg_parts
+                       |                     put_fragments_parallel_once
+                       |                     efs_client_put_fragments_parallel
+                       |                     |          
+                       |                      --2.63%--dcache_put_now.constprop.0
+                       |                                |          
+                       |                                |--1.40%--put_pool_thread
+                       |                                |          start_thread
+                       |                                |          
+                       |                                 --1.19%--dcache_flush_slot_inner.constprop.0
+                       |                                           |          
+                       |                                            --1.09%--dcache_reclaim_main
+                       |                                                      start_thread
+                       |          
+                       |--2.19%--efs_client_get_fragment.part.0
+                       |          |          
+                       |           --2.15%--frag_pool_thread
+                       |                     start_thread
+                       |          
+                        --0.88%--fetch_published_once
+                                  efs_client_fetch_published_chunk_obs
+                                  chunk_get_worker.isra.0
+                                  |          
+                                   --0.88%--efs_client_read
+                                             efs_fuse_read_ino
+                                             ll_read
+                                             0x7f375a9ae1fa
+
+     9.26%     0.00%  [.] ll_read
+            |          
+             --9.25%--ll_read
+                       |          
+                        --9.25%--0x7f375a9ae1fa
+
+     9.25%     0.00%  [.] efs_fuse_read_ino
+            |          
+             --9.25%--efs_fuse_read_ino
+                       |          
+                        --9.25%--ll_read
+                                  |          
+                                   --9.25%--0x7f375a9ae1fa
+
+     9.25%     0.00%  [.] 0x00007f375a9ae1fa
+     9.03%     0.01%  [.] efs_client_read
+            |          
+             --9.02%--efs_client_read
+                       |          
+                        --9.02%--efs_fuse_read_ino
+                                  ll_read
+                                  |          
+                                   --9.02%--0x7f375a9ae1fa
+
+     8.12%     0.00%  [.] pull_chunks_range.part.0
+            |          
+             --8.12%--pull_chunks_range.part.0
+                       |          
+                       |--4.58%--pull_fan_thread
+                       |          |          
+                       |          |--3.29%--pull_groups_parallel.part.0
+                       |          |          efs_client_pull_layout_miss
+                       |          |          efs_client_read
+                       |          |          efs_fuse_read_ino
+                       |          |          ll_read
+                       |          |          0x7f375a9ae1fa
+                       |          |          
+                       |           --1.29%--start_thread
+                       |          
+                       |--1.96%--efs_client_pull_layout_miss
+                       |          |          
+                       |           --1.96%--efs_client_read
+                       |                     efs_fuse_read_ino
+                       |                     ll_read
+                       |                     0x7f375a9ae1fa
+                       |          
+                        --1.58%--efs_client_read
+                                  |          
+                                   --1.58%--efs_fuse_read_ino
+                                             ll_read
+                                             |          
+                                              --1.58%--0x7f375a9ae1fa
+
+     7.48%     0.01%  [.] efs_dcache_flush_ino
+            |          
+             --7.48%--efs_dcache_flush_ino
+                       |          
+                       |--5.55%--ll_flush
+                       |          0x7f375a9ae361
+                       |          
+                        --1.92%--efs_append_flush_report.constprop.0
+                                  ll_setattr
+                                  0x7f375a9add8e
+
+     7.39%     0.03%  [.] dcache_flush_ino_pass
+            |          
+             --7.37%--dcache_flush_ino_pass
+                       |          
+                        --7.37%--efs_dcache_flush_ino
+                                  |          
+                                  |--5.48%--ll_flush
+                                  |          0x7f375a9ae361
+                                  |          
+                                   --1.89%--efs_append_flush_report.constprop.0
+                                             ll_setattr
+                                             0x7f375a9add8e
+
+     6.82%     0.12%  [.] dcache_flush_slot_inner.constprop.0
+            |          
+             --6.79%--dcache_flush_slot_inner.constprop.0
+                       |          
+                       |--6.19%--dcache_reclaim_main
+                       |          start_thread
+                       |          
+                        --0.58%--efs_dcache_maybe_reclaim
+                                  ll_write_buf
+                                  0x7f375a9bb0f8
+
+     6.80%     6.60%  [.] efs_dcache_yield_extra
+            |          
+             --6.09%--efs_dcache_yield_extra
+                       |          
+                       |--4.82%--apply_chunk_recs
+                       |          pull_chunks_range.part.0
+                       |          |          
+                       |          |--3.50%--pull_fan_thread
+                       |          |          |          
+                       |          |          |--2.57%--pull_groups_parallel.part.0
+                       |          |          |          efs_client_pull_layout_miss
+                       |          |          |          efs_client_read
+                       |          |          |          efs_fuse_read_ino
+                       |          |          |          ll_read
+                       |          |          |          0x7f375a9ae1fa
+                       |          |          |          
+                       |          |           --0.93%--start_thread
+                       |          |          
+                       |           --1.07%--efs_client_pull_layout_miss
+                       |                     efs_client_read
+                       |                     efs_fuse_read_ino
+                       |                     ll_read
+                       |                     0x7f375a9ae1fa
+                       |          
+                        --1.27%--efs_client_set_chunk
+                                  |          
+                                   --1.26%--dcache_put_now.constprop.0
+                                             |          
+                                              --0.84%--put_pool_thread
+                                                        start_thread
+
+     6.43%     6.31%  [.] dcache_steal_dirty.constprop.0
+            |          
+             --6.12%--dcache_steal_dirty.constprop.0
+                       |          
+                        --6.11%--dcache_flush_ino_pass
+                                  efs_dcache_flush_ino
+                                  |          
+                                  |--4.84%--ll_flush
+                                  |          0x7f375a9ae361
+                                  |          
+                                   --1.27%--efs_append_flush_report.constprop.0
+                                             ll_setattr
+                                             0x7f375a9add8e
+
+     6.28%     0.02%  [.] dcache_reclaim_main
+            |          
+             --6.27%--dcache_reclaim_main
+                       |          
+                        --6.27%--start_thread
+
+     6.20%     0.01%  [.] efs_client_put_fragments_parallel
+            |          
+             --6.20%--efs_client_put_fragments_parallel
+                       |          
+                        --6.16%--dcache_put_now.constprop.0
+                                  |          
+                                  |--3.66%--put_pool_thread
+                                  |          start_thread
+                                  |          
+                                   --2.41%--dcache_flush_slot_inner.constprop.0
+                                             |          
+                                              --2.19%--dcache_reclaim_main
+                                                        start_thread
+
+     5.81%     0.00%  [.] 0x00007f375a9ae361
+     5.79%     0.00%  [.] ll_flush
+            |          
+             --5.79%--ll_flush
+                       |          
+                        --5.79%--0x7f375a9ae361
+
+     5.64%     0.01%  [.] apply_chunk_recs
+            |          
+             --5.63%--apply_chunk_recs
+                       |          
+                        --5.63%--pull_chunks_range.part.0
+                                  |          
+                                  |--4.03%--pull_fan_thread
+                                  |          |          
+                                  |          |--2.91%--pull_groups_parallel.part.0
+                                  |          |          efs_client_pull_layout_miss
+                                  |          |          efs_client_read
+                                  |          |          efs_fuse_read_ino
+                                  |          |          ll_read
+                                  |          |          0x7f375a9ae1fa
+                                  |          |          
+                                  |           --1.12%--start_thread
+                                  |          
+                                   --1.26%--efs_client_pull_layout_miss
+                                             efs_client_read
+                                             efs_fuse_read_ino
+                                             ll_read
+                                             0x7f375a9ae1fa
+
+     5.48%     0.12%  [k] __x64_sys_futex
+            |          
+             --5.38%--__x64_sys_futex
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--2.68%--__GI___lll_lock_wait
+                       |          
+                       |--1.78%--__GI___lll_lock_wake
+                       |          
+                        --0.61%--__futex_abstimed_wait_common
+
+     5.36%     0.07%  [k] do_futex
+            |          
+             --5.30%--do_futex
+                       |          
+                        --5.29%--__x64_sys_futex
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  |          
+                                  |--2.63%--__GI___lll_lock_wait
+                                  |          
+                                  |--1.77%--__GI___lll_lock_wake
+                                  |          
+                                   --0.60%--__futex_abstimed_wait_common
+
+     5.29%     0.01%  [.] efs_client_pull_layout_miss
+            |          
+             --5.29%--efs_client_pull_layout_miss
+                       |          
+                        --5.29%--efs_client_read
+                                  efs_fuse_read_ino
+                                  ll_read
+                                  0x7f375a9ae1fa
+
+     5.14%     0.02%  [.] efs_hash
+            |          
+             --5.11%--efs_hash
+                       |          
+                       |--3.29%--hash_write_fragments
+                       |          |          
+                       |           --3.28%--dcache_put_now.constprop.0
+                       |                     |          
+                       |                     |--1.88%--put_pool_thread
+                       |                     |          start_thread
+                       |                     |          
+                       |                      --1.33%--dcache_flush_slot_inner.constprop.0
+                       |                                |          
+                       |                                 --1.22%--dcache_reclaim_main
+                       |                                           start_thread
+                       |          
+                        --1.65%--dcache_put_now.constprop.0
+                                  |          
+                                  |--0.96%--put_pool_thread
+                                  |          start_thread
+                                  |          
+                                   --0.67%--dcache_flush_slot_inner.constprop.0
+                                             |          
+                                              --0.60%--dcache_reclaim_main
+                                                        start_thread
+
+     4.82%     0.08%  [.] blake3_hasher_update.part.0
+            |          
+             --4.75%--blake3_hasher_update.part.0
+                       |          
+                        --4.75%--efs_hash
+                                  |          
+                                  |--3.22%--hash_write_fragments
+                                  |          |          
+                                  |           --3.21%--dcache_put_now.constprop.0
+                                  |                     |          
+                                  |                     |--1.84%--put_pool_thread
+                                  |                     |          start_thread
+                                  |                     |          
+                                  |                      --1.31%--dcache_flush_slot_inner.constprop.0
+                                  |                                |          
+                                  |                                 --1.20%--dcache_reclaim_main
+                                  |                                           start_thread
+                                  |          
+                                   --1.48%--dcache_put_now.constprop.0
+                                             |          
+                                             |--0.85%--put_pool_thread
+                                             |          start_thread
+                                             |          
+                                              --0.60%--dcache_flush_slot_inner.constprop.0
+                                                        |          
+                                                         --0.54%--dcache_reclaim_main
+                                                                   start_thread
+
+     4.61%     0.00%  [.] pull_fan_thread
+            |          
+             --4.61%--pull_fan_thread
+                       |          
+                       |--3.31%--pull_groups_parallel.part.0
+                       |          efs_client_pull_layout_miss
+                       |          efs_client_read
+                       |          efs_fuse_read_ino
+                       |          ll_read
+                       |          0x7f375a9ae1fa
+                       |          
+                        --1.30%--start_thread
+
+     4.55%     4.41%  [.] blake3_hash_many_avx512
+            |          
+             --4.41%--blake3_hash_many_avx512
+                       |          
+                        --4.32%--blake3_compress_subtree_wide
+                                  |          
+                                   --4.25%--blake3_compress_subtree_wide
+                                             |          
+                                              --4.10%--blake3_compress_subtree_wide
+                                                        |          
+                                                         --4.10%--blake3_hasher_update.part.0
+                                                                   efs_hash
+                                                                   |          
+                                                                   |--2.79%--hash_write_fragments
+                                                                   |          |          
+                                                                   |           --2.79%--dcache_put_now.constprop.0
+                                                                   |                     |          
+                                                                   |                     |--1.57%--put_pool_thread
+                                                                   |                     |          start_thread
+                                                                   |                     |          
+                                                                   |                      --1.17%--dcache_flush_slot_inner.constprop.0
+                                                                   |                                |          
+                                                                   |                                 --1.07%--dcache_reclaim_main
+                                                                   |                                           start_thread
+                                                                   |          
+                                                                    --1.31%--dcache_put_now.constprop.0
+                                                                              |          
+                                                                              |--0.76%--put_pool_thread
+                                                                              |          start_thread
+                                                                              |          
+                                                                               --0.53%--dcache_flush_slot_inner.constprop.0
+
+     4.54%     0.07%  [k] schedule
+            |          
+             --4.47%--schedule
+                       |          
+                       |--2.21%--futex_do_wait
+                       |          __futex_wait
+                       |          futex_wait
+                       |          do_futex
+                       |          __x64_sys_futex
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          |          
+                       |           --1.70%--__GI___lll_lock_wait
+                       |          
+                        --1.89%--schedule_hrtimeout_range_clock
+                                  poll_schedule_timeout.constprop.0
+                                  do_poll.constprop.0
+                                  do_sys_poll
+                                  __x64_sys_poll
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  |          
+                                   --1.89%--__poll
+                                             |          
+                                             |--0.72%--start_thread
+                                             |          
+                                             |--0.61%--efs_client_put_fragments_parallel
+                                             |          |          
+                                             |           --0.60%--dcache_put_now.constprop.0
+                                             |          
+                                              --0.57%--conn_rdma_frame.constprop.0
+
+     4.53%     0.03%  [.] __poll
+            |          
+             --4.50%--__poll
+                       |          
+                       |--1.57%--start_thread
+                       |          
+                       |--1.50%--efs_client_put_fragments_parallel
+                       |          |          
+                       |           --1.50%--dcache_put_now.constprop.0
+                       |                     |          
+                       |                     |--0.92%--put_pool_thread
+                       |                     |          start_thread
+                       |                     |          
+                       |                      --0.55%--dcache_flush_slot_inner.constprop.0
+                       |          
+                        --1.43%--conn_rdma_frame.constprop.0
+                                  |          
+                                   --0.93%--efs_conn_recv_msg
+                                             |          
+                                              --0.62%--rpc_send_recv_shard
+
+     4.51%     0.05%  [.] blake3_compress_subtree_wide
+            |          
+             --4.46%--blake3_compress_subtree_wide
+                       |          
+                        --4.34%--blake3_compress_subtree_wide
+                                  |          
+                                   --4.13%--blake3_compress_subtree_wide
+                                             |          
+                                              --4.13%--blake3_hasher_update.part.0
+                                                        efs_hash
+                                                        |          
+                                                        |--2.81%--hash_write_fragments
+                                                        |          |          
+                                                        |           --2.81%--dcache_put_now.constprop.0
+                                                        |                     |          
+                                                        |                     |--1.58%--put_pool_thread
+                                                        |                     |          start_thread
+                                                        |                     |          
+                                                        |                      --1.17%--dcache_flush_slot_inner.constprop.0
+                                                        |                                |          
+                                                        |                                 --1.07%--dcache_reclaim_main
+                                                        |                                           start_thread
+                                                        |          
+                                                         --1.32%--dcache_put_now.constprop.0
+                                                                   |          
+                                                                   |--0.76%--put_pool_thread
+                                                                   |          start_thread
+                                                                   |          
+                                                                    --0.54%--dcache_flush_slot_inner.constprop.0
+
+     4.48%     0.19%  [k] __schedule
+            |          
+             --4.31%--__schedule
+                       |          
+                        --4.31%--schedule
+                                  |          
+                                  |--2.13%--futex_do_wait
+                                  |          __futex_wait
+                                  |          futex_wait
+                                  |          do_futex
+                                  |          __x64_sys_futex
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          |          
+                                  |           --1.65%--__GI___lll_lock_wait
+                                  |          
+                                   --1.83%--schedule_hrtimeout_range_clock
+                                             poll_schedule_timeout.constprop.0
+                                             do_poll.constprop.0
+                                             do_sys_poll
+                                             __x64_sys_poll
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             |          
+                                              --1.83%--__poll
+                                                        |          
+                                                        |--0.70%--start_thread
+                                                        |          
+                                                        |--0.59%--efs_client_put_fragments_parallel
+                                                        |          |          
+                                                        |           --0.58%--dcache_put_now.constprop.0
+                                                        |          
+                                                         --0.55%--conn_rdma_frame.constprop.0
+
+     4.42%     0.07%  [.] put_fragments_parallel_once
+            |          
+             --4.34%--put_fragments_parallel_once
+                       |          
+                        --4.34%--efs_client_put_fragments_parallel
+                                  |          
+                                   --4.31%--dcache_put_now.constprop.0
+                                             |          
+                                             |--2.48%--put_pool_thread
+                                             |          start_thread
+                                             |          
+                                              --1.77%--dcache_flush_slot_inner.constprop.0
+                                                        |          
+                                                         --1.62%--dcache_reclaim_main
+                                                                   start_thread
+
+     4.35%     4.27%  [.] xor_into
+            |          
+             --4.26%--xor_into
+                       |          
+                        --4.26%--efs_encode_chunk
+                                  |          
+                                   --4.25%--dcache_put_now.constprop.0
+                                             |          
+                                             |--3.24%--put_pool_thread
+                                             |          start_thread
+                                             |          
+                                              --0.96%--dcache_flush_slot_inner.constprop.0
+                                                        |          
+                                                         --0.90%--dcache_reclaim_main
+                                                                   start_thread
+
+     4.27%     0.01%  [.] efs_encode_chunk
+            |          
+             --4.26%--efs_encode_chunk
+                       |          
+                        --4.26%--dcache_put_now.constprop.0
+                                  |          
+                                  |--3.24%--put_pool_thread
+                                  |          start_thread
+                                  |          
+                                   --0.96%--dcache_flush_slot_inner.constprop.0
+                                             |          
+                                              --0.90%--dcache_reclaim_main
+                                                        start_thread
+
+     4.16%     0.06%  [.] read
+            |          
+             --4.10%--read
+                       |          
+                       |--3.03%--0x300000000
+                       |          0x746e756f6d2d
+                       |          
+                        --0.55%--conn_rdma_frame.constprop.0
+
+     3.82%     0.30%  [k] do_sys_poll
+            |          
+             --3.54%--do_sys_poll
+                       __x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --3.54%--__poll
+                                  |          
+                                  |--1.21%--efs_client_put_fragments_parallel
+                                  |          |          
+                                  |           --1.21%--dcache_put_now.constprop.0
+                                  |                     |          
+                                  |                      --0.75%--put_pool_thread
+                                  |                                start_thread
+                                  |          
+                                  |--1.18%--conn_rdma_frame.constprop.0
+                                  |          |          
+                                  |           --0.75%--efs_conn_recv_msg
+                                  |                     |          
+                                  |                      --0.51%--rpc_send_recv_shard
+                                  |          
+                                   --1.15%--start_thread
+
+     3.82%     0.10%  [.] __GI___lll_lock_wait
+            |          
+             --3.72%--__GI___lll_lock_wait
+
+     3.71%     0.05%  [k] __x64_sys_poll
+            |          
+             --3.67%--__x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --3.67%--__poll
+                                  |          
+                                  |--1.25%--efs_client_put_fragments_parallel
+                                  |          |          
+                                  |           --1.25%--dcache_put_now.constprop.0
+                                  |                     |          
+                                  |                      --0.77%--put_pool_thread
+                                  |                                start_thread
+                                  |          
+                                  |--1.23%--conn_rdma_frame.constprop.0
+                                  |          |          
+                                  |           --0.78%--efs_conn_recv_msg
+                                  |                     |          
+                                  |                      --0.52%--rpc_send_recv_shard
+                                  |          
+                                   --1.20%--start_thread
+
+     3.54%     0.06%  [k] ksys_read
+            |          
+             --3.48%--ksys_read
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --3.48%--read
+                                  |          
+                                   --2.89%--0x300000000
+                                             0x746e756f6d2d
+
+     3.42%     0.08%  [k] vfs_read
+            |          
+             --3.35%--vfs_read
+                       ksys_read
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --3.35%--read
+                                  |          
+                                   --2.87%--0x300000000
+                                             0x746e756f6d2d
+
+     3.40%     0.13%  [k] futex_wait
+            |          
+             --3.26%--futex_wait
+                       do_futex
+                       __x64_sys_futex
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--2.61%--__GI___lll_lock_wait
+                       |          
+                        --0.59%--__futex_abstimed_wait_common
+
+     3.33%     0.01%  [.] hash_write_fragments
+            |          
+             --3.31%--hash_write_fragments
+                       |          
+                        --3.30%--dcache_put_now.constprop.0
+                                  |          
+                                  |--1.90%--put_pool_thread
+                                  |          start_thread
+                                  |          
+                                   --1.33%--dcache_flush_slot_inner.constprop.0
+                                             |          
+                                              --1.22%--dcache_reclaim_main
+                                                        start_thread
+
+     3.32%     0.00%  [.] pull_groups_parallel.part.0
+            |          
+             --3.31%--pull_groups_parallel.part.0
+                       |          
+                        --3.31%--efs_client_pull_layout_miss
+                                  efs_client_read
+                                  efs_fuse_read_ino
+                                  ll_read
+                                  0x7f375a9ae1fa
+
+     3.31%     0.17%  [k] do_poll.constprop.0
+            |          
+             --3.15%--do_poll.constprop.0
+                       do_sys_poll
+                       __x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --3.15%--__poll
+                                  |          
+                                  |--1.06%--conn_rdma_frame.constprop.0
+                                  |          |          
+                                  |           --0.67%--efs_conn_recv_msg
+                                  |          
+                                  |--1.06%--efs_client_put_fragments_parallel
+                                  |          |          
+                                  |           --1.05%--dcache_put_now.constprop.0
+                                  |                     |          
+                                  |                      --0.65%--put_pool_thread
+                                  |                                start_thread
+                                  |          
+                                   --1.03%--start_thread
+
+     3.27%     0.14%  [k] __futex_wait
+            |          
+             --3.18%--__futex_wait
+                       futex_wait
+                       do_futex
+                       __x64_sys_futex
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--2.55%--__GI___lll_lock_wait
+                       |          
+                        --0.58%--__futex_abstimed_wait_common
+
+     3.21%     0.01%  [.] efs_client_get_fragment.part.0
+            |          
+             --3.20%--efs_client_get_fragment.part.0
+                       |          
+                        --3.10%--frag_pool_thread
+                                  start_thread
+
+     3.18%     0.02%  [.] frag_pool_thread
+            |          
+             --3.17%--frag_pool_thread
+                       |          
+                        --3.17%--start_thread
+
+     3.17%     0.01%  [.] efs_conn_recv_msg
+            |          
+             --3.16%--efs_conn_recv_msg
+                       |          
+                       |--2.03%--efs_client_rpc_getchunks
+                       |          pull_chunks_range.part.0
+                       |          |          
+                       |          |--1.07%--efs_client_read
+                       |          |          efs_fuse_read_ino
+                       |          |          ll_read
+                       |          |          0x7f375a9ae1fa
+                       |          |          
+                       |           --0.59%--efs_client_pull_layout_miss
+                       |                     efs_client_read
+                       |                     efs_fuse_read_ino
+                       |                     ll_read
+                       |                     0x7f375a9ae1fa
+                       |          
+                        --1.08%--rpc_send_recv_shard
+                                  |          
+                                   --0.68%--efs_client_rpc_lookup
+                                             |          
+                                              --0.64%--ll_lookup
+                                                        0x7f375a9baf5f
+
+     2.97%     0.07%  [.] conn_rdma_frame.constprop.0
+            |          
+             --2.89%--conn_rdma_frame.constprop.0
+                       |          
+                       |--1.72%--efs_conn_recv_msg
+                       |          |          
+                       |          |--1.04%--rpc_send_recv_shard
+                       |          |          |          
+                       |          |           --0.65%--efs_client_rpc_lookup
+                       |          |                     |          
+                       |          |                      --0.62%--ll_lookup
+                       |          |                                0x7f375a9baf5f
+                       |          |          
+                       |           --0.63%--efs_client_rpc_getchunks
+                       |                     pull_chunks_range.part.0
+                       |          
+                        --0.80%--efs_conn_recv_msg_into
+                                  efs_client_get_fragment.part.0
+                                  |          
+                                   --0.77%--frag_pool_thread
+                                             start_thread
+
+     2.87%     0.07%  [.] efs_rdma_send_frame
+            |          
+             --2.81%--efs_rdma_send_frame
+                       |          
+                        --2.73%--efs_conn_send_msg_parts
+                                  put_fragments_parallel_once
+                                  efs_client_put_fragments_parallel
+                                  |          
+                                   --2.72%--dcache_put_now.constprop.0
+                                             |          
+                                             |--1.47%--put_pool_thread
+                                             |          start_thread
+                                             |          
+                                              --1.22%--dcache_flush_slot_inner.constprop.0
+                                                        |          
+                                                         --1.12%--dcache_reclaim_main
+                                                                   start_thread
+
+     2.86%     0.01%  [k] fuse_dev_read
+            |          
+             --2.85%--fuse_dev_read
+                       vfs_read
+                       ksys_read
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --2.85%--read
+                                  0x300000000
+                                  0x746e756f6d2d
+
+     2.86%     0.08%  [k] fuse_dev_do_read
+            |          
+             --2.80%--fuse_dev_do_read
+                       fuse_dev_read
+                       vfs_read
+                       ksys_read
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --2.80%--read
+                                  0x300000000
+                                  0x746e756f6d2d
+
+     2.82%     0.01%  [.] efs_conn_send_msg_parts
+            |          
+             --2.81%--efs_conn_send_msg_parts
+                       |          
+                        --2.81%--put_fragments_parallel_once
+                                  efs_client_put_fragments_parallel
+                                  |          
+                                   --2.80%--dcache_put_now.constprop.0
+                                             |          
+                                             |--1.51%--put_pool_thread
+                                             |          start_thread
+                                             |          
+                                              --1.25%--dcache_flush_slot_inner.constprop.0
+                                                        |          
+                                                         --1.14%--dcache_reclaim_main
+                                                                   start_thread
+
+     2.45%     0.00%  [.] 0x00007f375a9add8e
+     2.45%     0.00%  [.] ll_setattr
+            |          
+             --2.45%--ll_setattr
+                       |          
+                        --2.45%--0x7f375a9add8e
+
+     2.45%     0.01%  [.] ll_write_buf
+            |          
+             --2.44%--ll_write_buf
+                       |          
+                        --2.43%--0x7f375a9bb0f8
+
+     2.45%     0.00%  [.] 0x00007f375a9bb0f8
+     2.44%     0.11%  [.] __GI___lll_lock_wake
+            |          
+             --2.33%--__GI___lll_lock_wake
+
+     2.28%     0.06%  [k] futex_do_wait
+            |          
+             --2.22%--futex_do_wait
+                       __futex_wait
+                       futex_wait
+                       do_futex
+                       __x64_sys_futex
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --1.71%--__GI___lll_lock_wait
+
+     2.24%     0.02%  [k] poll_schedule_timeout.constprop.0
+            |          
+             --2.22%--poll_schedule_timeout.constprop.0
+                       do_poll.constprop.0
+                       do_sys_poll
+                       __x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --2.22%--__poll
+                                  |          
+                                  |--0.84%--start_thread
+                                  |          
+                                  |--0.70%--efs_client_put_fragments_parallel
+                                  |          |          
+                                  |           --0.70%--dcache_put_now.constprop.0
+                                  |          
+                                   --0.69%--conn_rdma_frame.constprop.0
+
+     2.24%     0.04%  [k] fuse_copy_args
+            |          
+             --2.19%--fuse_copy_args
+                       |          
+                        --2.08%--fuse_dev_do_read
+                                  fuse_dev_read
+                                  vfs_read
+                                  ksys_read
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  read
+                                  0x300000000
+                                  0x746e756f6d2d
+
+     2.21%     0.00%  [.] 0x00007f375a9baf5f
+     2.20%     0.05%  [k] schedule_hrtimeout_range_clock
+            |          
+             --2.15%--schedule_hrtimeout_range_clock
+                       poll_schedule_timeout.constprop.0
+                       do_poll.constprop.0
+                       do_sys_poll
+                       __x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --2.15%--__poll
+                                  |          
+                                  |--0.80%--start_thread
+                                  |          
+                                  |--0.69%--efs_client_put_fragments_parallel
+                                  |          |          
+                                  |           --0.69%--dcache_put_now.constprop.0
+                                  |          
+                                   --0.66%--conn_rdma_frame.constprop.0
+
+     2.17%     0.29%  [.] recv_poller
+            |          
+             --1.91%--recv_poller
+                       |          
+                        --1.90%--start_thread
+
+     2.14%     0.16%  [k] fuse_copy_page
+            |          
+             --2.00%--fuse_copy_page
+                       fuse_copy_args
+                       |          
+                        --1.95%--fuse_dev_do_read
+                                  fuse_dev_read
+                                  vfs_read
+                                  ksys_read
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  read
+                                  0x300000000
+                                  0x746e756f6d2d
+
+     2.10%     0.00%  [.] efs_client_rpc_getchunks
+            |          
+             --2.09%--efs_client_rpc_getchunks
+                       |          
+                        --2.09%--pull_chunks_range.part.0
+                                  |          
+                                  |--1.11%--efs_client_read
+                                  |          efs_fuse_read_ino
+                                  |          ll_read
+                                  |          0x7f375a9ae1fa
+                                  |          
+                                   --0.61%--efs_client_pull_layout_miss
+                                             efs_client_read
+                                             efs_fuse_read_ino
+                                             ll_read
+                                             0x7f375a9ae1fa
+
+     2.08%     0.00%  [.] efs_append_flush_report.constprop.0
+            |          
+             --2.08%--efs_append_flush_report.constprop.0
+                       |          
+                        --2.08%--ll_setattr
+                                  0x7f375a9add8e
+
+     2.07%     0.22%  [k] futex_wake
+            |          
+             --1.89%--futex_wake
+                       do_futex
+                       |          
+                        --1.88%--__x64_sys_futex
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  |          
+                                   --1.66%--__GI___lll_lock_wake
+
+
+
+#
+# (Tip: Add -I to perf record to sample register values, which will be visible in perf report sample context.)
+#

@@ -25,6 +25,47 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 30 2026 21:10Z — review of the user's fstor007 perf dir: the evictor and the per-close walk (documented, not changed)
+
+The user ran `perf record -F 499 -g` on fstor007's efs-fuse for 62 min
+(19:54Z–20:56Z) around two `ecopy --verify /data1/erbmi1/software/
+/tmp/efs-mount/software/` runs, the first traced with `strace -f -tt -T`
+for 86 s (died of its own SIGPIPE), the second for 150 s (^C). Asked to
+review and document next steps only.
+`results/measure/20260930-205300-ecopy-perf-review/SUMMARY.txt`.
+
+`stage_evict_main` is 31.6 % of the whole profile and 47.6 % of the
+second ecopy's slice; `perf annotate` puts every hot instruction in the
+inlined `evict_pass` scan of `g_lru_keys`/`g_lru_ticks`. It runs
+back-to-back because of D18's floor: the staging estimate is always over
+the 256 MB cap, each pass evicts 64 just-closed rows (table lock 64×, one
+compact per wake) and `efs_client_stage_evict_kick` — called from every
+`ensure_meta_room` — re-arms it because the pass did evict. The Sep 30
+targeted-evict fix made a pass cheap; it did not change the cadence.
+
+`dcache_steal_dirty` is 36.9 % of that slice with a broken callchain
+(libfuse worker, no frame pointers). The only caller at that rate is the
+per-close path: `ll_flush → efs_append_flush_report → efs_dcache_flush_ino
+→ dcache_flush_ino_pass`, which loops over every chunk index of the file
+(from the staged size), two mutex pairs and a slot chain walk each, under
+the inode's append stripe, on read-only opens and dup'd fds too, and
+falls back to all 65536 slots once the file is ≥ 8 GiB
+(`dcache_flush_all_slots.part.0` is in the slice). There is no
+"anything unpublished?" predicate on that path; the utimens path got
+one earlier the same day. `efs_dcache_yield_extra` (one `dcache_find`)
+at 6.6 % suggests the slot chains hold many dead nodes; that is a
+hypothesis to count with gdb, not a finding.
+
+Per-op efs latency under the ecopy, with dirfd resolved through the fd
+table: rename 54 / 29 ms, openat 18 / 7.7, utimens 8.8 / 15.9, stat
+9.5 / 4.0, close 9.8 / 2.5 (idle refs 6.2 / 0.6 / 1.05 / 0.33 / 0.34),
+at only ≈ 27 and ≈ 5.6 efs ops in flight; ecopy kept ≈ 250–275 of its
+~400 threads on one futex. No efs syscall over 1.7 s, no EIO/EBUSY/
+ESTALE. Next steps as written in the SUMMARY: decide D18 (an isolating
+run with `EFS_CLIENT_META_MB=4096` needs no code), the close-path
+predicate (mechanical, after a `--call-graph dwarf` confirmation), the
+gdb chain count, and only then a server-side trace.
+
 ## Sep 30 2026 18:55Z — item 10: a 9-client IO-500 that completes, and the ior-hard-read loss was a naming bug
 
 Goal for the afternoon: one 9×4 IO-500 that completes ior-hard-write

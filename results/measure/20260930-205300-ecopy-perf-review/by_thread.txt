@@ -1,0 +1,33 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 13M of event 'cycles:P'
+# Event count (approx.): 18442602460630
+#
+# Overhead  Command   Symbol                                        
+# ........  ........  ..............................................
+#
+    31.63%  efs-fuse  [.] stage_evict_main
+    10.67%  efs-fuse  [.] __memmove_avx512_unaligned_erms
+     6.60%  efs-fuse  [.] efs_dcache_yield_extra
+     6.31%  efs-fuse  [.] dcache_steal_dirty.constprop.0
+     4.41%  efs-fuse  [.] blake3_hash_many_avx512
+     4.27%  efs-fuse  [.] xor_into
+     1.00%  efs-fuse  [k] copyout
+     0.74%  efs-fuse  [.] dcache_patch
+     0.70%  efs-fuse  [k] memcpy_erms
+     0.66%  efs-fuse  [k] select_task_rq_fair
+     0.63%  efs-fuse  [.] 0x0000000000000b15
+     0.63%  efs-fuse  [k] srso_alias_safe_ret
+     0.60%  efs-fuse  [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.58%  efs-fuse  [k] srso_alias_return_thunk
+     0.56%  efs-fuse  [.] __memset_avx512_unaligned_erms
+     0.54%  efs-fuse  [.] memset
+     0.51%  efs-fuse  [k] entry_SYSCALL_64
+
+
+#
+# (Tip: Profiling branch (mis)predictions with: perf record -b / perf report)
+#

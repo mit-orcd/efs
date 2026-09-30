@@ -1,0 +1,205 @@
+efs-bg: start 2026-09-30T21:13:00Z host=fstor007-mgmt name=perf353 screen=efs-perf353
+== per-thread (top 30)
+== time slices: first 5% / middle 40-60% / last 5%  (top 8 symbols each)
+-- 0%-5%
+# Samples: 171K of event 'cycles:P' (time slices: 0%-5%)
+# Event count (approx.): 130290687200
+     8.41%  [.] __memmove_avx512_unaligned_erms
+     5.92%  [.] xor_into
+     5.59%  [.] blake3_hash_many_avx512
+     2.00%  [.] 0x0000000000000b15
+     1.78%  [.] efs_rdma_recv_wait
+                                                                   0x7f375a9baf5f
+     1.55%  [.] __memset_avx512_unaligned_erms
+     1.45%  [.] recv_poller
+-- 40%-60%
+# Samples: 2M of event 'cycles:P' (time slices: 40%-60%)
+# Event count (approx.): 4107105079449
+    32.83%  [.] stage_evict_main
+     9.49%  [.] __memmove_avx512_unaligned_erms
+                                             0x7f375a9ae1fa
+     8.00%  [.] efs_dcache_yield_extra
+     7.98%  [.] dcache_steal_dirty.constprop.0
+                                             0x7f375a9add8e
+     4.19%  [.] blake3_hash_many_avx512
+     3.75%  [.] xor_into
+-- 95%-100%
+# Samples: 110K of event 'cycles:P' (time slices: 95%-100%)
+# Event count (approx.): 724792576564
+    47.60%  [.] stage_evict_main
+    36.93%  [.] dcache_steal_dirty.constprop.0
+                                             0x7f375a9add8e
+     3.52%  [.] dcache_flush_all_slots.part.0
+                       0x7f375a9ae361
+                                  0x300000000
+                                  0x746e756f6d2d
+     0.77%  [.] dcache_flush_slot_inner.constprop.0
+== annotate stage_evict_main (lines >= 0.5%)
+    8.94 :   443784: lea    0x1(%rdx),%rax
+    6.53 :   443788: cmp    %rdi,%rdx
+    6.48 :   443791: mov    %rax,%rdx
+    9.03 :   443794: mov    (%rsi,%rdx,8),%rax
+    6.76 :   443798: test   %rax,%rax
+    8.22 :   44379d: vmovq  (%r8,%rdx,8),%xmm0
+    6.63 :   4437a3: vmovq  %rax,%xmm3
+    4.78 :   4437a8: vmovq  %xmm0,%rcx
+    3.60 :   4437ad: vpinsrq $0x1,%rcx,%xmm3,%xmm2
+    1.83 :   4437b3: cmp    %r10,%rcx
+    2.69 :   4437b8: cmp    $0xff,%r13d
+    2.69 :   4437c1: cmp    %r9,%rcx
+    1.52 :   4437e0: mov    %rax,%rcx
+    2.96 :   4437e3: shl    $0x4,%rcx
+    2.92 :   4437e7: mov    0x253e968(%rcx),%rcx
+    1.46 :   4437ee: cmp    %r9,%rcx
+    8.68 :   4437f9: inc    %rax
+    8.64 :   4437fc: cmp    %r13,%rax
+    0.72 :   443830: vpermt2q -0x20(%rax),%ymm4,%ymm0
+    2.10 :   44383d: cmp    $0x253f938,%rax
+== callers of the other hot symbols
+    10.67%  efs-fuse  libc.so.6      [.] __memmove_avx512_unaligned_erms
+            |          
+            |--4.65%--start_thread
+            |          |          
+            |          |--2.18%--frag_pool_thread
+            |          |          efs_client_get_fragment.part.0
+            |          |          |          
+            |          |           --2.11%--__memmove_avx512_unaligned_erms
+            |          |          
+            |          |--1.37%--put_pool_thread
+            |          |          |          
+            |          |           --1.37%--dcache_put_now.constprop.0
+            |          |                     |          
+            |          |                      --1.37%--efs_client_put_fragments_parallel
+            |          |                                put_fragments_parallel_once
+            |          |                                |          
+            |          |                                 --1.37%--efs_conn_send_msg_parts
+            |          |                                           |          
+            |          |                                            --1.37%--efs_rdma_send_frame
+            |          |                                                      |          
+            |          |                                                       --1.36%--__memmove_avx512_unaligned_erms
+            |          |          
+            |           --1.07%--dcache_reclaim_main
+            |                     dcache_flush_slot_inner.constprop.0
+            |                     |          
+            |                      --1.07%--dcache_put_now.constprop.0
+            |                                |          
+            |                                 --1.07%--efs_client_put_fragments_parallel
+            |                                           put_fragments_parallel_once
+            |                                           |          
+            |                                            --1.07%--efs_conn_send_msg_parts
+            |                                                      |          
+            |                                                       --1.07%--efs_rdma_send_frame
+            |                                                                 |          
+            |                                                                  --1.06%--__memmove_avx512_unaligned_erms
+            |          
+            |--4.22%--__memmove_avx512_unaligned_erms
+            |          
+             --1.75%--0x746e756f6d2d
+                       0x300000000
+     6.60%  efs-fuse  efs-fuse       [.] efs_dcache_yield_extra
+            |          
+            |--4.20%--0x746e756f6d2d
+            |          0x300000000
+            |          
+             --2.40%--start_thread
+                       |          
+                       |--1.02%--pull_fan_thread
+                       |          pull_chunks_range.part.0
+                       |          |          
+                       |           --1.01%--apply_chunk_recs
+                       |                     |          
+                       |                      --0.90%--efs_dcache_yield_extra
+                       |          
+                        --0.92%--put_pool_thread
+                                  |          
+                                   --0.92%--dcache_put_now.constprop.0
+                                             |          
+                                              --0.83%--efs_client_set_chunk
+                                                        |          
+                                                         --0.82%--efs_dcache_yield_extra
+     6.31%  efs-fuse  efs-fuse       [.] dcache_steal_dirty.constprop.0
+            |          
+             --6.31%--0x746e756f6d2d
+                       0x300000000
+     4.41%  efs-fuse  efs-fuse       [.] blake3_hash_many_avx512
+            |          
+             --4.16%--start_thread
+                       |          
+                       |--2.51%--put_pool_thread
+                       |          |          
+                       |           --2.51%--dcache_put_now.constprop.0
+                       |                     |          
+                       |                     |--1.70%--hash_write_fragments
+                       |                     |          efs_hash
+                       |                     |          |          
+                       |                     |           --1.69%--blake3_hasher_update.part.0
+                       |                     |                     |          
+                       |                     |                      --1.65%--blake3_compress_subtree_wide
+                       |                     |                                |          
+                       |                     |                                 --1.62%--blake3_compress_subtree_wide
+                       |                     |                                           |          
+                       |                     |                                            --1.55%--blake3_compress_subtree_wide
+                       |                     |                                                      |          
+                       |                     |                                                       --1.53%--blake3_hash_many_avx512
+                       |                     |          
+                       |                      --0.81%--efs_hash
+                       |                                |          
+                       |                                 --0.81%--blake3_hasher_update.part.0
+                       |                                           |          
+                       |                                            --0.80%--blake3_compress_subtree_wide
+                       |                                                      |          
+                       |                                                       --0.78%--blake3_compress_subtree_wide
+                       |                                                                 |          
+                       |                                                                  --0.75%--blake3_compress_subtree_wide
+                       |                                                                            |          
+                       |                                                                             --0.74%--blake3_hash_many_avx512
+                       |          
+                        --1.65%--dcache_reclaim_main
+                                  |          
+                                   --1.65%--dcache_flush_slot_inner.constprop.0
+                                             |          
+                                              --1.65%--dcache_put_now.constprop.0
+                                                        |          
+                                                        |--1.13%--hash_write_fragments
+                                                        |          efs_hash
+                                                        |          |          
+                                                        |           --1.13%--blake3_hasher_update.part.0
+                                                        |                     |          
+                                                        |                      --1.12%--blake3_compress_subtree_wide
+                                                        |                                |          
+                                                        |                                 --1.10%--blake3_compress_subtree_wide
+                                                        |                                           |          
+                                                        |                                            --1.06%--blake3_compress_subtree_wide
+                                                        |                                                      |          
+                                                        |                                                       --1.05%--blake3_hash_many_avx512
+                                                        |          
+                                                         --0.52%--efs_hash
+                                                                   |          
+                                                                    --0.52%--blake3_hasher_update.part.0
+                                                                              |          
+                                                                               --0.51%--blake3_compress_subtree_wide
+                                                                                         |          
+                                                                                          --0.50%--blake3_compress_subtree_wide
+     4.27%  efs-fuse  efs-fuse       [.] xor_into
+            |          
+             --4.15%--start_thread
+                       |          
+                       |--3.24%--put_pool_thread
+                       |          |          
+                       |           --3.24%--dcache_put_now.constprop.0
+                       |                     |          
+                       |                      --3.19%--efs_encode_chunk
+                       |                                |          
+                       |                                 --3.19%--xor_into
+                       |          
+                        --0.90%--dcache_reclaim_main
+                                  |          
+                                   --0.90%--dcache_flush_slot_inner.constprop.0
+                                             |          
+                                              --0.90%--dcache_put_now.constprop.0
+                                                        |          
+                                                         --0.88%--efs_encode_chunk
+                                                                   |          
+                                                                    --0.88%--xor_into
+== DONE
+efs-bg: end 2026-09-30T21:14:56Z rc=0

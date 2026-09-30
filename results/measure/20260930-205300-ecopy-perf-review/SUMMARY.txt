@@ -1,0 +1,217 @@
+Review of /home/erbmi1/orcd/scratch/efs/perf/efs-mount/ — Sep 30 2026, 21:10Z
+=============================================================================
+Documentation only. No code was changed for this review.
+
+What is new in the directory since the last two reviews
+(results/measure/20260930-063500-perf-dir-review, 20260930-080000-ecopy-times-review):
+
+  fuse.data            2.3 GB  perf record -F 499 -g -p <efs-fuse on fstor007>,
+                               3741 s (≈ 19:54Z – 20:56Z), 13.05 M samples
+  fuse.stderr                  the perf record trailer
+  flat.txt / by_thread.txt / callers.txt   user's perf report reductions of fuse.data
+  ecopy.strace.txt     100 MB  ecopy --verify /data1/erbmi1/software/ /tmp/efs-mount/software/
+                               19:54:37Z – 19:56:04Z (86 s), killed by SIGPIPE
+                               (ecopy's own stdout pipe closed: write EPIPE ×1, then
+                               SIGPIPE from itself; not efs)
+  ecopy1.strace.txt     47 MB  same command, 20:53:11Z – 20:55:42Z (150 s), exit 130 (^C)
+  ecopy.out.txt / ecopy1.out.txt  empty
+  strace-summary.txt           regenerated at 21:00Z but its window is 22:13–22:19 of
+                               Sep 29 (the old fuse.strace); nothing new in it
+  ecopy.strace2/3.txt, ana-fuse/, fuse.strace, strace.std*   Sep 29, reviewed before
+  efs-fuse-efs-mount.log       02:35Z Sep 30, reviewed before; the 19:53Z client
+                               logged elsewhere (no new fuse log in this dir)
+
+The fstor007 client binary was /tmp/efs/efs-fuse built 19:53Z Sep 30 (tree at
+HEAD 44073b77 + the Sep 30 evictor fix 5ea397fd). Servers 44073b77249b-dirty
+(roll350, 19:43Z). No efs-fuse was running on fstor007 at 21:12Z.
+
+Reductions in this directory:
+  syscalls.txt      per-syscall count / total / max, errors, calls ≥ 1 s (ecopy_syscalls.py)
+  ops-by-fs.txt     per-syscall latency split efs / local by resolving dirfd
+                    through the fd table, with a latency histogram (ecopy_ops.py)
+  perf-slices.txt   perf report of fuse.data: first 5 % / middle 20 % / last 5 % of
+                    the 62 min, annotate of stage_evict_main, callers of the other
+                    hot symbols (run on fstor007, ~/efs-runs/perf353.log)
+  perf-callers.txt, flat.txt, by_thread.txt, fuse.stderr   copied from the perf dir
+
+
+1. Hot path #1 — the staging evictor runs continuously and is the top
+   consumer of client cycles
+-----------------------------------------------------------------------
+Whole 62 min profile (by_thread.txt):
+    31.63 %  stage_evict_main   (self)
+    10.67 %  __memmove_avx512_unaligned_erms
+     6.60 %  efs_dcache_yield_extra
+     6.31 %  dcache_steal_dirty.constprop.0
+     4.41 %  blake3_hash_many_avx512
+     4.27 %  xor_into
+
+Time slices (perf-slices.txt):
+    first 5 %  (≈ 19:54–19:57Z, ecopy run 1 with data):  memmove 8.4, xor 5.9,
+               blake3 5.6 — the data path; the evictor is NOT in the top 8.
+    40–60 %    (≈ 20:19–20:31Z): stage_evict_main 32.8, memmove 9.5,
+               efs_dcache_yield_extra 8.0, dcache_steal_dirty 8.0, blake3 4.2,
+               xor 3.8. 2 M samples in 748 s ≈ 5.4 threads busy — a workload
+               (PUT/GET traffic in the callers) was running then too, untraced.
+    last 5 %   (≈ 20:53–20:56Z, ecopy run 2): stage_evict_main 47.6,
+               dcache_steal_dirty 36.9, dcache_flush_all_slots.part.0 3.5.
+               110 K samples in 187 s ≈ 1.2 threads busy: ≈ 0.6 core in the
+               evictor, ≈ 0.45 core in dcache_steal_dirty.
+
+perf annotate of stage_evict_main puts every hot instruction in the inlined
+evict_pass() LRU scan (stage_evict.c:489–515): the loop over
+g_lru_keys[0..g_lru_mask] / g_lru_ticks[] with the 256-entry cand[] replace-
+worst (the `cmp $0xff` and the 16-byte `shl $0x4` indexing into cand[]).
+That scan is O(LRU table) per band, up to 4 bands per wake, and the table is
+sized 4× the staged-ino count (lru_ensure), so one wake reads 4·(4..8)·N slots.
+
+Why it never stops: this is D18 (START-HERE, pending ask). The per-tab floor
+of the staging table (~90–170 KB × up to 4096 tabs) sits above
+EFS_CLIENT_META_MB = 256 MB before any row is staged; stage_bytes_now() is
+therefore always > cap, every evict_pass finds 64 evictable rows (the ecopy's
+just-closed files), evict_one() takes table_lock + idx_mu + dirty_mu 64 times
+per band, efs_export_compact() runs under the table lock once per wake, and
+efs_client_stage_evict_kick() (ops.c:192, on every staging op) re-arms the
+thread immediately because the last pass did evict something
+(g_evict_idle_until is only set when evicted_total == 0). The old
+efs-fuse-efs-mount.log line "staging table over EFS_CLIENT_META_MB (256 MB)
+with nothing evictable; growing" is the same condition seen from the other
+side (all pinned). The Sep 30 fix 5ea397fd made each evict_one cheap; it did
+not change how often the pass runs, and under a 400-thread ecopy that is
+back-to-back.
+
+Cost outside the evictor's own core: every RPC path takes the client table
+lock; 64 evict_one() per band + one compact per wake serialize against them.
+The evicted rows are the files ecopy touches next (utimens/rename/verify of
+a just-closed file), so each is re-fetched (GETATTR/GETCHUNKS) — extra server
+round trips per op. Not separately measured here; see next steps.
+
+2. Hot path #2 — close of any file walks every chunk index of the file,
+   dirty or not
+---------------------------------------------------------------------
+dcache_steal_dirty.constprop.0 is 36.9 % of the last slice with a broken
+callchain (0x746e756f6d2d = "-mount", a libfuse worker without frame
+pointers). Its body is the slot chain walk under two mutexes; it does not
+copy the 128 KiB itself (that is memmove). The caller that can issue it at
+that rate is the per-close path:
+
+  ll_flush → efs_fuse_flush_ino → efs_append_flush_report (efs_fuse.c:2339)
+  → efs_wb_sync_ino + efs_dcache_flush_ino → dcache_flush_ino_pass
+  (write.c:4623): nci = ceil(size / 128 KiB) from the staged row, then
+  for ci in 0..nci: dcache_steal_dirty(ino, ci)  (two mutex pairs + chain
+  walk each), and dcache_flush_all_slots(ino, 1) — 65536 slots — once nci
+  > 65536 (a file ≥ 8 GiB; dcache_flush_all_slots.part.0 at 3.5 % says such
+  a close happened in run 2).
+
+efs_append_flush_report has no "is anything of this ino dirty" predicate
+(the utimens path added one on Sep 30: efs_fuse.c:2383,
+`efs_client_ino_is_dirty(ino) || efs_dcache_ino_pinned(ino)`); ll_flush runs
+on every close(2), including read-only opens — an ecopy --verify of a tree
+with GB-sized files pays S/128 KiB chain walks per verified file, and every
+dup'd fd pays it again. The same walk is on ll_fsync and ll_setattr(size).
+
+3. Probable contributor — dcache slot chains are long
+-----------------------------------------------------
+efs_dcache_yield_extra (write.c:3735) is a single dcache_find() under one
+shard lock and a flag clear, yet it is 6.6 % of the whole profile and 8.0 %
+of the middle slice — the same share as dcache_steal_dirty. Both are chain
+walks over g_dcache.e[s] (65536 head slots). A flushed full-overwrite entry
+keeps a body-less node in the chain ("names a published chunk", write.c:3769)
+and the reclaim path zeroes ino/data of a clean node without unlinking it
+(write.c:4521–4527); dcache_store() reuses only an empty HEAD, never an
+empty chained node; chained nodes are freed only by dcache_drop_locked
+(truncate, adopt shrink, wb PUT). Hypothesis: after hundreds of thousands of
+distinct (ino, ci) the chains hold many dead nodes and every find is a
+pointer chase over them. Not proven by this data — the verification is a
+one-line gdb walk (below).
+
+4. What the ecopy straces say about per-op latency (ops-by-fs.txt)
+------------------------------------------------------------------
+efs-side syscalls only (dirfd resolved), avg ms / fraction ≥ 10 ms:
+
+                run 1 (19:54Z, data + verify)     run 2 (20:53Z, re-verify)
+  renameat      54.2 ms   98 %                    28.6 ms   94 %
+  openat        18.0 ms   24 %                     7.7 ms   14 %
+  utimensat      8.8 ms   22 %                    15.9 ms   47 %
+  newfstatat     9.5 ms   14 %                     4.0 ms    9 %
+  close          9.8 ms   16 %                     2.5 ms    4 %
+  fstat          0.73 ms                           1.9 ms
+  fchmod         0.77 ms                           1.0 ms
+  pread64        2.2 ms  (verify reads)           10.7 ms  (311 calls)
+  local (/data1) newfstatat / openat / pread      0.01–0.27 ms
+
+Idle single-thread references (Sep 30 postfix review): stat 0.33, openat
+0.60, close 0.34, utimensat 1.05, chmod 0.49, rename 6.2 ms. So under the
+ecopy: rename 5–9×, open 13–30×, stat 12–29×, utimens 8–15×.
+
+Concurrency, from summed syscall time / wall: run 1 ≈ 27 efs ops in flight
+on average, run 2 ≈ 5.6. Meanwhile ecopy's own threads sat in futex
+(run 1: 21 285 thread-seconds over 86 s ≈ 247 threads waiting; run 2:
+41 168 over 150 s ≈ 274 waiting; 26 threads waited the entire 149.6 s of
+run 2 on 0x4506c8; in run 1 ~380 threads waited 29.0 s on 0x4506cc from
+19:55:13Z while ten threads did newfstatat). That is ecopy's work
+distribution (the user's tool), not an efs stall: no efs syscall in either
+trace exceeded 1.7 s (max close 1.686 s, max renameat 0.805 s), and there is
+no EIO/EBUSY/ESTALE in either trace (errors: ENOENT on the pre-create stat,
+EXDEV on copy_file_range across filesystems, EOPNOTSUPP on fallocate —
+all expected).
+
+Throughput seen by the mount: run 1 ≈ 2 300 efs syscalls/s; run 2 ≈ 1 050/s.
+
+With only ≈ 5 ops in flight in run 2, 8–30 ms per op is not 400-way
+server queueing. The candidates on the client are §1 (table lock held by
+evict_one/compact, plus re-fetch of the evicted row) and §2 (the per-close
+walk holds the inode's append stripe amu for the whole scan, so a
+concurrent utimens/flush/fsync on the same ino waits). The server side was
+not traced in this window; roll350 ran without --perf/--strace.
+
+5. Next steps (in order; nothing here is implemented)
+-----------------------------------------------------
+N1. Decide D18 (ask — already pending in START-HERE). This review adds the
+    cost: with the floor above the cap the evictor is 32–48 % of client
+    cycles under ecopy and re-arms on every staging op. Choices to put to
+    the user, unchanged: count the cap against rows + arenas + chunk
+    arrays only (exclude the per-tab index floor), or set the cap from the
+    tab floor at startup, or both. Not a knob. Until decided, a
+    measurement that isolates its cost needs no code: run the same ecopy
+    once with EFS_CLIENT_META_MB=4096 in client.sh's environment (cap above
+    the floor → evictor idle) and compare ops-by-fs.txt for the two runs.
+
+N2. Close-path predicate (mechanical, same rule as the utimens fix): in
+    efs_append_flush_report skip efs_dcache_flush_ino + REPORT when the ino
+    has no wb pending, is not in the dirty set and has no pinned dcache —
+    the three sources named in the "nothing to flush" learning. Then
+    ll_flush of a read-only or already-published file costs three lookups
+    instead of size/128 KiB chain walks. Gate: posix jobs=1 200/201,
+    posix2 63/63, concurrent_appends, mtime_repro.py rows (the
+    write→futimens→close ordering must still flush). Confirm the caller
+    first: perf record --call-graph dwarf -p <efs-fuse> for 30 s of an
+    ecopy --verify (fp callchains from libfuse workers are broken, see
+    the 0x746e756f6d2d frames) and read who issues dcache_steal_dirty.
+
+N3. Measure dcache chain length before touching it (gdb attach to the live
+    efs-fuse, ptrace_scope is 0):
+      gdb -p $(pgrep -x efs-fuse) -batch -ex 'set $n=0' -ex 'set $m=0' \
+        -ex 'set $i=0' -ex 'while $i<65536' -ex 'set $e=&g_dcache.e[$i]' \
+        -ex 'set $l=0' -ex 'while $e' -ex 'set $l=$l+1' -ex 'set $e=$e->next' \
+        -ex 'end' -ex 'set $n=$n+$l' -ex 'if $l>$m' -ex 'set $m=$l' -ex 'end' \
+        -ex 'set $i=$i+1' -ex 'end' -ex 'p $n' -ex 'p $m'
+    after an ecopy of the software tree, and how many of those nodes have
+    data == NULL. If the mean is in the tens, the fix is mechanical (reuse
+    or unlink dead chained nodes in dcache_store / the reclaim path) and
+    is gated by the same suites as N2. If it is ~1, drop §3.
+
+N4. Only after N1–N3: a server-side trace of one ecopy (roll with --strace
+    on one follower, one leader) to split the remaining per-op time
+    between the client and the Raft commit; the reference per-op numbers
+    are 0.3–6 ms idle, so anything left above ~10 ms at 5 in flight is a
+    client-side hold.
+
+N5. For the user's tool, not efs: run 2 kept ≈ 274 of ~400 threads on one
+    futex with ≈ 5 efs ops in flight; run 1's 29 s barrier was ten threads
+    stat'ing while the rest waited. ecopy's throughput on this mount is
+    bounded by its own dispatch before it is bounded by efs.
+
+Not done in this review: no server trace exists for the window; the
+"middle" 20 % of the profile had an untraced workload; the 8 GiB+ file
+that triggered dcache_flush_all_slots in run 2 was not identified.
