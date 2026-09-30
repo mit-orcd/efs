@@ -1807,28 +1807,9 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     return 0;
 }
 
-/* Open/create stash the inode so write/read skip a path walk + idx_mu
- * on every 4k I/O. */
-static int fuse_file_ino(const char *path, struct fuse_file_info *fi,
-                         efs_ino_t *ino_out)
-{
-    if (fi && fi->fh) {
-        *ino_out = (efs_ino_t)fi->fh;
-        return 0;
-    }
-    struct efs_inode ino;
-    if (efs_client_lookup(path, &ino) != 0)
-        return -ENOENT;
-    if (efs_mode_is_dir(ino.mode))
-        return -EISDIR;
-    *ino_out = ino.ino;
-    return 0;
-}
-
 static void efs_fuse_log_err(const char *where, int efs_rc, efs_ino_t ino,
                              uint64_t offset, size_t size, const char *path);
 static int efs_wb_sync(void);
-static int efs_file_data_sync_for_ino(efs_ino_t ino);
 
 static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offset,
                              struct fuse_file_info *fi)
@@ -2347,22 +2328,6 @@ static pthread_mutex_t *append_mu(efs_ino_t ino)
 {
     pthread_once(&g_append_mu_once, append_mu_init);
     return &g_append_mu[(uint32_t)ino % APPEND_MU_N];
-}
-
-static int efs_file_data_sync_for_ino(efs_ino_t ino)
-{
-    pthread_mutex_t *amu;
-
-    if (!ino || virt_kind(ino))
-        return EFS_OK;
-    int rc = efs_wb_sync_ino(ino);
-    if (rc != EFS_OK)
-        return rc;
-    amu = append_mu(ino);
-    pthread_mutex_lock(amu);
-    rc = efs_dcache_flush_ino(ino);
-    pthread_mutex_unlock(amu);
-    return rc;
 }
 
 /* Close: flush and the REPORT that publishes it are one critical
