@@ -1,0 +1,75 @@
+1746 efsd.log
+1108
+0
+184
+raft-obs: wait_timeouts=0 pump_hold_max=276us lock_wait_max=1us drain_max=276us tick_max=1us apply_max=35us persist_max=489us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=43593 drop=0 sent=41807 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=322us lock_wait_max=1us drain_max=322us tick_max=1us apply_max=30us persist_max=489us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=43698 drop=0 sent=41912 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=271us lock_wait_max=1us drain_max=271us tick_max=1us apply_max=34us persist_max=489us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=43802 drop=0 sent=42016 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=295us lock_wait_max=1us drain_max=295us tick_max=1us apply_max=47us persist_max=490us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=43907 drop=0 sent=42121 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=288us lock_wait_max=1us drain_max=288us tick_max=1us apply_max=60us persist_max=497us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44011 drop=0 sent=42225 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=328us lock_wait_max=1us drain_max=328us tick_max=1us apply_max=38us persist_max=521us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44116 drop=0 sent=42330 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=291us lock_wait_max=1us drain_max=291us tick_max=1us apply_max=31us persist_max=486us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44220 drop=0 sent=42434 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=299us lock_wait_max=1us drain_max=299us tick_max=1us apply_max=49us persist_max=508us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44325 drop=0 sent=42538 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=283us lock_wait_max=1us drain_max=283us tick_max=1us apply_max=53us persist_max=501us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44428 drop=0 sent=42642 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=356us lock_wait_max=1us drain_max=356us tick_max=1us apply_max=32us persist_max=500us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44532 drop=0 sent=42746 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=265us lock_wait_max=1us drain_max=265us tick_max=1us apply_max=33us persist_max=486us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44637 drop=0 sent=42851 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=292us lock_wait_max=1us drain_max=291us tick_max=1us apply_max=50us persist_max=498us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44741 drop=0 sent=42955 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=334us lock_wait_max=1us drain_max=334us tick_max=1us apply_max=36us persist_max=498us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44846 drop=0 sent=43060 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=268us lock_wait_max=1us drain_max=268us tick_max=1us apply_max=38us persist_max=510us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+===tail
+raft-obs: tx->1 enq=43907 drop=0 sent=42121 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=288us lock_wait_max=1us drain_max=288us tick_max=1us apply_max=60us persist_max=497us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44011 drop=0 sent=42225 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=328us lock_wait_max=1us drain_max=328us tick_max=1us apply_max=38us persist_max=521us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44116 drop=0 sent=42330 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=291us lock_wait_max=1us drain_max=291us tick_max=1us apply_max=31us persist_max=486us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44220 drop=0 sent=42434 fail=0 hi=2 rtt_avg=24us get_avg=47us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=299us lock_wait_max=1us drain_max=299us tick_max=1us apply_max=49us persist_max=508us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44325 drop=0 sent=42538 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=283us lock_wait_max=1us drain_max=283us tick_max=1us apply_max=53us persist_max=501us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44428 drop=0 sent=42642 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=356us lock_wait_max=1us drain_max=356us tick_max=1us apply_max=32us persist_max=500us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44532 drop=0 sent=42746 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=265us lock_wait_max=1us drain_max=265us tick_max=1us apply_max=33us persist_max=486us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44637 drop=0 sent=42851 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=292us lock_wait_max=1us drain_max=291us tick_max=1us apply_max=50us persist_max=498us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44741 drop=0 sent=42955 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=334us lock_wait_max=1us drain_max=334us tick_max=1us apply_max=36us persist_max=498us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+raft-obs: tx->1 enq=44846 drop=0 sent=43060 fail=0 hi=2 rtt_avg=24us get_avg=46us get_max=1991ms
+raft-obs: tx->2 enq=4 drop=0 sent=2 fail=2 hi=1 rtt_avg=28us get_avg=504989us get_max=2019ms
+raft-obs: wait_timeouts=0 pump_hold_max=268us lock_wait_max=1us drain_max=268us tick_max=1us apply_max=38us persist_max=510us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0

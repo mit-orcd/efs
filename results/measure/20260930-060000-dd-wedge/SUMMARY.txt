@@ -1,0 +1,106 @@
+Wedged mount after a 100 GiB dd — Sep 30 2026 06:00–06:05Z (local 02:00–02:05)
+Servers e002771e56e4-dirty (rolled 05:43Z), client fstor007 `client.sh --perf`
+on the same tree. Everything before the dd was fine: ls, rsync, ecrawl,
+find ×2, du (01:50–01:56 local, other-tools.txt).
+
+What the user saw
+-----------------
+dd_1m.out.txt: 100 GiB `dd bs=1M` to /tmp/efs-mount/001/dat01, steady
+1.0–1.2 GB/s for 106 s, then `dd: closing output file: Input/output error`.
+sha256sum of the file: `openat` ENOENT after 33.5 s. `ls /tmp/efs-mount/`
+EBUSY after 16.7 s. Unmount: `UNMOUNT DATA LOSS: metadata flush still
+failing (rc=-13) after 60s`.
+
+client-log.txt: `report-loop ino=112106 rounds=1 busy=1 ms=18582 rc=-13`
+(the close REPORT, 819200 records = every chunk of the file, BUSY after
+18.6 s), then `exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY` on
+type 83 shard 1514, type 67 (REPORT) dual, type 43 (INODE_LOOKUP) shard 0
+(the root), then three more 8 s BUSY report loops at unmount.
+
+What the servers show (srv-*.txt, nonobs-*.txt, live raft-status 06:10Z)
+------------------------------------------------------------------------
+fcstor004 (g0 leader, g2 follower):
+  report-split nrec=819200 pack_ms=7008 push_ms=9371 finish_ms=1014 rc=-13
+  then 82 × report-split nrec=819200 pack_ms=0 push_ms=0 finish_ms=0 rc=-13
+  164 × apply-sleep us=400050 group=2 idx=5335xx applied=533364..533377
+  raft-obs: tx->2 enq=134026 sent=109397 fail=2399 hi=2048 rtt_avg=5725us
+  g2 commit=applied=533395 while the g2 leader was at 534116 (721 behind)
+fcstor005 (g2 leader, g0 follower):
+  82 × report-split ... rc=-13 (pack 0 / push 0 — BUSY at the ReadIndex)
+  82 × apply-sleep group=0 idx=5301xx applied=530032..530045
+  raft-obs: tx->1 enq=135010 sent=106589 fail=2395 hi=2048 rtt_avg=5868us
+  g0 commit=applied=530064 while the g0 leader was at 530742 (678 behind)
+fcstor003 and fcstor006: every lane fail=0, hi ≤ 114, commit==applied.
+Terms did not move (g0 100, g2 676). inbox_drop=0. apply_max ≤ 110 ms.
+Ten minutes after the client was gone the two lanes were still failing
+once per 250 ms: 2399 fails ≈ 600 s / HOST_SEND_IO_MS.
+
+Root cause (src/server/raft_host.c host_sender, src/common/protocol.c)
+----------------------------------------------------------------------
+A frame larger than the RDMA buffer (72 KiB) goes over the conn's TCP
+side-channel (conn_pick_send_chan) and the peer answers it on TCP;
+smaller frames go RDMA and are answered on RDMA. host_sender pipelines up
+to three messages (host_sender_depth = nrecv−1) and then collected three
+RAFT_REPLYs with `recv_chan` left at the LAST message's channel. A batch
+of [AE_REP (RDMA), big AE (TCP)] read TCP only; the RDMA reply stayed in
+the ring; the read timed out; the conn was destroyed; Raft resent the
+same window; same shape, same timeout. Only the lane between the two
+dual-group hosts mixes one group's AppendEntries with the other group's
+replies (the leader keeps one AE in flight per peer, so a single-group
+lane rarely batches two kinds), and only a big-entry stream makes the AE
+take TCP: the publish batches of a 100 GiB dd (2048 publishes per
+command) did. Before F1 the same shape waited EFS_IO_TIMEOUT_MS (30 s)
+per attempt — that is the "lost RAFT_REPLY" behind the election storms in
+results/measure/20260930-040600-postfix-review; F1 made it a 250 ms
+livelock instead.
+
+Consequences, in order: the follower each broken lane fed fell ~700
+entries behind; every read it served (`host_read_index` → 400 ms
+`apply-sleep` → BUSY) and every REPORT touching both groups returned
+BUSY; the client's 16-retry budget (10.3 s) ran out → EBUSY / ENOENT;
+dd's close REPORT lost 18 s of pack+push to one BUSY at the end and was
+retried whole; the unmount gave up after 60 s. The KV L0 gate
+(efs_kv_lsm_l0_hot) was not involved: the KV dir on fcstor004 is 0.33 GB.
+
+Fix (85f5b31c): `efs_conn.last_recv_chan` is set on every receive path;
+host_sender counts expected replies per channel after each send and
+reads with recv_chan=RDMA while RDMA replies are outstanding (that wait
+drains the ring first and falls through to TCP when a byte is there),
+TCP otherwise; a reply on a channel with none outstanding is a protocol
+error (conn dropped). No wire change.
+
+Gate (after the 06:16Z roll to 85f5b31c5996-dirty; ~/efs-runs/gate130.log)
+--------------------------------------------------------------------------
+fcstor007, fuse.efs-fuse + MOUNT_OK, 32 GiB of /dev/urandom bytes
+(1 GiB tmpfs file × 32 through `dd bs=1M iflag=fullblock conv=fsync`):
+32.853 s wall ≈ 1000 MiB/s with the flush in the clock, DD_RC=0, size
+34359738368. Server: `report-split nrec=262144 pack_ms=2811
+push_ms=4186 finish_ms=138 rc=0` — the same 2048-publish batch stream
+that wedged the 100 GiB run. `tx->N fail=0` on all lanes of fcstor004
+and fcstor005 before and after; terms unchanged (g0 106, g2 680), both
+groups commit==applied; `apply-sleep` 23–107 ms, each one index behind,
+none at the 400 ms bound. fuse.log: one `inode-rpc: slow-ok type=67
+attempts=1 saw_busy=0 status=0 us=7378753` (the close REPORT), zero
+exhausted / report-loop / DATA LOSS / conn pool. File removed, mount
+unmounted cleanly (rc=0, pgrep -x efs-fuse = 0).
+gate128 is void: the dd was placed inside a 15 s efs-ssh call and died
+before writing a byte.
+
+Also seen, not changed
+----------------------
+- Client dd profile (client-perf-flat.txt): memmove 29 % (8.6 % of it the
+  copy into the registered RDMA send buffer in efs_rdma_send_frame, the
+  rest without a frame-pointer chain), blake3 13 %, xor 4.7 %, copyin
+  4.5 %; dcache_reclaim_main is off the top (the 05:43Z fix holds). The
+  single-stream rate is 1.0–1.2 GB/s against a 947 MiB/s reference.
+- The close REPORT of a 100 GiB file is one RPC of 819200 records
+  (pack 7 s + push 9.4 s on the server) and a BUSY on its last batch
+  throws all of it away. Splitting REPORT is a design ask (not done).
+- `kv-compact: start l0=15x inputs=2 range=N l0only=1`, 184–473 per node:
+  with 512 key ranges and l0_max=4 the D13 fold runs after every flush
+  and folds two files of one range; L0 sits at ~150 files, L1 at 271.
+  1–5 ms each; log noise, not the wedge.
+- `raft-host: apply lane-fence rc=-2` ×32 on 004 and 005 during the dd
+  (O_TRUNC of the fresh file fencing lanes with no record?). Not chased.
+- 629 `applied session` lines (kind 8/9, shard 0) — the sha256sum/ls
+  retries' HOLD/RELEASE. Normal.

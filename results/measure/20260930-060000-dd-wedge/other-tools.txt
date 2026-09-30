@@ -1,0 +1,16 @@
+== ecrawl.out
+wait_crawl_tasks=110
+wait_writer_push=0
+wait_writer_pop=0
+crawl_idle_ns=4775401204
+teardown_sec=0.000
+== du.out
+52K	/tmp/efs-mount/
+== rsync.out
+rsync: [Receiver] getcwd(): No such file or directory (2)
+rsync error: errors selecting input/output files, dirs (code 3) at util1.c(1123) [Receiver=3.2.5]
+[Receiver] _exit_cleanup(code=3, file=util1.c, line=1123): about to call exit(3)
+== find1 lines
+  25626 find1.out.txt
+  21503 find2.out.txt
+  47129 total

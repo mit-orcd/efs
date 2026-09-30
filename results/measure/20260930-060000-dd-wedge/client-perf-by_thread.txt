@@ -1,0 +1,37 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 97K of event 'cycles:P'
+# Event count (approx.): 773755008009
+#
+# Overhead  Command   Symbol                                        
+# ........  ........  ..............................................
+#
+    29.11%  efs-fuse  [.] __memmove_avx512_unaligned_erms
+    13.27%  efs-fuse  [.] blake3_hash_many_avx512
+     4.68%  efs-fuse  [.] xor_into
+     4.54%  efs-fuse  [k] copyin
+     3.75%  efs-fuse  [k] memcpy_erms
+     1.10%  efs-fuse  [.] 0x0000000000000b15
+     0.97%  efs-fuse  [k] native_queued_spin_lock_slowpath
+     0.96%  efs-fuse  [k] fuse_copy_fill
+     0.80%  efs-fuse  [.] __memset_avx512_unaligned_erms
+     0.80%  efs-fuse  [k] srso_alias_safe_ret
+     0.72%  efs-fuse  [k] srso_alias_return_thunk
+     0.71%  efs-fuse  [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.69%  efs-fuse  [.] efs_rdma_recv_wait
+     0.63%  efs-fuse  [k] do_syscall_64
+     0.62%  efs-fuse  [.] recv_poller
+     0.61%  efs-fuse  [.] forget_ino_on_tab.part.0
+     0.57%  efs-fuse  [k] eventfd_poll
+     0.52%  efs-fuse  [.] blake3_compress_in_place_avx512
+     0.51%  efs-fuse  [.] icnt_get
+     0.50%  efs-fuse  [k] select_task_rq_fair
+     0.50%  efs-fuse  [k] gup_pte_range
+
+
+#
+# (Tip: Save output of perf stat using: perf stat record <target workload>)
+#

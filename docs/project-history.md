@@ -25,6 +25,66 @@ time, so the same day can appear in several places.
 
 ---
 
+## Sep 30 2026 06:17Z — the wedged mount after a 100 GiB dd: a pipelined peer lane read its replies on the wrong channel
+
+The user ran ls/rsync/ecrawl/find/du (all fine), then a 100 GiB `dd
+bs=1M` from fstor007 against the 05:43Z roll. 1.0–1.2 GB/s for 106 s,
+then `dd: closing output file: Input/output error`; sha256sum ENOENT
+after 33 s, `ls /tmp/efs-mount` EBUSY after 16.7 s, unmount `DATA LOSS`
+after 60 s of BUSY REPORTs. Analysis and inputs in
+`results/measure/20260930-060000-dd-wedge/`.
+
+The servers: no elections, `inbox_drop=0`, `apply_max` 110 ms. But the
+two dual-group hosts' lanes to each other were failing once per 250 ms
+in both directions (`tx->2 fail=2399 hi=2048` on fcstor004, `tx->1
+fail=2395 hi=2048` on fcstor005; the 003 and 006 lanes fail=0), and ten
+minutes after the client was gone fcstor005's group 0 was 678 entries
+behind its leader and fcstor004's group 2 was 721 behind — each moving
+one entry every ~15 s. Every read served by those followers
+(`host_read_index` → 400 ms `apply-sleep` → BUSY: 164 + 82 lines) and
+every REPORT touching both groups (`report-split nrec=819200 …
+rc=-13`, 83 + 82 lines, pack 0 / push 0) returned BUSY; the client's
+16-retry budget ran out.
+
+Root cause, read from `host_sender`: a frame larger than the RDMA buffer
+(72 KiB) goes over the conn's TCP side-channel (`conn_pick_send_chan`)
+and the peer answers it on TCP; smaller frames go and come back on RDMA.
+The sender pipelines up to three messages and then collected the
+replies with `recv_chan` left at the *last* message's channel. A batch
+of [AE_REP (RDMA), big AE (TCP)] read TCP only, left the RDMA reply in
+the ring, timed out at `HOST_SEND_IO_MS`, destroyed the conn, and Raft
+resent the same window — same shape, same result, forever. Only the
+004↔005 lane mixes one group's AppendEntries with the other group's
+replies (a single-group lane keeps one AE in flight and rarely batches
+two kinds), and only a big-entry stream makes an AE take TCP: the dd's
+publish batches (2048 publishes per command) did. Before F1 the same
+shape waited `EFS_IO_TIMEOUT_MS` (30 s) per attempt — that is the
+"lost RAFT_REPLY" the 04:06Z review could not place; the reply was on
+the other channel.
+
+Fix `85f5b31c`: `struct efs_conn` records `last_recv_chan` on every
+receive path; `host_sender` counts the expected replies per channel
+after each send and reads with `recv_chan=RDMA` while RDMA replies are
+outstanding (that wait drains the ring first and falls through to TCP
+when a byte is there), TCP otherwise; a reply on a channel with none
+outstanding drops the conn. No wire change. Rolled `--all` 06:16Z.
+
+Gate 06:19Z (`~/efs-runs/gate130.log`): fcstor007, 32 GiB of random
+bytes through `dd bs=1M conv=fsync`, 32.85 s ≈ 1000 MiB/s, rc 0, size
+34359738368, server `report-split nrec=262144 … rc=0` — the same
+2048-publish stream that wedged. `tx->N fail=0` on every lane of
+fcstor004 and fcstor005 before and after, terms unchanged, both groups
+commit==applied, no `exhausted`/`report-loop`/`DATA LOSS` in fuse.log;
+clean unmount. (A first attempt, gate128, ran the dd inside a 15 s
+`efs-ssh.sh` call and died before writing a byte — void.)
+
+Not changed: the 819200-record close REPORT is one RPC whose last-batch
+BUSY discards 16 s of server work (splitting it is a design ask); the
+D13 fold runs after every flush (L0 ~150 files, 1–5 ms each, log
+noise); `apply lane-fence rc=-2` ×32 during the dd, not chased; the
+client dd profile is memmove 29 % / blake3 13 % / xor 4.7 % with
+`dcache_reclaim_main` gone from the top.
+
 ## Sep 30 2026 05:45Z — review of the 05:06Z roll under ecopy: the conn pool was the 5 s mode and the 30 s freezes
 
 The user ran `client.sh --perf` on fstor007 against the 05:06Z roll

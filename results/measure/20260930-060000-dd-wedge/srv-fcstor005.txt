@@ -1,0 +1,75 @@
+2977 efsd.log
+1839
+94
+463
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=116224 drop=0 sent=95534 fail=1498 hi=2048 rtt_avg=4113us get_avg=41us get_max=43ms
+raft-obs: tx->3 enq=47406 drop=0 sent=47395 fail=8 hi=38 rtt_avg=78us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=147us lock_wait_max=1us drain_max=147us tick_max=71us apply_max=87us persist_max=605us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=116556 drop=0 sent=95726 fail=1517 hi=2048 rtt_avg=4156us get_avg=41us get_max=43ms
+raft-obs: tx->3 enq=47511 drop=0 sent=47500 fail=8 hi=38 rtt_avg=78us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=218us lock_wait_max=1us drain_max=218us tick_max=78us apply_max=77us persist_max=510us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=116861 drop=0 sent=95876 fail=1536 hi=2048 rtt_avg=4201us get_avg=42us get_max=43ms
+raft-obs: tx->3 enq=47615 drop=0 sent=47604 fail=8 hi=38 rtt_avg=78us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=137us lock_wait_max=127us drain_max=137us tick_max=68us apply_max=78us persist_max=533us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=117209 drop=0 sent=96053 fail=1555 hi=2048 rtt_avg=4244us get_avg=42us get_max=43ms
+raft-obs: tx->3 enq=47718 drop=0 sent=47707 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=160us lock_wait_max=1us drain_max=160us tick_max=81us apply_max=77us persist_max=504us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=117563 drop=0 sent=96266 fail=1574 hi=2048 rtt_avg=4286us get_avg=43us get_max=43ms
+raft-obs: tx->3 enq=47822 drop=0 sent=47811 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=156us lock_wait_max=1us drain_max=145us tick_max=99us apply_max=88us persist_max=536us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=118354 drop=0 sent=96830 fail=1593 hi=2048 rtt_avg=4313us get_avg=43us get_max=43ms
+raft-obs: tx->3 enq=47926 drop=0 sent=47915 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=51126us lock_wait_max=261us drain_max=51125us tick_max=98us apply_max=48002us persist_max=792us applies_in_worst=2 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=118980 drop=0 sent=97124 fail=1612 hi=2048 rtt_avg=4350us get_avg=43us get_max=43ms
+raft-obs: tx->3 enq=48030 drop=0 sent=48019 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=161us lock_wait_max=1us drain_max=161us tick_max=96us apply_max=91us persist_max=513us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=119349 drop=0 sent=97370 fail=1631 hi=2048 rtt_avg=4390us get_avg=44us get_max=43ms
+raft-obs: tx->3 enq=48135 drop=0 sent=48123 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=182us lock_wait_max=1us drain_max=181us tick_max=84us apply_max=131us persist_max=524us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=119684 drop=0 sent=97550 fail=1650 hi=2048 rtt_avg=4432us get_avg=44us get_max=43ms
+raft-obs: tx->3 enq=48239 drop=0 sent=48228 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=225us lock_wait_max=228us drain_max=224us tick_max=72us apply_max=142us persist_max=580us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=120011 drop=0 sent=97733 fail=1669 hi=2048 rtt_avg=4474us get_avg=44us get_max=43ms
+raft-obs: tx->3 enq=48343 drop=0 sent=48332 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=221us lock_wait_max=286us drain_max=221us tick_max=69us apply_max=173us persist_max=558us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+===tail
+raft-obs: tx->3 enq=47615 drop=0 sent=47604 fail=8 hi=38 rtt_avg=78us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=137us lock_wait_max=127us drain_max=137us tick_max=68us apply_max=78us persist_max=533us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=117209 drop=0 sent=96053 fail=1555 hi=2048 rtt_avg=4244us get_avg=42us get_max=43ms
+raft-obs: tx->3 enq=47718 drop=0 sent=47707 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=160us lock_wait_max=1us drain_max=160us tick_max=81us apply_max=77us persist_max=504us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=117563 drop=0 sent=96266 fail=1574 hi=2048 rtt_avg=4286us get_avg=43us get_max=43ms
+raft-obs: tx->3 enq=47822 drop=0 sent=47811 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=156us lock_wait_max=1us drain_max=145us tick_max=99us apply_max=88us persist_max=536us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=118354 drop=0 sent=96830 fail=1593 hi=2048 rtt_avg=4313us get_avg=43us get_max=43ms
+raft-obs: tx->3 enq=47926 drop=0 sent=47915 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=51126us lock_wait_max=261us drain_max=51125us tick_max=98us apply_max=48002us persist_max=792us applies_in_worst=2 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=118980 drop=0 sent=97124 fail=1612 hi=2048 rtt_avg=4350us get_avg=43us get_max=43ms
+raft-obs: tx->3 enq=48030 drop=0 sent=48019 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=161us lock_wait_max=1us drain_max=161us tick_max=96us apply_max=91us persist_max=513us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=119349 drop=0 sent=97370 fail=1631 hi=2048 rtt_avg=4390us get_avg=44us get_max=43ms
+raft-obs: tx->3 enq=48135 drop=0 sent=48123 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=182us lock_wait_max=1us drain_max=181us tick_max=84us apply_max=131us persist_max=524us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=119684 drop=0 sent=97550 fail=1650 hi=2048 rtt_avg=4432us get_avg=44us get_max=43ms
+raft-obs: tx->3 enq=48239 drop=0 sent=48228 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=225us lock_wait_max=228us drain_max=224us tick_max=72us apply_max=142us persist_max=580us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17
+raft-obs: tx->0 enq=2 drop=0 sent=2 fail=0 hi=2 rtt_avg=34us get_avg=1476us get_max=2ms
+raft-obs: tx->1 enq=120011 drop=0 sent=97733 fail=1669 hi=2048 rtt_avg=4474us get_avg=44us get_max=43ms
+raft-obs: tx->3 enq=48343 drop=0 sent=48332 fail=8 hi=38 rtt_avg=77us get_avg=0us get_max=3ms
+raft-obs: wait_timeouts=82 pump_hold_max=221us lock_wait_max=286us drain_max=221us tick_max=69us apply_max=173us persist_max=558us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=17

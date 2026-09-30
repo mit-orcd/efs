@@ -96,12 +96,21 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
- **UP 05:43Z Sep 30.** Rolled `--all`, no recorders
+ **UP 06:16Z Sep 30.** Rolled `--all`, no recorders
+ (`~/efs-runs/roll126.log`, ROLL_OK): `85f5b31c…-dirty` = HEAD
+ `85f5b31c` (pipelined-sender reply channel fix, learning below;
+ `results/measure/20260930-060000-dd-wedge`). fstor007 `/tmp/efs`
+ rebuilt on the same tree. Gate 06:19Z (`~/efs-runs/gate130.log`):
+ fcstor007 32 GiB non-zero dd+fsync **~1000 MiB/s** (32.85 s, rc 0,
+ size 34359738368), lane `fail=0` on 004/005 before and after,
+ terms g0 106 / g2 680 unchanged, commit==applied; fcstor007
+ unmounted cleanly afterwards. No client is mounted on 003–015.
+ Prior 05:43Z roll
  (`~/efs-runs/roll107.log`): `e002771e56e4-dirty` = HEAD `e002771e`
  (F1/F2/utimens flush in `a5e3d5fe`; conn-pool and reclaim fixes in
  `e002771e`, review `results/measure/20260930-051000-review2`).
- fstor007 `/tmp/efs` rebuilt on the same tree; no client mounted
- at the roll. Prior 05:06Z roll (`~/efs-runs/roll78.log`, ROLL_OK):
+ The user's 100 GiB dd on that build (06:00Z) wedged the mount: dd
+ close EIO, `ls` EBUSY, unmount DATA LOSS — the lane bug, not the KV. Prior 05:06Z roll (`~/efs-runs/roll78.log`, ROLL_OK):
  `06916bc7e5c1-dirty` = HEAD
  `06916bc7` + uncommitted raft wedge fix + F1 (RDMA peer reply
  wait bounded to 250 ms) + F2 (`inbox_drop=` on the raft-obs line)
@@ -596,9 +605,24 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  `HOST_SEND_IO_MS` on every conn kind; `server_raft_host_inbox`
  counts drops (`raft-host: inbox full` for the first ten,
  `inbox_drop=` on the obs line). A stalled lane now shows as `fail`
- +1 every 250 ms, not a 30 s freeze; it still does not say which
- side lost the reply. Stickiness (D15) and a separate peer credit
- class (D16) are asks.
+ +1 every 250 ms, not a 30 s freeze. **The reply was never lost
+ (Sep 30 06:17Z, `results/measure/20260930-060000-dd-wedge`):** a
+ frame over 72 KiB goes over the conn's TCP side-channel and is
+ answered on TCP, smaller ones on RDMA; `host_sender` pipelines up to
+ three messages and read the replies with `recv_chan` left at the
+ last message's channel, so [AE_REP (RDMA), big AE (TCP)] read TCP
+ only and left the RDMA reply in the ring → timeout → conn destroyed
+ → same window resent → same shape. Only the fcstor004↔fcstor005
+ lane mixes one group's AEs with the other's replies, and only a
+ big-entry stream (publish batches of a 100 GiB dd) makes the AE
+ take TCP; both directions failed every 250 ms for 10 min
+ (fail=2399, hi=2048), the fed follower sat ~700 entries behind, and
+ every follower-served read / dual-group REPORT was BUSY. Fixed
+ `85f5b31c`: `efs_conn.last_recv_chan`, replies counted per channel.
+ A `tx->N fail` that grows by exactly 4/s with `hi=2048` and stable
+ terms is a sender-side read on the wrong channel, not the wire.
+ Stickiness (D15) and a separate peer credit class (D16) are asks
+ without their motivating case.
 - Raft catch-up: follower dedupes same index+term entries; leader keeps
   one AE batch in flight per peer (`ae_inflight`). Before this, 005
   rewrote the same 128-entry window ~30×/s with an fsync each and never

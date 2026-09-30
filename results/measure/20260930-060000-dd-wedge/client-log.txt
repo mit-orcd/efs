@@ -1,0 +1,31 @@
+Discovered 4 cluster nodes from fcstor003.ib:19810
+  node id=1 172.16.223.57:19810
+  node id=4 172.16.223.60:19810
+  node id=2 172.16.223.58:19810
+  node id=3 172.16.223.59:19810
+fetching metadata...
+meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+export id=1 name=fs
+meta ready staged_rows=1 staged_chunks=0 staged_bytes=169120 root_get=0 mode=40755
+efs-fuse daemon pid=422312
+fuse serving
+efs: RDMA transport up on mlx5_1 port 1 (lid 1911, 36 x 72 KiB bufs/conn)
+efs-fuse: staging table over EFS_CLIENT_META_MB (256 MB) with nothing evictable; growing (pinned data is real work, not cache)
+report-loop ino=112106 rounds=1 stale=0 busy=1 ms=18582 rc=-13
+efs-fuse flush-meta: resource busy (efs_rc=-13) ino=112106 off=0 len=0
+inode-rpc: shard=1514 type=83 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+inode-rpc: shard=0 type=43 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY
+report-loop ino=0 rounds=1 stale=0 busy=1 ms=8204 rc=-13
+report-loop ino=0 rounds=1 stale=0 busy=1 ms=8125 rc=-13
+report-loop ino=0 rounds=1 stale=0 busy=1 ms=9626 rc=-13
