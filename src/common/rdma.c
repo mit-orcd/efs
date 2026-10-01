@@ -42,6 +42,18 @@
 #include <time.h>
 #include <unistd.h>
 
+/* x86 PAUSE / aarch64 YIELD: hint that this is a spin, not a data dependency. */
+static inline void cpu_relax(void)
+{
+#if defined(__x86_64__) || defined(__i386__)
+    __asm__ volatile("pause" ::: "memory");
+#elif defined(__aarch64__)
+    __asm__ volatile("yield" ::: "memory");
+#else
+    __asm__ volatile("" ::: "memory");
+#endif
+}
+
 #define EFS_RDMA_NRECV_DEFAULT 4 /* posted recv buffers per QP */
 /* One buffer per in-flight send on this QP. The write pipeline posts
  * EFS_WRITE_PIPELINE chunks; with 2 buffers the third send spun in
@@ -801,7 +813,7 @@ static void *recv_poller(void *arg)
          * the next completion is then invisible until poll() times
          * out — that added about a millisecond to every RPC. */
         if (__sync_fetch_and_add(&g_live_conns, 0) > 0 && ++empty < 32) {
-            __asm__ volatile("pause" ::: "memory");
+            cpu_relax();
             continue;
         }
         empty = 0;
@@ -1678,7 +1690,7 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
                     break;
                 if (rc->broken)
                     return EFS_ERR_NET;
-                __asm__ volatile("pause" ::: "memory");
+                cpu_relax();
             }
         }
         if (pend_pop(rc))
@@ -1827,7 +1839,7 @@ int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us)
             return 1;
         if (rc->broken)
             return -1;
-        __asm__ volatile("pause" ::: "memory");
+        cpu_relax();
     }
     return 0;
 }

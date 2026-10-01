@@ -18,6 +18,22 @@ LDFLAGS = -lpthread -lm -ldl -libverbs
 COMMON_DIR = src/common
 BLAKE3_DIR = deps/blake3
 
+# ISA kernels. Each x86 file is compiled with its own -m flag so a Zen2
+# -march=native build can still include the AVX-512 object. aarch64 uses
+# the NEON kernel (baseline; no extra -m). Anywhere else, dispatch falls
+# through to the portable kernel.
+CC_TARGET := $(shell $(CC) -dumpmachine 2>/dev/null || uname -m)
+ifneq (,$(filter aarch64% arm64%,$(CC_TARGET)))
+BLAKE3_ARCH_SRCS = $(BLAKE3_DIR)/blake3_neon.c
+else ifneq (,$(filter x86_64% i386% i686% amd64%,$(CC_TARGET)))
+BLAKE3_ARCH_SRCS = $(BLAKE3_DIR)/blake3_sse2.c \
+              $(BLAKE3_DIR)/blake3_sse41.c \
+              $(BLAKE3_DIR)/blake3_avx2.c \
+              $(BLAKE3_DIR)/blake3_avx512.c
+else
+BLAKE3_ARCH_SRCS =
+endif
+
 COMMON_SRCS = $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/protocol.c \
@@ -52,10 +68,7 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               $(BLAKE3_DIR)/blake3.c \
               $(BLAKE3_DIR)/blake3_portable.c \
               $(BLAKE3_DIR)/blake3_dispatch.c \
-              $(BLAKE3_DIR)/blake3_sse2.c \
-              $(BLAKE3_DIR)/blake3_sse41.c \
-              $(BLAKE3_DIR)/blake3_avx2.c \
-              $(BLAKE3_DIR)/blake3_avx512.c \
+              $(BLAKE3_ARCH_SRCS) \
               src/client/client.c \
               src/client/ops.c \
               src/client/read.c \
@@ -97,10 +110,7 @@ FUSE_LIBS := $(shell pkg-config --libs fuse3 2>/dev/null)
 BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_portable.o \
               $(BLAKE3_DIR)/blake3_dispatch.o \
-              $(BLAKE3_DIR)/blake3_sse2.o \
-              $(BLAKE3_DIR)/blake3_sse41.o \
-              $(BLAKE3_DIR)/blake3_avx2.o \
-              $(BLAKE3_DIR)/blake3_avx512.o
+              $(BLAKE3_ARCH_SRCS:.c=.o)
 
 .PHONY: all clean tests test docs-check blake3-bench FORCE
 

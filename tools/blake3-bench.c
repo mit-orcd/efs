@@ -88,7 +88,7 @@ static const char *blake3_best_cpu_feature(void)
 #else
 static const char *blake3_best_cpu_feature(void)
 {
-#if BLAKE3_USE_NEON == 1
+#if defined(__aarch64__) && !defined(__ARM_BIG_ENDIAN)
     return "NEON";
 #else
     return "portable";
