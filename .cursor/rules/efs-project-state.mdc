@@ -279,6 +279,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   `test_noop_over_stale_tail`). A follower waiting in `apply-sleep`
   for an index above its own `last_i` on a stable term is this class:
   gdb the leader's `send_idx`/`match_index` before anything else.
+- **A rotated SNAP record's base is a value, 0 included (Oct 1,
+  `test_raft_store` `test_rotation`).** `raft_log_rotate_locked` writes
+  the retained window's `log_base` into the 24-byte SNAP record; replay
+  read hint 0 as "pre-window record, compact everything", set
+  `log_base = snap_idx`, and the entries from index 1 that followed were
+  a gap → `efs_raft_disk_open` returned NULL. Any group that rotated
+  while its first 512 MiB window was still whole could not restart.
+  `RAFT_SNAP_NO_HINT` is the absence now (16-byte records, live
+  `save_snap`). `make test` had been red since W22 (Sep 29) for this and
+  for `drive_pair` expecting raft_mem's compact-at-once answers from the
+  windowed disk store; run it on a node after every raft/kv change.
 - **A Raft proposal is identified by `(index, term)`, never by index
   (I17 root cause, fixed `46d54e6`):** the apply ring matched by index;
   after a leader change the truncated entry's index is reused and the

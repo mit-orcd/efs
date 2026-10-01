@@ -8058,7 +8058,7 @@ static int host_dir_migrate_txn(struct efs_raft_host *h, efs_ino_t dir,
     uint8_t k_loc[EFS_KV_KEY_MAX], k_hash[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX];
     uint8_t v_dent[EFS_META_DENT_BYTES];
-    uint8_t loc_buf[EFS_META_DENT_BYTES], cmd[22];
+    uint8_t loc_buf[EFS_META_DENT_BYTES];
     uint32_t kl = 0, kh = 0, ki = 0, ks = 0, locn;
     uint32_t psh, coord;
     uint64_t loc_ver = 0, hash_ver = 0, bit;
@@ -8350,7 +8350,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     uint32_t psh, coord;
     uint64_t aver = 0, dver = 0;
     uint64_t bit;
-    uint8_t lane, cmd[22];
+    uint8_t lane;
     efs_ino_t next = 0, ino = 0;
     int rc, i;
 
@@ -8480,7 +8480,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
     uint64_t aver = 0, dver = 0, salt = 0;
     uint64_t now;
     efs_ino_t next = 0, ino = 0;
-    uint8_t cmd[22], mkcmd[HOST_CMD_MAX], p_lane = 0;
+    uint8_t mkcmd[HOST_CMD_MAX], p_lane = 0;
     uint32_t mklen = 0;
     struct host_idx_ref prefs[8];
     int hint = -1;
@@ -8775,7 +8775,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     uint32_t kpi = 0, kci = 0, kps = 0, kcs = 0, nent = 0;
     uint32_t psh, csh, dsh, coord;
     uint64_t cver = 0, gver = 0, now;
-    uint8_t cmd[HOST_CMD_MAX], rmcmd[HOST_CMD_MAX], p_lane = 0;
+    uint8_t rmcmd[HOST_CMD_MAX], p_lane = 0;
     struct host_idx_ref prefs[16];
     int hint = -1;
     int rc, i, held, stamp_lane = 0, ngv = 0, hashed_child = 0, npref = 0;
@@ -9122,7 +9122,6 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     uint8_t k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
-    uint8_t cmd[22];
     uint32_t ki = 0, kp = 0, ks = 0, krl = 0;
     uint32_t dsh, ish, psh, coord, ash = 0;
     uint64_t iver = 0, now;
@@ -10097,7 +10096,7 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
     struct efs_txn_ino_delta pd, id;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX];
-    uint8_t v_dent[EFS_META_DENT_BYTES], cmd[22];
+    uint8_t v_dent[EFS_META_DENT_BYTES];
     uint32_t kd = 0, ki = 0, kp = 0, ks = 0;
     uint32_t dsh, ish, psh, coord;
     uint64_t dver = 0, now;
@@ -10316,7 +10315,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     uint8_t k_nino[EFS_KV_KEY_MAX], k_ndseq[EFS_KV_KEY_MAX];
     uint8_t k_dpar[EFS_KV_KEY_MAX], k_ddseq[EFS_KV_KEY_MAX];
     uint8_t v_dent[EFS_META_DENT_BYTES];
-    uint8_t v_pver[8], cmd[22];
+    uint8_t v_pver[8];
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
     uint32_t kd = 0, ki = 0, kp = 0, kq = 0, kpv = 0;
     uint32_t kn = 0, knd = 0, krl = 0, kdp = 0, kdsq = 0;

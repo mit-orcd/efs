@@ -36,6 +36,12 @@
 #define RAFT_REC_SNAP  4
 #define RAFT_REC_CFG   5
 
+/* raft_group_snap base_hint for "no retained-window base": a live
+ * save_snap and the replay of a pre-window 16-byte SNAP record. A
+ * rotated 24-byte record carries the real log_base, which is 0 while
+ * the first window is still whole — 0 is a value, not the absence. */
+#define RAFT_SNAP_NO_HINT UINT64_MAX
+
 /* Enforced at append AND at replay: a record replay would refuse to read must
  * be impossible to commit (the kv_wal lesson). */
 #define RAFT_CMD_MAX (8u * 1024u * 1024u)

@@ -165,9 +165,11 @@ int raft_group_snap(struct raft_disk_group *g, uint64_t last_index,
         }
     } else if (g->n == 0) {
         /* Rotated file: the SNAP record is replayed before its entries.
-         * base_hint is the retained window. Old 16-byte records have
-         * hint 0 and compact the whole prefix. */
-        if (base_hint > 0 && base_hint <= last_index)
+         * base_hint is the retained window's base (0 while the first
+         * window is whole: the entries from index 1 follow). A live
+         * save_snap and an old 16-byte record carry RAFT_SNAP_NO_HINT
+         * and compact the whole prefix. */
+        if (base_hint != RAFT_SNAP_NO_HINT && base_hint <= last_index)
             g->log_base = base_hint;
         else
             g->log_base = last_index;
@@ -388,7 +390,7 @@ static int disk_save_snap(void *ctx, uint64_t last_index, uint64_t last_term)
     rc = raft_log_append(g->d, RAFT_REC_SNAP, g, last_index, last_term, NULL,
                          0);
     if (rc == EFS_OK) {
-        rc = raft_group_snap(g, last_index, last_term, 0);
+        rc = raft_group_snap(g, last_index, last_term, RAFT_SNAP_NO_HINT);
         /* A snapshot can drop almost the whole file. The usual check
          * waits until the file doubles, which would leave a multi-GB
          * log on disk after the prefix is dead. */

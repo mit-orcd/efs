@@ -304,7 +304,7 @@ static int replay_one(struct efs_raft_disk *d, const uint8_t *p, uint32_t len)
             return EFS_ERR_PROTO;
         return raft_group_truncate(g, get_u64(p + off));
     case RAFT_REC_SNAP: {
-        uint64_t hint = 0;
+        uint64_t hint = RAFT_SNAP_NO_HINT;
 
         if (len - off != 16 && len - off != 24)
             return EFS_ERR_PROTO;

@@ -73,7 +73,41 @@ static int st_check(struct efs_raft_store *s, uint64_t idx, uint64_t term,
     return clen == 0 || memcmp(buf, cmd, clen) == 0;
 }
 
-/* --- semantics: disk must match raft_mem exactly --------------------- */
+/* get() of the snapshot's own index: the term must match; the payload is
+ * the original command while the entry sits in a retained window, empty
+ * once it has been compacted. */
+static int st_snapped(struct efs_raft_store *s, uint64_t idx, uint64_t term,
+                      const char *cmd)
+{
+    uint8_t buf[512];
+    uint32_t clen = sizeof(buf);
+    uint64_t got_term = 0;
+
+    if (s->get(s, idx, &got_term, buf, &clen) != EFS_OK)
+        return 0;
+    if (got_term != term)
+        return 0;
+    if (clen == 0)
+        return 1;
+    return clen == strlen(cmd) && memcmp(buf, cmd, clen) == 0;
+}
+
+/* get() below the snapshot: NOT_FOUND, or exactly the original entry. */
+static int st_below_snap(struct efs_raft_store *s, uint64_t idx,
+                         uint64_t term, const char *cmd)
+{
+    uint8_t buf[512];
+    uint32_t clen = sizeof(buf);
+    uint64_t got_term = 0;
+    int rc = s->get(s, idx, &got_term, buf, &clen);
+
+    if (rc == EFS_ERR_NOT_FOUND)
+        return 1;
+    return rc == EFS_OK && got_term == term && clen == strlen(cmd) &&
+           memcmp(buf, cmd, clen) == 0;
+}
+
+/* --- semantics: disk must match raft_mem ----------------------------- */
 
 /* Runs the same script against both stores and compares every answer, so
  * the two implementations cannot drift. */
@@ -131,14 +165,20 @@ static void drive_pair(struct efs_raft_store *a, struct efs_raft_store *b)
     r1 = a->save_snap(a, 2, 7);
     r2 = b->save_snap(b, 2, 7);
     CHECK(r1 == r2 && r1 == EFS_OK, "save_snap rc differs");
-    /* The snapshot index itself still answers, with an empty command. */
-    CHECK(st_check(a, 2, 7, "") && st_check(b, 2, 7, ""),
+    /* The snapshot index itself still answers with its term. A store
+     * that keeps a retained window (raft_disk, EFS_RAFT_SNAP_BYTES) still
+     * holds the entry's payload; one that compacts at once (raft_mem)
+     * answers with an empty command. Both are the contract (raft.h
+     * log_floor). */
+    CHECK(st_snapped(a, 2, 7, "cmd-2") && st_snapped(b, 2, 7, "cmd-2"),
           "snap index should report its term");
-    c1 = sizeof(b1);
-    c2 = sizeof(b2);
-    r1 = a->get(a, 1, &t1, b1, &c1);
-    r2 = b->get(b, 1, &t2, b2, &c2);
-    CHECK(r1 == r2 && r1 == EFS_ERR_NOT_FOUND, "compacted prefix differs");
+    /* Below the snapshot: gone, or still the original entry — never
+     * anything else. */
+    CHECK(st_below_snap(a, 1, 7, "cmd-1") && st_below_snap(b, 1, 7, "cmd-1"),
+          "compacted prefix answers wrongly");
+    a->last(a, &ai, &at);
+    b->last(b, &bi, &bt);
+    CHECK(ai == bi && ai == 4, "last after snap differs");
     CHECK(st_check(a, 3, 9, "rewritten") && st_check(b, 3, 9, "rewritten"),
           "entry above snap lost");
 
@@ -394,13 +434,19 @@ static void test_crash_durability(void)
 
 /* --- rotation -------------------------------------------------------- */
 
-/* The log must not grow without bound as snapshots make records dead, and
- * rotation must preserve the live state exactly. */
+/* The log must not grow without bound as truncation makes records dead,
+ * and rotation must preserve the live state exactly — including a
+ * snapshot whose retained window (EFS_RAFT_SNAP_BYTES) still starts at
+ * index 1. That case is the first 512 MiB of every group's life: the
+ * rotated SNAP record carries log_base 0, and replay must read 0 as "the
+ * window starts at 1", not as "no window, compact everything" — which is
+ * what it did until Oct 1 2026 (reopen after rotation returned NULL). */
 static void test_rotation(void)
 {
     struct efs_raft_disk *d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_NOSYNC);
     struct efs_raft_store *s;
     uint64_t before, after, idx = 0, term = 0;
+    uint32_t clen;
     char cmd[256];
     int k;
 
@@ -411,16 +457,24 @@ static void test_rotation(void)
     cmd[sizeof(cmd) - 1] = '\0';
     for (k = 1; k <= 400; k++)
         CHECK(st_append(s, (uint64_t)k, 1, cmd) == EFS_OK, "bulk append");
-    /* Snapshot through 399: only index 400 stays live. save_snap rotates
-     * immediately — a multi-GB log must not wait until the file doubles. */
+    /* Truncate half: 200 records in the file are dead. Rotation must
+     * shrink the file to the live 200 and nothing else. */
+    CHECK(s->truncate_from(s, 201) == EFS_OK, "truncate");
     before = efs_raft_disk_bytes(d);
-    CHECK(s->save_snap(s, 399, 1) == EFS_OK, "save_snap");
-    after = efs_raft_disk_bytes(d);
-    CHECK(after < before, "snapshot did not shrink the log");
     CHECK(efs_raft_disk_rotate(d) == EFS_OK, "rotate");
-    CHECK(s->last(s, &idx, &term) == EFS_OK && idx == 400,
+    after = efs_raft_disk_bytes(d);
+    CHECK(after < before, "rotation did not shrink the log");
+    CHECK(s->last(s, &idx, &term) == EFS_OK && idx == 200,
           "rotation lost the live tail");
-    CHECK(st_check(s, 400, 1, cmd), "rotation lost the live payload");
+    CHECK(st_check(s, 1, 1, cmd) && st_check(s, 200, 1, cmd),
+          "rotation lost a live payload");
+    /* Snapshot through 150. 200 × 255 B is far inside the window, so
+     * every entry stays, log_base stays 0, and a rotation writes a SNAP
+     * record with base 0 followed by entries from index 1. */
+    CHECK(s->save_snap(s, 150, 1) == EFS_OK, "save_snap");
+    CHECK(efs_raft_disk_rotate(d) == EFS_OK, "rotate after snapshot");
+    CHECK(s->last(s, &idx, &term) == EFS_OK && idx == 200,
+          "snapshot rotation lost the tail");
     efs_raft_disk_close(d);
 
     /* And the rotated file must be what a restart reads. */
@@ -429,11 +483,19 @@ static void test_rotation(void)
     if (!d)
         return;
     s = efs_raft_disk_group(d, EFS_RAFT_GROUP_SHARD);
-    CHECK(s->last(s, &idx, &term) == EFS_OK && idx == 400,
+    CHECK(s->last(s, &idx, &term) == EFS_OK && idx == 200,
           "rotated log did not replay");
-    CHECK(st_check(s, 400, 1, cmd), "rotated payload did not replay");
-    CHECK(s->get(s, 5, &term, NULL, (uint32_t *)&idx) == EFS_ERR_NOT_FOUND,
-          "compacted entry came back");
+    CHECK(s->load_snap(s, &idx, &term) == EFS_OK && idx == 150 && term == 1,
+          "snapshot did not replay");
+    CHECK(st_check(s, 200, 1, cmd), "rotated payload did not replay");
+    CHECK(st_check(s, 1, 1, cmd) && st_check(s, 150, 1, cmd),
+          "retained window did not replay");
+    clen = 0;
+    CHECK(s->get(s, 201, &term, NULL, &clen) == EFS_ERR_NOT_FOUND,
+          "truncated entry came back");
+    /* A follower inside the window is served from the log: 1 is the floor. */
+    CHECK(s->log_floor == NULL || s->log_floor(s) == 1,
+          "log_floor is not the window start");
     efs_raft_disk_close(d);
     rmtree(g_dir);
 }
