@@ -1,4 +1,5 @@
 #include "efs/common.h"
+#include "efs/log_ts.h"
 #include "efs/network.h"
 #include "bench_local.h"
 #include "server_internal.h"
@@ -325,6 +326,7 @@ int main(int argc, char **argv)
 {
     /* Install before any work — imagenet load has produced silent SIGSEGVs. */
     efsd_install_crash_handlers();
+    efs_log_timestamps_install();
 
     /* The 1024-fd soft cap put accept() into EMFILE backoff under conn
      * storms (~500 live conns + data files), which wedged new mounts and

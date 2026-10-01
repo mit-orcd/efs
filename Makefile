@@ -19,6 +19,7 @@ COMMON_DIR = src/common
 BLAKE3_DIR = deps/blake3
 
 COMMON_SRCS = $(COMMON_DIR)/common.c \
+              $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/protocol.c \
               src/wire/wire.c \
               src/data/erasure.c \

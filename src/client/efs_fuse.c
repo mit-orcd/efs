@@ -5,6 +5,7 @@
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/kv_key.h"
+#include "efs/log_ts.h"
 #include "efs/rdma.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -5124,6 +5125,7 @@ int main(int argc, char **argv)
     /* Line-buffer logs even when stdout is a pipe (client.sh | tee). */
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IOLBF, 0);
+    efs_log_timestamps_install();
     efs_fuse_install_crash_handlers();
 
     int perf = 0, strace_opt = 0;

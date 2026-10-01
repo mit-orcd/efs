@@ -334,7 +334,10 @@ void efs_conn_destroy(struct efs_conn *c)
         int nb = backtrace(bt, 8);
         fprintf(stderr, "rdma-first: conn destroy fd=%d qpn=%u match=%d\n",
                 c->fd, efs_rdma_qpn(c->rc), efs_conn_fd_matches(c));
-        backtrace_symbols_fd(bt, nb, fileno(stderr));
+        /* fd 2, not fileno(stderr): the daemons' stderr is a cookie
+         * stream (log_ts.c) whose fileno is -1. */
+        fflush(stderr);
+        backtrace_symbols_fd(bt, nb, 2);
     }
     int own = efs_conn_fd_matches(c);
 

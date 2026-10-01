@@ -572,6 +572,36 @@ out:
     pthread_mutex_unlock(&g_client.dirty_mu);
 }
 
+/* D24 (Oct 1 2026): publish landed chunks while the file is still being
+ * written. W30 PUTs every completed chunk during the write, but nothing
+ * REPORTed them until close(): a 20 GiB dd's close() was one REPORT of
+ * 163 840 records (~27 MB) that the server answered in 2.3 s alone and in
+ * minutes when eight such closes met (every recv timeout re-sent the
+ * whole REPORT, attempts=6, 116 s; the killed writers sat in D-state
+ * in the kernel's forced FLUSH and the mount was wedged for every other
+ * process). Now every REPORT_LANDED_CHUNKS landed PUTs (1 GiB) kick the
+ * flush thread, which REPORTs the whole dirty set without waiting for a
+ * commit (the same records close would send, in the same code path).
+ * close() then publishes only the tail. The count is global, so eight
+ * concurrent writers share one REPORT per GiB landed. A REPORT at
+ * 8192 records is ~1.4 MB and ~100 ms of server time. Internal
+ * constant, not a knob. */
+#define REPORT_LANDED_CHUNKS 8192u
+static unsigned g_landed_unreported;
+
+static void report_landed_note(void)
+{
+    unsigned n = __atomic_add_fetch(&g_landed_unreported, 1, __ATOMIC_RELAXED);
+    if (n < REPORT_LANDED_CHUNKS)
+        return;
+    /* One kicker per crossing: whoever swaps the count back to 0. */
+    if (__atomic_compare_exchange_n(&g_landed_unreported, &n, 0u, 0,
+                                    __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
+        fprintf(stderr, "report-landed: %u chunks landed, kicking REPORT\n", n);
+        efs_client_kick_meta_flush();
+    }
+}
+
 /* The client-driven metadata flush (flush_snapshot / send_meta_root /
  * META_FLUSH_BEGIN election / take_write_lease) was removed: the server is
  * the sole metadata writer (Phase 2b REPORT_CHUNKS + server-side flush with
@@ -2797,6 +2827,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
         pthread_mutex_unlock(dcache_mu(sl));
     }
     efs_client_mark_chunk_dirty(ino, ci);
+    report_landed_note();
     /* Mark the ino too so the next report carries its size/mtime irec. The
      * append path reflects the reserved size before the patch, so
      * dcache_note_size sees no growth and skips its mark — and the

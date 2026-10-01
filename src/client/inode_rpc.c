@@ -396,7 +396,8 @@ static struct efs_conn *rpc_owner_conn_shard(uint32_t shard,
 }
 
 static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
-                              uint8_t expect, void *reply, uint32_t reply_len);
+                              uint8_t expect, void *reply, uint32_t reply_len,
+                              int recv_ms);
 
 /* Send to the owner of `shard`. Retry NOT_PRIMARY. */
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
@@ -637,7 +638,7 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     int rc = S_ISDIR(mode)
                  ? rpc_send_recv_dual(EFS_MSG_INODE_CREATE, buf, slen,
                                       EFS_MSG_INODE_CREATE_REPLY, &r,
-                                      sizeof(r))
+                                      sizeof(r), 0)
                  : rpc_send_recv_owner(parent, EFS_MSG_INODE_CREATE, buf,
                                        slen, EFS_MSG_INODE_CREATE_REPLY,
                                        &r, sizeof(r));
@@ -1099,9 +1100,15 @@ int efs_client_rpc_past_deadline(void)
 }
 
 /* rpc_send_recv_shard with the dual-host picker (raft mode reports). Same
- * NOT_PRIMARY hint-following; BUSY backs off and retries. */
+ * NOT_PRIMARY hint-following; BUSY backs off and retries. recv_ms > 0
+ * bounds the reply wait for this call instead of the conn's 30 s
+ * default: a REPORT's service time grows with its record count, and a
+ * recv timeout on a request the server is still executing re-sends the
+ * whole request (Oct 1 2026: 8 × 20 GiB close REPORTs, attempts=6,
+ * 116 s). */
 static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
-                              uint8_t expect, void *reply, uint32_t reply_len)
+                              uint8_t expect, void *reply, uint32_t reply_len,
+                              int recv_ms)
 {
     efs_node_id_t target = 0;
     efs_node_id_t skip = 0;
@@ -1136,19 +1143,25 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         uint8_t rtype = 0;
         void *payload = NULL;
         uint32_t plen = 0;
+        if (recv_ms > 0)
+            efs_conn_set_recv_timeout(conn, recv_ms);
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
             efs_client_conn_drop(nid, conn);
             if (attempt + 1 < 16) {
                 unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-                fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d\n",
-                        type, attempt, rc);
+                fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
+                        "req_len=%u recv_ms=%d\n",
+                        type, attempt, rc, req_len,
+                        recv_ms > 0 ? recv_ms : EFS_IO_TIMEOUT_MS);
                 usleep((useconds_t)(50000ull << shift));
                 continue;
             }
             return EFS_ERR_NET;
         }
+        if (recv_ms > 0)
+            efs_conn_set_recv_timeout(conn, 0); /* pooled conn: default again */
         efs_client_conn_release(nid, conn);
         if (rtype != expect || plen < reply_len) {
             fprintf(stderr, "inode-rpc: proto type=%u rtype=%u plen=%u "
@@ -1242,8 +1255,15 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     if (ino_count)
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
     struct efs_msg_inode_reply r;
+    /* Reply wait sized to the work: the server packs, publishes and
+     * waits for a Raft commit per record (13 us/rec alone, 8 concurrent
+     * 160k-rec REPORTs went past 30 s). 0.5 ms per record on top of the
+     * default; D24's periodic REPORT keeps a sequential writer's close
+     * near 8192 records, so this is the bound for the rest. */
+    int recv_ms = EFS_IO_TIMEOUT_MS + (int)(count / 2u);
     int rc = rpc_send_recv_dual(EFS_MSG_REPORT_CHUNKS, buf, (uint32_t)len,
-                                EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r));
+                                EFS_MSG_REPORT_CHUNKS_REPLY, &r, sizeof(r),
+                                recv_ms);
     free(buf);
     if (rc != EFS_OK)
         return rc;

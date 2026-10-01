@@ -1007,6 +1007,27 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   2 nodes, HCAs on node 0 → CPUs 0–11. Pin means affinity + MPOL_PREFERRED,
   set before the first thread; a pin after threads exist binds one
   thread only.
+- **A client whose dd's sit in D-state in `request_wait_answer` while
+  efs-fuse is idle (all threads asleep, FUSE workers in `read`,
+  `/sys/fs/fuse/connections/N/waiting=0`) is waiting on ONE RPC's retry
+  loop, not on the kernel or the servers (Oct 1 13:41Z, fstor007, 8 ×
+  20 GiB dd + ecopy).** The close-time REPORT of a 20 GiB file was
+  163 840 records; eight at once exceeded the 30 s recv timeout and
+  `rpc_send_recv_dual` re-sent the whole REPORT (`retry type=67
+  why=recv rc=-6`, `slow-ok attempts=6 us=116 s`); every other close
+  on the client queued on `report_mu` (ecopy "never started"); SIGKILL
+  cannot interrupt the kernel's forced FLUSH. **D24 (decided by the
+  user Oct 1):** `report_landed_note` REPORTs the dirty set every 8192
+  landed PUTs (`report-landed:` line), so close publishes ≤ 1 GiB; the
+  REPORT reply wait is `30 s + 0.5 ms × records`. Gate: 4 × 8 GiB dd
+  on one client 9.8 s (3.5 GB/s) with a concurrent 300-file
+  create/close storm at p99 51 ms (`agent-wedge-20261001-141222`).
+  `report_mu` is still one lock per client (W41, ask). Diagnose this
+  class with `gdb -p` + `ps -o wchan` + the log, no strace needed.
+- **Both daemons stamp every log line** (`src/common/log_ts.c`,
+  `2026-10-01T14:01:46.414Z ` prefix via `fopencookie` on fds 1/2,
+  `EFS_LOG_TS=0` off). `fileno(stderr)` is -1 in the daemons — write
+  raw bytes to fd 2. All harness greps are substring matches.
 - **Remounting through `scripts/client.sh` right after `stop` fails with
   "another efs-fuse already holds"** — the flock fd is inherited by the
   dying daemon; poll `pgrep -x efs-fuse` empty before the next mount.

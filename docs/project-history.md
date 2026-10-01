@@ -25,6 +25,65 @@ time, so the same day can appear in several places.
 
 ---
 
+## Oct 1 2026 14:00Z — the fstor007 wedge: D24 decided, REPORT reply wait sized, log timestamps
+
+**Symptom (user).** fstor007, 8 parallel 20 GiB `dd bs=1M` + an `ecopy`:
+once ecopy started the mount blocked, ecopy never got going, SIGKILL
+left the processes stuck.
+
+**Read live, no tracing (13:41Z, `~/efs-runs/rec-look550..559.log`).**
+16 `dd` in D-state in `request_wait_answer`, cmdline already gone
+(`[dd]`: past `exit_mm`, i.e. the kill had landed and they were in the
+kernel's forced, uninterruptible close-time FLUSH); `ecopy` a zombie
+with threads in D; load 56. efs-fuse (pid 2007820) alive: 63 threads,
+all asleep — 10 FUSE workers in `read(/dev/fuse)`, 32 put-pool + 16
+reclaim in `cond_wait` (gdb snapshot `/tmp/efs-fuse-stacks-552.txt`);
+`/sys/fs/fuse/connections/59/waiting=0`. Servers: commit==applied,
+`apply_max` < 1 ms, `inbox_drop=0`, no elections. The client log
+(`/tmp/efs-fuse-efs-mount.log`, no timestamps then) ended with
+`retry type=67 why=recv rc=-6` ×3, `slow-ok type=67 attempts=6
+saw_busy=1 us=116309308`, then `attempts=4 us=121101530`. Everything
+had drained by 13:44Z.
+
+**Mechanism.** Type 67 = `REPORT_CHUNKS`. One 20 GiB file is 163 840
+records (~27 MB), 2.2 s of server time alone; eight arriving together
+pushed some past `EFS_IO_TIMEOUT_MS` (30 s), `rpc_send_recv_dual`
+dropped the conn and re-sent the whole REPORT, up to six times, so
+each `close()` took ~2 min. Every `close()` on the client goes through
+`efs_client_report_dirty_ino` → `report_mu`, so ecopy's first close on
+every thread queued behind that loop. The kernel's FLUSH/RELEASE on
+close is `force`d, so SIGKILL could not release the waiters.
+
+**Decided (user, 14:00Z): "implement all fixes that prevent the lock",
+timestamps in the logs.** Done:
+1. **D24** — `report_landed_note()` in `dcache_put_now`: every 8192
+   landed PUTs (1 GiB, global) kick `meta_flush_main`, which REPORTs
+   the whole dirty set (`sync=0`, the close path's records and code);
+   close() publishes only the tail. `report-landed:` log line.
+2. `rpc_send_recv_dual(…, recv_ms)`: REPORT's reply wait is
+   `EFS_IO_TIMEOUT_MS + count/2` ms (0.5 ms/record), restored to the
+   conn default on release; the `retry … why=recv` line prints
+   `req_len` and the bound.
+3. `src/common/log_ts.c`: both daemons replace stdout/stderr with
+   `fopencookie` streams that prefix every line with
+   `YYYY-MM-DDTHH:MM:SS.mmmZ `; `EFS_LOG_TS=0` disables;
+   `backtrace_symbols_fd` writes to fd 2 (cookie `fileno` is -1).
+
+**Not done — W41 (ask).** `report_mu` still serializes every close on
+one client behind one REPORT's retry loop (BUSY ≈ 2 s, STALE up to the
+8 s sync budget). Removing it needs per-inode extraction from the
+open-addressing dirty sets and a multi-slot `pub_ino` set; the
+snapshot swap is load-bearing for "close returns only after this
+inode's records went out".
+
+**Gate.** Unit tests pass (`bld561`). `~/efs-runs/wedge565.sh` on
+fcstor007 (`agent-wedge-20261001-141222`): 4 × 8 GiB dd+fsync from one
+client in 9.8 s (3.5 GB/s aggregate, sizes correct) with a concurrent
+300-file create+write+close storm at p50 4.7 / p99 51 / max 213 ms;
+32 `report-landed`, zero `fsync-split`, zero retries. Clients
+fcstor003–015 and fstor007's `/tmp/efs` on this tree; servers not
+rolled (timestamps only; the user's live session).
+
 ## Oct 1 2026 13:20Z — the user's 20 GiB dd perf dir: reclaim herd, read buffer, NUMA pin
 
 **Input.** `~/orcd/scratch/efs/perf/efs-mount/` from fstor007: `client.sh
