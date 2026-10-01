@@ -5,6 +5,7 @@
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/kv_key.h"
+#include "efs/rdma.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -1698,8 +1699,11 @@ int efs_client_ino_is_open(efs_ino_t ino)
  * every regular open (not just O_DIRECT). Application O_DIRECT still
  * requires 4 KiB alignment; FOPEN_DIRECT_IO does not — the kernel
  * sends ordinary unaligned FUSE reads/writes once cache is bypassed.
- * libfuse 3.10.2 fuse_reply_open cannot set FOPEN_PARALLEL_DIRECT_WRITES
- * or INIT max_pages (kernel default 32 pages = 128 KiB/request). */
+ * libfuse 3.10.2 fuse_reply_open cannot set FOPEN_PARALLEL_DIRECT_WRITES.
+ * Requests ARE 1 MiB here (Oct 1 2026 strace of a 1 MiB dd: read(/dev/fuse)
+ * = 1048656, reply writev = 1048592): libfuse 3.10.2 negotiates
+ * FUSE_MAX_PAGES with max_write, so a 1 MiB write() is one FUSE request
+ * and eight 128 KiB chunks per ll_write_buf. */
 static void fuse_fi_direct_io(struct fuse_file_info *fi)
 {
     if (!fi)
@@ -3959,8 +3963,17 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
          * which is the same one kernel->user copy read(/dev/fuse) does,
          * plus one splice per request (24 668 in 67 s, 17 072 of them
          * header-sized). `copyout` under `pipe_read` was 5.2% of the
-         * client. Leave it off; fs.pipe-max-size no longer matters. */
-        conn->want &= ~FUSE_CAP_SPLICE_READ;
+         * client. Leave it off; fs.pipe-max-size no longer matters.
+         * EFS_FUSE_SPLICE_READ=1 turns it back on for a measurement
+         * (a 1 MiB streaming write is two copies without it). */
+        {
+            const char *sp = getenv("EFS_FUSE_SPLICE_READ");
+
+            if (sp && *sp && strcmp(sp, "0") != 0)
+                conn->want |= FUSE_CAP_SPLICE_READ;
+            else
+                conn->want &= ~FUSE_CAP_SPLICE_READ;
+        }
 #endif
         if (conn->congestion_threshold < 96)
             conn->congestion_threshold = 96;
@@ -4368,13 +4381,38 @@ static void ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
         fuse_reply_open(req, fi);
 }
 
+/* Per-worker reply buffer. A malloc(1 MiB)/free per READ request sat
+ * above glibc's mmap threshold on every call (fresh pages, kernel memset
+ * and rmqueue in the read profile of a 20 GiB dd, Oct 1 2026); the
+ * worker keeps one buffer sized to the largest request it has seen. */
+#define LL_READ_BUF_MAX (16u << 20)
+static __thread char *t_rd_buf;
+static __thread size_t t_rd_cap;
+
 static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                     struct fuse_file_info *fi)
 {
     char *buf;
-    int n;
+    int n, owned = 0;
     t_req = req;
-    buf = malloc(size ? size : 1);
+    if (size <= LL_READ_BUF_MAX) {
+        if (size > t_rd_cap) {
+            size_t cap = size < 4096 ? 4096 : size;
+            char *nb = realloc(t_rd_buf, cap);
+
+            if (nb) {
+                t_rd_buf = nb;
+                t_rd_cap = cap;
+            }
+        }
+        buf = t_rd_cap >= size ? t_rd_buf : NULL;
+    } else {
+        buf = NULL;
+    }
+    if (!buf) {
+        buf = malloc(size ? size : 1);
+        owned = 1;
+    }
     if (!buf) {
         t_req = NULL;
         fuse_reply_err(req, ENOMEM);
@@ -4386,7 +4424,8 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
         fuse_reply_err(req, -n);
     else
         fuse_reply_buf(req, buf, (size_t)n);
-    free(buf);
+    if (owned)
+        free(buf);
 }
 
 static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
@@ -4829,6 +4868,69 @@ static int parse_addr(const char *str, char *host, size_t host_len, uint16_t *po
     return 0;
 }
 
+/* Pin the client to the HCA's NUMA node: CPU affinity for every thread
+ * created after this call (sched_setaffinity on the main thread is
+ * inherited) and MPOL_PREFERRED for the heap, so the write/read paths'
+ * buffer pool, rdcache and RDMA pool live beside the HCA.
+ *
+ * Why (Oct 1 2026, fstor007, 2 sockets / 8 nodes, HCA on node 2): a 20 GiB
+ * 1 MiB dd wrote 21.2 s unpinned and 18.0 s pinned (1.0 → 1.2 GB/s; the
+ * FUSE thread's fuse_buf_copy into a cold remote-node pool buffer was
+ * 0.3 ms/MiB), and the cold read went 10.4 s → 6.2 s (2.1 → 3.5 GB/s). On a
+ * single-node host (fcstor) sysfs reports node -1 or 0 and this is a
+ * no-op. EFS_NUMA_NODE=none disables it; =N forces node N. */
+#ifndef MPOL_PREFERRED
+#define MPOL_PREFERRED 1
+#endif
+static void numa_pin_startup(const char *host, uint16_t port)
+{
+    const char *env = getenv("EFS_NUMA_NODE");
+    int node = -1;
+    char hca[64] = "env";
+    if (env && (strcmp(env, "none") == 0 || strcmp(env, "-1") == 0))
+        return;
+    if (env && *env && strcmp(env, "auto") != 0)
+        node = atoi(env);
+    else
+        node = efs_rdma_numa_node_for_host(host, port, hca, sizeof(hca));
+    if (node < 0)
+        return;
+    char path[128], buf[4096];
+    snprintf(path, sizeof(path), "/sys/devices/system/node/node%d/cpulist",
+             node);
+    FILE *f = fopen(path, "r");
+    if (!f || !fgets(buf, sizeof(buf), f)) {
+        if (f)
+            fclose(f);
+        return;
+    }
+    fclose(f);
+    cpu_set_t set;
+    CPU_ZERO(&set);
+    int ncpu = 0;
+    for (char *p = buf; *p && *p != '\n';) {
+        char *end;
+        long a = strtol(p, &end, 10), b = a;
+        if (end == p)
+            break;
+        if (*end == '-')
+            b = strtol(end + 1, &end, 10);
+        for (long c = a; c <= b && c < CPU_SETSIZE; c++) {
+            CPU_SET((int)c, &set);
+            ncpu++;
+        }
+        p = (*end == ',') ? end + 1 : end;
+    }
+    if (ncpu == 0 || sched_setaffinity(0, sizeof(set), &set) != 0)
+        return;
+    unsigned long mask[2] = {0, 0};
+    if (node < 128)
+        mask[node / 64] |= 1UL << (node % 64);
+    long mrc = syscall(SYS_set_mempolicy, MPOL_PREFERRED, mask, 128);
+    fprintf(stderr, "efs: numa pin node=%d cpus=%d (hca %s) mempolicy=%s\n",
+            node, ncpu, hca, mrc == 0 ? "preferred" : strerror(errno));
+}
+
 static int mkdir_p(const char *path)
 {
     char tmp[8192];
@@ -5072,6 +5174,15 @@ int main(int argc, char **argv)
         size_t mpl = strlen(g_mountpoint);
         while (mpl > 1 && g_mountpoint[mpl - 1] == '/')
             g_mountpoint[--mpl] = '\0';
+    }
+
+    {
+        /* Before any thread or RDMA buffer exists: affinity is inherited
+         * and the mempolicy applies to pages touched from here on. */
+        char host[64];
+        uint16_t port = 0;
+        if (parse_addr(nodes[0], host, sizeof(host), &port) == 0)
+            numa_pin_startup(host, port);
     }
 
     efs_client_init_nodes(&g_client, nodes, node_count);

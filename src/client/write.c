@@ -5090,6 +5090,16 @@ static struct {
     int64_t empty_until_ns;
     /* Full-chunk overwrites waiting to be PUT before close (W30). */
     uint64_t complete;
+    /* Workers inside cond_wait. A kick takes `mu` only when this is
+     * non-zero (Oct 1 2026, fstor007 20 GiB dd: `dcache_kick_complete`
+     * ran 8× per 1 MiB write and every finished sweep broadcast to the
+     * other 15 workers — 52 000 futex calls/s on `mu`, 18 % of the
+     * client's cycles in the kernel spinlock, the FUSE thread queued on
+     * the same mutex). Dekker order: the worker increments `waiters`
+     * before it re-reads `complete`/`kicks`; the kicker bumps those
+     * before it reads `waiters`. Both sides are seq_cst, so one of them
+     * sees the other's write and no wakeup is lost. */
+    int waiters;
 } g_reclaim = {
     .mu = PTHREAD_MUTEX_INITIALIZER,
     .cv = PTHREAD_COND_INITIALIZER,
@@ -5139,25 +5149,31 @@ static void *dcache_reclaim_main(void *arg)
 
         for (;;) {
             int64_t now;
+            uint64_t kicks;
 
             if (g_reclaim.shutdown)
                 break;
-            if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
+            /* Announce the wait before the checks (see `waiters`). */
+            __atomic_add_fetch(&g_reclaim.waiters, 1, __ATOMIC_SEQ_CST);
+            if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_SEQ_CST) <=
                     g_reclaim.lim &&
-                __atomic_load_n(&g_reclaim.complete, __ATOMIC_RELAXED) == 0) {
+                __atomic_load_n(&g_reclaim.complete, __ATOMIC_SEQ_CST) == 0) {
                 pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
+                __atomic_sub_fetch(&g_reclaim.waiters, 1, __ATOMIC_SEQ_CST);
                 continue;
             }
             /* The last sweep found nothing and no writer has kicked
              * since: the dirty set is fresh-file chunks, not our work.
              * A complete-chunk kick is work even under the cap. */
-            if (__atomic_load_n(&g_reclaim.complete, __ATOMIC_RELAXED) == 0 &&
-                g_reclaim.kicks == g_reclaim.empty_kicks) {
+            kicks = __atomic_load_n(&g_reclaim.kicks, __ATOMIC_SEQ_CST);
+            if (__atomic_load_n(&g_reclaim.complete, __ATOMIC_SEQ_CST) == 0 &&
+                kicks == g_reclaim.empty_kicks) {
                 pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
+                __atomic_sub_fetch(&g_reclaim.waiters, 1, __ATOMIC_SEQ_CST);
                 continue;
             }
             now = reclaim_now_ns();
-            if (__atomic_load_n(&g_reclaim.complete, __ATOMIC_RELAXED) == 0 &&
+            if (__atomic_load_n(&g_reclaim.complete, __ATOMIC_SEQ_CST) == 0 &&
                 now < g_reclaim.empty_until_ns) {
                 struct timespec ts;
 
@@ -5165,13 +5181,15 @@ static void *dcache_reclaim_main(void *arg)
                 ts.tv_nsec = (long)(g_reclaim.empty_until_ns % 1000000000ll);
                 (void)pthread_cond_timedwait(&g_reclaim.cv, &g_reclaim.mu,
                                              &ts);
+                __atomic_sub_fetch(&g_reclaim.waiters, 1, __ATOMIC_SEQ_CST);
                 continue;
             }
+            __atomic_sub_fetch(&g_reclaim.waiters, 1, __ATOMIC_SEQ_CST);
             break;
         }
         if (g_reclaim.shutdown)
             break;
-        kicks_seen = g_reclaim.kicks;
+        kicks_seen = __atomic_load_n(&g_reclaim.kicks, __ATOMIC_SEQ_CST);
         g_reclaim.active++;
         pthread_mutex_unlock(&g_reclaim.mu);
 
@@ -5277,13 +5295,31 @@ static void *dcache_reclaim_main(void *arg)
                 g_reclaim.empty_kicks = kicks_seen;
             g_reclaim.empty_until_ns = reclaim_now_ns() + RECLAIM_EMPTY_NAP_NS;
         } else {
-            /* There was work; let the pool go straight back in. */
-            g_reclaim.empty_kicks = g_reclaim.kicks - 1;
+            /* There was work; this worker goes straight back in (the
+             * loop head re-checks), and parked workers were already
+             * signalled once per kick. Waking all 15 others here was
+             * the herd. */
+            g_reclaim.empty_kicks =
+                __atomic_load_n(&g_reclaim.kicks, __ATOMIC_SEQ_CST) - 1;
         }
-        pthread_cond_broadcast(&g_reclaim.cv);
+        if (g_reclaim.shutdown)
+            pthread_cond_broadcast(&g_reclaim.cv); /* reclaim_stop waits */
     }
     pthread_mutex_unlock(&g_reclaim.mu);
     return NULL;
+}
+
+/* One kick: count it, wake one parked worker if there is one. Busy
+ * workers re-read `kicks`/`complete` at their loop head and need no
+ * signal; taking `mu` for them put the FUSE thread behind the pool. */
+static void reclaim_kick(void)
+{
+    __atomic_add_fetch(&g_reclaim.kicks, 1, __ATOMIC_SEQ_CST);
+    if (__atomic_load_n(&g_reclaim.waiters, __ATOMIC_SEQ_CST) == 0)
+        return;
+    pthread_mutex_lock(&g_reclaim.mu);
+    pthread_cond_signal(&g_reclaim.cv);
+    pthread_mutex_unlock(&g_reclaim.mu);
 }
 
 static void dcache_reclaim_start(void)
@@ -5303,11 +5339,8 @@ static void dcache_reclaim_start(void)
 static void dcache_kick_complete(void)
 {
     pthread_once(&g_reclaim_once, dcache_reclaim_start);
-    __atomic_add_fetch(&g_reclaim.complete, 1, __ATOMIC_RELAXED);
-    pthread_mutex_lock(&g_reclaim.mu);
-    g_reclaim.kicks++;
-    pthread_cond_signal(&g_reclaim.cv);
-    pthread_mutex_unlock(&g_reclaim.mu);
+    __atomic_add_fetch(&g_reclaim.complete, 1, __ATOMIC_SEQ_CST);
+    reclaim_kick();
 }
 
 void efs_dcache_maybe_reclaim(void)
@@ -5322,10 +5355,7 @@ void efs_dcache_maybe_reclaim(void)
     if (dirty <= lim)
         return;
     pthread_once(&g_reclaim_once, dcache_reclaim_start);
-    pthread_mutex_lock(&g_reclaim.mu);
-    g_reclaim.kicks++;
-    pthread_cond_signal(&g_reclaim.cv);
-    pthread_mutex_unlock(&g_reclaim.mu);
+    reclaim_kick();
     /* Hard cap at 2x: the background pool is drain-limited (a sparse-entry
      * flush is a GET+PUT at disk latency), so writers that outpace it must
      * help — otherwise a >>limit working set grows the dcache without bound.

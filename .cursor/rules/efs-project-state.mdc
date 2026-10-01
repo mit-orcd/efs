@@ -103,9 +103,12 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  `cluster.sh restart --clients`, CLUSTER_OK, no recorders).
  Servers `4b2844487831-dirty`, g0 term 5 leader fcstor003, g2
  term 4 leader fcstor004, commit==applied, `arc_miss=0`. Clients
- fcstor003–015 remounted 07:34Z (`dep419`) on the same tree plus
- the rdcache-pending and PUT-window read fixes (learnings below),
- all `fuse.efs-fuse` MOUNT_OK. **Posix on it:** jobs=1 fcstor007
+ fcstor003–015 remounted **13:20Z Oct 1 (`dep532`)** on the dd-review
+ tree (reclaim herd fix, `ll_read` buffer, NUMA pin to node 0 —
+ learnings below), all `fuse.efs-fuse` MOUNT_OK; on it posix jobs=1
+ 200/201 (`results/posix/20261001-132125`), 9-host 200/201 on all
+ nine 14.2–15.3 s (`results/posix/20261001-132411`), fcstor007
+ 8 GiB dd+fsync 1.3 GB/s (`dd539`). Prior remount 07:34Z (`dep419`). **Posix on it:** jobs=1 fcstor007
  200/201 28.1 s (`results/posix/20261001-073542`), 9-host 200/201
  on all nine 13.3–13.6 s (`results/posix/20261001-074052`),
  posix2 62/63 then 63/63 (`results/posix2/20261001-073048`,
@@ -974,6 +977,39 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  spinning on rtnl. Cached per local IPv4 under `g_dev_lock`, one
  resolver at a time. If that symbol is back in a profile, conns are
  being re-created — count `efs_client_conn_drop` first.
+- **A condvar that every completion signals under its mutex is a herd
+  (Oct 1, `g_reclaim`):** `dcache_kick_complete` locked `g_reclaim.mu` +
+  `cond_signal` per completed chunk, every sweep end `cond_broadcast` to
+  16 workers — 156 K futex calls per 3 s on two addresses, 18 % of all
+  client cycles in `native_queued_spin_lock_slowpath`, the FUSE thread
+  queued in `ll_write_buf → __lll_lock_wait`. Now `kicks` is an atomic
+  counter and `reclaim_kick` takes the mutex only when `waiters > 0`.
+  Client CPU for a 20 GiB dd 74.9 → 33.6 s; the wall did not move
+  (dd's serial source read + the close REPORT). Resolve futex
+  addresses with `nm -n /tmp/efs/efs-fuse` (non-PIE), not gdb through
+  ssh. Any new pool wakeup follows `reclaim_kick`.
+- **`perf record -p <efs-fuse>` taken at mount sees only the 7 initial
+  threads**; the reclaim/put pools are created at the first write and
+  never show (no blake3 in the user's `client.sh --perf` profile). Use
+  `perf record -a` on the node, `--sort pid` / `--tid` for one thread
+  (this perf has no `--sort tid`), and run `perf report` on the node
+  (the login-node perf cannot read the file).
+- **FUSE requests are 1 MiB** (`read(/dev/fuse)=1048656`, reply
+  `writev=1048592`): libfuse 3.10.2 does negotiate `FUSE_MAX_PAGES`
+  from `max_write`. A 1 MiB `write()` is one `ll_write_buf` of eight
+  chunks; `ll_read` answers 1 MiB from a thread-local buffer (was a
+  `malloc`/`mmap` + kernel zeroing per READ).
+- **efs-fuse pins itself to the HCA's NUMA node** (`numa_pin_startup`,
+  `efs: numa pin node=N cpus=M (hca …)` in fuse.log; `EFS_NUMA_NODE=
+  none|N`). fstor007: HCA on node 2 of 8, cold remote-node memcpy
+  3–18 GB/s vs 55–66 hot; 20 GiB dd write 20.1 → 18.9 s, read 12.2 →
+  6.6 s (`~/orcd/scratch/efs/perf/agent-dd-20261001-*-numa`). fcstor:
+  2 nodes, HCAs on node 0 → CPUs 0–11. Pin means affinity + MPOL_PREFERRED,
+  set before the first thread; a pin after threads exist binds one
+  thread only.
+- **Remounting through `scripts/client.sh` right after `stop` fails with
+  "another efs-fuse already holds"** — the flock fd is inherited by the
+  dying daemon; poll `pgrep -x efs-fuse` empty before the next mount.
 - **Clean dcache bodies have no budget and no evictor** (freed only by
  drop or take-replace). Do not keep a full-overwrite body after its
  PUT "as cache": RSS then tracks the bytes written (D23, ask).

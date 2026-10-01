@@ -29,6 +29,7 @@
 #include <fcntl.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <pthread.h>
@@ -467,6 +468,65 @@ static struct efs_rdma_dev *dev_for_fd(int fd)
     }
     pthread_mutex_unlock(&resolve_mu);
     return r;
+}
+
+/* NUMA node of the HCA that will carry traffic to host:port. The local
+ * address is the one the kernel routes to the server (a connected UDP
+ * socket sends nothing); EFS_RDMA_DEV overrides the interface walk.
+ * Returns the node, or -1 (no IB device behind the route, sysfs says
+ * -1, or TCP transport). Call before threads exist if the result sets
+ * the process affinity. */
+int efs_rdma_numa_node_for_host(const char *host, uint16_t port,
+                                char *devname, size_t devlen)
+{
+    if (efs_rdma_transport() == EFS_TRANSPORT_TCP)
+        return -1;
+    char dev[64] = {0};
+    const char *env = getenv("EFS_RDMA_DEV");
+    if (env && *env) {
+        strncpy(dev, env, sizeof(dev) - 1);
+    } else {
+        struct addrinfo hints, *ai = NULL;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_DGRAM;
+        char pstr[8];
+        snprintf(pstr, sizeof(pstr), "%u", (unsigned)port);
+        if (getaddrinfo(host, pstr, &hints, &ai) != 0 || !ai)
+            return -1;
+        int s = socket(AF_INET, SOCK_DGRAM, 0);
+        uint32_t ip = 0;
+        if (s >= 0 && connect(s, ai->ai_addr, ai->ai_addrlen) == 0) {
+            struct sockaddr_in la;
+            socklen_t ll = sizeof(la);
+            if (getsockname(s, (struct sockaddr *)&la, &ll) == 0)
+                ip = la.sin_addr.s_addr;
+        }
+        if (s >= 0)
+            close(s);
+        freeaddrinfo(ai);
+        if (!ip || (ntohl(ip) & 0xFF000000u) == 0x7F000000u)
+            return -1;
+        char ifname[IF_NAMESIZE];
+        if (ifname_for_ip(ip, ifname, sizeof(ifname)) != 0 ||
+            ibdev_for_ifname(ifname, dev, sizeof(dev)) != 0)
+            return -1;
+    }
+    char path[256];
+    snprintf(path, sizeof(path), "/sys/class/infiniband/%s/device/numa_node",
+             dev);
+    FILE *f = fopen(path, "r");
+    if (!f)
+        return -1;
+    int node = -1;
+    if (fscanf(f, "%d", &node) != 1)
+        node = -1;
+    fclose(f);
+    if (node >= 0 && devname && devlen) {
+        strncpy(devname, dev, devlen - 1);
+        devname[devlen - 1] = '\0';
+    }
+    return node;
 }
 
 int efs_rdma_available(void)

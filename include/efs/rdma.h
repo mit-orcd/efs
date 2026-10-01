@@ -30,6 +30,11 @@ struct efs_rdma_conn;    /* opaque, rdma.c */
 int efs_rdma_transport(void);       /* EFS_TRANSPORT_* */
 int efs_rdma_available(void);       /* transport != tcp and a usable IB dev */
 
+/* NUMA node of the HCA on the route to host:port (EFS_RDMA_DEV wins),
+ * -1 when unknown or TCP. devname (optional) receives the HCA name. */
+int efs_rdma_numa_node_for_host(const char *host, uint16_t port,
+                                char *devname, size_t devlen);
+
 /* Client: upgrade a fresh TCP conn to RDMA (SETUP handshake over TCP).
  * Returns 0 with conn->rc live, or -1 (conn stays usable as TCP). */
 int efs_rdma_client_upgrade(struct efs_conn *c);

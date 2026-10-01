@@ -25,6 +25,68 @@ time, so the same day can appear in several places.
 
 ---
 
+## Oct 1 2026 13:20Z — the user's 20 GiB dd perf dir: reclaim herd, read buffer, NUMA pin
+
+**Input.** `~/orcd/scratch/efs/perf/efs-mount/` from fstor007: `client.sh
+--perf --strace`, `dd bs=1M` 20 GiB write (29.1 s, 738 MB/s) and read
+back to local disk (23.9 s). Both figures carry the tracers; the pid-
+attached `perf record -p` taken at mount had only the seven initial
+threads (the reclaim and put pools are created at the first write), so
+blake3 and the PUT path were missing from that profile.
+
+**Reproductions** (`~/orcd/scratch/efs/perf/agent-dd-20261001-*`, all
+fstor007, source `/data1/node9901-data1/erbmi1/001/dat01`, no tracer
+unless named): `-120522` pid perf + strace windows + dd straces;
+`-121718-sw` system-wide perf before the fix; `-121931-lock` dwarf perf
++ `futex.strace` + `futex-top.txt`; `-122504-fix` system-wide after;
+`-1237xx-var` variants A (fix) / B (`EFS_FUSE_SPLICE_READ=1`) /
+C (`numactl --cpunodebind=2 --preferred=2`) / D (read) / E (read
+pinned); `-130753-base` clean HEAD `292fc6da`; `-13xxxx-numa` the
+in-process pin.
+
+**Where the time is.** dd is serial: source `read()` 0.45 ms/MiB (9.1 s
+of a 20 s write), efs `write()` 0.82 ms/MiB, then `close()` is one
+`EFS_MSG_REPORT_CHUNKS` of 163 840 records that the server answers in
+2.13–2.35 s (`slow-ok type=67`, `fsync-split flush_ms≈2300`), linear in
+file size. Read: efs 0.56 ms/MiB to `/dev/null`; writing the
+destination disk was the other half of the user's 23.9 s.
+
+**Found and fixed (client).**
+1. `g_reclaim` herd: `dcache_kick_complete` took `g_reclaim.mu` and
+   signalled per completed chunk; every sweep end `cond_broadcast` to
+   16 workers that each re-took the mutex. `strace` 3 s window: 156 377
+   futex calls on `g_reclaim+0x0` / `+0x50` (`nm -n`, non-PIE binary);
+   perf: 18 % of all client cycles in `native_queued_spin_lock_slowpath`,
+   FUSE thread in `ll_write_buf → __lll_lock_wait`. Fix: atomic `kicks`,
+   `reclaim_kick` locks only when `waiters > 0`, broadcast only at
+   shutdown. After: 26.5 K futex / 3 s, spinlock gone, client CPU for
+   the 20 GiB write 74.9 s → 33.6 s. Wall unchanged (20.1 → 21.2 s): the
+   wall is dd's read plus the REPORT tail.
+2. `ll_read` malloc'd `size` per request (1 MiB, above the mmap
+   threshold → mmap/munmap + kernel page zeroing per READ). Thread-local
+   buffer up to 16 MiB. Read 12.2 → 10.4 s.
+3. NUMA: fstor007 is 2 sockets / 8 nodes, HCA `mlx5_1` on node 2; the
+   FUSE thread's `fuse_buf_copy` into a cold remote-node pool buffer was
+   0.3 ms/MiB (cold-destination memcpy bench 3–18 GB/s vs 55–66 hot).
+   `numactl` variants: write 21.2 → 18.0 s, read 10.4 → 6.2 s. Now
+   in-process: `numa_pin_startup` (affinity before the first thread +
+   `MPOL_PREFERRED`), node from `efs_rdma_numa_node_for_host` (route's
+   local IP → ifname → HCA → sysfs `numa_node`), `EFS_NUMA_NODE=none|N`.
+   Measured: write 18.9 s (CPU 23.9 s), read 6.6 s (3.3 GB/s), `cmp` of
+   the first GiB OK. fcstor nodes: 2 nodes, HCAs on node 0.
+4. The "libfuse 3.10.2 cannot set max_pages, 128 KiB/request" comment
+   was wrong: `read(/dev/fuse)=1048656`, requests are 1 MiB.
+
+**Measured, not done** (START-HERE §1a 0f / 1i): D24 ask — a threshold
+REPORT of landed chunks during a long write (the 2.3 s close tail);
+W39 RDMA zero-copy send (`efs_rdma_send_frame` memmove 6.5 % of client
+cycles; memmove total 25 %, blake3 8 %, `xor_into` 7.3 %); W40 the FUSE
+request → pool copy (splice does not remove it: variant B 21.9 s).
+
+**Unit tests** on fcstor007 (`unittest528`): all pass except
+`test_raft_store` (4 failures, identical on clean HEAD — pre-existing,
+snapshot/retained-window semantics, not this change).
+
 ## Oct 1 2026 08:05Z — IO-500 on the fresh table, one record lost (W38)
 
 The user asked for the cluster to be started and IOR run, errors as
