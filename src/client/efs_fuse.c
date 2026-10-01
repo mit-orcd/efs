@@ -4390,12 +4390,45 @@ static void ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 static __thread char *t_rd_buf;
 static __thread size_t t_rd_cap;
 
+#define LL_READ_REFS_MAX 32
 static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                     struct fuse_file_info *fi)
 {
     char *buf;
     int n, owned = 0;
     t_req = req;
+    /* Zero-copy reply: a chunk-aligned read whose chunks are all in the
+     * read cache goes to the kernel as one writev of the cached images
+     * (fuse_reply_iov; fuse_reply_data would copy a multi-buffer vector
+     * into a fresh allocation in libfuse 3.10). Anything else — a
+     * partial chunk, a miss, a dirty overlay, a span — takes the copy
+     * path below. */
+    if (virt_kind(ino) == 0 && size <= LL_READ_BUF_MAX &&
+        !fuse_odirect_unaligned(fi, off, size)) {
+        efs_ino_t file = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+        struct efs_read_ref refs[LL_READ_REFS_MAX];
+        int nr = efs_client_read_refs(file, (uint64_t)off, size, refs,
+                                      LL_READ_REFS_MAX);
+        if (nr > 0) {
+            struct iovec iov[LL_READ_REFS_MAX];
+            for (int i = 0; i < nr; i++) {
+                iov[i].iov_base = (void *)(uintptr_t)refs[i].data;
+                iov[i].iov_len = refs[i].len;
+            }
+            t_req = NULL;
+            fuse_reply_iov(req, iov, nr);
+            for (int i = 0; i < nr; i++)
+                efs_rdcache_unpin(refs[i].pin);
+            {
+                static int logged;
+                if (!logged) {
+                    logged = 1;
+                    fprintf(stderr, "efs: read reply zero-copy active (iov=%d size=%zu)\n", nr, size);
+                }
+            }
+            return;
+        }
+    }
     if (size <= LL_READ_BUF_MAX) {
         if (size > t_rd_cap) {
             size_t cap = size < 4096 ? 4096 : size;

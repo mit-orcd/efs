@@ -102,8 +102,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  `wipe405.log`, salt 4206459926809775694; `restart408` =
  `cluster.sh restart --clients`, CLUSTER_OK, no recorders).
  Servers `4b2844487831-dirty`, g0 term 5 leader fcstor003, g2
- term 4 leader fcstor004, commit==applied, `arc_miss=0`. Clients
- fcstor003–015 remounted **13:20Z Oct 1 (`dep532`)** on the dd-review
+ term 4 leader fcstor004, commit==applied, `arc_miss=0`. **Clients
+ fcstor003–015 remounted 16:01Z Oct 1 (`dep691`) on the W39 + read-path
+ tree (RDMA zero-copy send, R1–R5 read copies, 64 get workers, rmdir
+ asks the server; START-HERE §1b 15:55Z); fstor007's `/tmp/efs` rebuilt
+ on it, the user's efs-fuse untouched. Servers still
+ `4b2844487831-dirty`: store.c writev, W37 and the log timestamps are
+ in the tree, NOT rolled (compiled, `bld701`).** fcstor007 on it: 16 GiB write 1.5 GB/s, cold read
+ 3.6 GB/s, 4 readers 6.5 GB/s; posix jobs=1 200/201
+ (`results/posix/20261001-155932`), 9-host 200/201 on all nine
+ (`results/posix/20261001-160049`).
+ Prior remount **13:20Z Oct 1 (`dep532`)** on the dd-review
  tree (reclaim herd fix, `ll_read` buffer, NUMA pin to node 0 —
  learnings below), all `fuse.efs-fuse` MOUNT_OK; on it posix jobs=1
  200/201 (`results/posix/20261001-132125`), 9-host 200/201 on all
@@ -767,8 +776,26 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  rc=-7 index=3` on every group-2 apply forever; only a wipe recovers.
  `roll_efsd.sh --all --fresh` waits for both leaders and mkfs's on
  fcstor003 only. The server-side guard is open.
+- **The client's table is not an emptiness witness (Oct 1).**
+  `efs_client_unlink` refused `rmdir` with ENOTEMPTY when
+  `efs_export_dir_empty` found a child in the local table — a child
+  whose removal committed elsewhere (another client, a retry answered
+  from the op-id window) stays listed, and one host of nine failed
+  `dir_deep_nesting` for minutes while the server's row was empty
+  (fcstor012 Sep 30 `d50`, fcstor009 Oct 1 `d25`). The check now logs
+  `efs: rmdir … local table lists child` and the server decides
+  (`EFS_INODE_RPC_NOT_EMPTY`). A one-host ENOTEMPTY with a clean KV is
+  this line in that client's fuse.log, not metadata.
+- **`raft-mkfs` replicates the COMMITTED salt, never the caller's
+  (W37, in tree, unrolled).** `efs_meta_apply_mkfs` is a no-op on an
+  existing root (first salt kept — keep that contract; an EXIST-
+  returning variant broke `test_meta_apply`/`test_sim`); the fork was
+  the SALT step carrying the second node's `h->salt`. `server_raft_
+  host_mkfs` now reads the salt back (`efs_meta_apply_export_salt`),
+  BUSY if this node holds no record; SALT is ring-only (PROTO is a
+  verdict, not a halted group).
 - **`apply_unlink_cmd` / `apply_rmdir_cmd` map NOT_FOUND at apply to
- OK with no log line.** A rename of the same source racing a
+  OK with no log line.** A rename of the same source racing a
  log-path unlink can make both return 0 and leave the dest dentry
  dangling (`-?????????`, posix2 `peer_rename_vs_unlink_src`, 1 in
  6, START-HERE 0c / W36). Do not add more silent "replay" mappings;
@@ -990,15 +1017,41 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   ssh. Any new pool wakeup follows `reclaim_kick`.
 - **`perf record -p <efs-fuse>` taken at mount sees only the 7 initial
   threads**; the reclaim/put pools are created at the first write and
-  never show (no blake3 in the user's `client.sh --perf` profile). Use
-  `perf record -a` on the node, `--sort pid` / `--tid` for one thread
-  (this perf has no `--sort tid`), and run `perf report` on the node
+  never show (no blake3 in the user's `client.sh --perf` profile).
+  `perf record -a` is REFUSED at `perf_event_paranoid=1` (Oct 1; the
+  fio-honest rule's "-a works" is wrong) — attach `-p` ~0.7 s after the
+  I/O starts so the pools exist; `--sort pid` / `--tid` for one thread
+  (this perf has no `--sort tid`); run `perf report` on the node
   (the login-node perf cannot read the file).
 - **FUSE requests are 1 MiB** (`read(/dev/fuse)=1048656`, reply
   `writev=1048592`): libfuse 3.10.2 does negotiate `FUSE_MAX_PAGES`
   from `max_write`. A 1 MiB `write()` is one `ll_write_buf` of eight
   chunks; `ll_read` answers 1 MiB from a thread-local buffer (was a
-  `malloc`/`mmap` + kernel zeroing per READ).
+  `malloc`/`mmap` + kernel zeroing per READ), or — chunk-aligned and
+  every chunk cached and clean — with `fuse_reply_iov` over pinned
+  rdcache images (`efs_client_read_refs`, Oct 1). `fuse_reply_data`
+  with a multi-buffer bufvec COPIES into a fresh allocation in 3.10;
+  `fuse_reply_iov` does not. A pinned way (`rdcache_ent.pins`) is never
+  a victim and `rdcache_put` leaves its bytes; unpin after the reply.
+- **The read path's cost was copies, and the in-flight depth is the
+  wall (Oct 1, `agent-rd-20261001-*`).** Cold 16 GiB single stream
+  2.5 → 3.6 GB/s (CPU 21.6 → 10.8 s) after: prefetched chunk handed to
+  the rdcache (`efs_rdcache_put_owned`), whole-chunk demand decoded into
+  the caller's buffer (`chunk_get_job.ext`), data fragments received
+  into the chunk (`efs_decode_chunk` skips the self-copy), iov reply.
+  Four readers 3.7 → 6.5 GB/s with 64 get workers (`GET_POOL_N`; one
+  synchronous fetch per worker = the client's in-flight cap, was 32).
+  `EFS_READ_PREFETCH=32` is slower than 16. Left: RDMA recv buffer →
+  chunk (zero-copy receive is a transport change — ask) and W40. Do not
+  chase blake3 or `xor_into` on the read side.
+- **W39: an RDMA send of a bufpool buffer is two SGEs, no copy**
+  (`efs_rdma_zc_region_add` per slab, lazy `ibv_reg_mr` per HCA,
+  `max_send_sge = 2`, payload ≥ 4 KiB). The payload must live until the
+  send CQE — true today because a conn ends replied or destroyed. Any
+  new sender that frees or reuses the buffer before the reply breaks
+  this; `efs_rdma_send_quiesce` is the reap for a destroy path.
+  `cat … | dd skip=N` on a pipe without `iflag=fullblock` skips short
+  pipe reads — compare against a regular file (gate670's CMP_TAIL_BAD).
 - **efs-fuse pins itself to the HCA's NUMA node** (`numa_pin_startup`,
   `efs: numa pin node=N cpus=M (hca …)` in fuse.log; `EFS_NUMA_NODE=
   none|N`). fstor007: HCA on node 2 of 8, cold remote-node memcpy

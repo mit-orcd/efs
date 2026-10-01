@@ -2116,11 +2116,14 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * APPEND_RSV is the same: BUSY/INVAL must not halt the log.
      * PUBLISH too: a lost generation CAS is audible via the ring, not a
      * reason to retry the same index forever (W1 two-client RMW). */
+    /* SALT too (W37): a SALT that does not match the anchor's record
+     * answers PROTO and writes nothing; it must not halt the group's
+     * apply (Oct 1: `apply salt rc=-7 index=3` on every group-2 apply). */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
-           cmd[0] == EFS_MD_CMD_XATTR)
+           cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT)
               ? EFS_OK
               : rc;
     if (a0) {
@@ -6695,11 +6698,36 @@ void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)
      * both groups carry the salt. */
     rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD, cmd, 17, &hint);
     if (rc == EFS_OK) {
+        /* W37: the SALT step carries the salt the COMMITTED MKFS recorded,
+         * never this node's own. `efs_meta_apply_mkfs` on an existing root
+         * is a no-op that keeps the first salt, so a retry of mkfs from a
+         * second node used to commit MKFS "fine" and then replicate ITS
+         * salt to group 2 — `efs_meta_apply_salt_record` PROTO on every
+         * group-2 apply, only a wipe recovers (Oct 1). Read the record
+         * back (root shard's export key; group 2's anchor if this node
+         * holds only that); a node that holds neither cannot know the
+         * salt and answers BUSY — retry on a group-0 node. */
+        uint64_t committed = 0;
+        int src = efs_meta_apply_export_salt(h->kv, &committed);
+        if (src != EFS_OK) {
+            fprintf(stderr, "raft-host: raft-mkfs: MKFS committed but this "
+                    "node holds no salt record (rc=%d); retry on a group-0 "
+                    "node\n", src);
+            rc = EFS_ERR_BUSY;
+        } else if (committed != h->salt) {
+            fprintf(stderr, "raft-host: raft-mkfs: table exists with salt %llu; "
+                    "own salt %llu not used (mkfs once, on one node)\n",
+                    (unsigned long long)committed, (unsigned long long)h->salt);
+            h->salt = committed;
+        }
+    }
+    if (rc == EFS_OK) {
         scmd[0] = EFS_MD_CMD_SALT;
         wr32be(scmd + 1, efs_kv_anchor_shard(2));
         wr64be(scmd + 5, h->salt);
         rc = host_propose_wait(h, EFS_RAFT_GROUP_SHARD2, scmd, 13, &hint);
     }
+    out->salt = h->salt;
     pthread_mutex_lock(&h->mu);
     r = group_raft(h, EFS_RAFT_GROUP_SHARD);
     if (r)

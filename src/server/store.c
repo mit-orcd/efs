@@ -10,6 +10,34 @@
 #include <errno.h>
 #include <dirent.h>
 #include <pthread.h>
+#include <sys/uio.h>
+
+/* writev until every iovec is consumed. O_DIRECT needs each remaining
+ * iovec base/len aligned; a short write that is not a 4 KiB multiple
+ * leaves an unaligned remainder and the next writev fails with EINVAL,
+ * which the caller reports as EIO. */
+static int writev_all(int fd, struct iovec *iov, int n)
+{
+    while (n > 0) {
+        ssize_t w = writev(fd, iov, n);
+        if (w <= 0) {
+            if (w < 0 && errno == EINTR)
+                continue;
+            return -1;
+        }
+        size_t left = (size_t)w;
+        while (n > 0 && left >= iov[0].iov_len) {
+            left -= iov[0].iov_len;
+            iov++;
+            n--;
+        }
+        if (n > 0 && left > 0) {
+            iov[0].iov_base = (uint8_t *)iov[0].iov_base + left;
+            iov[0].iov_len -= left;
+        }
+    }
+    return 0;
+}
 
 /* mkdir -p, leaf first. `path` is writable and is restored before return.
  * The top-down walk did mkdir("/data1"), mkdir("/data1/06"), ... on every
@@ -686,13 +714,45 @@ static void *shard_io_thread(void *arg)
                 }
                 wbuf = zero_dio;
                 pthread_mutex_unlock(&zero_dio_mu);
-            } else if (!a->sum && ((uintptr_t)a->buf & 4095u) == 0 &&
-                       a->len == alloc) {
+            } else if (((uintptr_t)a->buf & 4095u) == 0 && a->len > 0 &&
+                       (a->len & 4095u) == 0) {
                 /* Fast path: the RDMA recv layout places the frame payload
                  * on a 4096 boundary, so O_DIRECT can write straight out of
                  * the recv buffer — no 64 KiB bounce copy per fragment.
                  * Only when no pad is needed: the bounce path zero-pads
-                 * short tails and the on-disk image must not change. */
+                 * short tails and the on-disk image must not change.
+                 * With a digest (D20) the 4 KiB tail page is a second
+                 * iovec from a per-thread aligned page; one writev carries
+                 * payload + tail. Until Oct 1 the digest forced every
+                 * fragment through the 64 KiB memcpy below. */
+                if (a->sum) {
+                    static __thread uint8_t *tail_tls;
+                    if (!tail_tls &&
+                        posix_memalign((void **)&tail_tls, 4096, 4096) != 0) {
+                        tail_tls = NULL;
+                        close(fd);
+                        a->result = EFS_ERR_NOMEM;
+                        return NULL;
+                    }
+                    memcpy(tail_tls, a->sum, EFS_HASH_SIZE);
+                    memset(tail_tls + EFS_HASH_SIZE, 0, 4096 - EFS_HASH_SIZE);
+                    static int once_zc;
+                    if (!once_zc && __sync_bool_compare_and_swap(&once_zc, 0, 1))
+                        fprintf(stderr, "store: put O_DIRECT zero-copy "
+                                "(payload+digest writev) len=%u\n", a->len);
+                    struct iovec iov[2] = {
+                        { .iov_base = a->buf, .iov_len = a->len },
+                        { .iov_base = tail_tls, .iov_len = 4096 },
+                    };
+                    int rc = writev_all(fd, iov, 2);
+                    close(fd);
+                    if (rc != 0) {
+                        a->result = EFS_ERR_IO;
+                        return NULL;
+                    }
+                    a->result = EFS_OK;
+                    return NULL;
+                }
                 wbuf = a->buf;
             } else {
                 /* Per-thread O_DIRECT bounce buffer for unaligned sources
@@ -711,6 +771,12 @@ static void *shard_io_thread(void *arg)
                     }
                     aligned_tls_len = alloc;
                 }
+                static int once_bounce;
+                if (a->sum && !once_bounce &&
+                    __sync_bool_compare_and_swap(&once_bounce, 0, 1))
+                    fprintf(stderr, "store: put O_DIRECT bounce copy "
+                            "(buf align=%u len=%u)\n",
+                            (unsigned)((uintptr_t)a->buf & 4095u), a->len);
                 memcpy(aligned_tls, a->buf, a->len);
                 if (a->len < alloc)
                     memset(aligned_tls + a->len, 0, alloc - a->len);

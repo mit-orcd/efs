@@ -12,6 +12,7 @@
  * the pool vs free() path deterministically.
  */
 #include <efs/common.h>
+#include <efs/rdma.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -81,6 +82,10 @@ void *efs_buf_alloc(uint32_t len)
     for (i = 1; i < BUF_SLAB_N && g_bp_n < BUFPOOL_MAX_FREE; i++)
         g_bp[g_bp_n++] = (uint8_t *)slab + (size_t)i * EFS_CHUNK_SIZE;
     pthread_mutex_unlock(&g_bp_mu);
+    /* W39: a PUT fragment that lives in a slab is sent as a second SGE
+     * straight from here (no copy into the conn's send buffer). The slab
+     * is never freed, so the registration is for the process lifetime. */
+    (void)efs_rdma_zc_region_add(slab, (size_t)BUF_SLAB_N * EFS_CHUNK_SIZE);
     return slab;
 }
 

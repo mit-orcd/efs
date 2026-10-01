@@ -263,6 +263,14 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
     if (!frag_buf)
         return EFS_ERR_NOMEM;
     frag_ptrs(frag_buf, frag_len, frags);
+    /* The two data fragments are received straight into the chunk's
+     * halves; only parity needs scratch. efs_decode_chunk skips the
+     * copy of a fragment that is already in place (Oct 1 read review:
+     * the assemble memcpy was 21 % of client cycles on a cold read). */
+    if ((size_t)frag_len * 2 == chunk_size) {
+        frags[0] = chunk_out;
+        frags[1] = chunk_out + frag_len;
+    }
 
     memset(&ce, 0, sizeof(ce));
     if (cep) {
@@ -672,6 +680,8 @@ struct rdcache_ent {
     uint32_t tick;
     uint64_t gen; /* chunk-map generation these bytes were decoded from */
     int pending;  /* a fetch of this key is in flight; data may be stale */
+    int pins;     /* readers replying straight out of data (efs_client_read_refs):
+                   * never a victim, never overwritten while > 0 */
 };
 static struct {
     pthread_mutex_t mu[RDCACHE_STRIPES];
@@ -897,12 +907,17 @@ int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
     return -1;
 }
 
-void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len)
+/* owned: src is a pool buffer the caller gives up; it becomes the way's
+ * body (no memcpy) and the way's old body goes back to the pool. Returns
+ * 1 when ownership was taken, 0 when the caller still owns src (a copy
+ * was made, or nothing was stored). */
+static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
+                             uint32_t len, int owned)
 {
     uint64_t tg;
 
     if (!src || !len)
-        return;
+        return 0;
     tg = rdcache_map_gen(ino, ci);
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_t *mu = rdcache_mu(s);
@@ -921,12 +936,19 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
                 break;
         }
     }
+    if (e && e->pins > 0 && e->data && !e->pending) {
+        /* A reader is replying out of these bytes: leave them. The
+         * entry is current for its gen; a newer gen of the same chunk
+         * is fetched again by the next reader (the gen check fails). */
+        pthread_mutex_unlock(mu);
+        return 0;
+    }
     if (!e) {
         /* Victim: a free way, else the LRU way; never a way pending for
-         * another key (its waiters would be stranded). */
+         * another key (its waiters would be stranded) or pinned. */
         for (int w = 0; w < RDCACHE_WAYS; w++) {
             struct rdcache_ent *c = &g_rdcache.e[s][w];
-            if (c->pending)
+            if (c->pending || c->pins > 0)
                 continue;
             if (!c->data) {
                 e = c;
@@ -937,37 +959,100 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
         }
         if (!e) {
             pthread_mutex_unlock(mu);
-            return;
+            return 0;
         }
     }
-    if (e->data && e->len < len) {
-        /* Oversized-chunk export: the pooled buffer can't grow. */
-        efs_buf_free(e->data, e->len);
-        e->data = NULL;
-    }
-    if (!e->data) {
-        /* Pool buffers are EFS_CHUNK_SIZE-capacity; allocate once per way. */
-        e->data = efs_buf_alloc(len);
+    int took = 0;
+    if (owned) {
+        /* Prefetch hand-off (Oct 1 read review): the worker's buffer
+         * becomes the way; the 128 KiB memcpy per prefetched chunk is
+         * gone. The old body goes back to the pool. */
+        if (e->data)
+            efs_buf_free(e->data, e->len);
+        e->data = (uint8_t *)(uintptr_t)src;
+        took = 1;
+    } else {
+        if (e->data && e->len < len) {
+            /* Oversized-chunk export: the pooled buffer can't grow. */
+            efs_buf_free(e->data, e->len);
+            e->data = NULL;
+        }
         if (!e->data) {
-            /* Release the mark or its waiters never wake. */
-            if (e->pending) {
-                e->pending = 0;
-                e->ino = 0;
-                pthread_cond_broadcast(
-                    &g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
+            /* Pool buffers are EFS_CHUNK_SIZE-capacity; allocate once per way. */
+            e->data = efs_buf_alloc(len);
+            if (!e->data) {
+                /* Release the mark or its waiters never wake. */
+                if (e->pending) {
+                    e->pending = 0;
+                    e->ino = 0;
+                    pthread_cond_broadcast(
+                        &g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
+                }
+                pthread_mutex_unlock(mu);
+                return 0;
             }
-            pthread_mutex_unlock(mu);
-            return;
         }
+        memcpy(e->data, src, len);
     }
     e->len = len;
-    memcpy(e->data, src, len);
     e->ino = ino;
     e->ci = ci;
     e->gen = tg;
     e->pending = 0;
     e->tick = ++g_rdcache.tick;
     pthread_cond_broadcast(&g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
+    pthread_mutex_unlock(mu);
+    return took;
+}
+
+void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len)
+{
+    (void)rdcache_put_inner(ino, ci, src, len, 0);
+}
+
+/* Store a pool buffer by ownership transfer. 1 = the cache owns buf now;
+ * 0 = the caller still does. */
+int efs_rdcache_put_owned(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                          uint32_t len)
+{
+    return rdcache_put_inner(ino, ci, buf, len, 1);
+}
+
+/* Pin the current image of (ino, ci) for a zero-copy reply. Returns the
+ * entry handle (opaque) and its bytes, or NULL when there is no current,
+ * complete, non-pending image. The entry is neither replaced nor
+ * overwritten until efs_rdcache_unpin. */
+void *efs_rdcache_pin(efs_ino_t ino, uint32_t ci, uint32_t len,
+                      const uint8_t **data)
+{
+    uint64_t tg = rdcache_map_gen(ino, ci);
+    if (!tg || !len)
+        return NULL;
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_t *mu = rdcache_mu(s);
+    pthread_mutex_lock(mu);
+    struct rdcache_ent *e = rdcache_find(s, ino, ci);
+    if (e && !e->pending && e->data && e->gen == tg && e->len >= len) {
+        e->pins++;
+        e->tick = ++g_rdcache.tick;
+        *data = e->data;
+        pthread_mutex_unlock(mu);
+        return e;
+    }
+    pthread_mutex_unlock(mu);
+    return NULL;
+}
+
+void efs_rdcache_unpin(void *handle)
+{
+    struct rdcache_ent *e = handle;
+    if (!e)
+        return;
+    uint32_t s = (uint32_t)((e - &g_rdcache.e[0][0]) / RDCACHE_WAYS);
+    pthread_mutex_t *mu = rdcache_mu(s);
+    pthread_mutex_lock(mu);
+    if (e->pins > 0)
+        e->pins--;
     pthread_mutex_unlock(mu);
 }
 
@@ -991,6 +1076,8 @@ struct chunk_get_job {
     int have_ce;
     int cacheable;
     int owned; /* prefetch: get_pool_thread frees chunk + this struct */
+    int ext;   /* chunk points into the caller's read buffer: no pool
+                * buffer, no copy-out, never freed here */
     int rc;
     uint8_t *chunk; /* data_chunk_size() bytes, owned by caller unless owned */
     struct get_batch *bp;
@@ -1071,10 +1158,16 @@ static void *chunk_get_worker(void *arg)
                                                chunk_size);
     if (job->rc == EFS_OK) {
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
-        if (job->cacheable)
+        if (job->cacheable && job->owned) {
+            /* Prefetch: the buffer becomes the cache way, no copy. */
+            if (efs_rdcache_put_owned(job->ino, job->ci, job->chunk,
+                                      chunk_size))
+                job->chunk = NULL;
+        } else if (job->cacheable) {
             efs_rdcache_put(job->ino, job->ci, job->chunk, chunk_size);
-        else if (acq == 1)
+        } else if (acq == 1) {
             rdcache_cancel(job->ino, job->ci);
+        }
     } else if (acq == 1) {
         rdcache_cancel(job->ino, job->ci);
     }
@@ -1082,14 +1175,18 @@ static void *chunk_get_worker(void *arg)
 }
 
 #define GET_POOL_QDEPTH 32
+/* One synchronous chunk fetch per worker, so this is the client's
+ * in-flight read cap: 32 × 128 KiB at ~0.9 ms per chunk was the 4.6 GB/s
+ * four-reader ceiling on fcstor007 (Oct 1). 64 workers, 8 MiB in flight. */
+#define GET_POOL_N 64
 static struct {
     pthread_mutex_t mu;
     pthread_cond_t cv;
     struct chunk_get_job *q[GET_POOL_QDEPTH];
     int head, tail, count;
-} g_get_sh[EFS_WRITE_PIPELINE];
+} g_get_sh[GET_POOL_N];
 static struct {
-    pthread_t tids[EFS_WRITE_PIPELINE];
+    pthread_t tids[GET_POOL_N];
     int nworkers;
     int ready;
     int shutdown;
@@ -1123,7 +1220,8 @@ static void *get_pool_thread(void *arg)
 
         if (job->owned) {
             uint32_t cs = data_chunk_size();
-            efs_buf_free(job->chunk, cs);
+            if (job->chunk)
+                efs_buf_free(job->chunk, cs);
             free(job);
             continue;
         }
@@ -1145,7 +1243,7 @@ static int get_pool_ensure(void)
         return 0;
     pthread_mutex_lock(&g_get_init);
     if (!g_get_pool.ready) {
-        uint32_t n = EFS_WRITE_PIPELINE;
+        uint32_t n = GET_POOL_N;
         for (i = 0; i < n; i++) {
             pthread_mutex_init(&g_get_sh[i].mu, NULL);
             pthread_cond_init(&g_get_sh[i].cv, NULL);
@@ -1197,7 +1295,7 @@ void efs_client_read_pools_stop(void)
 static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
 {
     struct get_batch bp;
-    uint8_t used[EFS_WRITE_PIPELINE];
+    uint8_t used[GET_POOL_N];
     uint32_t i;
     int base;
 
@@ -1327,7 +1425,7 @@ static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,
         e = NULL;
         for (w = 0; w < RDCACHE_WAYS; w++) {
             struct rdcache_ent *c = &g_rdcache.e[s][w];
-            if (c->pending)
+            if (c->pending || c->pins > 0)
                 continue;
             if (!c->data) {
                 e = c;
@@ -1469,11 +1567,75 @@ static void maybe_prefetch(int want, efs_ino_t ino, uint64_t end_off,
     prefetch_ahead(ino, next_ci, file_size);
 }
 
+/* Zero-copy read (Oct 1 read review): a chunk-aligned read whose every
+ * chunk has a current rdcache image, no dirty dcache entry and no spans is
+ * answered with pinned references to those images; libfuse writev's them
+ * to the kernel and the 128 KiB copy per chunk into the FUSE buffer is
+ * gone. Returns the number of refs (> 0), 0 when the caller must take
+ * efs_client_read (any chunk missing: the slow path fetches, waits on the
+ * prefetch, or copies), or < 0 on error. The caller unpins every ref with
+ * efs_rdcache_unpin after the reply. Prefetch and the sequential-run
+ * bookkeeping run here too so the pipeline stays ahead. */
+static __thread efs_ino_t t_seq_ino;
+static __thread uint64_t t_seq_next;
+static __thread int t_seq_run;
+
+int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
+                         struct efs_read_ref *refs, int max_refs)
+{
+    uint32_t cs = data_chunk_size();
+
+    if (!cs || size == 0 || (offset % cs) != 0 || (size % cs) != 0 ||
+        size / cs > (size_t)max_refs || efs_ino_is_meta_table(ino))
+        return 0;
+    pthread_mutex_lock(&g_client.idx_mu);
+    struct efs_inode inode;
+    int have_row = (efs_export_get_inode(&g_client.export, ino, &inode) == 0);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    if (!have_row || offset + size > inode.size)
+        return 0;
+    (void)efs_dcache_put_win_wait(ino);
+    int n = (int)(size / cs);
+    uint32_t ci0 = (uint32_t)(offset / cs);
+    int got = 0;
+    for (int i = 0; i < n; i++) {
+        uint32_t ci = ci0 + (uint32_t)i;
+        struct efs_chunk_entry sce;
+        int spans;
+
+        if (efs_dcache_has(ino, ci))
+            break;
+        pthread_mutex_lock(&g_client.idx_mu);
+        spans = efs_export_get_chunk(&g_client.export, ino, ci, &sce) != 0 ||
+                sce.ndelta > 0;
+        pthread_mutex_unlock(&g_client.idx_mu);
+        if (spans)
+            break;
+        refs[i].pin = efs_rdcache_pin(ino, ci, cs, &refs[i].data);
+        if (!refs[i].pin)
+            break;
+        refs[i].len = cs;
+        got++;
+    }
+    if (got < n) {
+        for (int i = 0; i < got; i++)
+            efs_rdcache_unpin(refs[i].pin);
+        return 0;
+    }
+    efs_client_stage_touch(ino);
+    if (t_seq_ino == ino && offset == t_seq_next)
+        t_seq_run++;
+    else
+        t_seq_run = 1;
+    t_seq_ino = ino;
+    t_seq_next = offset + size;
+    maybe_prefetch((t_seq_run >= 2) || (size >= cs), ino, offset + size,
+                   inode.size);
+    return got;
+}
+
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len)
 {
-    static __thread efs_ino_t t_seq_ino;
-    static __thread uint64_t t_seq_next;
-    static __thread int t_seq_run;
     int want_pf;
     uint32_t chunk_size;
 
@@ -1596,14 +1758,27 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
 
         while (batch < pipe && batch_pos < end) {
             uint32_t ci = (uint32_t)(batch_pos / chunk_size);
+            uint64_t cstart = (uint64_t)ci * chunk_size;
             memset(&jobs[batch], 0, sizeof(jobs[batch]));
             jobs[batch].ino = ino;
             jobs[batch].ci = ci;
-            jobs[batch].chunk = efs_buf_alloc(chunk_size);
-            if (!jobs[batch].chunk) {
-                for (uint32_t j = 0; j < batch; j++)
-                    efs_buf_free(jobs[j].chunk, chunk_size);
-                return EFS_ERR_NOMEM;
+            /* A whole chunk inside [offset, end) is fetched (or copied
+             * out of the rdcache) straight into the caller's buffer: no
+             * pool buffer and no 128 KiB copy-out per chunk (Oct 1 read
+             * review: a prefetched chunk was copied four times between
+             * the wire and the FUSE reply). */
+            if (batch_pos == cstart && cstart + chunk_size <= end &&
+                cstart >= offset) {
+                jobs[batch].chunk = (uint8_t *)buf + (cstart - offset);
+                jobs[batch].ext = 1;
+            } else {
+                jobs[batch].chunk = efs_buf_alloc(chunk_size);
+                if (!jobs[batch].chunk) {
+                    for (uint32_t j = 0; j < batch; j++)
+                        if (!jobs[j].ext)
+                            efs_buf_free(jobs[j].chunk, chunk_size);
+                    return EFS_ERR_NOMEM;
+                }
             }
             jobs[batch].rc = EFS_ERR_IO;
             jobs[batch].cacheable = 1;
@@ -1671,7 +1846,8 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                                 "failing read instead of zero-filling\n",
                                 (unsigned long long)ino, miss0, miss1, prc);
                         for (uint32_t j = 0; j < batch; j++)
-                            efs_buf_free(jobs[j].chunk, chunk_size);
+                            if (!jobs[j].ext)
+                                efs_buf_free(jobs[j].chunk, chunk_size);
                         return prc;
                     }
                 } else {
@@ -1694,7 +1870,8 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         for (uint32_t i = 0; i < batch; i++) {
             if (jobs[i].rc != EFS_OK) {
                 for (uint32_t j = i; j < batch; j++)
-                    efs_buf_free(jobs[j].chunk, chunk_size);
+                    if (!jobs[j].ext)
+                        efs_buf_free(jobs[j].chunk, chunk_size);
                 return jobs[i].rc;
             }
             uint64_t chunk_start = (uint64_t)jobs[i].ci * chunk_size;
@@ -1702,6 +1879,12 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
             size_t to_copy = end - pos;
             if (to_copy > chunk_size - chunk_off)
                 to_copy = chunk_size - chunk_off;
+            if (jobs[i].ext) {
+                /* Already in place (chunk == buf + total, chunk_off 0). */
+                total += to_copy;
+                pos += to_copy;
+                continue;
+            }
             memcpy(buf + total, jobs[i].chunk + chunk_off, to_copy);
             total += to_copy;
             pos += to_copy;

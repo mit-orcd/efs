@@ -142,8 +142,9 @@ only** (`sysctl -w`); `/etc/sysctl.d/99-ptrace.conf` still says 2, so it
 reverts on reboot — ask the USER to re-apply, do not edit the conf.
 **Kernel-side profiling is OPEN as of Sep 19 2026 (user ran
 `sysctl -w kernel.perf_event_paranoid=1 kernel.kptr_restrict=0` via clush on
-fcstor003–015, node9901, fstor007):** `perf record -a`/`-g` with kernel
-symbols, `perf trace`, `perf sched`, `perf top` all work same-uid. Runtime
+fcstor003–015, node9901, fstor007):** `perf record -g -p <pid>` with kernel
+symbols works same-uid; **`perf record -a` is refused at paranoid=1**
+(checked Oct 1 — attach `-p` after the daemon's pools exist). Runtime
 only (`sysctl -w`) like ptrace_scope — reverts on reboot; ask the USER to
 re-apply, do not edit `/etc/sysctl.d`. `/sys/kernel/tracing/events` may
 still be unreadable (that is tracefs perms, not paranoid).

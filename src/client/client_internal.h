@@ -312,6 +312,9 @@ int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len);
 int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
                      uint8_t *dst, uint32_t len);
 void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len);
+/* Ownership transfer of a pool buffer (1 = taken). */
+int efs_rdcache_put_owned(efs_ino_t ino, uint32_t ci, uint8_t *buf,
+                          uint32_t len);
 void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci);
 
 /* Dirty assembled chunks: combine partial writes and PUT on flush/evict. */
@@ -381,6 +384,17 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
 /* Store a fragment on a node. Returns 0 on success. */
 /* Read bytes from a file. Returns 0 on success. */
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len);
+/* Zero-copy read: pinned rdcache images for a chunk-aligned range. */
+struct efs_read_ref {
+    const uint8_t *data;
+    uint32_t len;
+    void *pin;
+};
+int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
+                         struct efs_read_ref *refs, int max_refs);
+void *efs_rdcache_pin(efs_ino_t ino, uint32_t ci, uint32_t len,
+                      const uint8_t **data);
+void efs_rdcache_unpin(void *handle);
 void efs_client_read_pools_stop(void);
 
 /* Write bytes to a file and replicate metadata. Returns 0 on success. */

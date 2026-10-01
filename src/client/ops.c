@@ -1382,6 +1382,12 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
     return EFS_OK;
 }
 
+static int first_child_name_cb(struct efs_export *ex, uint64_t slot, void *arg)
+{
+    *(const char **)arg = efs_export_inode_name(ex, slot);
+    return 1;
+}
+
 int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
 {
     /* Validate type locally (and to surface ENOENT/EISDIR before the RPC). */
@@ -1396,12 +1402,23 @@ int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir)
             efs_client_unlock_dir(parent);
             return EFS_ERR_INVAL;
         }
-        /* rmdir fast-path: refuse a non-empty directory locally (the server
-         * also enforces this authoritatively via EFS_INODE_RPC_NOT_EMPTY). */
+        /* rmdir: the local table may still list a child whose removal
+         * committed elsewhere (another client, or a retry answered from the
+         * op-id window) — refusing here made `rmdir` ENOTEMPTY for minutes
+         * on one client while the server's row was empty (posix
+         * `dir_deep_nesting`, fcstor012 Sep 30, fcstor009 Oct 1). The
+         * server is authoritative (EFS_INODE_RPC_NOT_EMPTY); log the
+         * stale view and ask it. */
         if (is_dir && !efs_export_dir_empty(&g_client.export, ino.ino)) {
-            pthread_mutex_unlock(&g_client.idx_mu);
-            efs_client_unlock_dir(parent);
-            return EFS_ERR_NOT_EMPTY;
+            const char *child = NULL;
+            efs_export_foreach_child(&g_client.export, ino.ino,
+                                     first_child_name_cb, &child);
+            static unsigned logged;
+            if (logged < 16) {
+                logged++;
+                fprintf(stderr, "efs: rmdir ino=%llu local table lists child '%s' — asking the server\n",
+                        (unsigned long long)ino.ino, child ? child : "?");
+            }
         }
     }
     /* Local miss (cross-client: this client never looked the name up, so the

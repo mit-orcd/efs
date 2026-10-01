@@ -51,10 +51,31 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc);
 /* ---- data path (used by the protocol.c dispatchers and handler.c) ---- */
 
 /* Send a full frame (len+type+p1+p2). Inline when small, else a pool send
- * buffer (payload is copied in). Returns EFS_OK or EFS_ERR_NET. */
+ * buffer (payload is copied in). Returns EFS_OK or EFS_ERR_NET.
+ *
+ * W39: when p2 lies inside a region named by efs_rdma_zc_region_add and
+ * l2 >= EFS_RDMA_ZC_MIN, the frame is posted as two SGEs (header from
+ * the pool buffer, p2 straight from the region) and p2 is NOT copied.
+ * The caller must keep p2 untouched until the send completed: a reply
+ * received on this conn, or efs_rdma_send_quiesce(), or destroying the
+ * conn. Every other payload is copied as before. */
 int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
                         const void *p1, uint32_t l1,
                         const void *p2, uint32_t l2);
+
+#define EFS_RDMA_ZC_MIN 4096u
+
+/* Name a long-lived buffer region (a client bufpool slab) for zero-copy
+ * sends. The region is registered with each HCA's PD on first use. */
+int efs_rdma_zc_region_add(void *base, size_t len);
+
+/* Wait (bounded by the send deadline) until every send posted on rc has
+ * completed. Returns 0, or -1 when the conn is broken. */
+int efs_rdma_send_quiesce(struct efs_rdma_conn *rc);
+
+/* Counters for raft-obs / fuse stats: zero-copy frames vs copied frames
+ * that were eligible by size. */
+void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied);
 
 /* Zero-copy send for big replies: reserve a pool send buffer, fill the
  * payload area directly, then commit. Reserve returns NULL when no buffer

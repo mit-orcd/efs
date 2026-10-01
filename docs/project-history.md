@@ -25,6 +25,108 @@ time, so the same day can appear in several places.
 
 ---
 
+## Oct 1 2026 15:55Z — roadmap performance items: W39, read path R1–R5, store writev, W37
+
+**Request.** "From the roadmap, what else can be implemented and smoke
+tested? I will do the heavy testing. I would prioritize performance
+improvements" → list given (server PUT without the D20 bounce copy, W39
+RDMA zero-copy send, read-path profile → fix, W41; D23 / fragment layout /
+W40 / metadata ops as asks) → "do as many as you can and in parallel if
+possible, i follow your recommendations".
+
+**Server PUT bounce copy (`store.c`, in the tree, not rolled).** D20's
+4 KiB digest tail had disabled the aligned O_DIRECT fast path for every
+data PUT: payload + digest were memcpy'd into a bounce buffer (one 68 KiB
+copy per fragment). An aligned payload with a digest is now one `writev`
+of `{payload, tail_tls}` where `tail_tls` is a per-thread 4 KiB page
+holding the digest and zeros (`writev_all` loops on short writes).
+Once-logs `store: put O_DIRECT zero-copy` / `bounce copy`.
+
+**W39 — RDMA zero-copy fragment send (client, deployed).**
+`efs_rdma_send_frame` copied every fragment into an 84 KiB registered pool
+buffer (6.5 % of client cycles). Now `bufpool.c` calls
+`efs_rdma_zc_region_add(slab, …)` for every slab it carves; `rdma.c` keeps
+an append-only table of up to 128 regions with a lazily registered MR per
+HCA (`zc_lkey` → `ibv_reg_mr(pd, base, len, LOCAL_WRITE)`, once, logged
+once on failure) and posts a two-SGE send (`post_send2`: 5-byte frame
+header + small header part from the pool buffer, payload from the slab)
+when the payload is ≥ 4 KiB (`EFS_RDMA_ZC_MIN`) and the QP was created
+with `max_send_sge = 2` (`rc->zc_ok`). The payload must stay valid until
+the send CQE; every caller already does (a conn is either replied to —
+which implies send completion — or destroyed through `efs_conn_destroy`
+→ `ibv_destroy_qp`; `efs_rdma_send_quiesce` reaps outstanding sends).
+`test_rdma_xprt` passes; `efs: RDMA zero-copy send active (type=6 hdr=80
+payload=65536)` on the first PUT. 16 GiB random dd+fsync on fcstor007
+1.4 → 1.5 GB/s, client CPU ~21.4 s; cmp 0/5/15 GiB + md5 OK
+(`~/orcd/scratch/efs/perf/agent-rd-20261001-151704-new`).
+
+**Read path (client, deployed).** Baseline profile
+(`agent-rd-20261001-145047`, 16 GiB cold read 2.5 GB/s, 21.6 s CPU; `perf
+record -a` is refused at `perf_event_paranoid=1` — the rule's claim is
+wrong; attach `-p` ~0.7 s into the read so the pools exist): user time was
+memmove chains — RDMA recv buffer → fragment buffer → decoded chunk →
+rdcache → FUSE reply buffer → kernel. R1 `efs_rdcache_put_owned` hands a
+prefetched chunk's buffer to the cache (frees the victim's body); R2 a
+whole-chunk demand job decodes into the caller's buffer (`chunk_get_job
+.ext`, no copy-out, nothing freed); R4 `efs_client_decode_placed_chunk_
+attempts` points the two data-fragment buffers into the chunk itself and
+`efs_decode_chunk` skips a memcpy whose source is its destination
+(after R4: 3.0 GB/s, CPU 16.6 s — the removed copy was hot-cache, the
+cold-source ones remained, `-153035-inplace`, `-153356-prof`); R5
+`efs_client_read_refs` pins the rdcache images of a chunk-aligned READ
+whose chunks are all cached and clean (`efs_rdcache_pin` → `pins++`
+under the stripe lock; a pinned way is never a victim and `rdcache_put`
+leaves its bytes alone) and `ll_read` answers with `fuse_reply_iov`
+(libfuse 3.10's `fuse_reply_data` copies a multi-buffer bufvec into a
+fresh allocation; `fuse_reply_iov` writev's the vector). Once-log `efs:
+read reply zero-copy active (iov=8 size=1048576)`. The get pool is 64
+workers (`GET_POOL_N`), was `EFS_WRITE_PIPELINE` = 32; one synchronous
+fetch per worker is the client's in-flight read cap.
+Result (`-154007-refs`): single cold read **3.6 GB/s, CPU 10.8 s**; four
+readers **6.5 GB/s** (was 3.7); `EFS_READ_PREFETCH=32` 2.9 GB/s (worse,
+default 16 stays). cmp/md5 OK; the one `CMP_TAIL_BAD` in `gate670` was
+the harness (`cat | dd skip=1023` on a pipe without `iflag=fullblock`
+counts short reads) — `gate671` with an exact source: tail cold/warm,
+unaligned warm, md5 all OK. posix jobs=1 200/201
+(`results/posix/20261001-154333`); wedge gate (4 × 8 GiB + 300-file
+storm) 8.2 s / p99 70 ms / 32 `report-landed`.
+Still copies: RDMA recv buffer → chunk (zero-copy receive = per-request
+posted receives into the destination, a transport change — ask) and the
+FUSE write copy (W40). Single-stream is bound by in-flight depth and
+~1 ms per chunk, not CPU.
+
+**W37 — mkfs salt fork (server, in the tree, not rolled).** The Oct 1
+wedge: fcstor003's mkfs committed MKFS and SALT, the SALT reply was BUSY
+(the `group_slot` bug), the harness retried on fcstor004, whose MKFS was
+a no-op (the apply keeps the first salt) and whose SALT carried ITS salt →
+`efs_meta_apply_salt_record` PROTO → `apply salt rc=-7 index=3` on every
+group-2 apply, because SALT was a halt-on-error command. Fix:
+`server_raft_host_mkfs` reads the committed salt back
+(`efs_meta_apply_export_salt`) after the MKFS commit and replicates that;
+a node holding no record (group-2-only host, SALT not yet landed) answers
+BUSY with `retry on a group-0 node`; `EFS_MD_CMD_SALT` is ring-only so a
+mismatch is a verdict, not a stuck group. A first attempt to make the
+mkfs apply return EXIST broke `test_meta_apply` `idempotent` and
+`test_sim` `idempotent mkfs` — the apply contract (idempotent, first salt
+wins) is right and stays. Compiled, `test_sim` and `test_meta_apply` pass (`bld701`).
+Gate: a fresh-table start after the next wipe.
+
+**rmdir emptiness (client, deployed).** The 9-host suite on the new
+client gave fcstor009 199/201: `dir_deep_nesting` `rmdir d25` ENOTEMPTY
+(`results/posix/20261001-155455`) — the same one-host signature as
+fcstor012's `d50` on Sep 30, where the KV showed the dir empty and
+another client's rmdir succeeded. `efs_client_unlink` refused locally
+when `efs_export_dir_empty` found a child in the client's table; that
+table can keep a child whose removal committed elsewhere. The local
+check now only logs (`efs: rmdir ino=… local table lists child '…' —
+asking the server`, first 16) and the server decides. 9-host after
+(`dep691`): 200/201 on all nine (`results/posix/20261001-160049`).
+
+**Deployment.** Clients fcstor003–015 (`dep680`) and fstor007's `/tmp/efs`
+tree (the user's running efs-fuse untouched). Servers carry store.c, W37
+and the log timestamps unbuilt — a build-ID roll the user's live session
+should not pay for unasked.
+
 ## Oct 1 2026 14:00Z — the fstor007 wedge: D24 decided, REPORT reply wait sized, log timestamps
 
 **Symptom (user).** fstor007, 8 parallel 20 GiB `dd bs=1M` + an `ecopy`:

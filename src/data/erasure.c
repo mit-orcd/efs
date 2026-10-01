@@ -111,15 +111,21 @@ int efs_decode_chunk(uint8_t *const fragments[EFS_NUM_FRAGMENTS], size_t chunk_s
 
     size_t frag_len = chunk_size / 2;
 
+    /* A data fragment that already sits in its half of chunk (the
+     * client receives data fragments in place) is not copied. */
     if (missing == 2) {
-        memcpy(chunk, fragments[0], frag_len);
-        memcpy(chunk + frag_len, fragments[1], frag_len);
+        if (fragments[0] != chunk)
+            memcpy(chunk, fragments[0], frag_len);
+        if (fragments[1] != chunk + frag_len)
+            memcpy(chunk + frag_len, fragments[1], frag_len);
     } else if (missing == 1) {
-        memcpy(chunk, fragments[0], frag_len);
+        if (fragments[0] != chunk)
+            memcpy(chunk, fragments[0], frag_len);
         xor_into(chunk + frag_len, fragments[0], fragments[2], frag_len);
     } else { /* missing == 0 */
         xor_into(chunk, fragments[1], fragments[2], frag_len);
-        memcpy(chunk + frag_len, fragments[1], frag_len);
+        if (fragments[1] != chunk + frag_len)
+            memcpy(chunk + frag_len, fragments[1], frag_len);
     }
 
     (void)chunk_len;

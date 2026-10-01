@@ -203,6 +203,89 @@ static struct efs_rdma_dev g_devs[4];
 static int g_dev_count;
 static pthread_mutex_t g_dev_lock = PTHREAD_MUTEX_INITIALIZER;
 static int g_live_conns;
+
+/* W39: zero-copy send regions. A client bufpool slab (32 MiB) is named
+ * once; each HCA registers it on the first send out of it (ibv_reg_mr of
+ * 32 MiB pins the pages, ~ms, once per slab per device). The table is
+ * append-only: base/len are read without the lock, the per-device MR
+ * pointer is published with a release store after registration. A send
+ * whose payload is not in any region (TLS parity buffers, malloc'd
+ * records) copies into the pool buffer as before. */
+#define ZC_MAX_REGIONS 128
+struct zc_region {
+    uint8_t *base;
+    size_t len;
+    struct ibv_mr *mr[4]; /* indexed like g_devs */
+    int failed[4];        /* registration failed: copy path, logged once */
+};
+static struct zc_region g_zc[ZC_MAX_REGIONS];
+static int g_zc_n;
+static pthread_mutex_t g_zc_lock = PTHREAD_MUTEX_INITIALIZER;
+static uint64_t g_zc_sent, g_zc_copied;
+
+int efs_rdma_zc_region_add(void *base, size_t len)
+{
+    if (!base || len == 0)
+        return -1;
+    pthread_mutex_lock(&g_zc_lock);
+    if (g_zc_n >= ZC_MAX_REGIONS) {
+        pthread_mutex_unlock(&g_zc_lock);
+        return -1;
+    }
+    struct zc_region *r = &g_zc[g_zc_n];
+    r->base = base;
+    r->len = len;
+    memset(r->mr, 0, sizeof(r->mr));
+    memset(r->failed, 0, sizeof(r->failed));
+    __atomic_store_n(&g_zc_n, g_zc_n + 1, __ATOMIC_RELEASE);
+    pthread_mutex_unlock(&g_zc_lock);
+    return 0;
+}
+
+void efs_rdma_zc_stats(uint64_t *zc, uint64_t *copied)
+{
+    if (zc)
+        *zc = __atomic_load_n(&g_zc_sent, __ATOMIC_RELAXED);
+    if (copied)
+        *copied = __atomic_load_n(&g_zc_copied, __ATOMIC_RELAXED);
+}
+
+/* lkey for [p, p+len) on dev, or 0 when the range is not inside one
+ * registered region. Registers on first use. */
+static uint32_t zc_lkey(struct efs_rdma_dev *dev, const void *p, uint32_t len)
+{
+    int di = (int)(dev - g_devs);
+    if (di < 0 || di >= 4)
+        return 0;
+    int n = __atomic_load_n(&g_zc_n, __ATOMIC_ACQUIRE);
+    const uint8_t *q = p;
+    for (int i = 0; i < n; i++) {
+        struct zc_region *r = &g_zc[i];
+        if (q < r->base || q + len > r->base + r->len)
+            continue;
+        struct ibv_mr *mr = __atomic_load_n(&r->mr[di], __ATOMIC_ACQUIRE);
+        if (mr)
+            return mr->lkey;
+        if (__atomic_load_n(&r->failed[di], __ATOMIC_RELAXED))
+            return 0;
+        pthread_mutex_lock(&g_zc_lock);
+        mr = r->mr[di];
+        if (!mr && !r->failed[di]) {
+            mr = ibv_reg_mr(dev->pd, r->base, r->len, IBV_ACCESS_LOCAL_WRITE);
+            if (mr) {
+                __atomic_store_n(&r->mr[di], mr, __ATOMIC_RELEASE);
+            } else {
+                r->failed[di] = 1;
+                fprintf(stderr, "efs: RDMA zero-copy region %p len=%zu "
+                        "reg_mr failed on %s (errno %d); copying sends\n",
+                        (void *)r->base, r->len, dev->name, errno);
+            }
+        }
+        pthread_mutex_unlock(&g_zc_lock);
+        return mr ? mr->lkey : 0;
+    }
+    return 0;
+}
 static int g_spinning; /* conn threads currently in the recv-ring spin wait */
 
 /* Conn registry: recv WR wr_id = (gen << 32) | (reg_idx << 8) | buf_idx, so
@@ -582,6 +665,7 @@ struct efs_rdma_conn {
                    * alongside efd so a dead peer (FIN/RST) wakes the wait
                    * even though the QP itself never errors when idle */
     uint32_t max_inline; /* actual QP inline cap (may be < EFS_RDMA_INLINE_MAX) */
+    int zc_ok;           /* QP accepts 2 SGEs: W39 zero-copy sends allowed */
 };
 
 static int post_recv(struct efs_rdma_conn *rc, int idx)
@@ -850,7 +934,7 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     ia.recv_cq = dev->recv_cq;
     ia.cap.max_send_wr = 32;
     ia.cap.max_recv_wr = rc->nrecv + 4;
-    ia.cap.max_send_sge = 1;
+    ia.cap.max_send_sge = 2; /* W39: header + region payload */
     ia.cap.max_recv_sge = 1;
     ia.cap.max_inline_data = EFS_RDMA_INLINE_MAX;
     ia.qp_type = IBV_QPT_RC;
@@ -861,6 +945,7 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     /* Driver may reduce the requested inline cap. Stack-buffer INLINE
      * larger than this fails post_send (small LOOKUP after upgrade). */
     rc->max_inline = ia.cap.max_inline_data;
+    rc->zc_ok = ia.cap.max_send_sge >= 2;
 
     struct ibv_qp_attr attr;
     memset(&attr, 0, sizeof(attr));
@@ -1368,6 +1453,50 @@ static int post_send(struct efs_rdma_conn *rc, uint64_t wr_id,
     return EFS_OK;
 }
 
+/* W39: header from the pool buffer, payload straight from a registered
+ * region. Two SGEs, never inline. */
+static int post_send2(struct efs_rdma_conn *rc, uint64_t wr_id,
+                      const void *hdr, uint32_t hdr_len,
+                      const void *payload, uint32_t payload_len,
+                      uint32_t payload_lkey)
+{
+    struct ibv_sge sge[2] = {
+        { .addr = (uintptr_t)hdr, .length = hdr_len, .lkey = rc->mr->lkey },
+        { .addr = (uintptr_t)payload, .length = payload_len,
+          .lkey = payload_lkey },
+    };
+    struct ibv_send_wr wr = {
+        .wr_id = wr_id,
+        .opcode = IBV_WR_SEND,
+        .send_flags = IBV_SEND_SIGNALED,
+        .num_sge = 2,
+        .sg_list = sge,
+    };
+    struct ibv_send_wr *bad = NULL;
+    if (ibv_post_send(rc->qp, &wr, &bad) != 0) {
+        rc->broken = 1;
+        return EFS_ERR_NET;
+    }
+    rc->n_posted++;
+    return EFS_OK;
+}
+
+int efs_rdma_send_quiesce(struct efs_rdma_conn *rc)
+{
+    int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
+    for (;;) {
+        if (reap_sends(rc) != 0)
+            return -1;
+        if (rc->n_reaped >= rc->n_posted)
+            return 0;
+        if (now_us() > end) {
+            rc->broken = 1;
+            return -1;
+        }
+        sched_yield();
+    }
+}
+
 int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
                         const void *p1, uint32_t l1,
                         const void *p2, uint32_t l2)
@@ -1390,6 +1519,29 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
         return EFS_ERR_NET;
     }
     uint8_t *b = rc->send_bufs[idx];
+    if (p2 && l2 >= EFS_RDMA_ZC_MIN && rc->zc_ok) {
+        uint32_t lkey = zc_lkey(rc->dev, p2, l2);
+        if (lkey != 0) {
+            if (efs_wire_frame_header(type, payload, b) != EFS_OK)
+                return EFS_ERR_NET;
+            if (l1 > 0 && p1)
+                memcpy(b + 5, p1, l1);
+            struct send_ident ident;
+            send_ident_take(rc, &ident);
+            if (post_send2(rc, SEND_WRID_POOL | (uint64_t)idx, b, 5 + l1,
+                           p2, l2, lkey) != 0) {
+                send_fail_dump2(rc, type, "ibv_post_send (2 sge)", &ident);
+                return EFS_ERR_NET;
+            }
+            rc->send_busy[idx] = 1;
+            rc->send_posted_us[idx] = now_us();
+            if (__atomic_fetch_add(&g_zc_sent, 1, __ATOMIC_RELAXED) == 0)
+                fprintf(stderr, "efs: RDMA zero-copy send active "
+                        "(type=%u hdr=%u payload=%u)\n", type, l1, l2);
+            return EFS_OK;
+        }
+        __atomic_fetch_add(&g_zc_copied, 1, __ATOMIC_RELAXED);
+    }
     uint32_t encoded = 0;
     if (efs_wire_frame_encode(type, p1, l1, p2, l2, b, rc->max_frame,
                               &encoded) != EFS_OK)
