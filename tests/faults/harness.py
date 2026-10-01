@@ -639,11 +639,14 @@ def case_missing_checksum(cluster, seed):
         return [row("missing_checksum", "FAIL",
                     detail="fragment 0 was not created")]
     frag = groups[0]
-    side = frag + ".sum"
-    if not os.path.isfile(side):
+    sz = os.path.getsize(frag)
+    if sz < 4096:
         return [row("missing_checksum", "FAIL",
-                    detail="no checksum sidecar at %s" % side)]
-    os.unlink(side)
+                    detail="fragment %s has no checksum tail" % frag)]
+    # Zero the digest in the 4 KiB tail (offset = size - 4096).
+    with open(frag, "r+b") as f:
+        f.seek(sz - 4096)
+        f.write(b"\x00" * 32)
     flip_first_byte(frag)
     got, err = timed_read(mount_b, name, cluster.journal, cluster.work)
     if err is None and got == data:

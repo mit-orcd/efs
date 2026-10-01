@@ -1,0 +1,5 @@
+efs-bg: start 2026-10-01T07:58:22Z host=fcstor010 name=hs438 screen=efs-hs438
+file=/tmp/efs-mount/io500/2026.10.01-03.49.05/ior-hard/file size=35148821760 records=747720 ntasks=36 G=1817379128 threads=12
+BAD rec=331368 off=15576946944 seg=9204 rank=24 chunk=118842 word=5344 byte=15576989696 exp=000000186c531618 got=0000000000000000 (got_rank=0 got_i=-1817379128 zero_words=532/5876)
+DONE records=747720 bad=1 short=0
+efs-bg: end 2026-10-01T07:58:46Z rc=1

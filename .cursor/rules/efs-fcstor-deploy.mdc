@@ -115,7 +115,7 @@ Use `efs-bg.sh start wipe 'bash tests/wipe_cluster.sh'` (the wipe is minutes; th
 3. **Wipe with `edelete`, NEVER `rm -rf`** (rm -rf on millions of chunk
    files takes many minutes; edelete does all 6 paths on 4 nodes in
    seconds):
-   `for d in 01..06; do ~/git/ereport/edelete --delete --force /data1/$d/efs; done`
+   `for d in 01..06; do ~/bin/edelete --delete --force /data1/$d/efs; done`
    then `mkdir -p` the dirs again (edelete removes the start dir too).
    Same for any big test-tree cleanup on these nodes.
 
@@ -188,8 +188,23 @@ then `rm -f fuse.log` and:
 
 `efsd` HELLO requires a matching `EFS_BUILD_ID`. Rolling restart works only
 when the ID is unchanged (same commit, `-dirty`). After a NEW commit, restart
-ALL servers together — mixed build IDs are rejected:
-`efs-bg.sh start roll-all "EFSD_ENV='EFS_TRANSPORT=rdma EFS_RAFT_OBS=1' bash tests/roll_efsd.sh --all"`
-(parallel build on all four, checks the four IDs agree, `pkill -9 -x efsd`
-on all four, starts all four without `--join`, waits for both groups;
-~2 min). Plain `roll_efsd.sh 1 2 3 4` refuses when the ID changed.
+ALL servers together — mixed build IDs are rejected. Do that through
+`tests/cluster.sh` (it runs `roll_efsd.sh --all`):
+
+```
+efs-bg.sh start <name> 'bash ~/git/efs/tests/cluster.sh restart [--clients] [--perf] [--strace]'
+```
+
+`stop` brings efsd down and leaves storage. `start` rebuilds and starts
+the four servers, no `--join`, no wipe. `start --fresh` is the start
+after a wipe (storage must be empty): seed + `--join`, wait for both
+group leaders, then `raft-mkfs` on fcstor003 ONLY — never retry the
+mkfs on another node (each node proposes its own salt; a second node's
+MKFS forks group 2's salt and wedges its apply, Oct 1). `--clients` also stops or
+remounts efs-fuse on fcstor003–015 (plain RDMA); without it the command
+refuses while any of those mounts is up. `--perf` and `--strace` attach
+to efsd only. `stop` SIGTERMs efsd, and if it is still up SIGTERMs `perf`
+and `strace` before `pkill -9 -x efsd`, so `/tmp/efs-perf/efsd.data` gets
+a footer. `start` deletes those two files on each server; copy them off
+first. fstor007 is not touched. Plain `roll_efsd.sh 1 2 3 4` refuses when
+the ID changed.

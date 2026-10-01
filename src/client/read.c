@@ -12,6 +12,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <time.h>
+#include <poll.h>
 
 static uint32_t data_chunk_size(void)
 {
@@ -36,12 +37,6 @@ static int overlay_chunk_deltas_ce(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                                    uint32_t chunk_len,
                                    const struct efs_chunk_entry *cep);
 
-struct frag_batch {
-    pthread_mutex_t mu;
-    pthread_cond_t cv;
-    int remaining;
-};
-
 struct frag_get_job {
     efs_node_id_t node;
     efs_ino_t ino;
@@ -52,8 +47,9 @@ struct frag_get_job {
     uint32_t len;
     int rc;
     uint64_t chunk_generation;
-    struct frag_batch *bp;
 };
+
+static void get_two_parallel(struct frag_get_job *jobs);
 
 static void *frag_get_thread(void *arg)
 {
@@ -65,120 +61,9 @@ static void *frag_get_thread(void *arg)
     return NULL;
 }
 
-/* Persistent fragment GET workers. decode used to pthread_create+join two
- * threads per chunk; at GB/s that is tens of thousands of creates/s. A
- * dedicated pool (separate from the chunk GET pool) keeps the two preferred
- * fragments concurrent without a create/join storm, and cannot deadlock
- * with chunk workers that wait on this pool. */
-/* Workers cap outstanding fragment GETs (one in flight per worker); client
- * read throughput ≈ workers × frag_size / RTT. 4× pipeline keeps the conn
- * pool, not the pool, the limiter. */
-#define FRAG_POOL_WORKERS (4 * EFS_WRITE_PIPELINE)
-#define FRAG_POOL_QDEPTH  (8 * EFS_WRITE_PIPELINE)
-static struct {
-    pthread_mutex_t mu;
-    pthread_cond_t not_empty;
-    pthread_cond_t not_full;
-    struct frag_get_job *q[FRAG_POOL_QDEPTH];
-    int head, tail, count;
-    pthread_t tids[FRAG_POOL_WORKERS];
-    int nworkers;
-    int ready;
-    int shutdown;
-} g_frag_pool = {
-    .mu = PTHREAD_MUTEX_INITIALIZER,
-    .not_empty = PTHREAD_COND_INITIALIZER,
-    .not_full = PTHREAD_COND_INITIALIZER,
-};
-
-static void *frag_pool_thread(void *arg)
-{
-    (void)arg;
-    for (;;) {
-        pthread_mutex_lock(&g_frag_pool.mu);
-        while (g_frag_pool.count == 0 && !g_frag_pool.shutdown)
-            pthread_cond_wait(&g_frag_pool.not_empty, &g_frag_pool.mu);
-        if (g_frag_pool.shutdown && g_frag_pool.count == 0) {
-            pthread_mutex_unlock(&g_frag_pool.mu);
-            return NULL;
-        }
-        struct frag_get_job *job = g_frag_pool.q[g_frag_pool.head];
-        g_frag_pool.head = (g_frag_pool.head + 1) % FRAG_POOL_QDEPTH;
-        g_frag_pool.count--;
-        pthread_cond_signal(&g_frag_pool.not_full);
-        pthread_mutex_unlock(&g_frag_pool.mu);
-
-        frag_get_thread(job);
-
-        struct frag_batch *bp = job->bp;
-        if (bp) {
-            pthread_mutex_lock(&bp->mu);
-            if (--bp->remaining == 0)
-                pthread_cond_signal(&bp->cv);
-            pthread_mutex_unlock(&bp->mu);
-        }
-    }
-}
-
-static int frag_pool_ensure(void)
-{
-    if (g_frag_pool.ready)
-        return 0;
-    pthread_mutex_lock(&g_frag_pool.mu);
-    if (!g_frag_pool.ready) {
-        for (int i = 0; i < FRAG_POOL_WORKERS; i++) {
-            if (pthread_create(&g_frag_pool.tids[i], NULL, frag_pool_thread,
-                               NULL) != 0) {
-                g_frag_pool.shutdown = 1;
-                pthread_cond_broadcast(&g_frag_pool.not_empty);
-                pthread_mutex_unlock(&g_frag_pool.mu);
-                for (int j = 0; j < i; j++)
-                    pthread_join(g_frag_pool.tids[j], NULL);
-                g_frag_pool.shutdown = 0;
-                return -1;
-            }
-        }
-        g_frag_pool.nworkers = FRAG_POOL_WORKERS;
-        g_frag_pool.ready = 1;
-    }
-    pthread_mutex_unlock(&g_frag_pool.mu);
-    return 0;
-}
-
-static int frag_pool_run(struct frag_get_job *jobs, int n)
-{
-    if (n <= 0)
-        return 0;
-    if (n == 1 || frag_pool_ensure() != 0) {
-        for (int i = 0; i < n; i++)
-            frag_get_thread(&jobs[i]);
-        return 0;
-    }
-    struct frag_batch bp;
-    pthread_mutex_init(&bp.mu, NULL);
-    pthread_cond_init(&bp.cv, NULL);
-    bp.remaining = n;
-
-    pthread_mutex_lock(&g_frag_pool.mu);
-    for (int i = 0; i < n; i++) {
-        jobs[i].bp = &bp;
-        while (g_frag_pool.count == FRAG_POOL_QDEPTH && !g_frag_pool.shutdown)
-            pthread_cond_wait(&g_frag_pool.not_full, &g_frag_pool.mu);
-        g_frag_pool.q[g_frag_pool.tail] = &jobs[i];
-        g_frag_pool.tail = (g_frag_pool.tail + 1) % FRAG_POOL_QDEPTH;
-        g_frag_pool.count++;
-        pthread_cond_signal(&g_frag_pool.not_empty);
-    }
-    pthread_mutex_unlock(&g_frag_pool.mu);
-
-    pthread_mutex_lock(&bp.mu);
-    while (bp.remaining > 0)
-        pthread_cond_wait(&bp.cv, &bp.mu);
-    pthread_mutex_unlock(&bp.mu);
-    pthread_mutex_destroy(&bp.mu);
-    pthread_cond_destroy(&bp.cv);
-    return 0;
-}
+/* The two preferred fragment GETs run on the chunk worker
+ * (get_two_parallel): one send of both, one poll. A 128-thread frag
+ * pool was a condvar hop per fragment (Oct 1, ~400 futex per MiB). */
 
 /* Reuse the fragment scratch across decodes on the same worker thread.
  * The buffer is heap + thread-local, so without a destructor it leaks
@@ -207,6 +92,148 @@ static uint8_t *decode_frag_scratch(uint32_t need)
         (void)pthread_setspecific(decode_scratch_key, buf);
     }
     return buf;
+}
+
+/* Issue two fragment GETs and wait for both on this thread. */
+static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
+{
+    uint8_t reply_type = 0;
+    uint8_t status = 0;
+    uint8_t sum[EFS_HASH_SIZE];
+
+    if (efs_conn_recv_msg_into(conn, &reply_type, &status, sum, EFS_HASH_SIZE,
+                               j->out, j->frag_len) != 0 ||
+        reply_type != EFS_MSG_GET_CHUNK_REPLY) {
+        j->rc = EFS_ERR_NET;
+        return -1;
+    }
+    if (status != EFS_GET_CHUNK_OK) {
+        j->rc = EFS_ERR_NOT_FOUND;
+        return 0;
+    }
+    j->len = j->frag_len;
+    j->rc = EFS_OK;
+    return 0;
+}
+
+static void get_two_parallel(struct frag_get_job *jobs)
+{
+    struct efs_conn *conns[2] = {NULL, NULL};
+    int pending[2] = {0, 0};
+    int i;
+
+    for (i = 0; i < 2; i++) {
+        struct efs_msg_get_chunk req;
+        jobs[i].rc = EFS_ERR_NET;
+        jobs[i].len = 0;
+        if (jobs[i].node == 0 || efs_client_node_is_down(jobs[i].node))
+            continue;
+        conns[i] = efs_client_conn_get(jobs[i].node);
+        if (!conns[i])
+            continue;
+        memset(&req, 0, sizeof(req));
+        req.export_id = g_client.export_id;
+        req.ino = jobs[i].ino;
+        req.chunk_index = jobs[i].chunk_index;
+        req.fragment_index = (uint32_t)jobs[i].fi;
+        if (jobs[i].chunk_generation &&
+            jobs[i].chunk_generation != EFS_CHUNK_BASE_UNCOND)
+            req.chunk_generation = jobs[i].chunk_generation;
+        if (efs_conn_send_msg(conns[i], EFS_MSG_GET_CHUNK, &req,
+                              sizeof(req)) != 0) {
+            efs_client_conn_drop(jobs[i].node, conns[i]);
+            efs_client_node_note_fail(jobs[i].node);
+            conns[i] = NULL;
+            continue;
+        }
+        pending[i] = 1;
+    }
+
+    {
+        struct timespec ts;
+        int64_t deadline;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        deadline = (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000 +
+                   5000;
+        while (pending[0] || pending[1]) {
+            struct pollfd pfds[2];
+            int map[2];
+            int np = 0;
+            int64_t now, left;
+            int pr;
+
+            for (i = 0; i < 2; i++) {
+                int w;
+                if (!pending[i] || !conns[i])
+                    continue;
+                w = efs_conn_reply_watch_quick(conns[i]);
+                if (w == EFS_CONN_REPLY_READY) {
+                    if (get_one_reply(conns[i], &jobs[i]) != 0) {
+                        efs_client_conn_drop(jobs[i].node, conns[i]);
+                        efs_client_node_note_fail(jobs[i].node);
+                    } else {
+                        efs_client_conn_release(jobs[i].node, conns[i]);
+                        if (jobs[i].rc == EFS_OK)
+                            efs_client_node_note_ok(jobs[i].node);
+                    }
+                    conns[i] = NULL;
+                    pending[i] = 0;
+                    continue;
+                }
+                if (w < 0) {
+                    efs_client_conn_drop(jobs[i].node, conns[i]);
+                    efs_client_node_note_fail(jobs[i].node);
+                    conns[i] = NULL;
+                    pending[i] = 0;
+                    continue;
+                }
+                pfds[np].fd = w;
+                pfds[np].events = POLLIN;
+                pfds[np].revents = 0;
+                map[np] = i;
+                np++;
+            }
+            if (!pending[0] && !pending[1])
+                break;
+            if (np == 0)
+                break;
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            now = (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+            left = deadline - now;
+            if (left <= 0) {
+                for (i = 0; i < 2; i++) {
+                    if (!pending[i] || !conns[i])
+                        continue;
+                    efs_client_conn_drop(jobs[i].node, conns[i]);
+                    efs_client_node_note_fail(jobs[i].node);
+                    conns[i] = NULL;
+                    pending[i] = 0;
+                }
+                break;
+            }
+            pr = poll(pfds, (nfds_t)np, left > 2000 ? 2000 : (int)left);
+            if (pr <= 0)
+                continue;
+            for (i = 0; i < np; i++) {
+                int k;
+                if (!(pfds[i].revents & (POLLIN | POLLERR | POLLHUP)))
+                    continue;
+                k = map[i];
+                if (!pending[k] || !conns[k])
+                    continue;
+                if (get_one_reply(conns[k], &jobs[k]) != 0) {
+                    efs_client_conn_drop(jobs[k].node, conns[k]);
+                    efs_client_node_note_fail(jobs[k].node);
+                } else {
+                    efs_client_conn_release(jobs[k].node, conns[k]);
+                    if (jobs[k].rc == EFS_OK)
+                        efs_client_node_note_ok(jobs[k].node);
+                }
+                conns[k] = NULL;
+                pending[k] = 0;
+            }
+        }
+    }
 }
 
 /* Reconstruct one logical chunk from any 2 of 3 fragments. The three GETs run
@@ -306,7 +333,9 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[i].rc = EFS_ERR_NET;
             jobs[i].chunk_generation = have_ce ? ce.generation : 0;
         }
-        frag_pool_run(jobs, 2);
+        /* Both GETs from this worker: send, one poll, recv. The frag
+         * pool's condvar hop was ~16 futex per chunk (Oct 1). */
+        get_two_parallel(jobs);
         for (int i = 0; i < 2; i++) {
             if (jobs[i].rc == 0 && jobs[i].len == frag_len && !have[jobs[i].fi]) {
                 have[jobs[i].fi] = 1;
@@ -642,9 +671,11 @@ struct rdcache_ent {
     uint32_t len;
     uint32_t tick;
     uint64_t gen; /* chunk-map generation these bytes were decoded from */
+    int pending;  /* a fetch of this key is in flight; data may be stale */
 };
 static struct {
     pthread_mutex_t mu[RDCACHE_STRIPES];
+    pthread_cond_t cv[RDCACHE_STRIPES];
     int mu_ready;
     struct rdcache_ent e[RDCACHE_SLOTS][RDCACHE_WAYS];
     uint32_t tick;
@@ -658,8 +689,10 @@ static void rdcache_ensure(void)
         return;
     pthread_mutex_lock(&g_rdcache_init_mu);
     if (!g_rdcache.mu_ready) {
-        for (int i = 0; i < RDCACHE_STRIPES; i++)
+        for (int i = 0; i < RDCACHE_STRIPES; i++) {
             pthread_mutex_init(&g_rdcache.mu[i], NULL);
+            pthread_cond_init(&g_rdcache.cv[i], NULL);
+        }
         __atomic_store_n(&g_rdcache.mu_ready, 1, __ATOMIC_RELEASE);
     }
     pthread_mutex_unlock(&g_rdcache_init_mu);
@@ -874,16 +907,37 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_t *mu = rdcache_mu(s);
     pthread_mutex_lock(mu);
-    struct rdcache_ent *e = rdcache_find(s, ino, ci);
+    /* The way rdcache_acquire marked pending for this key first: it may
+     * have no data yet (a fresh way), and rdcache_find skips those. A put
+     * that lands in another way leaves that mark behind and the next
+     * reader of the chunk waits on it forever (Oct 1 07:25Z, posix
+     * basic_pread_pwrite D-state on a fresh mount). */
+    struct rdcache_ent *e = NULL;
+    for (int w = 0; w < RDCACHE_WAYS; w++) {
+        struct rdcache_ent *c = &g_rdcache.e[s][w];
+        if (c->ino == ino && c->ci == ci && (c->pending || c->data)) {
+            e = c;
+            if (c->pending)
+                break;
+        }
+    }
     if (!e) {
-        e = &g_rdcache.e[s][0];
-        for (int w = 1; w < RDCACHE_WAYS; w++) {
-            if (!g_rdcache.e[s][w].data) {
-                e = &g_rdcache.e[s][w];
+        /* Victim: a free way, else the LRU way; never a way pending for
+         * another key (its waiters would be stranded). */
+        for (int w = 0; w < RDCACHE_WAYS; w++) {
+            struct rdcache_ent *c = &g_rdcache.e[s][w];
+            if (c->pending)
+                continue;
+            if (!c->data) {
+                e = c;
                 break;
             }
-            if (g_rdcache.e[s][w].tick < e->tick)
-                e = &g_rdcache.e[s][w];
+            if (!e || c->tick < e->tick)
+                e = c;
+        }
+        if (!e) {
+            pthread_mutex_unlock(mu);
+            return;
         }
     }
     if (e->data && e->len < len) {
@@ -895,6 +949,13 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
         /* Pool buffers are EFS_CHUNK_SIZE-capacity; allocate once per way. */
         e->data = efs_buf_alloc(len);
         if (!e->data) {
+            /* Release the mark or its waiters never wake. */
+            if (e->pending) {
+                e->pending = 0;
+                e->ino = 0;
+                pthread_cond_broadcast(
+                    &g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
+            }
             pthread_mutex_unlock(mu);
             return;
         }
@@ -904,7 +965,9 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
     e->ino = ino;
     e->ci = ci;
     e->gen = tg;
+    e->pending = 0;
     e->tick = ++g_rdcache.tick;
+    pthread_cond_broadcast(&g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
     pthread_mutex_unlock(mu);
 }
 
@@ -914,8 +977,11 @@ void efs_rdcache_invalidate(efs_ino_t ino, uint32_t ci)
     pthread_mutex_t *mu = rdcache_mu(s);
     pthread_mutex_lock(mu);
     struct rdcache_ent *e = rdcache_find(s, ino, ci);
-    if (e)
+    if (e) {
         e->ino = 0;
+        e->pending = 0;
+        pthread_cond_broadcast(&g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
+    }
     pthread_mutex_unlock(mu);
 }
 
@@ -930,11 +996,23 @@ struct chunk_get_job {
     struct get_batch *bp;
 };
 
+static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,
+                           uint32_t len);
+static void rdcache_cancel(efs_ino_t ino, uint32_t ci);
+
 static void *chunk_get_worker(void *arg)
 {
     struct chunk_get_job *job = arg;
     uint32_t chunk_size = data_chunk_size();
-    if (efs_rdcache_get(job->ino, job->ci, job->chunk, chunk_size) == 0) {
+    int acq;
+    /* Same-mount read of a chunk this client still holds. efs_dcache_copy
+     * serves a current image and refuses one the map does not name. */
+    if (efs_dcache_copy(job->ino, job->ci, 0, job->chunk, chunk_size) == 0) {
+        job->rc = EFS_OK;
+        return NULL;
+    }
+    acq = rdcache_acquire(job->ino, job->ci, job->chunk, chunk_size);
+    if (acq == 0) {
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         /* The cached image is the base. Spans published after it was
          * stored are not in it; paint them or the read hides a peer
@@ -982,6 +1060,8 @@ static void *chunk_get_worker(void *arg)
         memset(job->chunk, 0, chunk_size);
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         job->rc = EFS_OK;
+        if (acq == 1)
+            rdcache_cancel(job->ino, job->ci);
         return NULL;
     }
     /* fetch covers a generation-0 base (first spans hang off an empty
@@ -993,43 +1073,51 @@ static void *chunk_get_worker(void *arg)
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         if (job->cacheable)
             efs_rdcache_put(job->ino, job->ci, job->chunk, chunk_size);
+        else if (acq == 1)
+            rdcache_cancel(job->ino, job->ci);
+    } else if (acq == 1) {
+        rdcache_cancel(job->ino, job->ci);
     }
     return NULL;
 }
 
-#define GET_POOL_QDEPTH (8 * EFS_WRITE_PIPELINE)
+#define GET_POOL_QDEPTH 32
 static struct {
     pthread_mutex_t mu;
-    pthread_cond_t not_empty;
-    pthread_cond_t not_full;
+    pthread_cond_t cv;
     struct chunk_get_job *q[GET_POOL_QDEPTH];
     int head, tail, count;
+} g_get_sh[EFS_WRITE_PIPELINE];
+static struct {
     pthread_t tids[EFS_WRITE_PIPELINE];
     int nworkers;
     int ready;
     int shutdown;
-} g_get_pool = {
-    .mu = PTHREAD_MUTEX_INITIALIZER,
-    .not_empty = PTHREAD_COND_INITIALIZER,
-    .not_full = PTHREAD_COND_INITIALIZER,
-};
+    int rr;
+} g_get_pool;
+static pthread_mutex_t g_get_init = PTHREAD_MUTEX_INITIALIZER;
 
 static void *get_pool_thread(void *arg)
 {
-    (void)arg;
+    int si = (int)(intptr_t)arg;
     for (;;) {
-        pthread_mutex_lock(&g_get_pool.mu);
-        while (g_get_pool.count == 0 && !g_get_pool.shutdown)
-            pthread_cond_wait(&g_get_pool.not_empty, &g_get_pool.mu);
-        if (g_get_pool.shutdown && g_get_pool.count == 0) {
-            pthread_mutex_unlock(&g_get_pool.mu);
+        struct chunk_get_job *job;
+        int was_full;
+
+        pthread_mutex_lock(&g_get_sh[si].mu);
+        while (g_get_sh[si].count == 0 && !g_get_pool.shutdown)
+            pthread_cond_wait(&g_get_sh[si].cv, &g_get_sh[si].mu);
+        if (g_get_pool.shutdown && g_get_sh[si].count == 0) {
+            pthread_mutex_unlock(&g_get_sh[si].mu);
             return NULL;
         }
-        struct chunk_get_job *job = g_get_pool.q[g_get_pool.head];
-        g_get_pool.head = (g_get_pool.head + 1) % GET_POOL_QDEPTH;
-        g_get_pool.count--;
-        pthread_cond_signal(&g_get_pool.not_full);
-        pthread_mutex_unlock(&g_get_pool.mu);
+        was_full = (g_get_sh[si].count == GET_POOL_QDEPTH);
+        job = g_get_sh[si].q[g_get_sh[si].head];
+        g_get_sh[si].head = (g_get_sh[si].head + 1) % GET_POOL_QDEPTH;
+        g_get_sh[si].count--;
+        if (was_full)
+            pthread_cond_signal(&g_get_sh[si].cv);
+        pthread_mutex_unlock(&g_get_sh[si].mu);
 
         chunk_get_worker(job);
 
@@ -1052,84 +1140,98 @@ static void *get_pool_thread(void *arg)
 
 static int get_pool_ensure(void)
 {
+    uint32_t i;
     if (g_get_pool.ready)
         return 0;
-    pthread_mutex_lock(&g_get_pool.mu);
+    pthread_mutex_lock(&g_get_init);
     if (!g_get_pool.ready) {
         uint32_t n = EFS_WRITE_PIPELINE;
-        for (uint32_t i = 0; i < n; i++) {
+        for (i = 0; i < n; i++) {
+            pthread_mutex_init(&g_get_sh[i].mu, NULL);
+            pthread_cond_init(&g_get_sh[i].cv, NULL);
+        }
+        for (i = 0; i < n; i++) {
             if (pthread_create(&g_get_pool.tids[i], NULL, get_pool_thread,
-                               NULL) != 0) {
+                               (void *)(intptr_t)i) != 0) {
+                uint32_t s, j;
                 g_get_pool.shutdown = 1;
-                pthread_cond_broadcast(&g_get_pool.not_empty);
-                pthread_mutex_unlock(&g_get_pool.mu);
-                for (uint32_t j = 0; j < i; j++)
+                for (s = 0; s < n; s++) {
+                    pthread_mutex_lock(&g_get_sh[s].mu);
+                    pthread_cond_broadcast(&g_get_sh[s].cv);
+                    pthread_mutex_unlock(&g_get_sh[s].mu);
+                }
+                for (j = 0; j < i; j++)
                     pthread_join(g_get_pool.tids[j], NULL);
                 g_get_pool.shutdown = 0;
+                pthread_mutex_unlock(&g_get_init);
                 return -1;
             }
         }
         g_get_pool.nworkers = (int)n;
         g_get_pool.ready = 1;
     }
-    pthread_mutex_unlock(&g_get_pool.mu);
+    pthread_mutex_unlock(&g_get_init);
     return 0;
 }
 
-/* Stop both persistent read pools and join their workers. Thread exit is
- * what runs the TLS destructor that frees each worker's decode scratch
- * (decode_frag_scratch), so skipping the join leaks ~192 KiB per worker.
- * Call only when no reads can be in flight (client shutdown). */
+/* Stop the read pool and join its workers. Thread exit runs the TLS
+ * destructor that frees each worker's decode scratch, so skipping the
+ * join leaks ~192 KiB per worker. Call only when no reads are in flight. */
 void efs_client_read_pools_stop(void)
 {
-    if (g_get_pool.ready) {
-        pthread_mutex_lock(&g_get_pool.mu);
-        g_get_pool.shutdown = 1;
-        pthread_cond_broadcast(&g_get_pool.not_empty);
-        pthread_mutex_unlock(&g_get_pool.mu);
-        for (int i = 0; i < g_get_pool.nworkers; i++)
-            pthread_join(g_get_pool.tids[i], NULL);
-        g_get_pool.ready = 0;
-        g_get_pool.shutdown = 0;
+    uint32_t i;
+    if (!g_get_pool.ready)
+        return;
+    g_get_pool.shutdown = 1;
+    for (i = 0; i < (uint32_t)g_get_pool.nworkers; i++) {
+        pthread_mutex_lock(&g_get_sh[i].mu);
+        pthread_cond_broadcast(&g_get_sh[i].cv);
+        pthread_mutex_unlock(&g_get_sh[i].mu);
     }
-    if (g_frag_pool.ready) {
-        pthread_mutex_lock(&g_frag_pool.mu);
-        g_frag_pool.shutdown = 1;
-        pthread_cond_broadcast(&g_frag_pool.not_empty);
-        pthread_mutex_unlock(&g_frag_pool.mu);
-        for (int i = 0; i < g_frag_pool.nworkers; i++)
-            pthread_join(g_frag_pool.tids[i], NULL);
-        g_frag_pool.ready = 0;
-        g_frag_pool.shutdown = 0;
-    }
+    for (i = 0; i < (uint32_t)g_get_pool.nworkers; i++)
+        pthread_join(g_get_pool.tids[i], NULL);
+    g_get_pool.ready = 0;
+    g_get_pool.shutdown = 0;
 }
 
 static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
 {
+    struct get_batch bp;
+    uint8_t used[EFS_WRITE_PIPELINE];
+    uint32_t i;
+    int base;
+
     if (batch == 0)
         return 0;
     if (batch == 1 || get_pool_ensure() != 0) {
-        for (uint32_t i = 0; i < batch; i++)
+        for (i = 0; i < batch; i++)
             chunk_get_worker(&jobs[i]);
         return 0;
     }
-    struct get_batch bp;
     pthread_mutex_init(&bp.mu, NULL);
     pthread_cond_init(&bp.cv, NULL);
     bp.remaining = (int)batch;
-
-    pthread_mutex_lock(&g_get_pool.mu);
-    for (uint32_t i = 0; i < batch; i++) {
+    memset(used, 0, sizeof(used));
+    base = (int)__sync_fetch_and_add(&g_get_pool.rr, 1);
+    for (i = 0; i < batch; i++) {
+        int si = (int)(((unsigned)base + i) % (unsigned)g_get_pool.nworkers);
         jobs[i].bp = &bp;
-        while (g_get_pool.count == GET_POOL_QDEPTH && !g_get_pool.shutdown)
-            pthread_cond_wait(&g_get_pool.not_full, &g_get_pool.mu);
-        g_get_pool.q[g_get_pool.tail] = &jobs[i];
-        g_get_pool.tail = (g_get_pool.tail + 1) % GET_POOL_QDEPTH;
-        g_get_pool.count++;
-        pthread_cond_signal(&g_get_pool.not_empty);
+        pthread_mutex_lock(&g_get_sh[si].mu);
+        while (g_get_sh[si].count == GET_POOL_QDEPTH && !g_get_pool.shutdown)
+            pthread_cond_wait(&g_get_sh[si].cv, &g_get_sh[si].mu);
+        g_get_sh[si].q[g_get_sh[si].tail] = &jobs[i];
+        g_get_sh[si].tail = (g_get_sh[si].tail + 1) % GET_POOL_QDEPTH;
+        g_get_sh[si].count++;
+        used[si] = 1;
+        pthread_mutex_unlock(&g_get_sh[si].mu);
     }
-    pthread_mutex_unlock(&g_get_pool.mu);
-
+    for (i = 0; i < (uint32_t)g_get_pool.nworkers; i++) {
+        if (!used[i])
+            continue;
+        pthread_mutex_lock(&g_get_sh[i].mu);
+        pthread_cond_signal(&g_get_sh[i].cv);
+        pthread_mutex_unlock(&g_get_sh[i].mu);
+    }
     pthread_mutex_lock(&bp.mu);
     while (bp.remaining > 0)
         pthread_cond_wait(&bp.cv, &bp.mu);
@@ -1139,22 +1241,25 @@ static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
     return 0;
 }
 
-/* Non-blocking submit for prefetch. Skip if the demand queue is already
- * half full so sequential ahead-GET cannot stall a FUSE worker. */
+/* Non-blocking submit for prefetch. Skip when that worker's queue is
+ * already half full so ahead-GET cannot stall a FUSE worker. */
 static int get_pool_try_submit(struct chunk_get_job *job)
 {
+    int si;
     if (get_pool_ensure() != 0)
         return -1;
-    pthread_mutex_lock(&g_get_pool.mu);
-    if (g_get_pool.shutdown || g_get_pool.count >= GET_POOL_QDEPTH / 2) {
-        pthread_mutex_unlock(&g_get_pool.mu);
+    si = (int)((unsigned)__sync_fetch_and_add(&g_get_pool.rr, 1) %
+               (unsigned)g_get_pool.nworkers);
+    pthread_mutex_lock(&g_get_sh[si].mu);
+    if (g_get_pool.shutdown || g_get_sh[si].count >= GET_POOL_QDEPTH / 2) {
+        pthread_mutex_unlock(&g_get_sh[si].mu);
         return -1;
     }
-    g_get_pool.q[g_get_pool.tail] = job;
-    g_get_pool.tail = (g_get_pool.tail + 1) % GET_POOL_QDEPTH;
-    g_get_pool.count++;
-    pthread_cond_signal(&g_get_pool.not_empty);
-    pthread_mutex_unlock(&g_get_pool.mu);
+    g_get_sh[si].q[g_get_sh[si].tail] = job;
+    g_get_sh[si].tail = (g_get_sh[si].tail + 1) % GET_POOL_QDEPTH;
+    g_get_sh[si].count++;
+    pthread_cond_signal(&g_get_sh[si].cv);
+    pthread_mutex_unlock(&g_get_sh[si].mu);
     return 0;
 }
 
@@ -1162,11 +1267,103 @@ static int rdcache_hit(efs_ino_t ino, uint32_t ci)
 {
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_t *mu = rdcache_mu(s);
-    int hit;
+    int hit = 0;
+    int w;
     pthread_mutex_lock(mu);
-    hit = rdcache_find(s, ino, ci) != NULL;
+    for (w = 0; w < RDCACHE_WAYS; w++) {
+        struct rdcache_ent *e = &g_rdcache.e[s][w];
+        if (e->ino == ino && e->ci == ci && (e->data || e->pending)) {
+            hit = 1;
+            break;
+        }
+    }
     pthread_mutex_unlock(mu);
     return hit;
+}
+
+/* 0 = dst filled from a finished entry. 1 = this caller owns the fetch
+ * and must efs_rdcache_put or efs_rdcache_cancel. A second caller for a
+ * key that is already pending waits and then copies. */
+static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,
+                           uint32_t len)
+{
+    uint64_t tg = rdcache_map_gen(ino, ci);
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_t *mu = rdcache_mu(s);
+    int stripe = (int)(s & (RDCACHE_STRIPES - 1));
+
+    if (!dst || !len)
+        return 1;
+    for (;;) {
+        struct rdcache_ent *e = NULL;
+        struct rdcache_ent *pend = NULL;
+        int w;
+
+        pthread_mutex_lock(mu);
+        for (w = 0; w < RDCACHE_WAYS; w++) {
+            struct rdcache_ent *c = &g_rdcache.e[s][w];
+            if (c->ino == ino && c->ci == ci) {
+                if (c->pending)
+                    pend = c;
+                else if (c->data)
+                    e = c;
+            }
+        }
+        if (e && e->gen == tg && e->len >= len && tg) {
+            memcpy(dst, e->data, len);
+            e->tick = ++g_rdcache.tick;
+            pthread_mutex_unlock(mu);
+            return 0;
+        }
+        if (pend) {
+            pthread_cond_wait(&g_rdcache.cv[stripe], mu);
+            pthread_mutex_unlock(mu);
+            continue;
+        }
+        /* Victim: a free way, else the LRU way that is not pending for
+         * another key. Taking a pending way would strand that key's
+         * waiters into a second fetch. No way at all: fetch unmarked;
+         * efs_rdcache_put picks its own slot. */
+        e = NULL;
+        for (w = 0; w < RDCACHE_WAYS; w++) {
+            struct rdcache_ent *c = &g_rdcache.e[s][w];
+            if (c->pending)
+                continue;
+            if (!c->data) {
+                e = c;
+                break;
+            }
+            if (!e || c->tick < e->tick)
+                e = c;
+        }
+        if (e) {
+            e->ino = ino;
+            e->ci = ci;
+            e->pending = 1;
+            e->gen = 0;
+        }
+        pthread_mutex_unlock(mu);
+        return 1;
+    }
+}
+
+static void rdcache_cancel(efs_ino_t ino, uint32_t ci)
+{
+    uint32_t s = rdcache_slot(ino, ci);
+    pthread_mutex_t *mu = rdcache_mu(s);
+    int w;
+
+    pthread_mutex_lock(mu);
+    for (w = 0; w < RDCACHE_WAYS; w++) {
+        struct rdcache_ent *e = &g_rdcache.e[s][w];
+        if (e->ino == ino && e->ci == ci && e->pending) {
+            e->pending = 0;
+            if (!e->data)
+                e->ino = 0;
+        }
+    }
+    pthread_cond_broadcast(&g_rdcache.cv[s & (RDCACHE_STRIPES - 1)]);
+    pthread_mutex_unlock(mu);
 }
 
 /* Chunks ahead of the demand window. 0 disables. libfuse 3.10.2 does not
@@ -1317,6 +1514,10 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
         }
     }
     efs_client_stage_touch(ino);
+    /* A full-image PUT in flight for this inode has the chunk's body and
+     * no map row yet; read it after the window closes (efs_dcache_put_win_wait).
+     * One check per read; lock-free when no window is open anywhere. */
+    (void)efs_dcache_put_win_wait(ino);
     uint64_t file_size = inode.size;
 
     if (offset >= file_size) {
@@ -1484,6 +1685,10 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
             }
         }
 
+        /* Prefetch the next window before this batch's wait so those
+         * GETs overlap the copy-out. Demand joins an in-flight prefetch
+         * through rdcache_acquire. */
+        maybe_prefetch(want_pf, ino, batch_pos, file_size);
         get_pool_run(jobs, batch);
 
         for (uint32_t i = 0; i < batch; i++) {
@@ -1506,6 +1711,5 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     }
 
     *out_len = total;
-    maybe_prefetch(want_pf, ino, offset + total, file_size);
     return EFS_OK;
 }

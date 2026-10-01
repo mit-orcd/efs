@@ -3319,8 +3319,14 @@ static int host_apply_rc_locked(struct efs_raft_host *h, uint8_t group,
     struct host_group *g = group_slot(h, group);
     uint64_t s;
 
-    if (!g)
-        return EFS_OK; /* not hosted: the leader's submit reply carried it */
+    /* Not hosted: the leader's submit reply carried the verdict. The
+     * slot exists for every group (attach_group sets g->group and
+     * hosted=0), so test hosted, not the pointer: on a single-group
+     * host the unhosted slot's empty ring answered every forwarded
+     * host_propose_wait with BUSY (raft-mkfs's SALT step, Oct 1 07:20Z,
+     * arc_miss +1 per call). */
+    if (!g || !g->hosted)
+        return EFS_OK;
     s = idx & HOST_APPLY_RC_MASK;
     if (g->arc_idx[s] != idx) {
         h->obs_arc_miss++;
@@ -3340,8 +3346,8 @@ static int host_apply_extra_locked(struct efs_raft_host *h, uint8_t group,
     struct host_group *g = group_slot(h, group);
     uint64_t s;
 
-    if (!g)
-        return EFS_ERR_BUSY;
+    if (!g || !g->hosted)
+        return EFS_ERR_BUSY; /* no local ring; the extra is not on the wire */
     s = idx & HOST_APPLY_RC_MASK;
     if (g->arc_idx[s] != idx) {
         h->obs_arc_miss++;
@@ -3387,7 +3393,7 @@ static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
         return rc;
     pthread_mutex_lock(&h->mu);
     g = group_slot(h, group);
-    if (g) {
+    if (g && g->hosted) {
         uint64_t s = idx & HOST_APPLY_RC_MASK;
 
         if (g->arc_idx[s] == idx && g->arc_term[s] != term) {
@@ -11285,6 +11291,8 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
 
         pthread_mutex_lock(&h->mu);
         g = group_slot(h, b->group);
+        if (g && !g->hosted)
+            g = NULL; /* forwarded batch: the leader's reply was the verdict */
         for (i = 0; i < b->nidx && g; i++) {
             uint64_t s = b->idxs[i] & HOST_APPLY_RC_MASK;
             int erc;

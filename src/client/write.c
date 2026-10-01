@@ -2879,6 +2879,7 @@ static struct {
     uint32_t n;
 } put_win[PUT_WIN_SLOTS];
 static uint32_t put_win_overflow;
+static uint32_t put_win_total; /* open windows, all inodes: read fast path */
 static pthread_mutex_t put_win_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t put_win_cv = PTHREAD_COND_INITIALIZER;
 
@@ -2887,6 +2888,7 @@ static void put_win_open(efs_ino_t ino)
     int free_i = -1, i;
 
     pthread_mutex_lock(&put_win_mu);
+    __atomic_fetch_add(&put_win_total, 1, __ATOMIC_RELEASE);
     for (i = 0; i < PUT_WIN_SLOTS; i++) {
         if (put_win[i].n && put_win[i].ino == ino) {
             put_win[i].n++;
@@ -2919,6 +2921,8 @@ static void put_win_close(efs_ino_t ino)
     }
     if (!found && put_win_overflow)
         put_win_overflow--;
+    if (put_win_total)
+        __atomic_fetch_sub(&put_win_total, 1, __ATOMIC_RELEASE);
     pthread_cond_broadcast(&put_win_cv);
     pthread_mutex_unlock(&put_win_mu);
 }
@@ -2961,6 +2965,20 @@ static int put_win_wait(efs_ino_t ino, unsigned max_ms)
     }
     pthread_mutex_unlock(&put_win_mu);
     return rc;
+}
+
+/* Read side of the window. A full-image PUT steals the dcache body
+ * (snap-steal-full) and the local chunk map names the object only after
+ * the PUT lands, so until then the chunk is in no place a reader looks:
+ * dcache_copy misses, the map has no row, and the read is a "hole" of
+ * zeros (posix writev_readv_chunk_straddle, Oct 1 07:30Z: W30 PUTs the
+ * completed chunk 0 during the writev; the readv raced it). A reader
+ * waits for the inode's windows first. Lock-free when none is open. */
+int efs_dcache_put_win_wait(efs_ino_t ino)
+{
+    if (!__atomic_load_n(&put_win_total, __ATOMIC_ACQUIRE))
+        return 0;
+    return put_win_wait(ino, 8000u);
 }
 
 static uint8_t *dcache_steal_body(struct dcache_ent *e)
@@ -3475,6 +3493,8 @@ static void dcache_note_size(efs_ino_t ino, uint64_t end)
     efs_client_unlock_dir(ino);
 }
 
+static void dcache_kick_complete(void);
+
 static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
                                    const uint8_t *src, uint32_t cs)
 {
@@ -3499,6 +3519,7 @@ static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
         e->base_gen = EFS_CHUNK_BASE_UNCOND;
     }
     pthread_mutex_unlock(mu);
+    dcache_kick_complete();
     return 0;
 }
 
@@ -3529,6 +3550,7 @@ int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
     }
     pthread_mutex_unlock(mu);
     dcache_note_size(ino, ((uint64_t)ci + 1) * cs);
+    dcache_kick_complete();
     return 0;
 }
 
@@ -4287,6 +4309,13 @@ static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
      * re-pinned it (dcache_set_dirty + dcache_pin_add); leave that. */
     if (e && e->ino == ino && e->ci == ci && !e->dirty)
         dcache_pin_release(e);
+    /* A full overwrite's body is NOT put back after the PUT. Clean
+     * bodies have no budget and no evictor (freed only by drop or a
+     * take-replace), so restoring them made RSS track the bytes written
+     * (20 GiB dd → 20 GiB of retained chunks, every alloc past the
+     * 2 GiB slab cap an mmap). Same-mount read-after-write is dcache
+     * by the fio-honest rule anyway. A bounded clean-image cache is
+     * START-HERE D23 (ask). */
     pthread_mutex_unlock(mu);
     return 0;
 }
@@ -4582,7 +4611,9 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             e->ci = 0;
         }
         /* Clean after a landed PUT: the dirty set holds the row until
-         * the REPORT; the slot's pin is not needed (see dcache_flush_keep). */
+         * the REPORT; the slot's pin is not needed (see dcache_flush_keep).
+         * A full overwrite's body stays dropped — see dcache_flush_keep
+         * for why it is not restored (no clean-body budget, D23). */
         if (e->ino == ino && e->ci == ci && !e->dirty)
             dcache_pin_release(e);
         efs_buf_free(copy, len);
@@ -5057,6 +5088,8 @@ static struct {
     uint64_t kicks;
     uint64_t empty_kicks;
     int64_t empty_until_ns;
+    /* Full-chunk overwrites waiting to be PUT before close (W30). */
+    uint64_t complete;
 } g_reclaim = {
     .mu = PTHREAD_MUTEX_INITIALIZER,
     .cv = PTHREAD_COND_INITIALIZER,
@@ -5110,18 +5143,22 @@ static void *dcache_reclaim_main(void *arg)
             if (g_reclaim.shutdown)
                 break;
             if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
-                g_reclaim.lim) {
+                    g_reclaim.lim &&
+                __atomic_load_n(&g_reclaim.complete, __ATOMIC_RELAXED) == 0) {
                 pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
                 continue;
             }
             /* The last sweep found nothing and no writer has kicked
-             * since: the dirty set is fresh-file chunks, not our work. */
-            if (g_reclaim.kicks == g_reclaim.empty_kicks) {
+             * since: the dirty set is fresh-file chunks, not our work.
+             * A complete-chunk kick is work even under the cap. */
+            if (__atomic_load_n(&g_reclaim.complete, __ATOMIC_RELAXED) == 0 &&
+                g_reclaim.kicks == g_reclaim.empty_kicks) {
                 pthread_cond_wait(&g_reclaim.cv, &g_reclaim.mu);
                 continue;
             }
             now = reclaim_now_ns();
-            if (now < g_reclaim.empty_until_ns) {
+            if (__atomic_load_n(&g_reclaim.complete, __ATOMIC_RELAXED) == 0 &&
+                now < g_reclaim.empty_until_ns) {
                 struct timespec ts;
 
                 ts.tv_sec = (time_t)(g_reclaim.empty_until_ns / 1000000000ll);
@@ -5139,56 +5176,97 @@ static void *dcache_reclaim_main(void *arg)
         pthread_mutex_unlock(&g_reclaim.mu);
 
         uint64_t low = g_reclaim.lim - g_reclaim.lim / 8;
-        /* W18: pop a dirty have_base slot instead of scanning 65536. */
-        for (int i = 0; i < DCACHE_RECLAIM_SCAN; i++) {
-            uint32_t s = 0;
-            efs_ino_t pino = 0;
-            uint32_t pci = 0;
-            int found = 0;
-            int sh;
+        /* Up to one pipeline of PUTs in flight (the close path's
+         * flush_pipe), not one chunk then a wait. Full overwrites are
+         * taken even under the dirty cap; partial have_base chunks only
+         * when over it. Sparse appends stay for close/fsync. */
+        {
+            struct flush_pipe pipe;
+            int i;
 
-            if (__atomic_load_n(&g_dcache.dirty_bytes, __ATOMIC_RELAXED) <=
-                low)
-                break;
-            for (sh = 0; sh < DCACHE_SHARDS && !found; sh++) {
-                struct dcache_ent *e;
+            flush_pipe_init(&pipe);
+            for (i = 0; i < (int)EFS_WRITE_PIPELINE && pipe.rc == EFS_OK;
+                 i++) {
+                uint64_t dirty = __atomic_load_n(&g_dcache.dirty_bytes,
+                                                 __ATOMIC_RELAXED);
+                uint64_t comp = __atomic_load_n(&g_reclaim.complete,
+                                                __ATOMIC_RELAXED);
+                efs_ino_t pino = 0;
+                uint32_t pci = 0;
+                int found = 0;
+                int full = 0;
+                int sh;
+                uint8_t *copy = NULL;
+                uint32_t len = 0;
+                uint64_t bg = 0, seq = 0;
+                uint32_t doff = 0, dlen = 0;
+                int drop_body = 0;
+                struct efs_chunk_entry obs;
+                int have_obs = 0;
+                int st;
 
-                pthread_mutex_lock(&g_dcache.shard[sh]);
-                for (e = g_dcache.dirty_head[sh]; e; e = e->dirty_next) {
-                    if (!e->dirty || !e->data || !e->have_base ||
-                        e->reclaim_claimed)
-                        continue;
-                    /* Claim, do not unlink: the entry stays dirty until
-                     * the flush snapshots it, and dcache_flush_ino_pass
-                     * reads these lists as the index of an inode's dirty
-                     * chunks. An unlinked-but-dirty entry was invisible
-                     * to a close racing this pop (Oct 1 2026). */
-                    s = dcache_slot(e->ino, e->ci);
-                    pino = e->ino;
-                    pci = e->ci;
-                    e->reclaim_claimed = 1;
-                    found = 1;
+                if (comp == 0 && dirty <= low)
+                    break;
+                for (sh = 0; sh < DCACHE_SHARDS && !found; sh++) {
+                    struct dcache_ent *e;
+
+                    pthread_mutex_lock(&g_dcache.shard[sh]);
+                    for (e = g_dcache.dirty_head[sh]; e; e = e->dirty_next) {
+                        int is_full;
+
+                        if (!e->dirty || !e->data || !e->have_base ||
+                            e->reclaim_claimed)
+                            continue;
+                        is_full = dcache_full_overwrite(e->have_base,
+                                                        e->base_gen,
+                                                        e->nrange);
+                        if (!is_full && dirty <= g_reclaim.lim)
+                            continue;
+                        e->reclaim_claimed = 1;
+                        pino = e->ino;
+                        pci = e->ci;
+                        full = is_full;
+                        found = 1;
+                        break;
+                    }
+                    pthread_mutex_unlock(&g_dcache.shard[sh]);
+                }
+                if (!found) {
+                    __atomic_store_n(&g_reclaim.complete, 0, __ATOMIC_RELAXED);
                     break;
                 }
-                pthread_mutex_unlock(&g_dcache.shard[sh]);
-            }
-            if (!found)
-                break;
-            npopped++;
-            (void)dcache_flush_slot(s, 0, 0);
-            /* The snapshot's unlink cleared the claim. If the flush did
-             * not reach the entry (an early error), release the claim so
-             * another pass can take it. */
-            {
-                pthread_mutex_t *mu = dcache_mu(s);
-                struct dcache_ent *e;
+                if (full) {
+                    uint64_t c = __atomic_load_n(&g_reclaim.complete,
+                                                 __ATOMIC_RELAXED);
+                    if (c)
+                        __atomic_fetch_sub(&g_reclaim.complete, 1,
+                                           __ATOMIC_RELAXED);
+                }
+                st = dcache_steal_dirty(pino, pci, &copy, &len, &bg, &seq,
+                                        &doff, &dlen, &drop_body, &obs,
+                                        &have_obs);
+                if (st <= 0) {
+                    uint32_t s = dcache_slot(pino, pci);
+                    pthread_mutex_t *mu = dcache_mu(s);
+                    struct dcache_ent *e;
 
-                pthread_mutex_lock(mu);
-                for (e = &g_dcache.e[s]; e; e = e->next)
-                    if (e->ino == pino && e->ci == pci && e->reclaim_claimed)
-                        e->reclaim_claimed = 0;
-                pthread_mutex_unlock(mu);
+                    pthread_mutex_lock(mu);
+                    for (e = &g_dcache.e[s]; e; e = e->next)
+                        if (e->ino == pino && e->ci == pci &&
+                            e->reclaim_claimed)
+                            e->reclaim_claimed = 0;
+                    pthread_mutex_unlock(mu);
+                    if (st < 0)
+                        pipe.rc = st;
+                    continue;
+                }
+                npopped++;
+                if (flush_pipe_add(&pipe, pino, pci, copy, len, bg, seq, doff,
+                                   dlen, drop_body,
+                                   have_obs ? &obs : NULL) != EFS_OK)
+                    break;
             }
+            (void)flush_pipe_drain(&pipe);
         }
         pthread_mutex_lock(&g_reclaim.mu);
         g_reclaim.active--;
@@ -5220,6 +5298,16 @@ static void dcache_reclaim_start(void)
         }
         pthread_detach(t);
     }
+}
+
+static void dcache_kick_complete(void)
+{
+    pthread_once(&g_reclaim_once, dcache_reclaim_start);
+    __atomic_add_fetch(&g_reclaim.complete, 1, __ATOMIC_RELAXED);
+    pthread_mutex_lock(&g_reclaim.mu);
+    g_reclaim.kicks++;
+    pthread_cond_signal(&g_reclaim.cv);
+    pthread_mutex_unlock(&g_reclaim.mu);
 }
 
 void efs_dcache_maybe_reclaim(void)
@@ -5273,39 +5361,42 @@ void efs_dcache_reclaim_stop(void)
  * waits on that tracker, so concurrent writers (WB workers) all stay in flight
  * instead of racing on a single batch slot. Queue depth spans several batches
  * so enqueuers rarely block. */
-#define PUT_POOL_QDEPTH (8 * EFS_WRITE_PIPELINE)
+#define PUT_POOL_QDEPTH 32
 static struct {
     pthread_mutex_t mu;
-    pthread_cond_t not_empty;
-    pthread_cond_t not_full;
+    pthread_cond_t cv;
     struct chunk_put_job *q[PUT_POOL_QDEPTH];
     int head, tail, count;
+} g_put_sh[EFS_WRITE_PIPELINE];
+static struct {
     pthread_t tids[EFS_WRITE_PIPELINE];
     int nworkers;
     int ready;
     int shutdown;
-} g_put_pool = {
-    .mu = PTHREAD_MUTEX_INITIALIZER,
-    .not_empty = PTHREAD_COND_INITIALIZER,
-    .not_full = PTHREAD_COND_INITIALIZER,
-};
+    int rr;
+} g_put_pool;
 
 static void *put_pool_thread(void *arg)
 {
-    (void)arg;
+    int si = (int)(intptr_t)arg;
     for (;;) {
-        pthread_mutex_lock(&g_put_pool.mu);
-        while (g_put_pool.count == 0 && !g_put_pool.shutdown)
-            pthread_cond_wait(&g_put_pool.not_empty, &g_put_pool.mu);
-        if (g_put_pool.shutdown && g_put_pool.count == 0) {
-            pthread_mutex_unlock(&g_put_pool.mu);
+        struct chunk_put_job *job;
+        int was_full;
+
+        pthread_mutex_lock(&g_put_sh[si].mu);
+        while (g_put_sh[si].count == 0 && !g_put_pool.shutdown)
+            pthread_cond_wait(&g_put_sh[si].cv, &g_put_sh[si].mu);
+        if (g_put_pool.shutdown && g_put_sh[si].count == 0) {
+            pthread_mutex_unlock(&g_put_sh[si].mu);
             return NULL;
         }
-        struct chunk_put_job *job = g_put_pool.q[g_put_pool.head];
-        g_put_pool.head = (g_put_pool.head + 1) % PUT_POOL_QDEPTH;
-        g_put_pool.count--;
-        pthread_cond_signal(&g_put_pool.not_full);
-        pthread_mutex_unlock(&g_put_pool.mu);
+        was_full = (g_put_sh[si].count == PUT_POOL_QDEPTH);
+        job = g_put_sh[si].q[g_put_sh[si].head];
+        g_put_sh[si].head = (g_put_sh[si].head + 1) % PUT_POOL_QDEPTH;
+        g_put_sh[si].count--;
+        if (was_full)
+            pthread_cond_signal(&g_put_sh[si].cv);
+        pthread_mutex_unlock(&g_put_sh[si].mu);
 
         chunk_put_worker(job);
 
@@ -5317,57 +5408,82 @@ static void *put_pool_thread(void *arg)
     }
 }
 
+static pthread_mutex_t g_put_init = PTHREAD_MUTEX_INITIALIZER;
+
 static int put_pool_ensure(void)
 {
+    uint32_t i;
     if (g_put_pool.ready)
         return 0;
-    pthread_mutex_lock(&g_put_pool.mu);
+    pthread_mutex_lock(&g_put_init);
     if (!g_put_pool.ready) {
         uint32_t n = EFS_WRITE_PIPELINE;
-        for (uint32_t i = 0; i < n; i++) {
+        for (i = 0; i < n; i++) {
+            pthread_mutex_init(&g_put_sh[i].mu, NULL);
+            pthread_cond_init(&g_put_sh[i].cv, NULL);
+        }
+        for (i = 0; i < n; i++) {
             if (pthread_create(&g_put_pool.tids[i], NULL, put_pool_thread,
-                               NULL) != 0) {
+                               (void *)(intptr_t)i) != 0) {
+                uint32_t s, j;
                 g_put_pool.shutdown = 1;
-                pthread_cond_broadcast(&g_put_pool.not_empty);
-                pthread_mutex_unlock(&g_put_pool.mu);
-                for (uint32_t j = 0; j < i; j++)
+                for (s = 0; s < n; s++) {
+                    pthread_mutex_lock(&g_put_sh[s].mu);
+                    pthread_cond_broadcast(&g_put_sh[s].cv);
+                    pthread_mutex_unlock(&g_put_sh[s].mu);
+                }
+                for (j = 0; j < i; j++)
                     pthread_join(g_put_pool.tids[j], NULL);
                 g_put_pool.shutdown = 0;
+                pthread_mutex_unlock(&g_put_init);
                 return -1;
             }
         }
         g_put_pool.nworkers = (int)n;
         g_put_pool.ready = 1;
     }
-    pthread_mutex_unlock(&g_put_pool.mu);
+    pthread_mutex_unlock(&g_put_init);
     return 0;
 }
 
 static int put_pool_run(struct chunk_put_job *jobs, uint32_t batch)
 {
+    struct put_batch bp;
+    uint8_t used[EFS_WRITE_PIPELINE];
+    uint32_t i;
+    int base;
+
     if (batch == 0)
         return 0;
     if (batch == 1 || put_pool_ensure() != 0) {
-        for (uint32_t i = 0; i < batch; i++)
+        for (i = 0; i < batch; i++)
             chunk_put_worker(&jobs[i]);
         return 0;
     }
-    struct put_batch bp;
     pthread_mutex_init(&bp.mu, NULL);
     pthread_cond_init(&bp.cv, NULL);
     bp.remaining = (int)batch;
-
-    pthread_mutex_lock(&g_put_pool.mu);
-    for (uint32_t i = 0; i < batch; i++) {
+    memset(used, 0, sizeof(used));
+    base = (int)__sync_fetch_and_add(&g_put_pool.rr, 1);
+    for (i = 0; i < batch; i++) {
+        int si = (int)(((unsigned)base + i) % (unsigned)g_put_pool.nworkers);
         jobs[i].bp = &bp;
-        while (g_put_pool.count == PUT_POOL_QDEPTH && !g_put_pool.shutdown)
-            pthread_cond_wait(&g_put_pool.not_full, &g_put_pool.mu);
-        g_put_pool.q[g_put_pool.tail] = &jobs[i];
-        g_put_pool.tail = (g_put_pool.tail + 1) % PUT_POOL_QDEPTH;
-        g_put_pool.count++;
-        pthread_cond_signal(&g_put_pool.not_empty);
+        pthread_mutex_lock(&g_put_sh[si].mu);
+        while (g_put_sh[si].count == PUT_POOL_QDEPTH && !g_put_pool.shutdown)
+            pthread_cond_wait(&g_put_sh[si].cv, &g_put_sh[si].mu);
+        g_put_sh[si].q[g_put_sh[si].tail] = &jobs[i];
+        g_put_sh[si].tail = (g_put_sh[si].tail + 1) % PUT_POOL_QDEPTH;
+        g_put_sh[si].count++;
+        used[si] = 1;
+        pthread_mutex_unlock(&g_put_sh[si].mu);
     }
-    pthread_mutex_unlock(&g_put_pool.mu);
+    for (i = 0; i < (uint32_t)g_put_pool.nworkers; i++) {
+        if (!used[i])
+            continue;
+        pthread_mutex_lock(&g_put_sh[i].mu);
+        pthread_cond_signal(&g_put_sh[i].cv);
+        pthread_mutex_unlock(&g_put_sh[i].mu);
+    }
 
     pthread_mutex_lock(&bp.mu);
     while (bp.remaining > 0)

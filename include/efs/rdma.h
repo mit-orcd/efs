@@ -17,9 +17,12 @@ struct efs_rdma_conn;    /* opaque, rdma.c */
 #define EFS_TRANSPORT_RDMA 1
 #define EFS_TRANSPORT_TCP  2
 
-/* Pool buffer size: covers the largest chunk frame (PUT_CHUNK wire size is
- * 5 + ~56 hdr + 64 KiB) with headroom. Bigger frames use the TCP fd. */
-#define EFS_RDMA_BUFSZ (72 * 1024)
+/* Pool buffer size: a 64 KiB fragment frame, and a 64-entry GETCHUNKS
+ * reply (64 × 1248 B = 79872, plus the reply header). 72 KiB put every
+ * window pull on the TCP side channel (Oct 1 1 GiB dd). 84 KiB covers
+ * that reply; a 128 KiB frame still does not fit. Bigger frames use the
+ * TCP fd. */
+#define EFS_RDMA_BUFSZ (84 * 1024)
 
 /* Frames up to this size are sent IBV_SEND_INLINE (no pool buffer). */
 #define EFS_RDMA_INLINE_MAX 256

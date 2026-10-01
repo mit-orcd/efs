@@ -1,0 +1,14 @@
+-----
+efs-rec: start 2026-10-01T08:01:23Z pid=3422120 host=login009
+efs-rec: cmd EFS_SSH_TIMEOUT=20 ~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh fcstor004.ib "cd /tmp/efs && ls efs-mgmt >/dev/null && for s in 118842 118843 118844; do EFS_MGMT_CHUNKS=1 ./efs-mgmt raft-getchunks 172.16.223.58:19810 10897 \$s | grep -v \"^raft-getchunks\"; done" 2>&1 | grep -v Identity
+  ci=118842 nodes=0,0,0 base_gen=0 obj_gen=0 ck0=00000000 spans=2 seq=6316
+    span off=0 len=88320 gen=9692160360391843753 seq=3764 nodes=1,2,3
+    span off=88320 len=42752 gen=3295204673087189999 seq=6316 nodes=1,2,3
+  ci=118843 nodes=2,3,4 base_gen=17743715622959842861 obj_gen=17743715622959842861 ck0=7d0f7ac2 spans=1 seq=1222
+    span off=0 len=0 gen=18389759692080110185 seq=1222 nodes=2,3,4
+  ci=118844 nodes=0,0,0 base_gen=0 obj_gen=0 ck0=00000000 spans=4 seq=11031
+    span off=61216 len=47008 gen=17277770046174823438 seq=429 nodes=3,4,1
+    span off=0 len=14208 gen=5400591347085914641 seq=6317 nodes=3,4,1
+    span off=108224 len=22848 gen=11995767454201048144 seq=6888 nodes=3,4,1
+    span off=14208 len=47008 gen=1142941585191578046 seq=11031 nodes=3,4,1
+efs-rec: end 2026-10-01T08:01:24Z rc=0

@@ -25,6 +25,108 @@ time, so the same day can appear in several places.
 
 ---
 
+## Oct 1 2026 08:05Z — IO-500 on the fresh table, one record lost (W38)
+
+The user asked for the cluster to be started and IOR run, errors as
+START-HERE follow-ups. The cluster was already up from the 07:24Z start
+(`pf431.log` PREFLIGHT_OK, both groups idle), so the run went straight
+to `IO500_KEEP_DATA=1 SLOTS=4 EFS_SSH_TIMEOUT=60 run.sh debug` on
+fcstor007 (`rec-ior432.log`), 9 hosts × 4 ranks, 1 s stonewall.
+Results in `results/io500/20261001-074905-rdma/` (NOTE.txt has the
+table next to the Sep 30 18:35Z run): every phase completed, 0 fsync
+failures; ior-easy-write 5.173 GiB/s (4.563), mdtest-easy-write 6.185
+kIOPS (4.632), ior-hard-write 0.519 GiB/s in 63.2 s (0.640 in 52.6 s),
+mdtest-hard-write 2.818 (2.612), ior-easy-read 22.5 same-mount,
+mdtest-easy-stat 24.4 kIOPS (16.5), ior-hard-read 0.824 GiB/s with
+**1 read error** (1.034, 0), mdtest-hard-stat 30.4, easy-delete 5.65,
+hard-read 5.92, hard-delete 4.84. Score BW 2.657 / IOPS 8.001 / 4.610,
+all INVALID by the stonewall. Terms g0 5 / g2 4 unchanged,
+commit==applied, `arc_miss=0`, `wait_timeouts=6` on fcstor004,
+`pub_p50=879 ms` on the g2 leader, 1997 publish STALE retries (why=6
+FOLD_LIST 1954, why=5 18, why=2 22, why=4 3), none for the bad chunk.
+
+The error was chased cold: the nine clients were remounted (`rm436`),
+IOR `-r -R` over 36 ranks reproduced 1 error (`rec-hv437.log`, 851.7
+MiB/s), and a new scanner `tests/tools/hardscan.c` (the Sep 30 one had
+lived in `/tmp` on fcstor008 and was gone) found it in 24 s
+(`hs438.log`): `records=747720 bad=1`, record 331368 = rank 24 =
+fcstor013, the last 4256 bytes of the record = bytes [0,4256) of chunk
+118843 of ino 10897, all zero. Ranks 24–27 are all fcstor013, so the
+chunk had one writer host — not the Sep 30 two-host span-identity
+shape. `raft-getchunks` on fcstor004 (`getchunks-118842-118844.txt`):
+`ci=118843 nodes=2,3,4 base_gen=obj_gen=17743715622959842861 spans=1
+seq=1222; span off=0 len=0 gen=18389759692080110185`, i.e. rank 24's
+piece went up as a span first (seq 1222), then the client published a
+full image whose fold list named exactly that span, the server
+tombstoned the span (`meta_apply.c:~3425`), and the image carried zeros
+at [0,4256). Neighbour chunks are span-only rows and clean. Candidate
+client paths are listed in START-HERE §1b (F3) and §1a 0e; it needs a
+one-client 4-rank repro with `EFS_DCACHE_TRACE=1`. Lesson paid for:
+the remount for the cold verify truncated the nine `fuse.log`s of the
+run — copy them before remounting. Harness: `run.sh ior-hard-verify`
+now passes `--dataPacketType=timestamp` and takes `IOR_HARD_G`. The
+io500 tree and hard file stay on the mount for the repro.
+
+---
+
+## Oct 1 2026 07:45Z — fresh cluster after the wipe, posix suites, four bugs
+
+The user asked for the wiped 19810 to be started and the posix suites
+run, with errors as START-HERE follow-ups.
+
+**Start.** The first fresh start (`start401`) rotated `raft-mkfs` over
+nodes 1–3 because every attempt returned BUSY (rc=-13). Two bugs there.
+(1) Each node proposes its own `h->salt`: group 0 took node 1's MKFS,
+then node 2's attempt put node 2's salt on group 2's anchor shard, and
+`efs_meta_apply_salt_record` answered PROTO on every group-2 apply from
+then on (`apply salt rc=-7 index=3`, `rec-st402..404`). Only a wipe
+recovers; re-wiped at 07:18Z (`wipe405`). The harness now mkfs's on
+fcstor003 only, after both leaders are seen (`roll_efsd.sh --all
+--fresh`, `cluster.sh start --fresh`); the server guard is W37. (2) The
+BUSY itself: `host_apply_rc_locked` and three siblings tested `!g` for
+"not hosted", but `group_slot` returns a slot for every attached group,
+so the forwarded SALT step read fcstor003's unhosted group-2 ring →
+`arc_miss` +1 and BUSY. Fixed (`hosted` tested); `restart408` rolled it
+(same build id `4b2844487831-dirty`), mkfs took 2 ms afterwards.
+
+**Posix.** First jobs=1 run: 10/201, `basic_pread_pwrite` D-state in
+`request_wait_answer`, 190 NOTRUN (`results/posix/20261001-072454`).
+gdb: the FUSE worker in `rdcache_acquire` waiting on a `pending` way.
+`efs_rdcache_put` looked the entry up with `rdcache_find`, which needs
+`data`, so the mark W29 set on a fresh data-less way was never found,
+the put went to another way and the mark was orphaned. Fixed in
+`read.c`. Second run 199/201: `writev_readv_chunk_straddle` read zeros
+across the chunk boundary (`-072916`). W30 PUTs the completed chunk
+during the write; the full-image snap steals the body and the map names
+the object only after the PUT lands, so the readv in between found the
+chunk nowhere and `chunk_get_worker` zero-filled a "hole". `efs_client_read`
+now waits for the inode's PUT windows (`efs_dcache_put_win_wait`, the
+Sep 30 utimens window machinery, lock-free when none is open). Third run
+200/201 in 28.1 s (`-073542`); 9-host 200/201 on all nine in 13.3–13.6 s
+(`-074052`). posix2 62/63 (`results/posix2/20261001-073048`):
+`peer_rename_vs_unlink_src` — rename a→b on A and unlink a on B both
+returned 0 and `b` was left dangling (`-?????????`). 1 in 6 on a loop
+(`p2r422`); the full suite again was 63/63 (`-074250`). No server log
+line; `apply_unlink_cmd` maps NOT_FOUND→OK silently. That is W36
+(START-HERE 0c), evidence kept at
+`/tmp/efs-mount/posix-2c-r422-6/peer_rename_vs_unlink_src/b`.
+
+## Oct 1 2026 04:36Z — encryption idea, checked and saved, not a decision
+
+The user asked how synchronous encryption could work for transport and at
+rest: a key created with the cluster, and only the Linux user who mounts
+with that key can see the contents. Nothing to implement. The conclusions
+are in START-HERE §1a ("Idea checked Oct 1 2026 — synchronous encryption").
+Short form: one key shown once at `raft-mkfs`, a verifier in the cluster,
+fragments encrypted on the client after XOR parity (each fragment its own
+IV, object name still a hash of the plaintext), frame encryption on RDMA
+and the TCP side channel. Metadata is the open choice — plaintext
+namespace, or unlock `efsd` with the key at start and encrypt the KV and
+Raft log — because the servers apply names and cannot do that without the
+key. One cluster key is not per-user secrecy; the Linux-user limit is the
+key file mode plus a mount that is not `allow_other`, and it does not hold
+against root or against another host that has the key.
+
 ## Oct 1 2026 02:50Z — the last two mechanical items of the 21:10Z review: pin release on a landed PUT, dirty-list close flush
 
 Asked what else from the perf review was cheap, the two client-side

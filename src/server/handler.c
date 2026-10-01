@@ -319,7 +319,7 @@ void server_handle_conn(struct efs_conn *conn)
                         reply[0] = EFS_GET_CHUNK_NOT_FOUND;
                     } else {
                         /* Server-side read-verify for data fragments: the
-                         * .sum sidecar is already in hand, so one blake3
+                         * digest is the tail of the fragment file, so one blake3
                          * detects disk rot on the read path without any
                          * client CPU. A mismatch fails this fragment (the
                          * client's 2+1 decode falls back to the other
@@ -813,22 +813,29 @@ send_reply:
             int bad = 0;
             uint32_t count = 0;
             uint32_t ino_count = 0;
-            const struct efs_chunk_rec *recs = NULL;
+            struct efs_chunk_rec *recs = NULL;
             const struct efs_ino_size_rec *irecs = NULL;
             if (payload_len >= sizeof(struct efs_msg_report_chunks)) {
                 struct efs_msg_report_chunks *req = payload;
-                ino_count = req->ino_count;
+                const uint8_t *raw = (const uint8_t *)payload + sizeof(*req);
                 size_t avail = payload_len - sizeof(*req);
+                size_t used = 0;
+                ino_count = req->ino_count;
                 count = req->count;
-                recs = (const struct efs_chunk_rec *)((const uint8_t *)payload +
-                                                      sizeof(*req));
-                irecs = (const struct efs_ino_size_rec *)(recs + count);
-                if (count > avail / sizeof(struct efs_chunk_rec))
-                    bad = 1; /* truncated payload */
+                if (count > avail / offsetof(struct efs_chunk_rec, deltas))
+                    bad = 1;
+                else if (count > 0)
+                    recs = calloc(count, sizeof(*recs));
+                if (count && !recs)
+                    bad = 1;
+                else if (efs_chunk_recs_unpack(raw, avail, count, recs,
+                                               &used) != 0)
+                    bad = 1;
                 else if (ino_count >
-                         (avail - (size_t)count * sizeof(struct efs_chunk_rec)) /
-                             sizeof(struct efs_ino_size_rec))
-                    bad = 1; /* truncated inode recs */
+                         (avail - used) / sizeof(struct efs_ino_size_rec))
+                    bad = 1;
+                else if (ino_count)
+                    irecs = (const struct efs_ino_size_rec *)(raw + used);
             } else {
                 bad = 1;
             }
@@ -840,6 +847,7 @@ send_reply:
             }
             efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r,
                               sizeof(r));
+            free(recs);
             break;
         }
         case EFS_MSG_INODE_READDIR: {

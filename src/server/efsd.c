@@ -600,8 +600,14 @@ int main(int argc, char **argv)
         socklen_t addrlen = sizeof(addr);
         int fd = accept(server.listen_fd, (struct sockaddr *)&addr, &addrlen);
         if (fd < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
+                /* SIGINT/SIGTERM clear running. Leaving the loop is
+                 * what runs stop_perf_recorder; staying here left efsd
+                 * up and the perf file without a footer. */
+                if (!server.running)
+                    break;
                 continue;
+            }
             /* EMFILE/ENFILE: do not tear down the accept loop — back off so
              * existing handlers can finish and free fds, then resume. */
             if (errno == EMFILE || errno == ENFILE || errno == ENOBUFS ||

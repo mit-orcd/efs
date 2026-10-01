@@ -11,6 +11,9 @@
 #   tests/perf/io500/run.sh dry-run debug    # print io500 argv only
 #   tests/perf/io500/run.sh ior-hard-write <segs>   # raw IOR hard geometry, -k keep
 #   tests/perf/io500/run.sh ior-hard-verify <segs>  # -r -R the same file (cold-remount first)
+#     IOR_HARD_FILE=<path> IOR_HARD_G=<-G of the write> verifies a driver run's
+#     ior-hard/file cold (its -G is "Used Time Stamp" in ior-hard-write.txt;
+#     segs = file size / (47008 * NP), the stonewall pairs max with wear-out)
 #   tests/perf/io500/run.sh ior-easy-write <mb>     # raw IOR easy geometry (file-per-proc), -k keep
 #   tests/perf/io500/run.sh ior-easy-verify <mb>    # -r -R -C -Q 1 (rank reads a file from 2 nodes away)
 #
@@ -153,7 +156,7 @@ launch_ior_hard() { # write|verify segments
         -x PATH -x LD_LIBRARY_PATH \
         --mca plm_rsh_agent '$HERE/mpi-ssh.sh' \
         --mca plm_rsh_no_tree_spawn 1 \
-        ./bin/ior -a POSIX -C -Q 1 -g -G=271828 -k -e -t 47008 -b 47008 -s $segs \
+        ./bin/ior -a POSIX --dataPacketType=timestamp -C -Q 1 -g -G=${IOR_HARD_G:-271828} -k -e -t 47008 -b 47008 -s $segs \
             $flags -o '$IOR_HARD_FILE' >'$IO500_DIR/last-run.log' 2>&1 </dev/null &
         echo \"started ior-hard $mode segs=$segs; log: $IO500_DIR/last-run.log\""
 }

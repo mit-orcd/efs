@@ -374,6 +374,68 @@ static int ibdev_for_ifname(const char *ifname, char *devname, size_t len)
     return found;
 }
 
+/* Local IPv4 → HCA, resolved once. A client opens a conn per RPC slot (64
+ * per node × 4 nodes) and every upgrade used to walk getifaddrs() + sysfs
+ * + ibv_get_device_list(): 26 % of efs-fuse cycles under a 20 GiB dd, with
+ * the rest of the client queued on the rtnl/osq lock behind it. The host's
+ * interface → HCA mapping does not change while the process runs. */
+#define IP_DEV_MAX 8
+static struct {
+    uint32_t ip; /* network order; 0 = empty */
+    struct efs_rdma_dev *dev;
+} g_ip_dev[IP_DEV_MAX];
+static int g_ip_dev_count;
+
+static struct efs_rdma_dev *ip_dev_lookup(uint32_t ip)
+{
+    struct efs_rdma_dev *r = NULL;
+    pthread_mutex_lock(&g_dev_lock);
+    for (int i = 0; i < g_ip_dev_count; i++) {
+        if (g_ip_dev[i].ip == ip) {
+            r = g_ip_dev[i].dev;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_dev_lock);
+    return r;
+}
+
+static void ip_dev_remember(uint32_t ip, struct efs_rdma_dev *dev)
+{
+    if (!dev)
+        return; /* a failed probe is retried next time, not cached */
+    pthread_mutex_lock(&g_dev_lock);
+    int have = 0;
+    for (int i = 0; i < g_ip_dev_count; i++)
+        if (g_ip_dev[i].ip == ip)
+            have = 1;
+    if (!have && g_ip_dev_count < IP_DEV_MAX) {
+        g_ip_dev[g_ip_dev_count].ip = ip;
+        g_ip_dev[g_ip_dev_count].dev = dev;
+        g_ip_dev_count++;
+    }
+    pthread_mutex_unlock(&g_dev_lock);
+}
+
+/* The uncached resolution: interface for the IP, HCA behind the interface. */
+static struct efs_rdma_dev *dev_for_ip_resolve(uint32_t ip)
+{
+    if ((ntohl(ip) & 0xFF000000u) == 0x7F000000u)
+        return dev_probe_first(); /* loopback: same-host QP on any HCA */
+    char ifname[IF_NAMESIZE];
+    char devname[64];
+    if (ifname_for_ip(ip, ifname, sizeof(ifname)) == 0 &&
+        ibdev_for_ifname(ifname, devname, sizeof(devname)) == 0) {
+        struct efs_rdma_dev *r = dev_cached(devname);
+        if (r)
+            return r;
+        /* TCP NIC mapped to a RoCE/down port (lid=0). Fall through to a
+         * native-IB HCA on the same host — fcstor Ethernet is mlx5_0,
+         * IPoIB data is mlx5_2. */
+    }
+    return dev_probe_first();
+}
+
 /* Pick the HCA that carries this TCP conn's local address. */
 static struct efs_rdma_dev *dev_for_fd(int fd)
 {
@@ -389,21 +451,22 @@ static struct efs_rdma_dev *dev_for_fd(int fd)
         return dev_probe_first(); /* unix socketpair / v6: any local HCA */
     struct sockaddr_in *sa = (struct sockaddr_in *)&ss;
     uint32_t ip = sa->sin_addr.s_addr;
-    if ((ntohl(ip) & 0xFF000000u) == 0x7F000000u)
-        return dev_probe_first(); /* loopback: same-host QP on any HCA */
-
-    char ifname[IF_NAMESIZE];
-    char devname[64];
-    if (ifname_for_ip(ip, ifname, sizeof(ifname)) == 0 &&
-        ibdev_for_ifname(ifname, devname, sizeof(devname)) == 0) {
-        struct efs_rdma_dev *r = dev_cached(devname);
-        if (r)
-            return r;
-        /* TCP NIC mapped to a RoCE/down port (lid=0). Fall through to a
-         * native-IB HCA on the same host — fcstor Ethernet is mlx5_0,
-         * IPoIB data is mlx5_2. */
+    struct efs_rdma_dev *r = ip_dev_lookup(ip);
+    if (r)
+        return r;
+    /* One resolver at a time. A client's first PUT window opens its
+     * whole conn pool at once; 256 concurrent getifaddrs() serialize on
+     * the kernel's rtnl lock and the waiters spin (osq_lock 20 % of the
+     * 20 GiB dd profile). The rest sleep here and take the cached answer. */
+    static pthread_mutex_t resolve_mu = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&resolve_mu);
+    r = ip_dev_lookup(ip);
+    if (!r) {
+        r = dev_for_ip_resolve(ip);
+        ip_dev_remember(ip, r);
     }
-    return dev_probe_first();
+    pthread_mutex_unlock(&resolve_mu);
+    return r;
 }
 
 int efs_rdma_available(void)

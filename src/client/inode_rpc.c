@@ -1214,8 +1214,11 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
 {
     if (count == 0 && ino_count == 0 && !sync)
         return EFS_OK;
-    size_t len = sizeof(struct efs_msg_report_chunks) +
-                 (size_t)count * sizeof(struct efs_chunk_rec) +
+    size_t rec_bytes = 0;
+    uint32_t i;
+    for (i = 0; i < count; i++)
+        rec_bytes += efs_chunk_rec_wire_size(&recs[i]);
+    size_t len = sizeof(struct efs_msg_report_chunks) + rec_bytes +
                  (size_t)ino_count * sizeof(struct efs_ino_size_rec);
     uint8_t *buf = malloc(len);
     if (!buf)
@@ -1227,8 +1230,14 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     hdr->ino_count = ino_count;
     uint8_t *p = buf + sizeof(*hdr);
     if (count) {
-        memcpy(p, recs, (size_t)count * sizeof(*recs));
-        p += (size_t)count * sizeof(*recs);
+        for (i = 0; i < count; i++) {
+            size_t n = efs_chunk_rec_pack(p, len - (size_t)(p - buf), &recs[i]);
+            if (n == 0) {
+                free(buf);
+                return EFS_ERR_NOMEM;
+            }
+            p += n;
+        }
     }
     if (ino_count)
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));

@@ -2375,6 +2375,11 @@ def virt_find_not_a_real_dir(d):
 # ==========================================================================
 @test
 def opt_fallocate(d):
+    # efs implements no FUSE fallocate. The kernel returns EOPNOTSUPP for
+    # the syscall; glibc's posix_fallocate then writes zeros, so a plain
+    # fd succeeding here is that fallback, not reserved blocks. On an
+    # O_DIRECT fd the same fallback pwrite is misaligned and posix_fallocate
+    # returns EINVAL. The handler to add is START-HERE W26.
     p = os.path.join(d, "f")
     fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
     try:

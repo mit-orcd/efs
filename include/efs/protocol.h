@@ -4,7 +4,9 @@
 #include "efs/common.h"
 #include "efs/metadata.h"
 #include "efs/meta_cmd.h"
+#include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 /* Length-prefixed TCP frames: 4 bytes length (network order), 1 byte type,
  * length-1 bytes payload. Encode/decode lives in efs/wire.h; this header
@@ -656,6 +658,80 @@ struct efs_chunk_rec {
     uint64_t delta_base_seq;
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
 };
+
+/* W35: on the wire a rec is the head (through delta_base_seq) plus
+ * delta_base_n span records. A full image sends no delta array, so a
+ * 1 GiB REPORT is ~1.4 MB instead of 10 MB. The in-memory struct is
+ * unchanged. Same ABI on every node (one build id). */
+static inline uint32_t efs_chunk_rec_delta_n(const struct efs_chunk_rec *r)
+{
+    uint32_t n = r ? r->delta_base_n : 0;
+    if (n > EFS_CHUNK_DELTA_MAX)
+        n = EFS_CHUNK_DELTA_MAX;
+    return n;
+}
+
+static inline size_t efs_chunk_rec_wire_size(const struct efs_chunk_rec *r)
+{
+    return offsetof(struct efs_chunk_rec, deltas) +
+           (size_t)efs_chunk_rec_delta_n(r) * sizeof(struct efs_chunk_delta);
+}
+
+/* Returns the bytes written, 0 if dst is short. */
+static inline size_t efs_chunk_rec_pack(uint8_t *dst, size_t cap,
+                                        const struct efs_chunk_rec *r)
+{
+    size_t head = offsetof(struct efs_chunk_rec, deltas);
+    size_t n = efs_chunk_rec_wire_size(r);
+    uint32_t dn;
+
+    if (!dst || !r || n > cap)
+        return 0;
+    memcpy(dst, r, head);
+    dn = efs_chunk_rec_delta_n(r);
+    if (dn)
+        memcpy(dst + head, r->deltas, (size_t)dn * sizeof(struct efs_chunk_delta));
+    return n;
+}
+
+/* Unpack `count` recs. *used is the byte length consumed. -1 if short
+ * or delta_base_n is past the cap. */
+static inline int efs_chunk_recs_unpack(const uint8_t *src, size_t len,
+                                        uint32_t count,
+                                        struct efs_chunk_rec *out,
+                                        size_t *used)
+{
+    size_t off = 0;
+    size_t head = offsetof(struct efs_chunk_rec, deltas);
+    uint32_t i;
+
+    if (used)
+        *used = 0;
+    for (i = 0; i < count; i++) {
+        uint32_t n;
+
+        if (!out)
+            return -1;
+        memset(&out[i], 0, sizeof(out[i]));
+        if (off + head > len)
+            return -1;
+        memcpy(&out[i], src + off, head);
+        n = out[i].delta_base_n;
+        if (n > EFS_CHUNK_DELTA_MAX)
+            return -1;
+        off += head;
+        if (n) {
+            size_t dsz = (size_t)n * sizeof(struct efs_chunk_delta);
+            if (off + dsz > len)
+                return -1;
+            memcpy(out[i].deltas, src + off, dsz);
+            off += dsz;
+        }
+    }
+    if (used)
+        *used = off;
+    return 0;
+}
 
 /* Phase 2b: one inode size/mtime update (the write path grows a file and bumps
  * mtime without a full inode upsert, so other fields are left untouched). */

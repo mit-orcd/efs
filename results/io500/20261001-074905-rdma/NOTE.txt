@@ -1,0 +1,61 @@
+IO-500 debug 9x4 (36 ranks, fcstor007-015, 1 s stonewall, config-debug.ini),
+RDMA, launched 07:49:05Z Oct 1 2026 (rec-ior432), IO500_KEEP_DATA=1.
+Fresh table (wipe 06:37Z, mkfs 07:18Z). Servers 4b2844487831-dirty
+(restart408, no recorders); clients on the same tree plus the rdcache
+pending fix and the PUT-window read wait (dep419). Preflight idle
+(preflight.txt). First IO-500 with W28-W35 + D20 in both daemons.
+
+Every phase completed. No fsync failure. ior-easy-read 0 errors.
+ior-hard-read: "Incorrect data on read (1 errors found)" — same-mount.
+Every number is [INVALID] only because the debug stonewall is 1 s.
+
+                     this run              20260930-183504   20260930-072824
+ior-easy-write       5.173 GiB/s           4.563             3.148
+mdtest-easy-write    6.185 kIOPS           4.632             3.696
+ior-hard-write       0.519 GiB/s (63.2 s)  0.640 (52.6 s)    0.261 (16 fsync fail)
+mdtest-hard-write    2.818 kIOPS           2.612             2.126
+ior-easy-read        22.521 GiB/s (same-mount) 16.807         2.976
+mdtest-easy-stat     24.445 kIOPS          16.478            3.600
+ior-hard-read        0.824 GiB/s, 1 error  1.034, 0 errors   ABORT (read EIO)
+mdtest-hard-stat     30.447 kIOPS          23.763            -
+mdtest-easy-delete   5.649 kIOPS           4.987             -
+mdtest-hard-read     5.923 kIOPS           5.577             -
+mdtest-hard-delete   4.835 kIOPS           4.182             -
+SCORE (invalid)      BW 2.657 / IOPS 8.001 / 4.610
+
+Reads are same-mount after write (dcache/rdcache); do not quote
+ior-easy-read as a cold number. hard-write pairs 480..20770 (wear-out to
+20770), file 35148821760 B = 20770 x 36 x 47008.
+
+Hard file: /tmp/efs-mount/io500/2026.10.01-03.49.05/ior-hard/file,
+ino 10897, -G=1817379128. Cold verification after remounting the nine
+clients (rm436):
+  IOR -r -R 36 ranks (hv437, ior-hard-verify-cold.log): 1 error, 851.68 MiB/s.
+  tests/tools/hardscan (fcstor010, 12 threads, 24 s, hardscan.txt):
+    DONE records=747720 bad=1 short=0
+    BAD rec=331368 off=15576946944 seg=9204 rank=24 chunk=118842 word=5344
+        byte=15576989696 exp=000000186c531618 got=0 zero_words=532/5876
+  = the last 4256 bytes of rank 24's record = bytes [0,4256) of chunk
+  118843. Ranks 24-27 are all on fcstor013, so chunk 118843 is one
+  client's chunk (rank 24 wrote [0,4256), ranks 25-27 the rest).
+
+Server row (getchunks-118842-118844.txt, fcstor004 = g2 leader):
+  ci=118843 nodes=2,3,4 base_gen=obj_gen=17743715622959842861 spans=1 seq=1222
+    span off=0 len=0 gen=18389759692080110185 seq=1222 nodes=2,3,4
+  A len-0 entry is the tombstone a fold leaves (meta_apply.c:3425): the
+  span (rank 24's [0,4256), object 18389...) was published first at lane
+  seq 1222, then fcstor013 published a full image (1774...) whose fold
+  list matched (delta_base_n=1, seq=1222) — but that image has zeros at
+  [0,4256). The client built a full image that did not contain its own
+  already-published span's bytes. Neighbours 118842 / 118844 are
+  span-only rows (gen-0 base) and verify clean.
+  No "apply publish rc=" line for ci=118843 on any server (the fold
+  succeeded); the 1997 STALE lines (why=6 FOLD_LIST, 1954; why=5 18;
+  why=2 22; why=4 3) are other chunks' retries. Terms unchanged (g0 5,
+  g2 4), commit==applied, arc_miss=0, wait_timeouts=6 on fcstor004,
+  pub_p50=879 ms on the g2 leader during the run (servers-after.txt).
+
+The client fuse.logs of the run were lost: the cold remount for the
+verify truncates fuse.log. Copy the nine /tmp/efs/fuse.log before a
+remount next time. The hard file and the io500 tree are kept on the
+mount for the W38 repro.

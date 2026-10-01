@@ -477,23 +477,43 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
     int seq = slot >= 0 && seen[slot].ns &&
               ci0 >= seen[slot].ci0 &&
               ci0 <= seen[slot].ci1 + EFS_CHUNK_GROUP_SIZE;
+    /* Fresh means the requested range [ci0, ci1) is inside a pull
+     * younger than 200 ms AND that pull still has a full window of
+     * lookahead past ci1. The old test required seen.ci1 >= ci0+2*win.
+     * seen.ci1 was the previous call's ahead, which is one group short
+     * of this call's ahead once the window stops growing, so every
+     * 1 MiB read issued a GETCHUNKS (Oct 1 dd). Extend only when the
+     * covered range ends within `win` of ci1; pull [seen.ci1, ci1+2*win)
+     * then, not the range we already have. */
+    int covered = slot >= 0 && seen[slot].ns &&
+                  now - seen[slot].ns < 200000000ull &&
+                  seen[slot].ci0 <= ci0 && seen[slot].ci1 >= ci1;
     uint32_t win = META_WIN_MIN;
     if (seq && seen[slot].win)
-        win = seen[slot].win < META_WIN_MAX / 2 ? seen[slot].win * 2
-                                                : META_WIN_MAX;
-    uint32_t ahead = ci0 + win * 2u;
-    if (ahead < ci1)
-        ahead = ci1;
-    int fresh = slot >= 0 && seen[slot].ns &&
-                now - seen[slot].ns < 200000000ull &&
-                seen[slot].ci0 <= ci0 && seen[slot].ci1 >= ahead;
-    uint32_t pull_from = ci0;
-    if (!fresh && seq && seen[slot].ci1 > ci0 && seen[slot].ci1 < ahead)
-        pull_from = seen[slot].ci1;
-    uint32_t cov0 = (slot >= 0 && seq) ? seen[slot].ci0 : ci0;
-    pthread_mutex_unlock(&mu);
-    if (fresh)
+        win = seen[slot].win;
+    if (covered && seen[slot].ci1 >= ci1 + win) {
+        pthread_mutex_unlock(&mu);
         return EFS_OK;
+    }
+    uint32_t pull_from = ci0;
+    uint32_t cov0 = ci0;
+    uint32_t ahead;
+    if (covered) {
+        pull_from = seen[slot].ci1;
+        cov0 = seen[slot].ci0;
+    } else if (seq && seen[slot].ci1 > ci0) {
+        cov0 = seen[slot].ci0;
+    }
+    if (seq && win < META_WIN_MAX / 2)
+        win = win ? win * 2 : META_WIN_MIN;
+    else if (seq)
+        win = META_WIN_MAX;
+    ahead = ci1 + win * 2u;
+    if (!covered && seq && seen[slot].ci1 > ci0 && seen[slot].ci1 < ahead)
+        pull_from = seen[slot].ci1;
+    if (ahead < pull_from)
+        ahead = pull_from;
+    pthread_mutex_unlock(&mu);
     int rc = EFS_OK;
     if (pull_from < ahead)
         rc = pull_groups_parallel(ino, pull_from, ahead, NULL);

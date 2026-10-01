@@ -1992,10 +1992,16 @@ static int cmd_raft_publish(int argc, char **argv)
     req.rec.nodes[2] = 3;
     for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
         memset(req.rec.checksums[i], (uint8_t)(0xa5 + i), EFS_HASH_SIZE);
-    send_len = (uint32_t)(sizeof(req.hdr) + sizeof(req.rec) + sizeof(req.sz));
-    memcpy(buf, &req.hdr, sizeof(req.hdr));
-    memcpy(buf + sizeof(req.hdr), &req.rec, sizeof(req.rec));
-    memcpy(buf + sizeof(req.hdr) + sizeof(req.rec), &req.sz, sizeof(req.sz));
+    {
+        size_t rn = efs_chunk_rec_pack(buf + sizeof(req.hdr),
+                                       sizeof(buf) - sizeof(req.hdr),
+                                       &req.rec);
+        if (rn == 0)
+            return 1;
+        memcpy(buf, &req.hdr, sizeof(req.hdr));
+        memcpy(buf + sizeof(req.hdr) + rn, &req.sz, sizeof(req.sz));
+        send_len = (uint32_t)(sizeof(req.hdr) + rn + sizeof(req.sz));
+    }
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);

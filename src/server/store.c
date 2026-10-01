@@ -420,7 +420,8 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
     return 0;
 }
 
-/* Unlink a fragment's data + checksum sidecar from every storage root. */
+/* Unlink a fragment from every storage root. A leftover .sum from
+ * before the tail format is removed too; new files have no sidecar. */
 void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index)
@@ -439,17 +440,14 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
 }
 
 /* Checksum-conditional fragment delete for the data-plane GC (spec L7).
- * Fragment paths do not carry the chunk generation — one slot per
- * (ino, chunk, fragment), overwritten in place by a newer generation — so
- * the reaper proves identity by the .sum sidecar before unlinking:
- *   - sidecar == expect_sum: this slot holds the dead generation → unlink
- *     data + sidecar;
- *   - sidecar != expect_sum: a newer generation already overwrote the
- *     slot → the dead bytes are gone; MUST NOT unlink (that would kill
- *     live data); the record may be acked;
- *   - data present but no readable sidecar: cannot prove identity →
- *     treated as a live mismatch (leak-not-lose; raft-mode PUTs always
- *     write the sidecar, so this is a crashed-partial-PUT corner);
+ * The digest is the tail of the fragment file (4 KiB past the payload
+ * when O_DIRECT, 32 bytes when buffered). The reaper proves identity
+ * by that digest before unlinking:
+ *   - tail == expect_sum: this file is the dead generation → unlink;
+ *   - tail != expect_sum: a different image occupies the path → MUST
+ *     NOT unlink; the record may be acked;
+ *   - data present but no readable tail: cannot prove identity →
+ *     treated as a live mismatch (leak-not-lose);
  *   - nothing present: already gone.
  * Returns EFS_OK when no dead-generation fragment remains, EFS_ERR_EXIST
  * when a mismatched/unidentifiable live fragment remains (also ackable),
@@ -465,30 +463,40 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
                                   const uint8_t expect_sum[EFS_HASH_SIZE])
 {
     char path[8192];
-    char sum_path[8200];
     uint8_t got[EFS_HASH_SIZE];
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     int live = 0;
+    int direct = s->direct_io && !efs_ino_is_meta_table(ino);
+    uint32_t payload = server_frag_len(ex, ino);
 
     if (!s || !ex || !expect_sum)
         return EFS_ERR_INVAL;
     for (uint32_t ri = 0; ri < n; ri++) {
         {
             int fd;
-            ssize_t rn;
+            ssize_t rn = -1;
 
             fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index,
                              path, sizeof(path));
-            snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
-            fd = open(sum_path, O_RDONLY);
+            fd = open(path, direct ? (O_RDONLY | O_DIRECT) : O_RDONLY);
             if (fd < 0) {
-                if (access(path, F_OK) == 0)
-                    live = 1; /* data without a provable identity */
+                if (errno != ENOENT)
+                    live = 1;
                 continue;
             }
-            rn = read(fd, got, EFS_HASH_SIZE);
+            if (direct) {
+                uint8_t *tail = NULL;
+                if (posix_memalign((void **)&tail, 4096, 4096) == 0) {
+                    rn = pread(fd, tail, 4096, (off_t)payload);
+                    if (rn == 4096)
+                        memcpy(got, tail, EFS_HASH_SIZE);
+                    free(tail);
+                }
+            } else {
+                rn = pread(fd, got, EFS_HASH_SIZE, (off_t)payload);
+            }
             close(fd);
-            if (rn != (ssize_t)EFS_HASH_SIZE) {
+            if (direct ? rn != 4096 : rn != (ssize_t)EFS_HASH_SIZE) {
                 if (access(path, F_OK) == 0)
                     live = 1;
                 continue;
@@ -502,8 +510,12 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
                 uint64_t nbytes = 0;
                 int unlinked = 0;
 
-                if (stat(path, &st) == 0 && st.st_size > 0)
+                if (stat(path, &st) == 0 && st.st_size > 0) {
                     nbytes = (uint64_t)st.st_size;
+                    /* Quota counts the logical fragment, not the 4 KiB tail. */
+                    if (payload && nbytes > payload)
+                        nbytes = payload;
+                }
                 if (unlink(path) == 0) {
                     unlinked = 1;
                 } else if (errno != ENOENT) {
@@ -525,19 +537,17 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
                     server_usage_mark_dirty(s);
                 }
             }
-            if (unlink(sum_path) != 0 && errno != ENOENT)
-                return EFS_ERR_IO;
         }
     }
     return live ? EFS_ERR_EXIST : EFS_OK;
 }
 
-/* direct: caller decides per-ino — data fragments only. Metadata pages and
- * .sum sidecars stay buffered: they are small, randomly re-read (rebuild
- * sweeps, verify, catch-up), and the kernel cache is a feature there. */
+/* direct: caller decides per-ino — data fragments only. Metadata pages
+ * stay buffered. sum, when non-NULL, is filled from the digest stored
+ * at offset want_len (a 4 KiB O_DIRECT tail, or 32 buffered bytes). */
 static int read_file_bytes(const char *path,
                            uint8_t *buf, uint32_t want_len, uint32_t *got,
-                           int direct)
+                           int direct, uint8_t *sum, int *sum_ok)
 {
     int flags = O_RDONLY;
     if (direct)
@@ -571,6 +581,27 @@ static int read_file_bytes(const char *path,
         n = read(fd, buf, want_len);
         *got = (n > 0) ? (uint32_t)n : 0;
     }
+    if (sum && sum_ok && n > 0) {
+        *sum_ok = 0;
+        if (direct) {
+            uint8_t *tail = NULL;
+            if (posix_memalign((void **)&tail, 4096, 4096) == 0) {
+                ssize_t rn = pread(fd, tail, 4096, (off_t)want_len);
+                if (rn == 4096) {
+                    memcpy(sum, tail, EFS_HASH_SIZE);
+                    *sum_ok = 1;
+                }
+                free(tail);
+            }
+        } else {
+            uint8_t tmp[EFS_HASH_SIZE];
+            ssize_t rn = pread(fd, tmp, EFS_HASH_SIZE, (off_t)want_len);
+            if (rn == (ssize_t)EFS_HASH_SIZE) {
+                memcpy(sum, tmp, EFS_HASH_SIZE);
+                *sum_ok = 1;
+            }
+        }
+    }
     close(fd);
     if (n < 0)
         return EFS_ERR_IO;
@@ -585,6 +616,8 @@ struct shard_io_arg {
     int is_write;
     int direct; /* data fragments only; meta stays buffered */
     int no_create; /* write only if the file already exists (overwrite probe) */
+    int excl;      /* O_CREAT|O_EXCL: EEXIST -> EFS_ERR_EXIST, no second open */
+    const uint8_t *sum; /* 32-byte digest; placed in the file, not a sidecar */
     int result;
 };
 
@@ -595,9 +628,15 @@ static void *shard_io_thread(void *arg)
         int flags = O_WRONLY | O_TRUNC;
         if (!a->no_create)
             flags |= O_CREAT;
+        if (a->excl)
+            flags |= O_EXCL;
         if (a->direct)
             flags |= O_DIRECT;
         int fd = open(a->path, flags, 0644);
+        if (fd < 0 && errno == EEXIST && a->excl) {
+            a->result = EFS_ERR_EXIST; /* caller: overwrite, do not charge */
+            return NULL;
+        }
         if (fd < 0 && errno == ENOENT && a->no_create) {
             a->result = EFS_ERR_NOT_FOUND; /* caller: charge quota + create */
             return NULL;
@@ -615,10 +654,14 @@ static void *shard_io_thread(void *arg)
             uint32_t alloc = (a->len + 4095u) & ~4095u;
             if (alloc < 4096)
                 alloc = 4096;
+            /* Digest lives in a 4 KiB tail after the payload so one
+             * O_DIRECT write carries both. No .sum inode. */
+            if (a->sum && alloc < a->len + 4096u)
+                alloc = a->len + 4096u;
             /* Zero payloads (store-bench / dd if=/dev/zero): write from a
              * process-wide pre-zeroed O_DIRECT buffer — no per-PUT memset
              * or memcpy of the 64 KiB fragment. */
-            int is_zero = (a->len > 0) &&
+            int is_zero = !a->sum && (a->len > 0) &&
                           (efs_tls_write_known_zero ||
                            efs_bytes_are_zero(a->buf, a->len));
             const uint8_t *wbuf;
@@ -643,7 +686,8 @@ static void *shard_io_thread(void *arg)
                 }
                 wbuf = zero_dio;
                 pthread_mutex_unlock(&zero_dio_mu);
-            } else if (((uintptr_t)a->buf & 4095u) == 0 && a->len == alloc) {
+            } else if (!a->sum && ((uintptr_t)a->buf & 4095u) == 0 &&
+                       a->len == alloc) {
                 /* Fast path: the RDMA recv layout places the frame payload
                  * on a 4096 boundary, so O_DIRECT can write straight out of
                  * the recv buffer — no 64 KiB bounce copy per fragment.
@@ -670,6 +714,8 @@ static void *shard_io_thread(void *arg)
                 memcpy(aligned_tls, a->buf, a->len);
                 if (a->len < alloc)
                     memset(aligned_tls + a->len, 0, alloc - a->len);
+                if (a->sum)
+                    memcpy(aligned_tls + a->len, a->sum, EFS_HASH_SIZE);
                 wbuf = aligned_tls;
             }
             while (written < alloc) {
@@ -691,6 +737,14 @@ static void *shard_io_thread(void *arg)
                 }
                 written += (size_t)n;
             }
+            if (a->sum) {
+                ssize_t n = write(fd, a->sum, EFS_HASH_SIZE);
+                if (n != (ssize_t)EFS_HASH_SIZE) {
+                    close(fd);
+                    a->result = EFS_ERR_IO;
+                    return NULL;
+                }
+            }
             /* Do not fsync per shard PUT. A single FUSE dd MiB becomes
              * ~24 fragment PUTs × 4 disks = ~96 fsyncs and caps single-stream
              * bandwidth well below 1 GiB/s. Durability relies on the page
@@ -702,7 +756,7 @@ static void *shard_io_thread(void *arg)
     } else {
         uint32_t got = 0;
         a->result = read_file_bytes(a->path, a->buf, a->len, &got,
-                                    a->direct);
+                                    a->direct, NULL, NULL);
         if (a->result == EFS_OK && got < a->len)
             memset(a->buf + got, 0, a->len - got);
     }
@@ -775,12 +829,9 @@ static void frag_loc_note(efs_export_id_t export_id, efs_ino_t ino,
 }
 
 /* Combined fragment+checksum read. Single probe pass per GET: the data
- * open() itself is the probe (no access()+open() doubling), and the .sum
- * sidecar rides the same resolved path instead of running a second
- * all-roots probe loop. Roots are probed low to high, same as
- * server_find_fragment_root, so duplicate-shadowing semantics match.
- * *sum_ok is set when the sidecar supplied the sum (caller hashes
- * otherwise). */
+ * open() itself is the probe, and the digest is the 4 KiB tail of that
+ * file. Roots are probed low to high, same as server_find_fragment_root.
+ * *sum_ok is set when the tail supplied the sum (caller hashes otherwise). */
 int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,
@@ -807,7 +858,8 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
             fragment_path_at(s, loc->root, ex, ino, chunk_index,
                              fragment_index, path, sizeof(path));
             plen = (int)strlen(path);
-            rc = read_file_bytes(path, data, want, &got, direct);
+            rc = read_file_bytes(path, data, want, &got, direct, checksum,
+                                 sum_ok);
             if (rc == EFS_ERR_NOT_FOUND) {
                 loc->valid = 0;
                 rc = EFS_ERR_NOT_FOUND;
@@ -820,7 +872,8 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                 fragment_path_at(s, ri, ex, ino, chunk_index,
                                  fragment_index, path, sizeof(path));
                 plen = (int)strlen(path);
-                rc = read_file_bytes(path, data, want, &got, direct);
+                rc = read_file_bytes(path, data, want, &got, direct, checksum,
+                                     sum_ok);
                 if (rc == EFS_OK)
                     frag_loc_note(ex->id, ino, chunk_index, fragment_index,
                                   efs_tls_chunk_gen, ri);
@@ -831,16 +884,7 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
         if (rc != EFS_OK)
             return rc;
         *data_len = got;
-        if (plen > 0 && (size_t)plen + 5 <= sizeof(path)) {
-            memcpy(path + plen, ".sum", 5);
-            int fd = open(path, O_RDONLY);
-            if (fd >= 0) {
-                ssize_t rn = read(fd, checksum, EFS_HASH_SIZE);
-                close(fd);
-                if (rn == (ssize_t)EFS_HASH_SIZE)
-                    *sum_ok = 1;
-            }
-        }
+        (void)plen;
         return EFS_OK;
     }
 
@@ -853,42 +897,12 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     fragment_path_at(s, 0, ex, ino, chunk_index, fragment_index, path,
                      sizeof(path));
     plen = (int)strlen(path);
-    rc = read_file_bytes(path, data, want, &got, direct);
+    rc = read_file_bytes(path, data, want, &got, direct, checksum, sum_ok);
     if (rc != EFS_OK)
         return rc;
     *data_len = got;
-
-    if (plen > 0 && (size_t)plen + 5 <= sizeof(path)) {
-        memcpy(path + plen, ".sum", 5);
-        int fd = open(path, O_RDONLY);
-        if (fd >= 0) {
-            ssize_t rn = read(fd, checksum, EFS_HASH_SIZE);
-            close(fd);
-            if (rn == (ssize_t)EFS_HASH_SIZE)
-                *sum_ok = 1;
-        }
-    }
+    (void)plen;
     return EFS_OK;
-}
-
-/* Write the checksum sidecar for an already-resolved fragment path. The
- * fragment write just created the parent dir, so a plain open suffices — no
- * make_dir walk (saves the per-PUT dir-resolution the .sum used to redo). */
-static int write_sum_for_path(const char *frag_path,
-                              const uint8_t checksum[EFS_HASH_SIZE])
-{
-    char spath[8200];
-    size_t flen = strlen(frag_path);
-    if (flen + 5 > sizeof(spath))
-        return EFS_ERR_IO;
-    memcpy(spath, frag_path, flen);
-    memcpy(spath + flen, ".sum", 5);
-    int fd = open(spath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0)
-        return EFS_ERR_IO;
-    ssize_t n = write(fd, checksum, EFS_HASH_SIZE);
-    close(fd);
-    return (n == (ssize_t)EFS_HASH_SIZE) ? EFS_OK : EFS_ERR_IO;
 }
 
 /* True if path contains the sharded leaf for EFS_META_TABLE_INO. */
@@ -1247,23 +1261,26 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
                                         const uint8_t *data, uint32_t data_len,
                                         const uint8_t checksum[EFS_HASH_SIZE]);
 
-/* path must be the server_fragment_path() result for this fragment — built
- * once by the caller so with_sum doesn't format it twice per PUT. */
+/* path must be the server_fragment_path() result for this fragment.
+ * checksum, when non-NULL, is stored in the file (4 KiB tail under
+ * O_DIRECT, 32 bytes otherwise). */
 static int server_write_fragment_to_path(struct efsd_server *s, struct efs_export *ex,
                                          efs_ino_t ino, uint32_t chunk_index,
                                          uint32_t fragment_index,
                                          const uint8_t *data, uint32_t data_len,
-                                         const char *path)
+                                         const char *path,
+                                         const uint8_t *checksum)
 {
-    /* Quota charges logical fragment size (not raw EC bytes), and only once
-     * per fragment — overwrites must not inflate the cached used counter.
-     * Existence is determined by the write open itself: a no-create open
-     * first (overwrite = no charge), ENOENT falls through to the create
-     * path with the quota charge. The old access()-probe did up to 12
-     * uncached directory reads per PUT and capped the whole store path. */
+    /* Quota charges logical fragment size once per fragment. A first
+     * write (EFS_PATH_HINT_SKIP: the name cannot exist) creates in one
+     * open. Any other PUT tries O_CREAT|O_EXCL first — success is a new
+     * file and is charged; EEXIST is an overwrite and is not. The old
+     * no-create probe failed ENOENT on every fresh fragment (~180 µs
+     * and an 11-component walk, Oct 1). */
     (void)chunk_index;
     (void)fragment_index;
     int may_charge = (!efs_ino_is_meta_table(ino)) && (s->quota > 0);
+    int first_write = (efs_tls_path_hint == EFS_PATH_HINT_SKIP);
 
     struct shard_io_arg arg;
     memset(&arg, 0, sizeof(arg));
@@ -1274,6 +1291,7 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     if (arg.direct)
         arg.len = server_frag_len(ex, ino);
     arg.is_write = 1;
+    arg.sum = checksum;
     arg.result = EFS_ERR_IO;
     size_t plen = strlen(path);
     if (plen >= sizeof(arg.path))
@@ -1281,16 +1299,72 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     memcpy(arg.path, path, plen);
     arg.path[plen] = '\0';
 
-    if (may_charge) {
-        arg.no_create = 1;
-        shard_io_thread(&arg);
-        if (arg.result == EFS_OK)
-            return EFS_OK; /* overwrite of an existing fragment: no charge */
-        if (arg.result != EFS_ERR_NOT_FOUND)
-            return EFS_ERR_IO;
+    int do_charge = 0;
+    if (may_charge && !first_write) {
+        int under;
+        pthread_mutex_lock(&s->lock);
+        struct efs_node *local = server_local_node(s);
+        if (!local) {
+            pthread_mutex_unlock(&s->lock);
+            return EFS_ERR_INVAL;
+        }
+        under = (local->used + data_len <= s->quota);
+        pthread_mutex_unlock(&s->lock);
+        if (under) {
+            arg.excl = 1;
+            arg.no_create = 0;
+            arg.result = EFS_ERR_IO;
+            shard_io_thread(&arg);
+            if (arg.result == EFS_OK)
+                do_charge = 1; /* created; charge below, do not write again */
+            else if (arg.result != EFS_ERR_EXIST)
+                return EFS_ERR_IO;
+        }
+        if (!do_charge) {
+            arg.excl = 0;
+            arg.no_create = 1;
+            arg.result = EFS_ERR_IO;
+            shard_io_thread(&arg);
+            if (arg.result == EFS_OK)
+                return EFS_OK; /* overwrite: no charge */
+            if (!under)
+                return EFS_ERR_QUOTA;
+            if (arg.result != EFS_ERR_NOT_FOUND)
+                return EFS_ERR_IO;
+            do_charge = 1;
+        }
+    } else if (may_charge) {
+        do_charge = 1; /* first write: one O_CREAT, no probe open */
     }
 
-    int charge_quota = may_charge; /* reaching here under quota = new file */
+    /* EXCL already wrote the bytes. Charge and return. */
+    if (do_charge && arg.excl && arg.result == EFS_OK) {
+        int flush_usage = 0;
+        pthread_mutex_lock(&s->lock);
+        struct efs_node *local = server_local_node(s);
+        if (local) {
+            if (local->used + data_len > s->quota) {
+                pthread_mutex_unlock(&s->lock);
+                unlink(arg.path);
+                return EFS_ERR_QUOTA;
+            }
+            local->used += data_len;
+            static uint64_t charged_since_save;
+            uint64_t sum = __atomic_add_fetch(&charged_since_save,
+                                              (uint64_t)data_len,
+                                              __ATOMIC_RELAXED);
+            if (sum >= (64ull << 20)) {
+                __atomic_store_n(&charged_since_save, 0, __ATOMIC_RELAXED);
+                flush_usage = 1;
+            }
+        }
+        pthread_mutex_unlock(&s->lock);
+        if (flush_usage)
+            server_usage_save(s);
+        return EFS_OK;
+    }
+
+    int charge_quota = do_charge;
     int flush_usage = 0;
     if (charge_quota) {
         pthread_mutex_lock(&s->lock);
@@ -1343,11 +1417,12 @@ int server_write_fragment_sync(struct efsd_server *s, struct efs_export *ex,
     server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
     return server_write_fragment_to_path(s, ex, ino, chunk_index,
-                                         fragment_index, data, data_len, path);
+                                         fragment_index, data, data_len, path,
+                                         NULL);
 }
 
-/* Combined fragment+checksum write: one path format per PUT — the .sum goes
- * next to the fragment in the same just-created directory. */
+/* Combined fragment+checksum write. The digest is the tail of the
+ * fragment file; there is no sidecar. */
 int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export *ex,
                                         efs_ino_t ino, uint32_t chunk_index,
                                         uint32_t fragment_index,
@@ -1357,11 +1432,9 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
     char path[8192];
     server_fragment_path(s, ex, ino, chunk_index, fragment_index, path,
                          sizeof(path));
-    int rc = server_write_fragment_to_path(s, ex, ino, chunk_index,
-                                           fragment_index, data, data_len, path);
-    if (rc != EFS_OK)
-        return rc;
-    return write_sum_for_path(path, checksum);
+    return server_write_fragment_to_path(s, ex, ino, chunk_index,
+                                         fragment_index, data, data_len, path,
+                                         checksum);
 }
 
 #define EFS_NODES_MAGIC "EFSN"

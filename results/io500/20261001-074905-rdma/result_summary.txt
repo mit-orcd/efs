@@ -1,0 +1,16 @@
+IO500 version 02091cf254d8-29 (standard)
+[RESULT]       ior-easy-write        5.172549 GiB/s : time 9.238 seconds [INVALID]
+[RESULT]    mdtest-easy-write        6.184823 kIOPS : time 4.457 seconds [INVALID]
+[      ]            timestamp        0.000000 kIOPS : time 0.001 seconds
+[RESULT]       ior-hard-write        0.518772 GiB/s : time 63.166 seconds [INVALID]
+[RESULT]    mdtest-hard-write        2.817757 kIOPS : time 2.079 seconds [INVALID]
+[RESULT]                 find        0.000000 kIOPS : time 0.000 seconds [INVALID]
+[RESULT]        ior-easy-read       22.521065 GiB/s : time 2.179 seconds
+[RESULT]     mdtest-easy-stat       24.445457 kIOPS : time 1.882 seconds
+[RESULT]        ior-hard-read        0.824494 GiB/s : time 39.759 seconds [INVALID]
+[RESULT]     mdtest-hard-stat       30.446893 kIOPS : time 1.124 seconds
+[RESULT]   mdtest-easy-delete        5.648722 kIOPS : time 4.798 seconds
+[RESULT]     mdtest-hard-read        5.923237 kIOPS : time 1.526 seconds
+[RESULT]   mdtest-hard-delete        4.835289 kIOPS : time 1.654 seconds
+[      ]  ior-rnd4K-easy-read        0.000000 GiB/s : time 0.000 seconds [INVALID]
+[SCORE ] Bandwidth 2.656834 GiB/s : IOPS 8.000720 kiops : TOTAL 4.610486 [INVALID]

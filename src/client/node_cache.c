@@ -92,7 +92,7 @@ void efs_client_conn_init(void)
      * one conn for the whole RPC, a PUT holds three, so 400 ecopy
      * threads on 16 conns queued metadata RPCs behind chunk PUTs for the
      * full 5 s checkout timeout (Sep 30 2026). Slots connect lazily; one
-     * RDMA conn pins 4 × 76 KiB + 32 × 72 KiB ≈ 2.6 MB on each end. */
+     * RDMA conn pins 4 × 88 KiB + 32 × 84 KiB ≈ 3.0 MB on each end. */
     int n = 64;
     if (env && *env) {
         int v = atoi(env);

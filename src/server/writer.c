@@ -26,9 +26,7 @@ struct writer_job {
     uint32_t data_len;
     const uint8_t *checksum;
     int result;
-    int done;
-    pthread_mutex_t done_mu;
-    pthread_cond_t done_cv;
+    int path_hint; /* efs_tls_path_hint of the handler; the write runs here */
 };
 
 /* Writer-thread hint: fragment body is known-zero (checksum already verified). */
@@ -59,6 +57,24 @@ struct writer_pool {
 
 static struct writer_pool g_pool;
 static __thread int tls_in_writer;
+
+/* One job slot per writer. The handler hands a job to an idle slot and
+ * waits on that slot; there is no shared queue mutex on the PUT path
+ * (Oct 1: ~27 futex per fragment was this hand-off). */
+/* One cv per slot carries three waits — the writer (QUEUED), the owning
+ * handler (DONE), a handler in the fallback wait (EMPTY) — so every
+ * transition broadcasts. A signal could wake the wrong class and leave
+ * the owner asleep with no timeout. */
+enum { WSLOT_EMPTY = 0, WSLOT_QUEUED = 1, WSLOT_DONE = 2 };
+struct writer_slot {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    struct writer_job *job;
+    int state;
+};
+static struct writer_slot g_slots[EFS_MAX_WRITERS];
+static int g_slot_rr;
+static int g_slots_live;
 
 int server_default_writer_threads(void)
 {
@@ -106,8 +122,10 @@ static uint32_t pick_write_path(struct writer_job *job, int existing)
     for (uint32_t i = 0; i < n; i++) {
         /* One in-flight job ≈ 4 MiB of fairness debt so a backed-up disk
          * sheds new work even if historical bytes are slightly behind. */
-        score[i] = (uint64_t)g_pool.inflight[i] * (4ull << 20) +
-                   g_pool.assigned_bytes[i];
+        score[i] = (uint64_t)__atomic_load_n(&g_pool.inflight[i],
+                                            __ATOMIC_RELAXED) *
+                       (4ull << 20) +
+                   __atomic_load_n(&g_pool.assigned_bytes[i], __ATOMIC_RELAXED);
         if (score[i] < best_score)
             best_score = score[i];
     }
@@ -172,104 +190,149 @@ static int run_job(struct writer_job *job)
 
 static void *writer_thread(void *arg)
 {
-    (void)arg;
+    int idx = (int)(intptr_t)arg;
+    struct writer_slot *sl = &g_slots[idx];
+
     tls_in_writer = 1;
     for (;;) {
-        pthread_mutex_lock(&g_pool.lock);
-        while (g_pool.running && g_pool.count == 0)
-            pthread_cond_wait(&g_pool.not_empty, &g_pool.lock);
-        if (!g_pool.running && g_pool.count == 0) {
-            pthread_mutex_unlock(&g_pool.lock);
+        struct writer_job *job;
+        int rc;
+        int saved_hint;
+
+        pthread_mutex_lock(&sl->mu);
+        while (g_pool.running && sl->state != WSLOT_QUEUED)
+            pthread_cond_wait(&sl->cv, &sl->mu);
+        if (!g_pool.running && sl->state != WSLOT_QUEUED) {
+            pthread_mutex_unlock(&sl->mu);
             break;
         }
-        struct writer_job *job = g_pool.queue[g_pool.head];
+        job = sl->job;
+        pthread_mutex_unlock(&sl->mu);
+
         efs_tls_write_root = (int)job->path_index;
-        g_pool.head = (g_pool.head + 1) % EFS_WRITER_QUEUE_CAP;
-        g_pool.count--;
-        pthread_cond_signal(&g_pool.not_full);
-        pthread_mutex_unlock(&g_pool.lock);
-
-        int rc = run_job(job);
+        saved_hint = efs_tls_path_hint;
+        efs_tls_path_hint = job->path_hint;
+        rc = run_job(job);
         efs_tls_write_root = -1;
+        efs_tls_path_hint = saved_hint;
 
-        pthread_mutex_lock(&g_pool.lock);
-        if (job->path_index < (uint32_t)g_pool.npaths &&
-            g_pool.inflight[job->path_index] > 0)
-            g_pool.inflight[job->path_index]--;
-        pthread_mutex_unlock(&g_pool.lock);
+        if (job->path_index < (uint32_t)g_pool.npaths)
+            __atomic_fetch_sub(&g_pool.inflight[job->path_index], 1,
+                               __ATOMIC_RELAXED);
 
-        pthread_mutex_lock(&job->done_mu);
+        pthread_mutex_lock(&sl->mu);
         job->result = rc;
-        job->done = 1;
-        pthread_cond_signal(&job->done_cv);
-        pthread_mutex_unlock(&job->done_mu);
+        sl->state = WSLOT_DONE;
+        pthread_cond_broadcast(&sl->cv);
+        pthread_mutex_unlock(&sl->mu);
     }
     return NULL;
 }
 
+/* Hand job to an idle writer slot and wait for it. 5 s to find a slot;
+ * once queued, wait until that writer finishes (the RPC deadline bounds
+ * the write itself). Returns EFS_ERR_BUSY if every slot stays occupied. */
+static int slot_handoff(struct writer_job *job, int nw, int *queued)
+{
+    struct timespec deadline;
+    unsigned start = (unsigned)__sync_fetch_and_add(&g_slot_rr, 1);
+    int k;
+
+    *queued = 0;
+    clock_gettime(CLOCK_REALTIME, &deadline);
+    deadline.tv_sec += 5;
+    for (k = 0; k < nw; k++) {
+        struct writer_slot *sl = &g_slots[(start + k) % nw];
+        int rc;
+        if (pthread_mutex_trylock(&sl->mu) != 0)
+            continue;
+        if (sl->state != WSLOT_EMPTY || !g_pool.running) {
+            pthread_mutex_unlock(&sl->mu);
+            continue;
+        }
+        sl->job = job;
+        sl->state = WSLOT_QUEUED;
+        *queued = 1;
+        pthread_cond_broadcast(&sl->cv);
+        while (sl->state != WSLOT_DONE)
+            pthread_cond_wait(&sl->cv, &sl->mu);
+        rc = job->result;
+        sl->state = WSLOT_EMPTY;
+        sl->job = NULL;
+        pthread_cond_broadcast(&sl->cv);
+        pthread_mutex_unlock(&sl->mu);
+        return rc;
+    }
+    {
+        struct writer_slot *sl = &g_slots[start % nw];
+        int rc;
+        pthread_mutex_lock(&sl->mu);
+        while (sl->state != WSLOT_EMPTY && g_pool.running) {
+            if (pthread_cond_timedwait(&sl->cv, &sl->mu, &deadline) ==
+                ETIMEDOUT) {
+                pthread_mutex_unlock(&sl->mu);
+                return EFS_ERR_BUSY;
+            }
+        }
+        if (!g_pool.running || sl->state != WSLOT_EMPTY) {
+            pthread_mutex_unlock(&sl->mu);
+            return EFS_ERR_IO;
+        }
+        sl->job = job;
+        sl->state = WSLOT_QUEUED;
+        *queued = 1;
+        pthread_cond_broadcast(&sl->cv);
+        while (sl->state != WSLOT_DONE)
+            pthread_cond_wait(&sl->cv, &sl->mu);
+        rc = job->result;
+        sl->state = WSLOT_EMPTY;
+        sl->job = NULL;
+        pthread_cond_broadcast(&sl->cv);
+        pthread_mutex_unlock(&sl->mu);
+        return rc;
+    }
+}
+
 static int submit_and_wait(struct writer_job *job)
 {
+    int existing = -1;
+    uint32_t pi;
+    int nw;
+    int rc;
+
+    job->path_hint = efs_tls_path_hint;
+    job->result = EFS_ERR_IO;
     if (g_pool.nwriters <= 0 || tls_in_writer || g_pool.npaths <= 0)
         return run_job(job);
 
-    pthread_mutex_init(&job->done_mu, NULL);
-    pthread_cond_init(&job->done_cv, NULL);
-    job->done = 0;
-    job->result = EFS_ERR_IO;
-
-    int existing = -1;
     if (g_pool.npaths > 1)
         existing = server_find_fragment_root(job->s, job->ex, job->ino,
                                              job->chunk_index,
                                              job->fragment_index);
-    pthread_mutex_lock(&g_pool.lock);
-    uint32_t pi = pick_write_path(job, existing);
+    pi = pick_write_path(job, existing);
     if (pi >= (uint32_t)g_pool.npaths)
         pi = 0;
     job->path_index = pi;
+    __atomic_fetch_add(&g_pool.inflight[pi], 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&g_pool.assigned_bytes[pi],
+                       job->data_len ? (uint64_t)job->data_len : 64ull,
+                       __ATOMIC_RELAXED);
 
-    /* Bounded wait for queue space: blocking forever parks a conn thread per
-     * queued PUT (up to 512) with no client-visible backpressure. After the
-     * deadline return EBUSY so the client retries instead of stalling. */
-    if (g_pool.running && g_pool.count == EFS_WRITER_QUEUE_CAP) {
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        ts.tv_sec += 5;
-        while (g_pool.running && g_pool.count == EFS_WRITER_QUEUE_CAP) {
-            if (pthread_cond_timedwait(&g_pool.not_full, &g_pool.lock, &ts) ==
-                ETIMEDOUT) {
-                pthread_mutex_unlock(&g_pool.lock);
-                pthread_mutex_destroy(&job->done_mu);
-                pthread_cond_destroy(&job->done_cv);
-                return EFS_ERR_BUSY;
-            }
-        }
-    }
-    if (!g_pool.running) {
-        pthread_mutex_unlock(&g_pool.lock);
-        pthread_mutex_destroy(&job->done_mu);
-        pthread_cond_destroy(&job->done_cv);
+    nw = g_pool.nwriters;
+    if (!g_pool.running || nw <= 0) {
+        __atomic_fetch_sub(&g_pool.inflight[pi], 1, __ATOMIC_RELAXED);
         efs_tls_write_root = (int)pi;
-        int rc = run_job(job);
+        rc = run_job(job);
         efs_tls_write_root = -1;
         return rc;
     }
-    g_pool.queue[g_pool.tail] = job;
-    g_pool.tail = (g_pool.tail + 1) % EFS_WRITER_QUEUE_CAP;
-    g_pool.count++;
-    g_pool.inflight[pi]++;
-    g_pool.assigned_bytes[pi] += job->data_len ? job->data_len : 64u;
-    pthread_cond_signal(&g_pool.not_empty);
-    pthread_mutex_unlock(&g_pool.lock);
-
-    pthread_mutex_lock(&job->done_mu);
-    while (!job->done)
-        pthread_cond_wait(&job->done_cv, &job->done_mu);
-    int rc = job->result;
-    pthread_mutex_unlock(&job->done_mu);
-
-    pthread_mutex_destroy(&job->done_mu);
-    pthread_cond_destroy(&job->done_cv);
+    {
+        int queued = 0;
+        rc = slot_handoff(job, nw, &queued);
+        /* The writer decrements inflight only after it runs the job. */
+        if (!queued)
+            __atomic_fetch_sub(&g_pool.inflight[pi], 1, __ATOMIC_RELAXED);
+    }
     efs_tls_path_used = (int)job->path_index;
     return rc;
 }
@@ -311,16 +374,17 @@ int server_writer_pool_start(struct efsd_server *s)
     }
     g_pool.running = 1;
     for (int i = 0; i < nw; i++) {
-        if (efsd_pthread_create(&g_pool.threads[i], writer_thread, NULL) != 0) {
-            pthread_mutex_lock(&g_pool.lock);
+        pthread_mutex_init(&g_slots[i].mu, NULL);
+        pthread_cond_init(&g_slots[i].cv, NULL);
+        g_slots[i].job = NULL;
+        g_slots[i].state = WSLOT_EMPTY;
+    }
+    g_slots_live = nw;
+    for (int i = 0; i < nw; i++) {
+        if (efsd_pthread_create(&g_pool.threads[i], writer_thread,
+                                (void *)(intptr_t)i) != 0) {
             g_pool.running = 0;
-            pthread_cond_broadcast(&g_pool.not_empty);
-            pthread_mutex_unlock(&g_pool.lock);
-            for (int j = 0; j < i; j++)
-                pthread_join(g_pool.threads[j], NULL);
-            free(g_pool.threads);
-            g_pool.threads = NULL;
-            g_pool.nwriters = 0;
+            g_pool.nwriters = i;
             server_writer_pool_stop(s);
             return -1;
         }
@@ -340,8 +404,20 @@ void server_writer_pool_stop(struct efsd_server *s)
         pthread_cond_broadcast(&g_pool.not_empty);
         pthread_cond_broadcast(&g_pool.not_full);
         pthread_mutex_unlock(&g_pool.lock);
+        for (int i = 0; i < g_slots_live; i++) {
+            pthread_mutex_lock(&g_slots[i].mu);
+            pthread_cond_broadcast(&g_slots[i].cv);
+            pthread_mutex_unlock(&g_slots[i].mu);
+        }
         for (int i = 0; i < g_pool.nwriters; i++)
             pthread_join(g_pool.threads[i], NULL);
+        for (int i = 0; i < g_slots_live; i++) {
+            pthread_mutex_destroy(&g_slots[i].mu);
+            pthread_cond_destroy(&g_slots[i].cv);
+            g_slots[i].state = WSLOT_EMPTY;
+            g_slots[i].job = NULL;
+        }
+        g_slots_live = 0;
         free(g_pool.threads);
         g_pool.threads = NULL;
     }

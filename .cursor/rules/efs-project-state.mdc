@@ -33,7 +33,8 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Anything estimated over 10 s runs in a screen on node9901, fstor007,
  or an fcstor** (`efs-bg.sh start`, `EFS_RUNNER=` to pick the host), not
  in the login-node shell. Read `~/efs-runs/<name>.log`; do not `efs-bg.sh
- wait`. Posix suite, IO-500, `tests/roll_efsd.sh`,
+ wait`. Posix suite, IO-500, `tests/cluster.sh`
+ (the stop/start; `roll_efsd.sh` is what its server start calls),
  `tests/deploy_fuse_clients.sh`, and `tests/preflight.sh` (~15 s) all go
  through it. The login-node Cursor shell dies with "no exit status"
  (no stdout, no stderr, no exit code). Every login-node command is
@@ -96,9 +97,30 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
-  **UP 19:43Z Sep 30: servers `44073b77249b-dirty`** (rolled `--all`,
-  no `--perf`, no `--strace`, `~/efs-runs/roll350.log` ROLL_OK; HEAD
-  `44073b77`, span identity = (gen, off, len), learning below).
+ **UP 07:24Z Oct 1 on a FRESH table** (wipe 06:37Z
+ `~/efs-runs/wipe385.log`; re-wipe + `raft-mkfs` 07:18Z
+ `wipe405.log`, salt 4206459926809775694; `restart408` =
+ `cluster.sh restart --clients`, CLUSTER_OK, no recorders).
+ Servers `4b2844487831-dirty`, g0 term 5 leader fcstor003, g2
+ term 4 leader fcstor004, commit==applied, `arc_miss=0`. Clients
+ fcstor003–015 remounted 07:34Z (`dep419`) on the same tree plus
+ the rdcache-pending and PUT-window read fixes (learnings below),
+ all `fuse.efs-fuse` MOUNT_OK. **Posix on it:** jobs=1 fcstor007
+ 200/201 28.1 s (`results/posix/20261001-073542`), 9-host 200/201
+ on all nine 13.3–13.6 s (`results/posix/20261001-074052`),
+ posix2 62/63 then 63/63 (`results/posix2/20261001-073048`,
+ `-074250`; the 62 is W36, START-HERE 0c). Leftover on the mount:
+ `/posix-2c-r422-6` (W36 evidence, keep). `cluster.sh start
+ --fresh` is the fresh-table start (seed + `--join`, both leaders,
+ mkfs on fcstor003 only). Old `/data1/*/_delete/efs.*` trees were
+ being reclaimed by `~/bin/edelete` (`edel388.log`). Perf files
+ `/tmp/efs-perf/efsd.data` from 06:15Z are still on 003–006.
+ fstor007 has no efs-fuse. Prior stop 06:34Z
+ (`~/efs-runs/stop384.log`).
+ Prior start 06:15Z (`~/efs-runs/roll-d20.log`):
+ `4b2844487831-dirty`, `--perf` only. That start deleted the
+ 05:27Z `--perf`+`--strace` capture. Old fragments are the
+ sidecar layout and will not verify.
   **Clients fcstor007–015 remounted RDMA 02:43Z Oct 1 on `b6c1712d`**
   (`dep366`, all `fuse.efs-fuse` MOUNT_OK, one efs-fuse each; pin
   release on landed PUT + dirty-list close flush, learning below;
@@ -109,8 +131,8 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   **200/201** (mmap SKIP) in 45 s (`results/posix/20261001-022434`);
   on `b6c1712d`: posix **200/201** (`results/posix/20261001-024420`),
   posix2 **63/63** (`results/posix2/20261001-024506`), mtime gate
-  rows all 1380661863. The server build is still
-  `44073b77` — client-only changes, no roll needed. **IO-500 debug
+  rows all 1380661863. Those clients were stopped at the 03:19Z
+  roll; servers are now the same tree (`4b2844487831-dirty`). **IO-500 debug
  9×4 18:35Z (`results/io500/20260930-183504-rdma`): every phase
  completed, 0 fsync failures, 0 read errors, cold hardscan of the
  36 GB hard file bad=0** — easy-write 4.563 GiB/s, mdtest-easy-write
@@ -378,10 +400,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   9-client **1326.6**, walls 28.55–55.57 s
   (`results/measure/20260928-033420-dd-wall`, `db2b88c4802a-dirty`).
   99/108 report-split lines BUSY. Slower than TCP 1478.
- **Latest IO-500 is Sep 30 18:35Z** (`results/io500/20260930-183504-rdma`,
- cluster-facts above): every phase, 0 fsync failures, 0 read errors,
- cold hardscan bad=0; easy-write 4.563, hard-write 0.640, hard-read
- 1.034, mdtest-easy-write 4.632 kIOPS. The 07:28Z run
+ **Latest IO-500 is Oct 1 07:49Z** (`results/io500/20261001-074905-rdma`,
+ fresh table, W28–W35 + D20 in both daemons): every phase, 0 fsync
+ failures, easy-write **5.173**, mdtest-easy-write **6.185 kIOPS**,
+ hard-write **0.519** (63.2 s), mdtest-hard-write 2.818, easy-stat
+ 24.4 kIOPS, hard-read **0.824 with 1 read error** — cold hardscan
+ `bad=1` (ino 10897 ci 118843, [0,4256) zero, a fold tombstoned the
+ client's own span; W38, START-HERE 0e). Prior Sep 30 18:35Z
+ (`results/io500/20260930-183504-rdma`): every phase, 0 fsync
+ failures, 0 read errors, cold hardscan bad=0; easy-write 4.563,
+ hard-write 0.640, hard-read 1.034, mdtest-easy-write 4.632 kIOPS.
+ The 07:28Z run
  (`20260930-072824-rdma`: hard-write 0.261 with fsync failures,
  hard-read aborted) is superseded; do not quote a hard-read or a
  score from it. Prior complete run:
@@ -720,7 +749,27 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`stale_repull_replay`) is what broke the shared-file fsync livelock.
   Raft was never the bottleneck there (commit==applied throughout).
 - `EFS_MSG_INODE_LOOKUP` reply carries the full row; LOOKUP_PATH batches
-  ≤64 ancestors; readdir cursor is `(src, name)`, not `after_ino`.
+ ≤64 ancestors; readdir cursor is `(src, name)`, not `after_ino`.
+- **`group_slot` returns a slot for every attached group; "not hosted"
+ is `!g->hosted`, never `!g` (Oct 1).** The forwarded-command path
+ (`host_propose` → `host_remote_cmd` → `host_wait_verdict`) read the
+ unhosted group's empty apply ring on a single-group host and answered
+ BUSY with `arc_miss` +1 per call — `raft-mkfs` rc=-13 on every node
+ of a fresh cluster (the SALT step on group 2 from fcstor003). The
+ leader's submit reply is the verdict for a forwarded command.
+- **`raft-mkfs` once, on one node (Oct 1, START-HERE 0d / W37).** Each
+ node proposes its own `h->salt`; retrying the mkfs on another node
+ while the SALT step is BUSY gives group 0 one salt and group 2's
+ anchor another → `efs_meta_apply_salt_record` PROTO → `apply salt
+ rc=-7 index=3` on every group-2 apply forever; only a wipe recovers.
+ `roll_efsd.sh --all --fresh` waits for both leaders and mkfs's on
+ fcstor003 only. The server-side guard is open.
+- **`apply_unlink_cmd` / `apply_rmdir_cmd` map NOT_FOUND at apply to
+ OK with no log line.** A rename of the same source racing a
+ log-path unlink can make both return 0 and leave the dest dentry
+ dangling (`-?????????`, posix2 `peer_rename_vs_unlink_src`, 1 in
+ 6, START-HERE 0c / W36). Do not add more silent "replay" mappings;
+ a committed-replay verdict must come from the op-id window.
 
 - **A span record's identity is (object gen, off, len), never the gen
  alone (Sep 30, `results/io500/20260930-183504-rdma`).** The object
@@ -918,6 +967,35 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   Private 100-mkdir afterward was 642 ms vs 507 ms TCP. Default
   stays TCP. Do not debug that on the live cluster.
 
+- **`getifaddrs` per RDMA conn upgrade was 26 % of efs-fuse cycles
+ (Oct 1 20 GiB dd, `osq_lock` 20 %):** `dev_for_fd` resolved local
+ IP → ifname → HCA through `getifaddrs` + sysfs on every new conn,
+ and a client's first PUT window opens 256 conns at once, all
+ spinning on rtnl. Cached per local IPv4 under `g_dev_lock`, one
+ resolver at a time. If that symbol is back in a profile, conns are
+ being re-created — count `efs_client_conn_drop` first.
+- **Clean dcache bodies have no budget and no evictor** (freed only by
+ drop or take-replace). Do not keep a full-overwrite body after its
+ PUT "as cache": RSS then tracks the bytes written (D23, ask).
+- **A chunk inside a PUT window is readable nowhere (Oct 1).** The
+ full-image snap steals the body (`snap-steal-full`) and the local
+ map names the object only after the PUT lands; W30 PUTs completed
+ chunks during the write, so a read in between zero-filled a "hole"
+ (`efs: read hole`, posix `writev_readv_chunk_straddle` got `\0\0\0`
+ for `XYZ`). `efs_client_read` waits on `efs_dcache_put_win_wait`
+ first (lock-free when `put_win_total` is 0). `read hole` lines also
+ come from legitimate sparse reads — only a failing non-sparse test
+ makes them evidence. Any new reader path (prefetch, verify) goes
+ through the same wait.
+- **rdcache `pending` marks live on data-less ways; `rdcache_find`
+ skips those (Oct 1).** `efs_rdcache_put` used `rdcache_find`, stored
+ in another way, and the orphan mark made the next reader of that
+ chunk wait forever (posix `basic_pread_pwrite` D-state in
+ `request_wait_answer`, 190 NOTRUN, first reread after a fresh
+ mount). Every lookup that must see a pending entry matches
+ `ino/ci && (data || pending)`; a put or cancel always clears the
+ mark, including on alloc failure.
+
 **Harness / measurement**
 - IO-500 harness detaches `prterun` (ssh timeout killed the driver);
   `ior-easy|hard-write|verify` run IOR directly for cold verifies (the
@@ -927,6 +1005,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   keep-storage efsd bounce, not a wipe. Two 4-client 9×2g jobs exceed the
   400 s ssh budget — do not raise it.
 - `dd if=/dev/zero` skips PUTs (all-zero chunks) — use a non-zero source.
+- **A remount truncates `/tmp/efs/fuse.log`** (`rm -f` before mount).
+ Copy the nine client logs off BEFORE a cold remount for a verify, or
+ the run's client evidence is gone (Oct 1 W38). Cold verify of a
+ driver run's hard file: remount, then `IOR_HARD_FILE=… IOR_HARD_G=<-G>
+ run.sh ior-hard-verify <pairs>` (36 ranks) and
+ `tests/tools/hardscan.c` (12 threads, 35 GB in 24 s, prints every bad
+ record with offset/chunk/word); `efs-mgmt raft-getchunks <leader>
+ <ino> <ci>` with `EFS_MGMT_CHUNKS=1` shows the row and its span list
+ (`len=0` = a fold's tombstone).
 - posix harness reuses an existing mount (`ensure_mounted`); it remounts
   only on a transport mismatch. 9-way posix hits the 385 s python cap and
   reports `[None]` for never-ran tests (W8) — not 60 bugs.

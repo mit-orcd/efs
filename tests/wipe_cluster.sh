@@ -135,7 +135,7 @@ say "4/5 background edelete of _delete dirs (detached, survives ssh)"
 # setsid + </dev/null + & detaches so the ssh session returns immediately and
 # the edelete keeps running after we disconnect. Globs all 6 data dirs at once.
 for h in "${SERVERS[@]}"; do
-    ( ssh_to 10 "$h" "setsid bash -c 'for old in /data1/*/_delete/*; do [ -e \"\$old\" ] && ~/git/ereport/edelete --delete --force \"\$old\" >/dev/null 2>&1; done' </dev/null >/dev/null 2>&1 & echo BG-DELETE" ) &
+    ( ssh_to 10 "$h" "setsid bash -c 'for old in /data1/*/_delete/*; do [ -e \"\$old\" ] && ~/bin/edelete --delete --force \"\$old\"; done' </dev/null >/tmp/efs-edelete.log 2>&1 & echo BG-DELETE" ) &
 done
 wait
 

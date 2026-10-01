@@ -1,0 +1,50 @@
+     14 why=2
+      1 why=4
+     11 why=5
+    973 why=6
+wait_timeouts=0 apply_max=95 arc_miss=0 fin_drop=0 pub_p50=0 pub_max=0 inbox_drop=0 
+831
+raft-host: apply create rc=-13 index=31205 parent=1917 name=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+raft-host: apply create rc=-13 index=36421 parent=3399 name=.range-held
+raft-host: apply create rc=-13 index=37159 parent=1373 name=f0078
+== fcstor004
+  group 0 hosted=1 role=FOLLOWER leader=0 term=5 commit=129530 applied=129530 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=1 term=4 commit=114962 applied=114962 voters=0xe joint=0
+publish_stale=1997 publish_other=0
+     22 why=2
+      3 why=4
+     18 why=5
+   1954 why=6
+report-split nrec=15836 pack_ms=67 push_ms=68 finish_ms=101 skip=0 stale=0 inval=0 rc=0 fail=-/0
+wait_timeouts=6 apply_max=0 arc_miss=0 fin_drop=0 pub_p50=879 pub_max=0 inbox_drop=0 
+1342
+raft-host: apply create rc=-13 index=33252 parent=3190 name=   
+raft-host: apply create rc=-13 index=36421 parent=3399 name=.range-held
+raft-host: apply create rc=-13 index=37159 parent=1373 name=f0078
+== fcstor005
+  group 0 hosted=1 role=FOLLOWER leader=0 term=5 commit=129530 applied=129530 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=1 term=4 commit=114962 applied=114962 voters=0xe joint=0
+publish_stale=1997 publish_other=0
+     22 why=2
+      3 why=4
+     18 why=5
+   1954 why=6
+report-split nrec=10792 pack_ms=142 push_ms=0 finish_ms=31 skip=10792 stale=0 inval=0 rc=0 fail=-/0
+wait_timeouts=0 apply_max=0 arc_miss=0 fin_drop=0 pub_p50=0 pub_max=0 inbox_drop=0 
+833
+raft-host: apply create rc=-13 index=33252 parent=3190 name=   
+raft-host: apply create rc=-13 index=36421 parent=3399 name=.range-held
+raft-host: apply create rc=-13 index=37159 parent=1373 name=f0078
+== fcstor006
+  group 2 hosted=1 role=FOLLOWER leader=1 term=4 commit=114962 applied=114962 voters=0xe joint=0
+publish_stale=998 publish_other=0
+      8 why=2
+      2 why=4
+      7 why=5
+    981 why=6
+wait_timeouts=0 apply_max=0 arc_miss=0 fin_drop=0 pub_p50=0 pub_max=0 inbox_drop=0 
+414
+raft-host: apply create rc=-13 index=29222 parent=5602 name=f23
+raft-host: apply create rc=-13 index=32103 parent=924 name=d45
+raft-host: apply create rc=-13 index=33252 parent=3190 name=   
+efs-rec: end 2026-10-01T07:58:37Z rc=0

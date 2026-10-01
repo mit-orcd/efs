@@ -2,6 +2,10 @@
 # roll_efsd.sh [node...]      default: 1 2 3 4   (fcstor003..006)
 # roll_efsd.sh --all          build all four, STOP all four, START all four
 #
+# Prefer tests/cluster.sh for a stop or a start. It calls this script's
+# --all for the server start and adds the client / perf / strace choice
+# and a SIGTERM stop that finalizes perf.
+#
 # Rolling restart of efsd on the 19810 cluster, one node at a time, per the
 # efs-fcstor-deploy rule: rsync + clean build ON the node, `pkill -9 -x efsd`
 # (exact name, never -f / never the ps|awk kill-by-port), start detached,
@@ -18,6 +22,11 @@
 set -u
 S="$HOME/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh"
 ALL=0; [ "${1:-}" = "--all" ] && { ALL=1; shift; }
+# --all --fresh: storage was wiped (tests/wipe_cluster.sh). Node 1 is the
+# seed, nodes 2–4 start with --join, and raft-mkfs runs on node 1 once
+# all four are up. Refuses if any /data1/0*/efs on fcstor003 has content.
+FRESH=0; [ "${1:-}" = "--fresh" ] && { FRESH=1; shift; }
+[ $FRESH = 1 ] && [ $ALL = 0 ] && { echo "--fresh needs --all"; exit 1; }
 NODES=("$@"); [ ${#NODES[@]} -gt 0 ] || NODES=(1 2 3 4)
 # Environment for the efsd process, e.g. EFSD_ENV='EFS_TRANSPORT=tcp'
 # (peer pool + raft AE over TCP instead of the ungated RDMA upgrade).
@@ -86,13 +95,49 @@ if [ $ALL = 1 ]; then
     done
     [ "$(echo $ids | tr ' ' '\n' | sort -u | wc -l)" = 1 ] || { echo "FAIL: built IDs differ:$ids"; exit 1; }
     echo "== built$ids"
+    if [ $FRESH = 1 ]; then
+        echo "== fresh: storage must be empty"
+        for n in 1 2 3 4; do
+            cnt=$(ssh_ 15 "$(host_of $n)" "find /data1/0[1-6]/efs -mindepth 1 -maxdepth 1 2>/dev/null | wc -l")
+            echo "$(host_of $n) entries=$cnt"
+            [ "$cnt" = 0 ] || { echo "FAIL: $(host_of $n) storage not empty; --fresh refuses (wipe first)"; exit 1; }
+        done
+    fi
     echo "== stop all four"
     for n in 1 2 3 4; do ssh_ 15 "$(host_of $n)" "pkill -9 -x efsd; sleep 1; echo $(host_of $n) up=\$(pgrep -x efsd | wc -l)"; done
     echo "== start all four"
     for n in 1 2 3 4; do
         h=$(host_of $n); a=$(addr_of $n)
-        ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
+        join=""; [ $FRESH = 1 ] && [ "$n" != 1 ] && join="--join 172.16.223.57:19810"
+        ssh_ 30 "$h" "mkdir -p /tmp/efs-perf; rm -f /tmp/efs-perf/efsd.data /tmp/efs-perf/efsd.strace; cd /tmp/efs && mv -f efsd.log efsd.log.prev 2>/dev/null; (env $EFSD_ENV $PERF_ENV setsid ./efsd --node-id $n --addr $a --port 19810 --storage $STORAGE --quota 36T --direct-io $join $EFSD_ARGS >efsd.log 2>&1 </dev/null &); sleep 1; echo $h up=\$(pgrep -x efsd | wc -l) perf=\$(pgrep -x perf | wc -l)"
     done
+    if [ $FRESH = 1 ]; then
+        # Both groups need a leader first: mkfs commits MKFS on group 0
+        # and then the SALT record on group 2; a group-2 proposal before
+        # its first election is BUSY. And mkfs goes to ONE node only —
+        # the salt is h->salt of the node that serves it, so a retry on
+        # another node after a BUSY proposes a second salt and group 2's
+        # apply wedges on the SALT record forever (PROTO, Oct 1 07:15Z).
+        echo "== wait for a leader in both groups (node 2 hosts both)"
+        ok=0
+        for i in $(seq 1 60); do
+            st=$(ssh_ 15 fcstor004 "cd /tmp/efs && ./efs-mgmt raft-status 172.16.223.58:19810 2>/dev/null" | grep 'hosted=1')
+            if [ "$(echo "$st" | grep -c 'leader=[0-9]')" = 2 ]; then ok=1; break; fi
+            sleep 2
+        done
+        echo "$st"
+        [ $ok = 1 ] || { echo "FAIL: no leader in both groups after 120 s"; exit 1; }
+        echo "== raft-mkfs on node 1 only (same salt on every retry)"
+        ok=0
+        for i in $(seq 1 30); do
+            out=$(ssh_ 20 fcstor003 "cd /tmp/efs && ./efs-mgmt raft-mkfs 172.16.223.57:19810 efs-test; echo mkfs_exit=\$?")
+            echo "fcstor003: $(echo "$out" | tail -2 | tr '\n' ' ')"
+            if echo "$out" | grep -q 'mkfs_exit=0'; then ok=1; break; fi
+            sleep 2
+        done
+        [ $ok = 1 ] || { echo "FAIL: raft-mkfs not accepted after 60 s"; exit 1; }
+        echo "MKFS_OK"
+    fi
     echo "== wait for both groups"
     for n in 1 2 3 4; do
         h=$(host_of $n); a=$(addr_of $n); ok=0
