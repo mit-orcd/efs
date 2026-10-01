@@ -97,7 +97,14 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
- **UP 07:24Z Oct 1 on a FRESH table** (wipe 06:37Z
+ **ROLLED 18:00Z Oct 1 (`restart705`, `cluster.sh restart --clients
+ --perf`, CLUSTER_OK): servers `dc6b0af19832-dirty` = HEAD `dc6b0af1`
+ (W39, read path R1–R5, store writev PUT, W37 committed-salt mkfs, log
+ timestamps, rmdir asks the server) with `--perf` on fcstor003–006;
+ clients fcstor003–015 remounted RDMA; fstor007 untouched. g0 term 17
+ leader fcstor003, g2 term 12 leader fcstor006, commit==applied
+ (`post706`). The `-dirty` is the node tree missing tracked `results/`.**
+ Prior: **UP 07:24Z Oct 1 on a FRESH table** (wipe 06:37Z
  `~/efs-runs/wipe385.log`; re-wipe + `raft-mkfs` 07:18Z
  `wipe405.log`, salt 4206459926809775694; `restart408` =
  `cluster.sh restart --clients`, CLUSTER_OK, no recorders).
