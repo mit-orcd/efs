@@ -354,6 +354,28 @@ uint64_t efs_export_staged_bytes(const struct efs_export *ex);
  * hash indexes. Caller holds the table locks; not a hot-path op. */
 void efs_export_compact(struct efs_export *ex);
 
+/* Cold-tab eviction (client staging cache, D18, Oct 1 2026). A loaded
+ * shard tab costs its index/slab floor (~90–170 KB) with one row in it,
+ * so the row LRU alone cannot bring 4096 loaded tabs under the cap. The
+ * evictor drops whole tabs no pinned ino lives on; efs_export_table()
+ * rebuilds an empty tab on the next use of that shard.
+ *
+ * tabs_by_age: loaded tab shard ids, least recently used first
+ * (shard_tick ascending); fills out[0..n), returns the count.
+ * tab_for_each_ino: every ino the tab holds — inode rows, dentry stubs
+ * and chunk recs. cb returning nonzero stops the walk and is returned.
+ * drop_tab: free the tab (rows, names, chunk recs, indexes, child vecs);
+ * present_chunks of rows living elsewhere are decremented for the chunk
+ * recs it held. Returns the tab's staged-byte estimate, 0 if not loaded.
+ * All three: caller holds the table locks; shard 0 (the root) is never
+ * a tab. */
+uint32_t efs_export_tabs_by_age(const struct efs_export *ex, uint32_t *out,
+                                uint32_t n);
+int efs_export_tab_for_each_ino(struct efs_export *ex, uint32_t shard,
+                                int (*cb)(efs_ino_t ino, void *arg),
+                                void *arg);
+uint64_t efs_export_drop_tab(struct efs_export *ex, uint32_t shard);
+
 /* Set inode mode bits, preserving the file type. */
 int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode);
 

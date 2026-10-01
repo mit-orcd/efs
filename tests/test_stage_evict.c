@@ -45,6 +45,30 @@ static int chunk_present(struct efs_export *ex, efs_ino_t ino, uint32_t ci)
     return efs_export_get_chunk(ex, ino, ci, &ce) == EFS_OK;
 }
 
+struct ino_count {
+    efs_ino_t want;
+    int hits;
+    int other;
+};
+
+static int count_cb(efs_ino_t ino, void *arg)
+{
+    struct ino_count *c = arg;
+
+    if (ino == c->want)
+        c->hits++;
+    else
+        c->other++;
+    return 0;
+}
+
+static int stop_cb(efs_ino_t ino, void *arg)
+{
+    (void)ino;
+    (void)arg;
+    return 7;
+}
+
 int main(void)
 {
     struct efs_export ex;
@@ -160,6 +184,74 @@ int main(void)
     /* Unknown ino: nothing to do, table intact. */
     assert(efs_export_evict_ino(&ex, 7654321) == 2);
     assert(efs_export_get_inode(&ex, 17, &out) == EFS_OK);
+
+    /* D18 cold-tab eviction. Stage one file per shard 1..3 so three tabs
+     * are loaded, touch them in the order 2, 3, 1 and check the age order,
+     * enumerate a tab's inos, drop it, and see the shard rebuilt empty. */
+    uint32_t order[8];
+    uint32_t nt0 = efs_export_tabs_by_age(&ex, order, 8);
+    assert(nt0 >= 3); /* tabs 1..3 exist from the files above */
+    stage_file(&ex, 33, 16, "t1", 2); /* shard 1 */
+    stage_file(&ex, 34, 16, "t2", 1); /* shard 2 */
+    stage_file(&ex, 35, 16, "t3", 0); /* shard 3 */
+    (void)efs_export_table(&ex, 2);
+    (void)efs_export_table(&ex, 3);
+    (void)efs_export_table(&ex, 1);
+    /* Tabs loaded by "big" (ino 27) and not touched since are the oldest;
+     * the three just touched are the youngest, in touch order. */
+    uint32_t nt = efs_export_tabs_by_age(&ex, order, 8);
+    assert(nt == nt0);
+    assert(order[nt - 3] == 2 && order[nt - 2] == 3 && order[nt - 1] == 1);
+    assert(efs_export_tabs_by_age(&ex, order, 1) == 1);
+    if (nt0 > 3)
+        assert(order[0] != 1 && order[0] != 2 && order[0] != 3);
+    /* Tab 1 holds the row of 33 and its two chunk recs (group 0 stays on
+     * the ino's shard); the stub on the parent's tab (shard 0 = root) is
+     * not a tab. The callback sees 33 three times and nothing else. */
+    {
+        struct ino_count cnt = {33, 0, 0};
+
+        /* Row + two group-0 chunk recs of ino 33 are all on tab 1; the
+         * tab also holds whatever else of shards-1 survived above. */
+        assert(efs_export_tab_for_each_ino(&ex, 1, count_cb, &cnt) == 0);
+        assert(cnt.hits == 3);
+        int other1 = cnt.other;
+        /* A nonzero return stops the walk and is returned. */
+        assert(efs_export_tab_for_each_ino(&ex, 1, stop_cb, NULL) == 7);
+        /* Not loaded / the root: nothing visited. */
+        assert(efs_export_tab_for_each_ino(&ex, 0, count_cb, &cnt) == 0);
+        assert(efs_export_tab_for_each_ino(&ex, 4096 + 7, count_cb, &cnt) == 0);
+        assert(cnt.hits == 3 && cnt.other == other1);
+    }
+    uint64_t pre_drop = efs_export_staged_bytes(&ex);
+    uint64_t est = efs_export_drop_tab(&ex, 1);
+    assert(est > 0);
+    assert(efs_export_shard_tab(&ex, 1) == NULL);
+    assert(efs_export_staged_bytes(&ex) == pre_drop - est);
+    /* Dropping again or dropping the root is a no-op. */
+    assert(efs_export_drop_tab(&ex, 1) == 0);
+    assert(efs_export_drop_tab(&ex, 0) == 0);
+    assert(efs_export_tabs_by_age(&ex, order, 8) == nt0 - 1);
+    /* The other tabs and the root are untouched. */
+    assert(efs_export_get_inode(&ex, 34, &out) == EFS_OK);
+    assert(chunk_present(&ex, 34, 0));
+    assert(efs_export_get_inode(&ex, 35, &out) == EFS_OK);
+    assert(efs_export_get_inode(&ex, 16, &out) == EFS_OK);
+    /* Reads and in-place updates of the dropped shard miss without
+     * rebuilding the tab (chunk_tab_peek / shard_route peek). */
+    assert(efs_export_get_inode(&ex, 33, &out) != EFS_OK);
+    assert(!chunk_present(&ex, 33, 0));
+    assert(efs_export_set_chunk_gen(&ex, 33, 0, 5) == EFS_ERR_NOT_FOUND);
+    assert(efs_export_set_mode(&ex, 33, 0100600) != EFS_OK);
+    assert(efs_export_shard_tab(&ex, 1) == NULL);
+    assert(efs_export_tabs_by_age(&ex, order, 8) == nt0 - 1);
+    /* Staging a row rebuilds the tab empty on demand. */
+    stage_file(&ex, 41, 16, "t1b", 1); /* shard 1 */
+    assert(efs_export_shard_tab(&ex, 1) != NULL);
+    assert(efs_export_get_inode(&ex, 41, &out) == EFS_OK);
+    assert(chunk_present(&ex, 41, 0));
+    assert(efs_export_tabs_by_age(&ex, order, 8) == nt0);
+    assert(order[nt0 - 1] == 1); /* the youngest */
 
     efs_export_free(&ex);
     printf("test_stage_evict: OK\n");

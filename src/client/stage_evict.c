@@ -535,6 +535,87 @@ static uint64_t evict_pass(uint64_t cap, int *evicted, uint64_t min_tick,
     return bytes;
 }
 
+/* ---------------- D18: whole-tab eviction (Oct 1 2026) ----------------
+ * A loaded shard tab costs its slab + index floor (~90–170 KB) however
+ * few rows it holds, and ino → shard is uniform, so a client that has
+ * touched a few thousand files has ~all 4096 tabs loaded and the floor
+ * alone (360–700 MB) is above EFS_CLIENT_META_MB. The row LRU then evicts
+ * 64 just-closed rows per pass forever and never reaches the cap: 31.6 %
+ * of a 62 min ecopy profile, 47.6 % of its last slice
+ * (results/measure/20260930-205300-ecopy-perf-review). After the row
+ * bands, if the table is still over the cap, drop the least recently
+ * used tabs no pinned ino lives on (same pin rules as evict_one, same
+ * lock set, check and drop under one hold) until it is under. The tab
+ * is rebuilt empty by efs_export_table() on the next use of its shard;
+ * everything it held is re-fetchable. The user chose this over counting
+ * the cap above the floor or shrinking the floor (START-HERE D18). */
+#define TAB_SCAN  256
+#define TAB_EVICT 64
+
+static int tab_pin_cb(efs_ino_t ino, void *arg)
+{
+    (void)arg;
+    /* Caller holds table + idx_mu + dirty_mu (evict_one's set). */
+    if (efs_client_ino_is_dirty_locked(ino) || efs_dcache_ino_pinned(ino) ||
+        stage_ino_is_open(ino) || stage_op_pinned(ino) ||
+        stage_ino_has_plock(ino))
+        return 1;
+    return 0;
+}
+
+static int tab_lru_cb(efs_ino_t ino, void *arg)
+{
+    (void)arg;
+    /* Caller holds g_lru_mu. The ino's remaining traces (a dentry stub
+     * or chunk recs on another tab) go when that tab goes; a later touch
+     * re-enters it. Leaving the entry would send evict_one through the
+     * every-tab fan-out for a row that is gone. */
+    lru_remove_locked(ino);
+    return 0;
+}
+
+/* Returns the number of tabs dropped; *bytes_io is the reading after. */
+static int evict_cold_tabs(uint64_t cap, uint64_t *bytes_io)
+{
+    uint32_t shards[TAB_SCAN];
+    uint32_t n, i;
+    int dropped = 0, skipped = 0;
+    uint64_t bytes = *bytes_io;
+
+    efs_client_table_lock();
+    pthread_mutex_lock(&g_client.idx_mu);
+    n = efs_export_tabs_by_age(&g_client.export, shards, TAB_SCAN);
+    pthread_mutex_unlock(&g_client.idx_mu);
+    efs_client_table_unlock();
+    for (i = 0; i < n && dropped < TAB_EVICT && bytes > cap; i++) {
+        efs_client_table_lock();
+        pthread_mutex_lock(&g_client.idx_mu);
+        pthread_mutex_lock(&g_client.dirty_mu);
+        if (efs_export_tab_for_each_ino(&g_client.export, shards[i],
+                                        tab_pin_cb, NULL) == 0) {
+            pthread_mutex_lock(&g_lru_mu);
+            (void)efs_export_tab_for_each_ino(&g_client.export, shards[i],
+                                              tab_lru_cb, NULL);
+            pthread_mutex_unlock(&g_lru_mu);
+            if (efs_export_drop_tab(&g_client.export, shards[i]))
+                dropped++;
+            bytes = efs_export_staged_bytes(&g_client.export);
+        } else {
+            skipped++;
+        }
+        pthread_mutex_unlock(&g_client.dirty_mu);
+        pthread_mutex_unlock(&g_client.idx_mu);
+        efs_client_table_unlock();
+    }
+    if (dropped && getenv("EFS_STAGE_DBG"))
+        fprintf(stderr,
+                "stage-evict: tabs bytes=%lluMB cand=%u dropped=%d "
+                "pinned=%d\n",
+                (unsigned long long)(bytes >> 20), n, dropped, skipped);
+    *bytes_io = bytes;
+    return dropped;
+}
+
 static void *stage_evict_main(void *arg)
 {
     (void)arg;
@@ -580,6 +661,22 @@ static void *stage_evict_main(void *arg)
         }
         if (evicted_total > 0)
             g_evict_cursor = 0;
+        if (bytes > cap) {
+            /* Rows alone cannot reach the cap once the tab floor is
+             * above it (D18): drop the coldest unpinned tabs until the
+             * reading is under, so the kick path goes quiet instead of
+             * re-arming this thread on every staging op. */
+            uint64_t after = stage_bytes_now();
+
+            if (after > cap) {
+                int tabs = evict_cold_tabs(cap, &after);
+
+                evicted_total += tabs;
+                bytes = after;
+                __atomic_store_n(&g_stage_bytes_seen, after,
+                                 __ATOMIC_RELAXED);
+            }
+        }
         if (bytes > cap && evicted_total == 0) {
             __atomic_store_n(&g_evict_idle_until, evict_now_ms() + 1000,
                              __ATOMIC_RELAXED);

@@ -2867,9 +2867,15 @@ int efs_export_link(struct efs_export *ex, efs_ino_t src_ino,
 static struct efs_export *shard_route(struct efs_export *ex, efs_ino_t ino)
 {
     if (export_is_sharded_root(ex)) {
-        struct efs_export *tab = efs_export_table_for_ino(ex, ino);
-        if (tab)
-            return tab;
+        /* Peek, never create: these update a row that must already be
+         * staged. A miss on a dropped tab (D18) is NOT_FOUND, not a fresh
+         * ~100 KB tab for nothing. */
+        struct efs_export *tab = efs_export_shard_tab(
+            ex, efs_export_shard_of(ino, ex->root.shard_bits));
+        if (tab && tab != ex)
+            tab->shard_tick = __atomic_add_fetch(&ex->shard_tick, 1,
+                                                 __ATOMIC_RELAXED);
+        return tab; /* NULL: the row is not staged here */
     }
     return ex;
 }
@@ -2880,6 +2886,8 @@ static int set_size_common(struct efs_export *ex, efs_ino_t ino, uint64_t size,
     if (!ex)
         return EFS_ERR_INVAL;
     ex = shard_route(ex, ino);
+    if (!ex)
+        return EFS_ERR_NOT_FOUND;
     if (do_rollups)
         efs_export_ensure_rollups(ex);
     struct efs_inode_mem *p = inode_ptr(ex, ino);
@@ -2928,6 +2936,8 @@ int efs_export_set_mode(struct efs_export *ex, efs_ino_t ino, uint32_t mode)
     if (!ex)
         return EFS_ERR_INVAL;
     ex = shard_route(ex, ino);
+    if (!ex)
+        return EFS_ERR_NOT_FOUND;
     efs_export_ensure_rollups(ex);
     struct efs_inode_mem *p = inode_ptr(ex, ino);
     if (!p)
@@ -2953,6 +2963,8 @@ int efs_export_set_owner(struct efs_export *ex, efs_ino_t ino, uid_t uid, gid_t 
     if (!ex)
         return EFS_ERR_INVAL;
     ex = shard_route(ex, ino);
+    if (!ex)
+        return EFS_ERR_NOT_FOUND;
     efs_export_ensure_rollups(ex);
     struct efs_inode_mem *p = inode_ptr(ex, ino);
     if (!p)
@@ -2975,6 +2987,8 @@ static int set_mtime_ns_common(struct efs_export *ex, efs_ino_t ino,
     if (!ex)
         return EFS_ERR_INVAL;
     ex = shard_route(ex, ino);
+    if (!ex)
+        return EFS_ERR_NOT_FOUND;
     if (do_rollups)
         efs_export_ensure_rollups(ex);
     struct efs_inode_mem *p = inode_ptr(ex, ino);
@@ -3020,6 +3034,8 @@ int efs_export_set_atime(struct efs_export *ex, efs_ino_t ino, uint64_t atime,
     if (!ex)
         return EFS_ERR_INVAL;
     ex = shard_route(ex, ino);
+    if (!ex)
+        return EFS_ERR_NOT_FOUND;
     efs_export_ensure_rollups(ex);
     struct efs_inode_mem *p = inode_ptr(ex, ino);
     if (!p)
@@ -3267,14 +3283,33 @@ uint32_t efs_export_present_count(const struct efs_export *ex, efs_ino_t ino)
            __atomic_load_n(&p->present_extra, __ATOMIC_RELAXED);
 }
 
+/* Peek at the tab a chunk record lives on without creating it. Only
+ * efs_export_set_chunk inserts; a reader or an in-place update of a
+ * record that is not staged must not rebuild a tab the evictor dropped
+ * (D18, Oct 1 2026). Bumps the LRU tick like efs_export_table(). */
+static struct efs_export *chunk_tab_peek(struct efs_export *ex, efs_ino_t ino,
+                                         uint32_t chunk_index)
+{
+    uint32_t sh = efs_export_chunk_shard_of(ino, chunk_index,
+                                            ex->root.shard_bits);
+    struct efs_export *tab;
+
+    if (sh == 0)
+        return ex;
+    tab = efs_export_shard_tab(ex, sh);
+    if (tab && tab != ex)
+        tab->shard_tick = __atomic_add_fetch(&ex->shard_tick, 1,
+                                             __ATOMIC_RELAXED);
+    return tab;
+}
+
 int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
                              uint32_t chunk_index, uint64_t generation)
 {
     if (!ex)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
-        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
-                                                           chunk_index);
+        struct efs_export *tab = chunk_tab_peek(ex, ino, chunk_index);
         if (tab && tab != ex)
             return efs_export_set_chunk_gen(tab, ino, chunk_index, generation);
     }
@@ -3299,8 +3334,7 @@ int efs_export_set_chunk_deltas(struct efs_export *ex, efs_ino_t ino,
     if (!ex || n > EFS_CHUNK_DELTA_MAX)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
-        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
-                                                           chunk_index);
+        struct efs_export *tab = chunk_tab_peek(ex, ino, chunk_index);
         if (tab && tab != ex)
             return efs_export_set_chunk_deltas(tab, ino, chunk_index, deltas,
                                                n, newest_seq);
@@ -3324,8 +3358,7 @@ int efs_export_add_chunk_delta(struct efs_export *ex, efs_ino_t ino,
     if (!ex || !delta || delta->len == 0)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
-        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
-                                                           chunk_index);
+        struct efs_export *tab = chunk_tab_peek(ex, ino, chunk_index);
         if (tab && tab != ex)
             return efs_export_add_chunk_delta(tab, ino, chunk_index, delta);
     }
@@ -3349,8 +3382,7 @@ int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino, uint32_t chunk_in
     if (!ex)
         return EFS_ERR_INVAL;
     if (export_is_sharded_root(ex)) {
-        struct efs_export *tab = efs_export_table_for_chunk(ex, ino,
-                                                           chunk_index);
+        struct efs_export *tab = chunk_tab_peek(ex, ino, chunk_index);
         if (tab && tab != ex)
             return efs_export_get_chunk(tab, ino, chunk_index, out);
     }
@@ -3608,6 +3640,102 @@ void efs_export_compact(struct efs_export *ex)
             if (ex->shard_tabs[s])
                 compact_one_tab(ex->shard_tabs[s]);
     }
+}
+
+struct tab_age {
+    uint32_t shard;
+    uint64_t tick;
+};
+
+static int tab_age_cmp(const void *a, const void *b)
+{
+    const struct tab_age *x = a, *y = b;
+
+    if (x->tick != y->tick)
+        return x->tick < y->tick ? -1 : 1;
+    return x->shard < y->shard ? -1 : (x->shard > y->shard);
+}
+
+uint32_t efs_export_tabs_by_age(const struct efs_export *ex, uint32_t *out,
+                                uint32_t n)
+{
+    struct tab_age *ages;
+    uint32_t cnt = 0, i;
+
+    if (!ex || !out || !n || !ex->shard_tabs || ex->shard_tab_cap < 2)
+        return 0;
+    ages = malloc((size_t)ex->shard_tab_cap * sizeof(*ages));
+    if (!ages)
+        return 0;
+    for (i = 1; i < ex->shard_tab_cap; i++) {
+        if (!ex->shard_tabs[i])
+            continue;
+        ages[cnt].shard = i;
+        ages[cnt].tick = __atomic_load_n(&ex->shard_tabs[i]->shard_tick,
+                                         __ATOMIC_RELAXED);
+        cnt++;
+    }
+    qsort(ages, cnt, sizeof(*ages), tab_age_cmp);
+    if (cnt > n)
+        cnt = n;
+    for (i = 0; i < cnt; i++)
+        out[i] = ages[i].shard;
+    free(ages);
+    return cnt;
+}
+
+int efs_export_tab_for_each_ino(struct efs_export *ex, uint32_t shard,
+                                int (*cb)(efs_ino_t ino, void *arg),
+                                void *arg)
+{
+    struct efs_export *tab;
+    uint64_t i, n;
+    int rc;
+
+    if (!ex || !cb || shard == 0 || !ex->shard_tabs ||
+        shard >= ex->shard_tab_cap)
+        return 0;
+    tab = ex->shard_tabs[shard];
+    if (!tab)
+        return 0;
+    n = tab->inode_count;
+    if (n > tab->inode_capacity)
+        n = tab->inode_capacity;
+    for (i = 0; i < n; i++) {
+        struct efs_inode_mem *p = inode_at(tab, i);
+
+        if (p && p->ino && (rc = cb(p->ino, arg)) != 0)
+            return rc;
+    }
+    for (i = 0; i < tab->chunk_count; i++) {
+        if (tab->chunks[i].ino && (rc = cb(tab->chunks[i].ino, arg)) != 0)
+            return rc;
+    }
+    return 0;
+}
+
+uint64_t efs_export_drop_tab(struct efs_export *ex, uint32_t shard)
+{
+    struct efs_export *tab;
+    uint64_t est, i;
+
+    if (!ex || shard == 0 || !ex->shard_tabs || shard >= ex->shard_tab_cap)
+        return 0;
+    tab = ex->shard_tabs[shard];
+    if (!tab)
+        return 0;
+    est = tab->staged_est;
+    /* Chunk recs leave: the W20 present count on a row that lives on
+     * another tab (or the root) must not keep counting them. A row on
+     * this tab dies with it. */
+    for (i = 0; i < tab->chunk_count; i++) {
+        if (tab->chunks[i].ino)
+            efs_export_present_add(ex, tab->chunks[i].ino, 0, -1);
+    }
+    ex->shard_tabs[shard] = NULL;
+    efs_export_free(tab); /* leaves the root's staged_total */
+    free(tab);
+    return est;
 }
 
 uint32_t efs_export_shard_of(efs_ino_t ino, uint32_t shard_bits)
