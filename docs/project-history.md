@@ -25,6 +25,69 @@ time, so the same day can appear in several places.
 
 ---
 
+## Oct 1 2026 02:50Z — the last two mechanical items of the 21:10Z review: pin release on a landed PUT, dirty-list close flush
+
+Asked what else from the perf review was cheap, the two client-side
+items were (4) the dcache row pin and (5) the per-close chunk walk; the
+user asked for both and does the ecopy testing. In tree as `b6c1712d`,
+clients fcstor007–015 remounted 02:43Z (`dep366`), fstor007's `/tmp/efs`
+rebuilt (`fst367`); servers unchanged.
+
+(4) `dcache_pin_add` ran on every store (`dcache_init`, `dcache_fill`,
+the re-dirty paths), but `dcache_pin_release` ran only in
+`dcache_drop_locked` and in one partial-write branch of
+`dcache_flush_slot_inner`. A full-overwrite PUT stole the body and left
+the body-less node pinned; the append branch kept the published body
+and its pin. So every file this client had written stayed pinned for as
+long as its slot lived: the staging evictor could not evict its row
+("staging table over EFS_CLIENT_META_MB with nothing evictable;
+growing"), and the Oct 1 close predicate (`efs_ino_has_unpublished`,
+which counts the pin) never short-circuited for a written file — during
+ecopy's copy phase every close still took the full path. The pin's own
+comment says losing it is a bounded-cache miss, never corruption, and
+after a landed PUT `dcache_put_now` has already put the chunk in the
+dirty set, which keeps the row staged until the REPORT consumes it. So
+`dcache_flush_keep` (the close/fsync pipeline's completion) and
+`dcache_flush_slot_inner` (reclaim) now release the pin of a clean entry
+after a successful PUT, body kept or not. An entry a write re-dirtied
+mid-PUT was re-pinned by `dcache_set_dirty` + `dcache_pin_add` (the
+"already held mid-flush" path) and is left alone; the failure paths
+re-dirty before the release point and keep their pin.
+
+(5) `dcache_flush_ino_pass` read the staged row's size under `idx_mu`,
+then called `dcache_steal_dirty(ino, ci)` for every `ci` up to
+`size/128 KiB` — two mutexes and a chain walk per chunk, dirty or not —
+and fell back to all 65536 slots once `nci > DCACHE_SLOTS` (a file ≥
+8 GiB). It now asks `dcache_dirty_cis_of` for the inode's chunk indexes
+on the 64 per-shard dirty lists (W18's index; `realloc`-grown array,
+sorted so PUTs go out in chunk order) and steals exactly those. For the
+lists to be a complete index, dirty ⟹ on_dirty has to hold everywhere.
+It did except in the reclaim pop (`dcache_reclaim_main`), which
+unlinked an entry while leaving it dirty so a second reclaim thread
+would not take it; a close racing that pop would not have seen the
+chunk and its REPORT would have shipped without it (the chunk then
+reached the server on the reclaim's PUT, visible only after a later
+REPORT). The pop now sets `reclaim_claimed` and leaves the entry
+linked; other reclaim threads skip claimed entries; the claim clears in
+`dcache_dirty_link`/`dcache_dirty_unlink` (the snapshot's unlink) and,
+if the flush did not reach the entry, right after `dcache_flush_slot`
+returns. `dcache_flush_all_slots` lost its `have_only` branch and is
+reclaim-all only.
+
+Built clean on fcstor007 (`bld365`, no warnings; unit tests OK). Gate on
+the new client: posix jobs=1 fcstor007 200/201 (mmap SKIP, 0 EFS bugs,
+`results/posix/20261001-024420`); posix2 fcstor007/008 63/63
+(`results/posix2/20261001-024506`); `mtime_repro.py` rows
+`ecopy-order*`, `rsync-order`, `fsync-between` all 1380661863
+(`~/efs-runs/rec-mt371.log`; the gate script's `scp` to fcstor007 hung
+without the wrapper's agent — run the repro from the NFS home instead).
+
+What the user's ecopy profile should show: `dcache_steal_dirty` and
+`dcache_flush_all_slots` gone from the top; `g_dcache_pin_count` (gdb)
+near the number of files with in-flight writes rather than every file
+written; `stage-evict: tabs … pinned=` small. Open from the review: N3
+chain-length walk, the D18 A/B, N4 server trace.
+
 ## Oct 1 2026 02:25Z — D18 decided and implemented: the staging evictor drops whole cold tabs
 
 The 21:10Z review put the client staging evictor at 31.6 % of a 62 min

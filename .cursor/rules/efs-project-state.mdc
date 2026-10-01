@@ -99,13 +99,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   **UP 19:43Z Sep 30: servers `44073b77249b-dirty`** (rolled `--all`,
   no `--perf`, no `--strace`, `~/efs-runs/roll350.log` ROLL_OK; HEAD
   `44073b77`, span identity = (gen, off, len), learning below).
-  **Clients fcstor007–015 remounted RDMA 02:22Z Oct 1 on `f073e136`**
-  (`dep360`, all `fuse.efs-fuse` MOUNT_OK, one efs-fuse each; D18
-  cold-tab eviction, learning below; before that 01:58Z `65237a59`,
-  close predicate + dcache chain reuse); fstor007's `/tmp/efs` rebuilt
-  on `f073e136` for the user's `client.sh` (`fst362`, no efs-fuse was
-  running). Posix jobs=1 fcstor007 on it: **200/201** (mmap SKIP) in
-  45 s (`results/posix/20261001-022434`). The server build is still
+  **Clients fcstor007–015 remounted RDMA 02:43Z Oct 1 on `b6c1712d`**
+  (`dep366`, all `fuse.efs-fuse` MOUNT_OK, one efs-fuse each; pin
+  release on landed PUT + dirty-list close flush, learning below;
+  before that 02:22Z `f073e136` D18 cold-tab eviction, 01:58Z
+  `65237a59` close predicate + chain reuse); fstor007's `/tmp/efs`
+  rebuilt on `b6c1712d` for the user's `client.sh` (`fst367`, no
+  efs-fuse was running). Posix jobs=1 fcstor007 on `f073e136`:
+  **200/201** (mmap SKIP) in 45 s (`results/posix/20261001-022434`);
+  on `b6c1712d`: posix **200/201** (`results/posix/20261001-024420`),
+  posix2 **63/63** (`results/posix2/20261001-024506`), mtime gate
+  rows all 1380661863. The server build is still
   `44073b77` — client-only changes, no roll needed. **IO-500 debug
  9×4 18:35Z (`results/io500/20260930-183504-rdma`): every phase
  completed, 0 fsync failures, 0 read errors, cold hardscan of the
@@ -866,10 +870,19 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   `ecopy --verify`. **Fixed `65237a59` (Oct 1, clients fcstor007–015
   + fstor007 `/tmp/efs`):** `efs_append_flush_report` returns at once
   when `efs_ino_has_unpublished` (wb pending, dirty set, dcache pin —
-  the utimens predicate, shared) is 0. A dcache pin is released only
-  on drop or reclaim of the clean body, not when the PUT lands, so a
-  file this client wrote still takes the full path while its slot
-  lives. Same commit: `dcache_store`/`dcache_store_owned` reuse a
+  the utimens predicate, shared) is 0. **`b6c1712d` (Oct 1):** the
+  dcache row pin is released when a PUT lands and the entry is clean
+  (`dcache_flush_keep`, `dcache_flush_slot_inner`; the dirty set holds
+  the row until the REPORT) — before, `dcache_pin_release` ran only on
+  drop/reclaim, so every file this client wrote stayed pinned
+  (unevictable, "has unpublished") while its slot lived. Same commit:
+  `dcache_flush_ino_pass` flushes the inode's entries found on the
+  per-shard dirty lists (`dcache_dirty_cis_of`) instead of walking
+  `ci = 0..size/128 KiB`; the reclaim pop sets `reclaim_claimed`
+  instead of unlinking a still-dirty entry, so dirty ⟹ on_dirty holds
+  and the lists are a complete index (an unlinked-but-dirty entry was
+  invisible to a close racing the pop). `dcache_flush_all_slots` is
+  reclaim-all only. Prior commit: `dcache_store`/`dcache_store_owned` reuse a
   dead chained node (`dcache_chain_reuse`) instead of growing the
   chain — the reclaim flush zeroes ino/body of a chained node and
   nothing reused or unlinked it. Chain length was never counted
