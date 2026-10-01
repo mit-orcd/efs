@@ -2257,10 +2257,16 @@ struct dcache_ent {
     uint32_t object_delta_base_n;
     uint64_t object_delta_base_seq;
     struct dcache_ent *next;
-    /* W18: per-shard dirty list. on_dirty is 1 while linked. */
+    /* W18: per-shard dirty list. on_dirty is 1 while linked. Every dirty
+     * entry is on its list (dirty ⟹ on_dirty): the close path reads the
+     * lists as the index of an inode's dirty chunks. A reclaim thread
+     * that picked an entry sets reclaim_claimed instead of unlinking it,
+     * so the other threads skip it and the index stays complete; the
+     * claim clears with the next link/unlink. */
     struct dcache_ent *dirty_next;
     struct dcache_ent *dirty_prev;
     int on_dirty;
+    uint8_t reclaim_claimed;
     /* 1 = present_extra on the inode counts this slot (not in the table). */
     uint8_t present_extra;
 };
@@ -2570,6 +2576,7 @@ static void dcache_dirty_link(struct dcache_ent *e, uint32_t slot)
         e->dirty_next->dirty_prev = e;
     g_dcache.dirty_head[sh] = e;
     e->on_dirty = 1;
+    e->reclaim_claimed = 0;
 }
 
 static void dcache_dirty_unlink(struct dcache_ent *e, uint32_t slot)
@@ -2588,6 +2595,7 @@ static void dcache_dirty_unlink(struct dcache_ent *e, uint32_t slot)
     e->dirty_next = NULL;
     e->dirty_prev = NULL;
     e->on_dirty = 0;
+    e->reclaim_claimed = 0;
 }
 
 static void dcache_set_dirty(struct dcache_ent *e, uint32_t slot)
@@ -4268,12 +4276,17 @@ static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
     /* Full-chunk overwrite: the body was the PUT buffer. Leave it dropped.
      * Append and partial writes still install, so a later close does not
      * rebuild from a short size and zero the prefix. */
-    if (drop_body) {
-        pthread_mutex_unlock(mu);
-        return 0;
-    }
-    if (e && e->ino == ino && e->ci == ci)
+    if (!drop_body && e && e->ino == ino && e->ci == ci)
         dcache_install_image(e, copy, len, seq);
+    /* The PUT landed and dcache_put_now put the chunk in the dirty set,
+     * which keeps the row staged until the REPORT. A clean slot (body
+     * kept as cache, or the body-less node that names the object) no
+     * longer needs the row pin: with it, every file this client wrote
+     * stayed unevictable and "has unpublished" for as long as the slot
+     * lived (Oct 1 2026). A write that re-dirtied the entry mid-PUT
+     * re-pinned it (dcache_set_dirty + dcache_pin_add); leave that. */
+    if (e && e->ino == ino && e->ci == ci && !e->dirty)
+        dcache_pin_release(e);
     pthread_mutex_unlock(mu);
     return 0;
 }
@@ -4568,6 +4581,10 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             e->ino = 0;
             e->ci = 0;
         }
+        /* Clean after a landed PUT: the dirty set holds the row until
+         * the REPORT; the slot's pin is not needed (see dcache_flush_keep). */
+        if (e->ino == ino && e->ci == ci && !e->dirty)
+            dcache_pin_release(e);
         efs_buf_free(copy, len);
         e = e->next;
     }
@@ -4584,116 +4601,93 @@ static int dcache_flush_slot(uint32_t s, efs_ino_t only_ino, int have_only)
     return dcache_flush_slot_inner(s, only_ino, have_only);
 }
 
-/* Close/truncate used to walk all 65536 slots (and 64 shard locks) per
- * file. ecopy hit that on flush+release+ftruncate (~200k locks/file).
- * Chunks are dense from 0, so only those hashed slots can hold this ino. */
-static int dcache_flush_all_slots(efs_ino_t only_ino, int have_only)
+/* Reclaim-all / shutdown: every slot, every inode. The per-inode flush
+ * (close, fsync, truncate) is dcache_flush_ino_pass below. */
+static int dcache_flush_all_slots(void)
 {
     int rc = EFS_OK;
+    uint32_t i;
+
     dcache_ensure();
     /* Reclaim (have_only=0) skips unpublished have_base=0 slots. It
      * takes shard_io only to snapshot a dirty entry, then drops it
-     * before the fragment GET. fsync (have_only=1) pipelines the PUTs. */
-    if (!have_only || !only_ino) {
-        uint32_t i;
+     * before the fragment GET. */
+    for (i = 0; i < DCACHE_SLOTS; i++) {
+        int prc = dcache_flush_slot(i, 0, 0);
 
-        for (i = 0; i < DCACHE_SLOTS; i++) {
-            int prc = dcache_flush_slot(i, only_ino, have_only);
-
-            if (prc != EFS_OK && rc == EFS_OK)
-                rc = prc;
-        }
-        return rc;
+        if (prc != EFS_OK && rc == EFS_OK)
+            rc = prc;
     }
-    {
-        struct flush_pipe pipe;
-        uint32_t i;
-
-        flush_pipe_init(&pipe);
-        for (i = 0; i < DCACHE_SLOTS && pipe.rc == EFS_OK; i++) {
-            for (;;) {
-                pthread_mutex_t *io = dcache_io_mu(i);
-                pthread_mutex_t *mu = dcache_mu(i);
-                struct dcache_ent *e;
-                uint32_t ci;
-                uint8_t *copy = NULL;
-                uint32_t len = 0;
-                uint64_t bg = 0, seq = 0;
-                uint32_t doff = 0, dlen = 0;
-                int drop_body = 0;
-                int st;
-
-                pthread_mutex_lock(io);
-                pthread_mutex_lock(mu);
-                for (e = &g_dcache.e[i]; e; e = e->next) {
-                    if (e->dirty && e->data && e->ino == only_ino)
-                        break;
-                }
-                if (!e) {
-                    pthread_mutex_unlock(mu);
-                    pthread_mutex_unlock(io);
-                    break;
-                }
-                ci = e->ci;
-                pthread_mutex_unlock(mu);
-                pthread_mutex_unlock(io);
-                struct efs_chunk_entry obs;
-                int have_obs = 0;
-
-                st = dcache_steal_dirty(only_ino, ci, &copy, &len, &bg, &seq,
-                                        &doff, &dlen, &drop_body, &obs,
-                                        &have_obs);
-                if (st < 0) {
-                    pipe.rc = st;
-                    break;
-                }
-                if (st > 0) {
-                    if (flush_pipe_add(&pipe, only_ino, ci, copy, len, bg,
-                                       seq, doff, dlen, drop_body,
-                                       have_obs ? &obs : NULL) != EFS_OK)
-                        break;
-                } else {
-                    break;
-                }
-            }
-        }
-        (void)flush_pipe_drain(&pipe);
-        return pipe.rc;
-    }
+    return rc;
 }
 
+static int cmp_u32(const void *a, const void *b)
+{
+    uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
+
+    return x < y ? -1 : x > y;
+}
+
+/* The dirty chunk indexes of one inode, read from the per-shard dirty
+ * lists (W18's index). Every dirty entry is on its list (the reclaim pop
+ * claims instead of unlinking), so this is exact at collection time; a
+ * write landing after it is the caller's race, as before. Sorted so the
+ * PUTs go out in chunk order. Returns the count, or <0 on NOMEM. */
+static int dcache_dirty_cis_of(efs_ino_t ino, uint32_t **out)
+{
+    uint32_t *cis = NULL, n = 0, cap = 0;
+    int sh;
+
+    for (sh = 0; sh < DCACHE_SHARDS; sh++) {
+        struct dcache_ent *e;
+
+        pthread_mutex_lock(&g_dcache.shard[sh]);
+        for (e = g_dcache.dirty_head[sh]; e; e = e->dirty_next) {
+            if (e->ino != ino || !e->dirty || !e->data)
+                continue;
+            if (n == cap) {
+                uint32_t ncap = cap ? cap * 2 : 64;
+                uint32_t *grown = realloc(cis, (size_t)ncap * sizeof(*cis));
+
+                if (!grown) {
+                    pthread_mutex_unlock(&g_dcache.shard[sh]);
+                    free(cis);
+                    return EFS_ERR_NOMEM;
+                }
+                cis = grown;
+                cap = ncap;
+            }
+            cis[n++] = e->ci;
+        }
+        pthread_mutex_unlock(&g_dcache.shard[sh]);
+    }
+    if (n > 1)
+        qsort(cis, n, sizeof(*cis), cmp_u32);
+    *out = cis;
+    return (int)n;
+}
+
+/* Until Oct 1 2026 this walked ci = 0 .. size/128 KiB from the staged
+ * row (one chain walk under two mutexes per chunk, dirty or not) and
+ * every slot once the file was 8 GiB; it was 36.9 % of the client's
+ * cycles during an ecopy --verify. Now it costs the inode's dirty
+ * entries, which at close are the few the writeback did not take. */
 static int dcache_flush_ino_pass(efs_ino_t ino)
 {
-    uint32_t cs = data_chunk_size();
-    uint32_t nci = 1;
-    struct efs_inode inode;
     struct flush_pipe pipe;
-    uint32_t ci;
-    /* idx_mu: create dual-apply reindexes (idx_init frees ino_keys).
-     * Close without this lock raced that free → SIGSEGV → ENOTCONN
-     * mid-ImageNet copy on node9901. */
-    pthread_mutex_lock(&g_client.idx_mu);
-    int have = (cs && efs_export_get_inode(&g_client.export, ino, &inode) == 0 &&
-                inode.size > 0);
-    pthread_mutex_unlock(&g_client.idx_mu);
-    if (have) {
-        uint64_t n = (inode.size + (uint64_t)cs - 1) / (uint64_t)cs;
-        if (n > UINT32_MAX)
-            return dcache_flush_all_slots(ino, 1);
-        nci = (uint32_t)n;
-        if (nci == 0)
-            nci = 1;
-    }
-    /* Hashed slots are exact for dense ci 0..nci-1. Walking all 65536
-     * slots was the old fallback once nci > 4096 (a 512 MiB file) and
-     * made 1G fsync take tens of seconds. Only scan the table when
-     * hashing every ci would touch more slots than exist. */
-    if (nci > DCACHE_SLOTS)
-        return dcache_flush_all_slots(ino, 1);
+    uint32_t *cis = NULL;
+    int ncis, i;
 
     dcache_ensure();
+    ncis = dcache_dirty_cis_of(ino, &cis);
+    if (ncis < 0)
+        return ncis;
+    if (ncis == 0)
+        return EFS_OK;
     flush_pipe_init(&pipe);
-    for (ci = 0; ci < nci && pipe.rc == EFS_OK; ci++) {
+    for (i = 0; i < ncis && pipe.rc == EFS_OK; i++) {
+        uint32_t ci = cis[i];
+
         if (efs_client_rpc_deadline_ms() &&
             efs_client_rpc_past_deadline()) {
             pipe.rc = EFS_ERR_BUSY;
@@ -4718,6 +4712,7 @@ static int dcache_flush_ino_pass(efs_ino_t ino)
             break;
     }
     (void)flush_pipe_drain(&pipe);
+    free(cis);
     return pipe.rc;
 }
 
@@ -4743,7 +4738,7 @@ int efs_dcache_flush_ino(efs_ino_t ino)
 
 int efs_dcache_flush_all(void)
 {
-    return dcache_flush_all_slots(0, 0);
+    return dcache_flush_all_slots();
 }
 
 static uint64_t dcache_base_gen_of(efs_ino_t ino, uint32_t ci, uint64_t fallback)
@@ -5147,6 +5142,8 @@ static void *dcache_reclaim_main(void *arg)
         /* W18: pop a dirty have_base slot instead of scanning 65536. */
         for (int i = 0; i < DCACHE_RECLAIM_SCAN; i++) {
             uint32_t s = 0;
+            efs_ino_t pino = 0;
+            uint32_t pci = 0;
             int found = 0;
             int sh;
 
@@ -5158,10 +5155,18 @@ static void *dcache_reclaim_main(void *arg)
 
                 pthread_mutex_lock(&g_dcache.shard[sh]);
                 for (e = g_dcache.dirty_head[sh]; e; e = e->dirty_next) {
-                    if (!e->dirty || !e->data || !e->have_base)
+                    if (!e->dirty || !e->data || !e->have_base ||
+                        e->reclaim_claimed)
                         continue;
+                    /* Claim, do not unlink: the entry stays dirty until
+                     * the flush snapshots it, and dcache_flush_ino_pass
+                     * reads these lists as the index of an inode's dirty
+                     * chunks. An unlinked-but-dirty entry was invisible
+                     * to a close racing this pop (Oct 1 2026). */
                     s = dcache_slot(e->ino, e->ci);
-                    dcache_dirty_unlink(e, s);
+                    pino = e->ino;
+                    pci = e->ci;
+                    e->reclaim_claimed = 1;
                     found = 1;
                     break;
                 }
@@ -5171,6 +5176,19 @@ static void *dcache_reclaim_main(void *arg)
                 break;
             npopped++;
             (void)dcache_flush_slot(s, 0, 0);
+            /* The snapshot's unlink cleared the claim. If the flush did
+             * not reach the entry (an early error), release the claim so
+             * another pass can take it. */
+            {
+                pthread_mutex_t *mu = dcache_mu(s);
+                struct dcache_ent *e;
+
+                pthread_mutex_lock(mu);
+                for (e = &g_dcache.e[s]; e; e = e->next)
+                    if (e->ino == pino && e->ci == pci && e->reclaim_claimed)
+                        e->reclaim_claimed = 0;
+                pthread_mutex_unlock(mu);
+            }
         }
         pthread_mutex_lock(&g_reclaim.mu);
         g_reclaim.active--;
