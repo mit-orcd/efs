@@ -96,11 +96,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Only live cluster: port 19810**, fcstor003–006 = node 1–4 =
   172.16.223.57–60, `/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA
   (`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`).
- **UP 19:43Z Sep 30: servers `44073b77249b-dirty`** (rolled `--all`,
- no `--perf`, no `--strace`, `~/efs-runs/roll350.log` ROLL_OK; HEAD
- `44073b77`, span identity = (gen, off, len), learning below). Clients
- fcstor007–015 were not remounted (still the 18:32Z tree, `dep338`)
- (`dep338`, all `fuse.efs-fuse`, one efs-fuse each). **IO-500 debug
+  **UP 19:43Z Sep 30: servers `44073b77249b-dirty`** (rolled `--all`,
+  no `--perf`, no `--strace`, `~/efs-runs/roll350.log` ROLL_OK; HEAD
+  `44073b77`, span identity = (gen, off, len), learning below).
+  **Clients fcstor007–015 remounted RDMA 01:58Z Oct 1 on `65237a59`**
+  (`dep353`, all `fuse.efs-fuse` MOUNT_OK, one efs-fuse each; close
+  predicate + dcache chain reuse, learning below); fstor007's
+  `/tmp/efs` rebuilt on the same commit for the user's `client.sh`
+  (`fst354`). The server build is still `44073b77` — client-only
+  change, no roll needed. **IO-500 debug
  9×4 18:35Z (`results/io500/20260930-183504-rdma`): every phase
  completed, 0 fsync failures, 0 read errors, cold hardscan of the
  36 GB hard file bad=0** — easy-write 4.563 GiB/s, mdtest-easy-write
@@ -844,11 +848,18 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   `dcache_steal_dirty` per chunk index under the append stripe, on
   read-only opens and dup'd fds too, and walks all 65536 slots once
   the file is ≥ 8 GiB. It was 36.9 % of the client's cycles during an
-  `ecopy --verify`. `efs_append_flush_report` has no "anything
-  unpublished?" predicate (the utimens path has one). Documented, not
-  changed. Hypothesis in the same SUMMARY: dcache slot chains keep
-  dead nodes (`efs_dcache_yield_extra` = one find = 6.6 %); count
-  them with gdb before touching it.
+  `ecopy --verify`. **Fixed `65237a59` (Oct 1, clients fcstor007–015
+  + fstor007 `/tmp/efs`):** `efs_append_flush_report` returns at once
+  when `efs_ino_has_unpublished` (wb pending, dirty set, dcache pin —
+  the utimens predicate, shared) is 0. A dcache pin is released only
+  on drop or reclaim of the clean body, not when the PUT lands, so a
+  file this client wrote still takes the full path while its slot
+  lives. Same commit: `dcache_store`/`dcache_store_owned` reuse a
+  dead chained node (`dcache_chain_reuse`) instead of growing the
+  chain — the reclaim flush zeroes ino/body of a chained node and
+  nothing reused or unlinked it. Chain length was never counted
+  (`efs_dcache_yield_extra` = one find = 6.6 % was the evidence);
+  the gdb walk in the review SUMMARY still applies if it stays hot.
 - **`st_blocks` is 0 for every regular file this client did not
  write** (`du` 52K for 3.8 TB = 103 symlinks × 512 B; ecrawl
  `files_sparse_heuristic` = nearly all). `inode_allocated_bytes`
