@@ -1,6 +1,0 @@
-Traceback (most recent call last):
-  File "/tmp/efs/tests/stress/unlink_storm_worker.py", line 86, in <module>
-    sys.exit(main())
-  File "/tmp/efs/tests/stress/unlink_storm_worker.py", line 28, in main
-    with open(p, "w") as f:
-FileExistsError: [Errno 17] File exists: '/tmp/efs/mnt/ustorm-fcstor010-1787675003/12/312'

@@ -27,10 +27,9 @@ elsewhere in the tree that describes `g_server->lock`, shard tabs,
 `EFS_INO_RAM_MB`, extras catchup or `meta-rebuild` is history.
 
 What is left is measured performance and harness work, ordered in
-[START-HERE §1a](arch/START-HERE.md). The four design decisions that queue
-is currently stopped on (W13 background compaction, W11 chunked
-InstallSnapshot, W9 client-cache bound, W10 RDMA gate) each carry a
-recommendation, the reason, and the steps there, under "Decisions pending".
+[START-HERE §1a](arch/START-HERE.md). Design choices the spec did not make
+are listed there under "Decisions — taken and pending"; the taken ones
+(D1–D13, D18–D20, D24) are implemented, the pending ones are asks.
 
 ## Parked: server-side `.stats` / `.find` refresh
 
@@ -128,7 +127,8 @@ POSIX layers 1–3 exist (`tests/posix/posix_suite.py` 201 tests,
 `posix_2client.py` 63). They cover
 syscalls, peer visibility and same-file races. Not covered:
 
-- **Layer 4 fault injection** (no harness yet): crash after `fsync`; kill
+- **Layer 4 fault injection** (`tests/faults/` is the start of it, not in
+  `make test`; see `tests/faults/README.md`): crash after `fsync`; kill
   between EC/publish stages; degraded read and heal with one node down; silent
   checksum repair of a corrupted fragment; partition/fencing, including a
   leftover client that must not publish onto a fresh `mkfs`; lock-holder crash;

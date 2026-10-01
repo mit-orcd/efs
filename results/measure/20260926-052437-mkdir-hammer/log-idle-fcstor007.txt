@@ -1,3 +1,0 @@
-ERR fcstor007 p0 rmdir-own ENOTEMPTY
-DONE fcstor007 p0 n=598 err=0 p50=12.92 p90=13.71 p99=57.99 max=60.00 sum=5.012
-HOST_DONE fcstor007 bad_procs=0

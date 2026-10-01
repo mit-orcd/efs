@@ -1,5 +1,0 @@
-[same-parent] clients=1 procs=1 rounds=30 parent=/tmp/efs-mount/spstorm-20260921-134608 -> /home/erbmi1/git/efs/results/measure/20260921-134550-samedir-rate/storm-1x1
-[same-parent] PASS fcstor007 1 procs, slowest 0.7s
-children=0 nlink=2
-RMDIR_OK
-[same-parent] PASS 1×1 procs × 30 rounds in one parent

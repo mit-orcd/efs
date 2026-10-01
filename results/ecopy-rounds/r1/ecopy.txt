@@ -1,5 +1,0 @@
-FSTYPE=fuse.efs-fuse
-ECOPY_EC=124 DUR_MS=61474 FILES=1914 DIRS=77
-FSTYPE=fuse.efs-fuse
-ERR_LINES=0
-/tmp/efs-mount/r1dest/links_and_specials/hardlinks/h000502: futimens: No such file or directory

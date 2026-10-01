@@ -1,3 +1,0 @@
-ptrace_scope=0
-NCHILDREN 410 0.010
-COUNT_RC=0

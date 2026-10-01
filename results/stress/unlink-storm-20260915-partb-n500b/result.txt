@@ -1,6 +1,0 @@
-PASS 9 clients × 500 empty files
-CREATE_OK 44–58s, RM_OK 47–52s, ALIVE. FUSE stayed up.
-Empty creates (no 1-byte payload) because raft pack staging is off and
-a 1-byte write is a 128 KiB chunk; 9×4000 of those ENOSPCs the 1G quota.
-9×4000 empty rmtree exceeded RM_SEC=400 (scratch raft ~90 ms/op under load).
-Harness: TimeoutError must not be caught as OSError; alive marker is empty.

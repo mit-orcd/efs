@@ -1,7 +1,0 @@
-    32.89%         26428  efs-fuse     efs-fuse                   [.] recv_poller
-     6.13%          4999  efs-fuse     [kernel.kallsyms]          [k] entry_SYSCALL_64
-     2.88%          2591  efs-fuse     [kernel.kallsyms]          [k] ptrace_do_notify
-     2.68%          2465  efs-fuse     [kernel.kallsyms]          [k] retbleed_return_thunk
-     2.38%          4606  efs-fuse     efs-fuse                   [.] blake3_hash_many_avx2
-     2.28%          1975  efs-fuse     [kernel.kallsyms]          [k] child_wait_callback
-     1.88%          1707  efs-fuse     [kernel.kallsyms]          [k] __rcu_read_unlock

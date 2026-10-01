@@ -1,4 +1,0 @@
-create   10.1 ms
-create   65.8 ms
-create   72.9 ms
-create  117.6 ms

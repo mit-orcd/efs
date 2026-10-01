@@ -8,14 +8,15 @@ hand back. None of them changes the cluster version; two of them remount
 clients with the **same binary** plus an env var (`EFS_RPC_PROF=1`) and
 remount them plain afterwards.
 
-**Pinned version for this round: servers and clients on
-`b2184a5c7faf-dirty`** (byte-identical source to the §7.2 commit,
-`git log -1 --grep="commutative reductions"`). Every script's pre-flight
-prints the running build; pass `--expect-build b2184a5c7faf-dirty` to
-`tests/preflight.sh` yourself if you want it to refuse anything else. If
-the cluster is on a different build when you start, **stop and say so** —
-do not redeploy to "fix" it (that is a user decision; a redeploy is
-`tests/roll_efsd.sh --all`, START-HERE §1b).
+**Status (Oct 1 2026):** the items these runbooks were written for (W4,
+W6 residuals, W7, W8, W11) are closed; their closing numbers are quoted
+inline below and in START-HERE §1a. The scripts remain the way to
+remeasure the same thing after a change — run the same script, compare
+against the number here. Every script's pre-flight prints the running
+build; pass `--expect-build <id>` to `tests/preflight.sh` to make it refuse
+anything else. If the cluster is on a build you did not expect, **stop and
+say so** — a redeploy is `tests/cluster.sh restart`, and that is the user's
+call.
 
 ## 0. Rules that apply to every runbook
 
@@ -38,7 +39,7 @@ do not redeploy to "fix" it (that is a user decision; a redeploy is
    pre-flight requires an idle cluster (commit rate ≤ 5 entries/s) and the
    other would fail it — and pollute the numbers.
 3. **Start every session with the pre-flight in a screen:**
-   `efs-bg.sh start m-preflight 'bash tests/preflight.sh --expect-build b2184a5c7faf-dirty'`,
+   `efs-bg.sh start m-preflight 'bash tests/preflight.sh'`,
    then read `~/efs-runs/m-preflight.log`. `PREFLIGHT_OK` or stop. The
    scripts run it again internally and abort on FAIL; the output is saved
    as `preflight.txt` in the result dir.
@@ -46,7 +47,7 @@ do not redeploy to "fix" it (that is a user decision; a redeploy is
    command with `request_smart_mode_approval=true` and the verbatim reason.
    Do not split or weaken the command to dodge it.
 5. **Never `pkill -f` / `pgrep -f`** (matches your own ssh). `-x` only.
-   Never `wipe_cluster.sh`, `raft-mkfs`, `pkill -x efsd`, `roll_efsd.sh`
+   Never `wipe_cluster.sh`, `raft-mkfs`, `pkill -x efsd`, `cluster.sh`
    for a measurement. Never start a daemon under strace/perf; attach to
    the running one (the scripts do).
 6. **Deliverable = `SUMMARY.txt` + the raw files, committed under

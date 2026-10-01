@@ -1,6 +1,0 @@
-FAIL (quota)
-9×4000 with 1-byte writes: ENOSPC at ~1500/client.
-Scratch is --quota 1G; raft pack staging is off, so each "x" publishes a 128 KiB chunk.
-9×1500×128KiB ≈ 1.6 GiB logical plus leftover posix/hlstorm trees filled the quota.
-Retried 9×100 with writes: same ENOSPC (statfs bavail=0).
-Follow-up: empty-file 9×4000 (unlink_storm_worker.py create without payload).

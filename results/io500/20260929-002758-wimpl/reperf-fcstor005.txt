@@ -1,1 +1,0 @@
-REPORT_OK fcstor005 1698 samples=

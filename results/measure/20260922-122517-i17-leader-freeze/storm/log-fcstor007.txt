@@ -1,7 +1,0 @@
-ERR fcstor007 p0 r25 mkdir EEXIST
-ERR fcstor007 p0 r25 rmdir ENOENT
-DONE fcstor007 p0 rounds=80 errs=2 secs=38.7
-DONE fcstor007 p2 rounds=80 errs=0 secs=38.7
-DONE fcstor007 p1 rounds=80 errs=0 secs=38.8
-DONE fcstor007 p3 rounds=80 errs=0 secs=38.8
-HOST_DONE fcstor007 bad_procs=1

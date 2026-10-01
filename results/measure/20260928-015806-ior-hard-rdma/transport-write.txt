@@ -1,1 +1,0 @@
-efs: RDMA transport up on mlx5_2 port 1 (lid 2171, 6 x 72 KiB bufs/conn)

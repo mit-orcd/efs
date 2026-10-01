@@ -1,6 +1,0 @@
-# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs-mount 2026-09-16T03:32:52Z
-test	result	detail
-peer_overlap_pwrite_same_range	PASS	
-peer_overlap_pwrite_partial	FAIL	[8192,12288) is not B's exclusive range
-peer_overlap_pwrite_chunk_straddle	FAIL	below-chunk exclusive range not A
-# summary pass=1 fail=2 skip=0 total=3 dur=4.8

@@ -63,13 +63,17 @@ Fragment paths are sharded by inode (five base-10000 segments) so the export
 does not grow one directory per file:
 
 ```text
-data/exports/{export_id}/{d4}/{d3}/{d2}/{d1}/{d0}/{chunk>>10}/{chunk}.{frag}
+data/exports/{export_id}/{d4}/{d3}/{d2}/{d1}/{d0}/{chunk>>10}/{chunk}.{frag}.{generation}
 ```
 
-Inode `2`, chunk `0`, fragment `0` →
-`data/exports/1/0000/0000/0000/0000/0002/0/0.0`. Writes always use this
-layout. Reads/unlinks also try the older flat
-`data/exports/{id}/{ino}/{chunk>>10}/…` path.
+A fragment file is the 64 KiB payload followed by a 4 KiB tail page that
+holds its 32-byte digest (one `O_DIRECT` write; no sidecar `.sum`). Reads
+verify against that tail. Fragments written before Oct 1 2026 have the
+sidecar layout and do not verify; a wipe + `raft-mkfs` is the upgrade.
+
+`--meta-storage <root>` puts `mdraft/` on a root the fragment writers do not
+use. Default is the first `--storage` root; the flag does not move an
+existing `mdraft/`.
 
 ## Auto-rejoin
 
@@ -137,8 +141,10 @@ node — that is what the smoke scripts under `tests/stress/` use.
 
 ## Writer threads and direct I/O
 
-Each `--storage` path has a writer pool (default 8). `--writers 0` runs PUTs
-inline on the connection thread.
+One writer pool is shared across all `--storage` paths; the default thread
+count is `nproc` minus the standing helper threads. `--writers <n>` sets it,
+`--writers 0` runs PUTs inline on the connection thread. New fragments go to
+the path with the shortest writer queue.
 
 Fragment I/O uses the page cache unless you pass `--direct-io` (`O_DIRECT`,
 often better on local NVMe):
@@ -147,6 +153,29 @@ often better on local NVMe):
 ./efsd --node-id 1 --addr 127.0.0.1 --port 17432 \
        --storage /tmp/efs/s1 --direct-io
 ```
+
+## Profiling a server
+
+`efsd --perf` attaches `perf record -g` to itself after it is listening and
+writes `/tmp/efs-perf/efsd.data`; `--strace` does the same with `strace -f
+-tt -T` to `/tmp/efs-perf/efsd.strace`. SIGTERM stops the recorders first
+(that is what writes the perf footer), then the daemon. Never start a
+daemon under an external `strace` and quote its throughput.
+
+## The fcstor test cluster
+
+Everything above is the product. The dedicated test cluster (fcstor003–006
+servers on port 19810, fcstor003–015 clients) has one entry point:
+
+```bash
+bash tests/cluster.sh stop|start|restart [--clients] [--perf] [--strace]
+bash tests/cluster.sh start --fresh        # after tests/wipe_cluster.sh: seed + --join + raft-mkfs
+bash tests/preflight.sh                    # read-only health check, run first
+```
+
+Rules for that cluster (build on the node, never in the NFS home; `pgrep
+-x`, never `-f`; every long command in a screen) are in
+`.cursor/rules/efs-fcstor-deploy.mdc`.
 
 ## FUSE surface
 

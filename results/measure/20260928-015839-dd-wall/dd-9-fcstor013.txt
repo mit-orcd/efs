@@ -1,6 +1,0 @@
-FUSE_CHECK fstype=fuse.efs-fuse
-FUSE_OK
-dd: fsync failed for '/tmp/efs-mount/measure/dd-fcstor013.bin': Input/output error
-dd: closing output file '/tmp/efs-mount/measure/dd-fcstor013.bin': Input/output error
-WALL 309.066
-ls: cannot access '/tmp/efs-mount/measure/dd-fcstor013.bin': No such file or directory

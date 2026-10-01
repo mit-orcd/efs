@@ -1,4 +1,0 @@
-== fcstor009
-report-loop ino=1617642 rounds=1 stale=0 busy=1 ms=8229 rc=-13
-report-loop ino=1617642 rounds=1 stale=0 busy=1 ms=23266 rc=-13
-inode-rpc: dual type=67 exhausted 16 BUSY/STALE retries (10.3 s) -> EBUSY

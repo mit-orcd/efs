@@ -1,4 +1,0 @@
-# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs-mount 2026-09-15T17:38:00Z
-test	result	detail
-peer_creat_excl_race	PASS	
-# summary pass=1 fail=0 skip=0 total=1 dur=1.0

@@ -1,8 +1,0 @@
-file /data1/01/efs/mdraft/log/raft.log size 1828556777, parsed 65536 bytes from offset 1828491241, records {'ENTRY': 253}
-group 0: 253 entries, index 4644806..4645058
-  GC_ACK                     143   56.5%
-  PREPARE                     58   22.9%
-  RESOLVE                     22    8.7%
-  DECIDE                      10    4.0%
-  CREATE                      10    4.0%
-  RMDIR                       10    4.0%

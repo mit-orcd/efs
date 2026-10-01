@@ -1,8 +1,0 @@
-8 GiB dd+fsync own-file, build=b2184a5c7faf-dirty, 2026-09-21. Sep 18: 1=639 4=251 9=202 MiB/s.
-clients  ssh_wall_s    agg_mibs  per_client_min_max_s  sum_rates_mibs  pct_of_ceiling
-1        25.719872786  380.1     21.552/21.552         380.1           2.27
-
-server REPORT timing (efsd report-split lines during each phase; the fsync tail is here):
-1 clients: report-split: 1 lines; pack_ms sum=6922 max=6922; push_ms sum=5943 max=5943; finish_ms sum=1034 max=1034
-
-agg = clients*8 GiB / slowest client dd wall (ssh_wall includes ~4 s ssh+check overhead); sum_rates = sum of per-client 8 GiB/wall. Perf: perf-ddwall-*.txt (PERF=1). Raw: dd-*-*.txt

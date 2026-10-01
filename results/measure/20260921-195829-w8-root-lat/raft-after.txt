@@ -1,1 +1,0 @@
-  group 0 hosted=1 role=LEADER leader=0 term=771 commit=4644723 applied=4644723 voters=0x7 joint=0

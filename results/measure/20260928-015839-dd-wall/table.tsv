@@ -1,4 +1,0 @@
-clients	ssh_wall_s	agg_mibs	per_client_min_max_s	sum_rates_mibs	pct_of_ceiling
-1	9.493338612	947.4	8.646/8.646	947.4	5.67
-4	16.287628708	2310.6	11.329/14.181	2502.1	5.25
-9	326.122892229	INVALID	302.961/309.066	240.4	.54

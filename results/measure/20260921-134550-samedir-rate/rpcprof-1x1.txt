@@ -1,1 +1,0 @@
-fcstor007 RPC-PROF calls=409 checkout_us=1437 send_us=1608 recv_us=1644082 busy_us=0 busy_n=0 checkout_wait_n=0 lookup=247/69617us getattr=41/2252us create=30/70023us setattr=0/0us readdir=0/0us unlink=61/1437305us append=0/0us report=0/0us getchunks=0/0us lookup_path=0/0us

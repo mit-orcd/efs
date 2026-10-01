@@ -1,8 +1,0 @@
-FAIL 9/9 (not a D-state hang)
-Create: 9×4000 empty files OK in 304–358s (~90 ms/create under load).
-rmtree: all 9 hit RM_SEC=400. Worker printed RM_ERR rmtree because
-TimeoutError subclasses OSError and the inner shutil except swallowed
-the alarm (fixed in unlink_storm_worker.py). FUSE waiting=0 after.
-Scratch raft unlink is too slow for 9×4000 in 400s (create already 6 min).
-Scratch follow-up: 9×500 empty files, same RM_SEC.
-NVMe 9×4000 remains the original gate when a 19810 cluster exists.

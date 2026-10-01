@@ -6,9 +6,12 @@ pin covers every open fd, not only ghosts, because local getattr of
 an open file does not refetch. 9-host jobs=1 is 200/201
 (`results/posix/20260927-033723`). Posix 2 is 59/63. The leak gate
 is clean (`results/leaks/20260927-035622`). A cold stat of 1M files
-leveled at 233 MB RSS (`results/measure/20260927-w9-walk`). Where
-this doc and the spec ([architecture.md](architecture.md)) disagree,
-the spec wins.
+leveled at 233 MB RSS (`results/measure/20260927-w9-walk`). **D18 (Oct 1):**
+the per-shard-tab floor sat above the cap, so after the row LRU the
+evictor now drops whole cold tabs whose every ino passes the pin rules
+(`src/client/stage_evict.c`, `evict_cold_tabs`); readers peek and do not
+rebuild a dropped tab. Where this doc and the spec
+([architecture.md](architecture.md)) disagree, the spec wins.
 
 The other three parts of step 12 have landed: low-level (inode-based) FUSE
 (part B), exact self-invalidation with timeouts still 0 (part C), and

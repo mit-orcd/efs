@@ -1,6 +1,0 @@
-FUSE_CHECK fstype=fuse.efs-fuse
-FUSE_OK
-mkdir: cannot create directory ‘/tmp/efs-mount/measure’: Input/output error
-dd: failed to open '/tmp/efs-mount/measure/dd-fcstor007.bin': No such file or directory
-WALL 30.208
-efs-ssh: TIMEOUT after 400s host=fcstor007.ib

@@ -1,4 +1,0 @@
-# posix-2client host_a=fcstor007.ib host_b=fcstor008.ib mnt=/tmp/efs-mount 2026-09-18T00:05:33Z
-test	result	detail
-peer_concurrent_append	FAIL	OSError: [Errno 5] Input/output error
-# summary pass=0 fail=1 skip=0 total=1 dur=61.1

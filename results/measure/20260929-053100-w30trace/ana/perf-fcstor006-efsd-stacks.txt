@@ -1,9 +1,0 @@
-    20.61%        205917  efsd     libc.so.6                [.] __memcmp_avx2_movbe
-    14.76%        146874  efsd     efsd                     [.] merge_scan
-     4.50%         46077  efsd     [kernel.kallsyms]        [k] rep_movs_alternative
-     4.11%         41467  efsd     efsd                     [.] recv_poller
-     2.43%         25248  efsd     [kernel.kallsyms]        [k] clear_page_rep
-     2.41%         26345  efsd     [kernel.kallsyms]        [k] child_wait_callback
-     2.36%         28435  efsd     [kernel.kallsyms]        [k] ptrace_do_notify
-     2.23%         25697  efsd     [kernel.kallsyms]        [k] retbleed_return_thunk
-     1.88%         19926  efsd     [kernel.kallsyms]        [k] entry_SYSCALL_64

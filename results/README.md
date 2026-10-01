@@ -1,7 +1,19 @@
 # efs test results (tracked in git)
 
-This tree records correctness + performance runs so regressions are visible in
-`git log` / `git diff`. Each run gets a UTC `run_id` directory.
+This tree records the correctness and performance runs that a live document
+cites, so a number in a doc can be checked against its raw files. Each run
+gets a UTC `run_id` directory.
+
+## Retention
+
+A `results/<kind>/<run_id>` directory stays only while something outside
+`results/` cites it: `README.md`, `docs/` (excluding `project-history.md`,
+`design-history.md` and the generated `architecture-full.md` /
+`architecture.html`), `.cursor/rules/`, `tests/`, `scripts/`, `tools/`,
+`src/`. Everything else is deleted at the next review (last done Oct 1
+2026: 454 of 517 runs removed). A number that matters goes into
+START-HERE §1a or a rule with its directory named; the narrative goes to
+`docs/project-history.md`, and the directory may then go.
 
 ## Layout
 
@@ -12,23 +24,24 @@ results/
     efs-<host>.tsv          # posix_suite on efs (<host>:/tmp/efs-mount)
     compare-<host>.txt      # compare.py: efs bugs = PASS on XFS, FAIL on efs
   posix2/<run_id>/          # two-client visibility, same three files per pair
+  posixpersist/<run_id>/    # durability across unmount/remount
+  io500/<run_id>-<transport>/   # IO-500 debug runs: result_summary.txt, per-phase txt/csv, launch/preflight
+  measure/<run_id>-<name>/  # tests/measure/*.sh runbooks: SUMMARY.txt + raw files
+  stress/<run_id>-<name>/   # same_parent_storm, unlink_storm, N-1 gates
   perf/<run_id>/            # honest fio matrix: raw.tsv + per-host job logs
+  leaks/<run_id>/           # valgrind memcheck gate output
   nvme/
     history.tsv             # local /data1/01-06 NVMe ceiling (fcstor003-006)
     <run_id>/
       nvme-<host>.tsv       # per-server, per-drive, serial + parallel
       summary.tsv
-  meta/
-    history.tsv             # efs-bench --meta ops/s (read+write phases)
-    <run_id>/
-      meta-<host>-wN.txt    # raw bench output per worker count
-      summary.tsv           # run_id host workers phase rw ops wall_s ops_s
-  leaks/<run_id>/           # valgrind memcheck gate output
+  meta/                     # efs-bench --meta ops/s; recreated by run_tests.sh meta
 ```
 
 ## Running
 
-From the login node (needs ssh access to the test nodes):
+From the login node (needs ssh access to the test nodes; anything over
+10 s goes through `efs-bg.sh start`):
 
 ```bash
 tests/run_tests.sh posix  fcstor007.ib            # POSIX vs XFS baseline
@@ -38,11 +51,13 @@ tests/run_tests.sh meta fcstor007.ib              # efs-bench --meta 1/4/16 work
 tests/run_tests.sh leaks fcstor003.ib             # valgrind gate
 COMMIT=1 tests/run_tests.sh posix                 # + git-commit the results
 
+bash tests/measure/dd_wall.sh                     # 1/4/9-client dd+fsync wall
 bash tests/stress/fio_honest_matrix.sh results/perf/<run_id>-honest
 ```
 
-efs throughput comes from `fio_honest_matrix.sh` only. A `--direct=1` fio
-skips the kernel page cache but **not** the client's userspace dcache, so a
+A write number counts only with the flush in the clock (`dd conv=fsync`,
+fio `--end_fsync=1` without `time_based`). A `--direct=1` fio skips the
+kernel page cache but **not** the client's userspace dcache, so a
 `time_based` run without `end_fsync` measures memory bandwidth, not efs.
 
 `tests/posix/posix_suite.py <dir>` is self-contained and can also run

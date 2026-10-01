@@ -20,6 +20,11 @@ Build and run on the dedicated fcstor test cluster — never Slurm, never the NF
 home (see `.cursor/rules/efs-fcstor-deploy.mdc` for the deploy procedure and
 `.cursor/rules/efs-remote-timeouts.mdc` for timeouts).
 
+`bash tests/preflight.sh` first (read-only: one efsd per server, one build
+ID, both Raft leaders, `commit == applied`, idle commit rate, every mount
+`fuse.efs-fuse`). `tests/cluster.sh stop|start|restart [--clients] [--perf]
+[--strace]` is the only way to bounce the cluster.
+
 `tests/run_tests.sh <cmd>`:
 
 | Command | What it gates |
@@ -34,17 +39,21 @@ home (see `.cursor/rules/efs-fcstor-deploy.mdc` for the deploy procedure and
 
 A timeout is a FAIL, not a skip.
 
-## Honest fio
+## Honest throughput numbers
 
-`tests/stress/fio_honest_matrix.sh` is the only efs throughput harness:
-writes with `--end_fsync=1` and no `time_based`, remount every client before
-reads. A `time_based` fio with `--direct=1` skips the kernel page cache but
-not the client's userspace dcache, so its write column is memory bandwidth.
-Method and the current table live in `.cursor/rules/efs-fio-honest.mdc`; the
-current single-client numbers are in `results/perf/20260917-honest/` and
-`results/perf/20260918-dd-1c/`.
+A write number counts only with the flush inside the clock: `dd bs=1M
+conv=fsync` of a non-zero source (all-zero chunks skip PUTs), or fio with
+`--end_fsync=1` and no `time_based`; read numbers only after a remount of
+every reading client. A `time_based` fio with `--direct=1` skips the kernel
+page cache but not the client's userspace dcache, so its write column is
+memory bandwidth. Method and the number history live in
+`.cursor/rules/efs-fio-honest.mdc`; the current references are in
+START-HERE §1a ("Baselines"). `tests/stress/fio_honest_matrix.sh` is the
+fio form; `tests/measure/*.sh` hold the dd and IOR runbooks.
 
-Sanity check any write number against on-disk `du` of `/data1/0*/efs`.
+Before every number: `findmnt -o FSTYPE /tmp/efs-mount` must print
+`fuse.efs-fuse` and `stat` of the mount must succeed. Sanity check any
+write number against on-disk `du` of `/data1/0*/efs`.
 
 ## Other harnesses
 
@@ -78,6 +87,14 @@ next to the data file under `~/orcd/scratch/efs/perf/` (`efsd-<port>/` or
 ./scripts/client.sh stop /mnt/efs
 ```
 
-To profile a live cluster, attach instead of restarting: `perf record -p
-$(pgrep -x efsd)` and the same for `efs-fuse`. Never restart a daemon under
-`strace` and then quote the throughput.
+On the test cluster `tests/cluster.sh restart --perf [--strace]` does the
+same for the four servers (`/tmp/efs-perf/efsd.data`, `efsd.strace`);
+`cluster.sh stop` SIGTERMs so the perf file gets its footer.
+
+Attaching to a live daemon: `perf record -g -p $(pgrep -x efsd)`. A
+profile taken at mount sees only the initial threads — the client's
+reclaim/put pools are created at the first write, so attach after the I/O
+has started. `perf record -a` is refused at `perf_event_paranoid=1`. Run
+`perf report` on the node that recorded. Never restart a daemon under
+`strace` and then quote the throughput; a traced daemon sits on the strace
+plateau (~100 K lines/s) and the MB/s is a tracer number.

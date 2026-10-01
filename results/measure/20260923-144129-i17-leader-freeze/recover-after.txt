@@ -1,6 +1,0 @@
-  fcstor004: raft-host: txn-recover shard=1504 coord=1504 parts=2 age=16.5s -> ABORT
-  fcstor004: raft-host: txn-recover shard=1504 coord=1504 parts=2 age=16.5s -> ABORT
-  fcstor004: raft-host: txn-recover shard=1504 coord=2911 parts=2 age=16.5s -> COMMIT (resolved)
-  fcstor005: raft-host: txn-recover shard=907 coord=907 parts=2 age=5.6s -> COMMIT (resolved)
-  fcstor005: raft-host: txn-recover shard=1271 coord=1504 parts=2 age=8.9s -> ABORT
-  fcstor005: raft-host: txn-recover shard=2349 coord=2349 parts=2 age=13.5s -> COMMIT (resolved)

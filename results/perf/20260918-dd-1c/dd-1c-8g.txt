@@ -1,7 +1,0 @@
-FUSE_CHECK fuse.efs-fuse
-FUSE_OK
-DD_BEGIN 2026-09-18T04:04:35Z
-DD_END 2026-09-18T04:04:53Z rc=0
-WALL_SEC 18.300  MIB_S 447.7
--rw-r--r-- 1 erbmi1 erbmi1 8589934592 Sep 18 00:04 /tmp/efs-mount/dd-1c/8g.bin
-FUSE_AFTER fuse.efs-fuse

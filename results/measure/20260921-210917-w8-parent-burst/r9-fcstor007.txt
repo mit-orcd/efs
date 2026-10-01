@@ -1,2 +1,0 @@
-OK mkdir=0.103 rmdir=0.146
-rc=0

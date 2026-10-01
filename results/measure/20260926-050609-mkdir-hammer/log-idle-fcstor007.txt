@@ -1,2 +1,0 @@
-DONE fcstor007 p0 n=657 err=0 p50=10.85 p90=11.72 p99=57.65 max=68.94 sum=5.002
-HOST_DONE fcstor007 bad_procs=0

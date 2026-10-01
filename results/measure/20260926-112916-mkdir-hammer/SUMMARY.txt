@@ -1,8 +1,0 @@
-mkdir hammer build=194286c37a4f-dirty wall=45s procs=16 secs=15 2026-09-26T11:30:20Z
-idle (1 proc, fcstor007, 5s): procs=1 mkdir=860 err_lines=0 p50_med=9.48 p50_worst=9.48 p99_med=10.51 p99_worst=10.51 max=15.98
-hammer (16 x 9, 15s, own dir each): procs=144 mkdir=13715 err_lines=3 p50_med=137.52 p50_worst=171.63 p99_med=406.96 p99_worst=1073.00 max=2377.76
-
-obs peaks (us):
-apply_max host=fcstor005 apply_max=1713028 us persist_max=1666 us pump_hold_max=1713690 us applies_in_worst=59 wait_timeouts=0 fin_q=0 fin_done=0
-persist_max host=fcstor004 apply_max=22690 us persist_max=15891 us pump_hold_max=23295 us applies_in_worst=72 wait_timeouts=85 fin_q=34 fin_done=28
-pump_hold_max host=fcstor005 apply_max=1713028 us persist_max=1666 us pump_hold_max=1713690 us applies_in_worst=59 wait_timeouts=0 fin_q=0 fin_done=0

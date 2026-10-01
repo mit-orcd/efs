@@ -1,1 +1,0 @@
-fcstor007: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=00:42:57 

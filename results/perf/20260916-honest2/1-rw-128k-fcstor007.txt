@@ -1,2 +1,0 @@
-FUSE_CHECK fstype= mnt=/tmp/efs-mount
-NOT_FUSE

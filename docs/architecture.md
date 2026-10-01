@@ -1166,44 +1166,14 @@ the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
 a durable replacement is wired would drop metadata durability, so 10.5 is
 ordered ahead of it: durable backends first (gated by re-running the whole
 simulator against them, `efsd` untouched), then the applied SM in-sim, then
-production adoption for the single export. **Status (Sep 6):** 10.5a/b
-and 10.5c-1..8 are gated in-sim; 10.5c-9 (Raft host) and 10.5c-10
-(LOOKUP/GETATTR via ReadIndex + KV) and 10.5c-11 (file CREATE as one
-Raft entry) and 10.5c-12 (MKDIR as a 2-shard txn) and 10.5c-13
-(last-link file UNLINK) and 10.5c-14 (mode/owner SETATTR) and
-10.5c-15 (empty LOCAL RMDIR as a 2-shard txn) and 10.5c-16 (LINK as a
-2-shard txn) and 10.5c-17 (nlink>1 UNLINK as a 2-shard txn) and
-10.5c-18 (utimens inode fence) and 10.5c-19 (same-dir LOCAL file
-RENAME as a 2-shard txn) and 10.5c-20 (READDIR/LOOKUP_PATH via
-ReadIndex + KV) and 10.5c-21 (SETATTR SIZE / chunk-aligned truncate)
-and 10.5c-22 (chunk publish + GETCHUNKS)
-and 10.5c-23 (unaligned truncate tail CAS)
-and 10.5c-24 (cross-group propose: MKFS submit + inode bounce)
-and 10.5c-25 (O_APPEND reserve + resolve-on-report)
-and 10.5c-26 (SYMLINK as CREATE S_IFLNK + publish)
-and 10.5c-27 (same-dir LOCAL directory rename)
-and 10.5c-28 (HASHED dest CREATE)
-and 10.5c-29 (HOLD open-unlinked leases)
-and 10.5c-30 (non-blocking FLOCK grant/release)
-and 10.5c-31 (non-blocking whole-file fcntl)
-and 10.5c-32 (non-blocking fcntl byte ranges)
-and 10.5c-33 (F_GETLK leader read)
-and 10.5c-34 (blocking lock waits: FIFO leader queue)
-and 10.5c-35a (session record + register + establish)
-and 10.5c-35b (real session uuid/epoch on HOLD/FLOCK)
-and 10.5c-35c (revocation barrier: fence + waiter dequeue)
-and 10.5c-35d (append-reservation reclaim on fence as FENCED_HOLE)
-are gated on a
-scratch cluster behind `EFS_MD_RAFT`. **Status (Sep 11): production
-adoption has landed** — `efsd` + `efs-fuse` serve the single export from
-the Raft+KV engine behind `EFS_MD_RAFT`, reads AND writes (every FUSE
-metadata op is a Raft proposal; chunk publish/GETCHUNKS included), gated
-at 198/201 posix solo in 34 s and 193/201 under jobs=16 (commits 3299e89,
-807327a, 495444d; the last is the event-driven pump + eager commit
-broadcast + name-ordered readdir cursor). Remaining: three known-debt
-posix failures (cross-dir rename EINVAL, `.find` unimplemented, the
-report-poisoning EIO flake), then step 11 — cutover of the live table is
-not this work. The KV engine is
+production adoption for the single export. **Status (Oct 1 2026): steps
+0–12 are landed.** The 10.5c slices (listed one by one with their gates in
+[arch/verification.md](arch/verification.md)) were gated behind an
+`EFS_MD_RAFT` flag on a scratch cluster; step 11 (Sep 11) removed the flag
+and deleted the old snapshot / root-2PC engine, so the Raft+KV engine is
+the only metadata engine and every FUSE metadata op is a Raft proposal.
+Current gates: posix suite 1 200/201 (one `MAP_SHARED` SKIP by spec),
+posix2 63/63, 9-host suite 200/201 on every host. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
@@ -1222,16 +1192,11 @@ I16). It costs exactly one ordering rule: a snapshot drops the log prefix, so
 **no snapshot may advance past what the applied KV has durably stored**. The
 KV's own sync mode is therefore a performance choice, not a correctness one.
 
-**Step 1 has a hard prerequisite: the carve-up.** A pure state machine behind
-transport/storage interfaces does not exist today — four files hold ~45% of
-the tree and the state machine is fused with its I/O. So the *concrete* first
-move is **Phase M** in the roadmap: carve the monolith into `raft/ kv/ meta/
-wire/ data/ client/` behind interfaces
-([development.md](arch/development.md)), as behavior-preserving refactor
-gated by the existing suites. It is the dev-cycle lever in its own right
-*and* the thing that makes step 1 possible — the simulator can only reuse a
-state machine that is already pure. Build nothing in steps 2–11 as new
-monolith code; every new component lands inside the carved boundaries.
+**Step 1 had a hard prerequisite: the carve-up (Phase M, complete).** The
+tree is `raft/ kv/ meta/ wire/ data/ client/ server/` behind interfaces
+([development.md](arch/development.md)); the simulator reuses the same
+state machines production runs. Build nothing as new monolith code; every
+new component lands inside the carved boundaries.
 
 The detailed, gated steps live in the [scaling roadmap](scaling-roadmap.md);
 this document is the invariant they are measured against.

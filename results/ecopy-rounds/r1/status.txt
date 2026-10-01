@@ -1,9 +1,0 @@
-  node 1: 172.16.223.57:19810  up  used=154.69 MiB  quota=36.00 TiB (0.0%)  storage(6):
-  node 3: 172.16.223.59:19810  up  used=0 B  quota=36.00 TiB (0.0%)  storage(6):
-  node 4: 172.16.223.60:19810  up  used=0 B  quota=36.00 TiB (0.0%)  storage(6):
-  node 2: 172.16.223.58:19810  up  used=0 B  quota=36.00 TiB (0.0%)  storage(6):
-Heal:
-  node 1: idle  efs-test gen=289
-  node 3: idle  efs-test gen=289
-  node 4: idle  efs-test gen=289
-  node 2: idle  efs-test gen=289

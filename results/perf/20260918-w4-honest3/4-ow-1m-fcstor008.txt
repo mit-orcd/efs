@@ -1,6 +1,0 @@
-FUSE_CHECK fstype=fuse.efs-fuse mnt=/tmp/efs-mount
-FUSE_OK
-ow-1m: (g=0): rw=write, bs=(R) 1024KiB-1024KiB, (W) 1024KiB-1024KiB, (T) 1024KiB-1024KiB, ioengine=psync, iodepth=1
-...
-fio-3.35
-Starting 9 processes

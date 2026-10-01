@@ -1,7 +1,0 @@
-=== RPC ===
-=== fcstor003.ib ===
-RPC-PROF total=65808 report=6373 getattr=0 lookup=17241 create=5570 create_shard=0 setattr=16754 getchunks=0 lookup_path=0 readdir=170
-=== fcstor004.ib ===
-RPC-PROF total=2899 report=32 getattr=0 lookup=0 create=0 create_shard=0 setattr=0 getchunks=2 lookup_path=0 readdir=0
-=== fcstor005.ib ===
-=== fcstor006.ib ===

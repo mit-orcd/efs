@@ -1,5 +1,0 @@
-CALLERS_OK fcstor006 116296
-     7.80%     0.02%            17  [.] host_sender
-     7.11%     0.12%           116  [.] host_pump
-     3.32%     0.01%            11  [.] send_ae
-     3.09%     0.00%             3  [.] try_commit

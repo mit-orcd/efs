@@ -1,9 +1,0 @@
-W3 after HOST_PUB_BATCH_N=2048 + skip get_chunk(base_gen==0)
-8 GiB dd conv=fsync fcstor007 TCP
-WALL_SEC 20.105  MIB_S 407.5  (was 25.830 / 317.2)
-fsync-split ino=31832 flush_ms=5560 report_ms=8329 rc=0
-  (was flush_ms=5663 report_ms=15034)
-
-fcstor004 report-split nrec=65536 pack_ms=1861 push_ms=5582 finish_ms=820 rc=0
-push_ms is still the Raft-log fsync per propose (~32 proposes × ~175 ms).
-Next: N=4096 (808 KiB / entry, still < 1 MiB AE).

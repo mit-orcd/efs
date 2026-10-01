@@ -1,7 +1,0 @@
-Round 5 (SETATTR utimens/chmod/chown: one shard lock, no global)
-
-ecopy futimens was lock_all under g_server->lock per file. SIZE setattr
-(truncate) still uses the old lock_all + fan_drop path.
-
-Fresh mkfs 60s ecopy: FILES=5356 DIRS=100 ≈ 88.5 files/s.
-0 ino_dup. gens 6069×4.

@@ -1,4 +1,0 @@
-  fcstor003 txn-recover lines before: 0
-  fcstor004 txn-recover lines before: 3
-  fcstor005 txn-recover lines before: 2
-  fcstor006 txn-recover lines before: 0

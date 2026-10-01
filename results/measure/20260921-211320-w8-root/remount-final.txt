@@ -1,9 +1,0 @@
-fcstor007: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 
-fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 
-fcstor009: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 
-fcstor010: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 
-fcstor011: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 
-fcstor012: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 
-fcstor013: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 
-fcstor014: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 
-fcstor015: fstype=fuse.efs-fuse MOUNT_OK fuse=1 bin=16:41:19 

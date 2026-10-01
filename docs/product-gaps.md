@@ -5,11 +5,12 @@
 
 This page answers one question: **between here and a filesystem someone could
 actually run, what does not exist?** It is a capability inventory, audited
-against the source on Sep 18 2026 — not against comments or spec prose. A
+against the source on Sep 18 2026 and re-checked Oct 1 2026 — not against
+comments or spec prose. A
 function that exists but is only reachable from tests counts as absent.
 
 It is deliberately separate from [START-HERE §1a](arch/START-HERE.md), which is
-the *near-term work queue* (W1–W12: W1/W2 correctness done, then measured performance and harness gaps).
+the *near-term work queue* (numbered W items, most of them closed).
 Everything here is larger than a queue item and most of it needs a design
 decision first. Nothing on this page is scheduled. Do not start an item here
 without asking.
@@ -85,8 +86,9 @@ Invariant **I25** says every durable fragment is checksummed over identity plus
 payload, and a failing fragment is treated as unavailable and repaired, never
 fed to the decoder. Partially true: the server re-hashes on GET and returns
 NOT_FOUND on mismatch, which correctly keeps bad bytes out of the decoder. But
-client-side verification is off unless `EFS_READ_VERIFY` is set, PUT writes the
-`.sum` sidecar without verifying the payload it just received against it, and
+client-side verification is off unless `EFS_READ_VERIFY` is set, PUT stores
+the digest the client sent (the 4 KiB tail of the fragment file) without
+re-hashing the payload it just received, and
 "never decoded, always repaired" cannot hold while §1.1 is open — a corrupt
 fragment is detected and then nothing repairs it.
 
@@ -115,12 +117,12 @@ parallel filesystem has and efs does not.
 
 | ask | state | note |
 | --- | --- | --- |
-| IOR / mdtest / IO-500 numbers | **9×1 debug** | `results/io500/20260918-debug-9x1/`: easy-write 0.26 GiB/s, hard-write 0.025 GiB/s, mdtest-easy-write 0.053 kIOPS. IOR-hard `-W` 4244 errors (`20260918-hard-w/`). 30s ior aborted on fsync (`20260918-ior-30s-abort/`, nrec=125000 BUSY). 9×4 still open. START-HERE W6. |
+| IOR / mdtest / IO-500 numbers | **9×4 debug, every phase** | `results/io500/20261001-074905-rdma/` (fresh table, Oct 1): easy-write 5.17 GiB/s, hard-write 0.52, mdtest-easy-write 6.2 kIOPS, easy-stat 24.4 kIOPS, hard-read 0.82 with one read error (W38, open). Sep 30 `20260930-183504-rdma/`: 0 read errors, cold hardscan clean. No stonewall-compliant run yet (debug = 1 s stonewall, same-mount reads). |
 | N-1 shared-file writes that are correct | **gated** | §1.5; `peer_shared_pwrite` concurrent 5/5. |
 | per-file / per-directory layout (`lfs setstripe`-style chunk size, EC profile) | absent | export-wide only; the declared 32× small-write amplification has no opt-out. |
 | a client other than FUSE (kernel module, user-space library, MPI-IO ADIO driver) | absent | FUSE-only. libfuse 3.10.2: ≤128 KiB per request, no `FOPEN_PARALLEL_DIRECT_WRITES`; Linux serializes extending direct writes and `O_CREAT` per inode/dir per mount, so many ranks on one node serialize above efs. Already an open item in [§9](architecture.md). |
-| the data path on the fast interconnect | TCP over IPoIB | RDMA is implemented but not the gated default; every ceiling in START-HERE assumes it (W10). |
-| a hardware-relative throughput statement | 3.8 % of one client's 16.7 GB/s (639 MiB/s 8g dd); 4-client 0.46 % of 44 GB/s (251); 9-client 0.37 % (202). Writes share a ceiling and more clients make it worse. | derivation in START-HERE §1a; W4 gate. |
+| the data path on the fast interconnect | **RDMA** (since Sep 28) | `EFS_TRANSPORT=rdma` on the test cluster; zero-copy sends (W39); zero-copy receive is still a design ask. |
+| a hardware-relative throughput statement | 1 client: 1.3–1.5 GB/s write (~8–9 % of 16.7 GB/s), 3.6 GB/s cold read, 6.5 GB/s with four readers. 9 clients: 2.5–2.8 GB/s aggregate write (~6 % of 44 GB/s). | derivation in START-HERE §1a. |
 | MPI-IO hints, collective-buffering guidance, Darshan/instrumentation hooks | absent | — |
 | burst-buffer / tiering / HSM | absent, not designed | flash-only by decision (§1); no policy layer exists either way. |
 
@@ -165,19 +167,15 @@ repair and fencing, and repair and fencing are the things that do not exist.
 
 ## 4. Performance distance
 
-Not a capability gap, but it belongs in "usable product". The measured
-single-client write path is **639 MiB/s** (8 GiB `dd bs=1M conv=fsync`,
-best 724) after START-HERE W3 and **758 MiB/s** (honest fio, 9×2g sw-1m,
-W1). The binding ceilings are the client's 200 Gb/s IPoIB link (≈16.7 GB/s
-logical write after 2+1 EC) and the four hosts' NVMe (≈44–57 GB/s logical)
-— so writes sit at roughly **4 %** of the hardware. Reads reach 4429 MiB/s
-single-client, ~18 % of the link.
-
-4- and 9-client writes **share a ceiling and get worse**: 8 GiB
-`dd+fsync` is 639 → 251 → 202 MiB/s at 1 / 4 / 9 clients (3.8 % /
-0.46 % / 0.37 % of the 16.7 / 44 / 44 GB/s ceilings). W4
-(`results/perf/20260918-w4-honest4/gate.txt`). [§1](architecture.md)
-is unambiguous that a benchmark stopping at a software serialization
-point is by definition an EFS bug — the leftover is REPORT pack+push
-(W3). IO-500 9×1 debug is in (`results/io500/20260918-debug-9x1/`);
-30s stonewall and 9×4 are the rest of W6.
+Not a capability gap, but it belongs in "usable product". Current references
+(Oct 1 2026, RDMA, flush inside the clock; START-HERE §1a has the table):
+one client writes 8 GiB `dd bs=1M conv=fsync` at **1.3–1.5 GB/s** and reads
+a cold 16 GiB file at **3.6 GB/s** (6.5 GB/s with four readers); nine
+clients write **2.5–2.8 GB/s** aggregate. The binding ceilings are the
+client's 200 Gb/s link (≈16.7 GB/s logical write after 2+1 EC) and the four
+hosts' NVMe (≈44 GB/s logical) — so writes sit at roughly **6–9 %** of the
+hardware and single-client reads at ~20 % of the link. [§1](architecture.md)
+is unambiguous that a benchmark stopping at a software serialization point
+is by definition an EFS bug; the current levers are listed in START-HERE
+(read-side zero-copy receive, the per-client `report_mu`, IOR-hard's
+shared-chunk publish rate).

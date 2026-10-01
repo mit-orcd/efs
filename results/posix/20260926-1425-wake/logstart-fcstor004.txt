@@ -1,1 +1,0 @@
-1493 /tmp/efs/efsd.log

@@ -1,6 +1,0 @@
-fcstor003   group 0 hosted=1 role=LEADER leader=0 term=693 commit=4637218 applied=4637218 voters=0x7 joint=0
-fcstor004   group 0 hosted=1 role=FOLLOWER leader=0 term=693 commit=4637218 applied=4637218 voters=0x7 joint=0
-fcstor004   group 2 hosted=1 role=FOLLOWER leader=3 term=321 commit=3319979 applied=3319979 voters=0xe joint=0
-fcstor005   group 0 hosted=1 role=FOLLOWER leader=0 term=693 commit=4637219 applied=4637219 voters=0x7 joint=0
-fcstor005   group 2 hosted=1 role=FOLLOWER leader=3 term=321 commit=3319979 applied=3319979 voters=0xe joint=0
-fcstor006   group 2 hosted=1 role=LEADER leader=3 term=321 commit=3319979 applied=3319979 voters=0xe joint=0

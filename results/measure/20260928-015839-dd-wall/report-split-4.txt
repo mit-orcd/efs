@@ -1,4 +1,0 @@
-fcstor004 report-split nrec=65536 pack_ms=538 push_ms=849 finish_ms=395 rc=0
-fcstor004 report-split nrec=65536 pack_ms=840 push_ms=2039 finish_ms=605 rc=0
-fcstor004 report-split nrec=65536 pack_ms=828 push_ms=2232 finish_ms=215 rc=0
-fcstor004 report-split nrec=65536 pack_ms=881 push_ms=2154 finish_ms=135 rc=0

@@ -1,1 +1,0 @@
-raft-getattr status=0 primary=1 ino=1 mode=040755 nlink=406 size=0 mtime=1790019859

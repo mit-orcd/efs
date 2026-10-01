@@ -1,8 +1,0 @@
-8 GiB dd+fsync own-file, 9 clients only, build=75321297f719-dirty.
-Preflight was PREFLIGHT_OK (group0 0/s, group2 0/s) at the start of this run.
-Correctness: bad=0 (every host FUSE_OK, 8589934592 bytes, no fsync EIO). Zero report rc=-3. 119/128 report-split lines are rc=-13.
-clients  ssh_wall_s    agg_mibs  per_client_min_max_s  sum_rates_mibs  pct_of_ceiling
-9        54.067855338  1477.6    49.761/49.894         1479.5          3.35
-
-server REPORT timing:
-9 clients: report-split: 128 lines; pack_ms sum=38216 max=2789; push_ms sum=29454 max=3983; finish_ms sum=47560 max=4321

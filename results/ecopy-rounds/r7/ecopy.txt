@@ -1,5 +1,0 @@
-fuse.efs-fuse
---- ecopy 60s ---
-ECOPY_EC=124
-FILES=5478 DIRS=91
-SSH_EC=0 WALL=62.1

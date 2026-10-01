@@ -1,2 +1,0 @@
-RPC-PROF total=70519 report=6344 getattr=10712 lookup=11743 create=5552 create_shard=0 getchunks=8 lookup_path=0 readdir=0
-ino_dup=0

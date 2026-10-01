@@ -1,1 +1,0 @@
-procs=144 mkdir=35166 err_lines=10 p50_med=56.51 p50_worst=85.03 p99_med=188.88 p99_worst=294.57 max=1338.37

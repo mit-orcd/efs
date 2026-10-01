@@ -1,7 +1,0 @@
-     5.13%          5551  efsd     [kernel.kallsyms]        [k] retbleed_return_thunk
-     4.40%          5168  efsd     [kernel.kallsyms]        [k] ptrace_do_notify
-     2.83%          3433  efsd     [kernel.kallsyms]        [k] __task_pid_nr_ns
-     2.59%          2102  efsd     [kernel.kallsyms]        [k] rep_movs_alternative
-     2.56%          3113  efsd     [kernel.kallsyms]        [k] __rcu_read_unlock
-     1.76%          1646  efsd     libc.so.6                [.] __memcmp_avx2_movbe
-     1.53%          1791  efsd     [kernel.kallsyms]        [k] do_notify_parent_cldstop

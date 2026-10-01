@@ -1,2 +1,0 @@
-cold open_ms=219.8 read4k_ms=21.4 total_ms=241.2
-warm open_ms=29.6 read4k_ms=0.0 total_ms=29.6

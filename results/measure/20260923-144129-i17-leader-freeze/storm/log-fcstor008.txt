@@ -1,7 +1,0 @@
-ERR fcstor008 p3 r22 mkdir EBUSY
-ERR fcstor008 p3 r22 rmdir ENOENT
-DONE fcstor008 p1 rounds=80 errs=0 secs=45.6
-DONE fcstor008 p3 rounds=80 errs=2 secs=45.8
-DONE fcstor008 p0 rounds=80 errs=0 secs=45.8
-DONE fcstor008 p2 rounds=80 errs=0 secs=45.8
-HOST_DONE fcstor008 bad_procs=1

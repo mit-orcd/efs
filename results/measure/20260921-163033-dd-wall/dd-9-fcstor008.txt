@@ -1,3 +1,0 @@
-FUSE_CHECK fstype=fuse.efs-fuse
-FUSE_OK
-efs-ssh: TIMEOUT after 400s host=fcstor008.ib

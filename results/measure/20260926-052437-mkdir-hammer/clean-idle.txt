@@ -1,2 +1,0 @@
-leftover=1
-rmdir_rc=0

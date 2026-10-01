@@ -1,1 +1,0 @@
-  group 0 hosted=1 role=FOLLOWER leader=1 term=796 commit=4646860 applied=4646860 voters=0x7 joint=0

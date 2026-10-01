@@ -337,6 +337,14 @@ the ROOT group. Gate: `test_wire` (codec) and
 voter, kill -9 follower then leader, restart catch-up keeps ROOT.
 Not in this step: LOOKUP/GETATTR (that is 10.5c-10).
 
+**The flag is gone (Step 11, Sep 11 2026).** Every "When `EFS_MD_RAFT=1`"
+and "Flag off is a no-op" below records how that slice was gated while
+the old in-memory table still existed. The Raft+KV host now starts
+unconditionally and is the only metadata engine; the table those slices
+bypassed is deleted. The 19820 scratch cluster is retired;
+`tests/stress/raft_host_smoke.sh` starts and stops its own private
+cluster.
+
 **Step 10.5c-10 (gated): LOOKUP/GETATTR through ReadIndex + KV.** When
 `EFS_MD_RAFT=1`, `EFS_MSG_INODE_LOOKUP` / `GETATTR` skip the in-memory
 table: leader + ReadIndex, then `efs_meta_apply_getattr` /
@@ -621,12 +629,12 @@ fence, getattr is 131072, old-epoch append BUSY.
 ## Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
-itself**. Today that proof is a 13-node wipe + rsync + rebuild + ssh
-orchestration, and the signal is poor: 99% of posixstress "failures" are 15s
-timeouts (saturation, not correctness), and a single run is noise that needs
-≥3 fresh-wipe repeats. The strategy is to **push each class of bug to the
-cheapest layer that can catch it** — and to fill the deterministic gap the
-simulator occupies.
+itself**. Before the simulator (Step 10.5) that proof was a 13-node wipe +
+rsync + rebuild + ssh orchestration, and the signal was poor: most
+posixstress "failures" were 15 s timeouts (saturation, not correctness),
+and a single run was noise. The strategy is to **push each class of bug
+to the cheapest layer that can catch it**; `tests/test_sim` is that
+deterministic layer and is the correctness gate for every protocol change.
 
 The layers, cheapest first:
 
@@ -638,11 +646,9 @@ The layers, cheapest first:
 | **posix / posix2** | is it a correct filesystem (vs XFS) | minutes | semantic / peer-visibility gaps |
 | **13-node cluster** | does it perform on real hardware | slowest | perf ceilings, RDMA, NVMe — **not** correctness |
 
-A bug should be caught at the **lowest** layer that can see it. Today
-correctness bugs fall all the way to the top because nothing in the middle is
-deterministic. **The simulator is the next step because it is the only missing
-layer that is both fast and deterministic** — unit tests can't see a message
-race, the cluster can't reproduce one.
+A bug should be caught at the **lowest** layer that can see it. The
+simulator is the layer that is both fast and deterministic — unit tests
+cannot see a message race, the cluster cannot reproduce one.
 
 Deliberate moves that shorten the loop:
 

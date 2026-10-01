@@ -1,1 +1,0 @@
-PREPARE /tmp/efs-mount/n1-shared n=500 size=67108864

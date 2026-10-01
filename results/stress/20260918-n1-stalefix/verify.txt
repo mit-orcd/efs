@@ -1,1 +1,0 @@
-VERIFY n=500 lost_a=0 lost_b=0 lost=0 decode_eio=0

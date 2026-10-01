@@ -1,5 +1,0 @@
-FUSE_CHECK fstype=fuse.efs-fuse mnt=/tmp/efs-mount
-FUSE_OK
-fio: /tmp/efs-mount/fio-h/fcstor007/sw-50g is not a directory
-fio: failed parsing directory=/tmp/efs-mount/fio-h/fcstor007/sw-50g
-fio: file:options.c:1486, func=lstat, error=No such file or directory

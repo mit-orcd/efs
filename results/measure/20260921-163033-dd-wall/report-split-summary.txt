@@ -1,3 +1,0 @@
-1 clients: report-split: 1 lines; pack_ms sum=3554 max=3554; push_ms sum=4848 max=4848; finish_ms sum=1013 max=1013
-4 clients: report-split: 21 lines; pack_ms sum=133138 max=7686; push_ms sum=949629 max=149248; finish_ms sum=311227 max=35846
-9 clients: report-split: 49 lines; pack_ms sum=328414 max=8137; push_ms sum=2001208 max=184108; finish_ms sum=1132923 max=76823

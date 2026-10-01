@@ -17,7 +17,7 @@ PORT=19970
 EXPORT=efs-bench-priv
 WORK=/tmp/efs-bench-priv
 MNT=/tmp/efs-bench-mnt
-OUT=${1:-$HOME/git/efs/results/measure/20260928-0906-fs-private}
+OUT=${1:-$HOME/git/efs/results/measure/$(date -u +%Y%m%d-%H%M)-fs-private}
 REPEATS=${EFS_FS_REPEATS:-5}
 
 on() {

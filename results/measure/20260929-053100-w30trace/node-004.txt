@@ -1,9 +1,0 @@
-fcstor004 begin 12:07:36Z efsd=0 fuse=0
-total 9593956
--rw------- 1 erbmi1 erbmi1   93250240 Sep 29 08:02 efsd.data
--rw-r--r-- 1 erbmi1 erbmi1 7854486677 Sep 29 08:02 efsd.strace
--rw------- 1 erbmi1 erbmi1   11284804 Sep 29 08:02 fuse.data
--rw-r--r-- 1 erbmi1 erbmi1 1865170001 Sep 29 08:02 fuse.strace
-fcstor004 efsd perf_t0=3667500.469326 strace_t0=01:30:57.220487
-fcstor004 fuse perf_t0=3667528.461746 strace_t0=01:31:25.116569
-ANA_DONE fcstor004 12:12:54Z

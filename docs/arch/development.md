@@ -41,35 +41,36 @@ requirement than "the code is organized," and it has concrete consequences:
 rest of the tree to change one component safely, the modularity has failed —
 regardless of how the directories are named.
 
-**Where we are today (honest).** The code is *not* there. Four files hold
-~45% of the 36.5k-line tree — `metadata.c` (6042 lines), `efs_fuse.c` (3720),
-`meta_server.c` (3654), `handler.c` (3648). That is why every change is slow,
-every test pulls in the world, and every review needs the whole file in
-context. The target module boundaries below are drawn to fix exactly this.
+**Where we are (Oct 1 2026, honest).** The boundaries exist (Phase M is
+complete) and the state machines are pure enough that `tests/test_sim`
+runs them. The file-size rule is not met: of a 70k-line `src/`,
+`server/raft_host.c` is 12.1k lines, `client/write.c` 6.0k,
+`meta/meta_apply.c` 5.7k, `client/efs_fuse.c` 5.5k, `meta/metadata.c`
+3.8k. Splitting those by responsibility is a standing follow-on, taken
+when a change touches them, never as a drive-by.
 
-**Target boundaries** (aligned with the planes, so the architecture and the
+**Boundaries** (aligned with the planes, so the architecture and the
 code structure are the same map):
 
 ```text
 raft/       the consensus core — a pure state machine, transport- and
-            storage-agnostic; no I/O inline, no globals. Testable in the
-            simulator and in a unit harness alike.
-kv/         the ordered applied state — behind a storage interface
-            (real NVMe engine / simulated fault-injecting disk).
-            `include/efs/kv.h` + `src/kv/kv_mem.c` are the seam; production
-            still serializes to the EFSM blob until step 4 wires flush.
-meta/       the POSIX op handlers — pure-ish functions over the kv/ and
-            raft/ interfaces; no socket or FUSE calls inline.
-            Table implementation lives in `src/meta/metadata.c` (moved from
-            `src/common/`; still oversized — split by responsibility next).
+            storage-agnostic; no I/O inline, no globals (`raft.c`,
+            `raft_disk.c` on-disk log, `raft_mem.c` for the simulator).
+kv/         the ordered applied state — `kv_mem.c` for the simulator,
+            `kv_lsm.c` + `kv_wal.c` + `kv_seg.c` + `kv_compact.c` +
+            `kv_snap.c` on disk, behind `include/efs/kv.h`.
+meta/       the POSIX op state machine over kv/ and raft/ (`meta_apply.c`,
+            `txn.c`, `session.c`, `lock.c`, `dir_*.c`); no socket or FUSE
+            calls inline. `metadata.c` is the client-side staging table.
 wire/       the protocol — versioned encode/decode, nothing else.
-data/       the data plane — EC encode/decode, RDMA PUT/GET, generation
-            fencing. Store + transport vtables live here (`efs/store.h`,
-            `efs/transport.h`); production NVMe I/O is still `server/store.c`
-            until handler dispatch is carved (Phase M step 4).
-client/     the FUSE adapter — thin; translates FUSE ops to meta/data calls.
-            Path/RPC/data already live in `src/client/{ops,read,write,inode_rpc}.c`;
-            `efs_fuse.c` is the translation layer (still oversized — follow-on).
+data/       the data plane — EC encode/decode, store + transport vtables
+            (`efs/store.h`, `efs/transport.h`), loop/conn transports.
+server/     `efsd`: handlers, the production Raft host (`raft_host.c`),
+            the NVMe fragment store (`store.c`), writer pool, peer pool.
+client/     `efs-fuse`: `efs_fuse.c` is the FUSE adapter; `ops.c`,
+            `read.c`, `write.c`, `inode_rpc.c`, `stage_evict.c` hold the
+            path/RPC/data logic.
+sim/        the deterministic simulator the state machines run under.
 ```
 
 **Rules that enforce it:**

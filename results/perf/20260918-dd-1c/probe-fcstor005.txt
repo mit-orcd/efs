@@ -1,5 +1,0 @@
-HOST=fcstor005
-591476
-/usr/bin/perf
-0
-disk_before 19536260574

@@ -1,2 +1,0 @@
-DONE fcstor007 p0 rounds=30 errs=0 secs=0.7
-HOST_DONE fcstor007 bad_procs=0

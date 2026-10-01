@@ -1,3 +1,0 @@
-threads=155
--- conn threads (server_handle_conn) not idle in recv, by stack:
--- waiting on read_mu (lll_lock under a server_raft_host_ frame):

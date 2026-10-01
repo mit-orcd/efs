@@ -1,0 +1,15 @@
+================================================================
+POSIX baseline comparison: 63 tests
+  both pass        : 62
+  EFS BUGS         : 1  (baseline PASS, target FAIL)
+  both fail (match): 0
+  not equivalent   : 0  (status or detail differs)
+  target better    : 0
+  target skipped   : 0  (baseline PASS, target SKIP)
+  incomplete       : 0  (cut, missing, or NOTRUN)
+  target only      : 0
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_rename_vs_unlink_src        [FAIL] exec a step 2 rc=1 out='RESULT\tFAIL\twant exactly one success (rename=0 unlink=0)\n' err=''

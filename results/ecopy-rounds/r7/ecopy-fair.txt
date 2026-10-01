@@ -1,6 +1,0 @@
-FSTYPE=fuse.efs-fuse
---- ecopy dest=r6fresh 60s (fair vs r6) ---
-ECOPY_EC=124
-FILES=7260 DIRS=87
-ERR=0 0
-WALL=62.2

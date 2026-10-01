@@ -1,9 +1,0 @@
------
-efs-rec: start 2026-09-30T07:35:53Z pid=150649 host=login007
-efs-rec: cmd ~/.cursor/skills/efs-test-ssh/scripts/efs-ssh.sh fcstor012.ib 'cd /tmp/efs && timeout 12 gdb -q -batch -p $(pgrep -x efs-fuse) -ex "set \$v = child_vec_get(&g_client.export, 56024, 0)" -ex "p \$v" -ex "p *\$v" -ex "p \$v->count > 0 ? *inode_at(&g_client.export, \$v->slots[0]) : 0" -ex "p g_client.export.root.shard_bits" -ex "p g_client.export.inode_count" 2>&1 | grep -v "^\[\|^Reading\|New LWP\|libthread\|^0x\|^Using\|Missing" | cut -c1-700'
-$1 = (struct efs_child_vec *) 0x7ff474842638
-$2 = {slots = 0x7ff47c34d050, count = 0, cap = 4}
-$3 = 0
-$4 = 12
-$5 = 0
-efs-rec: end 2026-09-30T07:35:53Z rc=0

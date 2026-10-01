@@ -1,3 +1,0 @@
-rounds=6 ok=53 bad=1 slow=0
-server dir-op failure lines: 16
-client exhausted lines: 1

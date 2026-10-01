@@ -1,5 +1,0 @@
-Root has 410 names (scandir 0.010 s). nlink=406. Not the 65536 spread.
-
-One root mkdir under strace of read/recv: 0.003 s with no nanosleep, then
-1.120 s whose time is one recvfrom of the reply. The following rmdir was
-1.025 s, also one recvfrom.

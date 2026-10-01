@@ -139,6 +139,12 @@ before each mount — `rsync --exclude='*.log'` leaves the old log, and a
 
 ## Deploy procedure
 
+**The normal path is one command:** `efs-bg.sh start <name> 'bash
+~/git/efs/tests/cluster.sh restart [--clients] [--perf] [--strace]'` does
+steps 1–3 below on every server (and, with `--clients`, remounts
+fcstor003–015). Read `~/efs-runs/<name>.log` for `CLUSTER_OK`. The steps
+are listed so you can recognise what it did and debug one node by hand.
+
 1. **rsync** repo to node-local scratch on each target (exclude the live mount
    + logs so `--delete` doesn't fight FUSE), run ON the node:
    `rsync -a --delete --exclude='/mnt/' --exclude='*.log' "$HOME/git/efs/" /tmp/efs/`

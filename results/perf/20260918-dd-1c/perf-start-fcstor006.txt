@@ -1,2 +1,0 @@
-REC_OK pid=374956 rec=375545
-STAT_OK

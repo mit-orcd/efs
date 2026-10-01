@@ -1,5 +1,0 @@
-DONE fcstor009 p1 rounds=80 errs=0 secs=35.1
-DONE fcstor009 p0 rounds=80 errs=0 secs=35.2
-DONE fcstor009 p3 rounds=80 errs=0 secs=35.2
-DONE fcstor009 p2 rounds=80 errs=0 secs=35.2
-HOST_DONE fcstor009 bad_procs=0

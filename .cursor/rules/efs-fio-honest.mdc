@@ -29,13 +29,25 @@ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
   (dead daemon leaves a plain dir). Same class of bug as posix-on-tmpfs.
 - **Harness (use this, do not rewrite):**
   `bash tests/stress/fio_honest_matrix.sh results/perf/<id>-honest`
-  Current: `results/perf/20260918-w4-honest/` (1-client + morning 4-client
-  writes) and `results/perf/20260918-w4-honest4/gate.txt` (8g 4/9-client dd).
-  W3 8 GiB dd+fsync: `results/perf/20260918-w3-split/gate.txt` (639,
-  best 724). `FIO_SKIP1=1` skips the 1-client sweep; `FIO_ONLY=1` skips 4/9.
-  Prior: `results/perf/20260917-honest/` plus `results/perf/20260918-dd-1c/`.
+  `FIO_SKIP1=1` skips the 1-client sweep; `FIO_ONLY=1` skips 4/9. The dd
+  form is `tests/measure/dd_wall.sh` (1 / 4 / 9 clients, own file each,
+  `conv=fsync`, non-zero source). Current references: START-HERE §1a
+  "Baselines" and the tables below.
 
-## Latest dd (Sep 28 afternoon, RDMA, flush in the clock)
+## Latest (Oct 1 2026, RDMA, fresh table, `dc6b0af1` tree)
+
+Single client fcstor007, flush in the clock, `FUSE_OK`: 8 GiB
+`dd bs=1M conv=fsync` **1.3 GB/s** (`~/efs-runs/rec-dd539.log`, after the
+reclaim-herd fix and the NUMA pin); 16 GiB dd+fsync **1.5 GB/s**; cold
+16 GiB read (remount first) **3.6 GB/s**; four concurrent cold readers
+**6.5 GB/s** aggregate (`agent-rd-20261001-*` under
+`~/orcd/scratch/efs/perf/`). The 9-client aggregate was not remeasured on
+this tree; the Sep 28 2551–2810 MiB/s below is the standing number.
+IO-500 9×4 debug on the same day: `results/io500/20261001-074905-rdma`
+(easy-write 5.17 GiB/s, hard-write 0.52, hard-read 0.82 with one read
+error — W38).
+
+## Sep 28 dd (RDMA, flush in the clock) — standing 9-client number
 
 8 GiB `dd bs=1M conv=fsync`, own file, `FUSE_OK`, on-disk size
 8589934592. `EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`. The probe for an
@@ -52,86 +64,20 @@ tried and reverted (each made the slowest client worse).
 Do not quote `results/measure/20260928-102121-dd-prof-r2` (8 of 9
 clients hit the 150 s ssh timeout).
 
-## Morning dd (Sep 28, RDMA, flush in the clock)
+## Earlier numbers
 
-8 GiB `dd bs=1M conv=fsync`, own file, `FUSE_OK`, on-disk size
-8589934592. Servers `db2b88c4802a-dirty`,
-`EFS_TRANSPORT=rdma EFS_RAFT_OBS=1`. 9 clients only
-(`results/measure/20260928-033420-dd-wall`): aggregate **1326.6**
-MiB/s, slowest wall 55.574 s, per-client walls 28.55–55.57 s, all
-nine files 8589934592, no fsync EIO, zero `rc=-3`. 99 of 108
-report-split lines are BUSY. Slower than the TCP 1478 below.
-Earlier the same day on `113823180b15-dirty`
-(`results/measure/20260928-015839-dd-wall`): 1-client **947.4**
-(8.646 s), 4-client **2310.6** (walls 11.329–14.181 s). That run's
-9-client row is INVALID (fsync EIO, harness ~238). Do not quote it.
-1 and 4 were not remeasured on `db2b88c4802a-dirty`.
-
-## Sep 27 dd (TCP, flush in the clock)
-
-8 GiB `dd bs=1M conv=fsync`, own file, `FUSE_OK`, on-disk size
-8589934592.
-
-Morning, build `4c6a5acefe03-dirty`,
-`results/measure/20260927-053506-dd-wall`. A REAP_DONE tail was ~8/s
-(commit==applied, no client); the idle-commit gate was skipped for
-that reason only. 1→4 is 2.0×, not the Sep 18 collapse. Do not quote
-a 9-client rate from this run: fsync EIO on fcstor009 and fcstor013,
-report `rc=-3` (`EFS_ERR_NOT_FOUND`). The harness printed 1464; that
-number is not a result.
-
-| clients | aggregate MiB/s | slowest wall | build |
-| --- | --- | --- | --- |
-| 1 | **977** | 8.388 s | `4c6a5acefe03-dirty` |
-| 4 | **1984** | 16.515 s (16.42–16.52 s) | `4c6a5acefe03-dirty` |
-| 9 | **1478** | 49.894 s (49.76–49.89 s) | `75321297f719-dirty` |
-
-Evening 9-client only, preflight idle (0/s both groups),
-`results/measure/20260927-204907-dd-wall`: all nine files
-8589934592, no fsync EIO, zero `rc=-3`. 119 of 128 `report-split`
-lines are BUSY (`rc=-13`); the nine `rc=0` lines are the retries
-that found the chunks already published (`push_ms=0`). 1478 is
-3.4% of the 44 GB/s four-host ceiling. 1 and 4 clients were not
-remeasured on `75321297f719-dirty`.
-
-## Prior dd and fio (Sep 17–18, Raft+KV, 19810, TCP) — MiB/s
-
-On Sep 18, 4- and 9-client **writes shared a ceiling and got worse.**
-8 GiB dd+fsync own-file: 1-client **639**, 4-client **251** (0.41×),
-9-client first-write **202** (0.32×). That is 3.8 % / 0.46 % / 0.37 % of
-the 16.7 / 44 / 44 GB/s ceilings. Do not quote 9-client 007–010 13–31 s
-(stale 4-client files). Full 4/9 fio reads and 9-client fio writes were
-not finished: after two 4-client 9×2g jobs the REPORT tail exceeds the
-400 s ssh budget (do not raise it). Morning 4-client sw-1m AGG **1589**
-(2.3× that run's 694) is the best 4-client fio write.
-
-| test | 1 client | 4 client AGG |
-| sw-1m | 694 | 1589 |
-| ow-1m | 694 | 636 |
-| rw-1m | 699 | 343 |
-| rw-128k | 712 | — |
-| rw-4k | 385 | — |
-| sr-1m | 4102 | — |
-| rr-1m | 2556 | — |
-| rr-128k | 1577 | — |
-| rr-4k | 154 | — |
-| sw-50g | 341 | — |
-
-After WAL hold / activate-mask / pipelined propose, honest 9×2g sw-1m is
-**924**. Intra-job write samples run at several GiB/s — the wall is the
-`fsync`, so only the end-to-end number counts.
-
-**Do not compare these against the pre-Raft engine's numbers** (Aug 2026:
-1-client sw-1m 2355, 9-client 3599). That engine is deleted, its result
-dirs are gone, and its metadata path was a whole-table RAM snapshot with
-no per-op Raft commit — the two are not the same system. The write gap is
-W4 (multi-client) plus the leftover REPORT pack+push tail, not a
-regression to bisect.
-
-**Shape that still holds:** reads scale with clients, writes share a
-ceiling. The NVMe ceiling is 16.7–21.4 GB/s **per host**, so every write
-wall measured so far is software, not media. A 50g single-job file is
-slower than 9×2g on one client (less parallelism).
+Sep 17–28 dd and fio tables (TCP and RDMA, 1/4/9 clients, the INVALID
+runs and why) are in `docs/project-history.md` under "fio-honest number
+history". Summary: Sep 18 writes shared a ceiling and got worse with
+clients (639 / 251 / 202 MiB/s at 1/4/9); Sep 27 TCP 977 / 1984 / 1478;
+Sep 28 RDMA morning 1326.6 (9 clients). Do not quote
+`results/measure/20260928-102121-dd-prof-r2`,
+`20260928-015839-dd-wall`'s 9-client row, or `20260927-053506-dd-wall`'s
+9-client row — each is marked INVALID there. **Do not compare against the
+deleted pre-Raft engine** (Aug 2026: 1-client sw-1m 2355, 9-client 3599).
+Shape that still holds: reads scale with clients, writes share a ceiling;
+the NVMe ceiling is 16.7–21.4 GB/s per host, so every write wall measured
+so far is software, not media.
 
 ## Profile a single write
 

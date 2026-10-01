@@ -1,5 +1,0 @@
-window idle 13:10:00-13:34:00 work_s=0.000 fsync_n=0 fsync_s=0.000 fsync_max=0.000
-syscall                 count      total_s      max_s
-futex                    2880     1440.076      1.000
-poll                  1342555     1419.439      0.001
-ERR futex ETIMEDOUT                    1440

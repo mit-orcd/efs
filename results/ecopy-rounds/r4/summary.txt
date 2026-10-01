@@ -1,7 +1,0 @@
-Round 4 (skip GETATTR when LOOKUP already returned the full row)
-
-Files live on the parent shard, so parent LOOKUP is not a size-0 stub.
-lookup_needs_getattr() only RPCs GETATTR when shard(ino) != shard(parent).
-
-Fresh mkfs 60s ecopy: FILES=4975 DIRS=111 ≈ 82 files/s.
-RPC getattr 9950 / create 5176 = 1.9 (was 3.0 in r3). 0 ino_dup. gens 5680×4.
