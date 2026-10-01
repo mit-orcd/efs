@@ -25,6 +25,62 @@ time, so the same day can appear in several places.
 
 ---
 
+## Oct 1 2026 02:25Z — D18 decided and implemented: the staging evictor drops whole cold tabs
+
+The 21:10Z review put the client staging evictor at 31.6 % of a 62 min
+profile (47.6 % of the ecopy slice): the per-shard-tab floor (~90–170 KB
+× up to 4096 tabs) sits above `EFS_CLIENT_META_MB`, so the row LRU
+evicted 64 just-closed rows per pass and every `ensure_meta_room` re-armed
+it. Asked which bound they wanted (D18), the user chose "evict whole
+cold tabs". Implemented in `f073e136`, clients fcstor007–015 remounted on
+it (`dep360`), fstor007's `/tmp/efs` rebuilt (`fst362`, no efs-fuse was
+running there); servers unchanged (`44073b77249b-dirty`).
+
+Shape: `stage_evict_main` runs its four row bands as before; if the
+table is still over the cap, `evict_cold_tabs` (stage_evict.c) asks
+`efs_export_tabs_by_age` for the 256 least recently used tabs (sorted by
+`shard_tick`, which `efs_export_table()` already bumped on every use)
+and, holding table + idx + dirty exactly like `evict_one`, drops up to 64
+of them whose every row and chunk-record ino passes the same pin rules
+(`efs_export_tab_for_each_ino` with `tab_pin_cb`: dirty set, dcache pin,
+open fd, op pin, plock). The dropped inos' LRU entries are removed under
+`g_lru_mu` so a later `evict_one` does not fan out over every tab for a
+row that is gone; `efs_export_drop_tab` unregisters the present-chunk
+counts, frees the tab, and returns its `staged_est`. The pass stops at
+64 drops or when the reading is at or under the cap.
+
+The part that was not in the plan: `efs_export_get_chunk` (every read
+and write consults the local chunk table) went through
+`efs_export_table_for_chunk` → `efs_export_table`, which creates the tab
+on demand — the unit test caught it, a lookup of an evicted ino rebuilt
+the tab at its floor cost. That would have turned the evictor into a
+drop/rebuild loop under any wide walk. Readers and in-place updaters now
+peek: `chunk_tab_peek` for get_chunk / set_chunk_gen / set_chunk_deltas /
+add_chunk_delta, and `shard_route` (set_size, set_mode, set_owner,
+set_mtime, set_atime) returns NULL → NOT_FOUND on an absent tab, which
+is what those calls returned before (the freshly created tab was empty).
+Only `efs_export_set_chunk` and the row stagers create tabs. Both peeks
+still bump the LRU tick.
+
+`test_stage_evict` gained: age order follows touch order and `n=1`
+returns the oldest; the walk visits the row and its group-0 chunk recs
+and stops on a nonzero callback; drop frees exactly `staged_est`, leaves
+other tabs and the root intact, is a no-op repeated or on shard 0;
+get_inode / get_chunk / set_chunk_gen / set_mode on the dropped shard
+miss without rebuilding; staging a row rebuilds the tab and it is the
+youngest. Built on fcstor007 (`bld359`): `test_stage_evict`, `test_data`,
+`test_meta_apply`, `test_conn_fd`, `test_sim` OK; `test_stage_evict`
+clean under valgrind.
+
+Expected on the user's run: with `EFS_STAGE_DBG=1`, `stage-evict: tabs
+bytes=…MB cand=256 dropped=N pinned=M` lines while the table is over the
+cap, then silence; `evict_pass` out of the top of the client profile. If
+`shard_tab_get_or_create` shows up instead, the tabs are being rebuilt as
+fast as they are dropped (uniform shard access over a working set whose
+floor alone exceeds the cap) — that is D18's alternative (smaller first
+slab, lazily sized indexes), to bring back as a measurement, not a knob.
+`TAB_SCAN`/`TAB_EVICT` are internal constants.
+
 ## Sep 30 2026 21:10Z — review of the user's fstor007 perf dir: the evictor and the per-close walk (documented, not changed)
 
 The user ran `perf record -F 499 -g` on fstor007's efs-fuse for 62 min

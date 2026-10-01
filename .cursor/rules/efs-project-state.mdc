@@ -99,12 +99,14 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   **UP 19:43Z Sep 30: servers `44073b77249b-dirty`** (rolled `--all`,
   no `--perf`, no `--strace`, `~/efs-runs/roll350.log` ROLL_OK; HEAD
   `44073b77`, span identity = (gen, off, len), learning below).
-  **Clients fcstor007–015 remounted RDMA 01:58Z Oct 1 on `65237a59`**
-  (`dep353`, all `fuse.efs-fuse` MOUNT_OK, one efs-fuse each; close
-  predicate + dcache chain reuse, learning below); fstor007's
-  `/tmp/efs` rebuilt on the same commit for the user's `client.sh`
-  (`fst354`). The server build is still `44073b77` — client-only
-  change, no roll needed. **IO-500 debug
+  **Clients fcstor007–015 remounted RDMA 02:22Z Oct 1 on `f073e136`**
+  (`dep360`, all `fuse.efs-fuse` MOUNT_OK, one efs-fuse each; D18
+  cold-tab eviction, learning below; before that 01:58Z `65237a59`,
+  close predicate + dcache chain reuse); fstor007's `/tmp/efs` rebuilt
+  on `f073e136` for the user's `client.sh` (`fst362`, no efs-fuse was
+  running). Posix jobs=1 fcstor007 on it: **200/201** (mmap SKIP) in
+  45 s (`results/posix/20261001-022434`). The server build is still
+  `44073b77` — client-only changes, no roll needed. **IO-500 debug
  9×4 18:35Z (`results/io500/20260930-183504-rdma`): every phase
  completed, 0 fsync failures, 0 read errors, cold hardscan of the
  36 GB hard file bad=0** — easy-write 4.563 GiB/s, mdtest-easy-write
@@ -840,8 +842,21 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   `ensure_meta_room` kicks the thread and a pass that evicted 64 rows
   re-arms at once, so during an ecopy the inlined `evict_pass` LRU
   scan is 47.6 % of client cycles (31.6 % of a 62 min profile), each
-  pass taking the table lock 64× plus a compact. Documented, not
-  changed — D18 decides the bound.
+  pass taking the table lock 64× plus a compact. **D18 decided Oct 1
+  (user): evict whole cold tabs.** After the four row bands, if the
+  table is still over the cap, `evict_cold_tabs` (stage_evict.c) takes
+  the 256 least recently used tabs (`efs_export_tabs_by_age` on
+  `shard_tick`), and under table + idx + dirty locks drops up to 64 of
+  them whose every row/chunk ino passes evict_one's pin rules
+  (`efs_export_tab_for_each_ino` + `tab_pin_cb`; LRU entries of the
+  dropped inos removed under `g_lru_mu`; `efs_export_drop_tab` frees
+  the tab and its `staged_est`). Staging a row rebuilds the tab empty
+  (`efs_export_table`); readers and in-place updaters do not —
+  `chunk_tab_peek` (get_chunk, set_chunk_gen, set_chunk_deltas,
+  add_chunk_delta) and `shard_route` (set_size/mode/owner/mtime/atime)
+  return NOT_FOUND on a dropped tab instead of allocating ~100 KB for
+  a miss. `test_stage_evict` covers it. `TAB_SCAN`/`TAB_EVICT` are
+  internal constants. The row LRU is unchanged for the rest.
 - **`close(2)` of any file walks `size / 128 KiB` dcache slots
   (Sep 30 21:10Z, same review).** `ll_flush → efs_append_flush_report
   → efs_dcache_flush_ino → dcache_flush_ino_pass` calls
