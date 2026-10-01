@@ -2807,6 +2807,32 @@ static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
     return NULL;
 }
 
+/* A chained node whose chunk was reclaimed (ino and body cleared by the
+ * reclaim flush, dcache_flush_slot_inner) stays linked; until Sep 30 2026
+ * nothing reused or unlinked it, so every reclaimed chunk left a dead node
+ * behind and dcache_find walked all of them for the rest of the mount
+ * (efs_dcache_yield_extra — one find — was 6.6 % of a 62 min ecopy
+ * profile, dcache_steal_dirty 36.9 % of its last slice). Return such a
+ * node reset to the calloc state with its chain link kept, or NULL. A
+ * body-less node that still has an ino names a published chunk and is
+ * not free. Caller holds the slot's dcache_mu; nothing outside that lock
+ * holds a pointer to a node with ino == 0 (a flusher that dropped the
+ * lock re-finds its node by identity, dcache_chain_has + ino/ci). */
+static struct dcache_ent *dcache_chain_reuse(uint32_t s)
+{
+    for (struct dcache_ent *e = g_dcache.e[s].next; e; e = e->next) {
+        if (!e->ino && !e->dirty && !e->data && !e->pin_held &&
+            !e->on_dirty) {
+            struct dcache_ent *nx = e->next;
+
+            memset(e, 0, sizeof(*e));
+            e->next = nx;
+            return e;
+        }
+    }
+    return NULL;
+}
+
 /* Same identity match as dcache_find, including a slot whose 128 KiB body
  * was dropped after a full-chunk PUT. Report and CAS base still live on
  * the entry. */
@@ -3775,19 +3801,27 @@ static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
             dcache_account_extra(ino, ci);
         return rc;
     }
-    struct dcache_ent *n = calloc(1, sizeof(*n));
+    int reused = 0;
+    struct dcache_ent *n = dcache_chain_reuse(s);
+    if (n)
+        reused = 1;
+    else
+        n = calloc(1, sizeof(*n));
     if (!n) {
         pthread_mutex_unlock(mu);
         return EFS_ERR_NOMEM;
     }
     int rc = dcache_fill(n, ino, ci, chunk, chunk_size);
     if (rc != 0) {
-        free(n);
+        if (!reused)
+            free(n);
         pthread_mutex_unlock(mu);
         return rc;
     }
-    n->next = head->next;
-    head->next = n;
+    if (!reused) {
+        n->next = head->next;
+        head->next = n;
+    }
     pthread_mutex_unlock(mu);
     dcache_account_extra(ino, ci);
     return 0;
@@ -3841,20 +3875,28 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
             dcache_account_extra(ino, ci);
         return rc;
     }
-    struct dcache_ent *n = calloc(1, sizeof(*n));
+    int reused = 0;
+    struct dcache_ent *n = dcache_chain_reuse(s);
+    if (n)
+        reused = 1;
+    else
+        n = calloc(1, sizeof(*n));
     if (!n) {
         pthread_mutex_unlock(mu);
         return EFS_ERR_NOMEM;
     }
     int rc = dcache_take(n, ino, ci, chunk, chunk_size);
     if (rc != 0) {
-        free(n);
+        if (!reused)
+            free(n);
         pthread_mutex_unlock(mu);
         return rc;
     }
     dcache_apply_init(n, in);
-    n->next = head->next;
-    head->next = n;
+    if (!reused) {
+        n->next = head->next;
+        head->next = n;
+    }
     pthread_mutex_unlock(mu);
     dcache_account_extra(ino, ci);
     return 0;

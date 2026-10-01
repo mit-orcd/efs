@@ -2336,6 +2336,24 @@ static pthread_mutex_t *append_mu(efs_ino_t ino)
  * O_APPEND. A write between the PUT and the REPORT merged into the
  * span still in flight; the next image left that offset zero
  * (concurrent_appends: size 1600, 16 NUL bytes). */
+/* 1 if this inode can still have bytes this client has not published:
+ * a queued/in-flight wb job, a mark in the dirty set, or a dcache slot
+ * that pins it (dirty, or clean-before-PUT inside a PUT window — the pin
+ * is held until the slot is dropped). These are the three places
+ * unpublished data lives (project-state "nothing to flush"). */
+static int efs_ino_has_unpublished(efs_ino_t ino)
+{
+    int pending = 0;
+
+    if (g_wb.ready) {
+        pthread_mutex_lock(&g_wb.mu);
+        pending = efs_wb_ino_pending_locked(ino);
+        pthread_mutex_unlock(&g_wb.mu);
+    }
+    return pending || efs_client_ino_is_dirty(ino) ||
+           efs_dcache_ino_pinned(ino);
+}
+
 static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
 {
     pthread_mutex_t *amu;
@@ -2343,6 +2361,15 @@ static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
 
     (void)fi;
     if (!ino || virt_kind(ino))
+        return EFS_OK;
+    /* Every close(2) — read-only opens and dup'd fds included — reached
+     * dcache_flush_ino_pass, which probes size/128 KiB dcache slots (two
+     * mutex pairs and a chain walk each, all 65536 slots past 8 GiB)
+     * under the append stripe. dcache_steal_dirty was 36.9 % of the
+     * client's cycles during an ecopy --verify (Sep 30 2026,
+     * results/measure/20260930-205300-ecopy-perf-review). A clean inode
+     * has nothing to publish; the REPORT for it would carry no record. */
+    if (!efs_ino_has_unpublished(ino))
         return EFS_OK;
     rc = efs_wb_sync_ino(ino);
     if (rc != EFS_OK)
@@ -2361,15 +2388,8 @@ static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
  * is the later event on the server. Clean inode: nothing. */
 static int efs_utimens_flush_dirty(efs_ino_t ino)
 {
-    int pending = 0;
-
     if (!ino || virt_kind(ino))
         return EFS_OK;
-    if (g_wb.ready) {
-        pthread_mutex_lock(&g_wb.mu);
-        pending = efs_wb_ino_pending_locked(ino);
-        pthread_mutex_unlock(&g_wb.mu);
-    }
     /* The dirty SET is not "has unpublished data": a threshold REPORT
      * (only_ino=0) snapshots the ino mark that dcache_note_size set and
      * ships an irec-only record while the bytes are still a dirty dcache
@@ -2380,8 +2400,7 @@ static int efs_utimens_flush_dirty(efs_ino_t ino)
      * (1–2 of 5760 files per ecopy-shaped burst, Sep 30 trace: the
      * flush line printed with no report, the steal came after the
      * setattr). */
-    if (!pending && !efs_client_ino_is_dirty(ino) &&
-        !efs_dcache_ino_pinned(ino))
+    if (!efs_ino_has_unpublished(ino))
         return EFS_OK;
     return efs_append_flush_report(NULL, ino);
 }
