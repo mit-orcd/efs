@@ -1351,6 +1351,75 @@ static int fuse_stat_errno(int rc)
     return -EIO;
 }
 
+/* LOOKUP already returns a full row; with attr_timeout=0 the kernel
+ * GETATTRs the same ino on another FUSE worker immediately after.
+ * One-shot, 50 ms: consume the row, then the next getattr RPCs. */
+#define LOOKUP_MEMO_N 32
+#define LOOKUP_MEMO_US 50000ull
+
+struct lookup_memo {
+    efs_ino_t ino;
+    struct efs_inode row;
+    uint64_t us;
+};
+
+static pthread_mutex_t g_lookup_memo_mu = PTHREAD_MUTEX_INITIALIZER;
+static struct lookup_memo g_lookup_memo[LOOKUP_MEMO_N];
+static unsigned g_lookup_memo_i;
+static __thread struct efs_inode t_getattr_row;
+static __thread efs_ino_t t_getattr_ino;
+
+static uint64_t fuse_now_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
+}
+
+static void lookup_memo_put(const struct efs_inode *row)
+{
+    unsigned i;
+
+    if (!row || !row->ino)
+        return;
+    pthread_mutex_lock(&g_lookup_memo_mu);
+    i = g_lookup_memo_i++ % LOOKUP_MEMO_N;
+    g_lookup_memo[i].ino = row->ino;
+    g_lookup_memo[i].row = *row;
+    g_lookup_memo[i].us = fuse_now_us();
+    pthread_mutex_unlock(&g_lookup_memo_mu);
+}
+
+static int lookup_memo_take(efs_ino_t ino, struct efs_inode *out)
+{
+    uint64_t now;
+    int i;
+
+    if (!ino || !out)
+        return 0;
+    now = fuse_now_us();
+    pthread_mutex_lock(&g_lookup_memo_mu);
+    for (i = 0; i < LOOKUP_MEMO_N; i++) {
+        if (g_lookup_memo[i].ino == ino &&
+            now - g_lookup_memo[i].us < LOOKUP_MEMO_US) {
+            *out = g_lookup_memo[i].row;
+            g_lookup_memo[i].ino = 0;
+            pthread_mutex_unlock(&g_lookup_memo_mu);
+            return 1;
+        }
+    }
+    pthread_mutex_unlock(&g_lookup_memo_mu);
+    return 0;
+}
+
+static void getattr_note_row(const struct efs_inode *row)
+{
+    if (!row || !row->ino)
+        return;
+    t_getattr_row = *row;
+    t_getattr_ino = row->ino;
+}
+
 static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
                                 struct fuse_file_info *fi)
 {
@@ -1407,15 +1476,29 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
     /* Open-fd size stays local: a full adopt pulls a peer REPORT over
      * unflushed bytes (posix2 overlap pwrite) and a missing ghost is
      * ENOENT (nlink_after_unlink_open). nlink is not local — the peer
-     * that unlinks the last name is the one that commits 0. */
+     * that unlinks the last name is the one that commits 0.
+     * fi->fh is the ino for files; opendir stores a dirh pointer, so
+     * only trust fh when it names an open file. */
     {
-        efs_ino_t id = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+        efs_ino_t id = (efs_ino_t)ino;
+        if (fi && fi->fh && efs_client_ino_is_open((efs_ino_t)fi->fh))
+            id = (efs_ino_t)fi->fh;
         if (id && efs_client_ino_is_open(id)) {
             struct efs_inode row;
             if (efs_client_stat_open(id, &row) == EFS_OK) {
+                getattr_note_row(&row);
                 fill_stat_from_inode(stbuf, &row);
                 return 0;
             }
+        }
+    }
+
+    {
+        struct efs_inode row;
+        if (lookup_memo_take((efs_ino_t)ino, &row)) {
+            getattr_note_row(&row);
+            fill_stat_from_inode(stbuf, &row);
+            return 0;
         }
     }
 
@@ -1425,6 +1508,7 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
         return -EACCES;
     if (rc != EFS_OK)
         return fuse_stat_errno(rc);
+    getattr_note_row(&row);
     fill_stat_from_inode(stbuf, &row);
     return 0;
 }
@@ -1439,6 +1523,70 @@ struct readdir_collect_arg {
     size_t count;
     size_t cap;
 };
+
+/* Per-opendir listing. fi->fh is this pointer (files still store ino).
+ * First READDIR fills it; later READDIR / EOF getdents reuse it. */
+struct efs_dirh {
+    efs_ino_t ino;
+    struct readdir_ent *ents;
+    size_t count;
+    fuse_ino_t parent_ino;
+    mode_t self_mode;
+    mode_t parent_mode;
+    int listed;
+};
+
+static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col);
+
+static struct efs_dirh *dirh_new(efs_ino_t ino)
+{
+    struct efs_dirh *dh = calloc(1, sizeof(*dh));
+    if (!dh)
+        return NULL;
+    dh->ino = ino;
+    dh->parent_ino = FUSE_ROOT_ID;
+    dh->self_mode = S_IFDIR | 0755;
+    dh->parent_mode = S_IFDIR | 0755;
+    return dh;
+}
+
+static void dirh_free(struct efs_dirh *dh)
+{
+    if (!dh)
+        return;
+    free(dh->ents);
+    free(dh);
+}
+
+static int dirh_fill(struct efs_dirh *dh, fuse_ino_t ino)
+{
+    struct readdir_collect_arg col;
+    struct efs_inode row, prow;
+    int rc;
+
+    memset(&col, 0, sizeof(col));
+    rc = efs_fuse_readdir_ino(ino, &col);
+    if (rc != 0 && virt_kind(ino) != 2) {
+        free(col.ents);
+        return rc;
+    }
+    dh->ents = col.ents;
+    dh->count = col.count;
+    dh->self_mode = S_IFDIR | 0755;
+    dh->parent_mode = S_IFDIR | 0755;
+    dh->parent_ino = FUSE_ROOT_ID;
+    if (efs_client_stat_ino((efs_ino_t)ino, &row) == EFS_OK) {
+        dh->self_mode = row.mode;
+        if (row.parent)
+            dh->parent_ino = (fuse_ino_t)row.parent;
+    }
+    if (virt_kind(ino) == 2)
+        dh->parent_ino = virt_parent(ino);
+    if (efs_client_stat_ino((efs_ino_t)dh->parent_ino, &prow) == EFS_OK)
+        dh->parent_mode = prow.mode;
+    dh->listed = 1;
+    return 0;
+}
 
 /* Append one page, skipping name dups (spread dirs merge per-shard scans).
  * Returns 0 or -ENOMEM. */
@@ -4009,6 +4157,15 @@ static void fill_entry(fuse_ino_t ino, struct fuse_entry_param *e,
     e->entry_timeout = 0.0;
 }
 
+static void fill_entry_row(fuse_ino_t ino, struct fuse_entry_param *e,
+                           const struct efs_inode *row)
+{
+    struct stat st;
+    fill_stat_from_inode(&st, row);
+    fill_entry(ino, e, &st);
+    lookup_memo_put(row);
+}
+
 static int lookup_fill(fuse_ino_t ino, struct fuse_entry_param *e,
                        struct fuse_file_info *fi)
 {
@@ -4017,6 +4174,8 @@ static int lookup_fill(fuse_ino_t ino, struct fuse_entry_param *e,
     if (rc != 0)
         return rc;
     fill_entry(ino, e, &st);
+    if (t_getattr_ino == (efs_ino_t)ino)
+        lookup_memo_put(&t_getattr_row);
     if (virt_kind(ino) == 3)
         vq_nlookup_add(ino, 1);
     return 0;
@@ -4032,7 +4191,6 @@ static int lookup_fill_committed(fuse_ino_t ino, struct fuse_entry_param *e,
                                  const char *name)
 {
     struct efs_inode row;
-    struct stat st;
     int rc = lookup_fill(ino, e, NULL);
 
     if (rc == 0)
@@ -4047,8 +4205,7 @@ static int lookup_fill_committed(fuse_ino_t ino, struct fuse_entry_param *e,
             "getattr rc=%d, local reply\n", op,
             (unsigned long long)parent, name ? name : "",
             (unsigned long long)ino, rc);
-    fill_stat_from_inode(&st, &row);
-    fill_entry(ino, e, &st);
+    fill_entry_row(ino, e, &row);
     return 0;
 }
 
@@ -4116,9 +4273,7 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
      * never seen is a miss and falls through. */
     if (efs_client_lookup_local((efs_ino_t)parent, name, &row) == EFS_OK &&
         efs_mode_is_dir(row.mode)) {
-        struct stat st;
-        fill_stat_from_inode(&st, &row);
-        fill_entry((fuse_ino_t)row.ino, e, &st);
+        fill_entry_row((fuse_ino_t)row.ino, e, &row);
         return 0;
     }
     rc = efs_client_rpc_lookup(g_client.export_id, (efs_ino_t)parent, name, &row);
@@ -4127,11 +4282,7 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
     /* Adopt the LOOKUP row (full resolved inode) instead of throwing it
      * away and re-statting locally — that hid peer size/nlink growth. */
     efs_client_adopt_lookup(&row, &row);
-    {
-        struct stat st;
-        fill_stat_from_inode(&st, &row);
-        fill_entry((fuse_ino_t)row.ino, e, &st);
-    }
+    fill_entry_row((fuse_ino_t)row.ino, e, &row);
     return 0;
 }
 
@@ -4599,6 +4750,7 @@ static void ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode, off_t offset,
 
 static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
+    struct efs_dirh *dh;
     int vk = virt_kind(ino);
     t_req = req;
     if (vk == 1 || vk == 3) {
@@ -4612,8 +4764,16 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
             fuse_reply_err(req, ENOENT);
             return;
         }
+        dh = dirh_new((efs_ino_t)ino);
+        if (!dh) {
+            t_req = NULL;
+            fuse_reply_err(req, ENOMEM);
+            return;
+        }
         if (fi)
-            fi->fh = ino;
+            fi->fh = (uint64_t)(uintptr_t)dh;
+        else
+            dirh_free(dh);
         t_req = NULL;
         fuse_reply_open(req, fi);
         return;
@@ -4630,8 +4790,15 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
             fuse_reply_err(req, ENOTDIR);
             return;
         }
+        dh = dirh_new(row.ino);
+        if (!dh) {
+            fuse_reply_err(req, ENOMEM);
+            return;
+        }
         if (fi)
-            fi->fh = row.ino;
+            fi->fh = (uint64_t)(uintptr_t)dh;
+        else
+            dirh_free(dh);
         fuse_reply_open(req, fi);
     }
 }
@@ -4639,65 +4806,64 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
 static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                        struct fuse_file_info *fi)
 {
-    struct readdir_collect_arg col;
+    struct efs_dirh *dh = (fi && fi->fh)
+                              ? (struct efs_dirh *)(uintptr_t)fi->fh
+                              : NULL;
+    struct efs_dirh local;
     char *buf;
     size_t used = 0;
     off_t cookie = 1;
-    fuse_ino_t self = ino, parent_ino = FUSE_ROOT_ID;
-    mode_t self_mode = S_IFDIR | 0755, parent_mode = S_IFDIR | 0755;
     int rc;
-    (void)fi;
+
     t_req = req;
-    memset(&col, 0, sizeof(col));
-    rc = efs_fuse_readdir_ino(ino, &col);
-    if (rc != 0 && virt_kind(ino) != 2) {
+    if (!dh) {
+        memset(&local, 0, sizeof(local));
+        local.ino = (efs_ino_t)ino;
+        local.parent_ino = FUSE_ROOT_ID;
+        local.self_mode = S_IFDIR | 0755;
+        local.parent_mode = S_IFDIR | 0755;
+        dh = &local;
+    }
+    /* Cookies: 1='.', 2='..', 3.. = entries. Last emitted is 2+count.
+     * The kernel's next READDIR passes that cookie as off. */
+    if (dh->listed && off >= 2 + (off_t)dh->count) {
         t_req = NULL;
-        free(col.ents);
-        fuse_reply_err(req, -rc);
+        fuse_reply_buf(req, "", 0);
         return;
     }
-    {
-        struct stat st;
-        if (efs_fuse_getattr_ino(ino, &st, NULL) == 0) {
-            self = (fuse_ino_t)st.st_ino;
-            self_mode = st.st_mode;
+    if (!dh->listed) {
+        rc = dirh_fill(dh, ino);
+        if (rc != 0) {
+            t_req = NULL;
+            fuse_reply_err(req, -rc);
+            return;
         }
-        if (virt_kind(ino) == 2)
-            parent_ino = virt_parent(ino);
-        else {
-            struct efs_inode row;
-            if (efs_client_stat_ino((efs_ino_t)ino, &row) == EFS_OK && row.parent)
-                parent_ino = (fuse_ino_t)row.parent;
-        }
-        if (efs_fuse_getattr_ino(parent_ino, &st, NULL) == 0)
-            parent_mode = st.st_mode;
     }
     buf = malloc(size ? size : 1);
     if (!buf) {
         t_req = NULL;
-        free(col.ents);
         fuse_reply_err(req, ENOMEM);
         return;
     }
     if (off < cookie) {
-        if (dirbuf_add(req, buf, size, &used, ".", self, self_mode, cookie))
+        if (dirbuf_add(req, buf, size, &used, ".", ino, dh->self_mode, cookie))
             goto send;
     }
     cookie++;
     if (off < cookie) {
-        if (dirbuf_add(req, buf, size, &used, "..", parent_ino, parent_mode,
-                       cookie))
+        if (dirbuf_add(req, buf, size, &used, "..", dh->parent_ino,
+                       dh->parent_mode, cookie))
             goto send;
     }
     cookie++;
     {
         size_t i;
-        for (i = 0; i < col.count; i++, cookie++) {
+        for (i = 0; i < dh->count; i++, cookie++) {
             if (off >= cookie)
                 continue;
-            if (dirbuf_add(req, buf, size, &used, col.ents[i].name,
-                           (fuse_ino_t)col.ents[i].st.st_ino,
-                           col.ents[i].st.st_mode, cookie))
+            if (dirbuf_add(req, buf, size, &used, dh->ents[i].name,
+                           (fuse_ino_t)dh->ents[i].st.st_ino,
+                           dh->ents[i].st.st_mode, cookie))
                 goto send;
         }
     }
@@ -4708,14 +4874,16 @@ send:
     t_req = NULL;
     fuse_reply_buf(req, buf, used);
     free(buf);
-    free(col.ents);
+    if (dh == &local)
+        free(local.ents);
 }
 
 static void ll_releasedir(fuse_req_t req, fuse_ino_t ino,
                           struct fuse_file_info *fi)
 {
     (void)ino;
-    (void)fi;
+    if (fi && fi->fh)
+        dirh_free((struct efs_dirh *)(uintptr_t)fi->fh);
     fuse_reply_err(req, 0);
 }
 
