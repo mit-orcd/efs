@@ -413,10 +413,13 @@ I6/I7.
   size exposes.
 - **I22 · epoch fencing.** A publication naming a superseded content epoch is
   never committed, and size/time lane state from a superseded epoch is never
-  read. The epoch fences *in-flight work and lane state* — it does **not**
-  invalidate committed chunk data, and it is not part of a fragment object's
-  identity: a `truncate()` to a smaller non-zero size preserves the surviving
-  prefix, as POSIX requires (§7.3).
+  read. The epoch fences *in-flight work and lane state*, and — together
+  with the inode's **fence history** (§7.3) — bounds which bytes of a
+  committed chunk row are still valid; it is not part of a fragment
+  object's identity. A `truncate()` to a smaller non-zero size preserves
+  the surviving prefix, as POSIX requires, and bytes it fenced out read as
+  zero from the moment the fence commits, before and after any physical
+  reclamation (§7.3).
 - **I25 · end-to-end integrity.** Every durable fragment is protected by a
   checksum over its immutable identity plus its payload. A fragment that
   fails verification is never used as reconstruction input; it is treated as
@@ -456,9 +459,9 @@ I6/I7.
 - **L7.** EC generations that no chunk map references eventually reclaim —
   not only the never-published ones (a losing CAS candidate, a fenced
   client's orphan), but also generations that *were* published and are no
-  longer reachable: everything a `truncate` range-deleted, and every
-  old-profile generation superseded by a re-stripe (§7.3, failure
-  tolerance).
+  longer reachable: everything a `truncate` fenced out (deleted by the
+  background sweep, §7.3), and every old-profile generation superseded by
+  a re-stripe (§7.3, failure tolerance).
 - **L8.** Reconfiguration eventually converges desired placement to actual
   placement once failures stop.
 
@@ -593,7 +596,7 @@ Derived from the placement rules (§5) and the CREATE co-location rule
 | WRITE extending | chunk-map entry + that lane's size/mtime/ctime marks | **1** (co-located, §7.3) | single Raft entry |
 | WRITE first use of a lane | as above + `active_lanes` bit on the inode row | 2 | transaction (§7.2); ≤64 times per file, ever |
 | O_APPEND | EOF reserve (validated against the active-lane EOF vector, and holding an **EOF barrier** on those lanes until the reservation resolves) + chunk + size | inode shard + active lanes, then lane shards | reserve (§7.3) then ordinary write |
-| TRUNCATE | `content_epoch` + `base_size` + times on inode row, **+ each active lane's fence and range delete, + the tail chunk's publication when `size` is not chunk-aligned** | 1 + active lanes (≤65) | **inode fence**: one transaction (§7.2, §7.3) |
+| TRUNCATE | `content_epoch` + `base_size` + times + one **fence-history** entry on the inode row, **+ each active lane's fence stamp**; **no chunk-row deletes and no tail rewrite in the entry** — reclamation and tail materialisation are the reaper's background sweep (§7.3) | 1 + active lanes (≤65), O(lanes) apply | **inode fence**: one transaction (§7.2, §7.3); BUSY while the fence history is full |
 | READ spanning several chunks | chunk maps on the covering lanes | lanes covering the range | validated collect (§7.3) — I24 has a read side |
 | READDIR | dentries | 1 (normal) / used dir lanes (spread, ≤64) | range scan / scatter-merge |
 | CHMOD / CHOWN | inode row (ctime, **not** mtime) | 1 | single Raft entry |
@@ -774,21 +777,52 @@ not bit-exact wall-clock POSIX. **atime is
 `noatime` by default** (reads do not update atime at all), `relatime` a
 coalesced mount option; strict per-read atime is deliberately not offered.
 
-**Truncate** bumps the content epoch and stamps `base_size` — and because
-lane leaders must reject stale-epoch publications while ordinary writes
-never consult the inode shard, the epoch is **pushed by a bounded fence over
-the inode row plus the active lanes** (≤65 authorities; rare ops pay, P2).
-The same fence carries a **per-lane range delete of the chunk-map entries
-beyond the new size**: retaining them would let a later sub-chunk RMW take a
-pre-truncate generation as its base and resurrect truncated bytes. Because
-the KV is ordered and a lane holds `i, i+64, i+128, …`, that is one range
-delete per lane, not one per chunk. It **does not invalidate committed chunk
-data below the new size** — the surviving prefix stays readable, as POSIX
-requires (I22). When the new size falls **inside** a chunk, that tail chunk's
-zero-filled rewrite is prepared first and **CAS-published inside the same
-transaction**: a size without its matching tail would leave the file
-nominally shorter while the old bytes past the new end remain readable, and
-re-extending must read as zeros. The same fence distributes `mtime_gen`.
+**Truncate is logical; reclamation is deferred (D25, Oct 2 2026 — this
+replaces the earlier in-entry range delete and tail rewrite).** A truncate
+bumps the content epoch, stamps `base_size`, and appends one entry
+`(epoch, size)` to the inode's **fence history**; because lane leaders must
+reject stale-epoch publications while ordinary writes never consult the
+inode shard, the epoch and the history entry are **pushed by a bounded
+fence over the inode row plus the active lanes** (≤65 authorities; rare ops
+pay, P2). The entry deletes no chunk rows and rewrites no tail: its apply
+is O(lanes), never O(chunks), so a truncate of a petabyte file holds the
+Raft pump for the same single-digit milliseconds as a truncate of a page.
+The same fence distributes `mtime_gen`.
+
+**Validity rule — the one rule every reader, every publish merge and the
+sweep apply.** A chunk row `r` (epoch `e_r`, covering file offsets
+`[c, c + len)`) is valid up to `valid_end(r) = min{ size_j : (epoch_j,
+size_j) in the fence history with epoch_j > e_r }`, or unbounded when no
+later fence exists. Bytes of `r` at or past `valid_end(r)` are **fenced
+out**: a read returns zeros for them (within the current file size), a
+sub-chunk write that would merge with `r` takes `r` masked at
+`valid_end(r)` as its base, never the raw row, and a row with `valid_end(r)
+≤ c` is dead — never served, never a merge base. Retained data keeps its
+old epoch and is never re-stamped; "offset first, then epoch" — not "older
+epochs are never served". A size **extension** stamps `base_size` only and
+bumps no epoch: the zeros it exposes come from the rule, not from a write.
+Because the history holds every un-swept fence, the rule survives repeated
+shrink / extend / partial-rewrite sequences: shrink to 100 B at `e1`,
+extend to 1 MiB, write `[500, 600)` at `e1`, shrink to 700 B at `e2` —
+the `e0` base is valid to 100 (fence `e1`), the `e1` span to 600 (within
+fence `e2`), bytes `[100, 500)` and `[600, 700)` read zero, and no fence
+alone could have said so.
+
+**The sweep materialises fences and bounds the history.** The reaper's
+existing per-lane sweep (its own entries, 64 chunks per KV batch, off the
+client's path) walks each lane's rows older than the lane's newest fence:
+a dead row is deleted with a **versioned** DEL on the version it read, so
+a post-fence write that landed in between is never deleted; a boundary row
+is rewritten as the masked row at the fence epoch (versioned CAS). When no
+row in a lane precedes fence `j`, the lane drops `j` from its stamp; when
+every active lane has, the inode row drops `j` from the history. The
+history is bounded by `FENCE_HISTORY_MAX` entries (an internal constant);
+a TRUNCATE that finds it full answers BUSY and the client retries on its
+existing budget — the sweep is the only progress, so a full history is a
+reaper backlog, never a reason to delete in the entry. The history, the
+lane stamps and the rows are all replicated state: a restart mid-sweep
+re-derives the work from them and every sweep step is idempotent. Space
+returns asynchronously; `df` lags a large truncate by the sweep.
 
 **O_APPEND** reserves EOF on the inode shard, but the reservation is
 validated against the file's **real** EOF — the active-lane vector under the
@@ -1278,10 +1312,14 @@ this document is the invariant they are measured against.
 - **Content epoch** — the inode's content generation; bumped by truncate to
   invalidate lane state and reject in-flight stale publications. It is a
   fence, not part of any object's identity.
+- **Fence history** — the inode's replicated list of un-swept `(epoch,
+  size)` truncate entries (bounded by `FENCE_HISTORY_MAX`); with the content
+  epoch it defines `valid_end` for every chunk row (§7.3). Entries leave
+  when the background sweep has materialised them.
 - **Inode fence** — the bounded transaction over the inode row plus a file's
   active lanes (≤65 authorities) that distributes a new `content_epoch` or
-  `mtime_gen` and carries truncate's per-lane range delete. Used only by rare
-  operations; the write path never touches the inode shard.
+  `mtime_gen` and truncate's fence-history entry. It deletes nothing. Used
+  only by rare operations; the write path never touches the inode shard.
 - **Validated collect** — the read pattern shared by `stat()` and multi-chunk
   reads: collect versioned state, do the expensive work, re-read the
   versions, retry if they moved, with a read-only transaction as the bounded

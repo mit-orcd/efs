@@ -14,23 +14,16 @@ current status, remaining action, governing decision and gate; what
 follows that block is the dated record. W23 is the server compaction
 item; the client connection-liveness item is W49 (renamed Oct 2).
 
-**Durability and visibility, one statement (the normative text is
-[architecture.md §3](../architecture.md); this restates it for the items
-below).** A returned `write()` is client-owned: not durable, and not
-visible to another client until published. Three states of a buffered
-byte: *pending* — not yet published, in flight, or retrying on
-contention; *transiently failed* — a drain hit a transport failure, the
-RPC budget or a down node: the `fsync`/`flush` that ran it returns EIO,
-the bytes stay pending, the next drain retries; *failed (stalled)* — D27
-classified the publish as stalled: `fsync`/`fdatasync`/`flush` return EIO
-on every description until it lands, the bytes are retained, `write()`
-on that inode returns EIO. `fsync` drains **this client's** writes to the
-file that preceded the call and returns 0 when they committed; it never
-waits for other clients. Publication also happens at **every `flush`**
-(one per `close()` of a descriptor; dup'd descriptors flush more than
-once) and at the D24 landed-PUT REPORTs; `release` publishes nothing.
-Cross-client visibility follows publication, not `write()` — the one
-consistency deviation, stated in §3.
+**Durability and visibility.** The normative statement is
+[architecture.md §3](../architecture.md) (the three "Data —" bullets) and
+is not repeated here — earlier copies drifted. Vocabulary used by the
+items below, defined there: a buffered byte is *pending* (not yet
+published, in flight, or retrying on contention), *transiently failed*
+(one drain hit a transport/budget failure: that `fsync`/`flush` returns
+EIO, the byte stays pending) or *stalled* (D27: sticky EIO on every
+description until it lands, bytes retained). Publication happens at
+`fsync`, at every `flush`, and at the D24 landed-PUT REPORTs; `release`
+publishes nothing; `fsync` waits for this client's writes only.
 
 ---
 
@@ -853,7 +846,7 @@ in-flight batch stays forbidden. Order-table row 10.
 >
 > **Governing decision:** D1, D24, D27, W41 (decided). **Fold actors, precisely:** a fold may be performed only by (a) the publisher whose span fills the last delta slot, inside that publish, or (b) a reader that observes a full chain, as a background PUT off the read path that never blocks the read. No other rank's `fsync`/`close` folds; no fold on a chain that is not full; a fold's observation must come from a body that holds every span it folds (W38).
 >
-> **Gate:** ior-hard NP=36 SEGS=3000 cold `hardscan bad=0`; `pkill -9 -x io500` mid-run leaves no D-state rank once D27 is in; posix 1 200/201, posix 2 63/63.
+> **Gate:** ior-hard NP=36 SEGS=3000 cold `hardscan bad=0`; `pkill -9 -x io500` mid-run leaves no D-state rank once D27 is in; D27's `stalled_publish.sh` g1–g9 including **g8 recovery at a full cap** and **g9 whole-call bound**; posix 1 200/201, posix 2 63/63.
 
 **Historical record (dated).** Evidence and steps as they were written at the time. A step marked *done* or *superseded* in the status block above is not to be executed; its text stays so the gate directories and the reasoning remain findable.
 
@@ -1339,7 +1332,7 @@ What to implement:
 >
 > **Governing decision:** D25.
 >
-> **Gate:** `tests/stress/truncate_big.sh` exit 0; a loaded `open(O_TRUNC)` of a 10 GiB file returns within the SETATTR budget.
+> **Gate:** `tests/stress/truncate_big.sh` exit 0 with gates t1–t9 (retained prefix, zero tail after re-extension, no stale beyond the fence, sweep vs new-epoch writes, restart mid-sweep, apply bound, **durable truncation history across repeated shrink/extend/partial-rewrite**, history bound, boundary rewrites); a loaded `open(O_TRUNC)` of a 10 GiB file returns within the SETATTR budget.
 
 **Historical record (dated).** Evidence and steps as they were written at the time. A step marked *done* or *superseded* in the status block above is not to be executed; its text stays so the gate directories and the reasoning remain findable.
 
