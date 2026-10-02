@@ -380,18 +380,6 @@ static void dirty_set_put(uint64_t *keys, uint64_t mask, uint64_t key, uint64_t 
     }
 }
 
-static void dirty_sets_clear(void)
-{
-    if (g_client.dirty_ino_keys && g_client.dirty_ino_mask)
-        memset(g_client.dirty_ino_keys, 0,
-               (g_client.dirty_ino_mask + 1) * sizeof(uint64_t));
-    if (g_client.dirty_chunk_keys && g_client.dirty_chunk_mask)
-        memset(g_client.dirty_chunk_keys, 0,
-               (g_client.dirty_chunk_mask + 1) * sizeof(uint64_t));
-    g_client.dirty_ino_count = 0;
-    g_client.dirty_chunk_count = 0;
-}
-
 static int dirty_set_has(const uint64_t *keys, uint64_t mask, efs_ino_t ino)
 {
     if (!keys || !mask)
@@ -407,22 +395,162 @@ static int dirty_set_has(const uint64_t *keys, uint64_t mask, efs_ino_t ino)
     return 0;
 }
 
-/* The dirty set a REPORT is currently publishing. dirty_snap_save_locked
- * detaches the live set the moment a report starts, so without this an inode
- * looks clean from snapshot until the owner has actually applied the size --
- * and lookup_walk would then serve the owner's older size while this client
- * still holds the newer one. report_mu serializes reports, so there is at
- * most one of these at a time. Guarded by g_client.dirty_mu. */
-static uint64_t *pub_ino_keys;
-static uint64_t pub_ino_mask;
+/* W41 (decided, Oct 2 2026): the live dirty state is one record per
+ * inode, so a REPORT detaches one inode's marks and leaves every other
+ * inode's in place. Before, one process-wide set was detached whole on
+ * every REPORT (an fsync of file A re-marked every other file's chunks
+ * one by one under dirty_mu) and one `report_mu` serialized every
+ * REPORT: a 16-stream dd's close() waited 74.6 s behind the other
+ * streams' publishes, and a file looping on STALE held every other
+ * close. Records live under g_client.dirty_mu. */
+struct ino_dirty {
+    efs_ino_t ino;
+    uint64_t *chunk_keys, chunk_mask, chunk_count; /* dedupe set */
+    efs_ino_t *chunk_inos;                          /* parallel arrays */
+    uint32_t *chunk_idxs;
+    uint64_t chunk_cap;
+    int ino_marked;   /* the row (size/mtime) needs an irec */
+    unsigned landed;  /* D24: landed PUTs since this inode's last kick */
+    struct ino_dirty *next;
+};
+#define IDIRTY_BUCKETS 4096
+static struct ino_dirty *g_idirty[IDIRTY_BUCKETS];
+static uint64_t g_idirty_n; /* records */
 
-/* Drop the alias. Must run before the snapshot array is freed or merged back
- * on every exit path, or ino_is_dirty reads freed memory. */
-static void pub_ino_clear(void)
+static struct ino_dirty *idirty_find(efs_ino_t ino)
 {
+    struct ino_dirty *r = g_idirty[(uint64_t)ino % IDIRTY_BUCKETS];
+
+    while (r && r->ino != ino)
+        r = r->next;
+    return r;
+}
+
+static struct ino_dirty *idirty_get(efs_ino_t ino)
+{
+    struct ino_dirty *r = idirty_find(ino);
+
+    if (r)
+        return r;
+    r = calloc(1, sizeof(*r));
+    if (!r)
+        return NULL;
+    r->ino = ino;
+    r->next = g_idirty[(uint64_t)ino % IDIRTY_BUCKETS];
+    g_idirty[(uint64_t)ino % IDIRTY_BUCKETS] = r;
+    g_idirty_n++;
+    return r;
+}
+
+/* Unlink and free a record (its arrays are the caller's if they were
+ * moved out first — pass them NULL via idirty_detach). */
+static void idirty_free(struct ino_dirty *r)
+{
+    struct ino_dirty **pp = &g_idirty[(uint64_t)r->ino % IDIRTY_BUCKETS];
+
+    while (*pp && *pp != r)
+        pp = &(*pp)->next;
+    if (*pp)
+        *pp = r->next;
+    if (r->ino_marked && g_client.dirty_ino_count)
+        g_client.dirty_ino_count--;
+    if (g_client.dirty_chunk_count >= r->chunk_count)
+        g_client.dirty_chunk_count -= r->chunk_count;
+    else
+        g_client.dirty_chunk_count = 0;
+    free(r->chunk_keys);
+    free(r->chunk_inos);
+    free(r->chunk_idxs);
+    free(r);
+    if (g_idirty_n)
+        g_idirty_n--;
+}
+
+static void dirty_sets_clear(void)
+{
+    for (size_t b = 0; b < IDIRTY_BUCKETS; b++)
+        while (g_idirty[b])
+            idirty_free(g_idirty[b]);
+    g_client.dirty_ino_count = 0;
+    g_client.dirty_chunk_count = 0;
+    g_idirty_n = 0;
+}
+
+void efs_client_dirty_sets_free(void)
+{
+    dirty_sets_clear();
+}
+
+/* The inodes a REPORT is currently publishing (W41: one slot per
+ * in-flight REPORT; a whole-set REPORT parks its snapshot's ino set, a
+ * per-inode REPORT parks the ino). dirty_snap_save_locked detaches the
+ * live marks the moment a report starts, so without this an inode looks
+ * clean from snapshot until the owner has actually applied the size --
+ * and lookup_walk would then serve the owner's older size while this
+ * client still holds the newer one. A second REPORT of an inode that is
+ * in flight waits here (sync) or leaves it for the next kick (async), so
+ * two REPORTs never carry the same chunk. Guarded by g_client.dirty_mu;
+ * pub_cv is broadcast when a slot is released. */
+#define PUB_SLOTS 64
+struct pub_slot {
+    int used;
+    efs_ino_t ino;       /* single-inode REPORT */
+    uint64_t *keys;      /* whole-set REPORT: alias of ds->ino_keys */
+    uint64_t mask;
+};
+static struct pub_slot pub_slots[PUB_SLOTS];
+static pthread_cond_t pub_cv = PTHREAD_COND_INITIALIZER;
+
+/* Caller holds dirty_mu. */
+static int pub_has_locked(efs_ino_t ino)
+{
+    for (int i = 0; i < PUB_SLOTS; i++) {
+        if (!pub_slots[i].used)
+            continue;
+        if (pub_slots[i].ino == ino)
+            return 1;
+        if (dirty_set_has(pub_slots[i].keys, pub_slots[i].mask, ino))
+            return 1;
+    }
+    return 0;
+}
+
+static int pub_full_locked(void)
+{
+    for (int i = 0; i < PUB_SLOTS; i++)
+        if (!pub_slots[i].used)
+            return 0;
+    return 1;
+}
+
+/* Caller holds dirty_mu. Returns the slot index, or -1 when all are in
+ * use (the caller waits on pub_cv). */
+static int pub_take_locked(efs_ino_t ino, uint64_t *keys, uint64_t mask)
+{
+    for (int i = 0; i < PUB_SLOTS; i++) {
+        if (pub_slots[i].used)
+            continue;
+        pub_slots[i].used = 1;
+        pub_slots[i].ino = ino;
+        pub_slots[i].keys = keys;
+        pub_slots[i].mask = mask;
+        return i;
+    }
+    return -1;
+}
+
+/* Drop the alias. Must run before the snapshot array is freed or merged
+ * back on every exit path, or ino_is_dirty reads freed memory. */
+static void pub_release(int slot)
+{
+    if (slot < 0)
+        return;
     pthread_mutex_lock(&g_client.dirty_mu);
-    pub_ino_keys = NULL;
-    pub_ino_mask = 0;
+    pub_slots[slot].used = 0;
+    pub_slots[slot].ino = 0;
+    pub_slots[slot].keys = NULL;
+    pub_slots[slot].mask = 0;
+    pthread_cond_broadcast(&pub_cv);
     pthread_mutex_unlock(&g_client.dirty_mu);
 }
 
@@ -440,9 +568,7 @@ int efs_client_ino_is_dirty(efs_ino_t ino)
  * eviction commit already holds dirty_mu (client-cache design Part A). */
 int efs_client_ino_is_dirty_locked(efs_ino_t ino)
 {
-    return dirty_set_has(g_client.dirty_ino_keys, g_client.dirty_ino_mask,
-                         ino) ||
-           dirty_set_has(pub_ino_keys, pub_ino_mask, ino);
+    return idirty_find(ino) != NULL || pub_has_locked(ino);
 }
 
 #define MTIME_PIN_MAX 256
@@ -513,13 +639,15 @@ void efs_client_mark_ino_dirty(efs_ino_t ino)
         return;
     efs_client_ensure_dir_locks();
     pthread_mutex_lock(&g_client.dirty_mu);
-    if (dirty_set_ensure(&g_client.dirty_ino_keys, &g_client.dirty_ino_mask,
-                         g_client.dirty_ino_count + 1) != 0) {
+    struct ino_dirty *r = idirty_get(ino);
+    if (!r) {
         pthread_mutex_unlock(&g_client.dirty_mu);
         return;
     }
-    dirty_set_put(g_client.dirty_ino_keys, g_client.dirty_ino_mask, ino,
-                  &g_client.dirty_ino_count);
+    if (!r->ino_marked) {
+        r->ino_marked = 1;
+        g_client.dirty_ino_count++;
+    }
     int stripe = (int)((uint64_t)ino % EFS_DIR_LOCKS);
     g_client.last_dirty_stripe = stripe;
     g_client.dirty_stripe_ops[stripe]++;
@@ -532,42 +660,47 @@ void efs_client_mark_chunk_dirty(efs_ino_t ino, uint32_t chunk_index)
         return;
     efs_client_ensure_dir_locks();
     pthread_mutex_lock(&g_client.dirty_mu);
+    struct ino_dirty *r = idirty_get(ino);
     uint64_t before = 0;
-    if (g_client.dirty_chunk_keys && g_client.dirty_chunk_mask) {
+    if (!r)
+        goto out;
+    if (r->chunk_keys && r->chunk_mask) {
         uint64_t key = pack_dirty_chunk(ino, chunk_index);
-        uint64_t i = key & g_client.dirty_chunk_mask;
-        for (uint64_t n = 0; n <= g_client.dirty_chunk_mask; n++) {
-            if (g_client.dirty_chunk_keys[i] == 0)
+        uint64_t i = key & r->chunk_mask;
+        for (uint64_t n = 0; n <= r->chunk_mask; n++) {
+            if (r->chunk_keys[i] == 0)
                 break;
-            if (g_client.dirty_chunk_keys[i] == key)
+            if (r->chunk_keys[i] == key)
                 goto out;
-            i = (i + 1) & g_client.dirty_chunk_mask;
+            i = (i + 1) & r->chunk_mask;
         }
     }
-    before = g_client.dirty_chunk_count;
-    if (dirty_set_ensure(&g_client.dirty_chunk_keys, &g_client.dirty_chunk_mask,
-                         before + 1) != 0)
-        goto out;
-    dirty_set_put(g_client.dirty_chunk_keys, g_client.dirty_chunk_mask,
-                  pack_dirty_chunk(ino, chunk_index), &g_client.dirty_chunk_count);
-    if (g_client.dirty_chunk_count == before)
-        goto out;
-    if (g_client.dirty_chunk_count > g_client.dirty_chunk_cap) {
-        uint64_t ncap = g_client.dirty_chunk_cap ? g_client.dirty_chunk_cap * 2 : 64;
-        efs_ino_t *ni = realloc(g_client.dirty_chunk_inos, ncap * sizeof(efs_ino_t));
-        uint32_t *nx = realloc(g_client.dirty_chunk_idxs, ncap * sizeof(uint32_t));
-        if (!ni || !nx) {
-            free(ni);
-            free(nx);
+    before = r->chunk_count;
+    /* Grow the list before the key goes into the set, so a failed
+     * realloc leaves no key without a list entry (the old process-wide
+     * set could end with count > listed entries). */
+    if (before + 1 > r->chunk_cap) {
+        uint64_t ncap = r->chunk_cap ? r->chunk_cap * 2 : 64;
+        efs_ino_t *ni = realloc(r->chunk_inos, ncap * sizeof(efs_ino_t));
+        uint32_t *nx = realloc(r->chunk_idxs, ncap * sizeof(uint32_t));
+        if (ni)
+            r->chunk_inos = ni;
+        if (nx)
+            r->chunk_idxs = nx;
+        if (!ni || !nx)
             goto out;
-        }
-        g_client.dirty_chunk_inos = ni;
-        g_client.dirty_chunk_idxs = nx;
-        g_client.dirty_chunk_cap = ncap;
+        r->chunk_cap = ncap;
     }
-    uint64_t slot = g_client.dirty_chunk_count - 1;
-    g_client.dirty_chunk_inos[slot] = ino;
-    g_client.dirty_chunk_idxs[slot] = chunk_index;
+    if (dirty_set_ensure(&r->chunk_keys, &r->chunk_mask, before + 1) != 0)
+        goto out;
+    dirty_set_put(r->chunk_keys, r->chunk_mask,
+                  pack_dirty_chunk(ino, chunk_index), &r->chunk_count);
+    if (r->chunk_count == before)
+        goto out;
+    uint64_t slot = r->chunk_count - 1;
+    r->chunk_inos[slot] = ino;
+    r->chunk_idxs[slot] = chunk_index;
+    g_client.dirty_chunk_count++;
 out:
     pthread_mutex_unlock(&g_client.dirty_mu);
 }
@@ -582,23 +715,34 @@ out:
  * process). Now every REPORT_LANDED_CHUNKS landed PUTs (1 GiB) kick the
  * flush thread, which REPORTs the whole dirty set without waiting for a
  * commit (the same records close would send, in the same code path).
- * close() then publishes only the tail. The count is global, so eight
- * concurrent writers share one REPORT per GiB landed. A REPORT at
- * 8192 records is ~1.4 MB and ~100 ms of server time. Internal
- * constant, not a knob. */
+ * close() then publishes only the tail. W41 (Oct 2): the count is per
+ * inode and the kick names the inode, so each writer's REPORT carries
+ * its own ≤ 1 GiB of records and a pool thread publishes it without
+ * waiting for the other writers' REPORTs. A REPORT at 8192 records is
+ * ~1.4 MB and ~100 ms of server time. Internal constant, not a knob. */
 #define REPORT_LANDED_CHUNKS 8192u
-static unsigned g_landed_unreported;
 
-static void report_landed_note(void)
+static void meta_flush_enqueue(efs_ino_t ino);
+
+/* Called right after efs_client_mark_chunk_dirty(ino, ci) for a landed
+ * PUT. The record exists unless a REPORT detached it between the two
+ * calls; then this PUT rides in that REPORT's successor. */
+static void report_landed_note(efs_ino_t ino)
 {
-    unsigned n = __atomic_add_fetch(&g_landed_unreported, 1, __ATOMIC_RELAXED);
-    if (n < REPORT_LANDED_CHUNKS)
-        return;
-    /* One kicker per crossing: whoever swaps the count back to 0. */
-    if (__atomic_compare_exchange_n(&g_landed_unreported, &n, 0u, 0,
-                                    __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {
-        fprintf(stderr, "report-landed: %u chunks landed, kicking REPORT\n", n);
-        efs_client_kick_meta_flush();
+    struct ino_dirty *r;
+    unsigned n = 0;
+
+    pthread_mutex_lock(&g_client.dirty_mu);
+    r = idirty_find(ino);
+    if (r && ++r->landed >= REPORT_LANDED_CHUNKS) {
+        n = r->landed;
+        r->landed = 0;
+    }
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    if (n) {
+        fprintf(stderr, "report-landed: ino=%llu %u chunks landed, kicking REPORT\n",
+                (unsigned long long)ino, n);
+        meta_flush_enqueue(ino);
     }
 }
 
@@ -633,58 +777,73 @@ struct dirty_snap {
     int packed_is_cache;
 };
 
-static void dirty_snap_save_locked(struct dirty_snap *ds)
+/* Move one record's marks into the snapshot (W41). Caller holds
+ * dirty_mu; `r` is unlinked and freed. Returns -1 on NOMEM with the
+ * record left in place. */
+static int dirty_snap_take_record(struct dirty_snap *ds, struct ino_dirty *r)
 {
-    ds->ino_keys = g_client.dirty_ino_keys;
-    ds->ino_mask = g_client.dirty_ino_mask;
-    ds->ino_count = g_client.dirty_ino_count;
-    ds->chunk_keys = g_client.dirty_chunk_keys;
-    ds->chunk_mask = g_client.dirty_chunk_mask;
-    ds->chunk_count = g_client.dirty_chunk_count;
-    ds->chunk_inos = g_client.dirty_chunk_inos;
-    ds->chunk_idxs = g_client.dirty_chunk_idxs;
-    ds->chunk_cap = g_client.dirty_chunk_cap;
+    if (r->ino_marked) {
+        if (dirty_set_ensure(&ds->ino_keys, &ds->ino_mask,
+                             ds->ino_count + 1) != 0)
+            return -1;
+        dirty_set_put(ds->ino_keys, ds->ino_mask, r->ino, &ds->ino_count);
+    }
+    if (r->chunk_count) {
+        uint64_t need = ds->chunk_count + r->chunk_count;
+
+        if (need > ds->chunk_cap) {
+            uint64_t ncap = ds->chunk_cap ? ds->chunk_cap : 64;
+            efs_ino_t *ni;
+            uint32_t *nx;
+
+            while (ncap < need)
+                ncap *= 2;
+            ni = realloc(ds->chunk_inos, ncap * sizeof(*ni));
+            if (ni)
+                ds->chunk_inos = ni;
+            nx = realloc(ds->chunk_idxs, ncap * sizeof(*nx));
+            if (nx)
+                ds->chunk_idxs = nx;
+            if (!ni || !nx)
+                return -1;
+            ds->chunk_cap = ncap;
+        }
+        memcpy(ds->chunk_inos + ds->chunk_count, r->chunk_inos,
+               r->chunk_count * sizeof(*ds->chunk_inos));
+        memcpy(ds->chunk_idxs + ds->chunk_count, r->chunk_idxs,
+               r->chunk_count * sizeof(*ds->chunk_idxs));
+        ds->chunk_count += r->chunk_count;
+    }
+    idirty_free(r);
+    return 0;
+}
+
+/* Detach the marks a REPORT will publish. only_ino: that inode's record
+ * (nothing else moves). 0: every record that is not already in flight,
+ * plus the process-wide meta_dirty flag. Caller holds the table lock
+ * and dirty_mu. ds->chunk_keys stays NULL — the snapshot is a list, the
+ * dedupe set belongs to the live record. */
+static void dirty_snap_save_locked(struct dirty_snap *ds, efs_ino_t only_ino)
+{
+    if (only_ino) {
+        struct ino_dirty *r = idirty_find(only_ino);
+
+        if (r)
+            (void)dirty_snap_take_record(ds, r);
+        return;
+    }
     ds->meta_dirty = g_client.meta_dirty;
     ds->dirty_ops = g_client.meta_dirty_ops;
-    g_client.dirty_ino_keys = NULL;
-    g_client.dirty_ino_mask = 0;
-    g_client.dirty_ino_count = 0;
-    g_client.dirty_chunk_keys = NULL;
-    g_client.dirty_chunk_mask = 0;
-    g_client.dirty_chunk_count = 0;
-    g_client.dirty_chunk_inos = NULL;
-    g_client.dirty_chunk_idxs = NULL;
-    g_client.dirty_chunk_cap = 0;
     g_client.meta_dirty = 0;
     g_client.meta_dirty_ops = 0;
-    ds->ino_slots = NULL;
-    ds->chunk_slots = NULL;
-    ds->layout_epoch = g_client.export.layout_epoch;
-    ds->snap_icount = g_client.export.inode_count;
-    ds->snap_ccount = g_client.export.chunk_count;
-    if (ds->ino_count) {
-        ds->ino_slots = malloc(ds->ino_count * sizeof(uint64_t));
-        uint64_t n = 0;
-        if (ds->ino_slots && ds->ino_keys) {
-            for (uint64_t i = 0; i <= ds->ino_mask && n < ds->ino_count; i++) {
-                if (!ds->ino_keys[i])
-                    continue;
-                uint64_t slot = UINT64_MAX;
-                (void)efs_export_inode_slot(&g_client.export, ds->ino_keys[i],
-                                            &slot);
-                ds->ino_slots[n++] = slot;
-            }
-        }
-    }
-    if (ds->chunk_count) {
-        ds->chunk_slots = malloc(ds->chunk_count * sizeof(uint64_t));
-        if (ds->chunk_slots) {
-            for (uint64_t i = 0; i < ds->chunk_count; i++) {
-                uint64_t slot = UINT64_MAX;
-                (void)efs_export_chunk_slot(&g_client.export, ds->chunk_inos[i],
-                                            ds->chunk_idxs[i], &slot);
-                ds->chunk_slots[i] = slot;
-            }
+    for (size_t b = 0; b < IDIRTY_BUCKETS; b++) {
+        struct ino_dirty *r = g_idirty[b], *next;
+
+        while (r) {
+            next = r->next;
+            if (!pub_has_locked(r->ino))
+                (void)dirty_snap_take_record(ds, r);
+            r = next;
         }
     }
 }
@@ -705,18 +864,20 @@ static void dirty_snap_free(struct dirty_snap *ds)
 }
 
 /* Flush failed: re-mark everything the snapshot covered so the next flush
- * retries it. g_client.lock must be held. */
-static void dirty_snap_merge_back_locked(struct dirty_snap *ds)
+ * retries it. g_client.lock must be held. The snapshot is NOT freed here
+ * (W41: the caller releases the pub slot that aliases ds->ino_keys first,
+ * then dirty_snap_free). */
+static void dirty_snap_remark_locked(struct dirty_snap *ds)
 {
     for (uint64_t i = 0; i <= ds->ino_mask; i++) {
         if (ds->ino_keys && ds->ino_keys[i])
             efs_client_mark_ino_dirty(ds->ino_keys[i]);
     }
     for (uint64_t i = 0; i < ds->chunk_count; i++)
-        efs_client_mark_chunk_dirty(ds->chunk_inos[i], ds->chunk_idxs[i]);
+        if (ds->chunk_inos[i])
+            efs_client_mark_chunk_dirty(ds->chunk_inos[i], ds->chunk_idxs[i]);
     g_client.meta_dirty |= ds->meta_dirty;
     g_client.meta_dirty_ops += ds->dirty_ops;
-    dirty_snap_free(ds);
 }
 
 struct stale_pair {
@@ -1034,28 +1195,54 @@ int efs_client_report_dirty(int sync)
  * out as NET). Other inodes stay dirty. */
 int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
 {
-    static pthread_mutex_t report_mu = PTHREAD_MUTEX_INITIALIZER;
     struct dirty_snap ds;
+    int pub = -1;
     memset(&ds, 0, sizeof(ds));
 
-    /* Close kicks REPORT on the flush thread. setattr (utimens /
-     * truncate) drains first so a late rec cannot undo SETATTR. */
-    pthread_mutex_lock(&report_mu);
-
-    efs_client_table_lock();
+    /* W41: no process-wide report lock. An inode is published by at most
+     * one REPORT at a time (pub slot). A sync caller (fsync/close/
+     * setattr drain) whose inode is in flight waits for that REPORT and
+     * then publishes what accumulated since; an async caller leaves it
+     * for the next kick. A whole-set REPORT skips in-flight inodes. */
     efs_client_ensure_dir_locks();
+    /* Fast exits, no table lock. */
     pthread_mutex_lock(&g_client.dirty_mu);
-    if (g_client.dirty_ino_count == 0 && g_client.dirty_chunk_count == 0 &&
-        !g_client.meta_dirty && !sync) {
+    if ((only_ino && !sync && pub_has_locked(only_ino)) ||
+        (g_idirty_n == 0 && !g_client.meta_dirty && !sync) ||
+        (only_ino && !sync && !idirty_find(only_ino))) {
         pthread_mutex_unlock(&g_client.dirty_mu);
-        efs_client_table_unlock();
-        pthread_mutex_unlock(&report_mu);
         return EFS_OK;
     }
-    dirty_snap_save_locked(&ds);
+    pthread_mutex_unlock(&g_client.dirty_mu);
+
+    /* Take the pub slot BEFORE detaching the marks, so the inode never
+     * reads clean while its REPORT is being set up. Lock order is table
+     * lock, then dirty_mu; the wait drops both (the in-flight REPORT
+     * needs the table lock to finish). */
+    for (;;) {
+        efs_client_table_lock();
+        pthread_mutex_lock(&g_client.dirty_mu);
+        if (!(only_ino && pub_has_locked(only_ino)) &&
+            (pub = pub_take_locked(only_ino, NULL, 0)) >= 0)
+            break;
+        if (only_ino && !sync) {
+            pthread_mutex_unlock(&g_client.dirty_mu);
+            efs_client_table_unlock();
+            return EFS_OK;
+        }
+        pthread_mutex_unlock(&g_client.dirty_mu);
+        efs_client_table_unlock();
+        pthread_mutex_lock(&g_client.dirty_mu);
+        while ((only_ino && pub_has_locked(only_ino)) || pub_full_locked())
+            pthread_cond_wait(&pub_cv, &g_client.dirty_mu);
+        pthread_mutex_unlock(&g_client.dirty_mu);
+    }
+    dirty_snap_save_locked(&ds, only_ino);
     /* Keep these inodes reading as dirty until the owner has the size. */
-    pub_ino_keys = ds.ino_keys;
-    pub_ino_mask = ds.ino_mask;
+    if (!only_ino) {
+        pub_slots[pub].keys = ds.ino_keys;
+        pub_slots[pub].mask = ds.ino_mask;
+    }
     pthread_mutex_unlock(&g_client.dirty_mu);
 
     /* Build chunk + inode size/mtime recs from the live table (still holding
@@ -1084,29 +1271,16 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
     if ((ds.chunk_count && !crecs) || ((ds.ino_count + extra_cap) && !irecs)) {
         free(crecs);
         free(irecs);
-        pub_ino_clear();
-        /* table lock held (not dirty_mu — merge_back takes it internally). */
-        dirty_snap_merge_back_locked(&ds);
+        /* table lock held (not dirty_mu — the marks take it internally).
+         * Re-mark, then release the slot, then free (see the tail). */
+        dirty_snap_remark_locked(&ds);
+        pub_release(pub);
+        dirty_snap_free(&ds);
         efs_client_table_unlock();
-        pthread_mutex_unlock(&report_mu);
         return EFS_ERR_NOMEM;
     }
-    if (only_ino) {
-        for (uint64_t i = 0; i <= ds.ino_mask; i++) {
-            if (ds.ino_keys && ds.ino_keys[i] && ds.ino_keys[i] != only_ino) {
-                efs_client_mark_ino_dirty(ds.ino_keys[i]);
-                ds.ino_keys[i] = 0;
-                if (ds.ino_count)
-                    ds.ino_count--;
-            }
-        }
-        for (uint64_t i = 0; i < ds.chunk_count; i++) {
-            if (ds.chunk_inos[i] && ds.chunk_inos[i] != only_ino) {
-                efs_client_mark_chunk_dirty(ds.chunk_inos[i], ds.chunk_idxs[i]);
-                ds.chunk_inos[i] = 0;
-            }
-        }
-    }
+    /* W41: a per-inode snapshot holds only only_ino's marks (the old
+     * process-wide snapshot re-marked every other inode here). */
     for (uint64_t i = 0; i < ds.chunk_count; i++) {
         struct efs_chunk_entry ce;
         if (!ds.chunk_inos[i])
@@ -1210,9 +1384,8 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
     if (cn == 0 && in == 0) {
         free(crecs);
         free(irecs);
-        pub_ino_clear();
+        pub_release(pub);
         dirty_snap_free(&ds);
-        pthread_mutex_unlock(&report_mu);
         return EFS_OK;
     }
 
@@ -1270,9 +1443,12 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
         if (rc == EFS_ERR_STALE) {
             uint32_t k;
             unsigned slp;
-            /* Close-kicked report_dirty(0) must not occupy report_mu
-             * for 64 STALE rounds — that starved posix symlink/utimens
-             * for 15 s after dir_many_files. A later fsync/close retries. */
+            /* An async REPORT does not spin 64 STALE rounds (it used to
+             * hold the process-wide report lock while doing so and
+             * starved posix symlink/utimens for 15 s after
+             * dir_many_files; W41 removed that lock, but a whole-set
+             * async REPORT still parks every inode it carries). A later
+             * fsync/close retries. */
             if (!sync && attempt >= 2)
                 break;
             for (k = 0; k < in; k++) {
@@ -1397,39 +1573,89 @@ int efs_client_report_dirty_ino(efs_ino_t only_ino, int sync)
     }
     free(crecs);
     free(irecs);
-    /* The owner now has these sizes (or the snapshot is about to be merged
-     * back into the live set), so stop reporting them as in-flight. */
-    pub_ino_clear();
     if (rc == EFS_OK) {
+        /* The owner now has these sizes: stop reporting them as
+         * in-flight. */
+        pub_release(pub);
         dirty_snap_free(&ds);
     } else {
+        /* Re-mark first, release the slot second, so the inodes never
+         * read clean in between (the evictor would drop a row with
+         * unpublished chunks). The slot's alias of ds.ino_keys is
+         * dropped before the snapshot is freed. */
         efs_client_table_lock();
-        dirty_snap_merge_back_locked(&ds);
+        dirty_snap_remark_locked(&ds);
+        pub_release(pub);
+        dirty_snap_free(&ds);
         efs_client_table_unlock();
         g_client.report_flush_failed = 1;
     }
-    pthread_mutex_unlock(&report_mu);
     return rc;
 }
 
 
-/* Flush-thread main: waits for threshold hits and runs blocking flushes off
- * the FUSE worker threads. g_repl_mu still serializes against forced flushes
- * (fsync/unmount) from the op path. */
+/* W41: the flush pool. Each queued entry is an inode (D24: that writer
+ * crossed REPORT_LANDED_CHUNKS landed PUTs) or 0 (the op-count
+ * threshold: REPORT the whole dirty set). A pool thread pops one and
+ * runs the blocking REPORT off the FUSE worker threads; an inode that
+ * is already in flight is left for its next kick by report_dirty_ino.
+ * The queue dedupes, so a burst of kicks for one inode is one entry. */
+static void meta_flush_enqueue(efs_ino_t ino)
+{
+    unsigned i;
+
+    if (!g_client.meta_flush_started) {
+        /* No pool (C tests / before enable): the next forced REPORT
+         * carries it. */
+        efs_client_ensure_dir_locks();
+        pthread_mutex_lock(&g_client.dirty_mu);
+        g_client.meta_dirty = 1;
+        pthread_mutex_unlock(&g_client.dirty_mu);
+        return;
+    }
+    pthread_mutex_lock(&g_client.meta_flush_mu);
+    for (i = 0; i < g_client.meta_flush_qn; i++) {
+        unsigned k = (g_client.meta_flush_qh + i) % EFS_META_FLUSH_QLEN;
+
+        if (g_client.meta_flush_q[k] == ino) {
+            pthread_mutex_unlock(&g_client.meta_flush_mu);
+            return;
+        }
+    }
+    if (g_client.meta_flush_qn == EFS_META_FLUSH_QLEN) {
+        /* Full: collapse into a whole-set REPORT (0 = everything). */
+        g_client.meta_flush_q[g_client.meta_flush_qh] = 0;
+        g_client.meta_flush_qn = 1;
+    } else {
+        unsigned k = (g_client.meta_flush_qh + g_client.meta_flush_qn) %
+                     EFS_META_FLUSH_QLEN;
+
+        g_client.meta_flush_q[k] = ino;
+        g_client.meta_flush_qn++;
+    }
+    pthread_cond_signal(&g_client.meta_flush_cv);
+    pthread_mutex_unlock(&g_client.meta_flush_mu);
+}
+
 static void *meta_flush_main(void *arg)
 {
     (void)arg;
     pthread_mutex_lock(&g_client.meta_flush_mu);
     for (;;) {
-        while (!g_client.meta_flush_req && !g_client.meta_flush_stop)
+        efs_ino_t ino;
+
+        while (g_client.meta_flush_qn == 0 && !g_client.meta_flush_stop)
             pthread_cond_wait(&g_client.meta_flush_cv,
                               &g_client.meta_flush_mu);
         if (g_client.meta_flush_stop)
             break;
-        g_client.meta_flush_req = 0;
+        ino = g_client.meta_flush_q[g_client.meta_flush_qh];
+        g_client.meta_flush_qh = (g_client.meta_flush_qh + 1) %
+                                 EFS_META_FLUSH_QLEN;
+        g_client.meta_flush_qn--;
         pthread_mutex_unlock(&g_client.meta_flush_mu);
-        /* Phase 2b: background threshold flush reports dirty state via RPC. */
-        (void)efs_client_report_dirty(0);
+        /* Phase 2b: background flush reports dirty state via RPC. */
+        (void)efs_client_report_dirty_ino(ino, 0);
         pthread_mutex_lock(&g_client.meta_flush_mu);
     }
     pthread_mutex_unlock(&g_client.meta_flush_mu);
@@ -1442,15 +1668,25 @@ void efs_client_enable_meta_batch(uint32_t every_n_ops)
     g_client.meta_batch_ops = every_n_ops ? every_n_ops : 4096;
     g_client.meta_dirty = 0;
     g_client.meta_dirty_ops = 0;
+    efs_client_ensure_dir_locks();
+    pthread_mutex_lock(&g_client.dirty_mu);
     dirty_sets_clear();
+    pthread_mutex_unlock(&g_client.dirty_mu);
 
     if (!g_client.meta_flush_started) {
         pthread_mutex_init(&g_client.meta_flush_mu, NULL);
         pthread_cond_init(&g_client.meta_flush_cv, NULL);
-        g_client.meta_flush_req = 0;
+        g_client.meta_flush_qh = 0;
+        g_client.meta_flush_qn = 0;
         g_client.meta_flush_stop = 0;
-        if (pthread_create(&g_client.meta_flush_tid, NULL, meta_flush_main,
-                           NULL) == 0)
+        g_client.meta_flush_n = 0;
+        for (int i = 0; i < EFS_META_FLUSH_POOL; i++) {
+            if (pthread_create(&g_client.meta_flush_tids[g_client.meta_flush_n],
+                               NULL, meta_flush_main, NULL) != 0)
+                break;
+            g_client.meta_flush_n++;
+        }
+        if (g_client.meta_flush_n > 0)
             g_client.meta_flush_started = 1;
     }
 
@@ -1466,25 +1702,25 @@ void efs_client_stop_meta_flush(void)
         return;
     pthread_mutex_lock(&g_client.meta_flush_mu);
     g_client.meta_flush_stop = 1;
-    pthread_cond_signal(&g_client.meta_flush_cv);
+    pthread_cond_broadcast(&g_client.meta_flush_cv);
     pthread_mutex_unlock(&g_client.meta_flush_mu);
-    pthread_join(g_client.meta_flush_tid, NULL);
+    for (int i = 0; i < g_client.meta_flush_n; i++)
+        pthread_join(g_client.meta_flush_tids[i], NULL);
+    g_client.meta_flush_n = 0;
     g_client.meta_flush_started = 0;
+    /* W41: a REPORT that was in flight on a pool thread and failed has
+     * re-marked its inodes; nothing kicks the pool after this point, so
+     * publish what is left once, synchronously. */
+    pthread_mutex_lock(&g_client.dirty_mu);
+    int left = g_idirty_n > 0;
+    pthread_mutex_unlock(&g_client.dirty_mu);
+    if (left)
+        (void)efs_client_report_dirty_ino(0, 1);
 }
 
 void efs_client_kick_meta_flush(void)
 {
-    if (g_client.meta_flush_started) {
-        pthread_mutex_lock(&g_client.meta_flush_mu);
-        g_client.meta_flush_req = 1;
-        pthread_cond_signal(&g_client.meta_flush_cv);
-        pthread_mutex_unlock(&g_client.meta_flush_mu);
-        return;
-    }
-    efs_client_ensure_dir_locks();
-    pthread_mutex_lock(&g_client.dirty_mu);
-    g_client.meta_dirty = 1;
-    pthread_mutex_unlock(&g_client.dirty_mu);
+    meta_flush_enqueue(0);
 }
 
 int efs_client_note_meta_change(int force)
@@ -1517,10 +1753,7 @@ int efs_client_note_meta_change(int force)
      * above stay blocking for durability. */
     if (flush) {
         if (g_client.meta_flush_started) {
-            pthread_mutex_lock(&g_client.meta_flush_mu);
-            g_client.meta_flush_req = 1;
-            pthread_cond_signal(&g_client.meta_flush_cv);
-            pthread_mutex_unlock(&g_client.meta_flush_mu);
+            meta_flush_enqueue(0);
             return EFS_OK;
         }
         return efs_client_report_dirty(0);
@@ -2827,7 +3060,7 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
         pthread_mutex_unlock(dcache_mu(sl));
     }
     efs_client_mark_chunk_dirty(ino, ci);
-    report_landed_note();
+    report_landed_note(ino);
     /* Mark the ino too so the next report carries its size/mtime irec. The
      * append path reflects the reserved size before the patch, so
      * dcache_note_size sees no growth and skips its mark — and the
@@ -3844,7 +4077,15 @@ static int dcache_store(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
-    struct dcache_ent *e = dcache_find(s, ino, ci);
+    /* _meta: a body-less node of THIS chunk (its PUT landed, the body
+     * went to the rdcache or was dropped) is refilled, never shadowed
+     * by a second node. dcache_find skips body-less nodes, so the store
+     * chained a new one and dcache_find_meta (put-record,
+     * note_committed, putid) kept hitting the stale first node: the
+     * live node never learned its object, the REPORT took its identity
+     * from the staging table, and the next flush folded a full image
+     * from a stale delta list (peer_shared_pwrite EIO, Oct 2 2026). */
+    struct dcache_ent *e = dcache_find_meta(s, ino, ci);
     if (e) {
         int rc = dcache_fill(e, ino, ci, chunk, chunk_size);
         pthread_mutex_unlock(mu);
@@ -3916,7 +4157,7 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
     uint32_t s = dcache_slot(ino, ci);
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
-    struct dcache_ent *e = dcache_find(s, ino, ci);
+    struct dcache_ent *e = dcache_find_meta(s, ino, ci); /* see dcache_store */
     if (e) {
         int rc = dcache_take(e, ino, ci, chunk, chunk_size);
         if (rc == 0)
@@ -4033,6 +4274,60 @@ static void dcache_install_image(struct dcache_ent *e, uint8_t *img,
     }
     memcpy(e->data, img, len);
     e->have_base = 1;
+}
+
+/* D23 (decided Oct 2 2026): a clean body whose publish has COMMITTED is
+ * not kept in the dcache — clean bodies have no budget and no evictor
+ * there, so a long append/partial-write stream made RSS track the bytes
+ * written. The committed image goes to the rdcache (budgeted, LRU)
+ * instead; the slot keeps its body-less node, which names the object
+ * for the next snapshot. A later partial write finds the image through
+ * dcache_load_and_patch's rdcache probe, else one GET (the table names
+ * the committed gen, so the fetch and the CAS base are right).
+ *
+ * Commit time, not PUT-landed time: between PUT and REPORT the body and
+ * e->roff are the only record of which bytes are THIS client's, and a
+ * STALE on the REPORT (a peer's fold landed in between) is replayed by
+ * re-merging exactly those ranges over the committed base. Handing the
+ * body over at PUT time left nothing to replay (peer_shared_pwrite ci=1,
+ * Oct 2 2026 12:57Z: 30 identical stale-class rounds, no snap-replay).
+ * A span-only row has table gen 0 and the rdcache cannot key it
+ * (rdcache_map_gen == 0 → refused); a span commit does not move the
+ * base (gen 0 here), so span chunks keep their body as before.
+ *
+ * Returns 1 when the caller must hand `*img` (now detached from the
+ * slot) to the rdcache AFTER releasing the slot mutex:
+ * efs_rdcache_put_owned takes g_client.idx_mu for the map generation,
+ * and efs_client_set_chunk takes a slot mutex under that lock through
+ * efs_dcache_yield_extra — putting under the slot lock deadlocked the
+ * Oct 2 2026 06:08Z D24 wedge gate (7 FUSE requests waiting, every
+ * thread in __lll_lock_wait). Caller holds the slot mutex. */
+static int dcache_body_to_rdcache(struct dcache_ent *e, uint8_t **img,
+                                  uint32_t *len)
+{
+    *img = NULL;
+    *len = 0;
+    if (!e || e->dirty || !e->data || !e->have_base ||
+        e->base_gen == EFS_CHUNK_BASE_UNCOND)
+        return 0;
+    *img = e->data;
+    *len = e->len;
+    e->data = NULL;
+    e->len = 0;
+    e->nrange = 0;
+    DTRACE(e, "to-rdcache len=%u", *len);
+    return 1;
+}
+
+/* The unlocked half of dcache_body_to_rdcache: the rdcache takes `img`
+ * or the caller frees it (a refused put — table gen 0, or a pending
+ * way — leaves a body-less node; the next write of the chunk does one
+ * GET). */
+static void dcache_img_to_rdcache(efs_ino_t ino, uint32_t ci, uint8_t *img,
+                                  uint32_t len)
+{
+    if (img && !efs_rdcache_put_owned(ino, ci, img, len))
+        efs_buf_free(img, len);
 }
 
 static int dcache_need_published_merge(int have_base, uint64_t bg,
@@ -4328,7 +4623,15 @@ static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
     }
     /* Full-chunk overwrite: the body was the PUT buffer. Leave it dropped.
      * Append and partial writes still install, so a later close does not
-     * rebuild from a short size and zero the prefix. */
+     * rebuild from a short size and zero the prefix — and so a STALE on
+     * the REPORT can be replayed: the replay re-merges THIS client's
+     * ranges over the committed base, which needs the body and e->roff.
+     * The body goes to the rdcache only once the REPORT has committed
+     * the object (dcache_note_committed, D23). Handing it over here
+     * left nothing to replay: a peer's fold between our PUT and our
+     * REPORT made every round resend the same rec (peer_shared_pwrite
+     * ci=1: 30 identical stale-class lines, no snap-replay, Oct 2 2026
+     * 12:57Z). */
     if (!drop_body && e && e->ino == ino && e->ci == ci)
         dcache_install_image(e, copy, len, seq);
     /* The PUT landed and dcache_put_now put the chunk in the dirty set,
@@ -4344,9 +4647,9 @@ static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
      * bodies have no budget and no evictor (freed only by drop or a
      * take-replace), so restoring them made RSS track the bytes written
      * (20 GiB dd → 20 GiB of retained chunks, every alloc past the
-     * 2 GiB slab cap an mmap). Same-mount read-after-write is dcache
-     * by the fio-honest rule anyway. A bounded clean-image cache is
-     * START-HERE D23 (ask). */
+     * 2 GiB slab cap an mmap). The bounded clean-image cache is the
+     * rdcache, fed when the REPORT commits the object (D23, decided
+     * Oct 2 2026: dcache_note_committed → dcache_body_to_rdcache). */
     pthread_mutex_unlock(mu);
     return 0;
 }
@@ -4627,9 +4930,12 @@ static int dcache_flush_slot_inner(uint32_t s, efs_ino_t only_ino, int have_only
             continue;
         }
         if (!full && e->ino == ino && e->ci == ci && e->data && e->len >= len) {
-            /* Append / partial: keep the published bytes so the next close
-             * does not GET a short size and zero the prefix. A full-chunk
-             * overwrite drops the body (handled above). */
+            /* Append / partial. Re-dirtied during the PUT: install the
+             * image under the dirty ranges (this body is the only copy
+             * of those bytes). Clean: the published image goes to the
+             * rdcache and the body is dropped (D23); the body-less node
+             * keeps naming the object. A full-chunk overwrite drops the
+             * body (handled above). */
             if (e->base_gen != EFS_CHUNK_BASE_UNCOND)
                 e->base_gen = slot_bg;
             dcache_install_image(e, copy, len, seq);
@@ -4867,6 +5173,8 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen)
     uint32_t s;
     struct dcache_ent *e;
     int hit = 0;
+    uint8_t *rd_img = NULL;
+    uint32_t rd_len = 0;
 
     if (!ino)
         return 0;
@@ -4887,8 +5195,14 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen)
          * re-dirtied the slot during the report still needs its ranges. */
         if (!e->dirty)
             e->nrange = 0;
+        /* D23: the committed full image is the slot's whole content now
+         * (base = this object, no ranges of ours outstanding); it moves
+         * to the budgeted rdcache and the body is dropped. */
+        if (hit)
+            (void)dcache_body_to_rdcache(e, &rd_img, &rd_len);
     }
     pthread_mutex_unlock(dcache_mu(s));
+    dcache_img_to_rdcache(ino, ci, rd_img, rd_len);
     return hit;
 }
 

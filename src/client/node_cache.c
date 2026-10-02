@@ -473,19 +473,7 @@ void efs_client_shutdown(void)
         conn_pool_inited = 0;
     }
 
-    free(g_client.dirty_ino_keys);
-    free(g_client.dirty_chunk_keys);
-    free(g_client.dirty_chunk_inos);
-    free(g_client.dirty_chunk_idxs);
-    g_client.dirty_ino_keys = NULL;
-    g_client.dirty_chunk_keys = NULL;
-    g_client.dirty_chunk_inos = NULL;
-    g_client.dirty_chunk_idxs = NULL;
-    g_client.dirty_ino_mask = 0;
-    g_client.dirty_chunk_mask = 0;
-    g_client.dirty_ino_count = 0;
-    g_client.dirty_chunk_count = 0;
-    g_client.dirty_chunk_cap = 0;
+    efs_client_dirty_sets_free();
     efs_export_free(&g_client.export);
     pthread_mutex_destroy(&g_client.lock);
     if (g_client.dir_locks_ready) {

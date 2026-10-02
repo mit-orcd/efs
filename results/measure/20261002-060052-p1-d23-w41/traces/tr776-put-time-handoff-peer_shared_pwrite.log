@@ -1,0 +1,689 @@
+efs-bg: start 2026-10-02T12:57:12Z host=node9901 name=tr776 screen=efs-tr776
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:53:44 
+fcstor009: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:53:44 
+prepared /tmp/efs-mount/posix-2c-tr773 (63 testdirs)
+fcstor009: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:53:44 
+slow-step peer_shared_pwrite ab 1 2.76s
+FAIL peer_shared_pwrite               exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+============================================================
+POSIX 2-client: 0/1 pass, 1 fail  (3.2s)
+wrote /tmp/tr773.tsv
+# posix-2client host_a=fcstor008.ib host_b=fcstor009.ib mnt=/tmp/efs-mount 2026-10-02T12:57:20Z
+# select	peer_shared_pwrite
+test	result	detail
+peer_shared_pwrite	FAIL	exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+# summary pass=0 fail=1 skip=0 total=1 dur=3.2
+# complete
+--- fcstor008 fuse.log (trace)
+ dcache ino=39900 ci=0 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=1 r=[0,1)
+ dcache ino=39900 ci=0 put-record obj=bf90ca97a3991ccf seq=1 | dirty=0 hb=0 bg=0 obj=bf90ca97a3991ccf oseq=1 sseq=1 r=[0,1)
+ dcache ino=39900 ci=0 install len=131072 seq=1 | dirty=0 hb=0 bg=0 obj=bf90ca97a3991ccf oseq=1 sseq=1 r=[0,1)
+ report ino=39900 ci=0 only=39900 sync=1 rc=0
+ report-irec ino=39900 size=1 only=39900 sync=1 rc=0
+ report-irec ino=30879 size=0 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=2 r=[0,4096)
+ dcache ino=30879 ci=0 put-record obj=6ceeca2fc4d3ce2d seq=2 | dirty=0 hb=0 bg=0 obj=6ceeca2fc4d3ce2d oseq=2 sseq=2 r=[0,4096)
+ dcache ino=30879 ci=0 install len=131072 seq=2 | dirty=0 hb=0 bg=0 obj=6ceeca2fc4d3ce2d oseq=2 sseq=2 r=[0,4096)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=8192 len=4096 | dirty=1 hb=1 bg=0 obj=6ceeca2fc4d3ce2d oseq=2 sseq=2 r=[8192,12288)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=6ceeca2fc4d3ce2d oseq=2 sseq=3 r=[8192,12288)
+ dcache ino=30879 ci=0 put-record obj=a98f626db2f13ab0 seq=3 | dirty=0 hb=1 bg=0 obj=a98f626db2f13ab0 oseq=3 sseq=3 r=[8192,12288)
+ dcache ino=30879 ci=0 install len=131072 seq=3 | dirty=0 hb=1 bg=0 obj=a98f626db2f13ab0 oseq=3 sseq=3 r=[8192,12288)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=16384 len=4096 | dirty=1 hb=1 bg=0 obj=a98f626db2f13ab0 oseq=3 sseq=3 r=[16384,20480)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=a98f626db2f13ab0 oseq=3 sseq=4 r=[16384,20480)
+ dcache ino=30879 ci=0 put-record obj=d98ed7346f5710eb seq=4 | dirty=0 hb=1 bg=0 obj=d98ed7346f5710eb oseq=4 sseq=4 r=[16384,20480)
+ dcache ino=30879 ci=0 install len=131072 seq=4 | dirty=0 hb=1 bg=0 obj=d98ed7346f5710eb oseq=4 sseq=4 r=[16384,20480)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=24576 len=4096 | dirty=1 hb=1 bg=0 obj=d98ed7346f5710eb oseq=4 sseq=4 r=[24576,28672)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=d98ed7346f5710eb oseq=4 sseq=5 r=[24576,28672)
+ dcache ino=30879 ci=0 put-record obj=ce3d0f1d39a994af seq=5 | dirty=0 hb=1 bg=0 obj=ce3d0f1d39a994af oseq=5 sseq=5 r=[24576,28672)
+ dcache ino=30879 ci=0 install len=131072 seq=5 | dirty=0 hb=1 bg=0 obj=ce3d0f1d39a994af oseq=5 sseq=5 r=[24576,28672)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=32768 len=4096 | dirty=1 hb=1 bg=0 obj=ce3d0f1d39a994af oseq=5 sseq=5 r=[32768,36864)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=ce3d0f1d39a994af oseq=5 sseq=6 r=[32768,36864)
+ dcache ino=30879 ci=0 put-record obj=a0a2bd1d6aae24b seq=6 | dirty=0 hb=1 bg=0 obj=a0a2bd1d6aae24b oseq=6 sseq=6 r=[32768,36864)
+ dcache ino=30879 ci=0 install len=131072 seq=6 | dirty=0 hb=1 bg=0 obj=a0a2bd1d6aae24b oseq=6 sseq=6 r=[32768,36864)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=40960 len=4096 | dirty=1 hb=1 bg=0 obj=a0a2bd1d6aae24b oseq=6 sseq=6 r=[40960,45056)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=a0a2bd1d6aae24b oseq=6 sseq=7 r=[40960,45056)
+ dcache ino=30879 ci=0 put-record obj=bc5544857463cce0 seq=7 | dirty=0 hb=1 bg=0 obj=bc5544857463cce0 oseq=7 sseq=7 r=[40960,45056)
+ dcache ino=30879 ci=0 install len=131072 seq=7 | dirty=0 hb=1 bg=0 obj=bc5544857463cce0 oseq=7 sseq=7 r=[40960,45056)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=49152 len=4096 | dirty=1 hb=1 bg=0 obj=bc5544857463cce0 oseq=7 sseq=7 r=[49152,53248)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=bc5544857463cce0 oseq=7 sseq=8 r=[49152,53248)
+ dcache ino=30879 ci=0 put-record obj=fa66597d6240c952 seq=8 | dirty=0 hb=1 bg=0 obj=fa66597d6240c952 oseq=8 sseq=8 r=[49152,53248)
+ dcache ino=30879 ci=0 install len=131072 seq=8 | dirty=0 hb=1 bg=0 obj=fa66597d6240c952 oseq=8 sseq=8 r=[49152,53248)
+ dcache ino=30879 ci=0 stale-class committed=0 ours=fa66597d6240c952 done=0 base=0
+ dcache ino=30879 ci=0 snap-replay | dirty=0 hb=1 bg=0 obj=fa66597d6240c952 oseq=8 sseq=9 r=[49152,53248)
+ dcache ino=30879 ci=0 replay committed=0 fetch_rc=0 nrange=1 absent=0
+ dcache ino=30879 ci=0 put-record obj=2cd0a6301a65c5be seq=9 | dirty=0 hb=1 bg=0 obj=2cd0a6301a65c5be oseq=9 sseq=9 r=[49152,53248)
+ dcache ino=30879 ci=0 install len=131072 seq=9 | dirty=0 hb=1 bg=0 obj=2cd0a6301a65c5be oseq=9 sseq=9 r=[49152,53248)
+ dcache ino=30879 ci=0 stale-class committed=acabcb2100eef426 ours=2cd0a6301a65c5be done=0 base=0
+ dcache ino=30879 ci=0 snap-replay | dirty=0 hb=1 bg=0 obj=2cd0a6301a65c5be oseq=9 sseq=10 r=[49152,53248)
+ dcache ino=30879 ci=0 replay committed=acabcb2100eef426 fetch_rc=0 nrange=1 absent=0
+ dcache ino=30879 ci=0 put-record obj=fd9aaae538f7c41 seq=10 | dirty=0 hb=1 bg=0 obj=fd9aaae538f7c41 oseq=10 sseq=10 r=[49152,53248)
+ dcache ino=30879 ci=0 install len=131072 seq=10 | dirty=0 hb=1 bg=acabcb2100eef426 obj=fd9aaae538f7c41 oseq=10 sseq=10 r=[49152,53248)
+ dcache ino=30879 ci=0 stale-class committed=44491cbed5855f15 ours=fd9aaae538f7c41 done=0 base=acabcb2100eef426
+ dcache ino=30879 ci=0 snap-replay | dirty=0 hb=1 bg=acabcb2100eef426 obj=fd9aaae538f7c41 oseq=10 sseq=11 r=[49152,53248)
+ dcache ino=30879 ci=0 replay committed=44491cbed5855f15 fetch_rc=0 nrange=1 absent=0
+ dcache ino=30879 ci=0 put-record obj=7b62fe41fc8015f3 seq=11 | dirty=0 hb=1 bg=acabcb2100eef426 obj=7b62fe41fc8015f3 oseq=11 sseq=11 r=[49152,53248)
+ dcache ino=30879 ci=0 install len=131072 seq=11 | dirty=0 hb=1 bg=44491cbed5855f15 obj=7b62fe41fc8015f3 oseq=11 sseq=11 r=[49152,53248)
+ dcache ino=30879 ci=0 stale-class committed=2012e990033f1c23 ours=7b62fe41fc8015f3 done=0 base=44491cbed5855f15
+ dcache ino=30879 ci=0 snap-replay | dirty=0 hb=1 bg=44491cbed5855f15 obj=7b62fe41fc8015f3 oseq=11 sseq=12 r=[49152,53248)
+ dcache ino=30879 ci=0 replay committed=2012e990033f1c23 fetch_rc=0 nrange=1 absent=0
+ dcache ino=30879 ci=0 put-record obj=177b62cc39082cd3 seq=12 | dirty=0 hb=1 bg=44491cbed5855f15 obj=177b62cc39082cd3 oseq=12 sseq=12 r=[49152,53248)
+ dcache ino=30879 ci=0 install len=131072 seq=12 | dirty=0 hb=1 bg=2012e990033f1c23 obj=177b62cc39082cd3 oseq=12 sseq=12 r=[49152,53248)
+ dcache ino=30879 ci=0 stale-class committed=c75f1185a971f563 ours=177b62cc39082cd3 done=0 base=2012e990033f1c23
+ dcache ino=30879 ci=0 snap-replay | dirty=0 hb=1 bg=2012e990033f1c23 obj=177b62cc39082cd3 oseq=12 sseq=13 r=[49152,53248)
+ dcache ino=30879 ci=0 replay committed=c75f1185a971f563 fetch_rc=0 nrange=1 absent=0
+ dcache ino=30879 ci=0 put-record obj=5b86569bb7a15b38 seq=13 | dirty=0 hb=1 bg=2012e990033f1c23 obj=5b86569bb7a15b38 oseq=13 sseq=13 r=[49152,53248)
+ dcache ino=30879 ci=0 install len=131072 seq=13 | dirty=0 hb=1 bg=c75f1185a971f563 obj=5b86569bb7a15b38 oseq=13 sseq=13 r=[49152,53248)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=57344 len=4096 | dirty=1 hb=1 bg=5b86569bb7a15b38 obj=5b86569bb7a15b38 oseq=13 sseq=13 r=[57344,61440)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=5b86569bb7a15b38 obj=5b86569bb7a15b38 oseq=13 sseq=14 r=[57344,61440)
+ dcache ino=30879 ci=0 put-record obj=9823c9505c3c5a68 seq=14 | dirty=0 hb=1 bg=5b86569bb7a15b38 obj=9823c9505c3c5a68 oseq=14 sseq=14 r=[57344,61440)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=5b86569bb7a15b38 obj=9823c9505c3c5a68 oseq=14 sseq=14 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=9823c9505c3c5a68 obj=0 oseq=14 sseq=15 r=[65536,69632)
+ dcache ino=30879 ci=0 put-record obj=dcd6fdb2a0f76b16 seq=15 | dirty=0 hb=1 bg=9823c9505c3c5a68 obj=dcd6fdb2a0f76b16 oseq=15 sseq=15 r=[65536,69632)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=9823c9505c3c5a68 obj=dcd6fdb2a0f76b16 oseq=15 sseq=15 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=dcd6fdb2a0f76b16 obj=0 oseq=15 sseq=16 r=[73728,77824)
+ dcache ino=30879 ci=0 put-record obj=5b5cf8085fe2f656 seq=16 | dirty=0 hb=1 bg=dcd6fdb2a0f76b16 obj=5b5cf8085fe2f656 oseq=16 sseq=16 r=[73728,77824)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=dcd6fdb2a0f76b16 obj=5b5cf8085fe2f656 oseq=16 sseq=16 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=5b5cf8085fe2f656 obj=0 oseq=16 sseq=17 r=[81920,86016)
+ dcache ino=30879 ci=0 put-record obj=748fa9c1459ca69e seq=17 | dirty=0 hb=1 bg=5b5cf8085fe2f656 obj=748fa9c1459ca69e oseq=17 sseq=17 r=[81920,86016)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=5b5cf8085fe2f656 obj=748fa9c1459ca69e oseq=17 sseq=17 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=748fa9c1459ca69e obj=0 oseq=17 sseq=18 r=[90112,94208)
+ dcache ino=30879 ci=0 put-record obj=37465cb070505ebf seq=18 | dirty=0 hb=1 bg=748fa9c1459ca69e obj=37465cb070505ebf oseq=18 sseq=18 r=[90112,94208)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=748fa9c1459ca69e obj=37465cb070505ebf oseq=18 sseq=18 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=37465cb070505ebf obj=0 oseq=18 sseq=19 r=[98304,102400)
+ dcache ino=30879 ci=0 put-record obj=6b26b4103e5c1dd8 seq=19 | dirty=0 hb=1 bg=37465cb070505ebf obj=6b26b4103e5c1dd8 oseq=19 sseq=19 r=[98304,102400)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=37465cb070505ebf obj=6b26b4103e5c1dd8 oseq=19 sseq=19 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=6b26b4103e5c1dd8 obj=0 oseq=19 sseq=20 r=[106496,110592)
+ dcache ino=30879 ci=0 put-record obj=5f6539c5b5b7c159 seq=20 | dirty=0 hb=1 bg=6b26b4103e5c1dd8 obj=5f6539c5b5b7c159 oseq=20 sseq=20 r=[106496,110592)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=6b26b4103e5c1dd8 obj=5f6539c5b5b7c159 oseq=20 sseq=20 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=5f6539c5b5b7c159 obj=0 oseq=20 sseq=21 r=[114688,118784)
+ dcache ino=30879 ci=0 put-record obj=8c58ba6905fca4d8 seq=21 | dirty=0 hb=1 bg=5f6539c5b5b7c159 obj=8c58ba6905fca4d8 oseq=21 sseq=21 r=[114688,118784)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=5f6539c5b5b7c159 obj=8c58ba6905fca4d8 oseq=21 sseq=21 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=8c58ba6905fca4d8 obj=0 oseq=21 sseq=22 r=[122880,126976)
+ dcache ino=30879 ci=0 put-record obj=855ded82e8cd8d1d seq=22 | dirty=0 hb=1 bg=8c58ba6905fca4d8 obj=855ded82e8cd8d1d oseq=22 sseq=22 r=[122880,126976)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=8c58ba6905fca4d8 obj=855ded82e8cd8d1d oseq=22 sseq=22 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=23 r=[0,4096)
+ dcache ino=30879 ci=1 put-record obj=d0da6a945176396e seq=23 | dirty=0 hb=0 bg=0 obj=d0da6a945176396e oseq=23 sseq=23 r=[0,4096)
+ dcache ino=30879 ci=1 install len=131072 seq=23 | dirty=0 hb=0 bg=0 obj=d0da6a945176396e oseq=23 sseq=23 r=[0,4096)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=8192 len=4096 | dirty=1 hb=1 bg=0 obj=d0da6a945176396e oseq=23 sseq=23 r=[8192,12288)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=d0da6a945176396e oseq=23 sseq=24 r=[8192,12288)
+ dcache ino=30879 ci=1 put-record obj=bb6bfb96e36029f8 seq=24 | dirty=0 hb=1 bg=188ae4611932bd0a obj=bb6bfb96e36029f8 oseq=24 sseq=24 r=[8192,12288)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=188ae4611932bd0a obj=bb6bfb96e36029f8 oseq=24 sseq=24 r=
+ dcache ino=30879 ci=1 stale-class committed=c14e49cf66b0623a ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=d36e73ae76fae25a ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ report ino=30879 ci=1 only=30879 sync=1 rc=-14
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=-14
+ efs-fuse fsync: stale generation (efs_rc=-14) ino=30879 off=0 len=0
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ dcache ino=30879 ci=1 stale-class committed=4463fc850eca2a70 ours=bb6bfb96e36029f8 done=0 base=188ae4611932bd0a
+ report ino=30879 ci=1 only=30879 sync=1 rc=-14
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=-14
+ efs-fuse flush-meta: stale generation (efs_rc=-14) ino=30879 off=0 len=0
+133
+--- fcstor009 fuse.log (trace)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=1 r=[4096,8192)
+ dcache ino=30879 ci=0 put-record obj=858c47c844e87608 seq=1 | dirty=0 hb=0 bg=0 obj=858c47c844e87608 oseq=1 sseq=1 r=[4096,8192)
+ dcache ino=30879 ci=0 install len=131072 seq=1 | dirty=0 hb=0 bg=0 obj=858c47c844e87608 oseq=1 sseq=1 r=[4096,8192)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=12288 len=4096 | dirty=1 hb=1 bg=0 obj=858c47c844e87608 oseq=1 sseq=1 r=[12288,16384)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=858c47c844e87608 oseq=1 sseq=2 r=[12288,16384)
+ dcache ino=30879 ci=0 put-record obj=d739e84840defccd seq=2 | dirty=0 hb=1 bg=0 obj=d739e84840defccd oseq=2 sseq=2 r=[12288,16384)
+ dcache ino=30879 ci=0 install len=131072 seq=2 | dirty=0 hb=1 bg=0 obj=d739e84840defccd oseq=2 sseq=2 r=[12288,16384)
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 patch off=20480 len=4096 | dirty=1 hb=1 bg=0 obj=d739e84840defccd oseq=2 sseq=2 r=[20480,24576)
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=d739e84840defccd oseq=2 sseq=3 r=[20480,24576)
+ dcache ino=30879 ci=0 put-record obj=d13a0b1314543e2f seq=3 | dirty=0 hb=1 bg=0 obj=d13a0b1314543e2f oseq=3 sseq=3 r=[20480,24576)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=0 obj=d13a0b1314543e2f oseq=3 sseq=3 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=d13a0b1314543e2f obj=0 oseq=3 sseq=4 r=[28672,32768)
+ dcache ino=30879 ci=0 put-record obj=acabcb2100eef426 seq=4 | dirty=0 hb=1 bg=d13a0b1314543e2f obj=acabcb2100eef426 oseq=4 sseq=4 r=[28672,32768)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=d13a0b1314543e2f obj=acabcb2100eef426 oseq=4 sseq=4 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=acabcb2100eef426 obj=0 oseq=4 sseq=5 r=[36864,40960)
+ dcache ino=30879 ci=0 put-record obj=915130a33af9254 seq=5 | dirty=0 hb=1 bg=acabcb2100eef426 obj=915130a33af9254 oseq=5 sseq=5 r=[36864,40960)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=acabcb2100eef426 obj=915130a33af9254 oseq=5 sseq=5 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=915130a33af9254 obj=0 oseq=5 sseq=6 r=[45056,49152)
+ dcache ino=30879 ci=0 put-record obj=4f5d6bb2239c63f3 seq=6 | dirty=0 hb=1 bg=915130a33af9254 obj=4f5d6bb2239c63f3 oseq=6 sseq=6 r=[45056,49152)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=915130a33af9254 obj=4f5d6bb2239c63f3 oseq=6 sseq=6 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=4f5d6bb2239c63f3 obj=0 oseq=6 sseq=7 r=[53248,57344)
+ dcache ino=30879 ci=0 put-record obj=a7dcf159e4c4d868 seq=7 | dirty=0 hb=1 bg=4f5d6bb2239c63f3 obj=a7dcf159e4c4d868 oseq=7 sseq=7 r=[53248,57344)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=4f5d6bb2239c63f3 obj=a7dcf159e4c4d868 oseq=7 sseq=7 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=a7dcf159e4c4d868 obj=0 oseq=7 sseq=8 r=[61440,65536)
+ dcache ino=30879 ci=0 put-record obj=44491cbed5855f15 seq=8 | dirty=0 hb=1 bg=a7dcf159e4c4d868 obj=44491cbed5855f15 oseq=8 sseq=8 r=[61440,65536)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=a7dcf159e4c4d868 obj=44491cbed5855f15 oseq=8 sseq=8 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=44491cbed5855f15 obj=0 oseq=8 sseq=9 r=[69632,73728)
+ dcache ino=30879 ci=0 put-record obj=aa9c07c96a96a3be seq=9 | dirty=0 hb=1 bg=44491cbed5855f15 obj=aa9c07c96a96a3be oseq=9 sseq=9 r=[69632,73728)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=44491cbed5855f15 obj=aa9c07c96a96a3be oseq=9 sseq=9 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=aa9c07c96a96a3be obj=0 oseq=9 sseq=10 r=[77824,81920)
+ dcache ino=30879 ci=0 put-record obj=acfa4a7c6b01982a seq=10 | dirty=0 hb=1 bg=aa9c07c96a96a3be obj=acfa4a7c6b01982a oseq=10 sseq=10 r=[77824,81920)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=aa9c07c96a96a3be obj=acfa4a7c6b01982a oseq=10 sseq=10 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=acfa4a7c6b01982a obj=0 oseq=10 sseq=11 r=[86016,90112)
+ dcache ino=30879 ci=0 put-record obj=9cdf6008f03690d5 seq=11 | dirty=0 hb=1 bg=acfa4a7c6b01982a obj=9cdf6008f03690d5 oseq=11 sseq=11 r=[86016,90112)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=acfa4a7c6b01982a obj=9cdf6008f03690d5 oseq=11 sseq=11 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=9cdf6008f03690d5 obj=0 oseq=11 sseq=12 r=[94208,98304)
+ dcache ino=30879 ci=0 put-record obj=27015254813b273 seq=12 | dirty=0 hb=1 bg=9cdf6008f03690d5 obj=27015254813b273 oseq=12 sseq=12 r=[94208,98304)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=9cdf6008f03690d5 obj=27015254813b273 oseq=12 sseq=12 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=27015254813b273 obj=0 oseq=12 sseq=13 r=[102400,106496)
+ dcache ino=30879 ci=0 put-record obj=2012e990033f1c23 seq=13 | dirty=0 hb=1 bg=27015254813b273 obj=2012e990033f1c23 oseq=13 sseq=13 r=[102400,106496)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=27015254813b273 obj=2012e990033f1c23 oseq=13 sseq=13 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=2012e990033f1c23 obj=0 oseq=13 sseq=14 r=[110592,114688)
+ dcache ino=30879 ci=0 put-record obj=ce694a742f84ca55 seq=14 | dirty=0 hb=1 bg=2012e990033f1c23 obj=ce694a742f84ca55 oseq=14 sseq=14 r=[110592,114688)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=2012e990033f1c23 obj=ce694a742f84ca55 oseq=14 sseq=14 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=ce694a742f84ca55 obj=0 oseq=14 sseq=15 r=[118784,122880)
+ dcache ino=30879 ci=0 put-record obj=305fd43d7898ee3b seq=15 | dirty=0 hb=1 bg=ce694a742f84ca55 obj=305fd43d7898ee3b oseq=15 sseq=15 r=[118784,122880)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=ce694a742f84ca55 obj=305fd43d7898ee3b oseq=15 sseq=15 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=0 snap-steal | dirty=1 hb=1 bg=305fd43d7898ee3b obj=0 oseq=15 sseq=16 r=[126976,131072)
+ dcache ino=30879 ci=0 put-record obj=c75f1185a971f563 seq=16 | dirty=0 hb=1 bg=305fd43d7898ee3b obj=c75f1185a971f563 oseq=16 sseq=16 r=[126976,131072)
+ dcache ino=30879 ci=0 to-rdcache len=131072 | dirty=0 hb=1 bg=305fd43d7898ee3b obj=c75f1185a971f563 oseq=16 sseq=16 r=
+ report ino=30879 ci=0 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=17 r=[4096,8192)
+ dcache ino=30879 ci=1 put-record obj=1f4691ac575d4fc1 seq=17 | dirty=0 hb=0 bg=0 obj=1f4691ac575d4fc1 oseq=17 sseq=17 r=[4096,8192)
+ dcache ino=30879 ci=1 install len=131072 seq=17 | dirty=0 hb=0 bg=0 obj=1f4691ac575d4fc1 oseq=17 sseq=17 r=[4096,8192)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=12288 len=4096 | dirty=1 hb=1 bg=0 obj=1f4691ac575d4fc1 oseq=17 sseq=17 r=[12288,16384)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=1f4691ac575d4fc1 oseq=17 sseq=18 r=[12288,16384)
+ dcache ino=30879 ci=1 put-record obj=71de99b38b4ba5bc seq=18 | dirty=0 hb=1 bg=0 obj=71de99b38b4ba5bc oseq=18 sseq=18 r=[12288,16384)
+ dcache ino=30879 ci=1 install len=131072 seq=18 | dirty=0 hb=1 bg=0 obj=71de99b38b4ba5bc oseq=18 sseq=18 r=[12288,16384)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=20480 len=4096 | dirty=1 hb=1 bg=0 obj=71de99b38b4ba5bc oseq=18 sseq=18 r=[20480,24576)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=71de99b38b4ba5bc oseq=18 sseq=19 r=[20480,24576)
+ dcache ino=30879 ci=1 put-record obj=67de01bd2be7a5bc seq=19 | dirty=0 hb=1 bg=0 obj=67de01bd2be7a5bc oseq=19 sseq=19 r=[20480,24576)
+ dcache ino=30879 ci=1 install len=131072 seq=19 | dirty=0 hb=1 bg=0 obj=67de01bd2be7a5bc oseq=19 sseq=19 r=[20480,24576)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=28672 len=4096 | dirty=1 hb=1 bg=0 obj=67de01bd2be7a5bc oseq=19 sseq=19 r=[28672,32768)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=67de01bd2be7a5bc oseq=19 sseq=20 r=[28672,32768)
+ dcache ino=30879 ci=1 put-record obj=849b0282ab7e7d4c seq=20 | dirty=0 hb=1 bg=0 obj=849b0282ab7e7d4c oseq=20 sseq=20 r=[28672,32768)
+ dcache ino=30879 ci=1 install len=131072 seq=20 | dirty=0 hb=1 bg=0 obj=849b0282ab7e7d4c oseq=20 sseq=20 r=[28672,32768)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=36864 len=4096 | dirty=1 hb=1 bg=0 obj=849b0282ab7e7d4c oseq=20 sseq=20 r=[36864,40960)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=849b0282ab7e7d4c oseq=20 sseq=21 r=[36864,40960)
+ dcache ino=30879 ci=1 put-record obj=328bbbf3c67bb9d9 seq=21 | dirty=0 hb=1 bg=0 obj=328bbbf3c67bb9d9 oseq=21 sseq=21 r=[36864,40960)
+ dcache ino=30879 ci=1 install len=131072 seq=21 | dirty=0 hb=1 bg=0 obj=328bbbf3c67bb9d9 oseq=21 sseq=21 r=[36864,40960)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=45056 len=4096 | dirty=1 hb=1 bg=0 obj=328bbbf3c67bb9d9 oseq=21 sseq=21 r=[45056,49152)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=328bbbf3c67bb9d9 oseq=21 sseq=22 r=[45056,49152)
+ dcache ino=30879 ci=1 put-record obj=ad2242df5e984c4a seq=22 | dirty=0 hb=1 bg=0 obj=ad2242df5e984c4a oseq=22 sseq=22 r=[45056,49152)
+ dcache ino=30879 ci=1 install len=131072 seq=22 | dirty=0 hb=1 bg=0 obj=ad2242df5e984c4a oseq=22 sseq=22 r=[45056,49152)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=53248 len=4096 | dirty=1 hb=1 bg=0 obj=ad2242df5e984c4a oseq=22 sseq=22 r=[53248,57344)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=ad2242df5e984c4a oseq=22 sseq=23 r=[53248,57344)
+ dcache ino=30879 ci=1 put-record obj=c5861068a1079fe1 seq=23 | dirty=0 hb=1 bg=0 obj=c5861068a1079fe1 oseq=23 sseq=23 r=[53248,57344)
+ dcache ino=30879 ci=1 install len=131072 seq=23 | dirty=0 hb=1 bg=0 obj=c5861068a1079fe1 oseq=23 sseq=23 r=[53248,57344)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=61440 len=4096 | dirty=1 hb=1 bg=0 obj=c5861068a1079fe1 oseq=23 sseq=23 r=[61440,65536)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=c5861068a1079fe1 oseq=23 sseq=24 r=[61440,65536)
+ dcache ino=30879 ci=1 put-record obj=3e22375b8922b028 seq=24 | dirty=0 hb=1 bg=0 obj=3e22375b8922b028 oseq=24 sseq=24 r=[61440,65536)
+ dcache ino=30879 ci=1 install len=131072 seq=24 | dirty=0 hb=1 bg=0 obj=3e22375b8922b028 oseq=24 sseq=24 r=[61440,65536)
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 patch off=69632 len=4096 | dirty=1 hb=1 bg=0 obj=3e22375b8922b028 oseq=24 sseq=24 r=[69632,73728)
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=0 obj=3e22375b8922b028 oseq=24 sseq=25 r=[69632,73728)
+ dcache ino=30879 ci=1 put-record obj=c5cabfbd8e75efe3 seq=25 | dirty=0 hb=1 bg=0 obj=c5cabfbd8e75efe3 oseq=25 sseq=25 r=[69632,73728)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=0 obj=c5cabfbd8e75efe3 oseq=25 sseq=25 r=
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=c5cabfbd8e75efe3 obj=0 oseq=25 sseq=26 r=[77824,81920)
+ dcache ino=30879 ci=1 put-record obj=91c7eb4f8d740624 seq=26 | dirty=0 hb=1 bg=c5cabfbd8e75efe3 obj=91c7eb4f8d740624 oseq=26 sseq=26 r=[77824,81920)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=c5cabfbd8e75efe3 obj=91c7eb4f8d740624 oseq=26 sseq=26 r=
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=91c7eb4f8d740624 obj=0 oseq=26 sseq=27 r=[86016,90112)
+ dcache ino=30879 ci=1 put-record obj=904046bfdebac283 seq=27 | dirty=0 hb=1 bg=91c7eb4f8d740624 obj=904046bfdebac283 oseq=27 sseq=27 r=[86016,90112)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=91c7eb4f8d740624 obj=904046bfdebac283 oseq=27 sseq=27 r=
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=904046bfdebac283 obj=0 oseq=27 sseq=28 r=[94208,98304)
+ dcache ino=30879 ci=1 put-record obj=188ae4611932bd0a seq=28 | dirty=0 hb=1 bg=904046bfdebac283 obj=188ae4611932bd0a oseq=28 sseq=28 r=[94208,98304)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=904046bfdebac283 obj=188ae4611932bd0a oseq=28 sseq=28 r=
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=188ae4611932bd0a obj=0 oseq=28 sseq=29 r=[102400,106496)
+ dcache ino=30879 ci=1 put-record obj=c14e49cf66b0623a seq=29 | dirty=0 hb=1 bg=188ae4611932bd0a obj=c14e49cf66b0623a oseq=29 sseq=29 r=[102400,106496)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=188ae4611932bd0a obj=c14e49cf66b0623a oseq=29 sseq=29 r=
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=c14e49cf66b0623a obj=0 oseq=29 sseq=30 r=[110592,114688)
+ dcache ino=30879 ci=1 put-record obj=d36e73ae76fae25a seq=30 | dirty=0 hb=1 bg=c14e49cf66b0623a obj=d36e73ae76fae25a oseq=30 sseq=30 r=[110592,114688)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=c14e49cf66b0623a obj=d36e73ae76fae25a oseq=30 sseq=30 r=
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=d36e73ae76fae25a obj=0 oseq=30 sseq=31 r=[118784,122880)
+ dcache ino=30879 ci=1 put-record obj=16e4d6d53f8469d6 seq=31 | dirty=0 hb=1 bg=d36e73ae76fae25a obj=16e4d6d53f8469d6 oseq=31 sseq=31 r=[118784,122880)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=d36e73ae76fae25a obj=16e4d6d53f8469d6 oseq=31 sseq=31 r=
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=1 snap-steal | dirty=1 hb=1 bg=16e4d6d53f8469d6 obj=0 oseq=31 sseq=32 r=[126976,131072)
+ dcache ino=30879 ci=1 put-record obj=4463fc850eca2a70 seq=32 | dirty=0 hb=1 bg=16e4d6d53f8469d6 obj=4463fc850eca2a70 oseq=32 sseq=32 r=[126976,131072)
+ dcache ino=30879 ci=1 to-rdcache len=131072 | dirty=0 hb=1 bg=16e4d6d53f8469d6 obj=4463fc850eca2a70 oseq=32 sseq=32 r=
+ report ino=30879 ci=1 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=33 r=[4096,8192)
+ dcache ino=30879 ci=2 put-record obj=3534aedb1fdc173f seq=33 | dirty=0 hb=0 bg=0 obj=3534aedb1fdc173f oseq=33 sseq=33 r=[4096,8192)
+ dcache ino=30879 ci=2 install len=131072 seq=33 | dirty=0 hb=0 bg=0 obj=3534aedb1fdc173f oseq=33 sseq=33 r=[4096,8192)
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 patch off=12288 len=4096 | dirty=1 hb=1 bg=0 obj=3534aedb1fdc173f oseq=33 sseq=33 r=[12288,16384)
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=0 obj=3534aedb1fdc173f oseq=33 sseq=34 r=[12288,16384)
+ dcache ino=30879 ci=2 put-record obj=13171f45513859c8 seq=34 | dirty=0 hb=1 bg=0 obj=13171f45513859c8 oseq=34 sseq=34 r=[12288,16384)
+ dcache ino=30879 ci=2 install len=131072 seq=34 | dirty=0 hb=1 bg=0 obj=13171f45513859c8 oseq=34 sseq=34 r=[12288,16384)
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 patch off=20480 len=4096 | dirty=1 hb=1 bg=0 obj=13171f45513859c8 oseq=34 sseq=34 r=[20480,24576)
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=0 obj=13171f45513859c8 oseq=34 sseq=35 r=[20480,24576)
+ dcache ino=30879 ci=2 put-record obj=e603f161a1fff08d seq=35 | dirty=0 hb=1 bg=0 obj=e603f161a1fff08d oseq=35 sseq=35 r=[20480,24576)
+ dcache ino=30879 ci=2 install len=131072 seq=35 | dirty=0 hb=1 bg=0 obj=e603f161a1fff08d oseq=35 sseq=35 r=[20480,24576)
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 patch off=28672 len=4096 | dirty=1 hb=1 bg=0 obj=e603f161a1fff08d oseq=35 sseq=35 r=[28672,32768)
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=0 obj=e603f161a1fff08d oseq=35 sseq=36 r=[28672,32768)
+ dcache ino=30879 ci=2 put-record obj=25e88a212e10b655 seq=36 | dirty=0 hb=1 bg=0 obj=25e88a212e10b655 oseq=36 sseq=36 r=[28672,32768)
+ dcache ino=30879 ci=2 install len=131072 seq=36 | dirty=0 hb=1 bg=0 obj=25e88a212e10b655 oseq=36 sseq=36 r=[28672,32768)
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 patch off=36864 len=4096 | dirty=1 hb=1 bg=0 obj=25e88a212e10b655 oseq=36 sseq=36 r=[36864,40960)
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=0 obj=25e88a212e10b655 oseq=36 sseq=37 r=[36864,40960)
+ dcache ino=30879 ci=2 put-record obj=a4ef3d6047306126 seq=37 | dirty=0 hb=1 bg=0 obj=a4ef3d6047306126 oseq=37 sseq=37 r=[36864,40960)
+ dcache ino=30879 ci=2 install len=131072 seq=37 | dirty=0 hb=1 bg=0 obj=a4ef3d6047306126 oseq=37 sseq=37 r=[36864,40960)
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 patch off=45056 len=4096 | dirty=1 hb=1 bg=0 obj=a4ef3d6047306126 oseq=37 sseq=37 r=[45056,49152)
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=0 obj=a4ef3d6047306126 oseq=37 sseq=38 r=[45056,49152)
+ dcache ino=30879 ci=2 put-record obj=f7ba7d69689bd4fb seq=38 | dirty=0 hb=1 bg=0 obj=f7ba7d69689bd4fb oseq=38 sseq=38 r=[45056,49152)
+ dcache ino=30879 ci=2 install len=131072 seq=38 | dirty=0 hb=1 bg=0 obj=f7ba7d69689bd4fb oseq=38 sseq=38 r=[45056,49152)
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 patch off=53248 len=4096 | dirty=1 hb=1 bg=0 obj=f7ba7d69689bd4fb oseq=38 sseq=38 r=[53248,57344)
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=0 obj=f7ba7d69689bd4fb oseq=38 sseq=39 r=[53248,57344)
+ dcache ino=30879 ci=2 put-record obj=212654e2a4d56123 seq=39 | dirty=0 hb=1 bg=0 obj=212654e2a4d56123 oseq=39 sseq=39 r=[53248,57344)
+ dcache ino=30879 ci=2 install len=131072 seq=39 | dirty=0 hb=1 bg=0 obj=212654e2a4d56123 oseq=39 sseq=39 r=[53248,57344)
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 patch off=61440 len=4096 | dirty=1 hb=1 bg=0 obj=212654e2a4d56123 oseq=39 sseq=39 r=[61440,65536)
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=0 obj=212654e2a4d56123 oseq=39 sseq=40 r=[61440,65536)
+ dcache ino=30879 ci=2 put-record obj=45e0459cbf0016de seq=40 | dirty=0 hb=1 bg=0 obj=45e0459cbf0016de oseq=40 sseq=40 r=[61440,65536)
+ dcache ino=30879 ci=2 install len=131072 seq=40 | dirty=0 hb=1 bg=0 obj=45e0459cbf0016de oseq=40 sseq=40 r=[61440,65536)
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 patch off=69632 len=4096 | dirty=1 hb=1 bg=0 obj=45e0459cbf0016de oseq=40 sseq=40 r=[69632,73728)
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=0 obj=45e0459cbf0016de oseq=40 sseq=41 r=[69632,73728)
+ dcache ino=30879 ci=2 put-record obj=54114b5390ef10d9 seq=41 | dirty=0 hb=1 bg=0 obj=54114b5390ef10d9 oseq=41 sseq=41 r=[69632,73728)
+ dcache ino=30879 ci=2 to-rdcache len=131072 | dirty=0 hb=1 bg=0 obj=54114b5390ef10d9 oseq=41 sseq=41 r=
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=54114b5390ef10d9 obj=0 oseq=41 sseq=42 r=[77824,81920)
+ dcache ino=30879 ci=2 put-record obj=fe609a74521080eb seq=42 | dirty=0 hb=1 bg=54114b5390ef10d9 obj=fe609a74521080eb oseq=42 sseq=42 r=[77824,81920)
+ dcache ino=30879 ci=2 to-rdcache len=131072 | dirty=0 hb=1 bg=54114b5390ef10d9 obj=fe609a74521080eb oseq=42 sseq=42 r=
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=fe609a74521080eb obj=0 oseq=42 sseq=43 r=[86016,90112)
+ dcache ino=30879 ci=2 put-record obj=adc251a632e3c16a seq=43 | dirty=0 hb=1 bg=fe609a74521080eb obj=adc251a632e3c16a oseq=43 sseq=43 r=[86016,90112)
+ dcache ino=30879 ci=2 to-rdcache len=131072 | dirty=0 hb=1 bg=fe609a74521080eb obj=adc251a632e3c16a oseq=43 sseq=43 r=
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=adc251a632e3c16a obj=0 oseq=43 sseq=44 r=[94208,98304)
+ dcache ino=30879 ci=2 put-record obj=7b766a4590445a06 seq=44 | dirty=0 hb=1 bg=adc251a632e3c16a obj=7b766a4590445a06 oseq=44 sseq=44 r=[94208,98304)
+ dcache ino=30879 ci=2 to-rdcache len=131072 | dirty=0 hb=1 bg=adc251a632e3c16a obj=7b766a4590445a06 oseq=44 sseq=44 r=
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=7b766a4590445a06 obj=0 oseq=44 sseq=45 r=[102400,106496)
+ dcache ino=30879 ci=2 put-record obj=a9ea98778872b473 seq=45 | dirty=0 hb=1 bg=7b766a4590445a06 obj=a9ea98778872b473 oseq=45 sseq=45 r=[102400,106496)
+ dcache ino=30879 ci=2 to-rdcache len=131072 | dirty=0 hb=1 bg=7b766a4590445a06 obj=a9ea98778872b473 oseq=45 sseq=45 r=
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=a9ea98778872b473 obj=0 oseq=45 sseq=46 r=[110592,114688)
+ dcache ino=30879 ci=2 put-record obj=79ba02ab50085ff6 seq=46 | dirty=0 hb=1 bg=a9ea98778872b473 obj=79ba02ab50085ff6 oseq=46 sseq=46 r=[110592,114688)
+ dcache ino=30879 ci=2 to-rdcache len=131072 | dirty=0 hb=1 bg=a9ea98778872b473 obj=79ba02ab50085ff6 oseq=46 sseq=46 r=
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=79ba02ab50085ff6 obj=0 oseq=46 sseq=47 r=[118784,122880)
+ dcache ino=30879 ci=2 put-record obj=167d98151b00678b seq=47 | dirty=0 hb=1 bg=79ba02ab50085ff6 obj=167d98151b00678b oseq=47 sseq=47 r=[118784,122880)
+ dcache ino=30879 ci=2 to-rdcache len=131072 | dirty=0 hb=1 bg=79ba02ab50085ff6 obj=167d98151b00678b oseq=47 sseq=47 r=
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=2 snap-steal | dirty=1 hb=1 bg=167d98151b00678b obj=0 oseq=47 sseq=48 r=[126976,131072)
+ dcache ino=30879 ci=2 put-record obj=8399f1bb47248a57 seq=48 | dirty=0 hb=1 bg=167d98151b00678b obj=8399f1bb47248a57 oseq=48 sseq=48 r=[126976,131072)
+ dcache ino=30879 ci=2 to-rdcache len=131072 | dirty=0 hb=1 bg=167d98151b00678b obj=8399f1bb47248a57 oseq=48 sseq=48 r=
+ report ino=30879 ci=2 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=49 r=[4096,8192)
+ dcache ino=30879 ci=3 put-record obj=4bb31a16e5ab8f07 seq=49 | dirty=0 hb=0 bg=0 obj=4bb31a16e5ab8f07 oseq=49 sseq=49 r=[4096,8192)
+ dcache ino=30879 ci=3 install len=131072 seq=49 | dirty=0 hb=0 bg=0 obj=4bb31a16e5ab8f07 oseq=49 sseq=49 r=[4096,8192)
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 patch off=12288 len=4096 | dirty=1 hb=1 bg=0 obj=4bb31a16e5ab8f07 oseq=49 sseq=49 r=[12288,16384)
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=0 obj=4bb31a16e5ab8f07 oseq=49 sseq=50 r=[12288,16384)
+ dcache ino=30879 ci=3 put-record obj=f6afe8411d11af27 seq=50 | dirty=0 hb=1 bg=0 obj=f6afe8411d11af27 oseq=50 sseq=50 r=[12288,16384)
+ dcache ino=30879 ci=3 install len=131072 seq=50 | dirty=0 hb=1 bg=0 obj=f6afe8411d11af27 oseq=50 sseq=50 r=[12288,16384)
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 patch off=20480 len=4096 | dirty=1 hb=1 bg=0 obj=f6afe8411d11af27 oseq=50 sseq=50 r=[20480,24576)
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=0 obj=f6afe8411d11af27 oseq=50 sseq=51 r=[20480,24576)
+ dcache ino=30879 ci=3 put-record obj=3767056b4f8ab99 seq=51 | dirty=0 hb=1 bg=0 obj=3767056b4f8ab99 oseq=51 sseq=51 r=[20480,24576)
+ dcache ino=30879 ci=3 install len=131072 seq=51 | dirty=0 hb=1 bg=0 obj=3767056b4f8ab99 oseq=51 sseq=51 r=[20480,24576)
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 patch off=28672 len=4096 | dirty=1 hb=1 bg=0 obj=3767056b4f8ab99 oseq=51 sseq=51 r=[28672,32768)
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=0 obj=3767056b4f8ab99 oseq=51 sseq=52 r=[28672,32768)
+ dcache ino=30879 ci=3 put-record obj=f800c276ef195e48 seq=52 | dirty=0 hb=1 bg=0 obj=f800c276ef195e48 oseq=52 sseq=52 r=[28672,32768)
+ dcache ino=30879 ci=3 install len=131072 seq=52 | dirty=0 hb=1 bg=0 obj=f800c276ef195e48 oseq=52 sseq=52 r=[28672,32768)
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 patch off=36864 len=4096 | dirty=1 hb=1 bg=0 obj=f800c276ef195e48 oseq=52 sseq=52 r=[36864,40960)
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=0 obj=f800c276ef195e48 oseq=52 sseq=53 r=[36864,40960)
+ dcache ino=30879 ci=3 put-record obj=467a308daf4b26d0 seq=53 | dirty=0 hb=1 bg=0 obj=467a308daf4b26d0 oseq=53 sseq=53 r=[36864,40960)
+ dcache ino=30879 ci=3 install len=131072 seq=53 | dirty=0 hb=1 bg=0 obj=467a308daf4b26d0 oseq=53 sseq=53 r=[36864,40960)
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 patch off=45056 len=4096 | dirty=1 hb=1 bg=0 obj=467a308daf4b26d0 oseq=53 sseq=53 r=[45056,49152)
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=0 obj=467a308daf4b26d0 oseq=53 sseq=54 r=[45056,49152)
+ dcache ino=30879 ci=3 put-record obj=6efa3f3cffc89cd seq=54 | dirty=0 hb=1 bg=0 obj=6efa3f3cffc89cd oseq=54 sseq=54 r=[45056,49152)
+ dcache ino=30879 ci=3 install len=131072 seq=54 | dirty=0 hb=1 bg=0 obj=6efa3f3cffc89cd oseq=54 sseq=54 r=[45056,49152)
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 patch off=53248 len=4096 | dirty=1 hb=1 bg=0 obj=6efa3f3cffc89cd oseq=54 sseq=54 r=[53248,57344)
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=0 obj=6efa3f3cffc89cd oseq=54 sseq=55 r=[53248,57344)
+ dcache ino=30879 ci=3 put-record obj=f4f028c1b8988b5 seq=55 | dirty=0 hb=1 bg=0 obj=f4f028c1b8988b5 oseq=55 sseq=55 r=[53248,57344)
+ dcache ino=30879 ci=3 install len=131072 seq=55 | dirty=0 hb=1 bg=0 obj=f4f028c1b8988b5 oseq=55 sseq=55 r=[53248,57344)
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 patch off=61440 len=4096 | dirty=1 hb=1 bg=0 obj=f4f028c1b8988b5 oseq=55 sseq=55 r=[61440,65536)
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=0 obj=f4f028c1b8988b5 oseq=55 sseq=56 r=[61440,65536)
+ dcache ino=30879 ci=3 put-record obj=911d7733a2db43e8 seq=56 | dirty=0 hb=1 bg=0 obj=911d7733a2db43e8 oseq=56 sseq=56 r=[61440,65536)
+ dcache ino=30879 ci=3 install len=131072 seq=56 | dirty=0 hb=1 bg=0 obj=911d7733a2db43e8 oseq=56 sseq=56 r=[61440,65536)
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 patch off=69632 len=4096 | dirty=1 hb=1 bg=0 obj=911d7733a2db43e8 oseq=56 sseq=56 r=[69632,73728)
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=0 obj=911d7733a2db43e8 oseq=56 sseq=57 r=[69632,73728)
+ dcache ino=30879 ci=3 put-record obj=d7f18575d9e2fa5a seq=57 | dirty=0 hb=1 bg=0 obj=d7f18575d9e2fa5a oseq=57 sseq=57 r=[69632,73728)
+ dcache ino=30879 ci=3 to-rdcache len=131072 | dirty=0 hb=1 bg=0 obj=d7f18575d9e2fa5a oseq=57 sseq=57 r=
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=d7f18575d9e2fa5a obj=0 oseq=57 sseq=58 r=[77824,81920)
+ dcache ino=30879 ci=3 put-record obj=4a9f0d375d5d4d77 seq=58 | dirty=0 hb=1 bg=d7f18575d9e2fa5a obj=4a9f0d375d5d4d77 oseq=58 sseq=58 r=[77824,81920)
+ dcache ino=30879 ci=3 to-rdcache len=131072 | dirty=0 hb=1 bg=d7f18575d9e2fa5a obj=4a9f0d375d5d4d77 oseq=58 sseq=58 r=
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=4a9f0d375d5d4d77 obj=0 oseq=58 sseq=59 r=[86016,90112)
+ dcache ino=30879 ci=3 put-record obj=a7ed62d05c11fd0d seq=59 | dirty=0 hb=1 bg=4a9f0d375d5d4d77 obj=a7ed62d05c11fd0d oseq=59 sseq=59 r=[86016,90112)
+ dcache ino=30879 ci=3 to-rdcache len=131072 | dirty=0 hb=1 bg=4a9f0d375d5d4d77 obj=a7ed62d05c11fd0d oseq=59 sseq=59 r=
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=a7ed62d05c11fd0d obj=0 oseq=59 sseq=60 r=[94208,98304)
+ dcache ino=30879 ci=3 put-record obj=6b2814da15253e2e seq=60 | dirty=0 hb=1 bg=a7ed62d05c11fd0d obj=6b2814da15253e2e oseq=60 sseq=60 r=[94208,98304)
+ dcache ino=30879 ci=3 to-rdcache len=131072 | dirty=0 hb=1 bg=a7ed62d05c11fd0d obj=6b2814da15253e2e oseq=60 sseq=60 r=
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=6b2814da15253e2e obj=0 oseq=60 sseq=61 r=[102400,106496)
+ dcache ino=30879 ci=3 put-record obj=b64c2414af1e337c seq=61 | dirty=0 hb=1 bg=6b2814da15253e2e obj=b64c2414af1e337c oseq=61 sseq=61 r=[102400,106496)
+ dcache ino=30879 ci=3 to-rdcache len=131072 | dirty=0 hb=1 bg=6b2814da15253e2e obj=b64c2414af1e337c oseq=61 sseq=61 r=
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=b64c2414af1e337c obj=0 oseq=61 sseq=62 r=[110592,114688)
+ dcache ino=30879 ci=3 put-record obj=832f40c9a765e0e3 seq=62 | dirty=0 hb=1 bg=b64c2414af1e337c obj=832f40c9a765e0e3 oseq=62 sseq=62 r=[110592,114688)
+ dcache ino=30879 ci=3 to-rdcache len=131072 | dirty=0 hb=1 bg=b64c2414af1e337c obj=832f40c9a765e0e3 oseq=62 sseq=62 r=
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=832f40c9a765e0e3 obj=0 oseq=62 sseq=63 r=[118784,122880)
+ dcache ino=30879 ci=3 put-record obj=7988b1e3d31087e6 seq=63 | dirty=0 hb=1 bg=832f40c9a765e0e3 obj=7988b1e3d31087e6 oseq=63 sseq=63 r=[118784,122880)
+ dcache ino=30879 ci=3 to-rdcache len=131072 | dirty=0 hb=1 bg=832f40c9a765e0e3 obj=7988b1e3d31087e6 oseq=63 sseq=63 r=
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=3 snap-steal | dirty=1 hb=1 bg=7988b1e3d31087e6 obj=0 oseq=63 sseq=64 r=[126976,131072)
+ dcache ino=30879 ci=3 put-record obj=6622f8aa8329b775 seq=64 | dirty=0 hb=1 bg=7988b1e3d31087e6 obj=6622f8aa8329b775 oseq=64 sseq=64 r=[126976,131072)
+ dcache ino=30879 ci=3 to-rdcache len=131072 | dirty=0 hb=1 bg=7988b1e3d31087e6 obj=6622f8aa8329b775 oseq=64 sseq=64 r=
+ report ino=30879 ci=3 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=65 r=[4096,8192)
+ dcache ino=30879 ci=4 put-record obj=1b300bb3879d3a63 seq=65 | dirty=0 hb=0 bg=0 obj=1b300bb3879d3a63 oseq=65 sseq=65 r=[4096,8192)
+ dcache ino=30879 ci=4 install len=131072 seq=65 | dirty=0 hb=0 bg=0 obj=1b300bb3879d3a63 oseq=65 sseq=65 r=[4096,8192)
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 patch off=12288 len=4096 | dirty=1 hb=1 bg=0 obj=1b300bb3879d3a63 oseq=65 sseq=65 r=[12288,16384)
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=0 obj=1b300bb3879d3a63 oseq=65 sseq=66 r=[12288,16384)
+ dcache ino=30879 ci=4 put-record obj=192308a7105c6049 seq=66 | dirty=0 hb=1 bg=0 obj=192308a7105c6049 oseq=66 sseq=66 r=[12288,16384)
+ dcache ino=30879 ci=4 install len=131072 seq=66 | dirty=0 hb=1 bg=0 obj=192308a7105c6049 oseq=66 sseq=66 r=[12288,16384)
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 patch off=20480 len=4096 | dirty=1 hb=1 bg=0 obj=192308a7105c6049 oseq=66 sseq=66 r=[20480,24576)
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=0 obj=192308a7105c6049 oseq=66 sseq=67 r=[20480,24576)
+ dcache ino=30879 ci=4 put-record obj=3a87408658f44c14 seq=67 | dirty=0 hb=1 bg=0 obj=3a87408658f44c14 oseq=67 sseq=67 r=[20480,24576)
+ dcache ino=30879 ci=4 install len=131072 seq=67 | dirty=0 hb=1 bg=0 obj=3a87408658f44c14 oseq=67 sseq=67 r=[20480,24576)
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 patch off=28672 len=4096 | dirty=1 hb=1 bg=0 obj=3a87408658f44c14 oseq=67 sseq=67 r=[28672,32768)
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=0 obj=3a87408658f44c14 oseq=67 sseq=68 r=[28672,32768)
+ dcache ino=30879 ci=4 put-record obj=e5e761e889779862 seq=68 | dirty=0 hb=1 bg=0 obj=e5e761e889779862 oseq=68 sseq=68 r=[28672,32768)
+ dcache ino=30879 ci=4 install len=131072 seq=68 | dirty=0 hb=1 bg=0 obj=e5e761e889779862 oseq=68 sseq=68 r=[28672,32768)
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 patch off=36864 len=4096 | dirty=1 hb=1 bg=0 obj=e5e761e889779862 oseq=68 sseq=68 r=[36864,40960)
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=0 obj=e5e761e889779862 oseq=68 sseq=69 r=[36864,40960)
+ dcache ino=30879 ci=4 put-record obj=71ad2ffdb1fbd95 seq=69 | dirty=0 hb=1 bg=0 obj=71ad2ffdb1fbd95 oseq=69 sseq=69 r=[36864,40960)
+ dcache ino=30879 ci=4 install len=131072 seq=69 | dirty=0 hb=1 bg=0 obj=71ad2ffdb1fbd95 oseq=69 sseq=69 r=[36864,40960)
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 patch off=45056 len=4096 | dirty=1 hb=1 bg=0 obj=71ad2ffdb1fbd95 oseq=69 sseq=69 r=[45056,49152)
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=0 obj=71ad2ffdb1fbd95 oseq=69 sseq=70 r=[45056,49152)
+ dcache ino=30879 ci=4 put-record obj=b23b51db4c3b0a5a seq=70 | dirty=0 hb=1 bg=0 obj=b23b51db4c3b0a5a oseq=70 sseq=70 r=[45056,49152)
+ dcache ino=30879 ci=4 install len=131072 seq=70 | dirty=0 hb=1 bg=0 obj=b23b51db4c3b0a5a oseq=70 sseq=70 r=[45056,49152)
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 patch off=53248 len=4096 | dirty=1 hb=1 bg=0 obj=b23b51db4c3b0a5a oseq=70 sseq=70 r=[53248,57344)
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=0 obj=b23b51db4c3b0a5a oseq=70 sseq=71 r=[53248,57344)
+ dcache ino=30879 ci=4 put-record obj=52b247a1ca204a41 seq=71 | dirty=0 hb=1 bg=0 obj=52b247a1ca204a41 oseq=71 sseq=71 r=[53248,57344)
+ dcache ino=30879 ci=4 install len=131072 seq=71 | dirty=0 hb=1 bg=0 obj=52b247a1ca204a41 oseq=71 sseq=71 r=[53248,57344)
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 patch off=61440 len=4096 | dirty=1 hb=1 bg=0 obj=52b247a1ca204a41 oseq=71 sseq=71 r=[61440,65536)
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=0 obj=52b247a1ca204a41 oseq=71 sseq=72 r=[61440,65536)
+ dcache ino=30879 ci=4 put-record obj=a3466142a2d15a62 seq=72 | dirty=0 hb=1 bg=0 obj=a3466142a2d15a62 oseq=72 sseq=72 r=[61440,65536)
+ dcache ino=30879 ci=4 install len=131072 seq=72 | dirty=0 hb=1 bg=0 obj=a3466142a2d15a62 oseq=72 sseq=72 r=[61440,65536)
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 patch off=69632 len=4096 | dirty=1 hb=1 bg=0 obj=a3466142a2d15a62 oseq=72 sseq=72 r=[69632,73728)
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=0 obj=a3466142a2d15a62 oseq=72 sseq=73 r=[69632,73728)
+ dcache ino=30879 ci=4 put-record obj=183e88d9e4cf269c seq=73 | dirty=0 hb=1 bg=0 obj=183e88d9e4cf269c oseq=73 sseq=73 r=[69632,73728)
+ dcache ino=30879 ci=4 to-rdcache len=131072 | dirty=0 hb=1 bg=0 obj=183e88d9e4cf269c oseq=73 sseq=73 r=
+ report ino=30879 ci=4 only=30879 sync=1 rc=0
+ report-irec ino=30879 size=67108864 only=30879 sync=1 rc=0
+ dcache ino=30879 ci=4 snap-steal | dirty=1 hb=1 bg=183e88d9e4cf269c obj=0 oseq=73 sseq=74 r=[77824,81920)
+0
+--- server report-split / stale why
+fcstor004 2026-10-02T12:54:20.758Z report-split nrec=86 pack_ms=0 push_ms=0 finish_ms=2369 skip=0 stale=0 inval=0 rc=-13 fail=wait/-13
+fcstor004 2026-10-02T12:54:27.280Z report-split nrec=29797 pack_ms=109 push_ms=4242 finish_ms=58 skip=0 stale=0 inval=0 rc=0 fail=-/0
+fcstor004 2026-10-02T12:54:27.757Z report-split nrec=32552 pack_ms=172 push_ms=189 finish_ms=57 skip=0 stale=0 inval=0 rc=0 fail=-/0
+fcstor004 2026-10-02T12:54:28.235Z report-split nrec=31928 pack_ms=153 push_ms=209 finish_ms=55 skip=0 stale=0 inval=0 rc=0 fail=-/0
+fcstor004 2026-10-02T12:54:28.718Z report-split nrec=32552 pack_ms=170 push_ms=167 finish_ms=84 skip=0 stale=0 inval=0 rc=0 fail=-/0
+TR773_DONE
+efs-bg: end 2026-10-02T12:57:21Z rc=0

@@ -1,0 +1,15 @@
+  target better    : 3
+  target skipped   : 1  (baseline PASS, target SKIP)
+  incomplete       : 0  (cut, missing, or NOTRUN)
+  target only      : 0
+  verdict          : not an unqualified success
+================================================================
+
+--- target passes where baseline does not ---
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             
+
+--- target skipped a check the baseline ran ---
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device
+[run_tests] posix results in /home/erbmi1/git/efs/results/posix/20261002-130142

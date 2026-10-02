@@ -1,0 +1,141 @@
+P1 of the Oct 2 performance plan: D23 (clean dcache body -> rdcache) and
+W41 (per-inode REPORT, no shared report_mu) — gate record, Oct 2 2026
+06:00Z–13:30Z, RDMA, table from the Oct 1 07:18Z raft-mkfs, servers
+2b5a25df419c-dirty (unchanged all day), clients fcstor008/009 on the
+P1 tree, fcstor010 old build for the A/B rows then the P1 tree for the
+same-host wedge rerun.
+
+Files: before-* = old client build (fcstor008, 06:00Z); after-* = P1
+pass 1 (wedged, see §2.1); -v2..-v5 = passes 2–5; gate-passN-*.log =
+the driver logs (~/efs-runs/p1gate2.sh); traces/ = single-test
+EFS_DCACHE_TRACE=1 runs; wedge-*-fcstor010* = the same-host A/B of §4;
+rss-* = the D23 RSS gate of §3; deadlock-gdb-threads.txt = §2.1.
+
+1. What landed (src/client/write.c, client_internal.h, node_cache.c)
+
+W41: the dirty set is per inode (hash of inode sets), each REPORT takes
+a per-inode publish slot instead of the client-wide report_mu; D24's
+report_landed_note REPORTs are built and sent by a 4-thread meta-flush
+pool (EFS_META_FLUSH_POOL 4, queue 64) so a close never waits behind
+another file's 8192-record REPORT. close(2) of a file with nothing
+unpublished still returns at once (65237a59).
+
+D23: when a REPORT commits a chunk's full-image object
+(dcache_note_committed, hit = object_gen == gen, entry clean, have_base,
+base_gen != UNCOND) the dcache body is handed to the rdcache
+(dcache_body_to_rdcache under the slot lock, efs_rdcache_put_owned
+after it). The dcache keeps no clean full-overwrite bodies any more;
+reads of just-written data come from the rdcache (bounded, evicting)
+instead of an unbounded clean dcache.
+
+2. Five gate passes — three bugs in the D23 placement, one in dcache_store
+
+2.1 Pass 1 (p1g765): the wedge gate (4 x 8 GiB dd + 300-file storm)
+hung the client. gdb (deadlock-gdb-threads.txt): the hand-off ran
+inside dcache_flush_keep under the slot mutex and efs_rdcache_put_owned
+-> rdcache_map_gen takes g_client.idx_mu, while efs_client_set_chunk
+(holding idx_mu) -> efs_dcache_yield_extra wanted the slot mutex. Lock
+order is idx_mu -> slot, never slot -> idx_mu. Fix: split into a locked
+half that detaches the body and an unlocked half that puts it.
+
+2.2 Pass 2 (p1g768, posix 20261002-123204 deleted): basic_overwrite_
+middle / content_random_overwrite_append EIO, four posix2 pwrite tests
+EIO. traces/tr769-new-*: a span-only row (table gen 0) made
+efs_rdcache_put_owned refuse the image, the entry was left body-less
+with have_base=1, the next partial write built a zeros+range "full
+image", the server answered FOLD_LIST STALE, and the replay looped
+(stale-class committed=0 forever). traces/tr770-old-* is the same test
+on the old build for comparison. Interim fix: hand off only full-image
+PUTs.
+
+2.3 Pass 3 (p1g772): peer_shared_pwrite still EIO. dcache_store_owned
+used dcache_find (matches only nodes with a body), so a body-less node
+of the same (ino,ci) got a SECOND node; put-record (dcache_find_meta)
+then hit the stale first node ("identity from staging table (putid
+miss)", fold built from the stale delta list). Fix: dcache_store and
+dcache_store_owned look up with dcache_find_meta and refill the
+existing node (dcache_fill/dcache_take reset the object fields).
+
+2.4 Pass 4 (p1g775): peer_shared_pwrite / peer_overlap_pwrite_same_range
+still EIO; server log apply publish rc=-14 why=2 (BASE_CAS) exp=0
+base_n=1 x129. traces/tr776-*: after a PUT-time hand-off the STALE
+replay had no body and no ranges (30 identical stale-class rounds, no
+snap-replay). The replay needs the body AND the dirty ranges until the
+REPORT commits. Final form: hand-off at commit time only
+(dcache_note_committed); dcache_flush_keep / flush_slot_inner keep
+sites restored to dcache_install_image.
+
+2.5 Pass 5 (p1g778) green: posix 200/201 (mmap_write_read SKIP by
+spec; results/posix/20261002-130142), posix2 63/63 PASS
+(results/posix2/20261002-130227), CMP_OK on both written files after a
+remount, md_latency mkdir 3.2 / create 1.7 / append 3.4 / stat 0.2 /
+unlink 0.6 / rmdir 3.1 ms.
+
+3. D23 RSS gate (rss-4x1g-64k-*): four sequential 1 GiB dd bs=64k
+conv=fsync on one client, VmRSS after each. P1 build (fcstor008):
+1.45 -> 2.52 -> 2.55 -> 2.55 GB (bounded; pmap 1.08 GB + 950 MB +
+262 MB regions). Old build (fcstor010): 1.45 -> 2.52 -> 4.64 GB — RSS
+tracked the bytes written. A single 4 GiB dd shows 4.67 GB on both
+(the dirty bytes in flight) and does not discriminate.
+
+4. Throughput / wedge gate, fcstor008 unless noted (flush in the clock)
+
+ pass  4 GiB bs=64k  8 GiB bs=1M   wedge dd wall  storm p50/p99 ms
+ old   788 MB/s      (not run)     (wedge: Oct 1 agent-wedge-20261001-141222 9.8 s, p99 51 ms)
+ v2    826 MB/s      1537 MB/s     8.50 s         3.0 / 66.4
+ v3    812           1363          8.28           2.7 / 127.6
+ v4    828           1388          14.63 (*)      3.5 / 90.7
+ v5    736.5         1677.8        8.57           3.5 / 112.0
+ (*) v4's four dd's spent 5.4–6.4 s in the final fsync-split flush
+ while the servers compacted at l0 65–143 (W51 episode, not P1).
+
+Same-host A/B on fcstor010 (wedge-old-build-fcstor010.txt vs
+wedge-new-build-fcstor010-x2.txt):
+ old build:  dd wall 9.70 s (886–914 MB/s each)  storm p50 4.9 / p99 37.2 / max 52.8 ms
+ P1 build a: dd wall 8.30 s                      storm p50 3.8 / p99 100.7 / max 277.2 ms
+ P1 build b: dd wall 8.37 s                      storm p50 5.5 / p99 121.6 / max 216.8 ms
+
+READ THIS ROW BEFORE QUOTING W41 AS A WIN: with four 8 GiB dd's in
+flight the 300-file create/close storm's p99 went from 37 ms (old,
+Oct 1 reference 51 ms) to 100–128 ms on the P1 build, same host, while
+the dd walls improved 9.7 -> 8.3 s and the storm p50 improved. The
+mechanism is not established. Consistent with the evidence: each small
+close now sends its own REPORT proposal and it queues behind the pool's
+8192-record batch applies on the server (apply_max 60–85 ms during
+those batches, fcstor006 raft-obs 06:01–06:08Z); on the old build the
+small file's records rode along in whichever client-wide REPORT was in
+flight. Alternatives not excluded: the commit-time rdcache put taking
+idx_mu (only for full images — the storm's files are 1-byte spans, the
+dd's are UNCOND full overwrites, so neither should enter it), or the
+four pool threads' RPCs occupying conn-pool slots. Recorded as W53 in
+START-HERE (observation, user decision), not fixed here.
+
+5. Found on the way, not P1
+
+W52 (new): a REPORT after thousands of O_APPEND writes answers after
+>30 s. raft_host.c host_resolve_caught_up runs one serial
+host_propose_wait per OPEN reservation at/below the published size,
+AFTER the report-split log line and before set_inode_rc — N appends =
+N raft proposals before the reply. The client times out at 30 s
+(inode-rpc: retry type=67 why=recv rc=-6 recv_ms=30312), resends the
+byte-identical REPORT, the server packs it again (skip=all), dd reports
+"fsync: I/O error". Seen on BOTH builds (fcstor004 report-split
+nrec=1133 06:03:30Z then skip=1133 06:04:01Z old build; nrec=625 x3 at
+06:06:45/07:15/07:46Z new build). The reported size lags (completed
+prefix) and converges: before-app-g765 148443136 vs after-app-g765
+81920000, both files complete afterwards. ~5 ms per O_APPEND write.
+Not a W41 regression (anomaly c of pass 1 resolved).
+
+Also: fcstor005 inbox_drop=158 dates from 05:45:49–05:46:06Z (type=3
+frames from node 0 during the W49 ecopy), unrelated; fcstor006
+apply_max 100–160 ms during 06:01–06:08Z = the 8192-record batch
+applies (raft-obs fields are microseconds).
+
+6. Cluster state after this run
+
+Servers untouched (2b5a25df419c-dirty, up since 04:3xZ restart). Clients
+fcstor008/009/010 run the P1 tree from /tmp/efs (bin 09:01/09:29 local);
+fcstor007 and 011–015 are down (stop751). Test trees under
+/tmp/efs-mount: d23/, p0/, tr769/, tr770/, p1/ (wedge dirs) — removed
+by the cleanup step after this summary; /tmp/efs-dev on fcstor008 is
+the build dir used for the single-test traces.

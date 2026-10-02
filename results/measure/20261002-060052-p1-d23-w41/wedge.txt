@@ -1,0 +1,5 @@
+OUT=/home/erbmi1/efs-runs/wedge-w41-20261002-060806 host=fcstor008
+fuse.efs-fuse
+MOUNT_OK
+2026-10-02T06:07:54.489Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+efs-ssh: TIMEOUT after 400s host=fcstor008.ib

@@ -1,0 +1,6 @@
+fstype=fuse.efs-fuse
+MOUNT_OK
+8589934592 bytes (8.6 GB, 8.0 GiB) copied, 2.59775 s, 3.3 GB/s
+read_wall=2.605329749 cpu=5.65 MBps=3297.0
+CMP_OK
+READ_DONE

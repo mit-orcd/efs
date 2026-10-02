@@ -34,7 +34,20 @@ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
   `conv=fsync`, non-zero source). Current references: START-HERE §1a
   "Baselines" and the tables below.
 
-## Latest (Oct 1 2026, RDMA, fresh table, `dc6b0af1` tree)
+## Oct 2 2026 (RDMA, same table, P0/P1 of the performance plan)
+
+Untraced, servers `--perf` only, client fcstor007 (committed tree):
+8 GiB `dd bs=1M conv=fsync` **1518 MB/s**, cold read after remount
+**3297 MB/s**, CMP_OK; **16 × 10 GiB dd+fsync on one client 3815 MB/s
+aggregate** (every stream 44.7–45.0 s, no close tail —
+`results/measure/20261002-054132-p0-x16/SUMMARY.txt`). The traced
+04:02Z 663 MB/s on fstor007 is a traced shape, not a baseline. P1
+client tree (D23+W41) on fcstor008: 8 GiB bs=1M 1363–1678 MB/s over
+four passes, 4 GiB bs=64k 737–828 MB/s; same-host fcstor010 4 × 8 GiB
+dd 9.70 → 8.30 s with the create/close storm p99 37 → 101 ms (W53;
+`results/measure/20261002-060052-p1-d23-w41/SUMMARY.txt`).
+
+## Oct 1 2026 (RDMA, fresh table, `dc6b0af1` tree)
 
 Single client fcstor007, flush in the clock, `FUSE_OK`: 8 GiB
 `dd bs=1M conv=fsync` **1.3 GB/s** (`~/efs-runs/rec-dd539.log`, after the

@@ -1,0 +1,12 @@
+fcstor004       1 nrec=893 pack_ms=2 push_ms=0 skip=0 fail=-/0 
+fcstor004       1 nrec=8280 pack_ms=37 push_ms=27 skip=0 fail=-/0 
+fcstor004       1 nrec=8278 pack_ms=30 push_ms=36 skip=0 fail=-/0 
+fcstor004       1 nrec=8268 pack_ms=28 push_ms=20 skip=0 fail=-/0 
+fcstor004       1 nrec=8258 pack_ms=44 push_ms=17 skip=0 fail=-/0 
+fcstor004       1 nrec=8251 pack_ms=28 push_ms=35 skip=0 fail=-/0 
+fcstor004       1 nrec=8245 pack_ms=63 push_ms=15 skip=0 fail=-/0 
+fcstor004       1 nrec=8239 pack_ms=50 push_ms=27 skip=0 fail=-/0 
+fcstor004       1 nrec=8236 pack_ms=41 push_ms=9 skip=0 fail=-/0 
+fcstor004       1 nrec=8226 pack_ms=32 push_ms=25 skip=0 fail=-/0 
+fcstor004       1 nrec=8224 pack_ms=55 push_ms=25 skip=0 fail=-/0 
+fcstor004       1 nrec=8223 pack_ms=41 push_ms=18 skip=0 fail=-/0 

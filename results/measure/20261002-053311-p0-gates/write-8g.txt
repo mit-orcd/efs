@@ -1,0 +1,9 @@
+fstype=fuse.efs-fuse
+MOUNT_OK
+RSS_BEFORE VmRSS:	   21628 kB
+8589934592 bytes (8.6 GB, 8.0 GiB) copied, 5.65485 s, 1.5 GB/s
+wall=5.658447228 cpu=10.85 MBps=1518.0
+RSS_AFTER VmRSS:	  557140 kB
+SIZE=8589934592
+8
+WRITE_DONE

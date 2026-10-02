@@ -1,0 +1,51 @@
+efs-bg: start 2026-10-02T13:28:15Z host=node9901 name=wold783 screen=efs-wold783
+OUT=/home/erbmi1/efs-runs/wedge-w41-20261002-132815 host=fcstor010
+fuse.efs-fuse
+MOUNT_OK
+2026-10-02T13:27:26.769Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+n=300 total=1.9s p50=4.9ms p99=37.2ms max=52.8ms
+dd3 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 9.39469 s, 914 MB/s
+dd4 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 9.4657 s, 907 MB/s
+dd2 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 9.61852 s, 893 MB/s
+dd1 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 9.69197 s, 886 MB/s
+dd wall=9.699120263
+big1 size=8589934592
+big2 size=8589934592
+big3 size=8589934592
+big4 size=8589934592
+--- fuse.log since mark:
+2026-10-02T13:28:16.280Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:16.592Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:16.895Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:17.196Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:17.497Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:17.802Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:18.100Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:18.408Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:18.713Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:19.013Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:19.320Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:19.622Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:19.925Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:20.221Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:20.519Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:20.816Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:21.115Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:21.412Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:21.715Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:22.017Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:22.308Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:22.601Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:22.905Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:23.194Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:23.488Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:23.777Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:24.066Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:24.359Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:24.656Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:24.942Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:25.225Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T13:28:25.619Z report-landed: 8192 chunks landed, kicking REPORT
+report-landed=32
+WEDGE_DONE
+efs-bg: end 2026-10-02T13:28:25Z rc=0

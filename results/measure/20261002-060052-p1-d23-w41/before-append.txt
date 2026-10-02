@@ -1,0 +1,14 @@
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2257660 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	 4646984 kB
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+KeyboardInterrupt
+append_wall=179.135903465 MBps=2.1
+RSS_AFTER VmRSS:	 4720536 kB
+RSS_MAX 4796632 kB
+SIZE=148443136
+APPEND_DONE
+/home/erbmi1/efs-runs/d23-remote.sh: line 69: unexpected EOF while looking for matching `"'
+/home/erbmi1/efs-runs/d23-remote.sh: line 72: syntax error: unexpected end of file

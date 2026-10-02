@@ -1,0 +1,52 @@
+Thread 128 (Thread 0x7f6629eae640 (LWP 2262639) "efs-fuse"):
+#0  0x00007f662a888840 in __lll_lock_wait () from /lib64/libc.so.6
+#1  0x00007f662a88eb62 in pthread_mutex_lock@@GLIBC_2.2.5 () from /lib64/libc.so.6
+#2  0x0000000000429455 in efs_client_lock_dir (parent=parent@entry=32791) at src/client/ops.c:83
+#3  0x0000000000433d21 in dcache_account_extra (ino=32791, ci=38840) at src/client/write.c:4036
+#4  0x0000000000436bc3 in dcache_store_owned (in=0x7f6629e3dad0, chunk_size=131072, chunk=<optimized out>, ci=38840, ino=32791) at src/client/write.c:4195
+#5  dcache_merge_owned (ino=ino@entry=32791, ci=ci@entry=38840, off=off@entry=0, src=src@entry=0x7f640b43f010 "W\025\005\247H>~iT\205\270G\346\033\366\254\350J.\f\a\024\021d\267QXl\232/)\240\333\0200\
+#6  0x0000000000443c1f in efs_dcache_store_full_owned (ino=ino@entry=32791, ci=ci@entry=38840, chunk=chunk@entry=0x7f640b43f010 "W\025\005\247H>~iT\205\270G\346\033\366\254\350J.\f\a\024\021d\267QXl\2
+#7  0x0000000000411721 in efs_fuse_write_buf (path=0x0, fi=<optimized out>, offset=<optimized out>, buf=0x7f6629e3dd20) at src/client/efs_fuse.c:2651
+#8  ll_write_buf (req=<optimized out>, ino=<optimized out>, bufv=<optimized out>, off=<optimized out>, fi=<optimized out>) at src/client/efs_fuse.c:4489
+#9  0x00007f662aa350f8 in fuse_session_process_buf_int () from /lib64/libfuse3.so.3
+#10 0x00007f662aa2d497 in fuse_do_work () from /lib64/libfuse3.so.3
+#11 0x00007f662a88b699 in start_thread () from /lib64/libc.so.6
+
+Thread 127 (Thread 0x7f66295ab640 (LWP 2262641) "efs-fuse"):
+#0  0x00007f662a888840 in __lll_lock_wait () from /lib64/libc.so.6
+#1  0x00007f662a88eb62 in pthread_mutex_lock@@GLIBC_2.2.5 () from /lib64/libc.so.6
+#2  0x000000000042cbe0 in rdcache_map_gen (ino=ino@entry=2656277, ci=ci@entry=0) at src/client/read.c:742
+#3  0x000000000042eda7 in rdcache_put_inner (ino=ino@entry=2656277, ci=ci@entry=0, src=src@entry=0x7f63fe6ff010 'x' <repeats 200 times>..., len=len@entry=131072, owned=owned@entry=1) at src/client/rea
+#4  0x000000000042f8a4 in rdcache_put_inner (owned=<optimized out>, len=<optimized out>, src=<optimized out>, ci=<optimized out>, ino=<optimized out>) at src/client/read.c:1015
+#5  0x0000000000435d71 in dcache_body_to_rdcache (e=e@entry=0x7f64d4d255b0, ino=ino@entry=2656277, ci=ci@entry=0, img=img@entry=0x7f63fe6ff010 'x' <repeats 200 times>..., len=len@entry=131072, seq=seq
+#6  0x0000000000436881 in dcache_body_to_rdcache (seq=154540, len=131072, img=0x7f63fe6ff010 'x' <repeats 200 times>..., ci=0, ino=2656277, e=0x7f64d4d255b0) at src/client/write.c:4286
+#7  dcache_flush_keep (ino=2656277, ci=0, copy=0x7f63fe6ff010 'x' <repeats 200 times>..., len=131072, put_ok=put_ok@entry=1, seq=154540, drop_body=0) at src/client/write.c:4607
+#8  0x00000000004369a4 in flush_pipe_drain (p=p@entry=0x7f662952f290) at src/client/write.c:4656
+#9  0x00000000004433de in flush_pipe_drain (p=0x7f662952f290) at src/client/write.c:4653
+#10 dcache_flush_ino_pass (ino=ino@entry=2656277) at src/client/write.c:5060
+#11 0x0000000000444280 in efs_dcache_flush_ino (ino=ino@entry=2656277) at src/client/write.c:5067
+
+Thread 123 (Thread 0x7f6622ffd640 (LWP 2262645) "efs-fuse"):
+#0  0x00007f662a888840 in __lll_lock_wait () from /lib64/libc.so.6
+#1  0x00007f662a88eb62 in pthread_mutex_lock@@GLIBC_2.2.5 () from /lib64/libc.so.6
+#2  0x0000000000433e8d in dcache_note_committed (ino=45079, ci=36906, gen=15475642412585565334) at src/client/write.c:5159
+#3  0x000000000043e7d4 in dcache_note_committed (gen=<optimized out>, ci=<optimized out>, ino=<optimized out>) at src/client/write.c:5155
+#4  efs_client_report_dirty_ino (only_ino=<optimized out>, sync=0) at src/client/write.c:1566
+#5  0x000000000043f692 in meta_flush_main (arg=<optimized out>) at src/client/write.c:1658
+#6  0x00007f662a88b699 in start_thread () from /lib64/libc.so.6
+#7  0x00007f662a9108a0 in clone3 () from /lib64/libc.so.6
+
+Thread 56 (Thread 0x7f65cd7fd640 (LWP 2264531) "efs-fuse"):
+#0  0x00007f662a888840 in __lll_lock_wait () from /lib64/libc.so.6
+#1  0x00007f662a88eb62 in pthread_mutex_lock@@GLIBC_2.2.5 () from /lib64/libc.so.6
+#2  0x0000000000429455 in efs_client_lock_dir (parent=parent@entry=40983) at src/client/ops.c:83
+#3  0x0000000000433d21 in dcache_account_extra (ino=40983, ci=38256) at src/client/write.c:4036
+#4  0x0000000000436bc3 in dcache_store_owned (in=0x7f65cd78cad0, chunk_size=131072, chunk=<optimized out>, ci=38256, ino=40983) at src/client/write.c:4195
+#5  dcache_merge_owned (ino=ino@entry=40983, ci=ci@entry=38256, off=off@entry=0, src=src@entry=0x7f648ef07010 "\201\224\b\211Ǹ\270\344\337F*\225\002І\267\207\253\036j\342\246;\257P\360g\305>t\266\304\
+#6  0x0000000000443c1f in efs_dcache_store_full_owned (ino=ino@entry=40983, ci=ci@entry=38256, chunk=chunk@entry=0x7f648ef07010 "\201\224\b\211Ǹ\270\344\337F*\225\002І\267\207\253\036j\342\246;\257P\3
+#7  0x0000000000411721 in efs_fuse_write_buf (path=0x0, fi=<optimized out>, offset=<optimized out>, buf=0x7f65cd78cd20) at src/client/efs_fuse.c:2651
+#8  ll_write_buf (req=<optimized out>, ino=<optimized out>, bufv=<optimized out>, off=<optimized out>, fi=<optimized out>) at src/client/efs_fuse.c:4489
+#9  0x00007f662aa350f8 in fuse_session_process_buf_int () from /lib64/libfuse3.so.3
+#10 0x00007f662aa2d497 in fuse_do_work () from /lib64/libfuse3.so.3
+#11 0x00007f662a88b699 in start_thread () from /lib64/libc.so.6
+

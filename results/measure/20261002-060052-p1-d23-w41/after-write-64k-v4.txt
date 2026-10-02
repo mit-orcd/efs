@@ -1,0 +1,11 @@
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2284839 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	   19856 kB
+4294967296 bytes (4.3 GB, 4.0 GiB) copied, 5.18393 s, 829 MB/s
+wall=5.187846432 cpu=11.5 MBps=827.8
+RSS_AFTER VmRSS:	 4672956 kB
+RSS_MAX 4659056 kB
+SIZE=4294967296
+4
+WRITE_DONE

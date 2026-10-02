@@ -1,0 +1,32 @@
+efsd pid=1063706 frag_before=0
+strace: Process 1063721 detached
+strace: Process 1063720 detached
+strace: Process 1063719 detached
+strace: Process 1063718 detached
+strace: Process 1063717 detached
+strace: Process 1063716 detached
+strace: Process 1063715 detached
+strace: Process 1063714 detached
+strace: Process 1063713 detached
+strace: Process 1063712 detached
+strace: Process 1063711 detached
+strace: Process 1063710 detached
+strace: Process 1063709 detached
+strace: Process 1063706 detached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 55.94  361.147787        2630    137293           poll
+ 40.38  260.707964         658    395831     48726 futex
+  0.94    6.095989         123     49351           writev
+  0.87    5.606103          48    115991           write
+  0.77    4.991480          59     83421     28365 openat
+  0.57    3.654027          33    108692     27479 read
+  0.47    3.029255          55     55072           close
+  0.03    0.181279          31      5672           unlink
+  0.02    0.132923         396       335           fsync
+  0.01    0.080806         319       253           recvfrom
+  0.00    0.019827         200        99           fdatasync
+  0.00    0.008570          42       201           pwrite64
+------ ----------- ----------- --------- --------- ----------------
+100.00  645.656010         678    952211    104570 total
+STRACE_SRV_DONE

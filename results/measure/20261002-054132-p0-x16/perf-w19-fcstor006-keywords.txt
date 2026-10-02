@@ -1,0 +1,7 @@
+     2.47%          1087  efsd     [kernel.kallsyms]        [k] __memcpy
+     1.39%           614  efsd     libc.so.6                [.] __memmove_avx_unaligned_erms
+     0.49%           214  efsd     [kernel.kallsyms]        [k] __memmove
+     0.10%            44  efsd     libc.so.6                [.] __memmove_avx_unaligned
+     0.00%             2  efsd     [xfs]                    [k] xfs_inodegc_queue
+     0.00%             1  efsd     libc.so.6                [.] __libc_pwrite
+     0.00%             1  efsd     libmlx5.so.1.27.63.0     [.] memcpy@plt

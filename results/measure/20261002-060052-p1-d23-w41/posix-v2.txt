@@ -1,0 +1,15 @@
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_overwrite_middle           [FAIL] OSError: [Errno 5] Input/output error
+  content_random_overwrite_append  [FAIL] OSError: [Errno 5] Input/output error
+
+--- target passes where baseline does not ---
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             
+
+--- target skipped a check the baseline ran ---
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device
+[run_tests] posix results in /home/erbmi1/git/efs/results/posix/20261002-123204

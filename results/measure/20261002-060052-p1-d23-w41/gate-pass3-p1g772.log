@@ -1,0 +1,123 @@
+efs-bg: start 2026-10-02T12:41:57Z host=node9901 name=p1g772 screen=efs-p1g772
+OUT=/home/erbmi1/git/efs/results/measure/20261002-060052-p1-d23-w41
+== DEPLOY D23+W41 (lock-order fix) client to fcstor008 fcstor009
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:42:01 
+fcstor009: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:42:02 
+== AFTER (v2)
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2276005 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	   19864 kB
+4294967296 bytes (4.3 GB, 4.0 GiB) copied, 5.28369 s, 813 MB/s
+wall=5.287704472 cpu=11.66 MBps=812.2
+RSS_AFTER VmRSS:	 4670164 kB
+RSS_MAX 4654088 kB
+SIZE=4294967296
+4
+WRITE_DONE
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2276005 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	 4670164 kB
+8589934592 bytes (8.6 GB, 8.0 GiB) copied, 6.29877 s, 1.4 GB/s
+wall=6.302680972 cpu=11.71 MBps=1362.9
+RSS_AFTER VmRSS:	 4822700 kB
+RSS_MAX 4819972 kB
+SIZE=8589934592
+12
+WRITE_DONE
+== remount fcstor008
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:42:01 
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2276404 build= bin=/tmp/efs/efs-fuse
+CMP_OK
+cmp_wall=3.210926813
+CMP_DONE
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2276404 build= bin=/tmp/efs/efs-fuse
+CMP_OK
+cmp_wall=8.759815214
+CMP_DONE
+== D24 wedge gate on fcstor008 (4 x 8 GiB dd + 300-file close storm)
+OUT=/home/erbmi1/efs-runs/wedge-w41-20261002-124231 host=fcstor008
+fuse.efs-fuse
+MOUNT_OK
+2026-10-02T12:42:17.920Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+n=300 total=2.0s p50=3.8ms p99=127.6ms max=183.0ms
+dd2 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.0051 s, 1.1 GB/s
+dd4 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.00902 s, 1.1 GB/s
+dd3 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.27405 s, 1.0 GB/s
+dd1 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.27612 s, 1.0 GB/s
+dd wall=8.283329964
+big1 size=8589934592
+big2 size=8589934592
+big3 size=8589934592
+big4 size=8589934592
+--- fuse.log since mark:
+2026-10-02T12:42:32.137Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:32.153Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:32.163Z report-landed: ino=33516 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:32.231Z report-landed: ino=41708 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:33.094Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:33.122Z report-landed: ino=33516 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:33.161Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:33.242Z report-landed: ino=41708 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:34.159Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:37.132Z report-landed: ino=33516 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:37.157Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:37.195Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:37.212Z report-landed: ino=41708 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:38.078Z report-landed: ino=33516 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:38.117Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:38.185Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:38.214Z report-landed: ino=41708 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:39.065Z fsync-split ino=33516 flush_ms=122 report_ms=0 rc=0
+2026-10-02T12:42:39.147Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:39.162Z fsync-split ino=37612 flush_ms=135 report_ms=0 rc=0
+2026-10-02T12:42:39.397Z fsync-split ino=29420 flush_ms=130 report_ms=0 rc=0
+report-landed=18
+WEDGE_DONE
+== fuse.log tail (W41 lines)
+18
+== posix jobs=1 on fcstor008
+  target better    : 3
+  target skipped   : 1  (baseline PASS, target SKIP)
+  incomplete       : 0  (cut, missing, or NOTRUN)
+  target only      : 0
+  verdict          : not an unqualified success
+================================================================
+
+--- target passes where baseline does not ---
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             
+
+--- target skipped a check the baseline ran ---
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device
+[run_tests] posix results in /home/erbmi1/git/efs/results/posix/20261002-124239
+== posix2 fcstor008 fcstor009
+  both fail (match): 0
+  not equivalent   : 0  (status or detail differs)
+  target better    : 0
+  target skipped   : 0  (baseline PASS, target SKIP)
+  incomplete       : 0  (cut, missing, or NOTRUN)
+  target only      : 0
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_shared_pwrite               [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+[run_tests] posix2 results in /home/erbmi1/git/efs/results/posix2/20261002-124324
+== md_latency on fcstor008
+mkdir              min    0.6 med    3.1 max    6.9 ms
+create+1B+close    min    1.6 med    1.7 max    2.0 ms
+append+close       min    3.0 med    3.4 max    9.5 ms
+stat               min    0.2 med    0.2 max    0.4 ms
+unlink             min    0.6 med    0.6 max    1.0 ms
+rmdir              min    0.7 med    3.4 max    7.1 ms
+== remount fcstor010 without trace
+fcstor010: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=01:25:18 
+P1GATE_DONE
+efs-bg: end 2026-10-02T12:44:19Z rc=0

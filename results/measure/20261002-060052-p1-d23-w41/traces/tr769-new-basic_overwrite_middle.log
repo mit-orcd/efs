@@ -1,0 +1,9 @@
+efs-bg: start 2026-10-02T12:35:04Z host=node9901 name=tr769 screen=efs-tr769
+fcstor009: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:31:28 
+parallel 1 tests jobs=16 (serial 0 after)
+FAIL basic_overwrite_middle           OSError: [Errno 5] Input/output error
+kept test tree: /tmp/efs-mount/tr769/posix-fcstor009-9ygsdp6o
+============================================================
+POSIX suite: 0/1 pass, 1 fail, 0 skip, 0 notrun  (1.4s)
+157
+efs-bg: end 2026-10-02T12:35:07Z rc=0

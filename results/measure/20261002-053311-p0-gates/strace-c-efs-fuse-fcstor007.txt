@@ -1,0 +1,32 @@
+efs-fuse pid=1209977
+strace: Process 1210064 detached
+strace: Process 1210063 detached
+strace: Process 1210062 detached
+strace: Process 1210061 detached
+strace: Process 1210060 detached
+strace: Process 1210059 detached
+strace: Process 1210058 detached
+strace: Process 1210057 detached
+strace: Process 1210056 detached
+strace: Process 1210055 detached
+strace: Process 1210054 detached
+strace: Process 1209991 detached
+strace: Process 1209984 detached
+strace: Process 1209983 detached
+strace: Process 1209982 detached
+strace: Process 1209980 detached
+strace: Process 1209979 detached
+strace: Process 1209977 detached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 55.46  188.185642        1503    125129           poll
+ 35.26  119.645297        3702     32314      6100 futex
+  7.51   25.497180         119    214008      5693 read
+  0.99    3.373807          17    196353           write
+  0.66    2.250879        6620       340        64 recvfrom
+  0.06    0.205238          24      8313           writev
+  0.04    0.126634         487       260           mmap
+  0.00    0.007283         173        42           munmap
+------ ----------- ----------- --------- --------- ----------------
+100.00  339.291960         588    576759     11857 total
+STRACE_CLI_DONE

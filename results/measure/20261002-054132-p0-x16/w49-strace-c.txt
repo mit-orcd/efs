@@ -1,0 +1,40 @@
+strace: Process 1210066 detached
+strace: Process 1210065 detached
+strace: Process 1210064 detached
+strace: Process 1210063 detached
+strace: Process 1210062 detached
+strace: Process 1210061 detached
+strace: Process 1210060 detached
+strace: Process 1210059 detached
+strace: Process 1210058 detached
+strace: Process 1210057 detached
+strace: Process 1210056 detached
+strace: Process 1210055 detached
+strace: Process 1210054 detached
+strace: Process 1209984 detached
+strace: Process 1209983 detached
+strace: Process 1209979 detached
+strace: Process 1209977 detached
+% time     seconds  usecs/call     calls    errors syscall
+------ ----------- ----------- --------- --------- ----------------
+ 80.69  304.593706        1876    162303     21411 futex
+ 10.69   40.371803         642     62814           poll
+  7.10   26.790717         146    183242     59636 read
+  0.52    1.971413          30     64004           write
+  0.51    1.908953          34     55926           writev
+  0.43    1.636870       25182        65           clock_nanosleep
+  0.03    0.117102          28      4169           setsockopt
+  0.01    0.030454          32       943           rt_sigprocmask
+  0.00    0.016946         107       157           clone3
+  0.00    0.014936          29       507           mprotect
+  0.00    0.009055          57       158           madvise
+  0.00    0.005678          36       157           set_robust_list
+  0.00    0.004724          30       156           getsockopt
+  0.00    0.004373          27       157           rseq
+  0.00    0.003908         558         7           restart_syscall
+  0.00    0.001985          25        78        78 recvfrom
+  0.00    0.001412          64        22           munmap
+  0.00    0.000893          31        28           mmap
+  0.00    0.000056          56         1           mremap
+------ ----------- ----------- --------- --------- ----------------
+100.00  377.484984         705    534894     81125 total

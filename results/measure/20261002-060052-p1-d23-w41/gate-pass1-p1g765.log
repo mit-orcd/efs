@@ -1,0 +1,115 @@
+efs-bg: start 2026-10-02T06:00:52Z host=node9901 name=p1g765 screen=efs-p1g765
+OUT=/home/erbmi1/git/efs/results/measure/20261002-060052-p1-d23-w41
+== BEFORE (current client build on fcstor008)
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2257660 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	   18544 kB
+4294967296 bytes (4.3 GB, 4.0 GiB) copied, 5.45367 s, 788 MB/s
+wall=5.457668645 cpu=11.75 MBps=786.9
+RSS_AFTER VmRSS:	 4646984 kB
+RSS_MAX 4639024 kB
+SIZE=4294967296
+4
+WRITE_DONE
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2257660 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	 4646984 kB
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+KeyboardInterrupt
+append_wall=179.135903465 MBps=2.1
+RSS_AFTER VmRSS:	 4720536 kB
+RSS_MAX 4796632 kB
+SIZE=148443136
+APPEND_DONE
+/home/erbmi1/efs-runs/d23-remote.sh: line 69: unexpected EOF while looking for matching `"'
+/home/erbmi1/efs-runs/d23-remote.sh: line 72: syntax error: unexpected end of file
+== remount fcstor008
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=01:25:18 
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2260132 build= bin=/tmp/efs/efs-fuse
+CMP_OK
+cmp_wall=3.140405160
+CMP_DONE
+== DEPLOY D23+W41 client to fcstor008 fcstor009
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=02:04:13 
+fcstor009: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=02:04:13 
+49
+== AFTER
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2261095 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	   19896 kB
+4294967296 bytes (4.3 GB, 4.0 GiB) copied, 5.20084 s, 826 MB/s
+wall=5.207617406 cpu=11.62 MBps=824.7
+RSS_AFTER VmRSS:	 4672328 kB
+RSS_MAX 4658444 kB
+SIZE=4294967296
+4
+WRITE_DONE
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2261095 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	 4672328 kB
+Traceback (most recent call last):
+  File "<stdin>", line 7, in <module>
+OSError: [Errno 5] Input/output error
+append_wall=205.157562340 MBps=.3
+RSS_AFTER VmRSS:	 4603160 kB
+RSS_MAX 4675352 kB
+SIZE=81920000
+APPEND_DONE
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2261095 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	 4606104 kB
+8589934592 bytes (8.6 GB, 8.0 GiB) copied, 6.19871 s, 1.4 GB/s
+wall=6.204014716 cpu=11.80 MBps=1384.5
+RSS_AFTER VmRSS:	 4799976 kB
+RSS_MAX 4798672 kB
+SIZE=8589934592
+12
+WRITE_DONE
+== remount fcstor008
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=02:04:13 
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2262636 build= bin=/tmp/efs/efs-fuse
+CMP_OK
+cmp_wall=3.632842131
+CMP_DONE
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2262636 build= bin=/tmp/efs/efs-fuse
+CMP_OK
+cmp_wall=6.654830425
+CMP_DONE
+append size 59928576 expect 409600000
+== D24 wedge gate on fcstor008 (4 x 8 GiB dd + 300-file close storm)
+OUT=/home/erbmi1/efs-runs/wedge-w41-20261002-060806 host=fcstor008
+fuse.efs-fuse
+MOUNT_OK
+2026-10-02T06:07:54.489Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+efs-ssh: TIMEOUT after 400s host=fcstor008.ib
+== fuse.log tail (W41 lines)
+8
+== posix jobs=1 on fcstor008
+[run_tests]   baseline: 198 pass
+[run_tests] posix: efs on fcstor008.ib:/tmp/efs-mount  (x1)
+efs-ssh: TIMEOUT after 70s host=fcstor008.ib
+[run_tests] TIMEOUT 70s: fcstor008.ib for i in $(seq 1 20); do
+            if timeout 3 python3 -c "
+import os, tempfile, shutil
+d = tempfile.mkdtemp(prefix=\"warmup-\", dir=\"/tmp/efs-mount\")
+p = os.path.join(d, \"f\"); open(p, \"w\").write(\"x\")
+assert open(p).read() == \"x\"
+shutil.rmtree(d)
+" 2>/dev/null; then exit 0; fi
+            sleep 0.5
+        done; echo "  ERROR: fcstor008.ib warmup did not converge" >&2; exit 1
+[run_tests]   ERROR: fcstor008.ib warmup failed — not starting suite
+[run_tests] posix results in /home/erbmi1/git/efs/results/posix/20261002-061446
+== posix2 fcstor008 fcstor009

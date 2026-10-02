@@ -1,0 +1,38 @@
+efs-bg: start 2026-10-02T13:27:26Z host=node9901 name=rss782 screen=efs-rss782
+fcstor010: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=01:25:18 
+pid=1866961
+--- fresh
+VmRSS:	   18396 kB
+RssAnon:	   15280 kB
+RssFile:	    3116 kB
+1073741824 bytes (1.1 GB, 1.0 GiB) copied, 1.50929 s, 711 MB/s
+--- after 1 GiB bs=64k + fsync
+VmRSS:	 1452148 kB
+RssAnon:	 1448784 kB
+RssFile:	    3364 kB
+total kB         4030708 1452148 1448784
+00007fc227fe0000 1049376 1049276 1049276 rw---   [ anon ]
+00007fc187a79000  202544  201936  201936 rw---   [ anon ]
+00007fc19817e000   64140   64040   64040 rw---   [ anon ]
+00007fc26dd05000   35972   35968   35968 rw---   [ anon ]
+00000000004d0000   33440   29308   29308 rw---   [ anon ]
+00007fc2182ed000   21336   21308   21308 rw---   [ anon ]
+00007fc27490c000    8200    8196    8196 rw---   [ anon ]
+1073741824 bytes (1.1 GB, 1.0 GiB) copied, 1.43815 s, 747 MB/s
+--- after 2nd 1 GiB bs=64k + fsync
+VmRSS:	 2517596 kB
+RssAnon:	 2514232 kB
+1073741824 bytes (1.1 GB, 1.0 GiB) copied, 1.48956 s, 721 MB/s
+1073741824 bytes (1.1 GB, 1.0 GiB) copied, 1.45719 s, 737 MB/s
+--- after 4 x 1 GiB bs=64k + fsync
+VmRSS:	 4638604 kB
+RssAnon:	 4635240 kB
+total kB         7078256 4638604 4635240
+00007fc227fe0000 1114196 1114132 1114132 rw---   [ anon ]
+00007fc143fe2000  994492  994492  994492 rw---   [ anon ]
+00007fc185a78000  235996  235740  235740 rw---   [ anon ]
+00007fc26dd05000  101276  101272  101272 rw---   [ anon ]
+00007fc12c000000   65484   65484   65484 rw---   [ anon ]
+0
+RSS779_DONE
+efs-bg: end 2026-10-02T13:27:36Z rc=0

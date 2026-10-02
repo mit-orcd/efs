@@ -1,0 +1,88 @@
+P0 gates — Oct 2 2026 05:33Z–05:47Z (START-HERE "Performance plan" P0.1–P0.4)
+==============================================================================
+
+Tree: servers and clients 6163d51e339e-dirty (docs dirty only; the
+client code is the committed tree), roll `start760` (cluster.sh start
+--clients --perf, 05:25Z, CLUSTER_OK; servers under `--perf`, clients
+untraced). Client fcstor007 (2 NUMA nodes, HCA node 0), RDMA. Source
+/dev/shm/r1g (1 GiB urandom, cat'd N times, `iflag=fullblock`).
+Companion dir: results/measure/20261002-053311-p0-gates (P0.1).
+
+P0.1  W28 gate (8 GiB dd+fsync, remount, cold read) — PASS
+----------------------------------------------------------
+  write  8 GiB bs=1M conv=fsync       5.66 s   1518 MB/s   (dd539 Oct 1: 1.3 GB/s; 16 GiB 1.5)
+  cold read after remount             2.61 s   3297 MB/s   (Oct 1: 3.6 GB/s)   CMP_OK
+  efs-fuse CPU: write 10.85 s, read 5.65 s. RSS 21 MB -> 557 MB after the write.
+  (p0-gates/write-8g.txt, read-8g.txt)
+
+P0.1  W46 / W47 syscall counts (strace -c, 20 s windows around a second 8 GiB dd; traced
+      number 853 MB/s, not quoted) — recorded
+----------------------------------------------------------------------------------------
+  server fcstor003 (49 152 fragments = 65 536 chunks x 3 / 4 servers):
+      writev 49 351 (1.00/frag)  write 115 991 (2.36/frag, eventfd)  futex 395 831 (8.1/frag,
+      48 726 EAGAIN)  poll 137 293 (2.8/frag)  openat 83 421 (1.7/frag, 28 365 ENOENT probes)
+      close 55 072  read 108 692  unlink 5 672  fsync 335  fdatasync 99
+  client fcstor007 (65 536 PUTs, 196 608 fragment replies):
+      write 196 353 (1.0/frag)  read 214 008 (1.09/frag)  poll 125 129 (0.64/frag = 1.9/PUT)
+      futex 32 314 (0.5/PUT)  writev 8 313 (0.13/PUT)  recvfrom 340
+  Against the Oct 2 traced run (2 eventfd writes + 2 writev per fragment server-side; 1 poll
+  + 1 read per reply client-side): writev halved (W46's done-signal), eventfd write per
+  fragment unchanged (~2.4; W47 "saves nothing server-side" stands), client poll per reply
+  0.64. futex is the server's largest count at 8 per fragment (pool handoff + reply wait);
+  the client's is 0.5 per PUT. (p0-gates/strace-c-*.txt)
+
+P0.2  untraced 16 x 10 GiB dd+fsync, fresh names, one client — row 11 number
+----------------------------------------------------------------------------
+  every stream 44.7–45.0 s, 238–240 MB/s   ->   16 x 10 GiB / 45.03 s = 3815 MB/s aggregate
+  (the traced 04:02Z run on fstor007 was 663 MB/s, 37–50 MB/s per stream, last close 74.6 s;
+  this run has no close tail: the slowest stream ends 0.3 s after the fastest).
+  NOTE total_wall=230 s in x16.txt is a harness artefact (the RSS sampler kept `wait` from
+  returning for 185 s after the last dd); the per-stream walls are the measurement.
+  efs-fuse CPU 404 s for 160 GiB (2.5 s/GiB; the 8 GiB single stream was 1.36 s/GiB).
+  RSS 4.26 GB -> 8.57 GB over the run (rss-per-second.txt): grows 4.3 GB, not 160 GB —
+  not tracking bytes written, not flat either (16 streams' PUT windows + slab growth).
+  fuse.log: 168 `report-landed` kicks, 0 `slow-ok type=67`, 0 `retry type=67`.
+  Server census for the window (server-census.txt): report-split 169, all on fcstor004
+  (the one dual host the client chose), fail=wait 0, skip=all 0 — the BUSY-after-commit
+  resend (D29's motivation) did NOT occur untraced. REPORT shape: nrec ~8250,
+  pack_ms 28–63 (3.4–7.6 us/rec; the traced run had 100–133 us/rec under l0=100–170),
+  push_ms 9–36 (report-split-shapes.txt).
+  apply-sleep: 144 episodes (fcstor003 32, fcstor004 95, fcstor006 17; fcstor005 0),
+  20–34 ms each, never the 400 ms deadline; kv-compact end ms max 105; backpressure 0.
+  (apply-sleep-compact-gc.txt is W51's raw material for this run.)
+
+P0.3  W19 — group leaders profiled 20 s mid-run (perf record -p efsd; perf report on node)
+-----------------------------------------------------------------------------------------
+  fcstor003 (g0 leader, 46 K samples) / fcstor006 (g2 leader, 44 K):
+      __memcmp_avx2_movbe 9.20 % / 8.12 %  — 6.6 % of it is
+          lsm_scan_from <- efs_kv_scan_prefix <- host_gc_thread (the GC frag pass, D26),
+          0.7 % merge_scan (compaction), 0.5 % kv_seg_probe <- lookup <- lsm_get
+      xfs_buf_lookup 3.2 %, xfs_btree_lookup 2.0 %, _xfs_trans_bjoin 1.8 % (fragment
+          create/write/unlink), kernel __memcpy 2.3 % (pwrite copies)
+      libc __memmove_avx_unaligned_erms 1.59 % / 1.39 %  (+0.11 % unaligned)
+      kv_key_cmp 0.76 %, efs_crc32 0.64 %, server_handle_conn 0.57 %, run_job 0.47 %,
+      recv_poller 0.43 %; try_commit not in the top 60 (< 0.2 %)
+  W19 condition (memmove under the AE path < 2 %, try_commit < 1 %) holds -> CLOSE W19.
+  The leader's top user-space cost under a 3.8 GB/s write is the GC frag pass's key scan
+  (D26 P2.2), not the pump.
+  Idle after the run (05:45Z) fcstor003 still logs
+      gc-pass ms=396 frag=396 fkeys=867586 femit=514 ftomb=867072   every ~1.4 s
+  (W44 a: the walk is tombstones; femit=514 are real records — not an empty pass).
+  perf report caveat: the running efsd shows as "efsd (deleted)" — the client remount
+  step's rsync --delete + make in /tmp/efs replaced the binary file under the running
+  daemon (same source, new inode); symbols resolved by addr2line against /tmp/efs/efsd
+  (non-PIE: offset + 0x400000). Harmless for operation; keep in mind for any -p profile
+  taken after a `--clients` roll.
+
+P0.4  W49 — strace -c -f -p efs-fuse 10 s during an ecopy (18 705 files, /usr/lib/python3.9
+      -> the mount, 64 s) — CLOSE
+--------------------------------------------------------------------------------------------
+  534 894 syscalls: futex 162 303 (21 411 EAGAIN), read 183 242 (59 636 EAGAIN), poll 62 814,
+  write 64 004, writev 55 926, setsockopt 4 169, getsockopt 156, recvfrom 78 (all EAGAIN),
+  fstat 0.  getsockopt + recvfrom(MSG_PEEK) + fstat = 0.04 % < 1 % -> W49 closes.
+  (w49-strace-c.txt, w49-ecopy.txt)
+
+Status after P0: W28 gate passes; W46/W47 counts recorded; row 11 = 3815 MB/s untraced
+(fcstor007); W19 closed; W49 closed; D29's motivating symptom absent untraced (the ask
+stays open, no code). Next: P1.1 D23 + P1.2 W41 (built on fcstor008 /tmp/efs-dev,
+unit tests green) — gates per the plan rows.

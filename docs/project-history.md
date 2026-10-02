@@ -2122,6 +2122,94 @@ Original steps (1–4 done twice, kept for the commands):
 
 ---
 
+<a id="ph-oct-2-2026-13-45z-performance-plan-p0-p1-d23-w41-landed"></a>
+## Oct 2 2026 13:45Z — performance plan P0 (gates) and P1 (D23 + W41) done; W52, W53 opened
+
+The user started the START-HERE performance plan ("implement
+performance plan", 05:33Z) ahead of the correctness list. Servers stayed
+on `start760` (`cluster.sh start --clients --perf`, 05:25Z) all day; no
+wipe, no server code change.
+
+**P0 (`results/measure/20261002-053311-p0-gates`,
+`-054132-p0-x16/SUMMARY.txt`).** W28 gate on fcstor007 PASS: 8 GiB
+dd+fsync 1518 MB/s, cold read 3297 MB/s, CMP_OK. W46/W47 counts from a
+20 s `strace -c` attach around a second 8 GiB dd: server writev
+1.00/fragment (W46 halved it), eventfd write 2.36/fragment (unchanged;
+W47 saves nothing server-side), futex 8.1/fragment, openat 1.7
+(28 K ENOENT probes); client write 1.0/fragment reply, read 1.09, poll
+0.64, futex 0.5/PUT. Row 11, untraced 16 × 10 GiB dd on fcstor007:
+every stream 44.7–45.0 s = **3815 MB/s aggregate**, no close tail (the
+traced 04:02Z fstor007 run had 663 MB/s and a 74.6 s close); 169
+`report-split`, all on fcstor004, `fail=wait` 0, `skip=all` 0, nrec
+~8250, pack 3.4–7.6 µs/rec (the traced run had 100–133 µs under
+l0=100–170); 144 `apply-sleep` of 20–34 ms, none at the 400 ms
+deadline. So D29's motivating symptom (BUSY after commit, byte-identical
+resend) did not appear untraced — the ask stands without a live case.
+RSS 4.26 → 8.57 GB over 160 GiB written (not flat, not tracking bytes).
+W19 closed: leader profiles mid-run show memmove 1.6 %, `try_commit`
+< 0.2 %; the leaders' top user-space cost is the GC frag pass's key
+scan (`__memcmp_avx2_movbe` 9 %, 6.6 % under `host_gc_thread`) — D26.
+W49 closed: fstat + getsockopt + recvfrom(MSG_PEEK) = 0.04 % of
+534 894 syscalls during an ecopy. Caveat recorded: `perf report` shows
+`efsd (deleted)` after a `--clients` roll (the rsync+make replaced the
+binary file under the daemon); the harness's RSS sampler held `wait`
+185 s past the last dd, so `total_wall` in x16.txt is an artefact.
+
+**P1 (`results/measure/20261002-060052-p1-d23-w41/SUMMARY.txt`).**
+Client-only change (`write.c`, `client_internal.h`, `node_cache.c`),
+built on fcstor008 `/tmp/efs-dev`, deployed to fcstor008/009 (later
+010). W41: per-inode dirty sets, per-inode publish slots, a 4-thread
+meta-flush pool for D24's landed REPORTs, no `report_mu`. D23 took
+five gate passes to find its correct place: pass 1 wedged the client
+(rdcache put under the slot mutex vs `efs_client_set_chunk` holding
+`idx_mu` → `efs_dcache_yield_extra`; gdb stacks in the results dir);
+pass 2 EIO'd posix `basic_overwrite_middle` and four posix2 pwrite
+tests (a span-only row has table gen 0, the rdcache refuses it, the
+body-less `have_base` node then publishes zeros+range as a full image
+→ FOLD_LIST STALE, replay loop); pass 3 still failed
+`peer_shared_pwrite` (`dcache_store_owned` used `dcache_find`, which
+skips body-less nodes, so a second node shadowed the first); pass 4
+still failed it (after a PUT-time hand-off the STALE replay had no
+body and no ranges — `why=2 BASE_CAS exp=0 base_n=1` ×129, 30
+`stale-class` rounds with no `snap-replay`). Final form: the body goes
+to the rdcache in `dcache_note_committed` (REPORT OK, `object_gen ==
+gen`, clean, `base_gen != UNCOND`), put outside the slot lock; both
+store paths use `dcache_find_meta`. Pass 5: posix 200/201, posix2
+63/63 (`results/posix/20261002-130142`, `results/posix2/20261002-
+130227`), CMP_OK after remount, md_latency 3.2/1.7/3.4/0.2/0.6/3.1 ms.
+D23 RSS gate (4 × 1 GiB bs=64k dd+fsync): P1 build 1.45 → 2.52 → 2.55
+→ 2.55 GB, old build 1.45 → 2.52 → 4.64 GB. W41 wedge gate on the same
+host (fcstor010, old then P1 build): 4 × 8 GiB dd wall 9.70 → 8.30/
+8.37 s, storm p50 4.9 → 3.8/5.5 ms, **p99 37.2 → 100.7/121.6 ms, max
+52.8 → 277/217 ms** — the plan's p99 ≤ 51 ms gate is not met. Opened
+as **W53** (investigate; keep/revert is the user's): the hypothesis is
+that each small close's own REPORT proposal now queues behind the
+pool's 8192-record batch applies (fcstor006 `apply_max` 100–160 ms
+during those applies) where before the small file's records rode in
+whichever client-wide REPORT was in flight; not excluded are the
+commit-time rdcache put taking `idx_mu` (should not trigger for span
+files or UNCOND dd chunks) and the pool threads' conns.
+
+**W52 (found on the way, both builds):** a REPORT after thousands of
+O_APPEND writes answers after > 30 s because `host_resolve_caught_up`
+runs one serial `host_propose_wait` per OPEN reservation after the
+`report-split` line; the client's 30 s recv timeout resends
+byte-identical (`retry type=67 why=recv rc=-6 recv_ms=30312`), the
+server packs again (`skip=all`), dd prints `fsync: I/O error`; the
+size lags (completed prefix) and converges. fcstor004 `nrec=1133`
+06:03:30Z + `skip=1133` 06:04:01Z (old build), `nrec=625` ×3 at
+06:06:45/07:15/07:46Z (P1). ~5 ms per O_APPEND write. Fix shape is a
+question for the user. Also: fcstor005 `inbox_drop=158` dates from
+05:45:49–05:46:06Z (type=3 frames from node 0 during the W49 ecopy),
+unrelated to P1.
+
+Cleanup: test trees under `/tmp/efs-mount` (`d23 p0 tr769 tr770 p1 …`)
+and `/tmp/x16-*`, `/tmp/w41-gdb.txt`, `/tmp/tr77*` on fcstor008/009
+removed (`clean785`); intermediate posix/posix2 dirs of passes 2–4
+deleted; `/tmp/efs-dev` on fcstor008 left as the P1 build dir.
+
+---
+
 <a id="ph-oct-2-2026-05-00z-review-of-the-r749-window-16-dd-traced-on--e5dc7f"></a>
 ## Oct 2 2026 05:00Z — review of the r749 window: 16× dd traced on both ends, REPORT drain slower than PUTs, W44 step a read
 
@@ -2209,6 +2297,95 @@ Session mechanics: reductions ran as screens (`ana5-003..006` on the
 servers, `cli5`–`cli9` on fstor007; scripts in `~/efs-runs/`, outside
 the repo); `tail -2 a b` is "option used in invalid context" — `tail
 -n 2`; `raft_log_tail.py` wants `/data1/01/efs/mdraft/log/raft.log`.
+
+---
+
+<a id="ph-start-here-handoff-archive-oct-2-2026-05-00z-moved-oct-2-2026-1345z"></a>
+## START-HERE handoff archive Oct 2 2026 05:00Z — moved Oct 2 2026 13:45Z
+
+Verbatim from START-HERE §1b when the Oct 2 13:45Z block replaced it.
+
+**Oct 2 2026 05:00Z — review of the `r749` window (servers `--perf
+--strace`, fstor007 `client.sh --perf --strace`), written for whoever
+picks this up; the cluster is STOPPED (`stop751`, CLUSTER_OK 04:24Z).**
+Results + reductions: `results/measure/20261002-040242-dd16x10g-review/`
+(`SUMMARY.txt` is the review; raw traces stay in
+`~/orcd/scratch/efs/perf/efs-mount/` and
+`~/orcd/scratch/efs/perf/cluster-20261002-0423/`; `/tmp/efs-perf/
+efsd.{data,strace}` are still on fcstor003–006 — `cluster.sh start`
+deletes them). What it found, in order of weight:
+
+1. **The run was 16 × 10 GiB dd on one client, not one dd.** The FUSE
+   census (`client/ana-fuse-writers.txt`, nodeid from the
+   `fuse_in_header` of every 1 MiB `/dev/fuse` read) shows 16 inodes
+   × 10240 WRITEs from 04:02:43Z; 140 433 MiB in 222 s = **663 MB/s
+   aggregate with recorders on both ends**, same as the untraced Oct 1
+   20:56Z 16× run. The traced stream (dat16, `efs-mount/dd.trace.txt`)
+   got 50 MB/s + a 74.6 s `close()` = 37.3 MB/s. Servers: 3700–4000
+   fragment creates/s each = exactly that load. No regression, no PUT
+   amplification, no `apply truncate`/`lane-fence` lines (fresh files).
+   Four streams stopped at 3.6–5.2 GiB with a normal FLUSH and no error
+   reply seen in the FUSE trace — **W48 (investigate):** their exit
+   status, signal, stderr and byte counts are in the user's harness
+   dir, not in `efs-mount/`. An EIO/ENOSPC there establishes a failure;
+   it does not by itself name W42 (new in this tree) as the cause —
+   the server log at that second and the client's `inode-rpc` lines
+   decide that.
+2. **The publish path is slower than the PUT path, and BUSY-after-commit
+   doubles its cost.** `report-split` on fcstor004/005: nrec 8 k → 30 k
+   → 57 k → 68 k → 124 k → 322 k → 570 k; pack (one point get per record,
+   100–133 µs each under `l0=100–170`) up to 42.9 s; push up to 77 s;
+   every REPORT but the last ended `fail=wait/-13` (committed, then the
+   apply-wait deadline → BUSY) and the client resent it byte-identical
+   to the other dual host, which packed it again and found `skip=all`.
+   Publish ≈ 2.7 k rec/s vs PUT ≈ 5 k chunks/s, so the dirty set grows
+   for the whole write and the last close pays it. D24 bounds a close
+   only when REPORTs drain faster than PUTs land. → W41 (decided) is
+   necessary, not sufficient. **D29 (ask, user's framing 05:30Z):** a
+   REPORT *receipt* for "committed, apply pending" that lets the client
+   wait on or query the **same operation** instead of re-sending it
+   (no second pack, no second proposal). It is not a successful
+   publication and must not let the client free dirty bytes — the
+   apply may still return STALE or another failure. Tests must cover a
+   lost receipt and a leader change between receipt and verdict. Also:
+   D26's L0 width is a REPORT-pack cost too, not only the GC's.
+3. **W44 step a reading is in (D26's input):** idle leaders scan
+   **1 026 406 keys of which 1 026 149 are tombstones** (group 0) /
+   596 739 / 596 482 (group 2) to emit 257 records, every 1.6 s,
+   430–740 ms per pass = 38 % of a core; ~90 % of each leader's `efsd`
+   cycles under `host_gc_frag_pass`. The cost is tombstones under the
+   GC prefix, not the L0 count. **But these passes are not empty:
+   `femit=257` means 257 live records were found each time** (user,
+   05:30Z), so D26's watermark — which skips only truly empty scans —
+   will not help while those records remain. D26 therefore pairs the
+   watermark with **bounded scan progress** (a pass that resumes
+   where the last one stopped instead of re-walking 1 M tombstones to
+   reach the same 257) and with W50; the watermark is maintained
+   atomically with record insertion/removal and across recovery.
+   After the dd the tombstones were compacted away (12 k / 121 k) and
+   grew back (171 k / 337 k, +1024 per pass = the run's superseded
+   objects draining at ~512 records per pass). A `gc-frag group=0
+   scans=1 records=126 ms=428` line repeating identically is the
+   **W50 (investigate)** symptom: identical counts alone do not prove
+   failed deletes — record the 126 identities, each delete's verdict
+   and the committed GC_ACKs (`EFS_GC_DBG=1` for one pass) before
+   naming a cause. The raft log tail is 99.7 % GC_ACK at 5–6 commits/s
+   per group — that is why `preflight.sh` says "not idle".
+4. **Compaction pressure on the data-heavy followers** during the write:
+   `kv-compact` l0 up to 170, 340 MB L0+L1 merges of 3–5 s,
+   `apply-sleep` ×31 (fcstor004) / ×103 (fcstor005) coincide with the
+   `fail=wait` REPORTs in 2 and 400 ms BUSY on follower-served reads.
+   **W51 (investigate):** the experiment must distinguish lock blocking
+   (the apply waiting on `l->mu` / the compactor), slow application
+   (the apply itself), and transport delay (AE arrival) before any
+   remedy; **D30 (ask)** is that remedy and stays open until W51 says
+   which it is (D9/D10 territory).
+5. Server syscalls per 5 min (each node): futex 14.7 M, eventfd `write`
+   7.5 M (W47 saves nothing server-side: a conn thread is always armed),
+   openat 1.85 M, writev 1.7 M, fsync 13.8 k (max 0.15 s). Fragment
+   writes ~60 µs; the writer pool is not a bottleneck. Client: recv
+   poller 6.4 M eventfd writes, 24 PUT threads 149 k poll+read each,
+   blake3 19 % of 0.9 core — CPU is not the wall on either end.
 
 ---
 

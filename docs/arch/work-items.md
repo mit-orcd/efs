@@ -1015,9 +1015,9 @@ What to implement:
 
 #### W19 — Server: the Raft pump copies every AppendEntries twice, and `try_commit` re-walks the log per reply
 
-> **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** UNVERIFIED — no roll record in START-HERE, the rules or project-history names W19 as landed. Treat as OPEN.
+> **Current status (Oct 2 2026 05:45Z): CLOSED by measurement (P0.3).** Both group leaders profiled 20 s during the untraced 16 × 10 GiB dd (3.8 GB/s): libc `__memmove_avx_unaligned_erms` 1.59 % / 1.39 %, `try_commit` not in the top 60 (< 0.2 %); the leaders' top user-space cost is `__memcmp_avx2_movbe` 9 % of which 6.6 % is the GC frag pass's key scan (D26) (`results/measure/20261002-054132-p0-x16/perf-w19-*`). Steps 1–2 below are not taken.
 >
-> **Remaining action:** re-profile one group leader (`perf record -g -p $(pgrep -x efsd)` during a 9-client dd); if `memmove` under the pump's AE path is under 2 % and `try_commit` under 1 %, close this item with the profile dir; otherwise steps 1–2 below as written.
+> **Remaining action:** none.
 >
 > **Governing decision:** none needed (mechanical).
 >
@@ -1262,9 +1262,9 @@ What to implement:
 
 #### W49 — Client: five liveness syscalls per connection checkout, plus an `fstat` per send (was "W23"; renamed Oct 2 — W23 is the server compaction item)
 
-> **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** UNVERIFIED — no roll record names this item (renamed from the duplicate "W23" on Oct 2; the server item keeps W23). Treat as OPEN, low priority.
+> **Current status (Oct 2 2026 05:47Z): CLOSED by measurement (P0.4).** `strace -c -f -p efs-fuse` 10 s during an ecopy of 18 705 files: 534 894 syscalls, fstat 0, getsockopt 156, recvfrom 78 (all EAGAIN) = 0.04 % < 1 % (`results/measure/20261002-054132-p0-x16/w49-strace-c.txt`). Steps 1–2 below are not taken.
 >
-> **Remaining action:** attach `strace -c -f -p $(pgrep -x efs-fuse)` for 10 s during an `ecopy`; if `fstat` + `getsockopt` + `recvfrom(MSG_PEEK)` are under 1 % of syscalls, close with the count; otherwise steps 1–2 below.
+> **Remaining action:** none.
 >
 > **Governing decision:** none needed (mechanical).
 >

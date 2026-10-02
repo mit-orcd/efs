@@ -1,0 +1,5 @@
+fcstor004 2026-10-02T05:33:40.127Z report-split nrec=8190 pack_ms=13 push_ms=158 finish_ms=201 skip=0 stale=0 inval=0 rc=0 fail=-/0
+fcstor004 2026-10-02T05:33:41.604Z report-split nrec=8192 pack_ms=16 push_ms=508 finish_ms=103 skip=0 stale=0 inval=0 rc=0 fail=-/0
+fcstor004 2026-10-02T05:33:42.775Z report-split nrec=8191 pack_ms=11 push_ms=16 finish_ms=544 skip=0 stale=0 inval=0 rc=0 fail=-/0
+fcstor004 2026-10-02T05:33:43.622Z report-split nrec=8192 pack_ms=11 push_ms=63 finish_ms=110 skip=0 stale=0 inval=0 rc=0 fail=-/0
+fcstor005 2026-10-02T05:33:36.738Z report-split nrec=8191 pack_ms=6 push_ms=0 finish_ms=0 skip=8191 stale=0 inval=0 rc=0 fail=-/0

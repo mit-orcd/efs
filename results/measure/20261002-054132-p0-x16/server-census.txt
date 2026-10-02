@@ -1,0 +1,4 @@
+fcstor003 lines=1550 report_split=0 fail_wait=0 skip_all=0 apply_sleep=32 gc_pass=172 backpressure=0 compact=1036
+fcstor004 lines=2764 report_split=169 fail_wait=0 skip_all=0 apply_sleep=95 gc_pass=10 backpressure=0 compact=2352
+fcstor005 lines=2505 report_split=0 fail_wait=0 skip_all=0 apply_sleep=0 gc_pass=9 backpressure=0 compact=2358
+fcstor006 lines=1487 report_split=0 fail_wait=0 skip_all=0 apply_sleep=17 gc_pass=173 backpressure=0 compact=986

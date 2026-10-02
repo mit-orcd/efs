@@ -1,0 +1,19 @@
+efs-bg: start 2026-10-02T12:38:51Z host=node9901 name=tr770 screen=efs-tr770
+-rwxr-xr-x 1 erbmi1 erbmi1 4597048 01:25:18 /tmp/efs/efs-fuse
+grep: Invalid regular expression
+fcstor010: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=01:25:18 
+kept test tree: /tmp/efs-mount/tr770/posix-fcstor010-m02opgwa
+============================================================
+POSIX suite: 1/1 pass, 0 fail, 0 skip, 0 notrun  (0.1s)
+ dcache ino=42240 ci=0 snap-steal | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=1 r=[0,10)
+ dcache ino=42240 ci=0 put-record obj=b460b0fc7cf833c9 seq=1 | dirty=0 hb=0 bg=0 obj=b460b0fc7cf833c9 oseq=1 sseq=1 r=[0,10)
+ dcache ino=42240 ci=0 install len=131072 seq=1 | dirty=0 hb=0 bg=0 obj=b460b0fc7cf833c9 oseq=1 sseq=1 r=[0,10)
+ report ino=42240 ci=0 only=42240 sync=1 rc=0
+ report-irec ino=42240 size=10 only=42240 sync=1 rc=0
+ dcache ino=42240 ci=0 patch off=3 len=3 | dirty=1 hb=1 bg=0 obj=b460b0fc7cf833c9 oseq=1 sseq=1 r=[3,6)
+ dcache ino=42240 ci=0 snap-steal | dirty=1 hb=1 bg=0 obj=b460b0fc7cf833c9 oseq=1 sseq=2 r=[3,6)
+ dcache ino=42240 ci=0 put-record obj=484e7c39ba7a7b07 seq=2 | dirty=0 hb=1 bg=0 obj=484e7c39ba7a7b07 oseq=2 sseq=2 r=[3,6)
+ dcache ino=42240 ci=0 install len=131072 seq=2 | dirty=0 hb=1 bg=0 obj=484e7c39ba7a7b07 oseq=2 sseq=2 r=[3,6)
+ report ino=42240 ci=0 only=42240 sync=1 rc=0
+ report-irec ino=42240 size=10 only=42240 sync=1 rc=0
+efs-bg: end 2026-10-02T12:38:53Z rc=0

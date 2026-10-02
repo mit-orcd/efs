@@ -69,18 +69,17 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`voters=0x7`); group 2 = even shards = nodes 2–4 (`0xe`). Export
   `efs-test` (id 1), mount `/tmp/efs-mount`. 19820 is retired; do not
   stand it up. Do not roll back to TCP unless a suite fails.
-- **State at 04:24Z Oct 2 2026 (`stop751`, `cluster.sh stop
- --clients`, CLUSTER_OK):** efsd and efs-fuse are down on
- fcstor003–015; fstor007 has no mount. The `r749` window
- (01:54Z–04:24Z, `2b5a25df419c-dirty`, servers `--perf --strace`)
- left `/tmp/efs-perf/efsd.data` and `efsd.strace` on fcstor003–006
- and the reports at
- `~/orcd/scratch/efs/perf/cluster-20261002-0423/fcstor00{3,4,5,6}/`.
- Same table as the Oct 1 07:18Z `raft-mkfs` (salt
- 4206459926809775694); the next start needs no `--join` and no
- `--fresh`. `start` deletes those two perf files — copy them off
- first. Full roll/remount history: `docs/project-history.md`
- ("Cluster-state narrative").
+- **State at 13:45Z Oct 2 2026:** servers UP since `start760`
+ (05:25Z, `cluster.sh start --clients --perf`, build
+ `6163d51e339e-dirty`/`2b5a25df419c` server code, `--perf` attached;
+ `/tmp/efs-perf/efsd.data` on fcstor003–006 — `start` deletes it).
+ Clients: fcstor007 mounted on the committed tree; fcstor008/009/010
+ mounted on the P1 (D23+W41) tree built in `/tmp/efs`; fcstor011–015
+ down; fstor007 no mount. Same table as the Oct 1 07:18Z `raft-mkfs`
+ (salt 4206459926809775694); a restart needs no `--join`, no
+ `--fresh`. The `r749` reports are at
+ `~/orcd/scratch/efs/perf/cluster-20261002-0423/`. Full roll/remount
+ history: `docs/project-history.md` ("Cluster-state narrative").
 - **Current gate signature on that tree:** posix jobs=1 **200/201**
   (`mmap_write_read` SKIP by spec), posix2 **63/63**, 9-host posix
   **200/201** on all nine (`results/posix/20261001-160049`); IO-500 9×4
@@ -114,10 +113,19 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   eviction), D24 (landed-PUT REPORTs) are in. The queue, decisions and
   the open items (W36 rename-vs-unlink, W38 fold tombstone, W40, W41
   `report_mu`, D17 `st_blocks`, D23 clean-body budget) are START-HERE §1a.
+- **Performance plan (START-HERE §1a) P0 + P1 done Oct 2 13:30Z:**
+ W19/W49 closed, W28 gate PASS, row 11 = 16 × 10 GiB dd on one
+ client **3815 MB/s** untraced (no close tail, no BUSY-after-commit —
+ D29's symptom is absent untraced); D23 and W41 in the client tree
+ (`results/measure/20261002-060052-p1-d23-w41/SUMMARY.txt`). Open from
+ it: **W53** (W41's create/close-storm p99 37 → 100–120 ms under four
+ 8 GiB writers, same host; keep/revert is the user's), **W52** (serial
+ reservation resolves make an O_APPEND REPORT exceed 30 s). P2 (W50 →
+ D26, W23 test, W51) is next.
 - **Numbers (RDMA, flush in the clock; START-HERE §1a "Baselines"):**
-  1 client 8 GiB dd+fsync **1.3 GB/s** (`dd539`), 16 GiB **1.5 GB/s**,
-  cold 16 GiB read **3.6 GB/s**, four readers **6.5 GB/s**
-  (`agent-rd-20261001-*`); 9 clients **2551–2810 MiB/s** aggregate
+ 1 client 8 GiB dd+fsync **1.3 GB/s** (`dd539`; Oct 2 P0.1 1518 MB/s),
+ 16 GiB **1.5 GB/s**, cold 16 GiB read **3.6 GB/s**, four readers
+ **6.5 GB/s** (`agent-rd-20261001-*`); 9 clients **2551–2810 MiB/s** aggregate
   (`results/measure/20260928-134637-dd-prof-r5b`, `-131651-dd-prof-r2b`).
   IO-500 9×4 debug Oct 1: easy-write 5.17 GiB/s, mdtest-easy-write
   6.2 kIOPS, hard-write 0.52, easy-stat 24.4 kIOPS, hard-read 0.82
@@ -782,9 +790,50 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - **Remounting through `scripts/client.sh` right after `stop` fails with
   "another efs-fuse already holds"** — the flock fd is inherited by the
   dying daemon; poll `pgrep -x efs-fuse` empty before the next mount.
-- **Clean dcache bodies have no budget and no evictor** (freed only by
- drop or take-replace). Do not keep a full-overwrite body after its
- PUT "as cache": RSS then tracks the bytes written (D23, ask).
+- **D23 (Oct 2): a clean full-image body goes to the rdcache when the
+ REPORT COMMITS the object, never when the PUT lands**
+ (`dcache_note_committed` → `dcache_body_to_rdcache` under the slot
+ lock, `efs_rdcache_put_owned` after it). Four gate passes taught:
+ (1) lock order is `g_client.idx_mu` → slot mutex
+ (`efs_client_set_chunk` → `efs_dcache_yield_extra`); an rdcache put
+ (`rdcache_map_gen` takes `idx_mu`) under a slot mutex deadlocks the
+ client (7 FUSE requests parked, `__lll_lock_wait`); (2) a span-only
+ row has table gen 0 and `efs_rdcache_put_owned` refuses it — a
+ body-less `have_base=1` node then publishes zeros+range as a "full
+ image" → `apply publish rc=-14 why=6` (FOLD_LIST) and a replay loop
+ (`stale-class committed=0` forever); (3) `dcache_find` matches only
+ nodes WITH a body; `dcache_store`/`dcache_store_owned` must use
+ `dcache_find_meta` or a second node for the same (ino,ci) shadows
+ the first (put-record lands on the stale node, "identity from
+ staging table (putid miss)"); (4) a STALE replay needs the body AND
+ the dirty ranges until the commit — 30 identical `stale-class`
+ rounds with no `snap-replay` is a body-less entry. RSS gate: 4 ×
+ 1 GiB bs=64k dd+fsync 2.55 GB flat vs 4.64 GB before. Server-side
+ STALE reasons are on the `raft-host: apply publish rc=-14 … why=N
+ span= exp= base_n=` line (why=2 BASE_CAS, 6 FOLD_LIST).
+- **W41 (Oct 2): the dirty set, the publish slot and D24's landed
+ REPORTs are per inode** (4-thread meta-flush pool, `EFS_META_FLUSH_
+ POOL`), no `report_mu`. Same host: 4 × 8 GiB dd 9.70 → 8.30 s, but
+ the concurrent 300-file create/close storm's p99 37 → 100–120 ms
+ (W53, not explained; small REPORT proposals queuing behind 8192-
+ record batch applies is the hypothesis). A single-REPORT close no
+ longer rides in another file's REPORT — measure the storm p99
+ whenever the REPORT path changes.
+- **A REPORT after N O_APPEND writes costs N serial raft proposals
+ before its reply (W52, Oct 2, both builds):** `host_resolve_caught_up`
+ runs after the `report-split` log line, one `host_propose_wait` per
+ OPEN reservation; ~5 ms per append → > 30 s past ~6000 appends, the
+ client's recv timeout resends byte-identical (`retry type=67
+ why=recv rc=-6`, server `skip=all`), dd prints `fsync: I/O error`;
+ the size lags (completed prefix) and converges. Not a data-loss
+ class; the fix shape is a question.
+- **`EFS_NO_BUILD=1 deploy_fuse_clients.sh` remounts the EXISTING
+ `/tmp/efs/efs-fuse`** — it does not pick up a new tree. A `perf
+ report` that shows `efsd (deleted)` after a `--clients` roll is the
+ rsync+make in `/tmp/efs` replacing the binary file under the running
+ daemon (same source; resolve with `addr2line` on the new file,
+ non-PIE offset 0x400000). `raft-obs: wait` `apply_max`/`pump_hold_max`
+ are microseconds.
 - **A chunk inside a PUT window is readable nowhere (Oct 1).** The
  full-image snap steals the body (`snap-steal-full`) and the local
  map names the object only after the PUT lands; W30 PUTs completed

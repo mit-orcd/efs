@@ -1,0 +1,80 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 46K of event 'cpu-clock'
+# Event count (approx.): 11603250000
+#
+# Overhead       Samples  Command  Shared Object            Symbol                                       
+# ........  ............  .......  .......................  .............................................
+#
+     9.20%          4271  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+            |
+            ---__memcmp_avx2_movbe
+               |          
+               |--6.61%--0x441c61
+               |          0x41ea8e
+               |          0x4205fe
+               |          start_thread
+               |          
+               |--0.68%--0x441903
+               |          0x441c61
+               |          0x41ea8e
+               |          0x4205fe
+               |          start_thread
+               |          
+                --0.51%--0x448636
+                          0x43fdc0
+                          0x440340
+     3.22%          1494  efsd     [xfs]                    [k] xfs_buf_lookup.constprop.0
+            |
+            ---xfs_buf_lookup.constprop.0
+               xfs_buf_get_map
+               |          
+                --3.20%--xfs_buf_read_map
+                          |          
+                           --2.86%--xfs_trans_read_buf_map
+                                     |          
+                                      --1.56%--xfs_btree_read_buf_block
+                                                |          
+                                                 --1.56%--xfs_btree_lookup_get_block.part.0
+                                                           xfs_btree_lookup
+     2.35%          1089  efsd     [kernel.kallsyms]        [k] _raw_spin_unlock_irqrestore
+            |
+            ---_raw_spin_unlock_irqrestore
+               |          
+                --0.89%--try_to_wake_up
+                          wake_up_q
+                          futex_wake
+                          do_futex
+                          __x64_sys_futex
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          |          
+                           --0.88%--pthread_cond_signal@@GLIBC_2.3.2
+     2.29%          1061  efsd     [kernel.kallsyms]        [k] __memcpy
+            |
+            ---__memcpy
+               |          
+                --2.21%--xfs_buf_item_format_segment
+                          xfs_buf_item_format
+                          xlog_cil_insert_items
+                          xlog_cil_commit
+                          __xfs_trans_commit
+                          |          
+                           --2.19%--xfs_trans_commit
+                                     |          
+                                     |--1.32%--xfs_create
+                                     |          xfs_generic_create
+                                     |          |          
+                                     |           --1.32%--lookup_open.isra.0
+                                     |                     open_last_lookups
+                                     |                     path_openat
+                                     |                     do_filp_open
+                                     |                     do_sys_openat2
+                                     |                     __x64_sys_openat
+                                     |                     do_syscall_64
+                                     |                     entry_SYSCALL_64_after_hwframe
+                                     |                     __GI___libc_open
+                                     |          

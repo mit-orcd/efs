@@ -1,0 +1,38 @@
+OUT=/home/erbmi1/efs-runs/wedge-w41-20261002-124231 host=fcstor008
+fuse.efs-fuse
+MOUNT_OK
+2026-10-02T12:42:17.920Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+n=300 total=2.0s p50=3.8ms p99=127.6ms max=183.0ms
+dd2 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.0051 s, 1.1 GB/s
+dd4 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.00902 s, 1.1 GB/s
+dd3 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.27405 s, 1.0 GB/s
+dd1 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.27612 s, 1.0 GB/s
+dd wall=8.283329964
+big1 size=8589934592
+big2 size=8589934592
+big3 size=8589934592
+big4 size=8589934592
+--- fuse.log since mark:
+2026-10-02T12:42:32.137Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:32.153Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:32.163Z report-landed: ino=33516 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:32.231Z report-landed: ino=41708 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:33.094Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:33.122Z report-landed: ino=33516 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:33.161Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:33.242Z report-landed: ino=41708 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:34.159Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:37.132Z report-landed: ino=33516 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:37.157Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:37.195Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:37.212Z report-landed: ino=41708 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:38.078Z report-landed: ino=33516 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:38.117Z report-landed: ino=37612 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:38.185Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:38.214Z report-landed: ino=41708 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:39.065Z fsync-split ino=33516 flush_ms=122 report_ms=0 rc=0
+2026-10-02T12:42:39.147Z report-landed: ino=29420 8192 chunks landed, kicking REPORT
+2026-10-02T12:42:39.162Z fsync-split ino=37612 flush_ms=135 report_ms=0 rc=0
+2026-10-02T12:42:39.397Z fsync-split ino=29420 flush_ms=130 report_ms=0 rc=0
+report-landed=18
+WEDGE_DONE

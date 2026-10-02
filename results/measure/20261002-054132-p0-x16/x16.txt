@@ -1,0 +1,25 @@
+fstype=fuse.efs-fuse
+MOUNT_OK
+stream=16 rc=0 wall=44.712299730 10737418240 bytes (11 GB, 10 GiB) copied, 44.6776 s, 240 MB/s
+stream=13 rc=0 wall=44.868882122 10737418240 bytes (11 GB, 10 GiB) copied, 44.8374 s, 239 MB/s
+stream=6 rc=0 wall=44.901565156 10737418240 bytes (11 GB, 10 GiB) copied, 44.8938 s, 239 MB/s
+stream=3 rc=0 wall=44.901834827 10737418240 bytes (11 GB, 10 GiB) copied, 44.8978 s, 239 MB/s
+stream=8 rc=0 wall=44.961886222 10737418240 bytes (11 GB, 10 GiB) copied, 44.9535 s, 239 MB/s
+stream=11 rc=0 wall=44.979182028 10737418240 bytes (11 GB, 10 GiB) copied, 44.9579 s, 239 MB/s
+stream=15 rc=0 wall=44.978118250 10737418240 bytes (11 GB, 10 GiB) copied, 44.9505 s, 239 MB/s
+stream=14 rc=0 wall=44.997681984 10737418240 bytes (11 GB, 10 GiB) copied, 44.9725 s, 239 MB/s
+stream=9 rc=0 wall=44.999147309 10737418240 bytes (11 GB, 10 GiB) copied, 44.9852 s, 239 MB/s
+stream=7 rc=0 wall=45.012308858 10737418240 bytes (11 GB, 10 GiB) copied, 45.0057 s, 239 MB/s
+stream=1 rc=0 wall=45.012929332 10737418240 bytes (11 GB, 10 GiB) copied, 45.0071 s, 239 MB/s
+stream=10 rc=0 wall=45.020992467 10737418240 bytes (11 GB, 10 GiB) copied, 45.0092 s, 239 MB/s
+stream=5 rc=0 wall=45.025617379 10737418240 bytes (11 GB, 10 GiB) copied, 45.0196 s, 239 MB/s
+stream=2 rc=0 wall=45.025873515 10737418240 bytes (11 GB, 10 GiB) copied, 45.021 s, 238 MB/s
+stream=12 rc=0 wall=45.025274160 10737418240 bytes (11 GB, 10 GiB) copied, 45.0016 s, 239 MB/s
+stream=4 rc=0 wall=45.031521650 10737418240 bytes (11 GB, 10 GiB) copied, 45.0139 s, 239 MB/s
+total_wall=230.111012409 cpu=404.45 agg_MBps=746.5
+      1 
+     16 10737418240
+RSS min/max: 4261628 8572848  kB
+report-landed lines: 168
+0
+X16_DONE

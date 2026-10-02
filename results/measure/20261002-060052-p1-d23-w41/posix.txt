@@ -1,0 +1,15 @@
+[run_tests]   baseline: 198 pass
+[run_tests] posix: efs on fcstor008.ib:/tmp/efs-mount  (x1)
+efs-ssh: TIMEOUT after 70s host=fcstor008.ib
+[run_tests] TIMEOUT 70s: fcstor008.ib for i in $(seq 1 20); do
+            if timeout 3 python3 -c "
+import os, tempfile, shutil
+d = tempfile.mkdtemp(prefix=\"warmup-\", dir=\"/tmp/efs-mount\")
+p = os.path.join(d, \"f\"); open(p, \"w\").write(\"x\")
+assert open(p).read() == \"x\"
+shutil.rmtree(d)
+" 2>/dev/null; then exit 0; fi
+            sleep 0.5
+        done; echo "  ERROR: fcstor008.ib warmup did not converge" >&2; exit 1
+[run_tests]   ERROR: fcstor008.ib warmup failed — not starting suite
+[run_tests] posix results in /home/erbmi1/git/efs/results/posix/20261002-061446

@@ -1,0 +1,6 @@
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2276404 build= bin=/tmp/efs/efs-fuse
+CMP_OK
+cmp_wall=3.210926813
+CMP_DONE

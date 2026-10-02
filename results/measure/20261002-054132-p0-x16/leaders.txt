@@ -1,0 +1,6 @@
+fcstor003 group 0 hosted=1 role=LEADER
+fcstor004 group 0 hosted=1 role=FOLLOWER
+fcstor004 group 2 hosted=1 role=FOLLOWER
+fcstor005 group 0 hosted=1 role=FOLLOWER
+fcstor005 group 2 hosted=1 role=FOLLOWER
+fcstor006 group 2 hosted=1 role=LEADER

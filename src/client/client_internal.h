@@ -27,6 +27,10 @@ struct efs_client {
     /* Per-parent-directory stripes: create/unlink/chmod in different dirs
      * overlap. g_client.lock stays the rare table lock (realloc / snapshot). */
 #define EFS_DIR_LOCKS 64
+/* W41: REPORT flush pool size and its inode queue depth (internal
+ * constants, not knobs). */
+#define EFS_META_FLUSH_POOL 4
+#define EFS_META_FLUSH_QLEN 64
     pthread_mutex_t dir_lock[EFS_DIR_LOCKS];
     pthread_mutex_t dirty_mu; /* dirty-set growth + dirty-ops counter */
     pthread_mutex_t idx_mu;   /* inode/name/chunk index mutations */
@@ -80,26 +84,24 @@ struct efs_client {
     uint32_t meta_dirty_ops;
     int meta_dirty;
 
-    /* Dirty tracking for batched meta flushes (meta_batch only).
-     * Inodes: open-addressing set (key 0 = empty).
-     * Chunks: set for dedup + parallel arrays of (ino, chunk_index). */
-    uint64_t *dirty_ino_keys;
-    uint64_t dirty_ino_mask;
+    /* Dirty tracking for batched meta flushes (meta_batch only) lives in
+     * write.c as per-inode records (W41, Oct 2 2026): a REPORT detaches
+     * one inode's marks, not the process's. These two are the live totals
+     * (records with a dirty inode row / dirty chunk entries), under
+     * dirty_mu. */
     uint64_t dirty_ino_count;
-    uint64_t *dirty_chunk_keys;
-    uint64_t dirty_chunk_mask;
-    efs_ino_t *dirty_chunk_inos;
-    uint32_t *dirty_chunk_idxs;
     uint64_t dirty_chunk_count;
-    uint64_t dirty_chunk_cap;
 
-    /* Dedicated metadata-flush thread: batched threshold flushes run here so
-     * the O(table) serialize/encode/PUT work never executes on a FUSE worker
-     * thread. note_meta_change() only sets flush_req and signals. */
-    pthread_t meta_flush_tid;
+    /* Metadata-flush pool (W41): batched threshold flushes and D24's
+     * landed-PUT kicks run here so the REPORT build never executes on a
+     * FUSE worker thread. note_meta_change() enqueues ino 0 (whole set);
+     * report_landed_note enqueues the inode that crossed the threshold. */
+    pthread_t meta_flush_tids[EFS_META_FLUSH_POOL];
+    int meta_flush_n;
     pthread_mutex_t meta_flush_mu;
     pthread_cond_t meta_flush_cv;
-    int meta_flush_req;
+    efs_ino_t meta_flush_q[EFS_META_FLUSH_QLEN];
+    unsigned meta_flush_qh, meta_flush_qn;
     int meta_flush_stop;
     int meta_flush_started;
     int meta_flush_force; /* next flush does a full serialize */
@@ -157,6 +159,7 @@ void efs_client_stage_evict_ino(efs_ino_t ino);
 void efs_client_stage_touch(efs_ino_t ino);
 /* Pin queries used by the evictor (also usable elsewhere). */
 int efs_client_ino_is_dirty_locked(efs_ino_t ino); /* caller holds dirty_mu */
+void efs_client_dirty_sets_free(void); /* teardown: drop every dirty record */
 int efs_client_ino_is_open(efs_ino_t ino);
 int efs_client_ino_has_plock(efs_ino_t ino);
 int efs_dcache_ino_pinned(efs_ino_t ino);

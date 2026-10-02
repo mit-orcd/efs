@@ -1,0 +1,84 @@
+efs-bg: start 2026-10-02T13:29:00Z host=node9901 name=wnew784 screen=efs-wnew784
+fcstor010: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=09:29:06 
+OUT=/home/erbmi1/efs-runs/wedge-w41-20261002-132907 host=fcstor010
+fuse.efs-fuse
+MOUNT_OK
+2026-10-02T13:29:06.628Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+n=300 total=2.0s p50=3.8ms p99=100.7ms max=277.2ms
+dd3 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 7.9003 s, 1.1 GB/s
+dd2 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.29105 s, 1.0 GB/s
+dd4 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.28964 s, 1.0 GB/s
+dd1 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.29194 s, 1.0 GB/s
+dd wall=8.299730774
+big1 size=8589934592
+big2 size=8589934592
+big3 size=8589934592
+big4 size=8589934592
+--- fuse.log since mark:
+2026-10-02T13:29:08.408Z report-landed: ino=50453 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:08.429Z report-landed: ino=46357 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:08.471Z report-landed: ino=38165 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:08.481Z report-landed: ino=42261 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:09.364Z report-landed: ino=50453 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:09.383Z report-landed: ino=46357 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:09.468Z report-landed: ino=42261 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:09.477Z report-landed: ino=38165 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:10.326Z report-landed: ino=46357 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:10.368Z report-landed: ino=50453 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:10.453Z report-landed: ino=42261 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:10.461Z report-landed: ino=38165 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:13.349Z report-landed: ino=46357 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:13.384Z report-landed: ino=42261 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:13.392Z report-landed: ino=50453 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:13.412Z report-landed: ino=38165 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:14.364Z report-landed: ino=46357 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:14.381Z report-landed: ino=50453 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:14.390Z report-landed: ino=42261 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:14.421Z report-landed: ino=38165 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:15.317Z fsync-split ino=46357 flush_ms=118 report_ms=0 rc=0
+2026-10-02T13:29:15.665Z fsync-split ino=50453 flush_ms=270 report_ms=0 rc=0
+2026-10-02T13:29:15.687Z fsync-split ino=42261 flush_ms=233 report_ms=0 rc=0
+2026-10-02T13:29:15.707Z fsync-split ino=38165 flush_ms=239 report_ms=0 rc=0
+report-landed=20
+WEDGE_DONE
+OUT=/home/erbmi1/efs-runs/wedge-w41-20261002-132920 host=fcstor010
+fuse.efs-fuse
+MOUNT_OK
+2026-10-02T13:29:06.628Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+n=300 total=2.7s p50=5.5ms p99=121.6ms max=216.8ms
+dd4 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.19505 s, 1.0 GB/s
+dd2 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.33492 s, 1.0 GB/s
+dd3 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.3581 s, 1.0 GB/s
+dd1 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.36057 s, 1.0 GB/s
+dd wall=8.367249401
+big1 size=8589934592
+big2 size=8589934592
+big3 size=8589934592
+big4 size=8589934592
+--- fuse.log since mark:
+2026-10-02T13:29:21.944Z report-landed: ino=250535 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:21.972Z report-landed: ino=254631 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:21.981Z report-landed: ino=258727 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:22.060Z report-landed: ino=262823 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:22.907Z report-landed: ino=250535 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:22.944Z report-landed: ino=258727 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:22.961Z report-landed: ino=254631 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:23.089Z report-landed: ino=262823 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:23.900Z report-landed: ino=250535 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:23.934Z report-landed: ino=258727 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:23.940Z report-landed: ino=254631 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:24.103Z report-landed: ino=262823 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:27.609Z report-landed: ino=258727 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:27.623Z report-landed: ino=254631 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:27.675Z report-landed: ino=262823 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:27.684Z report-landed: ino=250535 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:28.579Z report-landed: ino=254631 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:28.600Z report-landed: ino=258727 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:28.666Z report-landed: ino=250535 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:28.707Z report-landed: ino=262823 8192 chunks landed, kicking REPORT
+2026-10-02T13:29:29.125Z fsync-split ino=254631 flush_ms=140 report_ms=0 rc=0
+2026-10-02T13:29:29.197Z fsync-split ino=258727 flush_ms=132 report_ms=0 rc=0
+2026-10-02T13:29:29.338Z fsync-split ino=250535 flush_ms=188 report_ms=0 rc=0
+report-landed=20
+WEDGE_DONE
+efs-bg: end 2026-10-02T13:29:31Z rc=0

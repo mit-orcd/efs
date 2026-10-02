@@ -1,0 +1,7 @@
+Total
+Elapsed       : 64.26 s
+Suggested next run:
+  DIRECT_COPY_DISABLE_DIRECT_IO=1
+Reason: this looks like a small-file or metadata-heavy workload, and buffered I/O is usually a better fit.
+ecopy_wall=64.296325089
+18705

@@ -1,0 +1,12 @@
+  target skipped   : 0  (baseline PASS, target SKIP)
+  incomplete       : 0  (cut, missing, or NOTRUN)
+  target only      : 0
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_overlap_pwrite_chunk_straddle [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+  peer_overlap_pwrite_partial      [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+  peer_overlap_pwrite_same_range   [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+  peer_shared_pwrite               [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+[run_tests] posix2 results in /home/erbmi1/git/efs/results/posix2/20261002-123251

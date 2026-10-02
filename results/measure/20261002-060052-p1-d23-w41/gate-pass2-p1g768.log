@@ -1,0 +1,122 @@
+efs-bg: start 2026-10-02T12:31:21Z host=node9901 name=p1g768 screen=efs-p1g768
+OUT=/home/erbmi1/git/efs/results/measure/20261002-060052-p1-d23-w41
+== DEPLOY D23+W41 (lock-order fix) client to fcstor008 fcstor009
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:31:28 
+fcstor009: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:31:28 
+== AFTER (v2)
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2267574 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	   19896 kB
+4294967296 bytes (4.3 GB, 4.0 GiB) copied, 5.19773 s, 826 MB/s
+wall=5.201870524 cpu=11.42 MBps=825.6
+RSS_AFTER VmRSS:	 4672072 kB
+RSS_MAX 4657856 kB
+SIZE=4294967296
+4
+WRITE_DONE
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2267574 build= bin=/tmp/efs/efs-fuse
+RSS_BEFORE VmRSS:	 4672072 kB
+8589934592 bytes (8.6 GB, 8.0 GiB) copied, 5.58475 s, 1.5 GB/s
+wall=5.588563683 cpu=11.79 MBps=1537.0
+RSS_AFTER VmRSS:	 4843396 kB
+RSS_MAX 4821564 kB
+SIZE=8589934592
+12
+WRITE_DONE
+== remount fcstor008
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=08:31:28 
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2267969 build= bin=/tmp/efs/efs-fuse
+CMP_OK
+cmp_wall=3.535279006
+CMP_DONE
+fstype=fuse.efs-fuse
+MOUNT_OK
+efs-fuse pid=2267969 build= bin=/tmp/efs/efs-fuse
+CMP_OK
+cmp_wall=8.215955671
+CMP_DONE
+== D24 wedge gate on fcstor008 (4 x 8 GiB dd + 300-file close storm)
+OUT=/home/erbmi1/efs-runs/wedge-w41-20261002-123155 host=fcstor008
+fuse.efs-fuse
+MOUNT_OK
+2026-10-02T12:31:42.739Z efs: numa pin node=0 cpus=12 (hca mlx5_2) mempolicy=preferred
+n=300 total=1.5s p50=3.0ms p99=66.4ms max=89.3ms
+dd2 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.31892 s, 1.0 GB/s
+dd4 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.45865 s, 1.0 GB/s
+dd3 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.48882 s, 1.0 GB/s
+dd1 rc=0 8589934592 bytes (8.6 GB, 8.0 GiB) copied, 8.48997 s, 1.0 GB/s
+dd wall=8.496391871
+big1 size=8589934592
+big2 size=8589934592
+big3 size=8589934592
+big4 size=8589934592
+--- fuse.log since mark:
+2026-10-02T12:31:56.761Z report-landed: ino=29907 8192 chunks landed, kicking REPORT
+2026-10-02T12:31:56.801Z report-landed: ino=25811 8192 chunks landed, kicking REPORT
+2026-10-02T12:31:56.813Z report-landed: ino=38099 8192 chunks landed, kicking REPORT
+2026-10-02T12:31:56.892Z report-landed: ino=34003 8192 chunks landed, kicking REPORT
+2026-10-02T12:31:57.747Z report-landed: ino=29907 8192 chunks landed, kicking REPORT
+2026-10-02T12:31:57.842Z report-landed: ino=25811 8192 chunks landed, kicking REPORT
+2026-10-02T12:31:57.855Z report-landed: ino=38099 8192 chunks landed, kicking REPORT
+2026-10-02T12:31:57.948Z report-landed: ino=34003 8192 chunks landed, kicking REPORT
+2026-10-02T12:31:58.719Z report-landed: ino=29907 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:01.320Z report-landed: ino=38099 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:01.320Z report-landed: ino=29907 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:01.338Z report-landed: ino=25811 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:01.349Z report-landed: ino=34003 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:02.319Z report-landed: ino=38099 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:02.348Z report-landed: ino=29907 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:02.358Z report-landed: ino=34003 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:02.370Z report-landed: ino=25811 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:03.294Z report-landed: ino=38099 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:03.349Z report-landed: ino=34003 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:03.370Z report-landed: ino=25811 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:03.376Z report-landed: ino=29907 8192 chunks landed, kicking REPORT
+2026-10-02T12:32:04.212Z fsync-split ino=25811 flush_ms=160 report_ms=0 rc=0
+report-landed=21
+WEDGE_DONE
+== fuse.log tail (W41 lines)
+21
+== posix jobs=1 on fcstor008
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  basic_overwrite_middle           [FAIL] OSError: [Errno 5] Input/output error
+  content_random_overwrite_append  [FAIL] OSError: [Errno 5] Input/output error
+
+--- target passes where baseline does not ---
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             
+
+--- target skipped a check the baseline ran ---
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device
+[run_tests] posix results in /home/erbmi1/git/efs/results/posix/20261002-123204
+== posix2 fcstor008 fcstor009
+  target skipped   : 0  (baseline PASS, target SKIP)
+  incomplete       : 0  (cut, missing, or NOTRUN)
+  target only      : 0
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  peer_overlap_pwrite_chunk_straddle [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+  peer_overlap_pwrite_partial      [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+  peer_overlap_pwrite_same_range   [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+  peer_shared_pwrite               [FAIL] exec ab-a step 1 rc=1 out='RESULT\tFAIL\tOSError: [Errno 5] Input/output error\n' err=''
+[run_tests] posix2 results in /home/erbmi1/git/efs/results/posix2/20261002-123251
+== md_latency on fcstor008
+mkdir              min    0.6 med    3.2 max    6.2 ms
+create+1B+close    min    1.5 med    1.5 max    1.8 ms
+append+close       min    3.0 med    3.4 max    3.7 ms
+stat               min    0.1 med    0.1 max    0.1 ms
+unlink             min    0.6 med    0.6 max    0.8 ms
+rmdir              min    0.5 med    3.4 max   10.7 ms
+P1GATE_DONE
+efs-bg: end 2026-10-02T12:33:52Z rc=0
