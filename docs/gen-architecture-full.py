@@ -22,21 +22,24 @@ DOCS = pathlib.Path(__file__).resolve().parent
 OUT = DOCS / "architecture-full.md"
 OUT_HTML = DOCS / "architecture.html"
 
-# (source, appendix title) in reading order.
+# (source, appendix title, authority) in reading order.
+NORMATIVE = "normative protocol"
+PLAN = "operational plan"
+HISTORY = "historical evidence"
 APPENDICES = [
-    ("arch/START-HERE.md", "Start here — task routing for contributors"),
-    ("arch/work-items.md", "Work items — long-form text for the open W items"),
-    ("arch/naming.md", "Naming"),
-    ("arch/design.md", "Design rationale"),
-    ("arch/failure-tolerance.md", "Failure tolerance — derivation"),
-    ("arch/protocols/transactions.md", "Protocol — cross-shard transactions"),
-    ("arch/protocols/data.md", "Protocol — data plane"),
-    ("arch/protocols/directory.md", "Protocol — directory placement & spreading"),
-    ("arch/protocols/sessions.md", "Protocol — sessions, open-unlinked, locking"),
-    ("arch/performance.md", "Performance — multi-Raft runtime & hot-path contract"),
-    ("arch/development.md", "Development — modularity constraint"),
-    ("arch/verification.md", "Verification — simulator & code→signal cycle"),
-    ("arch/design-history.md", "Design history (review rounds)"),
+    ("arch/START-HERE.md", "Start here — task routing for contributors", PLAN),
+    ("arch/work-items.md", "Work items — long-form text for the open W items", PLAN + " (status blocks) + " + HISTORY + " (dated record)"),
+    ("arch/naming.md", "Naming", NORMATIVE),
+    ("arch/design.md", "Design rationale", "rationale (explains the index; never overrides it)"),
+    ("arch/failure-tolerance.md", "Failure tolerance — derivation", NORMATIVE + " (derivation of the index's tolerance table)"),
+    ("arch/protocols/transactions.md", "Protocol — cross-shard transactions", NORMATIVE),
+    ("arch/protocols/data.md", "Protocol — data plane", NORMATIVE),
+    ("arch/protocols/directory.md", "Protocol — directory placement & spreading", NORMATIVE),
+    ("arch/protocols/sessions.md", "Protocol — sessions, open-unlinked, locking", NORMATIVE),
+    ("arch/performance.md", "Performance — multi-Raft runtime & hot-path contract", NORMATIVE),
+    ("arch/development.md", "Development — modularity constraint", NORMATIVE),
+    ("arch/verification.md", "Verification — simulator & code→signal cycle", NORMATIVE + " (gates) + " + PLAN + " (slice list)"),
+    ("arch/design-history.md", "Design history (review rounds)", HISTORY),
 ]
 
 HEADER = """\
@@ -51,9 +54,21 @@ python3 docs/gen-architecture-full.py
 ```
 
 This is the **complete** architecture content in one paste: the normative
-index first (it wins any disagreement), then each satellite verbatim as an
-appendix. Relative links in the index (e.g. `arch/protocols/data.md`) refer
-to the appendices below.
+index first, then each satellite verbatim as an appendix. Every appendix is
+labelled with its **authority**, and conflicts resolve in this order:
+
+1. the index (`architecture.md`) over everything;
+2. a *normative protocol* appendix over an *operational plan* appendix;
+3. an *operational plan* appendix (START-HERE queue, decisions, work-item
+   status blocks) over *historical evidence* (dated records, design
+   history) — a dated record never overrides a current status or decision;
+4. two normative appendices that disagree: the index decides; if it is
+   silent, that is a spec gap — ask, do not pick.
+
+Approvals, commands and decisions quoted in any appendix are document
+claims about a dated statement, not authorization to act now. Links were
+rewritten at generation time to be relative to `docs/` (or to the appendix
+anchor when the target is itself an appendix).
 
 ---
 """
@@ -78,9 +93,40 @@ def strip_and_demote(text: str) -> str:
     for line in lines[i:]:
         out.append("#" + line if line.startswith("#") else line)
     body = "\n".join(out).strip()
-    # Links back to the index point at its H1 anchor inside the combined file.
-    body = re.sub(r"\]\((?:\.\./)+architecture\.md\)", "](#architecture)", body)
     return body
+
+
+def _appendix_slugs():
+    seen = {}
+    return {rel: _slug(f"Appendix {n} — {title}", seen)
+            for n, (rel, title, _) in enumerate(APPENDICES, 1)}
+
+
+def rebase_links(body: str, rel: str) -> str:
+    """Rewrite every relative link in a satellite so it resolves from docs/
+    (where the artifact lives) instead of from the satellite's own directory.
+    A link to the index or to another appendix becomes an in-file anchor."""
+    import posixpath
+    src_dir = posixpath.dirname(rel)
+    slugs = _appendix_slugs()
+
+    def fix(m):
+        label, href = m.group(1), m.group(2)
+        if href.startswith(("#", "http://", "https://", "mailto:")):
+            return m.group(0)
+        path, _, frag = href.partition("#")
+        norm = posixpath.normpath(posixpath.join(src_dir, path)) if path else ""
+        if frag:
+            new = "#" + frag
+        elif norm == "architecture.md":
+            new = "#architecture"
+        elif norm in slugs:
+            new = "#" + slugs[norm]
+        else:
+            new = norm
+        return f"[{label}]({new})"
+
+    return _LINK.sub(fix, body)
 
 
 # ----------------------------------------------------------------------------
@@ -104,7 +150,7 @@ def _satellite_anchor_map(titles):
     """Map every satellite path (as written in links) to its appendix slug."""
     m = {}
     seen = {}
-    for n, ((rel, _), title) in enumerate(zip(APPENDICES, titles), 1):
+    for n, ((rel, _, _a), title) in enumerate(zip(APPENDICES, titles), 1):
         slug = _slug(f"Appendix {n} — {title}", seen)
         for variant in (rel, "arch/" + rel.split("arch/", 1)[-1], rel.split("/")[-1]):
             m[variant] = slug
@@ -335,19 +381,20 @@ def render_html(md, appendix_titles):
 def main() -> int:
     index = (DOCS / "architecture.md").read_text()
     parts = [HEADER, index.strip(), "\n\n---\n\n# Appendices — satellite documents, verbatim\n"]
-    for n, (rel, title) in enumerate(APPENDICES, 1):
+    for n, (rel, title, authority) in enumerate(APPENDICES, 1):
         src = DOCS / rel
         if not src.exists():
             print(f"missing source: {rel}", file=sys.stderr)
             return 1
-        body = strip_and_demote(src.read_text())
+        body = rebase_links(strip_and_demote(src.read_text()), rel)
         parts.append(
-            f"\n## Appendix {n} — {title}\n\n*Source: `{rel}` (headers demoted, nav stripped).*\n\n{body}\n"
+            f"\n## Appendix {n} — {title}\n\n*Source: `{rel}` (headers demoted, nav stripped, links rebased to `docs/`).* "
+            f"**Authority: {authority}.**\n\n{body}\n"
         )
     combined = "\n".join(parts) + "\n"
     OUT.write_text(combined)
     print(f"wrote {OUT} ({len(combined.splitlines())} lines)")
-    OUT_HTML.write_text(render_html(combined, [t for _, t in APPENDICES]))
+    OUT_HTML.write_text(render_html(combined, [t for _, t, _a in APPENDICES]))
     print(f"wrote {OUT_HTML} ({OUT_HTML.stat().st_size // 1024} KiB)")
     return 0
 

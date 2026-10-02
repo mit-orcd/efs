@@ -14,16 +14,20 @@ current status, remaining action, governing decision and gate; what
 follows that block is the dated record. W23 is the server compaction
 item; the client connection-liveness item is W49 (renamed Oct 2).
 
-**Durability, one statement (reconciles W2 with D27).** A returned
-`write()` is client-owned, not durable. `fsync`/`fdatasync` is the
-durability boundary: it returns 0 only after the publish committed and
-EIO otherwise, sticky while unresolved recs remain (D27). `close()`
-runs the same publish and reports the same error through `flush`, but a
-program cannot rely on close for durability (`release` returns nothing
-to the caller); the spec's "durable after last `close`" means the
-client publishes at last close and reports failure through `flush`, not
-that close is a guarantee. A program that needs the bytes durable calls
-`fsync` and checks it.
+**Durability, one statement (reconciles W2 with D27; the normative
+text is [architecture.md §3](../architecture.md)).** A returned `write()`
+is client-owned, not durable. Two states of a buffered byte are distinct:
+*pending* — not yet published, or a publish in flight or being retried
+on contention — and *failed* — a publish D27 has classified as stalled.
+`fsync`/`fdatasync` **drains pending bytes and returns 0** when their
+publish commits; that is the ordinary path and the durability boundary.
+It returns EIO when the inode holds **failed** bytes, and keeps returning
+EIO on every description until that publish lands (sticky, D27) — an
+ordinary in-flight publish is awaited, never reported. `close()` runs
+the same drain and reports the same failure through the `flush` return
+value; it is not a guarantee a program may rely on without checking,
+because nothing after `flush` can report. A program that needs the bytes
+durable calls `fsync` and checks it.
 
 ---
 
@@ -1839,13 +1843,31 @@ L0 cap, at which the apply path **blocks** (`kv-compact: backpressure`)
 stall; (c) D9's admission BUSY on local L0 bytes over 1 GiB applies to
 the leader's own KV only; (d) D12/D13 keep `n_l0` under the cap by
 L0→L0 merges while the compactor runs. **Remaining action (no
-decision needed to measure):** a fault hook `EFS_FAULT_COMPACT_STALL=1`
-that parks the compactor thread; on a private 3-node cluster drive a
-10 GiB write and record per node: memtable bytes, `n_l0`, `pump_hold_max`,
-`apply-sleep` count, follower `commit − applied`, RSS; name which of
-(a)–(d) bound it and at what size. If the honest answer is "a pump
-stall at 64 L0 files" or "unbounded follower lag", that is a design
-ask (a follower-lag admission rule) — bring the numbers, do not pick.
+decision needed to measure).** Fault hook `EFS_FAULT_COMPACT_STALL=1`
+(compiled only with `EFS_FAULTS=1`), **fault location:** `compactor_main`
+parks at the top of its loop, *between* iterations, holding neither
+`l->mu` nor `h->mu` and owning no pinned view — i.e. the compactor is
+alive but never starts a merge. Memtable flushes to L0 (`kv_flush_locked`,
+apply-path) continue; only L0→L1 and the D12/D13 L0→L0 merges stop.
+Parking while holding `l->mu` would test a lock-hold, a different
+failure, and is not this experiment. **Run:** private 3-node cluster
+(`tests/rdma_first_inode.sh` layout on one fcstor, `/dev/shm` or a scratch
+dir), one client, `dd bs=1M` of a non-zero source to fresh files, the
+hook set on **one follower only** (the leader keeps compacting, so the
+leader-side admission (c) is not what fires). **Sample every 5 s per
+node:** memtable bytes, `n_l0`, `pump_hold_max`, `apply-sleep` count,
+`kv-compact: backpressure` count, `commit − applied`, RSS. **Bounded
+stopping condition — stop at the first of:** the follower logs
+`kv-compact: backpressure` (bound = the stall at 64 L0 files, name the
+bytes written at that point); follower RSS exceeds 2× its pre-run RSS;
+follower `commit − applied` exceeds 10 000 entries for 30 s; 10 GiB
+written; 10 minutes. **Then** clear the hook (`/tmp/efs/fault`) and
+record how long the follower takes to reach `commit == applied` (must be
+under 2 min, else that is a second finding). **Result:** the dir under
+`results/measure/` names which of (a)–(d) bound the run and at what size;
+if the honest answer is "a pump stall at 64 L0 files" or "unbounded
+follower lag", that is a design ask (a follower-lag admission rule) —
+bring the numbers, do not pick.
 
 - **Read:** `src/kv/kv_compact.c` (`kv_maybe_flush_locked`, `compactor_main`,
   `kv_compact_locked`), `src/kv/kv_lsm.c` (`kv_flush_locked`), `src/kv/kv_seg.c`,

@@ -229,21 +229,28 @@ this list, before it ships.
   intended property for those is strict serializability of transactions.
 - There is **no global ordering** between two independent operations on
   unrelated shards, and none is needed.
-- **Data:** a returned `write()` is buffered in the client. It is
-  durable and visible to every client only after `fsync`, last `close`,
-  or an `O_SYNC`/`O_DSYNC`/`-o sync` write-through (the §7.3 publication
-  machine). Same-client read-your-writes hold via the dcache. This is
-  POSIX and every production PFS; the stronger "every `write()` publishes"
-  alternative was measured and rejected (W2, in project-history.md
-  "START-HERE closed items": peer sees 0/10 un-`fsync`ed bytes; `kill -9`
-  of `efs-fuse` loses a 64 MiB acknowledged `write()`). `O_SYNC` is
-  specified; it is not wired yet. **Read "after" as "only after a
-  successful"**: `fsync` is the durability boundary and returns 0 only
-  when the publish committed; while a publish is unresolved every
-  `fsync`/`flush` on the inode fails and the client retains the bytes
-  (D27, START-HERE). Last `close` runs the same publish and reports the
-  same failure through `flush`; it is not a guarantee a program may rely
-  on without checking `fsync`.
+- **Data:** a returned `write()` is buffered in the client; the client
+  owns those bytes, and they are neither durable nor visible to another
+  client yet. **The guarantee:** the bytes a `write()` returned are
+  durable and visible to every client **when an `fsync`/`fdatasync` on
+  that file returns 0**, or when an `O_SYNC`/`O_DSYNC`/`-o sync` write
+  returns (the §7.3 publication machine; `O_SYNC` is specified, not wired
+  yet). An `fsync` drains every pending publish of the file — one in
+  flight, or retrying on contention, is awaited, not reported — and
+  returns 0 when they have committed. If a publish of the file has been
+  classified **stalled** (D27, START-HERE: repeated cycles against an
+  unchanged server state), `fsync`, `fdatasync` and `flush` return EIO on
+  every description of the file until that publish lands, and the client
+  retains the bytes; it never discards them on its own. Last `close`
+  initiates the same drain and returns its failure through `flush`; EFS
+  makes **no durability promise at `close`** beyond that — nothing after
+  `flush` can report. Same-client read-your-writes hold via the dcache.
+  (Application advice, not a guarantee: a program that needs bytes
+  durable calls `fsync` and checks its return.) This is POSIX and every
+  production PFS; the stronger "every `write()` publishes" alternative was
+  measured and rejected (W2, in project-history.md "START-HERE closed
+  items": peer sees 0/10 un-`fsync`ed bytes; `kill -9` of `efs-fuse`
+  loses a 64 MiB acknowledged `write()`).
 - **One `write()`/`pwrite()` publishes atomically.** POSIX makes regular-file
   `read()`/`write()` effects atomic with respect to one another, so a
   concurrent reader never observes a mix of old and new chunks from a single
@@ -1165,15 +1172,18 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
     are demonstrably correct (data path starts as direct-I/O, §7.7).
 ```
 
-**Why 10.5 exists.** Steps 3–5 built the KV and Raft as *interfaces with
-in-memory implementations*, which is all the simulator needs. Production
-`efsd` still keeps metadata in the in-memory table and makes it durable with
-the snapshot / root-2PC flush that step 11 deletes. Deleting that path before
-a durable replacement is wired would drop metadata durability, so 10.5 is
-ordered ahead of it: durable backends first (gated by re-running the whole
-simulator against them, `efsd` untouched), then the applied SM in-sim, then
-production adoption for the single export. **Status (Oct 1 2026): steps
-0–12 are landed.** The 10.5c slices (listed one by one with their gates in
+**Why 10.5 exists — historical rationale (written before Sep 11 2026;
+the engine it describes is deleted).** Steps 3–5 built the KV and Raft as
+*interfaces with in-memory implementations*, which is all the simulator
+needs. At that time production `efsd` still kept metadata in an in-memory
+table made durable by a snapshot / root-2PC flush — the machinery step 11
+deleted. Deleting that path before a durable replacement was wired would
+have dropped metadata durability, so 10.5 was ordered ahead of it: durable
+backends first (gated by re-running the whole simulator against them,
+`efsd` untouched), then the applied SM in-sim, then production adoption
+for the single export. **Current status (Oct 1 2026): steps 0–12 are
+landed; there is no in-memory metadata table and no snapshot / root-2PC
+flush in the tree.** The 10.5c slices (listed one by one with their gates in
 [arch/verification.md](arch/verification.md)) were gated behind an
 `EFS_MD_RAFT` flag on a scratch cluster; step 11 (Sep 11) removed the flag
 and deleted the old snapshot / root-2PC engine, so the Raft+KV engine is
