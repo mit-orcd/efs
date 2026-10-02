@@ -6,6 +6,7 @@
 #include "efs/protocol.h"
 #include "efs/kv_key.h"
 #include "efs/log_ts.h"
+#include "efs/placement.h"
 #include "efs/rdma.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,7 +22,7 @@
 #include <sys/statvfs.h>
 #include <poll.h>
 #include <time.h>
-#include <fcntl.h>
+#include <fcntl.h> /* FALLOC_FL_KEEP_SIZE (_GNU_SOURCE) */
 #include <sys/file.h>
 #include <limits.h>
 #include <signal.h>
@@ -3100,26 +3101,29 @@ static int efs_fuse_statfs(const char *path, struct statvfs *stbuf)
      * client-cache Part A the table is a bounded cache, so a scan is both
      * O(cache) on a statfs hot path and wrong (evicted rows are invisible).
      * No servers reported yet => used reads 0, which is truthful. */
-    uint64_t phys = 0;
-    for (uint32_t i = 0; i < g_client.node_count; i++)
-        phys += g_client.nodes[i].used;
-    uint64_t used_logical = (phys * 2) / 3;
-
-    uint64_t min_quota = 0;
-    for (uint32_t i = 0; i < g_client.node_count; i++) {
-        uint64_t q = g_client.nodes[i].quota;
-        if (q > 0 && (min_quota == 0 || q < min_quota))
-            min_quota = q;
+    /* W42: capacity and free space come from ONE model,
+     * efs_capacity_logical (3-of-N fragment placement): total = what the
+     * quotas can hold, avail = what the remaining per-node room can
+     * hold, used = total − avail. The old `2 × min quota` was exact only
+     * for three nodes; on four 200 GiB nodes it reported 400 GiB where
+     * 533 fit. A node with no quota contributes nothing to total (its
+     * capacity is unknown), so total is 0 until every node has one —
+     * same rule as `efs-mgmt status`. */
+    uint64_t quota[EFS_MAX_NODES], room[EFS_MAX_NODES];
+    uint32_t nn = g_client.node_count, all_quota = 1;
+    if (nn > EFS_MAX_NODES)
+        nn = EFS_MAX_NODES;
+    for (uint32_t i = 0; i < nn; i++) {
+        uint64_t q = g_client.nodes[i].quota, u = g_client.nodes[i].used;
+        quota[i] = q;
+        room[i] = q > u ? q - u : 0;
+        if (q == 0)
+            all_quota = 0;
     }
-
-    /* 2+1 erasure coding: 3 fragments per chunk, 1.5x physical for 1x logical.
-       The cluster is limited by the smallest node because every chunk places
-       one fragment on each node. Logical capacity = 2 * min_quota. */
-    uint64_t total_logical = 0;
-    if (min_quota > 0 && g_client.node_count > 0)
-        total_logical = min_quota * 2;
-
-    uint64_t avail = (total_logical > used_logical) ? total_logical - used_logical : 0;
+    uint64_t total_logical = all_quota ? efs_capacity_logical(quota, nn) : 0;
+    uint64_t avail = all_quota ? efs_capacity_logical(room, nn) : 0;
+    if (avail > total_logical)
+        avail = total_logical;
 
     stbuf->f_bsize = 512;
     stbuf->f_frsize = 512;
@@ -4522,6 +4526,77 @@ static void ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
+/* W26: fallocate. efs has no reservation (quota is charged at PUT, a
+ * chunk that was never written is a hole the reader zero-fills), so the
+ * only state a fallocate can change is the size:
+ *   - mode 0, end past EOF  → extend like ftruncate (one size SETATTR;
+ *     no zero fragments are written, no quota is reserved);
+ *   - mode 0, end inside    → nothing to do, 0;
+ *   - KEEP_SIZE inside EOF  → 0 (the bytes are already "allocated" in
+ *     the only sense efs has);
+ *   - KEEP_SIZE past EOF, PUNCH_HOLE, ZERO_RANGE, COLLAPSE, INSERT,
+ *     UNSHARE → EOPNOTSUPP; the kernel then falls back where it can
+ *     (glibc posix_fallocate writes, cp --sparse probes).
+ * Without the handler libfuse answered ENOSYS, and the kernel's
+ * fallocate() returned EOPNOTSUPP for every call including the extend.
+ * The buffered writes are published before the size is read so an
+ * extend to `end` never truncates bytes this client wrote past it. */
+static void ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode, off_t offset,
+                         off_t length, struct fuse_file_info *fi)
+{
+    struct efs_inode row;
+    uint64_t end;
+    int rc, vk = virt_kind(ino);
+
+    t_req = req;
+    if (vk) {
+        t_req = NULL;
+        fuse_reply_err(req, vk == 2 ? EISDIR : EACCES);
+        return;
+    }
+    if (offset < 0 || length <= 0 ||
+        (uint64_t)offset > UINT64_MAX - (uint64_t)length) {
+        t_req = NULL;
+        fuse_reply_err(req, EINVAL);
+        return;
+    }
+    if (mode & ~FALLOC_FL_KEEP_SIZE) {
+        t_req = NULL;
+        fuse_reply_err(req, EOPNOTSUPP);
+        return;
+    }
+    end = (uint64_t)offset + (uint64_t)length;
+    rc = efs_append_flush_report(fi, (efs_ino_t)ino);
+    if (rc != EFS_OK) {
+        t_req = NULL;
+        fuse_reply_err(req, efs_rc_to_errno(rc));
+        return;
+    }
+    if (efs_client_stat_ino((efs_ino_t)ino, &row) != EFS_OK) {
+        t_req = NULL;
+        fuse_reply_err(req, ENOENT);
+        return;
+    }
+    if (efs_mode_is_dir(row.mode)) {
+        t_req = NULL;
+        fuse_reply_err(req, EISDIR);
+        return;
+    }
+    if (end <= row.size) {
+        t_req = NULL;
+        fuse_reply_err(req, 0);
+        return;
+    }
+    if (mode & FALLOC_FL_KEEP_SIZE) {
+        t_req = NULL;
+        fuse_reply_err(req, EOPNOTSUPP);
+        return;
+    }
+    rc = efs_fuse_truncate_ino(ino, (off_t)end, fi);
+    t_req = NULL;
+    fuse_reply_err(req, rc ? -rc : 0);
+}
+
 static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     int vk = virt_kind(ino);
@@ -4872,6 +4947,7 @@ static const struct fuse_lowlevel_ops efs_ll_ops = {
     .flush = ll_flush,
     .release = ll_release,
     .fsync = ll_fsync,
+    .fallocate = ll_fallocate,
     .opendir = ll_opendir,
     .readdir = ll_readdir,
     .releasedir = ll_releasedir,

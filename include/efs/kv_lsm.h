@@ -70,4 +70,18 @@ int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
  * trigger and no compaction in progress). */
 int efs_kv_lsm_quiesce(struct efs_kv *kv);
 
+/* W44 step a: what the CALLING THREAD's prefix scans (merge_scan) did
+ * since the last reset — scans run, segment iterators opened, merged
+ * keys visited, of which emitted to the callback vs tombstones consumed.
+ * Per thread, so the GC thread can print its own numbers on the
+ * `gc-pass` line without handler lookups mixed in. */
+struct efs_kv_scan_stats {
+    uint64_t scans;
+    uint64_t segs;
+    uint64_t keys;
+    uint64_t emitted;
+    uint64_t tombstones;
+};
+void efs_kv_lsm_scan_stats(struct efs_kv_scan_stats *out, int reset);
+
 #endif

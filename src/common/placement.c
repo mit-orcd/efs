@@ -115,6 +115,52 @@ static bool host_match(const char *a, const char *b)
     return a[i] == '\0' && b[i] == '\0';
 }
 
+/* Σ min(caps[i], m) ≥ 3 m ?  Saturating: 3 m and the sum can exceed
+ * 2^64 only with absurd inputs; clamp so the comparison stays true. */
+static int cap_fits(const uint64_t *caps, uint32_t n, uint64_t m)
+{
+    uint64_t sum = 0, need;
+    uint32_t i;
+
+    if (m > UINT64_MAX / 3)
+        return 0;
+    need = 3 * m;
+    for (i = 0; i < n; i++) {
+        uint64_t c = caps[i] < m ? caps[i] : m;
+        if (sum > UINT64_MAX - c)
+            return 1;
+        sum += c;
+    }
+    return sum >= need;
+}
+
+uint64_t efs_capacity_logical(const uint64_t *caps, uint32_t n)
+{
+    uint64_t lo = 0, hi = 0;
+    uint32_t k, nonzero = 0;
+
+    if (!caps || n < EFS_NUM_FRAGMENTS)
+        return 0;
+    for (k = 0; k < n; k++) {
+        if (caps[k] == 0)
+            continue;
+        nonzero++;
+        /* M never exceeds the sum / 3; the sum is a safe upper bound. */
+        hi = hi > UINT64_MAX - caps[k] ? UINT64_MAX : hi + caps[k];
+    }
+    if (nonzero < EFS_NUM_FRAGMENTS)
+        return 0;
+    /* cap_fits is monotone decreasing in m: binary search the largest m. */
+    while (lo < hi) {
+        uint64_t mid = lo + (hi - lo + 1) / 2;
+        if (cap_fits(caps, n, mid))
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    return lo > UINT64_MAX / 2 ? UINT64_MAX : lo * 2;
+}
+
 bool efs_is_local_node(const struct efs_node *nodes, uint32_t node_count,
                        const char *host, efs_node_id_t *local_id)
 {

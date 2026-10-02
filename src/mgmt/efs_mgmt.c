@@ -6,6 +6,7 @@
 #include "efs/kv_key.h"
 #include "efs/meta_cmd.h"
 #include "efs/opid.h"
+#include "efs/placement.h"
 #include "efs/session.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -126,8 +127,10 @@ static int cmd_status(int argc, char **argv)
     int up_nodes = 0;
     int down_nodes = 0;
     int all_have_quota = (list->node_count > 0);
-    uint64_t min_quota = 0;
-    uint64_t min_free = UINT64_MAX;
+    /* W42: per-node quota and remaining room of the UP nodes, fed to
+     * efs_capacity_logical (same model as FUSE statfs). */
+    uint64_t cap_quota[EFS_MAX_NODES], cap_room[EFS_MAX_NODES];
+    uint32_t ncap = 0;
     for (uint32_t i = 0; i < list->node_count; i++) {
         /* Probe every advertised addr (may differ from the seed string we used). */
         int up = probe_node_up(list->nodes[i].addr, list->nodes[i].port);
@@ -153,14 +156,12 @@ static int cmd_status(int argc, char **argv)
                    reach, used_str, quota_str, pct, npaths);
             if (up && list->nodes[i].used >= list->nodes[i].quota)
                 full_nodes++;
-            if (up) {
-                if (min_quota == 0 || list->nodes[i].quota < min_quota)
-                    min_quota = list->nodes[i].quota;
-                uint64_t free_i = (list->nodes[i].used < list->nodes[i].quota)
-                                      ? (list->nodes[i].quota - list->nodes[i].used)
-                                      : 0;
-                if (free_i < min_free)
-                    min_free = free_i;
+            if (up && ncap < EFS_MAX_NODES) {
+                cap_quota[ncap] = list->nodes[i].quota;
+                cap_room[ncap] = (list->nodes[i].used < list->nodes[i].quota)
+                                     ? (list->nodes[i].quota - list->nodes[i].used)
+                                     : 0;
+                ncap++;
             }
         } else {
             all_have_quota = 0;
@@ -177,11 +178,17 @@ static int cmd_status(int argc, char **argv)
             printf("      %s\n", tok);
     }
 
-    /* 2+1 cluster EC: each logical byte needs a fragment on every node, so
-     * usable capacity is 2 * min_quota (same model as FUSE df). */
-    if (all_have_quota && min_quota > 0 && min_free != UINT64_MAX && up_nodes >= 2) {
-        uint64_t usable_cap = min_quota * 2;
-        uint64_t usable_free = min_free * 2;
+    /* 2+1 cluster EC: a chunk's three fragments sit on three distinct
+     * nodes, so usable capacity is the 3-of-N bound in
+     * efs_capacity_logical (2 × min quota on three nodes, Σ × 2/3 on N
+     * equal ones) — the same model FUSE df uses, over the nodes that are
+     * up. Fewer than three up: nothing can be written; the state line
+     * says why. */
+    if (all_have_quota && ncap >= EFS_NUM_FRAGMENTS) {
+        uint64_t usable_cap = efs_capacity_logical(cap_quota, ncap);
+        uint64_t usable_free = efs_capacity_logical(cap_room, ncap);
+        if (usable_free > usable_cap)
+            usable_free = usable_cap;
         uint64_t usable_used =
             (usable_cap > usable_free) ? (usable_cap - usable_free) : 0;
         char used_s[32], free_s[32], cap_s[32];

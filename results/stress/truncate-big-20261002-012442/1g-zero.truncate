@@ -1,0 +1,2 @@
+truncate: failed to truncate '/tmp/efs-mount/truncbig-20261002-012442/1g-zero' at 0 bytes: Input/output error
+rc=1

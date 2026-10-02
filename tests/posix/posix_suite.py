@@ -2375,24 +2375,59 @@ def virt_find_not_a_real_dir(d):
 # ==========================================================================
 @test
 def opt_fallocate(d):
-    # efs implements no FUSE fallocate. The kernel returns EOPNOTSUPP for
-    # the syscall; glibc's posix_fallocate then writes zeros, so a plain
-    # fd succeeding here is that fallback, not reserved blocks. On an
-    # O_DIRECT fd the same fallback pwrite is misaligned and posix_fallocate
-    # returns EINVAL. The handler to add is START-HERE W26.
+    # W26: ll_fallocate. The raw fallocate(2) syscall on an O_DIRECT fd
+    # has no glibc fallback (posix_fallocate's zero-fill pwrite is what
+    # made a plain fd "pass" before the handler existed, and on O_DIRECT
+    # that pwrite is misaligned → EINVAL). Mode 0 past EOF extends the
+    # size with no data written; KEEP_SIZE inside the file is a no-op
+    # success; PUNCH_HOLE is EOPNOTSUPP so callers can fall back.
+    import ctypes
+    libc = ctypes.CDLL(None, use_errno=True)
+    libc.fallocate.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_int64,
+                               ctypes.c_int64]
+    libc.fallocate.restype = ctypes.c_int
+
+    def falloc(fd, mode, off, ln):
+        r = libc.fallocate(fd, mode, off, ln)
+        return 0 if r == 0 else ctypes.get_errno()
+
+    FALLOC_FL_KEEP_SIZE = 0x01
+    FALLOC_FL_PUNCH_HOLE = 0x02
     p = os.path.join(d, "f")
-    fd = os.open(p, os.O_CREAT | os.O_RDWR, 0o644)
+    fd = os.open(p, os.O_CREAT | os.O_RDWR | os.O_DIRECT, 0o644)
     try:
-        os.posix_fallocate(fd, 0, 4096)
-    except OSError as e:
+        e = falloc(fd, 0, 0, 1 << 20)
+        if e in (errno.EOPNOTSUPP, errno.ENOTSUP, errno.ENOSYS):
+            raise Fail("fallocate unsupported: %s" % os.strerror(e), soft=True)
+        if e:
+            raise Fail("fallocate(0, 0, 1M): %s" % os.strerror(e))
+        eq(os.fstat(fd).st_size, 1 << 20, "size after fallocate extend")
+        # Inside the file: nothing to do, size unchanged.
+        eq(falloc(fd, 0, 4096, 4096), 0, "fallocate inside the file")
+        eq(falloc(fd, FALLOC_FL_KEEP_SIZE, 0, 4096), 0,
+           "fallocate KEEP_SIZE inside the file")
+        eq(os.fstat(fd).st_size, 1 << 20, "size unchanged by inside calls")
+        # Other modes: supported (0, the XFS baseline) or EOPNOTSUPP (efs,
+        # so callers can fall back) — never EINVAL or another error.
+        e = falloc(fd, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE, 0, 4096)
+        if e not in (0, errno.EOPNOTSUPP, errno.ENOTSUP):
+            raise Fail("punch-hole returned %s, want 0 or EOPNOTSUPP" %
+                       os.strerror(e))
+        # KEEP_SIZE past EOF would need a reservation efs does not have.
+        e = falloc(fd, FALLOC_FL_KEEP_SIZE, 1 << 20, 4096)
+        if e not in (0, errno.EOPNOTSUPP, errno.ENOTSUP):
+            raise Fail("KEEP_SIZE past EOF returned %s, want 0 or EOPNOTSUPP" %
+                       os.strerror(e))
+        eq(os.fstat(fd).st_size, 1 << 20, "size unchanged by KEEP_SIZE")
+    finally:
         os.close(fd)
-        if e.errno in (errno.EOPNOTSUPP, errno.ENOTSUP):
-            raise Fail("posix_fallocate unsupported: %s" % e, soft=True)
-        raise Fail("posix_fallocate: %s" % e)
-    sz = os.fstat(fd).st_size
-    os.close(fd)
-    if sz < 4096:
-        raise Fail("fallocate size %d, want >= 4096" % sz)
+    # The extended range is a hole: zeros, and the file still stats 1 MiB.
+    eq(os.stat(p).st_size, 1 << 20, "size after close")
+    with open(p, "rb") as f:
+        data = f.read()
+    eq(len(data), 1 << 20, "read length of the extended file")
+    if data.count(b"\0") != len(data):
+        raise Fail("extended range is not all zeros")
 
 
 @test

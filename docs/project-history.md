@@ -2101,6 +2101,76 @@ Original steps (1–4 done twice, kept for the commands):
 
 ---
 
+## Oct 2 2026 01:20Z — the "runs without the user" table landed (W43 b/c, W45, W36, W26, W42, W44 a, W46, W47)
+
+The user asked for every START-HERE item that is a bug or a performance
+change and needs no decision. What landed, all unit suites +
+`test_rdma_xprt` green on fcstor007 with no warnings, cluster restarted
+(`start740`, `141071a3e9ba-dirty`), posix 200/201 (fcstor007, `gate741`
+/ `gate742`), posix2 63/63 (fcstor008/009), `tests/stress/truncate_big.sh`
+exit 3 on fcstor010 (`results/stress/truncate-big-20261002-012442`):
+
+- **W43 step b + W45 (server, `raft_host.c`).** `apply_unlink_cmd`,
+  `apply_rmdir_cmd`, `apply_setattr_cmd`, `apply_utimens_cmd`,
+  `apply_truncate_cmd`, `apply_activate_lane_cmd`, `apply_lane_fence_cmd`
+  return the apply's rc as the ring verdict instead of logging it and
+  returning OK; the six commands joined `host_apply`'s ring-only list so
+  a non-OK verdict never halts the log. The one kept mapping is utimens
+  STALE → OK (a later `mtime_gen` already landed). The full case table,
+  including the lock GRANT mapping left in place and flagged, is in
+  START-HERE §1b. Live: `truncate -s 0` / `dd of=` (O_TRUNC) onto a
+  1 GiB or 300 MiB file now returns **EIO** and leaves the file intact
+  (`apply lane-fence rc=-2` ×4 on the group-2 replicas, one per refused
+  truncate, each matched by a client error; `apply truncate rc=` is
+  never reached because the fence fails first). Before, the same
+  commands returned 0 with the size unchanged.
+- **W36 (server, `meta_apply.c`).** The log-path unlink/rmdir probed
+  the child's inode row for a pending txn intent but not the dentry it
+  deletes unversioned. A RENAME's dentry EXCL lands before its inode-row
+  REDUCE, so an unlink in that window removed the name and the row under
+  the rename and the rename's RESOLVE then PUT the dest dentry over
+  nothing — the `-?????????` of posix2 `peer_rename_vs_unlink_src`.
+  Both paths probe `k_loc`/`k_hash` now (BUSY → client retry → ENOENT).
+  posix2 63/63 on the first run after; the 20/20 repeat is the gate.
+- **W42 (`placement.c`, `efs_fuse.c`, `efs_mgmt.c`, `test_placement`).**
+  `efs_capacity_logical`: largest M with Σ min(cᵢ, M) ≥ 3M, logical =
+  2M (binary search). `df` total = quotas through the bound, avail =
+  per-node room through the bound, used = total − avail; `efs-mgmt
+  status` the same over the up nodes. Live on 19810: `df` 96.00 TiB
+  total (was 72), used 1.21 TiB = Σ used × 2/3; `efs-mgmt status`
+  prints the same three numbers.
+- **W26 (`efs_fuse.c`).** `ll_fallocate`: mode 0 past EOF publishes
+  buffered writes then extends through the SETATTR path; inside EOF and
+  KEEP_SIZE inside EOF are 0; KEEP_SIZE past EOF and every other mode
+  EOPNOTSUPP. posix `opt_fallocate` now calls raw `fallocate(2)` on an
+  `O_DIRECT` fd (no glibc zero-fill fallback), checks the extend, the
+  no-ops, the hole read, and accepts 0 or EOPNOTSUPP for punch-hole
+  (XFS baseline punches).
+- **W44 step a (`kv_lsm.c`, `raft_host.c`).** Per-thread
+  `efs_kv_scan_stats` counted in `merge_scan` (scans, segment iterators,
+  merged keys, emitted PUTs, tombstones); the `gc-pass` line carries the
+  frag pass's and the whole pass's counters, printed over 5 ms or under
+  `EFS_GC_DBG`. The idle-hour reading for D26 is the next action.
+- **W46 (`writer.c`).** `writer_slot` carries `cv_work`/`cv_done`/
+  `cv_empty`; QUEUED and DONE wake one waiter with `pthread_cond_signal`,
+  EMPTY broadcasts to the fallback waiters. Not yet measured (row 9's
+  futex count per PUT).
+- **W47 variant (`rdma.c`).** The poller writes a conn's eventfd only
+  when a waiter is armed (`efd_armed`; `efs_rdma_reply_fd` and the
+  `recv_wait` poll arm with a post-arm ring re-check that self-signals;
+  `reply_ready*` disarm). Replies that land while the waiter is spinning
+  or checking cost no `write`. One write per poll batch across conns
+  would need a shared per-waiter fd — a protocol change, not taken.
+- **W43 step c (`tests/stress/truncate_big.sh`).** Standalone (the
+  posix gate stays 200/201): four cases, exit 3 = truncate refused and
+  file unchanged (today), 0 = PASS (after D25), 1 = a lie.
+
+Not touched (asks): D25, 0a(d), W41, D23, D17, D26, the benches, D15/D16,
+the fragment layout, W40, zero-copy receive. Not run (need IOR/ecopy
+time): W38, W27, the 16× dd re-measure.
+
+---
+
 ## START-HERE closed items — full text (W1–W5, W7, W11, W13), moved Oct 1 2026
 
 ### W1 — Shared-file (N-1) writes from two clients silently lose data — DONE

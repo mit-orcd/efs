@@ -663,6 +663,7 @@ struct efs_rdma_conn {
     int reg_idx;  /* conn registry slot ((wr_id >> 8) & 0xFFFFFF), -1 until registered */
     uint32_t reg_gen; /* registry slot generation (wr_id >> 32) */
     int efd;      /* eventfd: poller signals when the pend ring empties->fills */
+    int efd_armed; /* W47: a waiter is in (or entering) poll() on efd */
     /* SPSC pend ring: the shared-CQ poller is the only producer; the conn's
      * current owner thread is the only consumer. Capacity covers every
      * posted recv buffer, so it can never overflow in correct operation. */
@@ -714,11 +715,43 @@ static void pend_push(struct efs_rdma_conn *rc, int buf, uint32_t len)
     }
     int empty_before = (head == __atomic_load_n(&rc->pr_tail,
                                                 __ATOMIC_ACQUIRE));
-    if (empty_before || buf < 0) {
+    /* W47: write the eventfd only when a waiter is (about to be) blocked
+     * in poll() on it. The ring is the source of truth; the fd is a wake.
+     * Dekker pairing with efd_arm(): the head store above and this
+     * efd_armed load are both seq_cst, as are the waiter's armed store
+     * and its ring re-check, so at least one side sees the other — the
+     * waiter self-signals if it finds the ring non-empty after arming. A
+     * spinning or still-checking waiter (reply_ready*, the recv_wait
+     * pause loop) is unarmed and costs the poller nothing. An error
+     * (buf < 0) always writes: the broken flag has no ring entry. */
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    if ((empty_before && __atomic_load_n(&rc->efd_armed, __ATOMIC_SEQ_CST)) ||
+        buf < 0) {
         uint64_t one = 1;
         if (write(rc->efd, &one, sizeof(one)) < 0 && errno != EAGAIN)
             rc->broken = 1;
     }
+}
+
+/* Waiter side of W47: announce that the next step is poll() on efd. Must
+ * be followed by the poll without an intervening pop; a ring entry that
+ * landed before the announcement is turned into a level-triggered wake
+ * here so the poll returns at once. */
+static void efd_arm(struct efs_rdma_conn *rc)
+{
+    __atomic_store_n(&rc->efd_armed, 1, __ATOMIC_SEQ_CST);
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    if (__atomic_load_n(&rc->pr_head, __ATOMIC_SEQ_CST) != rc->pr_tail ||
+        rc->broken) {
+        uint64_t one = 1;
+        if (write(rc->efd, &one, sizeof(one)) < 0 && errno != EAGAIN)
+            rc->broken = 1;
+    }
+}
+
+static inline void efd_disarm(struct efs_rdma_conn *rc)
+{
+    __atomic_store_n(&rc->efd_armed, 0, __ATOMIC_RELAXED);
 }
 
 static void harvest_recv_wcs(struct ibv_wc *wcs, int n)
@@ -1657,6 +1690,7 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
     }
     int64_t deadline = timeout_ms >= 0 ? now_ms() + timeout_ms : -1;
     for (;;) {
+        efd_disarm(rc); /* awake and checking: the poller need not write */
         if (pend_pop(rc)) {
             /* Keep efd == "ring non-empty": a pop that empties the ring
              * clears the stale signal so other pollers of the fd
@@ -1716,7 +1750,9 @@ int efs_rdma_recv_wait(struct efs_rdma_conn *rc, int timeout_ms)
             { .fd = rc->tcp_fd, .events = POLLIN },
         };
         nfds_t nf = rc->tcp_fd >= 0 ? 2 : 1;
+        efd_arm(rc);
         int pr = poll(pf, nf, ms);
+        efd_disarm(rc);
         if (pr == 0)
             return EFS_ERR_NET; /* timeout: caller drops the conn */
         if (pr < 0 && errno != EINTR) {
@@ -1781,6 +1817,7 @@ int efs_rdma_recv_repost(struct efs_rdma_conn *rc)
  * both client and server CPU under load is gone from the wait path. */
 int efs_rdma_reply_ready(struct efs_rdma_conn *rc)
 {
+    efd_disarm(rc);
     if (rc->broken || reap_or_dead(rc) != 0)
         return -1;
     if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
@@ -1808,6 +1845,7 @@ int efs_rdma_reply_ready(struct efs_rdma_conn *rc)
 
 int efs_rdma_reply_ready_quick(struct efs_rdma_conn *rc)
 {
+    efd_disarm(rc);
     if (rc->broken || reap_or_dead(rc) != 0)
         return -1;
     return __atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail;
@@ -1822,6 +1860,7 @@ int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us)
 {
     uint32_t pauses, n = 16;
 
+    efd_disarm(rc);
     if (rc->broken || reap_or_dead(rc) != 0)
         return -1;
     if (__atomic_load_n(&rc->pr_head, __ATOMIC_ACQUIRE) != rc->pr_tail)
@@ -1844,7 +1883,12 @@ int efs_rdma_reply_ready_us(struct efs_rdma_conn *rc, int budget_us)
     return 0;
 }
 
+/* The caller is about to poll() this fd (conn_wait_request, the PUT reply
+ * poll in write.c): arm it. A reply that landed between the caller's
+ * ready check and this call is self-signalled by efd_arm so the poll does
+ * not sleep on a ring that is already non-empty. */
 int efs_rdma_reply_fd(struct efs_rdma_conn *rc)
 {
+    efd_arm(rc);
     return rc->efd;
 }

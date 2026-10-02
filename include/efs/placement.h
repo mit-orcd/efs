@@ -21,6 +21,17 @@ void efs_place_fragments(const struct efs_node *nodes, uint32_t node_count,
                          efs_ino_t ino, uint32_t chunk_index,
                          efs_node_id_t fragment_nodes[EFS_NUM_FRAGMENTS]);
 
+/* Logical bytes that fit on nodes with per-node fragment capacities
+ * caps[0..n-1] (bytes each node can still take, or its quota), given 2+1
+ * EC: every 128 KiB chunk is three 64 KiB fragments on three DISTINCT
+ * nodes, so no node ever holds more than half the logical bytes. The
+ * answer is 2 × M for the largest M with Σ min(caps[i], M) ≥ 3 M:
+ * three equal quotas Q → 2Q, N equal quotas → Σ × 2/3, 100/100/1000 →
+ * 200 (the big node cannot take a second fragment of the same chunk).
+ * Fewer than three nodes, or no capacity, → 0. Used by `df` (statfs)
+ * and `efs-mgmt status` — one model for total and for free (W42). */
+uint64_t efs_capacity_logical(const uint64_t *caps, uint32_t n);
+
 /* Return true if the given host string matches a known server node.
  * Used by the FUSE client for data locality.
  * comparison is case-insensitive on the address part. */

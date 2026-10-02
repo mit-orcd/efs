@@ -69,16 +69,18 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`voters=0x7`); group 2 = even shards = nodes 2–4 (`0xe`). Export
   `efs-test` (id 1), mount `/tmp/efs-mount`. 19820 is retired; do not
   stand it up. Do not roll back to TCP unless a suite fails.
-- **State at 18:00Z Oct 1 2026 (`restart705`, `cluster.sh restart
-  --clients --perf`, CLUSTER_OK):** servers `dc6b0af19832-dirty` = HEAD
-  `dc6b0af1` with `--perf` on fcstor003–006 (`/tmp/efs-perf/efsd.data`);
-  clients fcstor003–015 mounted RDMA on the same tree; fstor007 untouched
-  (the user's own `client.sh`). Fresh table since the 07:18Z wipe +
-  `raft-mkfs` (salt 4206459926809775694); restarts need no `--join`. g0
-  term 17 leader fcstor003, g2 term 12 leader fcstor006, commit==applied.
-  The `-dirty` is the node tree missing tracked `results/`. Full
-  roll/remount history: `docs/project-history.md` ("Cluster-state
-  narrative").
+- **State at 01:22Z Oct 2 2026 (`start740`, `cluster.sh start
+ --clients`, CLUSTER_OK):** servers `141071a3e9ba-dirty` (the
+ W43/W45/W36/W26/W42/W44a/W46/W47 tree before its commit) on
+ fcstor003–006, no `--perf`/`--strace`; clients fcstor003–015 mounted
+ RDMA on the same tree; fstor007 untouched (the user's own `client.sh`).
+ The cluster had been STOPPED 22:00Z–01:22Z after the 16× dd review
+ (START-HERE §1b). Same table as the Oct 1 07:18Z `raft-mkfs` (salt
+ 4206459926809775694); restarts need no `--join`. g0 term 51 leader
+ fcstor003, g2 term 29 leader fcstor006, commit==applied. The `-dirty`
+ is the node tree missing tracked `results/` (and, for this roll, the
+ uncommitted edits). Full roll/remount history:
+ `docs/project-history.md` ("Cluster-state narrative").
 - **Current gate signature on that tree:** posix jobs=1 **200/201**
   (`mmap_write_read` SKIP by spec), posix2 **63/63**, 9-host posix
   **200/201** on all nine (`results/posix/20261001-160049`); IO-500 9×4
@@ -448,12 +450,31 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   host_mkfs` now reads the salt back (`efs_meta_apply_export_salt`),
   BUSY if this node holds no record; SALT is ring-only (PROTO is a
   verdict, not a halted group).
-- **`apply_unlink_cmd` / `apply_rmdir_cmd` map NOT_FOUND at apply to
-  OK with no log line.** A rename of the same source racing a
- log-path unlink can make both return 0 and leave the dest dentry
- dangling (`-?????????`, posix2 `peer_rename_vs_unlink_src`, 1 in
- 6, START-HERE 0c / W36). Do not add more silent "replay" mappings;
- a committed-replay verdict must come from the op-id window.
+- **An apply's rc is the ring verdict; "logged, then `return EFS_OK`"
+ is a lie to the client (W45, Oct 2).** Before: unlink swallowed every
+ failure (BUSY/IO → the file stayed, the client heard 0), truncate and
+ lane-fence swallowed the 32-chunk-DEL `TRUNC_IT_CAP` NOMEM (`truncate
+ -s 0` of a 1 GiB file returned 0 with the size unchanged — W43, the
+ 16× dd `O_TRUNC` review), setattr/utimens swallowed NOT_FOUND.
+ Now UNLINK/RMDIR/SETATTR/UTIMENS/TRUNCATE/ACTIVATE_LANE/LANE_FENCE
+ return their rc and sit on `host_apply`'s ring-only list (a non-OK
+ verdict never halts the log — a halted log retries one index
+ forever, the W37 salt shape). The documented idempotent cases are in
+ the apply bodies (utimens STALE = a later `mtime_gen` landed;
+ activate-lane's two OKs live in meta_apply). Lock GRANT still maps
+ AGAIN/NOLCK → OK (flagged, START-HERE §1b). Do not add silent
+ "replay" mappings; a committed-replay verdict comes from the op-id
+ window, never from the apply.
+- **The log path must probe EVERY key it deletes unversioned, not just
+ the inode row (W36, Oct 2).** `efs_meta_apply_unlink_op`/`rmdir_op`
+ checked `efs_txn_key_busy` on the child's inode row (and dseq) but
+ not on the dentry; a RENAME's dentry EXCL lands on the dentry shard
+ before its inode-row REDUCE lands on the inode shard, so an unlink
+ in that window deleted the name and the row under the rename and
+ its RESOLVE PUT the dest dentry over nothing (`-?????????`, posix2
+ `peer_rename_vs_unlink_src` 1 in 6). Both probe `k_loc`/`k_hash`
+ now → BUSY → the client retries → ENOENT. Any new unversioned DEL
+ in the log path probes its key first.
 
 - **A span record's identity is (object gen, off, len), never the gen
  alone (Sep 30, `results/io500/20260930-183504-rdma`).** The object

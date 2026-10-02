@@ -604,6 +604,19 @@ int kv_msrc_advance(struct kv_lsm *l, struct msrc *s, const uint8_t *lower,
  * it, so resuming a paged scan seeks every source instead of replaying the
  * range. The termination test stays on `prefix`: `start` moves the cursor,
  * it never widens or narrows what qualifies. */
+/* W44 step a: what the calling thread's prefix scans cost. Per thread so
+ * the GC thread's numbers are not mixed with handler lookups; read and
+ * reset by efs_kv_lsm_scan_stats. */
+static __thread struct efs_kv_scan_stats t_scan_stats;
+
+void efs_kv_lsm_scan_stats(struct efs_kv_scan_stats *out, int reset)
+{
+    if (out)
+        *out = t_scan_stats;
+    if (reset)
+        memset(&t_scan_stats, 0, sizeof(t_scan_stats));
+}
+
 static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
                       const uint8_t *start, uint32_t slen,
                       int (*cb)(void *user, const uint8_t *key, uint32_t klen,
@@ -619,6 +632,7 @@ static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
     int src_heap = 0;
     int rc = EFS_OK;
 
+    t_scan_stats.scans++;
     if (need > cap) {
         src = calloc(need, sizeof(*src));
         if (!src)
@@ -653,6 +667,7 @@ static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
         if (rc != EFS_OK)
             goto out;
         nsrc++;
+        t_scan_stats.segs++;
     }
     for (i = 0; i < nsrc; i++) {
         rc = kv_msrc_advance(l, &src[i], seek, seek_len);
@@ -674,11 +689,15 @@ static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
             break;
         if (!kv_has_prefix(src[win].key, src[win].klen, prefix, plen))
             break; /* ordered, so nothing further can match */
+        t_scan_stats.keys++;
         if (src[win].op == KV_OP_PUT) {
+            t_scan_stats.emitted++;
             rc = cb(user, src[win].key, src[win].klen, src[win].val,
                     src[win].vlen);
             if (rc != 0)
                 goto out;
+        } else {
+            t_scan_stats.tombstones++;
         }
         for (i = 0; i < nsrc; i++) {
             if (src[i].done || i == win)

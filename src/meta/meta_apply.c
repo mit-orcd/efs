@@ -1832,6 +1832,21 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
         rc = efs_kv_key_dentry(hsh, parent, name, k_hash, &kh);
     if (rc != EFS_OK)
         return rc;
+    /* W36: the DENTRY is deleted unversioned below, so it needs the same
+     * probe the inode row gets further down. A RENAME of this name holds
+     * an EXCL DEL intent on the source dentry (and a PUT on the dest)
+     * from PREPARE until RESOLVE; its inode-row REDUCE may not have
+     * landed yet, so the k_ino probe alone let this unlink delete the
+     * dentry and the row underneath the pending rename, whose RESOLVE
+     * then PUT the dest dentry over a row that no longer existed
+     * (`-?????????`, posix2 peer_rename_vs_unlink_src, 1 in 6). BUSY
+     * here makes the client retry after the rename resolves, and the
+     * retry finds the name gone → ENOENT, which is the right answer. */
+    rc = efs_txn_key_busy(kv, k_loc, kl);
+    if (rc == EFS_OK && !(kh == kl && memcmp(k_hash, k_loc, kl) == 0))
+        rc = efs_txn_key_busy(kv, k_hash, kh);
+    if (rc != EFS_OK)
+        return rc;
     memset(it, 0, sizeof(it));
     /* A lane-0 name during SPLITTING has k_hash == k_loc, and the tombstone
      * below is what has to survive; dropping the redundant delete keeps that
@@ -2852,6 +2867,14 @@ int efs_meta_apply_rmdir_op(struct efs_kv *kv, efs_ino_t parent, const char *nam
     memset(it, 0, sizeof(it));
     rc = dentry_drop_items(kv, &prow, parent, name, k_loc, &kl, k_hash, &kh,
                            v_tomb, it, &n);
+    if (rc != EFS_OK)
+        return rc;
+    /* W36 (same as unlink): a dir RENAME holds an EXCL intent on this
+     * dentry until it resolves; dir_txn_busy above probed the child's
+     * row and dseq, not the name being dropped. */
+    rc = efs_txn_key_busy(kv, k_loc, kl);
+    if (rc == EFS_OK && kh && !(kh == kl && memcmp(k_hash, k_loc, kl) == 0))
+        rc = efs_txn_key_busy(kv, k_hash, kh);
     if (rc != EFS_OK)
         return rc;
     rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, k_ino, &ki);

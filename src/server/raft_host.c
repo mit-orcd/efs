@@ -1231,14 +1231,21 @@ static int apply_unlink_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     memcpy(name, cmd + 18, nl);
     rc = efs_meta_apply_unlink_op(h->kv, parent, name, now,
                                   unlink_cmd_opid(cmd, clen, nl, &q));
-    if (rc == EFS_ERR_NOT_FOUND)
-        rc = EFS_OK; /* replay */
+    /* W45: the rc IS the ring verdict (UNLINK is on host_apply's
+     * ring-only list, so it never halts the log). NOT_FOUND here means
+     * the dentry went away between the leader's pre-check and the apply
+     * (a peer's unlink or rename won) — ENOENT to the caller, which is
+     * the POSIX answer. The retry of a committed unlink is answered from
+     * the op-id window before the pre-check (I16), not by mapping this to
+     * OK; the old "NOT_FOUND → OK (replay)" is the silent mapping W36
+     * flagged. BUSY/IO were also OK before — the file stayed and the
+     * client heard success. */
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply unlink rc=%d index=%llu parent=%llu "
                 "name=%s\n",
                 rc, (unsigned long long)index, (unsigned long long)parent,
                 name);
-        return EFS_OK;
+        return rc;
     }
     APPLY_LOG("raft-host: applied unlink index=%llu parent=%llu name=%s\n",
             (unsigned long long)index, (unsigned long long)parent, name);
@@ -1266,8 +1273,8 @@ static int apply_rmdir_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     memcpy(name, cmd + 18, nl);
     rc = efs_meta_apply_rmdir_op(h->kv, parent, name, now,
                                  unlink_cmd_opid(cmd, clen, nl, &q));
-    if (rc == EFS_ERR_NOT_FOUND)
-        rc = EFS_OK; /* replay */
+    /* W45: NOT_FOUND is the verdict (see apply_unlink_cmd); the retry of a
+     * committed rmdir is the op-id window's job. */
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply rmdir rc=%d index=%llu parent=%llu "
                 "name=%s\n",
@@ -1301,12 +1308,15 @@ static int apply_setattr_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     sa.uid = rd32be(cmd + 33);
     sa.gid = rd32be(cmd + 37);
     rc = efs_meta_apply_setattr(h->kv, ino, now, &sa);
-    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
-        rc = EFS_OK; /* replay / stale handle after a later unlink */
+    /* W45: the rc is the ring verdict (SETATTR is ring-only in
+     * host_apply). NOT_FOUND = the row went away after the leader's
+     * pre-read → ENOENT. The handler packs expect_gen = 0, so STALE is
+     * not produced; if a caller ever sets it, STALE is a real verdict
+     * (the handle names a replaced inode), not a replay. */
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply setattr rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-        return EFS_OK;
+        return rc;
     }
     APPLY_LOG("raft-host: applied setattr index=%llu ino=%llu mask=%u\n",
             (unsigned long long)index, (unsigned long long)ino, sa.mask);
@@ -1369,12 +1379,20 @@ static int apply_utimens_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     u.mtime_gen = rd64be(cmd + 45);
     u.lane_bits = rd64be(cmd + 53);
     rc = efs_meta_apply_utimens(h->kv, ino, now, &u);
-    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
+    /* W45. STALE is the one documented idempotent case: it means a utimens
+     * with a higher mtime_gen already landed (`u->mtime_gen <
+     * row.mtime_gen`) — the later caller's stamp is the one POSIX keeps,
+     * and this caller's own stat then shows it. NOT_FOUND (row gone after
+     * the pre-read) and everything else ride the ring as the verdict
+     * (UTIMENS is ring-only in host_apply). The cross-group lane half
+     * (lane_bits + expect_gen on a host without the row) returns OK from
+     * the apply itself. */
+    if (rc == EFS_ERR_STALE)
         rc = EFS_OK;
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply utimens rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-        return EFS_OK;
+        return rc;
     }
     APPLY_LOG("raft-host: applied utimens index=%llu ino=%llu mask=%u\n",
             (unsigned long long)index, (unsigned long long)ino, u.mask);
@@ -1424,12 +1442,18 @@ static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         t.tail = &tail;
     }
     rc = efs_meta_apply_truncate(h->kv, ino, now, &t);
-    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_STALE)
-        rc = EFS_OK;
+    /* W43 step b / W45: the apply's rc is the ring verdict (TRUNCATE is
+     * ring-only in host_apply, so a failed apply never halts the log).
+     * Before, every failure became OK: a lane holding more than the
+     * TRUNC_IT_CAP 32 chunk DELs returned NOMEM, the row kept its size,
+     * and `truncate -s 0` of a big file reported success (START-HERE
+     * W43). Now the SETATTR answers EIO (W16 mapping) until D25 decides
+     * the multi-entry shape. NOT_FOUND (row gone after the leader's
+     * pre-read) is ENOENT; STALE cannot occur (expect_gen = 0). */
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply truncate rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-        return EFS_OK;
+        return rc;
     }
     APPLY_LOG("raft-host: applied truncate index=%llu ino=%llu size=%llu\n",
             (unsigned long long)index, (unsigned long long)ino,
@@ -1452,10 +1476,15 @@ static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_meta_apply_activate_lanes(h->kv, ino, rd64be(cmd + 9));
     else
         rc = efs_meta_apply_activate_lane(h->kv, ino, cmd[9]);
+    /* W45: efs_meta_apply_activate_lanes already answers OK for the two
+     * idempotent cases (row unlinked since the host's read; bits already
+     * set). Anything else (IO, INVAL) is the verdict the REPORT's
+     * host_propose_wait needs — the publish that follows would otherwise
+     * land on a lane stat() never collects. Ring-only in host_apply. */
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply activate-lane rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-        return EFS_OK;
+        return rc;
     }
     if (raft_dbg_on())
         APPLY_LOG("raft-host: applied activate-lane index=%llu ino=%llu\n",
@@ -1477,10 +1506,16 @@ static int apply_lane_fence_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     rc = efs_meta_apply_lane_fence(h->kv, ino, rd64be(cmd + 9), cmd[17],
                                    rd64be(cmd + 18), rd64be(cmd + 26),
                                    rd32be(cmd + 34), cmd[38]);
+    /* W43 step b: the fence's rc is the verdict host_truncate waits on.
+     * efs_meta_apply_lane_fence is idempotent on its own (a fence at the
+     * same or an older epoch returns OK); a NOMEM from the 32-DEL cap or
+     * an IO error must stop the truncate before the inode-group entry
+     * advances the epoch over chunks that are still there. Ring-only in
+     * host_apply. */
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply lane-fence rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-        return EFS_OK;
+        return rc;
     }
     APPLY_LOG("raft-host: applied lane-fence index=%llu ino=%llu lane=%u\n",
             (unsigned long long)index, (unsigned long long)ino,
@@ -2118,12 +2153,20 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * reason to retry the same index forever (W1 two-client RMW). */
     /* SALT too (W37): a SALT that does not match the anchor's record
      * answers PROTO and writes nothing; it must not halt the group's
-     * apply (Oct 1: `apply salt rc=-7 index=3` on every group-2 apply). */
+     * apply (Oct 1: `apply salt rc=-7 index=3` on every group-2 apply).
+     * W43/W45 (Oct 1): UNLINK, SETATTR, UTIMENS, TRUNCATE, ACTIVATE_LANE
+     * and LANE_FENCE now return their apply rc as the verdict instead of
+     * swallowing it as OK; a non-OK verdict is a reply to the proposer,
+     * never a reason to re-apply the same index. */
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
-           cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT)
+           cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
+           cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
+           cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
+           cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
+           cmd[0] == EFS_MD_CMD_LANE_FENCE)
               ? EFS_OK
               : rc;
     if (a0) {
@@ -6298,9 +6341,12 @@ static void *host_gc_thread(void *arg)
 
     while (h->gc_running) {
         uint64_t t0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
+        struct efs_kv_scan_stats sc_frag, sc_all;
 
         host_snap_export_pass(h);
         host_snap_import_pass(h);
+        memset(&sc_frag, 0, sizeof(sc_frag));
+        efs_kv_lsm_scan_stats(NULL, 1);
         t0 = now_us_();
         for (g = 0; g < HOST_NGROUPS && h->gc_running; g++) {
             uint32_t anchor;
@@ -6326,7 +6372,18 @@ static void *host_gc_thread(void *arg)
             host_gc_reap_pass(h, h->g[g].group, anchor);
             t_reap += now_us_() - ta;
             ta = now_us_();
-            host_gc_frag_pass(h, h->g[g].group, anchor);
+            {
+                struct efs_kv_scan_stats b, a;
+
+                efs_kv_lsm_scan_stats(&b, 0);
+                host_gc_frag_pass(h, h->g[g].group, anchor);
+                efs_kv_lsm_scan_stats(&a, 0);
+                sc_frag.scans += a.scans - b.scans;
+                sc_frag.segs += a.segs - b.segs;
+                sc_frag.keys += a.keys - b.keys;
+                sc_frag.emitted += a.emitted - b.emitted;
+                sc_frag.tombstones += a.tombstones - b.tombstones;
+            }
             t_frag += now_us_() - ta;
         }
         t_spread = now_us_();
@@ -6336,17 +6393,36 @@ static void *host_gc_thread(void *arg)
         host_txn_recover_pass(h);
         t_rec = now_us_() - t_rec;
         t_all = now_us_() - t0;
+        efs_kv_lsm_scan_stats(&sc_all, 1);
         /* A pass that holds the KV for a while is a periodic stall on
          * every metadata op (Sep 30: du/find on fstor007 stalled 14 ms
-         * once per 1.014 s). Name the slow part. */
-        if (t_all > 5000)
+         * once per 1.014 s). Name the slow part. W44 step a: say what
+         * the frag pass's scans visited — segment iterators opened,
+         * merged keys seen, PUTs handed to the callback, tombstones
+         * consumed — and the same for the whole pass. An empty 205 ms
+         * frag pass with `fkeys=0 fsegs=55` is the L0 file count (D26);
+         * one with `ftomb` in the thousands is tombstones under the GC
+         * prefix. `EFS_GC_DBG` prints the line on every pass. */
+        if (t_all > 5000 || env_on("EFS_GC_DBG"))
             fprintf(stderr, "raft-host: gc-pass ms=%llu reap=%llu frag=%llu "
-                    "spread=%llu recover=%llu\n",
+                    "spread=%llu recover=%llu fscans=%llu fsegs=%llu "
+                    "fkeys=%llu femit=%llu ftomb=%llu scans=%llu segs=%llu "
+                    "keys=%llu emit=%llu tomb=%llu\n",
                     (unsigned long long)(t_all / 1000),
                     (unsigned long long)(t_reap / 1000),
                     (unsigned long long)(t_frag / 1000),
                     (unsigned long long)(t_spread / 1000),
-                    (unsigned long long)(t_rec / 1000));
+                    (unsigned long long)(t_rec / 1000),
+                    (unsigned long long)sc_frag.scans,
+                    (unsigned long long)sc_frag.segs,
+                    (unsigned long long)sc_frag.keys,
+                    (unsigned long long)sc_frag.emitted,
+                    (unsigned long long)sc_frag.tombstones,
+                    (unsigned long long)sc_all.scans,
+                    (unsigned long long)sc_all.segs,
+                    (unsigned long long)sc_all.keys,
+                    (unsigned long long)sc_all.emitted,
+                    (unsigned long long)sc_all.tombstones);
         /* ~1s between passes, in 20 ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
         for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++) {

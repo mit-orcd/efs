@@ -137,6 +137,50 @@ int main(void)
         failures++;
     }
 
+    /* W42: usable logical capacity under 3-of-N fragment placement. */
+    {
+        const uint64_t G = 1ull << 30;
+        struct {
+            const char *name;
+            uint64_t caps[6];
+            uint32_t n;
+            uint64_t want;
+        } cases[] = {
+            { "3 equal 200G → 400G", { 200 * G, 200 * G, 200 * G }, 3, 400 * G },
+            { "4 equal 200G → Σ×2/3 = 533.33G", { 200 * G, 200 * G, 200 * G, 200 * G },
+              4, (800 * G) * 2 / 3 },
+            { "4 equal 500G → 1333.33G", { 500 * G, 500 * G, 500 * G, 500 * G },
+              4, (2000 * G) * 2 / 3 },
+            { "100/100/1000 → 200", { 100, 100, 1000 }, 3, 200 },
+            { "100/100/100/1000 → 2×(300/2)=300", { 100, 100, 100, 1000 }, 4, 300 },
+            { "6 equal 1 → 4", { 1, 1, 1, 1, 1, 1 }, 6, 4 },
+            { "two nodes → 0", { 100, 100 }, 2, 0 },
+            { "three nodes, one empty → 0", { 100, 100, 0 }, 3, 0 },
+            { "four nodes, one empty → 3-node answer", { 100, 100, 0, 100 }, 4, 200 },
+            { "one node free → 0", { 0, 0, 100, 0 }, 4, 0 },
+        };
+        size_t ci;
+
+        for (ci = 0; ci < sizeof(cases) / sizeof(cases[0]); ci++) {
+            uint64_t got = efs_capacity_logical(cases[ci].caps, cases[ci].n);
+            /* Σ×2/3 truncates differently from 2×floor(Σ/3): allow 2 bytes. */
+            uint64_t d = got > cases[ci].want ? got - cases[ci].want
+                                              : cases[ci].want - got;
+            if (d > 2) {
+                fprintf(stderr, "FAIL capacity %s: got %llu want %llu\n",
+                        cases[ci].name, (unsigned long long)got,
+                        (unsigned long long)cases[ci].want);
+                failures++;
+            }
+        }
+        /* The bound is tight: one more fragment-byte per node-slot does
+         * not fit. 100/100/1000 at M=101 needs 303 and has 301. */
+        if (efs_capacity_logical((const uint64_t[]){ 100, 100, 1000 }, 3) != 200) {
+            fprintf(stderr, "FAIL capacity tightness\n");
+            failures++;
+        }
+    }
+
     if (failures == 0) {
         printf("test_placement: OK\n");
         return 0;
