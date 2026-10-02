@@ -210,11 +210,14 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  frag pass walks `fkeys=1 026 406` of which `ftomb=1 026 149` are
  tombstones to emit 257 records, every 1.6 s, 430–740 ms = 38 % of a
  core and ~90 % of `efsd` cycles (`host_gc_frag_pass → merge_scan`).
- The empty pass is tombstones under the GC prefix, not the L0 count
- (D26 option i). The raft log tail of an "idle" cluster is 99.7 %
- GC_ACK at 5–6 commits/s per group — that is `preflight.sh`'s "not
- idle". A `gc-frag group=N scans=1 records=K ms=` line repeating with
- the same K is a stuck set whose deletes fail every pass
+ The pass's cost is tombstones under the GC prefix, not the L0 count;
+ but `femit=257` means the passes are not empty, so D26's watermark
+ alone does not remove them (needs bounded scan progress + W50). The
+ raft log tail of an "idle" cluster is 99.7 % GC_ACK at 5–6 commits/s
+ per group — that is `preflight.sh`'s "not idle". A `gc-frag group=N
+ scans=1 records=K ms=` line repeating with the same K is consistent
+ with deletes failing every pass but does not prove it — W50 records
+ identities, verdicts and acks first
  (`results/measure/20261002-040242-dd16x10g-review/SUMMARY.txt` §4).
 - **A REPORT the host has committed can still be answered BUSY
  (`report-split … fail=wait/-13`), and the client then resends it
@@ -225,8 +228,8 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  rec/s against PUT ≈ 5 k chunks/s, the last `close()` 74.6 s. D24
  bounds a close only when REPORTs drain faster than PUTs land; W41
  (decided) removes the cross-file wait, not the per-REPORT cost. A
- "committed, apply pending" verdict is an ask (Q2 there), not a
- decision to take.
+ "committed, apply pending" receipt is the D29 ask (not a successful
+ publication, frees no dirty bytes), not a decision to take.
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
  no lane with >64 chunks was ever swept. Check this in any new scan user.

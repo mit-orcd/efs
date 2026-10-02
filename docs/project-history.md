@@ -2165,7 +2165,7 @@ census the nodeids before reading a single-process trace as the load.
   write and the last `close()` pays 74.6 s. D24 (REPORT every 8192
   landed) bounds a close only when REPORTs drain faster than PUTs land.
   W41 (decided) is necessary and not sufficient; the "committed, apply
-  pending" verdict is an ask (Q2 in SUMMARY). One STALE round
+  pending" receipt is an ask (Q2 in SUMMARY → **D29**, 05:30Z). One STALE round
   (322 395 records, 320 347 already committed, 2048 replayed,
   `pull_ms=12449`).
 - **W44 step a, read:** idle group-0 leader `gc-pass` every 1.6 s,
@@ -2178,8 +2178,11 @@ census the nodeids before reading a single-process trace as the load.
   tombstones compacted away (12 k / 121 k) and grew back (171 k /
   337 k; +1024 per pass = the superseded objects draining at ~512
   records per 1.4 s pass). A `gc-frag group=0 scans=1 records=126
-  ms=428` line repeating identically is a stuck set whose deletes fail
-  every pass (Q4). The raft log tail before the stop was 99.7 % GC_ACK
+  ms=428` line repeating identically is consistent with deletes
+  failing every pass but does not prove it (Q4 → **W50**, 05:30Z: the
+  user pointed out that identical counts prove nothing and that
+  `femit=257` means the passes are not empty, so D26's watermark alone
+  will not remove them). The raft log tail before the stop was 99.7 % GC_ACK
   at 5–6 commits/s per group — the reason `preflight.sh` reported "not
   idle" before `r749` was started without it.
 - **Compaction pressure** on fcstor004/005 during the write: l0 up to
@@ -2196,7 +2199,8 @@ census the nodeids before reading a single-process trace as the load.
   core. CPU is not the wall on either end.
 - **Open:** four of the 16 streams ended at 3.6–5.2 GiB (04:04:17–48Z)
   with a normal FLUSH and no error reply in the FUSE trace; their dd
-  exit lines are in the user's harness dir, not in `efs-mount/` (Q1).
+  exit lines are in the user's harness dir, not in `efs-mount/` (Q1 →
+  **W48**; an EIO/ENOSPC there would not by itself implicate W42).
   The traced stream's `openat(O_CREAT|O_TRUNC)` took 1.27 s under 16
   concurrent creates (not chased). No `apply truncate` / `lane-fence`
   lines: the files were fresh at open.

@@ -166,9 +166,12 @@ group 2; fcstor00{3,6}/ana-log.txt):
              2+ h before the dd) = 3450 s of GC time = 38 % of a core.
   fcstor006: 6478 passes, fkeys=596 739  ftomb=596 482  femit=257
              (constant) = 2510 s.
-So the empty pass is TOMBSTONES under the GC prefix (ftomb = fkeys -
-257), not the L0 count: the frag scan walks ~1 M dead keys to find 257
-live records every 1.6 s. perf agrees: `merge_scan` + `__memcmp_avx2_
+So the pass's COST is tombstones under the GC prefix (ftomb = fkeys -
+257), not the L0 count: the frag scan walks ~1 M dead keys to reach 257
+live records every 1.6 s. Note (user, 05:30Z): femit=257 means these
+are NOT empty passes -- live records were found each time. A pending-GC
+watermark (D26 i) skips only truly empty scans and does not help while
+those records remain; it needs bounded scan progress beside it. perf agrees: `merge_scan` + `__memcmp_avx2_
 movbe` + `kv_seg_iter_next` + `kv_msrc_advance` + pread = ~90 % of
 efsd cycles on both leaders, callers 100 % `host_gc_thread ->
 host_gc_frag_pass` (fcstor00{3,6}/flat.txt, callers-head.txt).
@@ -177,34 +180,45 @@ at 04:08Z, 121 089 on 006 at 04:19Z), then they grew again (003:
 171 009 at 04:24Z; 006: 336 642 with ftomb +1024 per pass = the real
 backlog of the run's superseded objects draining at ~512 records per
 1.4 s pass). `gc-frag group=0 scans=1 records=126 ms=428` repeating
-identically at 04:24Z = a stuck set whose fragment deletes fail every
-pass (`host_gc_record` "retry next pass", no ack) and re-scan ~1 M
-tombstones each time. Raft log tail before the stop: 99.7 % GC_ACK on
+identically at 04:24Z is CONSISTENT WITH a set whose fragment deletes
+fail every pass (`host_gc_record` "retry next pass", no ack) -- but
+identical counts alone do not prove it (W50): record the identities,
+each delete's verdict and the committed GC_ACKs first. Raft log tail before the stop: 99.7 % GC_ACK on
 both groups, 5-6 commits/s per group (fcstor00N/ana-raft-tail.txt) --
 this is what keeps `preflight.sh` reporting "not idle (>5 entries/s)".
-D26 reading: option (i) (pending-GC watermark) answers the 1 M-tombstone
-empty pass; the L0 width is a separate cost that shows up in REPORT
-pack (2a), not here.
+D26 reading: option (i) (pending-GC watermark) addresses only truly
+empty passes; here it must be paired with bounded scan progress and the
+W50 result, and maintained atomically with record insert/remove and
+recovery. The L0 width is a separate cost that shows up in REPORT pack
+(2a), not here.
 
 ------------------------------------------------------------------------
 5. Open questions for the next agent (do not guess; measure)
 ------------------------------------------------------------------------
-Q1  Four of the 16 streams stopped at 3.6-5.2 GiB (04:04:17-04:04:48Z)
-    with a normal FLUSH and no error reply in the FUSE trace. Harness
-    outputs for the other 15 streams are not in efs-mount/ (only dat16's).
-    Check the user's client.sh run dir for their dd exit lines; if they
-    were killed by a per-stream timeout, say so; if they returned EIO or
-    ENOSPC (W42 capacity bound is new in this tree), that is a bug.
-Q2  REPORT BUSY-after-commit (2b): the host's apply-wait answers BUSY for
-    a REPORT it has already committed. Options to bring to the user:
-    wait for the commit's own apply (not a fixed 400 ms), or carry an
-    "accepted, apply pending" verdict the client does not resend. Not a
-    decision the spec contains -- ask.
+Q1 = W48 (investigate). Four of the 16 streams stopped at 3.6-5.2 GiB
+    (04:04:17-04:04:48Z) with a normal FLUSH and no error reply in the
+    FUSE trace. Harness outputs for the other 15 streams are not in
+    efs-mount/ (only dat16's). Check the user's client.sh run dir for
+    exit status, signal, stderr and byte counts. EIO/ENOSPC establishes
+    a failure; it does not by itself identify W42 (new in this tree) as
+    the cause -- the server log at that second and the client's
+    inode-rpc lines do.
+Q2 = D29 (ask). REPORT BUSY-after-commit (2b): the host's apply-wait
+    answers BUSY for a REPORT it has already committed. User's framing
+    (05:30Z): a RECEIPT that lets the client wait on / query the SAME
+    operation, avoiding another pack and proposal. It is not a successful
+    publication and must not free dirty bytes -- the apply may still
+    return STALE or another failure. Test lost receipts and leader
+    changes. Not a decision the spec contains -- ask.
 Q3  Publish throughput < PUT throughput (2c): with W41 (decided) a
     close() stops waiting behind other files, but the per-REPORT pack
     (one get per record under 100+ L0s) and the serial flush thread
     still cap the drain at ~3 k rec/s per client. Measure after D26 and
     with an untraced client (row 11: `--perf` only on servers).
-Q4  Stuck GC set of 126 records on group 0 (4.): which fragment deletes
-    fail, on which node, and why (`EFS_GC_DBG=1` on the leader for one
-    pass prints them).
+Q4 = W50 (investigate). Repeating 126-record GC set on group 0 (4.):
+    identical counts do not prove failed deletes. Record the identities,
+    each delete's verdict per node, and whether a GC_ACK committed
+    (`EFS_GC_DBG=1` on the leader for one pass).
+Q5 = W51 (investigate) / D30 (ask). Compaction / follower lag (3.): the
+    experiment must separate lock blocking, slow application and
+    transport delay per apply-sleep episode before any remedy is chosen.
