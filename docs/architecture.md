@@ -234,10 +234,16 @@ this list, before it ships.
   or an `O_SYNC`/`O_DSYNC`/`-o sync` write-through (the §7.3 publication
   machine). Same-client read-your-writes hold via the dcache. This is
   POSIX and every production PFS; the stronger "every `write()` publishes"
-  alternative was measured and rejected (START-HERE W2:
-  peer sees 0/10 un-`fsync`ed bytes; `kill -9` of `efs-fuse` loses a
-  64 MiB acknowledged `write()`). `O_SYNC` is specified; it is not
-  wired yet.
+  alternative was measured and rejected (W2, in project-history.md
+  "START-HERE closed items": peer sees 0/10 un-`fsync`ed bytes; `kill -9`
+  of `efs-fuse` loses a 64 MiB acknowledged `write()`). `O_SYNC` is
+  specified; it is not wired yet. **Read "after" as "only after a
+  successful"**: `fsync` is the durability boundary and returns 0 only
+  when the publish committed; while a publish is unresolved every
+  `fsync`/`flush` on the inode fails and the client retains the bytes
+  (D27, START-HERE). Last `close` runs the same publish and reports the
+  same failure through `flush`; it is not a guarantee a program may rely
+  on without checking `fsync`.
 - **One `write()`/`pwrite()` publishes atomically.** POSIX makes regular-file
   `read()`/`write()` effects atomic with respect to one another, so a
   concurrent reader never observes a mix of old and new chunks from a single

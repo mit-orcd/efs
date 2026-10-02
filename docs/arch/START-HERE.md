@@ -62,16 +62,17 @@ when it is replaced.
 **Oct 2 2026 01:20Z — the "runs without the user" table, rows 1–3 and
 5–10, is in the tree (W43 b/c, W45, W36, W26, W44 a, W46, W47 variant)
 plus W42 (row 2a).** All 16 unit suites + `test_rdma_xprt` pass on
-fcstor007 with no warnings. **The cluster is UP** (`r749`,
-`~/efs-runs/r749.log`, `cluster.sh restart --clients --perf --strace`,
-CLUSTER_OK 01:54Z Oct 2): servers `2b5a25df419c-dirty` on fcstor003–006
-with `--perf --strace` (`/tmp/efs-perf/efsd.data`, `efsd.strace`), g0
-leader fcstor003 term 63, g2 leader fcstor006 term 35, fcstor003–015
-remounted RDMA with no client recorders (the `perf=1` on fcstor003–006
-is the server's `perf`), fstor007 has no mount. The `-dirty` is
-uncommitted docs in the tree that was built. The earlier `start740`
-(01:22Z, no recorders, `141071a3e9ba-dirty`) is what the gates below
-ran on. **Live gates held**
+fcstor007 with no warnings. **The cluster is STOPPED** (`stop751`,
+`~/efs-runs/stop751.log`, `cluster.sh stop --clients`, CLUSTER_OK
+04:24Z Oct 2). It had been up since `r749` (01:54Z, `2b5a25df419c-dirty`,
+servers `--perf --strace`). Perf reports from that window:
+`~/orcd/scratch/efs/perf/cluster-20261002-0423/fcstor00{3,4,5,6}/{flat,by_thread,callers}.txt`
+(0 lost samples; fcstor003's efsd needed the -9 after SIGTERM, header
+still ok). Raw `/tmp/efs-perf/efsd.data` and `efsd.strace` are still on
+each server. fcstor clients had no recorders; fstor007's earlier
+`efs-mount` reports were already written at 00:19Z and were left as
+they were. The earlier `start740` (01:22Z, no recorders,
+`141071a3e9ba-dirty`) is what the gates below ran on. **Live gates held**
 (`~/efs-runs/gate741.log`, `gate742.log`): posix fcstor007 **200/201**
 (`opt_fallocate` PASS on efs and on the XFS baseline; the one skip is
 `mmap_write_read` by spec), posix2 fcstor008/009 **63/63**
@@ -319,7 +320,7 @@ D9, D10, and D11 were rolled 05:31Z (`a53b253f2455-dirty`). The 12:02Z trace (§
 | **D25 · W43 / W24** | how does a truncate that drops more than 32 chunks per lane reach the KV? Today one Raft entry per cross-group lane (LANE_FENCE) plus one inode-group entry (TRUNCATE) each carry one `efs_kv_batch` capped at 32 chunk DELs per lane, and the apply gives up (NOMEM → logged → OK) on anything bigger | **Drain inside the entry in bounded KV batches, the way `efs_meta_apply_lane_sweep` already does for the reaper** (`SWEEP_CHUNKS` 64 DEL+GC pairs per `efs_kv_batch`, loop until the lane's range is empty, the lane/inode row PUT last so a crash mid-drain re-runs an idempotent fence): one entry per lane, no new opcode, no handler-side deletes, the apply cost bounded per batch (tens of ms for an 8192-chunk lane, under the election deadline). Alternative if the per-entry apply time is judged too long for a 1 TB file: the fence entry sets `fenced_epoch` + `base_size` only (reads already honor the epoch) and queues the range for the reaper's LANE_SWEEP, so truncate commits in O(lanes) and the deletes are background — pick one; both need the apply's rc on the ring (W43 step b) | 16 × `apply truncate rc=-2`, files kept 10 GiB, the rewrite's 34 REPORTs published nothing; W24's "open(O_TRUNC) did not return" is the same path under load |
 | **D26 · W44 / W23** | may the leader's GC frag pass pay a full prefix merge over every L0 segment plus L1 every 1.2 s when there is nothing to collect — i.e. is the 50–54-file L0 steady state (D12/D13 leave `l0=54` for an hour, one L0 compacted per 7 min) the table shape we want, given that every prefix scan and every REPORT `chunk_holds` get pays it? | **Measure first (W44 step a), then one of:** (i) a per-anchor pending-GC watermark the apply maintains (one get per empty pass; the scan runs only when records exist) — smallest, no KV shape change; (ii) a D12 backstop that keeps L0 under ~8 files when the apply is idle (compact L0→L0 opportunistically, never L1) so the merge width is bounded; (iii) both | 80 % of each leader's `efsd` cycles for 84 min, 20–40 % of a core under the KV lock; the frag drain rate itself is only 140 records/s per group (78 min per 160 GiB) |
 
-**D27 — DECIDED Oct 2 2026 03:50Z (user, verbatim intent; replaces the rejected spill and the rejected "drop after 16"). D28 — the architectural choice D27 leaves open; ask.** Source: 0a (d), fstor007 Oct 1 00:05 (`report-stale` ×2768 on one chunk, then `UNMOUNT DATA LOSS rc=-14 after 60s`). Framing: a successful buffered `write()` (returns the byte count) means the filesystem **owns** the pending bytes, not that they are durable; `fsync()` is the durability boundary; `close()` alone is not. A delayed-writeback error is legitimate; reporting it does not recover the data, and a log line plus a counter are diagnostics, not a substitute for delivering the error ([write(2)](https://www.man7.org/linux/man-pages/man2/write.2.html), [errseq](https://www.kernel.org/doc/html/latest/core-api/errseq.html)).
+**D27 — DECIDED Oct 2 2026 03:50Z (user, verbatim intent; replaces the rejected spill and the rejected "drop after 16"). D28 — the architectural choice D27 leaves open; ask.** Source: 0a (d), fstor007 Oct 1 00:05 (`report-stale` ×2768 on one chunk, then `UNMOUNT DATA LOSS rc=-14 after 60s`). Framing: a successful buffered `write()` (returns the byte count) means the filesystem **owns** the pending bytes, not that they are durable; `fsync()` is the durability boundary; `close()` alone is not. `close()` runs the same publish and reports failure through `flush`, but is not a guarantee a program may rely on — the spec's "durable after last `close`" (architecture.md §3) is read that way (the one-paragraph statement is at the top of [work-items.md](work-items.md)). A delayed-writeback error is legitimate; reporting it does not recover the data, and a log line plus a counter are diagnostics, not a substitute for delivering the error ([write(2)](https://www.man7.org/linux/man-pages/man2/write.2.html), [errseq](https://www.kernel.org/doc/html/latest/core-api/errseq.html)).
 
 | item | decided | implementation (binding where stated; the constants are proposals until the gate) |
 | --- | --- | --- |
@@ -380,8 +381,11 @@ posix), W9 (client staging table), W10 (RDMA), W12 (repo hygiene), W14
 (server write path), W15 (client write CPU), W16 (BUSY surfaced as
 ENOENT), W17 (N-1 STALE storm), W18 (dcache reclaim), W19 (Raft pump
 copies), W20 (`st_blocks`), W21 (staging evictor), W22 (snapshot
-cadence), W23 client (conn liveness syscalls) and W23 server (L0
-back-pressure / compaction), W24 (`open(O_TRUNC)`), W25 (`futimens`).
+cadence), W23 (server L0 back-pressure / compaction; its memory-bound
+correction is open), W49 (client conn-liveness syscalls; was a second
+"W23", renamed Oct 2), W24 (`open(O_TRUNC)`), W25 (`futimens`).
+Each opens with current status / remaining action / governing decision
+/ gate; the dated record follows.
 Closed items (W1–W5, W7, W11, W13, W26, W28–W35) are in
 project-history.md "START-HERE closed items". A plan row that names
 one of these W numbers is binding; the work-items text says how.
