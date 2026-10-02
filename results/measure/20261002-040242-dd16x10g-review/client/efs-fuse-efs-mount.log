@@ -1,0 +1,158 @@
+2026-10-02T04:02:09.669Z efs: numa pin node=2 cpus=12 (hca mlx5_1) mempolicy=preferred
+2026-10-02T04:02:09.670Z Discovered 4 cluster nodes from fcstor003.ib:19810
+2026-10-02T04:02:09.670Z   node id=1 172.16.223.57:19810
+2026-10-02T04:02:09.670Z   node id=2 172.16.223.58:19810
+2026-10-02T04:02:09.670Z   node id=3 172.16.223.59:19810
+2026-10-02T04:02:09.670Z   node id=4 172.16.223.60:19810
+2026-10-02T04:02:09.670Z fetching metadata...
+2026-10-02T04:02:10.020Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-02T04:02:10.020Z export id=1 name=fs
+2026-10-02T04:02:10.020Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=87200 root_get=0 mode=40755
+2026-10-02T04:02:10.021Z efs-fuse daemon pid=2205143
+2026-10-02T04:02:10.025Z fuse serving
+2026-10-02T04:02:10.047Z efs: RDMA transport up on mlx5_1 port 1 (lid 1911, 36 x 84 KiB bufs/conn)
+2026-10-02T04:02:43.036Z efs: RDMA zero-copy send active (type=6 hdr=80 payload=65536)
+2026-10-02T04:02:45.872Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:02:47.648Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:02:49.419Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:02:51.175Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:02:52.433Z inode-rpc: slow-ok type=67 attempts=2 saw_busy=1 status=0 us=6553321
+2026-10-02T04:02:52.928Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:02:54.579Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:02:56.272Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:02:57.908Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:02:59.512Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:01.194Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:02.837Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:04.020Z inode-rpc: slow-ok type=67 attempts=3 saw_busy=1 status=0 us=11558757
+2026-10-02T04:03:04.474Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:06.121Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:07.863Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:09.536Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:11.229Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:12.879Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:14.570Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:16.190Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:17.790Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:19.417Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:20.086Z efs-fuse: staging table over EFS_CLIENT_META_MB (256 MB) with nothing evictable; growing (pinned data is real work, not cache)
+2026-10-02T04:03:21.049Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:22.664Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:24.298Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:25.958Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:27.604Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:29.255Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:30.864Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:31.181Z inode-rpc: slow-ok type=67 attempts=2 saw_busy=1 status=0 us=24932572
+2026-10-02T04:03:32.616Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:34.277Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:35.851Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:37.410Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:39.065Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:40.721Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:42.385Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:43.952Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:45.530Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:47.178Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:48.843Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:50.504Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:52.178Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:53.828Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:55.461Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:57.126Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:03:58.736Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:00.444Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:02.106Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:03.752Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:05.391Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:07.039Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:08.694Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:10.362Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:12.008Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:13.657Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:15.405Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:17.007Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:18.549Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:20.149Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:21.767Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:23.370Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:24.994Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:26.603Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:28.245Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:29.876Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:31.534Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:33.207Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:34.838Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:35.641Z inode-rpc: slow-ok type=67 attempts=2 saw_busy=1 status=0 us=64299300
+2026-10-02T04:04:36.845Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:38.455Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:40.058Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:41.704Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:43.369Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:45.170Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:46.877Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:48.562Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:50.248Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:51.951Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:53.599Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:55.287Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:56.958Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:04:58.660Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:00.367Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:02.065Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:03.786Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:05.523Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:07.202Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:08.911Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:10.594Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:12.207Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:13.813Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:15.484Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:17.271Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:19.043Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:20.630Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:22.267Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:23.871Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:25.448Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:27.016Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:28.603Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:30.239Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:31.912Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:33.610Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:35.350Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:36.998Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:38.705Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:40.400Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:42.014Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:43.617Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:45.249Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:46.934Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:48.616Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:50.220Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:51.825Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:53.468Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:55.165Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:56.884Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:05:58.577Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:00.262Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:01.922Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:03.522Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:05.303Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:06.990Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:08.676Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:10.346Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:11.978Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:13.605Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:15.231Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:16.865Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:18.503Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:20.146Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:21.782Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:23.501Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:25.244Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:27.266Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:29.316Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:31.383Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:33.482Z report-landed: 8192 chunks landed, kicking REPORT
+2026-10-02T04:06:49.339Z report-stale: chunks=322395 runs=205 committed=320347 replayed=2048 pull_ms=12449 replay_ms=14
+2026-10-02T04:07:31.636Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=40954050

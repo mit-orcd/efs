@@ -69,16 +69,18 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`voters=0x7`); group 2 = even shards = nodes 2–4 (`0xe`). Export
   `efs-test` (id 1), mount `/tmp/efs-mount`. 19820 is retired; do not
   stand it up. Do not roll back to TCP unless a suite fails.
-- **State at 01:54Z Oct 2 2026 (`r749`, `cluster.sh restart
- --clients --perf --strace`, CLUSTER_OK):** servers
- `2b5a25df419c-dirty` on fcstor003–006 with `--perf --strace`
- (`/tmp/efs-perf/efsd.data`, `efsd.strace`); clients fcstor003–015
- remounted RDMA on the same build, no client recorders; fstor007 has
- no mount. Same table as the Oct 1 07:18Z `raft-mkfs` (salt
- 4206459926809775694); restarts need no `--join`. g0 term 63 leader
- fcstor003, g2 term 35 leader fcstor006, commit==applied at roll.
- The `-dirty` is uncommitted docs. Full roll/remount history:
- `docs/project-history.md` ("Cluster-state narrative").
+- **State at 04:24Z Oct 2 2026 (`stop751`, `cluster.sh stop
+ --clients`, CLUSTER_OK):** efsd and efs-fuse are down on
+ fcstor003–015; fstor007 has no mount. The `r749` window
+ (01:54Z–04:24Z, `2b5a25df419c-dirty`, servers `--perf --strace`)
+ left `/tmp/efs-perf/efsd.data` and `efsd.strace` on fcstor003–006
+ and the reports at
+ `~/orcd/scratch/efs/perf/cluster-20261002-0423/fcstor00{3,4,5,6}/`.
+ Same table as the Oct 1 07:18Z `raft-mkfs` (salt
+ 4206459926809775694); the next start needs no `--join` and no
+ `--fresh`. `start` deletes those two perf files — copy them off
+ first. Full roll/remount history: `docs/project-history.md`
+ ("Cluster-state narrative").
 - **Current gate signature on that tree:** posix jobs=1 **200/201**
   (`mmap_write_read` SKIP by spec), posix2 **63/63**, 9-host posix
   **200/201** on all nine (`results/posix/20261001-160049`); IO-500 9×4
@@ -204,7 +206,27 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  256/128 (`EFS_META_GC_ACK_MAX`), rescan while full within 200 ms.
  `raft-host: gc-pass ms= reap= frag= spread= recover=` prints when a
  GC iteration exceeds 5 ms; leaders show `recover=70`, 64 ms of it
- `HOST_REC_YIELD_US` sleeps.
+ `HOST_REC_YIELD_US` sleeps. **W44 a read (Oct 2):** an idle leader's
+ frag pass walks `fkeys=1 026 406` of which `ftomb=1 026 149` are
+ tombstones to emit 257 records, every 1.6 s, 430–740 ms = 38 % of a
+ core and ~90 % of `efsd` cycles (`host_gc_frag_pass → merge_scan`).
+ The empty pass is tombstones under the GC prefix, not the L0 count
+ (D26 option i). The raft log tail of an "idle" cluster is 99.7 %
+ GC_ACK at 5–6 commits/s per group — that is `preflight.sh`'s "not
+ idle". A `gc-frag group=N scans=1 records=K ms=` line repeating with
+ the same K is a stuck set whose deletes fail every pass
+ (`results/measure/20261002-040242-dd16x10g-review/SUMMARY.txt` §4).
+- **A REPORT the host has committed can still be answered BUSY
+ (`report-split … fail=wait/-13`), and the client then resends it
+ byte-identical to the other dual host, which packs it again and finds
+ `skip=all` (Oct 2, 16 × 10 GiB dd, same SUMMARY §2).** Pack is one
+ point get per record (100–133 µs under `l0=100–170`): nrec 8 k → 570 k
+ over the write, pack up to 42.9 s, push up to 77 s, publish ≈ 2.7 k
+ rec/s against PUT ≈ 5 k chunks/s, the last `close()` 74.6 s. D24
+ bounds a close only when REPORTs drain faster than PUTs land; W41
+ (decided) removes the cross-file wait, not the per-REPORT cost. A
+ "committed, apply pending" verdict is an ask (Q2 there), not a
+ decision to take.
 - `efs_kv_scan_prefix` callback returning **>0 means batch-full**, not
  error. The reaper (`lane-sweep`, `rsv_purge`) misread it for weeks —
  no lane with >64 chunks was ever swept. Check this in any new scan user.
@@ -803,6 +825,14 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 - Wait for the cluster to be apply-idle (`commit == applied` on all
   voters) before starting a measurement; a run started during catch-up
   measures the catch-up.
+- **One process's strace is not the mount's load.** Before reading a
+  `dd.trace` against server fragment rates, census the FUSE requests
+  in `fuse.strace`: the `fuse_in_header` nodeid is at offset 16 of each
+  `read(/dev/fuse)` payload (`client/ana-fuse-writers.txt` in the Oct 2
+  review dir has the parser). The Oct 2 "×14 PUT amplification" was 16
+  concurrent 10 GiB dd's on one client, 663 MB/s aggregate with
+  recorders on both ends; one of them wrote 37 MB/s. `rsync.out.txt`
+  in the user's `efs-mount/` dir is a dd's progress, not an rsync.
 
 ## Habit
 

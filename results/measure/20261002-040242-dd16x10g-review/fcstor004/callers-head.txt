@@ -1,0 +1,362 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 391K of event 'cycles:P'
+# Event count (approx.): 947022687932
+#
+# Children      Self  Symbol                                          
+# ........  ........  ................................................
+#
+    76.38%     0.30%  [k] entry_SYSCALL_64_after_hwframe
+            |          
+             --76.08%--entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--13.17%--__GI___libc_open
+                       |          |          
+                       |          |--2.25%--0x61642f7366652f31
+                       |          |          
+                       |          |--2.22%--0x61642f7366652f33
+                       |          |          
+                       |          |--2.20%--0x61642f7366652f35
+                       |          |          
+                       |          |--2.19%--0x61642f7366652f36
+                       |          |          
+                       |          |--2.15%--0x61642f7366652f34
+                       |          |          
+                       |           --2.11%--0x61642f7366652f32
+                       |          
+                       |--11.88%--__poll
+                       |          |          
+                       |          |--5.69%--server_handle_conn
+                       |          |          |          
+                       |          |           --0.65%--conn_thread
+                       |          |                     start_thread
+                       |          |          
+                       |          |--5.58%--start_thread
+                       |          |          
+                       |           --0.61%--conn_rdma_frame.constprop.0
+                       |                     efs_conn_recv_msg
+                       |                     |          
+                       |                      --0.57%--host_sender
+                       |                                start_thread
+                       |          
+                       |--10.72%--__GI___libc_write
+                       |          |          
+                       |          |--3.54%--recv_poller
+                       |          |          start_thread
+                       |          |          
+                       |          |--2.00%--lsm_batch
+                       |          |          |          
+                       |          |           --1.91%--efs_meta_apply_publish
+                       |          |                     host_apply
+                       |          |                     apply_committed
+                       |          |                     on_ae_req
+                       |          |                     drain_inbox
+                       |          |                     |          
+                       |          |                      --1.90%--host_pump
+                       |          |                                start_thread
+                       |          |          
+                       |           --0.58%--server_handle_conn
+                       |          
+                       |--9.43%--__GI___writev
+                       |          |          
+                       |           --9.38%--server_write_fragment_to_path.constprop.0
+                       |                     server_write_fragment_with_sum_sync
+                       |                     run_job
+                       |                     writer_thread
+                       |                     start_thread
+                       |          
+                       |--5.45%--read
+                       |          |          
+                       |          |--2.52%--0x1000100000007
+                       |          |          
+                       |          |--1.62%--server_handle_conn
+                       |          |          
+                       |           --0.86%--conn_rdma_frame.constprop.0
+                       |                     efs_conn_recv_msg
+                       |                     |          
+                       |                      --0.82%--host_sender
+                       |                                start_thread
+                       |          
+                       |--4.23%--__GI___lll_lock_wake
+                       |          |          
+                       |          |--2.80%--start_thread
+                       |          |          
+                       |           --0.82%--nvme_put
+                       |                     server_handle_conn
+                       |          
+                       |--4.20%--__futex_abstimed_wait_common
+                       |          
+                       |--3.07%--pthread_cond_signal@@GLIBC_2.3.2
+                       |          
+                       |--2.86%--__libc_pread
+                       |          |          
+                       |          |--1.03%--lookup
+                       |          |          |          
+                       |          |           --1.03%--lsm_get
+                       |          |                     |          
+                       |          |                      --0.53%--efs_meta_apply_get_chunk
+                       |          |                                server_raft_host_report
+                       |          |          
+                       |          |--0.86%--nvme_del_if_sum
+                       |          |          server_handle_conn
+                       |          |          
+                       |           --0.85%--kv_msrc_advance
+                       |                     |          
+                       |                      --0.53%--merge_scan
+                       |                                lsm_scan_prefix
+                       |          
+                       |--2.22%--__fstat64
+                       |          |          
+                       |           --2.21%--efs_conn_send_msg
+                       |                     |          
+                       |                      --1.88%--server_handle_conn
+                       |          
+                       |--2.19%--__close
+                       |          |          
+                       |           --1.63%--server_write_fragment_to_path.constprop.0
+                       |                     server_write_fragment_with_sum_sync
+                       |                     run_job
+                       |                     writer_thread
+                       |                     start_thread
+                       |          
+                       |--1.88%--__GI___lll_lock_wait
+                       |          
+                       |--1.48%--__GI___unlink
+                       |          |          
+                       |           --1.44%--nvme_del_if_sum
+                       |                     server_handle_conn
+                       |          
+                       |--0.86%--__GI___setsockopt
+                       |          |          
+                       |           --0.86%--host_sender
+                       |                     start_thread
+                       |          
+                       |--0.82%--clock_nanosleep@GLIBC_2.2.5
+                       |          |          
+                       |           --0.82%--start_thread
+                       |          
+                        --0.56%--__GI___fstatat64
+                                  nvme_del_if_sum
+                                  server_handle_conn
+
+    76.01%     0.50%  [k] do_syscall_64
+            |          
+             --75.51%--do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--13.13%--__GI___libc_open
+                       |          |          
+                       |          |--2.25%--0x61642f7366652f31
+                       |          |          
+                       |          |--2.22%--0x61642f7366652f33
+                       |          |          
+                       |          |--2.19%--0x61642f7366652f35
+                       |          |          
+                       |          |--2.19%--0x61642f7366652f36
+                       |          |          
+                       |          |--2.14%--0x61642f7366652f34
+                       |          |          
+                       |           --2.11%--0x61642f7366652f32
+                       |          
+                       |--11.74%--__poll
+                       |          |          
+                       |          |--5.64%--server_handle_conn
+                       |          |          |          
+                       |          |           --0.64%--conn_thread
+                       |          |                     start_thread
+                       |          |          
+                       |          |--5.50%--start_thread
+                       |          |          
+                       |           --0.60%--conn_rdma_frame.constprop.0
+                       |                     efs_conn_recv_msg
+                       |                     |          
+                       |                      --0.56%--host_sender
+                       |                                start_thread
+                       |          
+                       |--10.64%--__GI___libc_write
+                       |          |          
+                       |          |--3.51%--recv_poller
+                       |          |          start_thread
+                       |          |          
+                       |          |--1.98%--lsm_batch
+                       |          |          |          
+                       |          |           --1.89%--efs_meta_apply_publish
+                       |          |                     host_apply
+                       |          |                     apply_committed
+                       |          |                     on_ae_req
+                       |          |                     drain_inbox
+                       |          |                     |          
+                       |          |                      --1.88%--host_pump
+                       |          |                                start_thread
+                       |          |          
+                       |           --0.57%--server_handle_conn
+                       |          
+                       |--9.42%--__GI___writev
+                       |          |          
+                       |           --9.36%--server_write_fragment_to_path.constprop.0
+                       |                     server_write_fragment_with_sum_sync
+                       |                     run_job
+                       |                     writer_thread
+                       |                     start_thread
+                       |          
+                       |--5.40%--read
+                       |          |          
+                       |          |--2.50%--0x1000100000007
+                       |          |          
+                       |          |--1.60%--server_handle_conn
+                       |          |          
+                       |           --0.85%--conn_rdma_frame.constprop.0
+                       |                     efs_conn_recv_msg
+                       |                     |          
+                       |                      --0.81%--host_sender
+                       |                                start_thread
+                       |          
+                       |--4.18%--__GI___lll_lock_wake
+                       |          |          
+                       |          |--2.77%--start_thread
+                       |          |          
+                       |           --0.81%--nvme_put
+                       |                     server_handle_conn
+                       |          
+                       |--4.11%--__futex_abstimed_wait_common
+                       |          
+                       |--3.04%--pthread_cond_signal@@GLIBC_2.3.2
+                       |          
+                       |--2.84%--__libc_pread
+                       |          |          
+                       |          |--1.02%--lookup
+                       |          |          |          
+                       |          |           --1.02%--lsm_get
+                       |          |                     |          
+                       |          |                      --0.53%--efs_meta_apply_get_chunk
+                       |          |                                server_raft_host_report
+                       |          |          
+                       |          |--0.86%--nvme_del_if_sum
+                       |          |          server_handle_conn
+                       |          |          
+                       |           --0.85%--kv_msrc_advance
+                       |                     |          
+                       |                      --0.53%--merge_scan
+                       |                                lsm_scan_prefix
+                       |          
+                       |--2.19%--__fstat64
+                       |          |          
+                       |           --2.19%--efs_conn_send_msg
+                       |                     |          
+                       |                      --1.86%--server_handle_conn
+                       |          
+                       |--2.18%--__close
+                       |          |          
+                       |           --1.62%--server_write_fragment_to_path.constprop.0
+                       |                     server_write_fragment_with_sum_sync
+                       |                     run_job
+                       |                     writer_thread
+                       |                     start_thread
+                       |          
+                       |--1.87%--__GI___lll_lock_wait
+                       |          
+                       |--1.48%--__GI___unlink
+                       |          |          
+                       |           --1.44%--nvme_del_if_sum
+                       |                     server_handle_conn
+                       |          
+                       |--0.85%--__GI___setsockopt
+                       |          |          
+                       |           --0.85%--host_sender
+                       |                     start_thread
+                       |          
+                       |--0.81%--clock_nanosleep@GLIBC_2.2.5
+                       |          |          
+                       |           --0.81%--start_thread
+                       |          
+                        --0.56%--__GI___fstatat64
+                                  nvme_del_if_sum
+                                  server_handle_conn
+
+    45.53%     1.19%  [k] ptrace_notify
+            |          
+             --44.35%--ptrace_notify
+                       |          
+                       |--22.64%--syscall_trace_enter.constprop.0
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          |          
+                       |          |--4.60%--__poll
+                       |          |          |          
+                       |          |          |--2.26%--server_handle_conn
+                       |          |          |          
+                       |          |           --2.17%--start_thread
+                       |          |          
+                       |          |--3.64%--__GI___libc_write
+                       |          |          |          
+                       |          |          |--1.51%--recv_poller
+                       |          |          |          start_thread
+                       |          |          |          
+                       |          |           --0.75%--lsm_batch
+                       |          |                     |          
+                       |          |                      --0.74%--efs_meta_apply_publish
+                       |          |                                host_apply
+                       |          |                                apply_committed
+                       |          |                                on_ae_req
+                       |          |                                drain_inbox
+                       |          |                                |          
+                       |          |                                 --0.73%--host_pump
+                       |          |                                           start_thread
+                       |          |          
+                       |          |--2.97%--read
+                       |          |          |          
+                       |          |          |--1.33%--0x1000100000007
+                       |          |          |          
+                       |          |          |--0.86%--server_handle_conn
+                       |          |          |          
+                       |          |           --0.52%--conn_rdma_frame.constprop.0
+                       |          |                     efs_conn_recv_msg
+                       |          |          
+                       |          |--2.22%--__GI___lll_lock_wake
+                       |          |          |          
+                       |          |           --1.49%--start_thread
+                       |          |          
+                       |          |--1.78%--__GI___libc_open
+                       |          |          
+                       |          |--1.47%--__futex_abstimed_wait_common
+                       |          |          
+                       |          |--1.29%--pthread_cond_signal@@GLIBC_2.3.2
+                       |          |          
+                       |          |--1.15%--__fstat64
+                       |          |          |          
+                       |          |           --1.15%--efs_conn_send_msg
+                       |          |                     |          
+                       |          |                      --0.97%--server_handle_conn
+                       |          |          
+                       |          |--0.88%--__GI___lll_lock_wait
+                       |          |          
+                       |          |--0.67%--__libc_pread
+                       |          |          
+                       |           --0.59%--__close
+                       |          
+                        --21.70%--syscall_exit_work
+                                  syscall_exit_to_user_mode
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  |          
+                                  |--4.75%--__poll
+                                  |          |          
+                                  |          |--2.28%--server_handle_conn
+                                  |          |          
+                                  |           --2.18%--start_thread
+                                  |          
+                                  |--3.52%--__GI___libc_write
+                                  |          |          
+                                  |          |--1.35%--recv_poller
+                                  |          |          start_thread
+                                  |          |          
+                                  |           --0.57%--lsm_batch
+                                  |                     |          
+                                  |                      --0.56%--efs_meta_apply_publish
+                                  |                                host_apply
+                                  |                                apply_committed
+                                  |                                on_ae_req
+          

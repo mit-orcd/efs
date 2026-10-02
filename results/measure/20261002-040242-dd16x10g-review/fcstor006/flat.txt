@@ -1,0 +1,48 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1M of event 'cycles:P'
+# Event count (approx.): 3253882667473
+#
+# Overhead  Shared Object            Symbol                                          
+# ........  .......................  ................................................
+#
+    25.86%  libc.so.6                [.] __memcmp_avx2_movbe
+    17.11%  efsd                     [.] merge_scan
+     5.65%  efsd                     [.] kv_seg_iter_next
+     4.75%  [kernel.kallsyms]        [k] rep_movs_alternative
+     3.71%  efsd                     [.] kv_msrc_advance
+     2.38%  [kernel.kallsyms]        [k] ptrace_do_notify
+     2.06%  [kernel.kallsyms]        [k] retbleed_return_thunk
+     1.81%  efsd                     [.] memcmp@plt
+     1.48%  [kernel.kallsyms]        [k] copyout
+     1.17%  [kernel.kallsyms]        [k] __rcu_read_unlock
+     1.04%  [kernel.kallsyms]        [k] __task_pid_nr_ns
+     1.02%  [kernel.kallsyms]        [k] child_wait_callback
+     1.01%  [kernel.kallsyms]        [k] entry_SYSCALL_64
+     0.85%  [kernel.kallsyms]        [k] do_notify_parent_cldstop
+     0.73%  [kernel.kallsyms]        [k] ptrace_notify
+     0.68%  [kernel.kallsyms]        [k] _raw_spin_lock_irqsave
+     0.56%  [kernel.kallsyms]        [k] filemap_get_read_batch
+     0.56%  [kernel.kallsyms]        [k] ptrace_stop.part.0
+     0.52%  [kernel.kallsyms]        [k] __get_user_8
+     0.46%  libc.so.6                [.] __memmove_avx_unaligned_erms
+     0.41%  [kernel.kallsyms]        [k] _raw_spin_unlock_irq
+     0.40%  [kernel.kallsyms]        [k] _raw_spin_lock_irq
+     0.35%  [kernel.kallsyms]        [k] do_syscall_64
+     0.33%  [kernel.kallsyms]        [k] perf_pmu_nop_void
+     0.33%  [kernel.kallsyms]        [k] __rseq_handle_notify_resume
+     0.32%  [vdso]                   [.] 0x0000000000000b15
+     0.32%  [kernel.kallsyms]        [k] syscall_trace_enter.constprop.0
+     0.32%  [kernel.kallsyms]        [k] syscall_exit_work
+     0.32%  [kernel.kallsyms]        [k] map_id_up
+     0.30%  [kernel.kallsyms]        [k] schedule
+     0.30%  [kernel.kallsyms]        [k] __x64_sys_pread64
+     0.30%  libc.so.6                [.] __memset_avx2_unaligned_erms
+
+
+#
+# (Tip: To only collect call graph on one event use perf record -e cpu/cpu-cycles,callgraph=1/,branches ; perf report --show-ref-call-graph)
+#

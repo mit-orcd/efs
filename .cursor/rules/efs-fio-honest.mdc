@@ -43,6 +43,10 @@ reclaim-herd fix and the NUMA pin); 16 GiB dd+fsync **1.5 GB/s**; cold
 **6.5 GB/s** aggregate (`agent-rd-20261001-*` under
 `~/orcd/scratch/efs/perf/`). The 9-client aggregate was not remeasured on
 this tree; the Sep 28 2551–2810 MiB/s below is the standing number.
+Oct 2 04:02Z, 16 × 10 GiB dd on fstor007 with perf+strace on BOTH ends:
+663 MB/s aggregate, 37–50 MB/s per stream, last `close()` 74.6 s
+(`results/measure/20261002-040242-dd16x10g-review`) — a traced number,
+not a baseline; the untraced rerun is START-HERE row 11.
 IO-500 9×4 debug on the same day: `results/io500/20261001-074905-rdma`
 (easy-write 5.17 GiB/s, hard-write 0.52, hard-read 0.82 with one read
 error — W38).

@@ -1,0 +1,372 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2M of event 'cycles:P'
+# Event count (approx.): 4787183881702
+#
+# Children      Self  Symbol                                          
+# ........  ........  ................................................
+#
+    91.12%     0.00%  [.] start_thread
+            |          
+             --91.12%--start_thread
+
+    83.07%     0.00%  [.] host_gc_thread
+            |          
+             --83.07%--host_gc_thread
+                       start_thread
+
+    83.00%     0.01%  [.] host_gc_frag_pass
+            |          
+             --82.99%--host_gc_frag_pass
+                       |          
+                        --82.94%--host_gc_thread
+                                  start_thread
+
+    81.95%     0.00%  [.] lsm_scan_prefix
+            |          
+             --81.95%--lsm_scan_prefix
+                       |          
+                        --81.84%--host_gc_frag_pass
+                                  |          
+                                   --81.79%--host_gc_thread
+                                             start_thread
+
+    60.05%    19.88%  [.] merge_scan
+            |          
+            |--45.06%--merge_scan
+            |          lsm_scan_prefix
+            |          |          
+            |           --44.98%--host_gc_frag_pass
+            |                     |          
+            |                      --44.95%--host_gc_thread
+            |                                start_thread
+            |          
+            |--11.69%--__memcmp_avx2_movbe
+            |          |          
+            |          |--10.00%--lsm_scan_prefix
+            |          |          |          
+            |          |           --10.00%--host_gc_frag_pass
+            |          |                     |          
+            |          |                      --9.99%--host_gc_thread
+            |          |                                start_thread
+            |          |          
+            |           --1.69%--merge_scan
+            |                     lsm_scan_prefix
+            |                     |          
+            |                      --1.69%--host_gc_frag_pass
+            |                                |          
+            |                                 --1.69%--host_gc_thread
+            |                                           start_thread
+            |          
+            |--0.62%--kv_seg_iter_next
+            |          |          
+            |           --0.60%--kv_msrc_advance
+            |                     merge_scan
+            |                     lsm_scan_prefix
+            |                     |          
+            |                      --0.60%--host_gc_frag_pass
+            |                                |          
+            |                                 --0.60%--host_gc_thread
+            |                                           start_thread
+            |          
+             --0.52%--kv_msrc_advance
+
+    49.55%    28.82%  [.] __memcmp_avx2_movbe
+            |          
+            |--37.65%--__memcmp_avx2_movbe
+            |          |          
+            |          |--31.84%--lsm_scan_prefix
+            |          |          |          
+            |          |           --31.82%--host_gc_frag_pass
+            |          |                     |          
+            |          |                      --31.80%--host_gc_thread
+            |          |                                start_thread
+            |          |          
+            |           --5.65%--merge_scan
+            |                     lsm_scan_prefix
+            |                     |          
+            |                      --5.64%--host_gc_frag_pass
+            |                                |          
+            |                                 --5.63%--host_gc_thread
+            |                                           start_thread
+            |          
+            |--7.08%--merge_scan
+            |          lsm_scan_prefix
+            |          |          
+            |           --7.08%--host_gc_frag_pass
+            |                     |          
+            |                      --7.08%--host_gc_thread
+            |                                start_thread
+            |          
+            |--0.89%--kv_seg_iter_next
+            |          |          
+            |           --0.87%--kv_msrc_advance
+            |                     |          
+            |                      --0.87%--merge_scan
+            |                                lsm_scan_prefix
+            |                                |          
+            |                                 --0.87%--host_gc_frag_pass
+            |                                           |          
+            |                                            --0.87%--host_gc_thread
+            |                                                      start_thread
+            |          
+             --0.75%--kv_msrc_advance
+                       |          
+                        --0.67%--merge_scan
+                                  lsm_scan_prefix
+                                  |          
+                                   --0.67%--host_gc_frag_pass
+                                             |          
+                                              --0.67%--host_gc_thread
+                                                        start_thread
+
+    38.50%     0.18%  [k] entry_SYSCALL_64_after_hwframe
+            |          
+             --38.32%--entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--24.39%--__libc_pread
+                       |          |          
+                       |           --24.16%--kv_msrc_advance
+                       |                     |          
+                       |                      --24.13%--merge_scan
+                       |                                lsm_scan_prefix
+                       |                                |          
+                       |                                 --24.07%--host_gc_frag_pass
+                       |                                           |          
+                       |                                            --24.06%--host_gc_thread
+                       |                                                      start_thread
+                       |          
+                       |--2.67%--__GI___libc_open
+                       |          
+                       |--2.41%--__poll
+                       |          |          
+                       |          |--1.14%--start_thread
+                       |          |          
+                       |           --0.98%--server_handle_conn
+                       |          
+                       |--1.86%--__GI___writev
+                       |          |          
+                       |           --1.84%--server_write_fragment_to_path.constprop.0
+                       |                     server_write_fragment_with_sum_sync
+                       |                     run_job
+                       |                     writer_thread
+                       |                     start_thread
+                       |          
+                       |--1.45%--__GI___libc_write
+                       |          |          
+                       |           --0.71%--recv_poller
+                       |                     start_thread
+                       |          
+                       |--1.21%--read
+                       |          
+                       |--0.87%--__futex_abstimed_wait_common
+                       |          
+                       |--0.77%--__GI___lll_lock_wake
+                       |          |          
+                       |           --0.53%--start_thread
+                       |          
+                       |--0.67%--pthread_cond_signal@@GLIBC_2.3.2
+                       |          
+                        --0.51%--__fstat64
+                                  |          
+                                   --0.51%--efs_conn_send_msg
+
+    38.30%     0.29%  [k] do_syscall_64
+            |          
+             --38.01%--do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--24.17%--__libc_pread
+                       |          |          
+                       |           --23.94%--kv_msrc_advance
+                       |                     |          
+                       |                      --23.91%--merge_scan
+                       |                                lsm_scan_prefix
+                       |                                |          
+                       |                                 --23.86%--host_gc_frag_pass
+                       |                                           |          
+                       |                                            --23.85%--host_gc_thread
+                       |                                                      start_thread
+                       |          
+                       |--2.67%--__GI___libc_open
+                       |          
+                       |--2.37%--__poll
+                       |          |          
+                       |          |--1.12%--start_thread
+                       |          |          
+                       |           --0.97%--server_handle_conn
+                       |          
+                       |--1.86%--__GI___writev
+                       |          |          
+                       |           --1.84%--server_write_fragment_to_path.constprop.0
+                       |                     server_write_fragment_with_sum_sync
+                       |                     run_job
+                       |                     writer_thread
+                       |                     start_thread
+                       |          
+                       |--1.44%--__GI___libc_write
+                       |          |          
+                       |           --0.71%--recv_poller
+                       |                     start_thread
+                       |          
+                       |--1.20%--read
+                       |          
+                       |--0.85%--__futex_abstimed_wait_common
+                       |          
+                       |--0.76%--__GI___lll_lock_wake
+                       |          |          
+                       |           --0.52%--start_thread
+                       |          
+                       |--0.66%--pthread_cond_signal@@GLIBC_2.3.2
+                       |          
+                        --0.50%--__fstat64
+                                  |          
+                                   --0.50%--efs_conn_send_msg
+
+    31.52%     3.60%  [.] kv_msrc_advance
+            |          
+            |--28.02%--kv_msrc_advance
+            |          |          
+            |           --27.79%--merge_scan
+            |                     lsm_scan_prefix
+            |                     |          
+            |                      --27.73%--host_gc_frag_pass
+            |                                |          
+            |                                 --27.72%--host_gc_thread
+            |                                           start_thread
+            |          
+            |--2.11%--__memcmp_avx2_movbe
+            |          |          
+            |           --1.76%--lsm_scan_prefix
+            |                     |          
+            |                      --1.76%--host_gc_frag_pass
+            |                                |          
+            |                                 --1.76%--host_gc_thread
+            |                                           start_thread
+            |          
+             --0.87%--merge_scan
+                       lsm_scan_prefix
+                       |          
+                        --0.87%--host_gc_frag_pass
+                                  |          
+                                   --0.87%--host_gc_thread
+                                             start_thread
+
+    27.71%     0.66%  [k] ptrace_notify
+            |          
+             --27.05%--ptrace_notify
+                       |          
+                       |--13.60%--syscall_exit_work
+                       |          syscall_exit_to_user_mode
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          |          
+                       |          |--9.60%--__libc_pread
+                       |          |          |          
+                       |          |           --9.56%--kv_msrc_advance
+                       |          |                     |          
+                       |          |                      --9.56%--merge_scan
+                       |          |                                lsm_scan_prefix
+                       |          |                                |          
+                       |          |                                 --9.54%--host_gc_frag_pass
+                       |          |                                           |          
+                       |          |                                            --9.53%--host_gc_thread
+                       |          |                                                      start_thread
+                       |          |          
+                       |           --0.99%--__poll
+                       |          
+                        --13.45%--syscall_trace_enter.constprop.0
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  |          
+                                  |--9.07%--__libc_pread
+                                  |          |          
+                                  |           --9.03%--kv_msrc_advance
+                                  |                     |          
+                                  |                      --9.03%--merge_scan
+                                  |                                lsm_scan_prefix
+                                  |                                |          
+                                  |                                 --9.01%--host_gc_frag_pass
+                                  |                                           |          
+                                  |                                            --9.00%--host_gc_thread
+                                  |                                                      start_thread
+                                  |          
+                                  |--0.97%--__poll
+                                  |          
+                                  |--0.66%--read
+                                  |          
+                                   --0.56%--__GI___libc_write
+
+    27.69%     2.37%  [k] ptrace_do_notify
+            |          
+             --25.35%--ptrace_do_notify
+                       |          
+                        --25.35%--ptrace_notify
+                                  |          
+                                  |--12.79%--syscall_exit_work
+                                  |          syscall_exit_to_user_mode
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          |          
+                                  |          |--9.12%--__libc_pread
+                                  |          |          |          
+                                  |          |           --9.08%--kv_msrc_advance
+                                  |          |                     |          
+                                  |          |                      --9.08%--merge_scan
+                                  |          |                                lsm_scan_prefix
+                                  |          |                                |          
+                                  |          |                                 --9.06%--host_gc_frag_pass
+                                  |          |                                           |          
+                                  |          |                                            --9.05%--host_gc_thread
+                                  |          |                                                      start_thread
+                                  |          |          
+                                  |           --0.94%--__poll
+                                  |          
+                                   --12.55%--syscall_trace_enter.constprop.0
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             |          
+                                             |--8.66%--__libc_pread
+                                             |          |          
+                                             |           --8.62%--kv_msrc_advance
+                                             |                     |          
+                                             |                      --8.62%--merge_scan
+                                             |                                lsm_scan_prefix
+                                             |                                |          
+                                             |                                 --8.60%--host_gc_frag_pass
+                                             |                                           |          
+                                             |                                            --8.60%--host_gc_thread
+                                             |                                                      start_thread
+                                             |          
+                                             |--0.85%--__poll
+                                             |          
+                                             |--0.60%--read
+                                             |          
+                                              --0.50%--__GI___libc_write
+
+    25.71%     0.45%  [k] ptrace_stop.part.0
+            |          
+             --25.26%--ptrace_stop.part.0
+                       ptrace_do_notify
+                       |          
+                        --25.26%--ptrace_notify
+                                  |          
+                                  |--12.85%--syscall_exit_work
+                                  |          syscall_exit_to_user_mode
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          |          
+                                  |          |--9.11%--__libc_pread
+                                  |          |          |          
+                                  |          |           --9.07%--kv_msrc_advance
+                                  |          |                     |          
+                                  |          |                      --9.07%--merge_scan
+                                  |          |                                lsm_scan_prefix
+                                  |          |                                |          
+                                  |          |                                 --9.05%--host_gc_frag_pass
+                                  |          |                                           |          
+                                  |          |                                            --9.05%--host_gc_thread
+                                  |          |                                                      start_t

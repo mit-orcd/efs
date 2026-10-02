@@ -1,0 +1,48 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 96K of event 'cycles:P'
+# Event count (approx.): 744776219281
+#
+# Overhead  Command   Symbol                                        
+# ........  ........  ..............................................
+#
+    18.97%  efs-fuse  [.] blake3_hash_many_avx512
+    10.68%  efs-fuse  [.] __memmove_avx512_unaligned_erms
+     4.66%  efs-fuse  [k] memcpy_erms
+     3.56%  efs-fuse  [.] xor_into
+     1.95%  efs-fuse  [k] do_notify_parent_cldstop
+     1.56%  efs-fuse  [k] srso_alias_safe_ret
+     1.54%  efs-fuse  [k] srso_alias_return_thunk
+     1.51%  efs-fuse  [k] ptrace_stop.part.0
+     1.34%  efs-fuse  [.] 0x0000000000000b15
+     1.31%  efs-fuse  [k] dequeue_entity
+     1.24%  efs-fuse  [k] __schedule
+     1.18%  efs-fuse  [k] fuse_copy_fill
+     1.03%  efs-fuse  [k] ptrace_do_notify
+     0.81%  efs-fuse  [k] gup_pte_range
+     0.76%  efs-fuse  [k] update_curr
+     0.76%  efs-fuse  [.] efs_dcache_yield_extra
+     0.74%  efs-fuse  [k] fuse_copy_do
+     0.68%  efs-fuse  [k] fuse_copy_page
+     0.67%  efs-fuse  [.] chunk_idx_get.constprop.0
+     0.66%  efs-fuse  [.] blake3_compress_in_place_avx512
+     0.66%  efs-fuse  [k] __task_pid_nr_ns
+     0.63%  efs-fuse  [.] blake3_compress_xof_avx512
+     0.59%  efs-fuse  [k] update_load_avg
+     0.58%  efs-fuse  [k] send_signal_locked
+     0.58%  efs-fuse  [k] gup_pgd_range
+     0.57%  efs-fuse  [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.55%  efs-fuse  [k] sched_balance_newidle
+     0.52%  efs-fuse  [k] pick_next_task
+     0.52%  efs-fuse  [k] dequeue_task_fair
+     0.51%  efs-fuse  [k] perf_event_context_sched_out
+     0.50%  efs-fuse  [k] __perf_event_task_sched_in
+     0.50%  efs-fuse  [k] eventfd_poll
+
+
+#
+# (Tip: When collecting LBR backtraces use --stitch-lbr to handle more than 32 deep entries: perf record --call-graph lbr ; perf report --stitch-lbr)
+#

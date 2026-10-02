@@ -1,0 +1,52 @@
+window 00:02:40-00:07:36 local = 04:02:40-04:07:36Z
+syscall                count      total_s     max_s
+futex               13506463   160336.563  7736.486
+write                7786679      219.472     0.002
+poll                 3847800    26049.582  7759.213
+read                 2356614       92.398     0.002
+openat               1907998       97.129     0.014
+fstat                1764585       79.525     0.001
+close                1728329       81.202     0.005
+writev               1691361      137.907     0.020
+pread64              1187270       32.519     0.001
+setsockopt             37257        1.065     0.000
+unlink                 35651        1.077     0.041
+newfstatat             32241        0.795     0.000
+clock_nanosleep        25219      532.639     2.000
+recvfrom               21857        2.263     0.508
+fsync                  15623        6.660     0.152
+mprotect               15405        0.839     0.002
+mkdir                  15050        0.747     0.001
+pwrite64                9990        0.347     0.000
+lseek                   7753        0.192     0.000
+rename                  5995        0.232     0.000
+munmap                  5159        0.229     0.005
+fdatasync               4696        0.655     0.001
+getpid                  1643        0.077     0.000
+ioctl                    728        0.102     0.001
+mmap                     369        0.019     0.001
+rt_sigprocmask           294        0.007     0.000
+fcntl                    224        0.005     0.000
+ftruncate                207        0.034     0.000
+getsockname              103        0.003     0.000
+eventfd2                 102        0.014     0.011
+accept                    98       26.091    10.930
+clone3                    98        0.008     0.001
+rseq                      98        0.003     0.000
+set_robust_list           98        0.002     0.000
+madvise                   97        0.004     0.001
+sched_yield               74        0.004     0.000
+getdents64                 8        0.000     0.000
+socket                     6        0.000     0.000
+connect                    6        0.000     0.000
+getsockopt                 6        0.000     0.000
+readlink                   6        0.000     0.000
+
+fragment file opens: {'frag-open': 110515, 'frag-create': 852671}  unlink: 35651  writev bytes: 58721256145
+
+work syscalls >= 50 ms (5):
+00:07:06.319762 987118 fsync      0.152  987118 00:07:06.319762 <... fsync resumed>) = 0 <0.151529>
+00:05:58.232209 987118 fsync      0.139  987118 00:05:58.232209 <... fsync resumed>) = 0 <0.138898>
+00:05:58.231808 987117 fsync      0.107  987117 00:05:58.231808 <... fsync resumed>) = 0 <0.107404>
+00:07:06.319236 987115 fsync      0.104  987115 00:07:06.319236 <... fsync resumed>) = 0 <0.103523>
+00:07:06.319475 987117 fsync      0.091  987117 00:07:06.319475 <... fsync resumed>) = 0 <0.091094>

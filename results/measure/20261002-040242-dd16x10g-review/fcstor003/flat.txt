@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2M of event 'cycles:P'
+# Event count (approx.): 4787183881702
+#
+# Overhead  Shared Object            Symbol                                        
+# ........  .......................  ..............................................
+#
+    28.82%  libc.so.6                [.] __memcmp_avx2_movbe
+    19.88%  efsd                     [.] merge_scan
+     5.34%  efsd                     [.] kv_seg_iter_next
+     4.16%  [kernel.kallsyms]        [k] rep_movs_alternative
+     3.60%  efsd                     [.] kv_msrc_advance
+     2.37%  [kernel.kallsyms]        [k] ptrace_do_notify
+     1.97%  efsd                     [.] memcmp@plt
+     1.78%  [kernel.kallsyms]        [k] retbleed_return_thunk
+     1.63%  [kernel.kallsyms]        [k] child_wait_callback
+     1.52%  [kernel.kallsyms]        [k] copyout
+     1.14%  [kernel.kallsyms]        [k] __rcu_read_unlock
+     1.03%  [kernel.kallsyms]        [k] entry_SYSCALL_64
+     0.74%  [kernel.kallsyms]        [k] do_notify_parent_cldstop
+     0.73%  [kernel.kallsyms]        [k] __task_pid_nr_ns
+     0.66%  [kernel.kallsyms]        [k] ptrace_notify
+     0.65%  [kernel.kallsyms]        [k] filemap_get_read_batch
+     0.59%  [kernel.kallsyms]        [k] _raw_spin_lock_irqsave
+     0.48%  [kernel.kallsyms]        [k] __get_user_8
+     0.45%  [kernel.kallsyms]        [k] ptrace_stop.part.0
+     0.42%  [kernel.kallsyms]        [k] __x64_sys_pread64
+     0.39%  [kernel.kallsyms]        [k] _raw_spin_lock_irq
+     0.36%  [kernel.kallsyms]        [k] _raw_spin_unlock_irq
+     0.34%  [kernel.kallsyms]        [k] filemap_read
+     0.34%  [kernel.kallsyms]        [k] _copy_to_iter
+     0.34%  libc.so.6                [.] __memmove_avx_unaligned_erms
+     0.33%  [kernel.kallsyms]        [k] syscall_trace_enter.constprop.0
+     0.31%  [kernel.kallsyms]        [k] try_to_wake_up
+
+
+#
+# (Tip: To show time in nanoseconds in record/report add --ns)
+#

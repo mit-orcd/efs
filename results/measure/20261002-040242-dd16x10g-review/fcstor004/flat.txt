@@ -1,0 +1,79 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 391K of event 'cycles:P'
+# Event count (approx.): 947022687932
+#
+# Overhead  Shared Object            Symbol                                        
+# ........  .......................  ..............................................
+#
+     4.66%  [kernel.kallsyms]        [k] ptrace_do_notify
+     4.34%  [kernel.kallsyms]        [k] retbleed_return_thunk
+     3.84%  libc.so.6                [.] __memmove_avx_unaligned_erms
+     2.80%  libc.so.6                [.] __memcmp_avx2_movbe
+     2.71%  [kernel.kallsyms]        [k] __task_pid_nr_ns
+     2.62%  [kernel.kallsyms]        [k] __rcu_read_unlock
+     1.98%  [kernel.kallsyms]        [k] child_wait_callback
+     1.46%  [kernel.kallsyms]        [k] do_notify_parent_cldstop
+     1.36%  [kernel.kallsyms]        [k] _raw_spin_lock_irqsave
+     1.32%  [kernel.kallsyms]        [k] entry_SYSCALL_64
+     1.27%  efsd                     [.] lookup
+     1.19%  [kernel.kallsyms]        [k] ptrace_notify
+     1.16%  [kernel.kallsyms]        [k] rep_movs_alternative
+     1.07%  [kernel.kallsyms]        [k] ptrace_stop.part.0
+     1.04%  efsd                     [.] cm_sift_up
+     0.90%  [vdso]                   [.] 0x0000000000000b15
+     0.85%  [kernel.kallsyms]        [k] __get_user_8
+     0.83%  efsd                     [.] host_pump
+     0.75%  efsd                     [.] efs_crc32
+     0.74%  [kernel.kallsyms]        [k] __memcpy
+     0.73%  [kernel.kallsyms]        [k] __d_lookup_rcu
+     0.72%  [kernel.kallsyms]        [k] __wake_up_common
+     0.72%  [kernel.kallsyms]        [k] _raw_spin_unlock_irq
+     0.64%  efsd                     [.] search_block
+     0.64%  [kernel.kallsyms]        [k] map_id_up
+     0.64%  [kernel.kallsyms]        [k] _raw_spin_lock_irq
+     0.61%  [kernel.kallsyms]        [k] schedule
+     0.61%  [xfs]                    [k] xfs_btree_lookup
+     0.60%  [kernel.kallsyms]        [k] restore_fpregs_from_fpstate
+     0.55%  [xfs]                    [k] xfs_buf_get_map
+     0.52%  efsd                     [.] efs_rdma_recv_wait
+     0.51%  libc.so.6                [.] __memset_avx2_unaligned_erms
+     0.50%  [kernel.kallsyms]        [k] do_syscall_64
+     0.48%  [kernel.kallsyms]        [k] syscall_exit_work
+     0.48%  [kernel.kallsyms]        [k] futex_wait_setup
+     0.47%  [kernel.kallsyms]        [k] __x64_sys_futex
+     0.46%  [kernel.kallsyms]        [k] __rcu_read_lock
+     0.46%  [kernel.kallsyms]        [k] _copy_from_user
+     0.45%  [kernel.kallsyms]        [k] syscall_trace_enter.constprop.0
+     0.44%  [kernel.kallsyms]        [k] try_to_wake_up
+     0.43%  [kernel.kallsyms]        [k] select_task_rq_fair
+     0.42%  [kernel.kallsyms]        [k] perf_pmu_nop_void
+     0.41%  efsd                     [.] vx_sift_down.constprop.0
+     0.39%  [kernel.kallsyms]        [k] inode_permission
+     0.39%  efsd                     [.] kv_mtab_pos
+     0.37%  [kernel.kallsyms]        [k] do_sys_poll
+     0.37%  efsd                     [.] recv_poller
+     0.37%  [kernel.kallsyms]        [k] send_signal_locked
+     0.37%  [kernel.kallsyms]        [k] __x86_indirect_thunk_rax
+     0.37%  [kernel.kallsyms]        [k] ttwu_queue_wakelist
+     0.37%  [kernel.kallsyms]        [k] __rseq_handle_notify_resume
+     0.35%  [kernel.kallsyms]        [k] merge_sched_in
+     0.35%  [kernel.kallsyms]        [k] perf_ctx_enable
+     0.34%  [kernel.kallsyms]        [k] __schedule
+     0.34%  [kernel.kallsyms]        [k] perf_event_idx_default
+     0.33%  efsd                     [.] cm_pop
+     0.33%  [kernel.kallsyms]        [k] _raw_spin_unlock_irqrestore
+     0.32%  [kernel.kallsyms]        [k] perf_ctx_sched_task_cb
+     0.31%  [kernel.kallsyms]        [k] arch_perf_update_userpage
+     0.31%  efsd                     [.] kv_compact_locked
+     0.30%  efsd                     [.] server_handle_conn
+     0.30%  [kernel.kallsyms]        [k] syscall_exit_to_user_mode
+     0.30%  efsd                     [.] kv_seg_iter_next
+
+
+#
+# (Tip: See assembly instructions with percentage: perf annotate <symbol>)
+#

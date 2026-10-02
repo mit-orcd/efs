@@ -2122,6 +2122,146 @@ Original steps (1–4 done twice, kept for the commands):
 
 ---
 
+<a id="ph-oct-2-2026-05-00z-review-of-the-r749-window-16-dd-traced-on--e5dc7f"></a>
+## Oct 2 2026 05:00Z — review of the r749 window: 16× dd traced on both ends, REPORT drain slower than PUTs, W44 step a read
+
+The user asked for a review of `~/orcd/scratch/efs/perf/efs-mount/`
+(their `scripts/client.sh --perf --strace` run on fstor007) together
+with the servers' perf profiles and straces from the `r749` window
+(servers `2b5a25df419c-dirty` under `--perf --strace`, 01:54Z–04:24Z),
+then the cluster was stopped (`stop751`). The review and its reductions
+are `results/measure/20261002-040242-dd16x10g-review/` (SUMMARY.txt);
+the raw files stay in `~/orcd/scratch/efs/perf/efs-mount/` and
+`~/orcd/scratch/efs/perf/cluster-20261002-0423/`, and
+`/tmp/efs-perf/efsd.{data,strace}` are still on fcstor003–006 until the
+next `cluster.sh start`.
+
+**A wrong first reading, recorded so it is not repeated.** The one
+`dd.trace.txt` in the dir (dat16, 10 GiB, 37.3 MB/s, `close()` 74.6 s)
+was first read as the whole load, and the servers' 852 k fragment
+creates per node in the window — 14× what one 10 GiB file needs — as a
+PUT-amplification bug in the new tree. The FUSE census settled it: the
+`fuse_in_header` nodeid at offset 16 of every 1 MiB `/dev/fuse` read
+shows **16 inodes** receiving 10240 WRITEs each from 04:02:43Z
+(`client/ana-fuse-writers.txt`). 140 433 MiB in 222 s = 663 MB/s
+aggregate on one client with recorders on both ends — the same as the
+untraced Oct 1 20:56Z 16× run. The lesson is in the project-state rule:
+census the nodeids before reading a single-process trace as the load.
+
+**What the run shows (the numbers are in SUMMARY.txt):**
+
+- Per stream 50 MB/s; dd `write()` latency 6358 under 2 ms, 2132 at
+  10–50 ms, 1507 at 50–200 ms, 56 at 200 ms–1 s (dirty-cap
+  back-pressure with 16 streams on one 2 GiB budget). One 1 MiB
+  `write()` = one 1 MiB FUSE WRITE.
+- **Publish slower than PUT.** `report-split` on fcstor004/005: nrec 8 k
+  → 30 k → 57 k → 68 k → 124 k → 322 k → 570 k; pack 0.8 → 42.9 s (one
+  point get per record, 100–133 µs under `l0=100–170`); push up to
+  77 s; every REPORT but the last `fail=wait/-13` — the host had
+  committed every record and then its apply-wait hit the deadline, so
+  the client resent the identical REPORT to the other dual host, which
+  packed it again (0.3–15 s) and found `skip=all`. Publish ≈ 2.7 k
+  rec/s against PUT ≈ 5 k chunks/s: the dirty set grows for the whole
+  write and the last `close()` pays 74.6 s. D24 (REPORT every 8192
+  landed) bounds a close only when REPORTs drain faster than PUTs land.
+  W41 (decided) is necessary and not sufficient; the "committed, apply
+  pending" verdict is an ask (Q2 in SUMMARY). One STALE round
+  (322 395 records, 320 347 already committed, 2048 replayed,
+  `pull_ms=12449`).
+- **W44 step a, read:** idle group-0 leader `gc-pass` every 1.6 s,
+  430–740 ms, `fkeys=1 026 406 ftomb=1 026 149 femit=257` constant for
+  2 h (38 % of a core); group 2 `596 739 / 596 482 / 257`. perf: ~90 %
+  of each leader's `efsd` cycles under `host_gc_thread →
+  host_gc_frag_pass` (`merge_scan`, `__memcmp_avx2_movbe`,
+  `kv_seg_iter_next`, `kv_msrc_advance`, pread). It is tombstones under
+  the GC prefix, not the L0 count → D26 (i). After the dd the
+  tombstones compacted away (12 k / 121 k) and grew back (171 k /
+  337 k; +1024 per pass = the superseded objects draining at ~512
+  records per 1.4 s pass). A `gc-frag group=0 scans=1 records=126
+  ms=428` line repeating identically is a stuck set whose deletes fail
+  every pass (Q4). The raft log tail before the stop was 99.7 % GC_ACK
+  at 5–6 commits/s per group — the reason `preflight.sh` reported "not
+  idle" before `r749` was started without it.
+- **Compaction pressure** on fcstor004/005 during the write: l0 up to
+  170, 340 MB L0+L1 merges of 3–5 s, `apply-sleep` ×31 / ×103 — the
+  `fail=wait` REPORTs above and 400 ms BUSY on follower-served reads.
+- **Server syscalls per node per 5 min:** futex 14.7 M, eventfd `write`
+  7.5 M (W47 saves nothing on a server: the conn thread is always
+  armed), poll 3.6 M, openat 1.85 M (852 k O_CREAT), writev 1.7 M,
+  pread 1.66 M, fsync 13.8 k (max 0.15 s), unlink 25 k; no work syscall
+  over 50 ms. **Client:** recv poller 6.4 M eventfd writes, 24 PUT-pool
+  threads 149 k poll+read each (one per fragment reply), flush thread
+  `recvfrom` up to 120.6 s (REPORT replies over the TCP side channel);
+  perf blake3 19 %, memmove 10.7 %, memcpy 4.7 %, xor 3.6 % of ~0.9
+  core. CPU is not the wall on either end.
+- **Open:** four of the 16 streams ended at 3.6–5.2 GiB (04:04:17–48Z)
+  with a normal FLUSH and no error reply in the FUSE trace; their dd
+  exit lines are in the user's harness dir, not in `efs-mount/` (Q1).
+  The traced stream's `openat(O_CREAT|O_TRUNC)` took 1.27 s under 16
+  concurrent creates (not chased). No `apply truncate` / `lane-fence`
+  lines: the files were fresh at open.
+
+Session mechanics: reductions ran as screens (`ana5-003..006` on the
+servers, `cli5`–`cli9` on fstor007; scripts in `~/efs-runs/`, outside
+the repo); `tail -2 a b` is "option used in invalid context" — `tail
+-n 2`; `raft_log_tail.py` wants `/data1/01/efs/mdraft/log/raft.log`.
+
+---
+
+<a id="ph-start-here-handoff-archive-oct-2-2026-01-20z-moved-oct-2-202-70793e"></a>
+## START-HERE handoff archive Oct 2 2026 01:20Z — moved Oct 2 2026 05:00Z
+
+**Oct 2 2026 01:20Z — the "runs without the user" table, rows 1–3 and
+5–10, is in the tree (W43 b/c, W45, W36, W26, W44 a, W46, W47 variant)
+plus W42 (row 2a).** All 16 unit suites + `test_rdma_xprt` pass on
+fcstor007 with no warnings. **The cluster is STOPPED** (`stop751`,
+`~/efs-runs/stop751.log`, `cluster.sh stop --clients`, CLUSTER_OK
+04:24Z Oct 2). It had been up since `r749` (01:54Z, `2b5a25df419c-dirty`,
+servers `--perf --strace`). Perf reports from that window:
+`~/orcd/scratch/efs/perf/cluster-20261002-0423/fcstor00{3,4,5,6}/{flat,by_thread,callers}.txt`
+(0 lost samples; fcstor003's efsd needed the -9 after SIGTERM, header
+still ok). Raw `/tmp/efs-perf/efsd.data` and `efsd.strace` are still on
+each server. fcstor clients had no recorders; fstor007's earlier
+`efs-mount` reports were already written at 00:19Z and were left as
+they were. The earlier `start740` (01:22Z, no recorders,
+`141071a3e9ba-dirty`) is what the gates below ran on. **Live gates held**
+(`~/efs-runs/gate741.log`, `gate742.log`): posix fcstor007 **200/201**
+(`opt_fallocate` PASS on efs and on the XFS baseline; the one skip is
+`mmap_write_read` by spec), posix2 fcstor008/009 **63/63**
+(`peer_rename_vs_unlink_src` PASS once; the W36 20/20 repeat is still
+owed), `tests/stress/truncate_big.sh` fcstor010 **exit 3**
+(`results/stress/truncate-big-20261002-012442`: all four truncates
+returned EIO, every file unchanged, 0 lies; the servers show `apply
+lane-fence rc=-2` ×4 on fcstor004–006 — the inodes sit on group 2 —
+one per refused truncate, and no `apply truncate rc=` line because the
+fence fails before the inode-group entry is proposed). W42 live: `df`
+on fcstor007 reports 96.00 TiB total (4 × 36 TiB × 2/3; was 72) and
+used 1.21 TiB = Σ node used × 2/3; `efs-mgmt status` prints the same
+`Usable (2+1 logical)` line.
+
+*W45 audit — the case list (every `rc=%d index` site in `raft_host.c`):*
+
+| apply | before | now |
+| --- | --- | --- |
+| create, xattr, append-rsv, publish | verdict | unchanged |
+| **unlink** | every failure → OK (BUSY/IO included: file stayed, client heard success); NOT_FOUND "replay" | **verdict**; NOT_FOUND = lost a race → ENOENT; retries are the op-id window's job |
+| **rmdir** | NOT_FOUND → OK | **verdict** |
+| **setattr** | NOT_FOUND/STALE → OK | **verdict** (handler packs `expect_gen = 0`, STALE cannot occur) |
+| **utimens** | NOT_FOUND/STALE → OK | NOT_FOUND etc. **verdict**; STALE stays OK — documented: a later `mtime_gen` already landed, the later stamp is the POSIX result |
+| **truncate** | every failure → OK (the W43 lie) | **verdict** (NOMEM at the 33rd chunk → EIO until D25) |
+| **activate-lane** | every failure → OK | **verdict**; `efs_meta_apply_activate_lanes` itself answers OK for "row unlinked since the read" and "bits already set" |
+| **lane-fence** | every failure → OK | **verdict** (the fence apply is idempotent on its own: same/older epoch → OK) |
+| lane-sweep, reap-done, gc-ack | logged, OK | unchanged — host-driven GC, the next pass rescans |
+| append-res | NOT_FOUND → OK | unchanged — the reservation was already resolved |
+| dir (BEGIN/MIGRATE/FINISH) | NOT_FOUND/INVAL/BUSY → OK | unchanged — the spread driver re-reads the layout each pass |
+| session (LEASE_DROP/RECLAIM) | NOT_FOUND/INVAL/BUSY/STALE → OK | unchanged — cleanup; the reaper is the witness |
+| **lock** (GRANT/RELEASE) | AGAIN/NOLCK/NOT_FOUND/INVAL/BUSY/STALE → OK | **unchanged, flagged**: the handler pre-checks conflicts before proposing, so an AGAIN at apply = a conflicting grant committed between pre-check and apply, and the client still hears "granted". Not changed blind — the lock wait queues live in leader memory and need the trace. Ask or trace before touching |
+
+Those six commands are now on `host_apply`'s ring-only list (a non-OK
+verdict is a reply, never a halted log).
+
+---
+
 <a id="ph-oct-2-2026-0120z--the-runs-without-the-user-table-landed-w43-7d41f2"></a>
 ## Oct 2 2026 01:20Z — the "runs without the user" table landed (W43 b/c, W45, W36, W26, W42, W44 a, W46, W47)
 

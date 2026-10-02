@@ -1,0 +1,210 @@
+16 x 10 GiB dd on one client (fstor007), both ends traced -- review
+====================================================================
+
+Window: 2026-10-02 04:02:43Z .. 04:07:32Z. Tree 2b5a25df419c(-dirty docs).
+Servers fcstor003-006 under `cluster.sh restart --clients --perf --strace`
+(r749, 01:54Z); client fstor007 under the user's `scripts/client.sh --perf
+--strace` (recorders on BOTH ends: every absolute MB/s below is a tracer
+number; the shapes and ratios are not).
+
+Sources (raw, outside the repo):
+  ~/orcd/scratch/efs/perf/efs-mount/            fstor007: fuse.strace (1.7 GB),
+      fuse.data, dd.trace.txt (one stream), rsync.out.txt (= that dd's
+      progress), efs-fuse-efs-mount.log
+  ~/orcd/scratch/efs/perf/cluster-20261002-0423/fcstor00{3,4,5,6}/
+      flat/by_thread/callers (perf, 150 min), ana-*.txt (reductions of
+      /tmp/efs-perf/efsd.strace and efsd.log, still on the servers)
+Reductions in this directory: client/ (fuse strace per-thread, per-10 s,
+FUSE request census per nodeid, dd write() latency), fcstor00N/ (perf flat,
+dd-window syscall table, fragment creates per second, GC/REPORT/compaction
+log lines, raft log tail, unlinks per 10 min).
+
+------------------------------------------------------------------------
+0. What the run was (this changes how every number below reads)
+------------------------------------------------------------------------
+The trace in efs-mount/dd.trace.txt is ONE stream. The FUSE request
+census (client/ana-fuse-writers.txt: fuse_in_header nodeid at offset 16
+of every 1 MiB /dev/fuse read) shows SIXTEEN inodes receiving 1 MiB
+FUSE_WRITEs from 04:02:43Z, 10240 each:
+
+  nodeid   writes  first     last
+  0x33f2e  10240   04:02:43  04:06:23      (12 streams completed 10 GiB,
+  ...                                        last one 04:06:25)
+  0x36f2e   5234   04:02:43  04:04:48      (4 streams stopped at
+  0x3df2e   4498   04:02:43  04:04:23       3.6-5.2 GiB: FLUSH, no
+  0x41f2e   4151   04:02:44  04:04:29       error reply seen; cause
+  0x3cf2e   3670   04:02:43  04:04:17       unknown -- see open Q1)
+
+Total 140 433 MiB through FUSE in 222 s = 632 MiB/s (663 MB/s) aggregate
+on one traced client; the traced stream (dat16) got 10 GiB / 213 s =
+50 MB/s + a 74.6 s close() = 37.3 MB/s. That is the same aggregate as the
+untraced Oct 1 20:56Z 16x run (~670-700 MB/s). There is NO per-stream
+regression and NO PUT amplification: the servers' 3700-4000 fragment
+creates/s each (fcstor00N/ana-dd-frag-per-sec.txt; 852 k O_CREAT opens
+per server in the 5 min) are exactly 16 streams x 50 MB/s x 3/4 per node.
+The 137 `report-landed: 8192 chunks landed` lines (1.12 M landed PUTs)
+are the 16 files' 1.13 M chunks, not re-PUTs. (The first reading of this
+data as "x14 PUT amplification of one 10 GiB file" was wrong -- always
+census the nodeids before reading a single-process trace as the load.)
+
+No `apply truncate rc=` / `apply lane-fence rc=` line on any server in the
+window: the 16 files were fresh or small at open (the 20:56Z run's W43
+signature is absent). The traced stream's openat(O_CREAT|O_TRUNC) took
+1.27 s (16 concurrent creates + the first REPORT round); unexplained but
+not chased.
+
+------------------------------------------------------------------------
+1. Client (fstor007) -- where the 16 streams' time goes
+------------------------------------------------------------------------
+dd write(1) latency, traced stream (client/dd.trace-reduced.txt):
+  <2 ms 6358   2-10 ms 187   10-50 ms 2132   50-200 ms 1507
+  200 ms-1 s 56   max 0.48 s        close(1) = 74.59 s
+A 1 MiB write() is one 1 MiB FUSE WRITE (read(/dev/fuse) = 1048656,
+client/ana-fuse-shape2.txt: 140 433 of them, all opcode 16). The 10-200 ms
+tail is dirty-cap back-pressure (`efs_dcache_maybe_reclaim`, 16 streams
+sharing the 2 GiB dcache budget), not the servers.
+
+Threads (client/ana-fuse-strace.txt, 17 min of strace):
+  tid 2205154 (recv_poller): write(eventfd) 6.41 M, read 857 k, poll 731 k
+      -- one eventfd write per fragment reply; W47 arming does not help
+      here because a PUT waiter is always armed when the reply lands.
+  24 PUT-pool threads: each read 149 k + poll 147 k (one poll+read per
+      fragment reply; 24 x 149 k = 3.6 M fragments = 1.2 M chunk PUTs).
+  flush thread (tid 2205148): recvfrom up to 120.6 s (REPORT replies over
+      the TCP side channel; see 2.).
+  futex total 398 k calls / 21 414 s summed wait, poll 3.67 M / 10 747 s.
+perf (client/flat.txt, 96 738 samples): blake3 19 %, memmove 10.7 %,
+memcpy_erms 4.7 %, xor_into 3.6 %, rest ptrace/libc. ~0.9 core for
+663 MB/s: CPU is not the wall; the wall is the publish path (2.) and the
+dirty cap.
+
+Client log (client/efs-fuse-efs-mount.log): only `report-landed` x137,
+`inode-rpc: slow-ok type=67` x5 (6.5 / 11.6 / 24.9 / 64.3 / 41 s),
+`report-stale: chunks=322395 runs=205 committed=320347 replayed=2048
+pull_ms=12449` x1, `staging table over EFS_CLIENT_META_MB ... growing` x1.
+No PUT error, no conn drop, no retry line.
+
+------------------------------------------------------------------------
+2. The publish path cannot keep up with the PUT path (the real finding)
+------------------------------------------------------------------------
+D24 kicks a REPORT every 8192 landed PUTs (every ~1.7 s here). One
+REPORT at a time (`report_mu`), the flush thread serial. Server view
+(fcstor004 + fcstor005 `report-split` lines, both dual hosts of the
+files' lanes; fcstor00{4,5}/ana-log.txt):
+
+  04:02:52  nrec=8193   pack 832 ms  push 668 ms  finish 2583 ms  fail=wait/-13
+  04:02:52  nrec=8193   pack 285 ms  skip=8193 (identical resend to the other host) OK
+  04:02:53  nrec=30526  finish 96 ms                              fail=act/-13
+  04:03:03  nrec=30526  pack 566 ms  push 6.3 s   finish 1.5 s    fail=wait/-13
+  04:03:04  nrec=30526  skip=30526 OK
+  04:03:06  nrec=57520  pack 198 ms  push 928 ms                  fail=push/-15 (NOT_PRIMARY)
+  04:03:28  nrec=68061  pack 4.7 s   push 15.4 s  finish 2.0 s    fail=wait/-13 (skip=5930)
+  04:03:31  nrec=68061  skip=68061 OK
+  04:04:20  nrec=124407 pack 12.5 s  push 34.0 s  finish 2.3 s    fail=wait/-13
+  04:04:35  nrec=124407 pack 15.3 s  skip=124407 OK
+  04:06:36  nrec=322395 pack 42.9 s  push 77.0 s  finish 481 ms   fail=wait/-14 (STALE)
+  04:06:49  nrec=2048   (the STALE replay)                        OK
+  04:07:31  nrec=569882 pack 13.9 s  push 26.4 s                  OK   <- the last closes
+
+Three multipliers, in order of size:
+  (a) pack = one point get per record on the server: 100-133 us/rec
+      under this load (42.9 s for 322 k). The KV had l0=100-170 L0
+      segments during the write (fcstor004 `kv-compact: end ... l0=`
+      lines; the Oct 1 steady state was 50-54) and a point get probes
+      every L0 whose range covers the key -> D26/D12 is not only the GC's
+      problem, it is the REPORT's.
+  (b) `fail=wait/-13`: the host proposed and committed every record,
+      then its apply-wait (finish_ms up to 2.6 s) hit the deadline and
+      answered BUSY. The client cannot tell a BUSY-after-commit from a
+      BUSY-before and resends the identical REPORT to the other dual
+      host, which packs it again (another 0.3-15 s) and finds every
+      record held (`skip=all`). Every REPORT in this run but the last
+      paid pack twice. The apply lag is the compaction storm:
+      `apply-sleep` x31 on fcstor004, x103 on fcstor005 in the window,
+      L0+L1 merges of 340 MB taking 3-5 s.
+  (c) while one REPORT is in flight (6-120 s) the 16 writers keep
+      marking chunks dirty, so the next snapshot is bigger: 8 k -> 30 k
+      -> 57 k -> 68 k -> 124 k -> 322 k -> 570 k records. Publish
+      throughput was ~2.7 k rec/s (322 k in 120 s) against a PUT rate
+      of ~5 k chunks/s, so the backlog grows for the whole write and
+      the last close() pays it: 74.6 s for dat16. This is the W41
+      (decided) + D24 shape: D24 bounds what ONE file's close sends
+      only if REPORTs drain faster than PUTs land.
+
+What is NOT in this run: no duplicate records (the dirty set dedupes
+by (ino,ci); 569 882 = 16 files' tails), no lost data (the STALE round
+committed 320 347 of 322 395, replayed 2048), no election storm
+(one NOT_PRIMARY at 04:03:06).
+
+------------------------------------------------------------------------
+3. Servers during the write (fcstor00N/ana-dd-syscalls.txt, 5 min window)
+------------------------------------------------------------------------
+Per server (fcstor004 shown; 003/005/006 within 10 %):
+  futex 14.7 M (160 k s summed = idle waits of ~500 threads),
+  write 7.5 M (eventfd: 2 per fragment -- W47 saves nothing on a server
+  whose conn threads are always armed), poll 3.6 M, openat 1.85 M
+  (852 k O_CREAT = fragment files, 110 k plain = probe/GET), writev
+  1.7 M (2 per fragment), pread 1.66 M (KV), fsync 13 789 (max 0.15 s),
+  unlink 25 k (GC). No work syscall >= 50 ms except one fsync 0.152 s.
+  The writer pool is not the bottleneck: fragment writes are ~60 us.
+Fragment creates per second: flat 3700-4000 from 04:02:44 to 04:06:25
+on every server (ana-dd-frag-per-sec.txt) = the client's 663 MB/s.
+
+Compaction / apply pressure on the data-heavy followers (fcstor004/005):
+  `kv-compact` l0 up to 170, L0+L1 merges 5.3 s / 3.3 s; `apply-sleep`
+  20-400 ms lines continuously -> the `fail=wait/-13` REPORTs above and
+  follower-served reads at 400 ms BUSY. `apply_max` is the W13/D9/D10
+  territory (compaction shape is a design decision -- ask).
+
+------------------------------------------------------------------------
+4. W44 step a -- the idle-hour reading (D26's input)
+------------------------------------------------------------------------
+Leaders, 150 min of `gc-pass` lines (fcstor003 = group 0, fcstor006 =
+group 2; fcstor00{3,6}/ana-log.txt):
+  fcstor003: 5534 passes, one per ~1.6 s, ms 430-740,
+             fkeys=1 026 406  ftomb=1 026 149  femit=257  (constant for
+             2+ h before the dd) = 3450 s of GC time = 38 % of a core.
+  fcstor006: 6478 passes, fkeys=596 739  ftomb=596 482  femit=257
+             (constant) = 2510 s.
+So the empty pass is TOMBSTONES under the GC prefix (ftomb = fkeys -
+257), not the L0 count: the frag scan walks ~1 M dead keys to find 257
+live records every 1.6 s. perf agrees: `merge_scan` + `__memcmp_avx2_
+movbe` + `kv_seg_iter_next` + `kv_msrc_advance` + pread = ~90 % of
+efsd cycles on both leaders, callers 100 % `host_gc_thread ->
+host_gc_frag_pass` (fcstor00{3,6}/flat.txt, callers-head.txt).
+After the dd: a compaction dropped the tombstones (fkeys 12 289 on 003
+at 04:08Z, 121 089 on 006 at 04:19Z), then they grew again (003:
+171 009 at 04:24Z; 006: 336 642 with ftomb +1024 per pass = the real
+backlog of the run's superseded objects draining at ~512 records per
+1.4 s pass). `gc-frag group=0 scans=1 records=126 ms=428` repeating
+identically at 04:24Z = a stuck set whose fragment deletes fail every
+pass (`host_gc_record` "retry next pass", no ack) and re-scan ~1 M
+tombstones each time. Raft log tail before the stop: 99.7 % GC_ACK on
+both groups, 5-6 commits/s per group (fcstor00N/ana-raft-tail.txt) --
+this is what keeps `preflight.sh` reporting "not idle (>5 entries/s)".
+D26 reading: option (i) (pending-GC watermark) answers the 1 M-tombstone
+empty pass; the L0 width is a separate cost that shows up in REPORT
+pack (2a), not here.
+
+------------------------------------------------------------------------
+5. Open questions for the next agent (do not guess; measure)
+------------------------------------------------------------------------
+Q1  Four of the 16 streams stopped at 3.6-5.2 GiB (04:04:17-04:04:48Z)
+    with a normal FLUSH and no error reply in the FUSE trace. Harness
+    outputs for the other 15 streams are not in efs-mount/ (only dat16's).
+    Check the user's client.sh run dir for their dd exit lines; if they
+    were killed by a per-stream timeout, say so; if they returned EIO or
+    ENOSPC (W42 capacity bound is new in this tree), that is a bug.
+Q2  REPORT BUSY-after-commit (2b): the host's apply-wait answers BUSY for
+    a REPORT it has already committed. Options to bring to the user:
+    wait for the commit's own apply (not a fixed 400 ms), or carry an
+    "accepted, apply pending" verdict the client does not resend. Not a
+    decision the spec contains -- ask.
+Q3  Publish throughput < PUT throughput (2c): with W41 (decided) a
+    close() stops waiting behind other files, but the per-REPORT pack
+    (one get per record under 100+ L0s) and the serial flush thread
+    still cap the drain at ~3 k rec/s per client. Measure after D26 and
+    with an untraced client (row 11: `--perf` only on servers).
+Q4  Stuck GC set of 126 records on group 0 (4.): which fragment deletes
+    fail, on which node, and why (`EFS_GC_DBG=1` on the leader for one
+    pass prints them).

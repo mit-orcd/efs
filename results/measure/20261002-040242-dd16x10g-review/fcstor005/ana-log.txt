@@ -1,0 +1,351 @@
+== gc-frag records= histogram per 10 min (count of lines by records value)
+04:00 records=126 1
+04:00 records=168 1
+04:00 records=252 1
+04:00 records=256 2
+04:00 records=42 3
+04:00 records=84 1
+
+== report-split / report lines
+2026-10-02T04:02:52.432Z report-split nrec=8193 pack_ms=285 push_ms=0 finish_ms=0 skip=8193 stale=0 inval=0 rc=0 fail=-/0
+2026-10-02T04:03:03.475Z report-split nrec=30526 pack_ms=566 push_ms=6339 finish_ms=1514 skip=0 stale=0 inval=0 rc=-13 fail=wait/-13
+2026-10-02T04:03:31.181Z report-split nrec=68061 pack_ms=2477 push_ms=0 finish_ms=1 skip=68061 stale=0 inval=0 rc=0 fail=-/0
+2026-10-02T04:04:35.640Z report-split nrec=124407 pack_ms=15251 push_ms=0 finish_ms=0 skip=124407 stale=0 inval=0 rc=0 fail=-/0
+
+== dd window log lines (04:02:40-04:07:40Z), excluding gc-pass/gc-frag/raft-obs
+2026-10-02T04:02:40.017Z kv-compact: end bytes=19784960 ms=175 l0=111 l1=282 rc=0
+2026-10-02T04:02:40.017Z kv-compact: start l0=111 inputs=11 range=2 l0only=0
+2026-10-02T04:02:40.245Z raft-host: apply-sleep us=20495 group=0 idx=405014 applied=405013
+2026-10-02T04:02:40.313Z raft-host: apply-sleep us=25803 group=0 idx=405015 applied=405014
+2026-10-02T04:02:40.632Z raft-host: apply-sleep us=23089 group=0 idx=405020 applied=405019
+2026-10-02T04:02:40.688Z raft-host: apply-sleep us=24362 group=0 idx=405021 applied=405020
+2026-10-02T04:02:40.783Z raft-host: apply-sleep us=58103 group=0 idx=405022 applied=405021
+2026-10-02T04:02:40.834Z raft-host: apply-sleep us=20602 group=0 idx=405023 applied=405022
+2026-10-02T04:02:40.934Z raft-host: apply-sleep us=20182 group=0 idx=405025 applied=405024
+2026-10-02T04:02:40.991Z raft-host: apply-sleep us=21211 group=0 idx=405026 applied=405025
+2026-10-02T04:02:41.051Z raft-host: apply-sleep us=22900 group=0 idx=405027 applied=405026
+2026-10-02T04:02:41.121Z raft-host: apply-sleep us=24011 group=0 idx=405028 applied=405027
+2026-10-02T04:02:41.461Z raft-host: apply-sleep us=22441 group=0 idx=405033 applied=405032
+2026-10-02T04:02:41.520Z raft-host: apply-sleep us=23396 group=0 idx=405034 applied=405033
+2026-10-02T04:02:41.605Z raft-host: apply-sleep us=49296 group=0 idx=405035 applied=405034
+2026-10-02T04:02:41.757Z raft-host: apply-sleep us=20057 group=0 idx=405038 applied=405037
+2026-10-02T04:02:41.816Z raft-host: apply-sleep us=20788 group=0 idx=405039 applied=405038
+2026-10-02T04:02:41.893Z raft-host: apply-sleep us=29532 group=0 idx=405040 applied=405039
+2026-10-02T04:02:41.964Z raft-host: apply-sleep us=26926 group=0 idx=405041 applied=405040
+2026-10-02T04:02:42.246Z raft-host: apply-sleep us=20091 group=0 idx=405045 applied=405044
+2026-10-02T04:02:42.299Z raft-host: apply-sleep us=20830 group=0 idx=405046 applied=405045
+2026-10-02T04:02:42.361Z raft-host: apply-sleep us=26895 group=0 idx=405047 applied=405046
+2026-10-02T04:02:42.670Z raft-host: apply-sleep us=23226 group=0 idx=405052 applied=405051
+2026-10-02T04:02:42.734Z raft-host: apply-sleep us=24761 group=0 idx=405053 applied=405052
+2026-10-02T04:02:42.827Z raft-host: apply-sleep us=54446 group=0 idx=405054 applied=405053
+2026-10-02T04:02:42.895Z raft-host: apply-sleep us=31723 group=0 idx=405055 applied=405054
+2026-10-02T04:02:43.020Z raft-host: apply-sleep us=25142 group=0 idx=405057 applied=405056
+2026-10-02T04:02:43.050Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-02T04:02:43.145Z raft-host: apply-sleep us=25236 group=0 idx=405058 applied=405057
+2026-10-02T04:02:43.233Z raft-host: apply-sleep us=40154 group=0 idx=405059 applied=405058
+2026-10-02T04:02:43.358Z kv-compact: end bytes=338002396 ms=3341 l0=165 l1=280 rc=0
+2026-10-02T04:02:43.358Z kv-compact: start l0=165 inputs=12 range=270 l0only=0
+2026-10-02T04:02:43.359Z raft-host: apply-sleep us=54569 group=0 idx=405060 applied=405059
+2026-10-02T04:02:43.514Z raft-host: apply-sleep us=28076 group=0 idx=405061 applied=405060
+2026-10-02T04:02:43.594Z raft-host: apply-sleep us=26410 group=0 idx=405062 applied=405061
+2026-10-02T04:02:43.690Z raft-host: apply-sleep us=26395 group=0 idx=405063 applied=405062
+2026-10-02T04:02:43.765Z raft-host: apply-sleep us=27184 group=0 idx=405064 applied=405063
+2026-10-02T04:02:43.850Z raft-host: apply-sleep us=30084 group=0 idx=405065 applied=405064
+2026-10-02T04:02:43.938Z raft-host: apply-sleep us=32467 group=0 idx=405066 applied=405065
+2026-10-02T04:02:43.958Z kv-compact: end bytes=40786341 ms=600 l0=162 l1=280 rc=0
+2026-10-02T04:02:43.958Z kv-compact: start l0=162 inputs=11 range=267 l0only=1
+2026-10-02T04:02:44.050Z kv-compact: end bytes=5726899 ms=92 l0=160 l1=280 rc=0
+2026-10-02T04:02:44.050Z kv-compact: start l0=160 inputs=11 range=1 l0only=1
+2026-10-02T04:02:44.061Z raft-host: apply-sleep us=68368 group=0 idx=405067 applied=405066
+2026-10-02T04:02:44.159Z raft-host: apply-sleep us=46482 group=0 idx=405068 applied=405067
+2026-10-02T04:02:44.234Z raft-host: apply-sleep us=22273 group=0 idx=405069 applied=405068
+2026-10-02T04:02:44.235Z raft-host: apply-sleep us=22379 group=0 idx=405070 applied=405068
+2026-10-02T04:02:44.319Z raft-host: apply-sleep us=26420 group=0 idx=405071 applied=405070
+2026-10-02T04:02:44.451Z raft-host: apply-sleep us=26170 group=0 idx=405073 applied=405072
+2026-10-02T04:02:44.484Z kv-compact: end bytes=31663360 ms=434 l0=150 l1=280 rc=0
+2026-10-02T04:02:44.486Z kv-compact: start l0=150 inputs=11 range=264 l0only=1
+2026-10-02T04:02:44.526Z raft-host: apply-sleep us=27865 group=0 idx=405074 applied=405073
+2026-10-02T04:02:44.526Z raft-host: apply-sleep us=28071 group=0 idx=405075 applied=405073
+2026-10-02T04:02:44.551Z kv-compact: end bytes=4139875 ms=65 l0=140 l1=280 rc=0
+2026-10-02T04:02:44.551Z kv-compact: start l0=140 inputs=11 range=257 l0only=1
+2026-10-02T04:02:44.607Z kv-compact: end bytes=2790605 ms=56 l0=130 l1=280 rc=0
+2026-10-02T04:02:44.609Z kv-compact: start l0=130 inputs=9 range=2 l0only=1
+2026-10-02T04:02:44.613Z raft-host: apply-sleep us=35857 group=0 idx=405076 applied=405075
+2026-10-02T04:02:44.761Z kv-compact: end bytes=10755560 ms=152 l0=129 l1=280 rc=0
+2026-10-02T04:02:44.761Z kv-compact: start l0=129 inputs=10 range=261 l0only=1
+2026-10-02T04:02:44.781Z raft-host: apply-sleep us=23947 group=0 idx=405079 applied=405078
+2026-10-02T04:02:44.838Z kv-compact: end bytes=4457600 ms=77 l0=120 l1=280 rc=0
+2026-10-02T04:02:44.839Z kv-compact: start l0=120 inputs=9 range=258 l0only=1
+2026-10-02T04:02:44.850Z raft-host: apply-sleep us=25443 group=0 idx=405080 applied=405079
+2026-10-02T04:02:44.857Z kv-compact: end bytes=888493 ms=18 l0=112 l1=280 rc=0
+2026-10-02T04:02:44.857Z kv-compact: start l0=112 inputs=7 range=260 l0only=1
+2026-10-02T04:02:44.905Z kv-compact: end bytes=2827357 ms=48 l0=106 l1=280 rc=0
+2026-10-02T04:02:44.905Z kv-compact: start l0=106 inputs=7 range=263 l0only=1
+2026-10-02T04:02:44.930Z raft-host: apply-sleep us=28970 group=0 idx=405082 applied=405081
+2026-10-02T04:02:44.935Z kv-compact: end bytes=1422105 ms=30 l0=100 l1=280 rc=0
+2026-10-02T04:02:44.935Z kv-compact: start l0=100 inputs=3 range=267 l0only=1
+2026-10-02T04:02:45.018Z raft-host: apply-sleep us=32595 group=0 idx=405083 applied=405082
+2026-10-02T04:02:45.044Z kv-compact: end bytes=5914331 ms=109 l0=98 l1=280 rc=0
+2026-10-02T04:02:45.044Z kv-compact: start l0=98 inputs=3 range=270 l0only=1
+2026-10-02T04:02:45.056Z raft-host: apply-sleep us=36563 group=0 idx=405084 applied=405083
+2026-10-02T04:02:45.073Z kv-compact: end bytes=301402 ms=29 l0=96 l1=280 rc=0
+2026-10-02T04:02:45.073Z kv-compact: start l0=96 inputs=2 range=1 l0only=1
+2026-10-02T04:02:45.213Z raft-host: apply-sleep us=100151 group=0 idx=405085 applied=405084
+2026-10-02T04:02:45.289Z raft-host: apply-sleep us=78559 group=0 idx=405086 applied=405084
+2026-10-02T04:02:45.614Z raft-host: apply-sleep us=69320 group=0 idx=405087 applied=405086
+2026-10-02T04:02:45.844Z raft-host: apply-sleep us=130998 group=0 idx=405088 applied=405087
+2026-10-02T04:02:46.057Z kv-compact: end bytes=32920318 ms=984 l0=104 l1=280 rc=0
+2026-10-02T04:02:46.064Z kv-compact: start l0=104 inputs=3 range=2 l0only=1
+2026-10-02T04:02:46.088Z raft-host: apply-sleep us=102447 group=0 idx=405089 applied=405088
+2026-10-02T04:02:46.320Z raft-host: apply-sleep us=33706 group=0 idx=405090 applied=405089
+2026-10-02T04:02:46.415Z kv-compact: end bytes=13140540 ms=351 l0=102 l1=280 rc=0
+2026-10-02T04:02:46.415Z kv-compact: start l0=102 inputs=3 range=264 l0only=1
+2026-10-02T04:02:46.476Z kv-compact: end bytes=4242608 ms=61 l0=100 l1=280 rc=0
+2026-10-02T04:02:46.476Z kv-compact: start l0=100 inputs=2 range=1 l0only=1
+2026-10-02T04:02:46.760Z raft-host: apply-sleep us=80619 group=0 idx=405091 applied=405090
+2026-10-02T04:02:46.977Z raft-host: apply-sleep us=101845 group=0 idx=405092 applied=405091
+2026-10-02T04:02:46.981Z raft-host: apply-sleep us=100879 group=0 idx=405093 applied=405091
+2026-10-02T04:02:47.434Z raft-host: apply-sleep us=285010 group=0 idx=405094 applied=405093
+2026-10-02T04:02:47.647Z raft-host: apply-sleep us=37746 group=0 idx=405095 applied=405094
+2026-10-02T04:02:47.713Z raft-host: apply-sleep us=65375 group=0 idx=405096 applied=405095
+2026-10-02T04:02:47.718Z kv-compact: end bytes=34038208 ms=1242 l0=107 l1=280 rc=0
+2026-10-02T04:02:47.718Z kv-compact: start l0=107 inputs=3 range=267 l0only=1
+2026-10-02T04:02:47.822Z raft-host: apply-sleep us=28703 group=0 idx=405097 applied=405096
+2026-10-02T04:02:47.829Z kv-compact: end bytes=6125676 ms=111 l0=105 l1=280 rc=0
+2026-10-02T04:02:47.829Z kv-compact: start l0=105 inputs=3 range=260 l0only=1
+2026-10-02T04:02:47.871Z kv-compact: end bytes=2974613 ms=42 l0=103 l1=280 rc=0
+2026-10-02T04:02:47.871Z kv-compact: start l0=103 inputs=3 range=257 l0only=1
+2026-10-02T04:02:47.922Z kv-compact: end bytes=2959681 ms=51 l0=101 l1=280 rc=0
+2026-10-02T04:02:47.922Z kv-compact: start l0=101 inputs=3 range=263 l0only=1
+2026-10-02T04:02:47.951Z raft-host: apply-sleep us=30574 group=0 idx=405098 applied=405097
+2026-10-02T04:02:47.955Z kv-compact: end bytes=1591181 ms=34 l0=99 l1=280 rc=0
+2026-10-02T04:02:47.956Z kv-compact: start l0=99 inputs=3 range=270 l0only=1
+2026-10-02T04:02:47.970Z kv-compact: end bytes=552932 ms=15 l0=97 l1=280 rc=0
+2026-10-02T04:02:47.971Z kv-compact: start l0=97 inputs=2 range=1 l0only=1
+2026-10-02T04:02:48.144Z raft-host: apply-sleep us=80150 group=0 idx=405099 applied=405098
+2026-10-02T04:02:48.246Z raft-host: apply-sleep us=83663 group=0 idx=405100 applied=405099
+2026-10-02T04:02:48.324Z raft-host: apply-sleep us=76320 group=0 idx=405101 applied=405100
+2026-10-02T04:02:48.542Z raft-host: apply-sleep us=101561 group=0 idx=405102 applied=405101
+2026-10-02T04:02:49.324Z raft-host: apply-sleep us=400141 group=0 idx=405105 applied=405102
+2026-10-02T04:02:49.325Z raft-host: apply-sleep us=400092 group=0 idx=405103 applied=405102
+2026-10-02T04:02:49.468Z kv-compact: end bytes=35273834 ms=1497 l0=104 l1=280 rc=0
+2026-10-02T04:02:49.468Z kv-compact: start l0=104 inputs=3 range=2 l0only=1
+2026-10-02T04:02:49.722Z kv-compact: end bytes=15479100 ms=254 l0=102 l1=280 rc=0
+2026-10-02T04:02:49.722Z kv-compact: start l0=102 inputs=3 range=264 l0only=1
+2026-10-02T04:02:49.818Z kv-compact: end bytes=4369415 ms=96 l0=100 l1=280 rc=0
+2026-10-02T04:02:49.818Z kv-compact: start l0=100 inputs=2 range=1 l0only=1
+2026-10-02T04:02:50.694Z raft-host: apply-sleep us=93017 group=0 idx=405106 applied=405105
+2026-10-02T04:02:50.908Z raft-host: apply-sleep us=77349 group=0 idx=405107 applied=405106
+2026-10-02T04:02:51.392Z raft-host: apply-sleep us=306037 group=0 idx=405108 applied=405107
+2026-10-02T04:02:51.392Z raft-host: apply-sleep us=307033 group=0 idx=405109 applied=405107
+2026-10-02T04:02:51.567Z kv-compact: end bytes=36455166 ms=1749 l0=109 l1=280 rc=0
+2026-10-02T04:02:51.567Z kv-compact: start l0=109 inputs=3 range=267 l0only=1
+2026-10-02T04:02:51.741Z kv-compact: end bytes=6512029 ms=175 l0=107 l1=280 rc=0
+2026-10-02T04:02:51.742Z kv-compact: start l0=107 inputs=3 range=261 l0only=1
+2026-10-02T04:02:51.839Z kv-compact: end bytes=4657552 ms=97 l0=105 l1=280 rc=0
+2026-10-02T04:02:51.839Z kv-compact: start l0=105 inputs=3 range=257 l0only=1
+2026-10-02T04:02:51.912Z kv-compact: end bytes=3258816 ms=73 l0=103 l1=280 rc=0
+2026-10-02T04:02:51.912Z kv-compact: start l0=103 inputs=3 range=260 l0only=1
+2026-10-02T04:02:51.978Z kv-compact: end bytes=3124042 ms=66 l0=101 l1=280 rc=0
+2026-10-02T04:02:51.980Z kv-compact: start l0=101 inputs=3 range=270 l0only=1
+2026-10-02T04:02:51.984Z raft-host: apply-sleep us=303822 group=0 idx=405111 applied=405110
+2026-10-02T04:02:51.987Z raft-host: apply-sleep us=72845 group=0 idx=405112 applied=405110
+2026-10-02T04:02:52.009Z kv-compact: end bytes=1051721 ms=29 l0=99 l1=280 rc=0
+2026-10-02T04:02:52.009Z kv-compact: start l0=99 inputs=3 range=258 l0only=1
+2026-10-02T04:02:52.032Z kv-compact: end bytes=1040708 ms=23 l0=97 l1=280 rc=0
+2026-10-02T04:02:52.032Z kv-compact: start l0=97 inputs=2 range=1 l0only=1
+2026-10-02T04:02:52.148Z raft-host: apply-sleep us=67852 group=0 idx=405113 applied=405112
+2026-10-02T04:02:52.404Z raft-host: apply-sleep us=122876 group=0 idx=405114 applied=405113
+2026-10-02T04:02:52.432Z report-split nrec=8193 pack_ms=285 push_ms=0 finish_ms=0 skip=8193 stale=0 inval=0 rc=0 fail=-/0
+2026-10-02T04:02:52.583Z raft-host: apply-sleep us=100506 group=0 idx=405115 applied=405114
+2026-10-02T04:02:52.704Z raft-host: apply-sleep us=119397 group=0 idx=405116 applied=405115
+2026-10-02T04:02:52.793Z raft-host: apply-sleep us=86437 group=0 idx=405117 applied=405116
+2026-10-02T04:02:53.254Z raft-host: apply-sleep us=103432 group=0 idx=405118 applied=405117
+2026-10-02T04:02:53.548Z raft-host: apply-sleep us=102187 group=0 idx=405119 applied=405118
+2026-10-02T04:02:53.552Z raft-host: apply-sleep us=90038 group=2 idx=398217 applied=398216
+2026-10-02T04:02:53.746Z raft-host: apply-sleep us=89977 group=2 idx=398219 applied=398217
+2026-10-02T04:02:53.746Z raft-host: apply-sleep us=196000 group=0 idx=405120 applied=405119
+2026-10-02T04:02:53.837Z raft-host: apply-sleep us=95114 group=0 idx=405121 applied=405119
+2026-10-02T04:02:53.841Z raft-host: apply-sleep us=70188 group=2 idx=398220 applied=398219
+2026-10-02T04:02:54.009Z kv-compact: end bytes=37050472 ms=1977 l0=106 l1=280 rc=0
+2026-10-02T04:02:54.009Z kv-compact: start l0=106 inputs=3 range=2 l0only=1
+2026-10-02T04:02:54.256Z raft-host: apply-sleep us=85933 group=2 idx=398222 applied=398220
+2026-10-02T04:02:54.354Z raft-host: apply-sleep us=95419 group=0 idx=405122 applied=405121
+2026-10-02T04:02:54.357Z raft-host: apply-sleep us=72483 group=2 idx=398223 applied=398222
+2026-10-02T04:02:54.520Z raft-host: apply-sleep us=45899 group=2 idx=398225 applied=398223
+2026-10-02T04:02:54.570Z raft-host: apply-sleep us=50514 group=0 idx=405123 applied=405122
+2026-10-02T04:02:54.572Z raft-host: apply-sleep us=42275 group=2 idx=398226 applied=398225
+2026-10-02T04:02:54.649Z kv-compact: end bytes=17567100 ms=639 l0=104 l1=280 rc=0
+2026-10-02T04:02:54.649Z kv-compact: start l0=104 inputs=3 range=264 l0only=1
+2026-10-02T04:02:54.655Z raft-host: apply-sleep us=22759 group=0 idx=405124 applied=405123
+2026-10-02T04:02:54.708Z raft-host: apply-sleep us=40885 group=2 idx=398228 applied=398226
+2026-10-02T04:02:54.761Z raft-host: apply-sleep us=54867 group=0 idx=405125 applied=405124
+2026-10-02T04:02:54.785Z kv-compact: end bytes=4517462 ms=136 l0=102 l1=280 rc=0
+2026-10-02T04:02:54.785Z kv-compact: start l0=102 inputs=3 range=263 l0only=1
+2026-10-02T04:02:54.834Z kv-compact: end bytes=1770227 ms=50 l0=100 l1=280 rc=0
+2026-10-02T04:02:54.835Z kv-compact: start l0=100 inputs=2 range=1 l0only=1
+2026-10-02T04:02:55.048Z raft-host: apply-sleep us=158210 group=0 idx=405126 applied=405125
+2026-10-02T04:02:55.051Z raft-host: apply-sleep us=155730 group=2 idx=398231 applied=398230
+2026-10-02T04:02:56.104Z raft-host: apply-sleep us=400142 group=0 idx=405128 applied=405127
+2026-10-02T04:02:56.104Z raft-host: apply-sleep us=400104 group=0 idx=405129 applied=405127
+2026-10-02T04:02:56.795Z kv-compact: end bytes=38131110 ms=1960 l0=107 l1=280 rc=0
+2026-10-02T04:02:56.796Z kv-compact: start l0=107 inputs=3 range=267 l0only=1
+2026-10-02T04:02:57.238Z kv-compact: end bytes=6737937 ms=442 l0=105 l1=280 rc=0
+2026-10-02T04:02:57.238Z kv-compact: start l0=105 inputs=3 range=257 l0only=1
+2026-10-02T04:02:57.478Z kv-compact: end bytes=3587267 ms=240 l0=103 l1=280 rc=0
+2026-10-02T04:02:57.479Z kv-compact: start l0=103 inputs=3 range=260 l0only=1
+2026-10-02T04:02:57.705Z kv-compact: end bytes=3379931 ms=227 l0=101 l1=280 rc=0
+2026-10-02T04:02:57.706Z kv-compact: start l0=101 inputs=3 range=270 l0only=1
+2026-10-02T04:02:57.801Z kv-compact: end bytes=1285634 ms=95 l0=99 l1=280 rc=0
+2026-10-02T04:02:57.801Z kv-compact: start l0=99 inputs=2 range=1 l0only=1
+2026-10-02T04:02:59.506Z raft-host: apply-sleep us=400079 group=0 idx=405134 applied=405132
+2026-10-02T04:02:59.546Z kv-compact: end bytes=39340282 ms=1745 l0=108 l1=280 rc=0
+2026-10-02T04:02:59.546Z kv-compact: start l0=108 inputs=3 range=2 l0only=1
+2026-10-02T04:03:00.670Z kv-compact: end bytes=19108999 ms=1124 l0=106 l1=280 rc=0
+2026-10-02T04:03:00.670Z kv-compact: start l0=106 inputs=3 range=264 l0only=1
+2026-10-02T04:03:00.969Z kv-compact: end bytes=5050388 ms=298 l0=104 l1=280 rc=0
+2026-10-02T04:03:00.969Z kv-compact: start l0=104 inputs=3 range=261 l0only=1
+2026-10-02T04:03:01.249Z kv-compact: end bytes=4853365 ms=280 l0=102 l1=280 rc=0
+2026-10-02T04:03:01.250Z kv-compact: start l0=102 inputs=3 range=263 l0only=1
+2026-10-02T04:03:01.375Z kv-compact: end bytes=1968718 ms=126 l0=100 l1=280 rc=0
+2026-10-02T04:03:01.376Z kv-compact: start l0=100 inputs=3 range=258 l0only=1
+2026-10-02T04:03:01.464Z kv-compact: end bytes=1197183 ms=88 l0=98 l1=280 rc=0
+2026-10-02T04:03:01.464Z kv-compact: start l0=98 inputs=2 range=1 l0only=1
+2026-10-02T04:03:02.338Z raft-host: apply-sleep us=400174 group=0 idx=405137 applied=405135
+2026-10-02T04:03:03.074Z raft-host: apply-sleep us=400168 group=2 idx=398249 applied=398244
+
+== raft-obs in window
+2026-10-02T04:02:44.850Z raft-obs: tx->0 enq=149549 drop=0 sent=149548 fail=0 hi=3 rtt_avg=455us get_avg=0us get_max=4ms
+2026-10-02T04:02:44.850Z raft-obs: tx->1 enq=401 drop=0 sent=398 fail=0 hi=2 rtt_avg=548us get_avg=12us get_max=4ms
+2026-10-02T04:02:44.850Z raft-obs: tx->3 enq=149675 drop=0 sent=149651 fail=0 hi=3 rtt_avg=457us get_avg=0us get_max=3ms
+2026-10-02T04:02:44.850Z raft-obs: wait_timeouts=0 pump_hold_max=95215us lock_wait_max=1us drain_max=95215us tick_max=236us apply_max=95085us persist_max=9069us applies_in_worst=3 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T04:02:49.851Z raft-obs: tx->0 enq=149636 drop=0 sent=149636 fail=0 hi=3 rtt_avg=456us get_avg=0us get_max=4ms
+2026-10-02T04:02:49.851Z raft-obs: tx->1 enq=493 drop=0 sent=490 fail=0 hi=5 rtt_avg=1924us get_avg=10us get_max=4ms
+2026-10-02T04:02:49.851Z raft-obs: tx->3 enq=149812 drop=0 sent=149748 fail=0 hi=3 rtt_avg=459us get_avg=0us get_max=3ms
+2026-10-02T04:02:49.851Z raft-obs: wait_timeouts=2 pump_hold_max=445782us lock_wait_max=1599us drain_max=445782us tick_max=1044us apply_max=445127us persist_max=2495us applies_in_worst=7 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_d
+2026-10-02T04:02:54.889Z raft-obs: tx->0 enq=149707 drop=0 sent=149707 fail=0 hi=3 rtt_avg=458us get_avg=0us get_max=4ms
+2026-10-02T04:02:54.889Z raft-obs: tx->1 enq=581 drop=0 sent=579 fail=0 hi=9 rtt_avg=3008us get_avg=8us get_max=4ms
+2026-10-02T04:02:54.889Z raft-obs: tx->3 enq=149954 drop=0 sent=149847 fail=0 hi=3 rtt_avg=463us get_avg=0us get_max=3ms
+2026-10-02T04:02:54.889Z raft-obs: wait_timeouts=2 pump_hold_max=436152us lock_wait_max=1502us drain_max=435450us tick_max=1146us apply_max=435069us persist_max=2698us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_d
+2026-10-02T04:03:00.325Z raft-obs: tx->0 enq=149728 drop=0 sent=149728 fail=0 hi=3 rtt_avg=458us get_avg=0us get_max=4ms
+2026-10-02T04:03:00.325Z raft-obs: tx->1 enq=597 drop=0 sent=594 fail=0 hi=9 rtt_avg=3098us get_avg=8us get_max=4ms
+2026-10-02T04:03:00.325Z raft-obs: tx->3 enq=150037 drop=0 sent=149873 fail=0 hi=3 rtt_avg=463us get_avg=0us get_max=3ms
+2026-10-02T04:03:00.325Z raft-obs: wait_timeouts=5 pump_hold_max=1254445us lock_wait_max=1us drain_max=1254444us tick_max=511us apply_max=1251582us persist_max=3461us applies_in_worst=3 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_dr
+2026-10-02T04:03:05.253Z raft-obs: g0 term 67->68 role LEADER->FOLLOWER leader=-1 commit=405151 applied=405151 t=1790913785253ms
+2026-10-02T04:03:05.329Z raft-obs: tx->0 enq=149775 drop=0 sent=149775 fail=0 hi=3 rtt_avg=459us get_avg=0us get_max=4ms
+2026-10-02T04:03:05.329Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:05.329Z raft-obs: tx->3 enq=150158 drop=0 sent=149926 fail=0 hi=3 rtt_avg=465us get_avg=0us get_max=3ms
+2026-10-02T04:03:05.329Z raft-obs: wait_timeouts=9 pump_hold_max=1072563us lock_wait_max=1415us drain_max=1072562us tick_max=1127us apply_max=1068815us persist_max=3555us applies_in_worst=4 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=11
+2026-10-02T04:03:10.555Z raft-obs: tx->0 enq=149885 drop=0 sent=149851 fail=0 hi=3 rtt_avg=460us get_avg=0us get_max=4ms
+2026-10-02T04:03:10.555Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:10.555Z raft-obs: tx->3 enq=150268 drop=0 sent=149993 fail=0 hi=3 rtt_avg=466us get_avg=0us get_max=3ms
+2026-10-02T04:03:10.556Z raft-obs: wait_timeouts=9 pump_hold_max=493296us lock_wait_max=1us drain_max=493296us tick_max=4us apply_max=492234us persist_max=2602us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:15.556Z raft-obs: tx->0 enq=149992 drop=0 sent=149901 fail=0 hi=3 rtt_avg=461us get_avg=0us get_max=4ms
+2026-10-02T04:03:15.556Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:15.556Z raft-obs: tx->3 enq=150371 drop=0 sent=150039 fail=0 hi=3 rtt_avg=467us get_avg=0us get_max=3ms
+2026-10-02T04:03:15.556Z raft-obs: wait_timeouts=9 pump_hold_max=616602us lock_wait_max=1us drain_max=616602us tick_max=1us apply_max=616036us persist_max=2677us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:20.863Z raft-obs: tx->0 enq=150078 drop=0 sent=149933 fail=0 hi=3 rtt_avg=462us get_avg=0us get_max=4ms
+2026-10-02T04:03:20.864Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:20.864Z raft-obs: tx->3 enq=150458 drop=0 sent=150069 fail=0 hi=3 rtt_avg=468us get_avg=0us get_max=3ms
+2026-10-02T04:03:20.864Z raft-obs: wait_timeouts=9 pump_hold_max=613716us lock_wait_max=1us drain_max=613715us tick_max=1us apply_max=613171us persist_max=2757us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:26.284Z raft-obs: tx->0 enq=150179 drop=0 sent=149986 fail=0 hi=3 rtt_avg=463us get_avg=0us get_max=4ms
+2026-10-02T04:03:26.285Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:26.285Z raft-obs: tx->3 enq=150567 drop=0 sent=150123 fail=0 hi=3 rtt_avg=469us get_avg=0us get_max=3ms
+2026-10-02T04:03:26.285Z raft-obs: wait_timeouts=9 pump_hold_max=571978us lock_wait_max=4us drain_max=571978us tick_max=1us apply_max=571602us persist_max=2456us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:31.285Z raft-obs: tx->0 enq=150292 drop=0 sent=150067 fail=0 hi=3 rtt_avg=466us get_avg=0us get_max=4ms
+2026-10-02T04:03:31.285Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:31.285Z raft-obs: tx->3 enq=150683 drop=0 sent=150199 fail=0 hi=3 rtt_avg=471us get_avg=0us get_max=3ms
+2026-10-02T04:03:31.285Z raft-obs: wait_timeouts=9 pump_hold_max=511331us lock_wait_max=1us drain_max=511331us tick_max=1us apply_max=505251us persist_max=2925us applies_in_worst=3 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:36.591Z raft-obs: tx->0 enq=150397 drop=0 sent=150136 fail=0 hi=3 rtt_avg=466us get_avg=0us get_max=4ms
+2026-10-02T04:03:36.591Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:36.591Z raft-obs: tx->3 enq=150794 drop=0 sent=150269 fail=0 hi=3 rtt_avg=472us get_avg=0us get_max=3ms
+2026-10-02T04:03:36.592Z raft-obs: wait_timeouts=9 pump_hold_max=439728us lock_wait_max=1us drain_max=439728us tick_max=4us apply_max=439006us persist_max=2630us applies_in_worst=3 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:41.987Z raft-obs: tx->0 enq=150492 drop=0 sent=150170 fail=0 hi=3 rtt_avg=467us get_avg=0us get_max=4ms
+2026-10-02T04:03:41.987Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:41.988Z raft-obs: tx->3 enq=150884 drop=0 sent=150304 fail=0 hi=3 rtt_avg=473us get_avg=0us get_max=3ms
+2026-10-02T04:03:41.988Z raft-obs: wait_timeouts=9 pump_hold_max=811858us lock_wait_max=1us drain_max=811857us tick_max=4us apply_max=811426us persist_max=5931us applies_in_worst=3 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:46.992Z raft-obs: tx->0 enq=150586 drop=0 sent=150201 fail=0 hi=3 rtt_avg=467us get_avg=0us get_max=4ms
+2026-10-02T04:03:46.992Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:46.992Z raft-obs: tx->3 enq=150994 drop=0 sent=150326 fail=0 hi=3 rtt_avg=473us get_avg=0us get_max=3ms
+2026-10-02T04:03:46.993Z raft-obs: wait_timeouts=9 pump_hold_max=858515us lock_wait_max=3us drain_max=858515us tick_max=1us apply_max=854265us persist_max=2788us applies_in_worst=3 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:51.992Z raft-obs: tx->0 enq=150686 drop=0 sent=150246 fail=0 hi=3 rtt_avg=468us get_avg=0us get_max=4ms
+2026-10-02T04:03:51.993Z raft-obs: tx->1 enq=639 drop=0 sent=637 fail=0 hi=9 rtt_avg=3317us get_avg=7us get_max=4ms
+2026-10-02T04:03:51.993Z raft-obs: tx->3 enq=151092 drop=0 sent=150370 fail=0 hi=3 rtt_avg=474us get_avg=0us get_max=3ms
+2026-10-02T04:03:51.993Z raft-obs: wait_timeouts=9 pump_hold_max=616978us lock_wait_max=5us drain_max=616977us tick_max=1us apply_max=611924us persist_max=2193us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_d
+2026-10-02T04:03:55.134Z raft-obs: g0 term 68->69 role FOLLOWER->CANDIDATE leader=-1 commit=405264 applied=405264 t=1790913835134ms
+2026-10-02T04:03:55.148Z raft-obs: g0 term 69->69 role CANDIDATE->LEADER leader=2 commit=405264 applied=405264 t=1790913835148ms
+2026-10-02T04:03:57.361Z raft-obs: tx->0 enq=150761 drop=0 sent=150287 fail=0 hi=3 rtt_avg=468us get_avg=0us get_max=4ms
+2026-10-02T04:03:57.361Z raft-obs: tx->1 enq=657 drop=0 sent=655 fail=0 hi=9 rtt_avg=3495us get_avg=7us get_max=4ms
+2026-10-02T04:03:57.361Z raft-obs: tx->3 enq=151185 drop=0 sent=150409 fail=0 hi=3 rtt_avg=474us get_avg=0us get_max=3ms
+2026-10-02T04:03:57.362Z raft-obs: wait_timeouts=9 pump_hold_max=625539us lock_wait_max=5us drain_max=625539us tick_max=1728us apply_max=625144us persist_max=2852us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbo
+2026-10-02T04:03:58.634Z raft-obs: g0 term 69->70 role LEADER->FOLLOWER leader=-1 commit=405276 applied=405276 t=1790913838634ms
+2026-10-02T04:04:02.544Z raft-obs: tx->0 enq=150835 drop=0 sent=150327 fail=0 hi=3 rtt_avg=469us get_avg=0us get_max=4ms
+2026-10-02T04:04:02.544Z raft-obs: tx->1 enq=669 drop=0 sent=667 fail=0 hi=9 rtt_avg=3573us get_avg=7us get_max=4ms
+2026-10-02T04:04:02.544Z raft-obs: tx->3 enq=151284 drop=0 sent=150453 fail=0 hi=3 rtt_avg=475us get_avg=0us get_max=3ms
+2026-10-02T04:04:02.544Z raft-obs: wait_timeouts=11 pump_hold_max=744768us lock_wait_max=1888us drain_max=744768us tick_max=196us apply_max=743588us persist_max=2842us applies_in_worst=3 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us i
+2026-10-02T04:04:07.994Z raft-obs: tx->0 enq=150949 drop=0 sent=150388 fail=0 hi=3 rtt_avg=470us get_avg=0us get_max=4ms
+2026-10-02T04:04:07.995Z raft-obs: tx->1 enq=669 drop=0 sent=667 fail=0 hi=9 rtt_avg=3573us get_avg=7us get_max=4ms
+2026-10-02T04:04:07.995Z raft-obs: tx->3 enq=151401 drop=0 sent=150511 fail=0 hi=3 rtt_avg=476us get_avg=0us get_max=3ms
+2026-10-02T04:04:07.995Z raft-obs: wait_timeouts=11 pump_hold_max=673932us lock_wait_max=1us drain_max=673931us tick_max=1us apply_max=673426us persist_max=2765us applies_in_worst=3 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_
+2026-10-02T04:04:13.268Z raft-obs: tx->0 enq=151050 drop=0 sent=150428 fail=0 hi=3 rtt_avg=471us get_avg=0us get_max=4ms
+2026-10-02T04:04:13.268Z raft-obs: tx->1 enq=669 drop=0 sent=667 fail=0 hi=9 rtt_avg=3573us get_avg=7us get_max=4ms
+2026-10-02T04:04:13.268Z raft-obs: tx->3 enq=151496 drop=0 sent=150538 fail=0 hi=3 rtt_avg=477us get_avg=0us get_max=3ms
+2026-10-02T04:04:13.268Z raft-obs: wait_timeouts=11 pump_hold_max=779817us lock_wait_max=1us drain_max=779816us tick_max=1us apply_max=776271us persist_max=2768us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_
+2026-10-02T04:04:18.399Z raft-obs: tx->0 enq=151151 drop=0 sent=150480 fail=0 hi=3 rtt_avg=471us get_avg=0us get_max=4ms
+2026-10-02T04:04:18.400Z raft-obs: tx->1 enq=669 drop=0 sent=667 fail=0 hi=9 rtt_avg=3573us get_avg=7us get_max=4ms
+2026-10-02T04:04:18.400Z raft-obs: tx->3 enq=151597 drop=0 sent=150576 fail=0 hi=3 rtt_avg=477us get_avg=0us get_max=3ms
+2026-10-02T04:04:18.400Z raft-obs: wait_timeouts=11 pump_hold_max=473770us lock_wait_max=1us drain_max=473769us tick_max=1us apply_max=473342us persist_max=2747us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=1113360us pub_max=0us inbox_
+
+== kv-compact lines in window
+2026-10-02T04:02:29.255Z kv-compact: start l0=100 inputs=2 range=1 l0only=1
+2026-10-02T04:02:29.775Z kv-compact: end bytes=58506492 ms=521 l0=106 l1=285 rc=0
+2026-10-02T04:02:29.776Z kv-compact: start l0=106 inputs=11 range=1 l0only=0
+2026-10-02T04:02:32.980Z kv-compact: end bytes=350344593 ms=3204 l0=119 l1=282 rc=0
+2026-10-02T04:02:32.980Z kv-compact: start l0=119 inputs=5 range=2 l0only=1
+2026-10-02T04:02:33.390Z kv-compact: end bytes=39079588 ms=409 l0=122 l1=282 rc=0
+2026-10-02T04:02:33.390Z kv-compact: start l0=122 inputs=6 range=270 l0only=1
+2026-10-02T04:02:33.449Z kv-compact: end bytes=6403543 ms=59 l0=117 l1=282 rc=0
+2026-10-02T04:02:33.449Z kv-compact: start l0=117 inputs=6 range=267 l0only=1
+2026-10-02T04:02:33.484Z kv-compact: end bytes=3522728 ms=35 l0=112 l1=282 rc=0
+2026-10-02T04:02:33.484Z kv-compact: start l0=112 inputs=6 range=260 l0only=1
+2026-10-02T04:02:33.505Z kv-compact: end bytes=2064139 ms=21 l0=107 l1=282 rc=0
+2026-10-02T04:02:33.505Z kv-compact: start l0=107 inputs=6 range=257 l0only=1
+2026-10-02T04:02:33.517Z kv-compact: end bytes=846231 ms=12 l0=102 l1=282 rc=0
+2026-10-02T04:02:33.517Z kv-compact: start l0=102 inputs=6 range=263 l0only=1
+2026-10-02T04:02:33.525Z kv-compact: end bytes=534456 ms=8 l0=97 l1=282 rc=0
+2026-10-02T04:02:33.525Z kv-compact: start l0=97 inputs=3 range=1 l0only=1
+2026-10-02T04:02:33.555Z kv-compact: end bytes=3229440 ms=30 l0=95 l1=282 rc=0
+2026-10-02T04:02:33.555Z kv-compact: start l0=95 inputs=2 range=2 l0only=1
+2026-10-02T04:02:33.931Z kv-compact: end bytes=40517988 ms=376 l0=94 l1=282 rc=0
+2026-10-02T04:02:33.931Z kv-compact: start l0=94 inputs=2 range=264 l0only=1
+2026-10-02T04:02:33.955Z kv-compact: end bytes=2509173 ms=24 l0=93 l1=282 rc=0
+2026-10-02T04:02:34.292Z kv-compact: start l0=100 inputs=2 range=2 l0only=1
+2026-10-02T04:02:34.707Z kv-compact: end bytes=41789348 ms=416 l0=107 l1=282 rc=0
+2026-10-02T04:02:34.708Z kv-compact: start l0=107 inputs=3 range=270 l0only=1
+2026-10-02T04:02:34.771Z kv-compact: end bytes=6521151 ms=63 l0=105 l1=282 rc=0
+2026-10-02T04:02:34.771Z kv-compact: start l0=105 inputs=3 range=1 l0only=1
+2026-10-02T04:02:34.822Z kv-compact: end bytes=5568000 ms=51 l0=103 l1=282 rc=0
+2026-10-02T04:02:34.822Z kv-compact: start l0=103 inputs=3 range=267 l0only=1
+2026-10-02T04:02:34.858Z kv-compact: end bytes=3734073 ms=37 l0=101 l1=282 rc=0
+2026-10-02T04:02:34.858Z kv-compact: start l0=101 inputs=3 range=260 l0only=1
+2026-10-02T04:02:34.879Z kv-compact: end bytes=2161391 ms=21 l0=99 l1=282 rc=0
+2026-10-02T04:02:34.879Z kv-compact: start l0=99 inputs=3 range=257 l0only=1
+2026-10-02T04:02:34.894Z kv-compact: end bytes=1057576 ms=14 l0=97 l1=282 rc=0
+2026-10-02T04:02:34.894Z kv-compact: start l0=97 inputs=3 range=263 l0only=1
+2026-10-02T04:02:34.905Z kv-compact: end bytes=745801 ms=11 l0=95 l1=282 rc=0
+2026-10-02T04:02:34.905Z kv-compact: start l0=95 inputs=2 range=2 l0only=1
+2026-10-02T04:02:35.325Z kv-compact: end bytes=42930788 ms=420 l0=102 l1=282 rc=0
+2026-10-02T04:02:35.325Z kv-compact: start l0=102 inputs=3 range=264 l0only=1
+2026-10-02T04:02:35.352Z kv-compact: end bytes=2635980 ms=27 l0=100 l1=282 rc=0
+
+== any BUSY/timeout/wedge words whole log (counts)
+   1551 wait_timeouts=0
+    230 wait_timeouts=14
+    170 apply-sleep
+     11 wait_timeouts=9
+      8 wait_timeouts=11
+      5 LEADER->FOLLOWER
+      2 wait_timeouts=2
+      2 wait_timeouts=12
+      1 wait_timeouts=5
+      1 wait_timeouts=13

@@ -1,0 +1,7 @@
+file /data1/01/efs/mdraft/log/raft.log size 3382257937, parsed 33554432 bytes from offset 3348703505, records {'ENTRY': 9156}
+group 0: 4549 entries, index 406379..410927
+  GC_ACK                    4535   99.7%
+  PUBLISH                     14    0.3%
+group 2: 4607 entries, index 399361..403967
+  GC_ACK                    4594   99.7%
+  PUBLISH                     13    0.3%
