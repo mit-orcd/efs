@@ -262,10 +262,13 @@ this list, before it ships.
   EFS does **not** offer that across clients: a byte written on client A
   becomes visible to client B only after A has **published** it
   (`fsync`, `flush`, `O_SYNC`, or a landed-PUT REPORT — D24). Within one
-  client, read-your-writes hold via the dcache. This is the
-  close-to-open-like relaxation of NFS and of every production PFS that
-  buffers client-side, and it is a consistency deviation separate from
-  the durability rule above; it is listed here as such. The stronger
+  client, read-your-writes hold via the dcache. This resembles NFS
+  close-to-open consistency (publication at `flush`, visibility on the
+  next open/read elsewhere) and only that: client-side buffering does
+  not by itself imply weak coherence — lock- or lease-based PFSs recall
+  buffered data to make it visible, and EFS has no such recall. It is a
+  consistency deviation separate from the durability rule above and is
+  listed here as such. The stronger
   "every `write()` publishes" alternative was measured and rejected (W2,
   in project-history.md "START-HERE closed items": peer sees 0/10
   un-`fsync`ed bytes; `kill -9` of `efs-fuse` loses a 64 MiB acknowledged
