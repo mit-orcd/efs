@@ -7,7 +7,11 @@ current queue, decisions and standing permissions live only in the
 sources listed under "Authoritative, current sources". Every `##`/`###`
 heading carries a stable anchor (`<a id="ph-<slug>-<hash>">`) so a dated
 entry can be cited unambiguously even where headings or dates repeat;
-cite the anchor, not the heading text. It holds, in order of appearance:
+cite the anchor, not the heading text. **Anchor rule:** an anchor is
+written once and never regenerated or renamed — editing a heading keeps
+its existing anchor line (the slug inside the id may then differ from
+the heading; that is expected); a new heading gets a new anchor; moving
+a section keeps its anchor. It holds, in order of appearance:
 the START-HERE §1b handoff blocks and closed-item bodies from Sep 21 –
 Oct 1 2026 (moved here Oct 1 2026), the cluster-state narrative trimmed
 out of `.cursor/rules/efs-project-state.mdc` on Oct 1 2026, and the

@@ -217,8 +217,10 @@ and deliberate, and all are stated in this section rather than discovered
 by a user: strictly-conforming per-read `atime` is **not offered** (§7.3);
 full syscall-level write atomicity **above the FUSE request boundary**
 is an unresolved kernel-interface problem that efs does not claim (below);
-and a returned `write()` is **not** durable or cross-client visible until
-`fsync`, `close`, or `O_SYNC`/`-o sync` (below). Everything else in this
+a returned `write()` is **not** durable until `fsync`/`flush`/`O_SYNC`
+(POSIX-conformant buffering, below); and a returned `write()` is **not
+visible to another client** until published (below) — the one
+consistency deviation, stated as such. Everything else in this
 section is a promise. If a deviation is ever added, it belongs here, in
 this list, before it ships.
 
@@ -229,28 +231,45 @@ this list, before it ships.
   intended property for those is strict serializability of transactions.
 - There is **no global ordering** between two independent operations on
   unrelated shards, and none is needed.
-- **Data:** a returned `write()` is buffered in the client; the client
-  owns those bytes, and they are neither durable nor visible to another
-  client yet. **The guarantee:** the bytes a `write()` returned are
-  durable and visible to every client **when an `fsync`/`fdatasync` on
-  that file returns 0**, or when an `O_SYNC`/`O_DSYNC`/`-o sync` write
-  returns (the §7.3 publication machine; `O_SYNC` is specified, not wired
-  yet). An `fsync` drains every pending publish of the file — one in
-  flight, or retrying on contention, is awaited, not reported — and
-  returns 0 when they have committed. If a publish of the file has been
-  classified **stalled** (D27, START-HERE: repeated cycles against an
-  unchanged server state), `fsync`, `fdatasync` and `flush` return EIO on
-  every description of the file until that publish lands, and the client
-  retains the bytes; it never discards them on its own. Last `close`
-  initiates the same drain and returns its failure through `flush`; EFS
-  makes **no durability promise at `close`** beyond that — nothing after
-  `flush` can report. Same-client read-your-writes hold via the dcache.
-  (Application advice, not a guarantee: a program that needs bytes
-  durable calls `fsync` and checks its return.) This is POSIX and every
-  production PFS; the stronger "every `write()` publishes" alternative was
-  measured and rejected (W2, in project-history.md "START-HERE closed
-  items": peer sees 0/10 un-`fsync`ed bytes; `kill -9` of `efs-fuse`
-  loses a 64 MiB acknowledged `write()`).
+- **Data — durability.** A returned `write()` is buffered in the client;
+  the client owns those bytes and they are not yet durable. **The
+  guarantee:** the bytes that *this client's* `write()`s to a file
+  returned before an `fsync`/`fdatasync` call are durable **when that call
+  returns 0**, or when an `O_SYNC`/`O_DSYNC`/`-o sync` write returns (the
+  §7.3 publication machine; `O_SYNC` is specified, not wired yet). An
+  `fsync` drains this client's pending publishes of the file that precede
+  it — one in flight, or retrying on contention, is awaited; it never
+  waits for another client's writes. A transient failure of that drain
+  (transport, RPC budget, node down) returns EIO from that call with the
+  bytes retained as pending; the next `fsync` retries. If a publish of
+  the file has been classified **stalled** (D27, START-HERE: repeated
+  cycles against an unchanged server state), `fsync`, `fdatasync` and
+  `flush` return EIO on every description of the file until that publish
+  lands, and the client retains the bytes; it never discards them on its
+  own. Deferring durability to `fsync` is POSIX. (Application advice, not
+  a guarantee: a program that needs bytes durable calls `fsync` and checks
+  its return.)
+- **Data — publication at `flush`, not "last close".** Every `flush` (the
+  kernel sends one per `close()` of a descriptor, so a dup'd descriptor
+  produces several) runs the same drain as `fsync` and returns its
+  failure to that `close()`. `release` does cleanup only (ghost reclaim,
+  lock drop) and publishes nothing — FUSE cannot identify a "last" flush
+  and EFS does not try. EFS makes **no durability promise at `close`**
+  beyond the `flush` return value; nothing after it can report.
+- **Data — cross-client visibility is a deviation from POSIX.** POSIX
+  requires that a read which can be proven to occur after a `write()`
+  returned observes that write, regardless of which process issued it.
+  EFS does **not** offer that across clients: a byte written on client A
+  becomes visible to client B only after A has **published** it
+  (`fsync`, `flush`, `O_SYNC`, or a landed-PUT REPORT — D24). Within one
+  client, read-your-writes hold via the dcache. This is the
+  close-to-open-like relaxation of NFS and of every production PFS that
+  buffers client-side, and it is a consistency deviation separate from
+  the durability rule above; it is listed here as such. The stronger
+  "every `write()` publishes" alternative was measured and rejected (W2,
+  in project-history.md "START-HERE closed items": peer sees 0/10
+  un-`fsync`ed bytes; `kill -9` of `efs-fuse` loses a 64 MiB acknowledged
+  `write()`).
 - **One `write()`/`pwrite()` publishes atomically.** POSIX makes regular-file
   `read()`/`write()` effects atomic with respect to one another, so a
   concurrent reader never observes a mix of old and new chunks from a single

@@ -9,7 +9,7 @@ Implements the documentation gate specified in docs/arch/development.md
                          fail on any diff.
   2. links               every internal markdown link in the doc sources
                          resolves (target file exists; #anchor, when present,
-                         names a header in the target).
+                         names a header or an explicit <a id> in the target).
   3. invariant-refs      every invariant reference (I1..I25, incl. ranges
                          like I20–I23 / I1..I25) names an invariant defined
                          in architecture.md §4.
@@ -127,6 +127,9 @@ def github_anchors(text):
     anchors = set()
     seen = {}
     for line in lines_without_fences(text):
+        # explicit HTML anchors (<a id="..."></a>), used by project-history.md
+        for aid in re.findall(r'<a\s+id="([^"]+)"', line):
+            anchors.add(aid)
         m = HEADER_RE.match(line)
         if not m:
             continue
