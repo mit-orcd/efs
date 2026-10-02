@@ -2732,11 +2732,56 @@ static void bounce_add(uint8_t *gs, int *ngs, int cap, uint8_t g)
 
 /* First peer other than self (and skip) that votes in every listed group.
  * Dual-hosts of {0,2} are raft ids 1 and 2 at n=4. Never returns self. */
+/* Leader of a group this host does not hold a view of, as the last
+ * forwarded reply named it (raft id, -1 unknown). Indexed by group >> 1. */
+static int g_fwd_leader[HOST_NGROUPS] = {-1, -1};
+
+static int host_local_leader(struct efs_raft_host *h, uint8_t group);
+
+/* A single-group forward goes to that group's leader when one is known:
+ * a follower answers a read with a ReadIndex RPC to the leader plus a
+ * catch-up wait (700 us each on the Spark pair, two per cross-group
+ * LOOKUP), the leader answers from its covered view in ~20 us. */
+static int host_fwd_leader_pick(struct efs_raft_host *h, uint8_t group,
+                                int skip)
+{
+    int rid = -1;
+
+    if ((group >> 1) >= HOST_NGROUPS)
+        return -1;
+    if (host_hosts(h, group))
+        rid = host_local_leader(h, group);
+    if (rid < 0)
+        rid = __atomic_load_n(&g_fwd_leader[group >> 1], __ATOMIC_RELAXED);
+    if (rid < 0 || rid >= h->n || rid == h->raft_id || rid == skip)
+        return -1;
+    {
+        struct host_group *s = group_slot(h, group);
+        uint32_t voters = (s && s->r) ? efs_raft_voters(s->r)
+                          : (s ? s->voters : group_voters(group, h->n));
+        if (!hosts_group(rid, voters))
+            return -1;
+    }
+    return rid;
+}
+
+static void host_fwd_leader_note(uint8_t group, int rid)
+{
+    if ((group >> 1) >= HOST_NGROUPS || rid < 0)
+        return;
+    __atomic_store_n(&g_fwd_leader[group >> 1], rid, __ATOMIC_RELAXED);
+}
+
 static int host_pick_peer(struct efs_raft_host *h, const uint8_t *groups, int ng,
                           int skip)
 {
     int rid, i;
 
+    if (ng == 1) {
+        rid = host_fwd_leader_pick(h, groups[0], skip);
+        if (rid >= 0)
+            return rid;
+    }
     for (rid = 0; rid < h->n; rid++) {
         int ok = 1;
         if (rid == h->raft_id || rid == skip)
@@ -2949,6 +2994,96 @@ static int host_past_deadline(const struct timespec *end)
     return now.tv_nsec >= end->tv_nsec;
 }
 
+/* EFS_READ_PROF=1: where a LOOKUP / GETATTR spends its time on this
+ * host. The Spark du (Oct 2) paid 1.4 ms per stat with the client and
+ * the leader on one host and ~100 us of CPU in it; the rest is the
+ * ReadIndex round (leader: begin round, pump kick, heartbeat RTT,
+ * publish, waiter wake; follower: RPC to the leader + catch-up) and
+ * the KV gets. One line per 1000 lookups+getattrs on stderr; sums are
+ * microseconds. Counters are relaxed atomics, the hot path adds a few
+ * clock reads only when the env is set. */
+struct read_prof_acc {
+    uint64_t n, sum, max;
+};
+
+static struct {
+    struct read_prof_acc ri_leader;   /* host_read_index, this host leads */
+    struct read_prof_acc ri_leader_covered; /* ... and no new round needed */
+    struct read_prof_acc ri_remote;   /* host_read_index, forwarded */
+    struct read_prof_acc ri_remote_wait; /* host_wait_applied after it */
+    struct read_prof_acc lk_total, lk_ri_parent, lk_kv, lk_lanes, lk_getattr;
+    struct read_prof_acc ga_total, ga_lanes, ga_getattr;
+    uint64_t lk_fwd, ga_fwd;
+    uint64_t ticks;
+} g_read_prof;
+
+static int read_prof_on(void)
+{
+    static int v = -1;
+    if (v < 0)
+        v = env_on("EFS_READ_PROF");
+    return v;
+}
+
+static void read_prof_add(struct read_prof_acc *a, uint64_t us)
+{
+    uint64_t m;
+
+    __atomic_fetch_add(&a->n, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&a->sum, us, __ATOMIC_RELAXED);
+    m = __atomic_load_n(&a->max, __ATOMIC_RELAXED);
+    while (us > m &&
+           !__atomic_compare_exchange_n(&a->max, &m, us, 1, __ATOMIC_RELAXED,
+                                        __ATOMIC_RELAXED))
+        ;
+}
+
+static void read_prof_fmt(char *buf, size_t cap, const char *name,
+                          const struct read_prof_acc *a)
+{
+    uint64_t n = __atomic_load_n(&a->n, __ATOMIC_RELAXED);
+    uint64_t s = __atomic_load_n(&a->sum, __ATOMIC_RELAXED);
+    uint64_t m = __atomic_load_n(&a->max, __ATOMIC_RELAXED);
+
+    snprintf(buf, cap, " %s=%llu/%llu/%llu", name, (unsigned long long)n,
+             (unsigned long long)(n ? s / n : 0), (unsigned long long)m);
+}
+
+/* Called once per finished LOOKUP / GETATTR; prints every 1000. Fields
+ * are n/avg_us/max_us since start. */
+static void read_prof_tick(void)
+{
+    uint64_t t = __atomic_add_fetch(&g_read_prof.ticks, 1, __ATOMIC_RELAXED);
+    char line[1024];
+    char f[16][96];
+    size_t i;
+
+    if (t % 1000 != 0)
+        return;
+    read_prof_fmt(f[0], sizeof(f[0]), "lk", &g_read_prof.lk_total);
+    read_prof_fmt(f[1], sizeof(f[1]), "lk_ri_parent", &g_read_prof.lk_ri_parent);
+    read_prof_fmt(f[2], sizeof(f[2]), "lk_kv", &g_read_prof.lk_kv);
+    read_prof_fmt(f[3], sizeof(f[3]), "lk_lanes", &g_read_prof.lk_lanes);
+    read_prof_fmt(f[4], sizeof(f[4]), "lk_getattr", &g_read_prof.lk_getattr);
+    read_prof_fmt(f[5], sizeof(f[5]), "ga", &g_read_prof.ga_total);
+    read_prof_fmt(f[6], sizeof(f[6]), "ga_lanes", &g_read_prof.ga_lanes);
+    read_prof_fmt(f[7], sizeof(f[7]), "ga_getattr", &g_read_prof.ga_getattr);
+    read_prof_fmt(f[8], sizeof(f[8]), "ri_leader", &g_read_prof.ri_leader);
+    read_prof_fmt(f[9], sizeof(f[9]), "ri_leader_covered",
+                  &g_read_prof.ri_leader_covered);
+    read_prof_fmt(f[10], sizeof(f[10]), "ri_remote", &g_read_prof.ri_remote);
+    read_prof_fmt(f[11], sizeof(f[11]), "ri_remote_wait",
+                  &g_read_prof.ri_remote_wait);
+    line[0] = '\0';
+    for (i = 0; i < 12; i++)
+        strncat(line, f[i], sizeof(line) - strlen(line) - 1);
+    fprintf(stderr, "read-prof:%s lk_fwd=%llu ga_fwd=%llu\n", line,
+            (unsigned long long)__atomic_load_n(&g_read_prof.lk_fwd,
+                                                __ATOMIC_RELAXED),
+            (unsigned long long)__atomic_load_n(&g_read_prof.ga_fwd,
+                                                __ATOMIC_RELAXED));
+}
+
 /* A follower's ReadIndex is one RPC to the leader per caller. The dual
  * hosts follow both groups and serve every GETCHUNKS (two ReadIndexes
  * per 64-chunk window); 9 clients × 16 pull threads put ~300 of those
@@ -3048,6 +3183,9 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
     struct timespec end;
     struct host_view v;
     uint64_t want;
+    int prof = read_prof_on();
+    uint64_t p0 = prof ? now_us_() : 0;
+    int first = 1;
 
     if (leader_hint)
         *leader_hint = -1;
@@ -3066,21 +3204,33 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
         if (v.role != EFS_RAFT_LEADER) {
             uint64_t ridx = 0;
             int rhint = -1;
+            uint64_t p1;
 
             if (v.leader == h->raft_id)
                 return EFS_ERR_NOT_PRIMARY;
             rc = host_remote_read_index(h, group, v.leader, &end, &ridx,
                                         &rhint);
+            p1 = prof ? now_us_() : 0;
+            if (prof)
+                read_prof_add(&g_read_prof.ri_remote, p1 - p0);
             if (rc == EFS_OK)
                 rc = host_wait_applied(h, group, ridx, leader_hint);
+            if (prof)
+                read_prof_add(&g_read_prof.ri_remote_wait, now_us_() - p1);
             if (rc != EFS_OK)
                 return rc;
             if (leader_hint && rhint >= 0)
                 *leader_hint = rhint;
             return EFS_OK;
         }
-        if (host_view_covers(&v, want))
+        if (host_view_covers(&v, want)) {
+            if (prof)
+                read_prof_add(first ? &g_read_prof.ri_leader_covered
+                                    : &g_read_prof.ri_leader,
+                              now_us_() - p0);
             return EFS_OK;
+        }
+        first = 0;
         if (!v.read_pending) {
             /* Begin a round — under h->mu, re-validated against the core
              * (another reader may have begun one since the view). */
@@ -3561,6 +3711,11 @@ static void host_inode_forward(struct efs_raft_host *h, uint8_t req_type,
             out->status = EFS_INODE_RPC_NOT_PRIMARY;
             continue;
         }
+        /* The peer's hint is that group's leader (set_inode_rc on OK as
+         * well as NOT_PRIMARY); remember it for the next single-group
+         * forward. Ambiguous when the request spanned two groups. */
+        if (ng == 1 && out->primary_id > 0)
+            host_fwd_leader_note(groups[0], (int)out->primary_id - 1);
         if (out->status != EFS_INODE_RPC_NOT_PRIMARY)
             return;
         skip = rid;
@@ -7107,9 +7262,14 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    int prof = read_prof_on();
+    uint64_t p0 = prof ? now_us_() : 0, p1 = 0;
+
     {
         uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
         if (!host_hosts(h, ig)) {
+            if (prof)
+                __atomic_fetch_add(&g_read_prof.ga_fwd, 1, __ATOMIC_RELAXED);
             host_fwd_getattr(h, ino, out, &ig, 1);
             return;
         }
@@ -7119,14 +7279,26 @@ void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out)
         uint8_t need[2];
 
         host_need_both(need);
+        if (prof)
+            __atomic_fetch_add(&g_read_prof.ga_fwd, 1, __ATOMIC_RELAXED);
         host_fwd_getattr(h, ino, out, need, 2);
         return;
     }
+    if (prof)
+        p1 = now_us_();
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK)
         stat_to_inode(&st, &out->inode);
+    if (prof) {
+        uint64_t p2 = now_us_();
+
+        read_prof_add(&g_read_prof.ga_total, p2 - p0);
+        read_prof_add(&g_read_prof.ga_lanes, p1 - p0);
+        read_prof_add(&g_read_prof.ga_getattr, p2 - p1);
+        read_prof_tick();
+    }
 }
 
 /* Open lease (I19): one Raft entry on the inode shard. flags=1 open,
@@ -7576,16 +7748,23 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    int prof = read_prof_on();
+    uint64_t p0 = prof ? now_us_() : 0, p1 = 0, p2 = 0, p3 = 0;
+
     psh = efs_kv_inode_shard(parent);
     pg = efs_raft_shard_group(psh);
     if (!host_hosts(h, pg)) {
         uint8_t need[2];
         need[0] = pg;
         need[1] = EFS_RAFT_GROUP_SHARD2;
+        if (prof)
+            __atomic_fetch_add(&g_read_prof.lk_fwd, 1, __ATOMIC_RELAXED);
         host_fwd_lookup(h, parent, name, out, need, 2);
         return;
     }
     rc = host_read_index(h, pg, &hint);
+    if (prof)
+        p1 = now_us_();
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, parent, &prow);
     if (rc == EFS_OK && prow.layout != EFS_META_LAYOUT_LOCAL) {
@@ -7607,15 +7786,26 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
     }
     if (rc == EFS_OK)
         rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
+    if (prof)
+        p2 = now_us_();
     if (rc == EFS_OK) {
         uint8_t cg = efs_raft_shard_group(efs_kv_inode_shard(dent.ino));
         if (!host_hosts(h, cg)) {
-            uint8_t need[2];
-            int nn = 1;
-            need[0] = pg;
-            if (cg != pg)
-                    need[nn++] = cg;
-            host_fwd_lookup(h, parent, name, out, need, nn);
+            /* The dentry was read here under pg's ReadIndex; only the
+             * child's row is on a group this host does not hold. Ask
+             * that group for a GETATTR (its leader when known) instead
+             * of re-running the whole LOOKUP on a dual host, which paid
+             * two follower ReadIndex round trips (Spark Oct 2: 1.5 ms
+             * per forwarded lookup against 20 us served). Same two
+             * independent ReadIndexes as before, one fewer hop. The
+             * child's lanes may still send the peer to a dual host. */
+            if (prof)
+                __atomic_fetch_add(&g_read_prof.lk_fwd, 1, __ATOMIC_RELAXED);
+            host_fwd_getattr(h, dent.ino, out, &cg, 1);
+            if (out->status == EFS_INODE_RPC_OK) {
+                out->inode.parent = parent;
+                strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
+            }
             return;
         }
         rc = host_read_inode_lanes(h, dent.ino, &hint);
@@ -7623,10 +7813,14 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             uint8_t need[2];
 
             host_need_both(need);
+            if (prof)
+                __atomic_fetch_add(&g_read_prof.lk_fwd, 1, __ATOMIC_RELAXED);
             host_fwd_lookup(h, parent, name, out, need, 2);
             return;
         }
     }
+    if (prof)
+        p3 = now_us_();
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
     set_inode_rc(out, rc, hint);
@@ -7634,6 +7828,16 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         stat_to_inode(&st, &out->inode);
         out->inode.parent = parent;
         strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
+    }
+    if (prof) {
+        uint64_t p4 = now_us_();
+
+        read_prof_add(&g_read_prof.lk_total, p4 - p0);
+        read_prof_add(&g_read_prof.lk_ri_parent, p1 - p0);
+        read_prof_add(&g_read_prof.lk_kv, p2 - p1);
+        read_prof_add(&g_read_prof.lk_lanes, p3 - p2);
+        read_prof_add(&g_read_prof.lk_getattr, p4 - p3);
+        read_prof_tick();
     }
 }
 

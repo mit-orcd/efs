@@ -296,9 +296,50 @@ static uint32_t raft_group_voters(uint8_t group, int n)
     return 0xeu;     /* nodes 2,3,4 = raft ids 1,2,3 */
 }
 
+/* Leader of each metadata group as the last OK reply named it
+ * (set_inode_rc puts the ReadIndex group's leader in primary_id on OK
+ * too). A follower-served read is a ReadIndex round trip to the leader
+ * plus a catch-up wait before the KV get; sending it to the leader
+ * removes that hop (Spark du Oct 2: 2.5 ms per stat on the follower
+ * host vs 1.4 on the leader host). A wrong note costs the old path: the
+ * leader forwards or answers NOT_PRIMARY with the hint and the reply
+ * corrects the note. 0 = unknown; indexed by group >> 1. */
+static efs_node_id_t g_group_leader[2];
+
+static void rpc_note_leader(uint8_t group, efs_node_id_t nid)
+{
+    unsigned gi = group >> 1;
+
+    if (gi >= 2 || nid == 0 || nid > EFS_RAFT_MAX_PEERS)
+        return;
+    __atomic_store_n(&g_group_leader[gi], nid, __ATOMIC_RELAXED);
+}
+
+static efs_node_id_t rpc_leader_of(uint8_t group)
+{
+    unsigned gi = group >> 1;
+
+    if (gi >= 2)
+        return 0;
+    return __atomic_load_n(&g_group_leader[gi], __ATOMIC_RELAXED);
+}
+
+/* The last OK LOOKUP/GETATTR reply's leader note, keyed by the group of
+ * the inode the reply describes (a LOOKUP's hint is the child's group,
+ * host_read_inode_lanes sets it last). */
+static void rpc_learn_leader(const struct efs_msg_inode_reply *r)
+{
+    if (!r || r->status != EFS_INODE_RPC_OK || r->primary_id == 0 ||
+        r->inode.ino == 0)
+        return;
+    rpc_note_leader(efs_raft_shard_group(efs_kv_inode_shard(r->inode.ino)),
+                    r->primary_id);
+}
+
 /* First live voter of the shard's group, not `skip`; the host bounces to
  * the leader and the retry loop follows primary_id, so any voter is a
- * fine entry point. `skip` is the voter that just answered NOT_PRIMARY
+ * fine entry point. The group's noted leader goes first when it is a live
+ * voter (see g_group_leader). `skip` is the voter that just answered NOT_PRIMARY
  * with no hint: this pick is deterministic, so without it the same node
  * was asked 16 times over 10.3 s and the op failed EBUSY (Sep 29, fstor007
  * ecopy: 810 such lines, SETATTR/CREATE/RENAME_AT, both terms stable).
@@ -310,8 +351,17 @@ static struct efs_conn *raft_voter_conn_skip(uint32_t shard,
     uint8_t group = efs_raft_shard_group(shard);
     int n = (int)g_client.node_count;
     uint32_t voters = raft_group_voters(group, n);
+    efs_node_id_t lead = rpc_leader_of(group);
     int pass;
 
+    if (lead && lead != skip && lead <= (efs_node_id_t)n &&
+        (voters & (1u << (lead - 1))) && !efs_client_node_is_down(lead)) {
+        struct efs_conn *conn = efs_client_conn_get(lead);
+        if (conn) {
+            *nid_out = lead;
+            return conn;
+        }
+    }
     for (pass = 0; pass < 2; pass++) {
         for (int rid = 0; rid < n && rid < EFS_RAFT_MAX_PEERS; rid++) {
             if (!(voters & (1u << rid)))
@@ -530,6 +580,11 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             saw_busy = 1;
             target = 0;
             skip = nid;
+            /* The noted leader no longer is one: forget it so the
+             * re-pick does not land here again. */
+            if (rpc_leader_of(efs_raft_shard_group(shard)) == nid)
+                __atomic_store_n(&g_group_leader[efs_raft_shard_group(shard) >> 1],
+                                 0, __ATOMIC_RELAXED);
             fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=no-hint from=%u\n",
                     type, attempt, nid);
             usleep((useconds_t)sleep_us);
@@ -600,6 +655,7 @@ int efs_client_rpc_lookup(efs_export_id_t export_id, efs_ino_t parent,
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
         return rpc_status_to_efs(r.status);
+    rpc_learn_leader(&r);
     if (out)
         *out = r.inode;
     return EFS_OK;
@@ -677,6 +733,7 @@ int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
         return rc;
     if (r.status != EFS_INODE_RPC_OK)
         return rpc_status_to_efs(r.status);
+    rpc_learn_leader(&r);
     if (out)
         *out = r.inode;
     return EFS_OK;

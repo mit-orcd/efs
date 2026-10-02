@@ -53,6 +53,17 @@ void server_handler_tls_cleanup(void)
 }
 
 
+/* EFS_RDMA_FIRST debug tracing, read once: getenv per received message
+ * was 0.5-0.6 % of efsd cycles on the Spark du profile. */
+static int rdma_first_on(void)
+{
+    static int on = -1;
+
+    if (on < 0)
+        on = getenv("EFS_RDMA_FIRST") != NULL;
+    return on;
+}
+
 /* Wait for the next request on either channel of an RDMA-capable conn.
  * See efs_conn_wait_request (protocol.c) — kept out of this file so the
  * xprt test cannot drift from the server conn thread. */
@@ -72,7 +83,7 @@ void server_handle_conn(struct efs_conn *conn)
         if (chan < 0)
             break;
         conn->recv_chan = chan;
-        if (getenv("EFS_RDMA_FIRST")) {
+        if (rdma_first_on()) {
             static int nwait;
             int n = __sync_fetch_and_add(&nwait, 1);
             if (n < 8)
@@ -885,7 +896,7 @@ send_reply:
             uint32_t rlen = sizeof(rep);
             efs_rdma_server_accept(conn, payload, payload_len, &rep, &rlen);
             efs_conn_send_msg(conn, EFS_MSG_RDMA_SETUP_REPLY, &rep, rlen);
-            if (getenv("EFS_RDMA_FIRST")) {
+            if (rdma_first_on()) {
                 /* Tag the peer's port: a QP and the TCP socket that carried
                  * its handshake must belong to the same connection, and that
                  * is exactly what a crossed SETUP reply would break. */

@@ -1536,7 +1536,8 @@ struct efs_dirh {
     int listed;
 };
 
-static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col);
+static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
+                                struct efs_inode *self_out);
 
 static struct efs_dirh *dirh_new(efs_ino_t ino)
 {
@@ -1565,7 +1566,8 @@ static int dirh_fill(struct efs_dirh *dh, fuse_ino_t ino)
     int rc;
 
     memset(&col, 0, sizeof(col));
-    rc = efs_fuse_readdir_ino(ino, &col);
+    memset(&row, 0, sizeof(row));
+    rc = efs_fuse_readdir_ino(ino, &col, &row);
     if (rc != 0 && virt_kind(ino) != 2) {
         free(col.ents);
         return rc;
@@ -1575,7 +1577,8 @@ static int dirh_fill(struct efs_dirh *dh, fuse_ino_t ino)
     dh->self_mode = S_IFDIR | 0755;
     dh->parent_mode = S_IFDIR | 0755;
     dh->parent_ino = FUSE_ROOT_ID;
-    if (efs_client_stat_ino((efs_ino_t)ino, &row) == EFS_OK) {
+    /* The listing's own stat of this dir is the row; no second table walk. */
+    if (row.ino != 0 || efs_client_stat_ino((efs_ino_t)ino, &row) == EFS_OK) {
         dh->self_mode = row.mode;
         if (row.parent)
             dh->parent_ino = (fuse_ino_t)row.parent;
@@ -1628,7 +1631,8 @@ static int readdir_collect_page(struct readdir_collect_arg *col,
     return 0;
 }
 
-static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col)
+static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col,
+                                struct efs_inode *self_out)
 {
     if (virt_kind(ino) == 2) {
         if (!feature_enabled(EFS_FEATURE_FIND))
@@ -1652,6 +1656,8 @@ static int efs_fuse_readdir_ino(fuse_ino_t ino, struct readdir_collect_arg *col)
             check_access(&parent, ctx->uid, ctx->gid, R_OK) != 0)
             return -EACCES;
     }
+    if (self_out)
+        *self_out = parent;
 
     uint32_t src = 0, done = 0;
     char name_cur[EFS_MAX_NAME] = "";
@@ -4803,6 +4809,9 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
     }
 }
 
+static __thread char *t_rdd_buf;
+static __thread size_t t_rdd_cap;
+
 static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                        struct fuse_file_info *fi)
 {
@@ -4839,12 +4848,21 @@ static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
             return;
         }
     }
-    buf = malloc(size ? size : 1);
-    if (!buf) {
-        t_req = NULL;
-        fuse_reply_err(req, ENOMEM);
-        return;
+    /* One reply buffer per FUSE worker; a du does ~2 READDIRs per
+     * directory and malloc/free of the 128 KiB were visible (cfree 3.8 %
+     * of client cycles on the Spark profile). */
+    if (t_rdd_cap < (size ? size : 1)) {
+        size_t want = size ? size : 1;
+        char *nb = realloc(t_rdd_buf, want);
+        if (!nb) {
+            t_req = NULL;
+            fuse_reply_err(req, ENOMEM);
+            return;
+        }
+        t_rdd_buf = nb;
+        t_rdd_cap = want;
     }
+    buf = t_rdd_buf;
     if (off < cookie) {
         if (dirbuf_add(req, buf, size, &used, ".", ino, dh->self_mode, cookie))
             goto send;
@@ -4873,7 +4891,6 @@ static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
 send:
     t_req = NULL;
     fuse_reply_buf(req, buf, used);
-    free(buf);
     if (dh == &local)
         free(local.ents);
 }
