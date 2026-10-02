@@ -69,17 +69,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`voters=0x7`); group 2 = even shards = nodes 2–4 (`0xe`). Export
   `efs-test` (id 1), mount `/tmp/efs-mount`. 19820 is retired; do not
   stand it up. Do not roll back to TCP unless a suite fails.
-- **State at 01:22Z Oct 2 2026 (`start740`, `cluster.sh start
- --clients`, CLUSTER_OK):** servers `141071a3e9ba-dirty` (the
- W43/W45/W36/W26/W42/W44a/W46/W47 tree before its commit) on
- fcstor003–006, no `--perf`/`--strace`; clients fcstor003–015 mounted
- RDMA on the same tree; fstor007 untouched (the user's own `client.sh`).
- The cluster had been STOPPED 22:00Z–01:22Z after the 16× dd review
- (START-HERE §1b). Same table as the Oct 1 07:18Z `raft-mkfs` (salt
- 4206459926809775694); restarts need no `--join`. g0 term 51 leader
- fcstor003, g2 term 29 leader fcstor006, commit==applied. The `-dirty`
- is the node tree missing tracked `results/` (and, for this roll, the
- uncommitted edits). Full roll/remount history:
+- **State at 01:54Z Oct 2 2026 (`r749`, `cluster.sh restart
+ --clients --perf --strace`, CLUSTER_OK):** servers
+ `2b5a25df419c-dirty` on fcstor003–006 with `--perf --strace`
+ (`/tmp/efs-perf/efsd.data`, `efsd.strace`); clients fcstor003–015
+ remounted RDMA on the same build, no client recorders; fstor007 has
+ no mount. Same table as the Oct 1 07:18Z `raft-mkfs` (salt
+ 4206459926809775694); restarts need no `--join`. g0 term 63 leader
+ fcstor003, g2 term 35 leader fcstor006, commit==applied at roll.
+ The `-dirty` is uncommitted docs. Full roll/remount history:
  `docs/project-history.md` ("Cluster-state narrative").
 - **Current gate signature on that tree:** posix jobs=1 **200/201**
   (`mmap_write_read` SKIP by spec), posix2 **63/63**, 9-host posix
