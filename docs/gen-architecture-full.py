@@ -25,6 +25,7 @@ OUT_HTML = DOCS / "architecture.html"
 # (source, appendix title) in reading order.
 APPENDICES = [
     ("arch/START-HERE.md", "Start here — task routing for contributors"),
+    ("arch/work-items.md", "Work items — long-form text for the open W items"),
     ("arch/naming.md", "Naming"),
     ("arch/design.md", "Design rationale"),
     ("arch/failure-tolerance.md", "Failure tolerance — derivation"),
