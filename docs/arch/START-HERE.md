@@ -27,7 +27,10 @@ performance. Each item names what to change, how to measure it, what
 proves it, and what is forbidden. If an item needs a decision the spec
 does not contain, **stop and ask** (§4). Decisions already taken are the
 rows marked **decided** in §1a "Decisions"; implement them, do not
-re-ask. Open asks as of Oct 2 13:45Z: **D28** (who owns acknowledged
+re-ask. **Oct 2 19:05Z: two open correctness rows go first — W54 (row
+0i, a fold's GC deletes the live base → read EIO, data loss) and row 0j
+(the client's 50 ms lookup memo returns pre-mutation stats, posix
+164/201).** Open asks as of Oct 2 13:45Z: **D28** (who owns acknowledged
 bytes across client death), **D29** (a REPORT receipt for "committed,
 apply pending"; its live symptom did not appear untraced — P0.2),
 **D30** (the remedy for compaction-induced apply lag), **W53**
@@ -73,17 +76,48 @@ is a bug in this page. One block only; the previous one moves to
 [project-history.md](../project-history.md) "START-HERE handoff archive"
 when it is replaced.
 
-**Oct 2 2026 15:00Z — P2.1 W50 and P2.4 W51 are done (investigations);
-D26 cursor is in the working tree, watermark not yet; cluster UP
-(`111a07527093-dirty`, `--perf`, RDMA). Clients fcstor007–015 remounted
-15:19Z (gate); fstor007 down.** Nothing in this block needs a
-wipe. W50: `results/measure/20261002-134900-w50-gcdbg/SUMMARY.txt`.
-W51: `results/measure/20261002-143815-w51/SUMMARY.txt`. Gate 15:19Z:
-posix 200/201, posix2 63/63, IO-500 9×4 debug
-`results/io500/20261002-152126-rdma` (compare
-`results/measure/20261002-151920-posix-ior/SUMMARY.txt`). The 13:45Z
-P0/P1 block is the previous handoff (same file history / project-history
-"START-HERE handoff archive Oct 2 2026 13:45Z").
+**Oct 2 2026 19:05Z — TWO CORRECTNESS ROWS OPENED BY THE 17:00Z GATE;
+do these before anything on the performance track.** Servers ran
+19:22–19:52Z on `efc0f499cbae-dirty` under `perf record -g` and were
+**stopped at 19:52Z** (`cluster.sh stop`; storage kept, no wipe, next
+start needs no `--join`). Clients fcstor003–015 are down. **The whole
+cluster is DOWN.** Nothing here needs a wipe.
+0. **Perf read of that window (20:05Z, no code change):**
+   `results/measure/20261002-195156-servers-perf-idle/SUMMARY.txt`.
+   Servers at 8–10 % of one core; load was one 10 GiB `dd` from the
+   user's fstor007 client (O_TRUNC over an existing file, traced,
+   337 MB/s — not a baseline). Hot paths: (a) PUT = kernel XFS
+   create + DIO extent alloc per fragment file, 20–24 % on every
+   node, efsd user code ~0.3 %; (b) followers compact 20×/s during
+   the dd (`l0=270`, 1215 compactions in one minute, L0 stays
+   ~260 idle) and the leader pump lags 35 ms mean / 118 ms max
+   (`apply-sleep`) under the REPORT applies — D9/D10 shape;
+   (c) **the leaders' GC frag pass is bounded by serial fragment
+   deletes, not by the scan any more**: `GC_FRAG_BUDGET_US` ends
+   every pass after two 256-record scans (~130 ms each = 3 serial
+   deletes per record, 2 remote at ~170 µs) → ≤ ~400 records/s per
+   group, 591 identical `gc-frag records=512` passes in 13 min after
+   the dd. Whether that queue was draining or a stuck set needs a
+   GC-prefix key count on a KV copy (safe now, servers down) — feeds
+   D26/P2.2, not a decision; (d) the user's client profile has
+   7.7 % memmove under `efs_rdma_send_frame` on the PUT send path
+   (W39 zero-copy apparently not engaged on fstor007 — check
+   `efs_rdma_zc_region_add` there before assuming it is everywhere).
+1. **W54 (row 0i, server, data loss):** a fold GC'd the generation it
+   kept as the base; ior-hard-read `MPI_ABORT` on a decode EIO. Fix in
+   `efs_meta_apply_publish`'s fold branch, unit test, cold repro, then a
+   stop-all/start-all roll. Evidence in the row and
+   `results/measure/20261002-165956-redeploy-posix-ior/SUMMARY.txt`.
+2. **Row 0j (client, `20745142`'s 50 ms lookup memo):** posix jobs=1
+   164/201 — a same-client stat after a mutation returns the pre-mutation
+   row. Invalidate the memo on local mutation of the ino.
+Then re-run the gate (posix jobs=1 200/201, posix2 63/63, IO-500 9×4
+debug every phase + cold `hardscan`) before touching P2.2.
+Previous block (15:00Z: W50/W51 done, D26 cursor in tree, 15:19Z gate
+clean on `111a07527093`) is below as history; W50:
+`results/measure/20261002-134900-w50-gcdbg/SUMMARY.txt`, W51:
+`results/measure/20261002-143815-w51/SUMMARY.txt`, gate
+`results/measure/20261002-151920-posix-ior/SUMMARY.txt`.
 
 1. **P0 (gates on what was already in the tree):** W28 gate PASS (8 GiB
    dd+fsync 1518 MB/s, cold read 3297 MB/s, CMP_OK, fcstor007); W46/W47
@@ -156,6 +190,23 @@ P0/P1 block is the previous handoff (same file history / project-history
    (insert +1 / retire −1, re-derive on GET miss) is still to land.
    Then P2.3 W23 stalled-compactor test on the private 3-node cluster.
    Then P3 benches. Asks unchanged: D28, D29, D30, W53, W52.
+7. **Hint — the next performance package (20:15Z, from the 19:22–19:52Z
+   profile; after 0i/0j):** run **P3 `efsd --bench` first** (no
+   cluster, one day), because today's data already says what it will
+   point at: the server PUT path is 98 % kernel XFS — one inode
+   create + one DIO extent allocation per 128 KiB fragment file, efsd
+   user code 0.3 % — so the 9-client shared ceiling (2.5–2.8 GB/s,
+   6 % of NVMe) is the per-fragment-file store, **P4.1 (fragment
+   on-disk layout: fewer path components, larger containers per
+   fragment; wipe; design row first)**. That is the package with the
+   most throughput behind it. The single-client number (1.5 GB/s) is
+   client CPU in the put pool (blake3 21 %, copies 14 %, parity 11 %,
+   FUSE kernel copy 6 %) → **P4.2 W40** is the client package, and
+   the cheap check before it is whether W39's zero-copy send is
+   engaged at all on fstor007 (7.7 % memmove under
+   `efs_rdma_send_frame`). The GC delete fan-out (≤ 400 records/s per
+   group) is background cost, not a throughput wall — fold it into
+   D26 (ii), do not take it before P4.1.
 
 The 05:00Z block (the r749 review: 16 streams not one, the publish
 path, W44 a reading, compaction pressure, syscall counts) is in
@@ -252,6 +303,8 @@ project-history.md "START-HERE closed items".**
 | 0g | **W43 · `truncate`/`O_TRUNC` of a file with > 32 chunks in a lane is a silent no-op; the apply answers OK on NOMEM** (Oct 1 22:00Z review, §1b). **Steps b and c IN TREE Oct 2** (the truncate now FAILS with EIO instead of lying; `tests/stress/truncate_big.sh`); step a is **D25, decided and revised Oct 2** (logical truncation + background reclamation), step d follows it | (a) **D25 (decided):** the fence entry sets epoch + size, the reaper reclaims; (b) mechanical regardless of D25: `apply_truncate_cmd` / `apply_lane_fence_cmd` put the apply's rc on the ring instead of `EFS_OK`, so SETATTR fails (EIO/EBUSY, W16 mapping) rather than lying; (c) repro + gate: `dd bs=1M count=10 conv=fsync` of a non-zero source onto an existing 1 GiB file, then `stat` (size 10 MiB), `md5sum` (the new bytes), `efs-mgmt raft-getchunks` on chunk 100 (gone); same with a 300 MiB file (every lane > 32 chunks) and with different content; add it to posix (`truncate_big_*`) and posix_persist; (d) then the apply drains per D25 and `apply truncate rc=` never appears in `efsd.log` during the 16× dd | servers `efsd.log` 20:56:41–43: `apply truncate rc=-2` ×16 inodes on every replica, `apply lane-fence rc=-2` ×661; client `slow-ok type=63 … status=0`; all 34 REPORTs `skip=8192 push_ms=0`. `TRUNC_IT_CAP` = 64 + 1 + 64×32×2 + 3, `efs_meta_apply_lane_fence` `it[1+32+32]`; `trunc_del_cb` → NOMEM at the 33rd chunk of a lane. Forbidden: raising the cap (a 1 TB file is 8192 chunks per lane); deleting chunk rows from the handler thread outside the entry; returning OK for an apply that wrote nothing |
 | 0h | **W44 · the group leader's GC frag pass scans the whole prefix every 1.2 s and is 80 % of the leader's `efsd` cycles** (Oct 1 22:00Z review, §1b). **Step a IN TREE Oct 2** (`gc-pass … fsegs= fkeys= ftomb=`); the idle-hour reading on the live table is the next action, then D26 | (a) count what one `host_gc_frag_pass` scan visits (`EFS_GC_DBG`, plus a per-scan key/segment counter on the `gc-pass` line) on the live table while idle; (b) if the 205 ms empty scan is the 50–54 L0 segments, that is D12/D13's file count — bring the number to the user (**D26**); if it is tombstones under the GC prefix, the fix is a per-anchor "GC records pending" watermark the apply maintains so an empty pass costs one get; (c) gate: idle leaders show no `gc-pass` line (> 5 ms) for 10 min, `md_latency.py` medians unchanged, a 10 GiB `rm` still drains at ≥ today's 140 records/s per group | fcstor003 `perf-pid.txt`: tid 1056219 79.7 % of 780 K samples, flat `__memcmp_avx2_movbe` 24.9 % + `merge_scan` 16.7 % + `kv_seg_iter_next` 4.1 % + `kv_msrc_advance` 2.8 %; `gc-pass ms=205 frag=205 reap=0` every 1.2 s from 20:11 to 20:56 with nothing to collect; `kv-compact: end … l0=54 l1=149` once per 7 min. Forbidden: a longer `GC_LOOP_MS` to hide it (the rm drain rate is already 78 min per 160 GiB); scanning from a handler thread |
 | 0a | **STALE replay that never converges** (no W number; the earlier `W26` label here collided with the `fallocate` item) | (a) identify ino 116202 on 19810 from a KV copy and compare its chunk row with what the classifier (`write.c:880–968`) would replay; (b) repro: eight `dd bs=1M` into one mount, SIGINT mid-write, client stop, `EFS_DCACHE_TRACE=1`; (c) mechanical: the unmount drain names the inos and rc it abandons, and a `report-stale` round that replays the same single chunk > 16 times logs ino/ci/row gen/verdict once; (d) **DECIDED Oct 2 03:50Z = D27** (decisions table): detect non-progress as repeated STALE against the *same* server generation (a gen advance is contention), stop the loop, keep the dirty bytes pinned, errseq-style EIO on `fsync`/`fdatasync`/`flush` of that inode, `client.sh stop` refused while a stalled rec exists, forced teardown reports ino/ci/off/len/cause per rec. Spill (Oct 1 23:00Z) and drop-after-N (Oct 2 01:45Z) were both rejected. **D28 (ask):** loss on forced teardown as written policy vs server-held write intents. Note: 2768 rounds prove a stalled operation, not a content mismatch — (a) decides which | fstor007 Oct 1 00:05: 2768 rounds of `report-stale: chunks=1 … committed=0 replayed=1` and then `UNMOUNT DATA LOSS … rc=-14 after 60s`. Acknowledged writes were discarded; the log cannot say whose. Forbidden: widening the 60 s drain, dropping the STALE check, or publishing a rec the server rejected |
+| 0i | **W54 · a fold's GC deletes the live base: when the folded image's object is also a tombstoned span (same content hash → same generation), `efs_meta_apply_publish` queues that generation for GC and the reaper unlinks the fragments the row still names; the next cache-miss read is EIO (Oct 2 17:04Z, IO-500 9×4 ior-hard-read `MPI_ABORT`). MUST FIX before any performance row; data loss with no repair** | (a) **fix the apply (mechanical, L7 already says a fragment set the live row names is not an orphan):** in the fold branch of `efs_meta_apply_publish` (`meta_apply.c` ~3625, "A full image replaces the spans") skip a span whose `generation == stored.generation` or whose `(nodes, checksums)` alias `stored` (`chunk_aliases`); apply the same filter to the tombstone walk, which today would also GC the previous base when a new image aliases it; (b) `test_meta_apply`: span of object X, then full image with `candidate_gen == X` → the batch holds no GC key for X; (c) repro + gate: two peers write adjacent ranges of one chunk so both merge to the identical image (ior-hard shape; or a posix2 `peer_shared_chunk_fold_gc`), wait past the GC latency (≥ 2 s), remount, cold read; plus a cold `ior-hard-verify` + `hardscan` after every 9×4 run (this run surfaced it only because a same-mount read missed the cache); (d) **ask (not decided):** a GC-side guard — `host_gc_record` point-gets the chunk row before each delete and skips a generation it still references (one get per record on the GC thread = D26's cost; the GC key lacks the inode generation the chunk key needs); (e) stop-all/start-all roll of the four servers, then the gate in (c) | `results/measure/20261002-165956-redeploy-posix-ior/SUMMARY.txt`; fcstor015 `fuse.log` 17:04:40Z `fetch published ino=656804 ci=181944 rc=-9 then pull rc=0 rc=-9` (row unchanged across the pull — not a stale map), `efs-fuse read: decode error (efs_rc=-9) off=23847816512 len=47008`; `raft-getchunks 656804 181944`: `base_gen=15366554570668337119 spans=2` with tombstones `4218386339069290638 seq=1088` and `15366554570668337119 seq=3731` — the base IS the second tombstone; on disk under `…/0065/6804/177/` only `181944.{0,1,2}.3089159234672355549` (one per fcstor003/004/005), the live generation gone. `gc_queue` (`meta_apply.c:3154`) checks nothing; `host_gc_local_del` → `efs_store_del_if_sum` passes on the same object's sum. Server code unchanged since `2b5a25df`; the hit is probabilistic (same-gen collision, GC runs, cache miss) so the 15:21Z clean hard-read does not clear it. The file `/tmp/efs-mount/io500/2026.10.02-13.02.57/ior-hard/file` is unrecoverable (test data; delete it). Forbidden: zero-filling the read (I9); a longer GC latency to hide it; a client-side retry loop |
+| 0j | **Client regression in `20745142`/`efc0f499` (not W54, same gate run): `lookup_memo_take` answers a GETATTR within 50 ms of the LOOKUP from the LOOKUP row — a stat right after write/chmod/link/utimens on the SAME client shows the pre-mutation row.** posix jobs=1 **164/201, 36 fail** (`results/posix/20261002-170119`: `basic_dd_rw` size 0, `attr_chmod` mode 420, `hardlink_basic` nlink 1, `attr_utimens_ns` old mtime …); posix2 63/63 (the peer holds no memo). The 15:19Z tree was 200/201 | mechanical: the memo must be invalidated by every local mutation of that ino (write/truncate/setattr/link/unlink/rename/utimens — the same set that already drops `g_lookup_memo` candidates on nothing today), or consumed only when no local op on the ino happened since `lookup_memo_put`; gate: posix jobs=1 back to 200/201 on one client and the Spark `du` number the commit cites not lost | `efs_fuse.c` `lookup_memo_put`/`lookup_memo_take` (`LOOKUP_MEMO_US` 50 ms, 32 slots, keyed by ino only). `attr_timeout` stays 0 (decided). Not a server change |
 | 0e | **W38 · ior-hard: a client's full image folds its own published span without the span's bytes (4256 B of zeros, committed)** | the F3 block in §1b (Oct 1 08:05Z): one-client 4-rank IOR hard with `EFS_DCACHE_TRACE=1 EFS_REPORT_DBG=1`, `hardscan` cold, `raft-getchunks` on each bad chunk; fix on the client (the fold observation must come from a body that holds the span) | `results/io500/20261001-074905-rdma` (NOTE.txt, hardscan.txt, getchunks-118842-118844.txt): ino 10897 ci 118843 base 1774…2861 + len-0 tombstone 1838…0185 seq 1222; 1 of 747720 records; first IOR with W30 in the client. Data loss: goes before 0c |
 | 0c | **W36 · rename-vs-unlink of one source both succeed, dangling dentry** (posix2 `peer_rename_vs_unlink_src`, 1 in 6) | the F1 block in §1b (Oct 1 07:45Z): trace the two txns with `APPLY_LOG`, decide between `apply_unlink_cmd`'s silent NOT_FOUND→OK and an EXCL DEL that passes on an absent key, fix that one | evidence `/tmp/efs-mount/posix-2c-r422-6/peer_rename_vs_unlink_src/b` on 19810 (`-?????????`), `~/efs-runs/p2r422.log`, `results/posix2/20261001-073048`. Correctness: goes before 1a–1h |
 | 2a | **W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (total = quotas, avail = room, used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question | mechanical: replace `total_logical = 2 × min_quota` (`efs_fuse_statfs`, `efs_fuse.c:3108–3120`) and `usable_cap = 2 × min_quota` / `usable_free = 2 × min_free` (`efs_mgmt.c:129–185`) with the 3-of-N placement bound: the largest `M` (chunks) with `Σ_i min(c_i, M) ≥ 3M`, `c_i` = node `i`'s quota (or free) in 64 KiB fragments, times 128 KiB; count only up nodes with a quota, as today. Reduces to `2 × min` on three nodes and to `Σ × 2/3` on N equal nodes. Also make `f_blocks` and the used figure come from the same model (statfs today derives used from `Σ phys × 2/3` and total from `2 × min`, so on four nodes used can exceed total and `avail` clamps to 0 while writes still succeed). Unit test with 3 equal, 4 equal, 3 unequal (100/100/1000 → 200, not 800). Then verify on 19810 (`df` vs `efs-mgmt status` vs `4 × 36T × 2/3`) | Both comments say "every chunk places one fragment on each node" — true for three nodes only. Four 500 GiB nodes show 1000 GiB instead of 1333. Not a data-path change; no decision needed. **Verify while there:** what a PUT does when exactly one stripe member answers `EFS_ERR_QUOTA` (`put_fragments_parallel_once`: `quota_errors >= 2` → QUOTA, `acks >= 2` → OK) — if the chunk publishes with two fragments, a full node creates protection debt silently (product-gaps §1.2); if `reroute_down_fragments` moves it, say so in the failure-tolerance table |
@@ -497,7 +550,7 @@ measures where the next one is.
 | row | item | status | what changes (server) | gate / done when | forbidden |
 | --- | --- | --- | --- | --- | --- |
 | P2.1 | **W50** | **CLOSED 14:57Z** — not stuck; `…w50-gcdbg/SUMMARY.txt` | one `EFS_GC_DBG=1` pass: identities, delete verdicts, ACK flush rc | table: all del/flush rc=0, 0 consecutive-pass repeats; `ex=(nil)` skip documented separately | naming a cause from counts |
-| P2.2 | **D26** GC pass | decided (shape); **cursor in tree, unrolled; watermark not yet** | (a) per-anchor pending-GC watermark maintained in the apply (insert bumps, ack/removal lowers, re-derived at recovery from a prefix scan once) so a truly empty pass costs one get; (b) **bounded scan progress**: the frag pass resumes from a per-anchor cursor instead of restarting at the prefix head (`efs_kv_scan_from` + skip the inclusive start); (c) tombstone-aware emit already on the `gc-pass` line — prefix compact on `ftomb/fkeys` only if D26 (ii) is taken | idle leaders: no `gc-pass` line > 5 ms for 10 min and leader `efsd` CPU < 5 % idle; `md_latency.py` medians unchanged; a 10 GiB `rm` still drains at ≥ 512 records per pass; the raft tail of an idle cluster is no longer 99.7 % GC_ACK (preflight's "idle" becomes true) | a longer `GC_LOOP_MS`; scanning from a handler thread; a watermark that is not updated in the same apply as the record |
+| P2.2 | **D26** GC pass | decided (shape); **cursor in tree, rolled 19:22Z; watermark not yet.** 19:22–19:52Z profile (`results/measure/20261002-195156-servers-perf-idle`): with the cursor the tombstone walk is gone (`ftomb=2`) and the pass cost is the deletes — two 256-record scans per 200 ms budget, ~0.5 ms/record = 3 serial fragment deletes, ≤ ~400 records/s per group; a 100 GiB overwrite is ≥ 34 min of GC. The delete fan-out (parallel/remote-batched deletes) is a shape question for D26 (ii), not in the decided text | (a) per-anchor pending-GC watermark maintained in the apply (insert bumps, ack/removal lowers, re-derived at recovery from a prefix scan once) so a truly empty pass costs one get; (b) **bounded scan progress**: the frag pass resumes from a per-anchor cursor instead of restarting at the prefix head (`efs_kv_scan_from` + skip the inclusive start); (c) tombstone-aware emit already on the `gc-pass` line — prefix compact on `ftomb/fkeys` only if D26 (ii) is taken | idle leaders: no `gc-pass` line > 5 ms for 10 min and leader `efsd` CPU < 5 % idle; `md_latency.py` medians unchanged; a 10 GiB `rm` still drains at ≥ 512 records per pass; the raft tail of an idle cluster is no longer 99.7 % GC_ACK (preflight's "idle" becomes true) | a longer `GC_LOOP_MS`; scanning from a handler thread; a watermark that is not updated in the same apply as the record |
 | P2.3 | **W23** stalled-compactor test | open (remaining action) | the test written in work-items.md W23 "correction": compactor stalled by a fault, measure memory and lag bound | numbers in `results/measure/`; feeds W51/D30 | — |
 | P2.4 | **W51** | **DONE 14:38Z** — table only; `…w51/SUMMARY.txt` | 144 apply-sleep episodes from the P0.2 file | compact-overlap 47, small-gap 89, lag-gap 0; D30 still ask | a remedy before the table |
 | P2.5 | **D30** apply-lag remedy | **ask**, blocked on P2.4 | candidate per class: compaction shape (D9/D10 revisit), apply batching, sender pacing | — | code before the decision |

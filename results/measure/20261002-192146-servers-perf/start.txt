@@ -1,0 +1,81 @@
+--- fcstor003 ---
+fuse=0
+--- fcstor004 ---
+fuse=0
+--- fcstor005 ---
+fuse=0
+--- fcstor006 ---
+fuse=0
+--- fcstor007 ---
+fuse=0
+--- fcstor008 ---
+fuse=0
+--- fcstor009 ---
+fuse=0
+--- fcstor010 ---
+fuse=0
+--- fcstor011 ---
+fuse=0
+--- fcstor012 ---
+fuse=0
+--- fcstor013 ---
+fuse=0
+--- fcstor014 ---
+fuse=0
+--- fcstor015 ---
+fuse=0
+[cluster] starting servers ( --perf)
+== build all four (parallel)
+-- node 1
+BUILD_OK
+build=20745142ad79-dirty
+build=efc0f499cbae-dirty
+-- node 2
+BUILD_OK
+build=20745142ad79-dirty
+build=efc0f499cbae-dirty
+-- node 3
+BUILD_OK
+build=20745142ad79-dirty
+build=efc0f499cbae-dirty
+-- node 4
+BUILD_OK
+build=20745142ad79-dirty
+build=efc0f499cbae-dirty
+== built build=efc0f499cbae-dirty build=efc0f499cbae-dirty build=efc0f499cbae-dirty build=efc0f499cbae-dirty
+== stop all four
+fcstor003 up=0
+fcstor004 up=0
+fcstor005 up=0
+fcstor006 up=0
+== start all four
+fcstor003 up=1 perf=0
+fcstor004 up=1 perf=0
+fcstor005 up=1 perf=0
+fcstor006 up=1 perf=0
+== wait for both groups
+  group 0 hosted=1 role=FOLLOWER leader=-1 term=130 commit=4266279 applied=4266279 voters=0x7 joint=0
+== node 1 caught up
+  group 0 hosted=1 role=FOLLOWER leader=0 term=144 commit=4266280 applied=4266280 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=75 commit=4501294 applied=4501294 voters=0xe joint=0
+== node 2 caught up
+  group 0 hosted=1 role=FOLLOWER leader=0 term=144 commit=4266280 applied=4266280 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=75 commit=4501294 applied=4501294 voters=0xe joint=0
+== node 3 caught up
+  group 2 hosted=1 role=LEADER leader=3 term=75 commit=4501294 applied=4501294 voters=0xe joint=0
+== node 4 caught up
+ROLL_OK
+--- fcstor003 ---
+efsd=1 perf=1 strace=0
+./efsd --node-id 1 --addr 172.16.223.57 --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io --perf 
+--- fcstor004 ---
+efsd=1 perf=1 strace=0
+./efsd --node-id 2 --addr 172.16.223.58 --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io --perf 
+--- fcstor005 ---
+efsd=1 perf=1 strace=0
+./efsd --node-id 3 --addr 172.16.223.59 --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io --perf 
+--- fcstor006 ---
+efsd=1 perf=1 strace=0
+./efsd --node-id 4 --addr 172.16.223.60 --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io --perf 
+[cluster] servers up
+[cluster] CLUSTER_OK start clients=0 perf=1 strace=0

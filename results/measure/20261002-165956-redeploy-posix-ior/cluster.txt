@@ -1,0 +1,140 @@
+[cluster] stopping efs-fuse on fcstor003-015
+--- fcstor003 ---
+fuse=0
+--- fcstor004 ---
+fuse=0
+--- fcstor005 ---
+fuse=0
+--- fcstor006 ---
+fuse=0
+--- fcstor007 ---
+fuse=0
+--- fcstor008 ---
+fuse=0
+--- fcstor009 ---
+fuse=0
+--- fcstor010 ---
+fuse=0
+--- fcstor011 ---
+fuse=0
+--- fcstor012 ---
+fuse=0
+--- fcstor013 ---
+fuse=0
+--- fcstor014 ---
+fuse=0
+--- fcstor015 ---
+fuse=0
+[cluster] clients down
+[cluster] stopping efsd on fcstor003-006 (SIGTERM, then recorders, then -9)
+--- fcstor003 ---
+efsd=0 perf=0 strace=0
+perf_bytes=359193924 perf_header=ok
+--- fcstor004 ---
+efsd=0 perf=0 strace=0
+perf_bytes=473424880 perf_header=ok
+--- fcstor005 ---
+efsd=0 perf=0 strace=0
+perf_bytes=324387916 perf_header=ok
+--- fcstor006 ---
+efsd=0 perf=0 strace=0
+perf_bytes=259996460 perf_header=ok
+[cluster] servers down
+[cluster] stopping efs-fuse on fcstor003-015
+--- fcstor003 ---
+fuse=0
+--- fcstor004 ---
+fuse=0
+--- fcstor005 ---
+fuse=0
+--- fcstor006 ---
+fuse=0
+--- fcstor007 ---
+fuse=0
+--- fcstor008 ---
+fuse=0
+--- fcstor009 ---
+fuse=0
+--- fcstor010 ---
+fuse=0
+--- fcstor011 ---
+fuse=0
+--- fcstor012 ---
+fuse=0
+--- fcstor013 ---
+fuse=0
+--- fcstor014 ---
+fuse=0
+--- fcstor015 ---
+fuse=0
+[cluster] clients down
+[cluster] starting servers ( --perf)
+== build all four (parallel)
+-- node 1
+BUILD_OK
+build=111a07527093-dirty
+build=20745142ad79-dirty
+-- node 2
+BUILD_OK
+build=111a07527093-dirty
+build=20745142ad79-dirty
+-- node 3
+BUILD_OK
+build=111a07527093-dirty
+build=20745142ad79-dirty
+-- node 4
+BUILD_OK
+build=111a07527093-dirty
+build=20745142ad79-dirty
+== built build=20745142ad79-dirty build=20745142ad79-dirty build=20745142ad79-dirty build=20745142ad79-dirty
+== stop all four
+fcstor003 up=0
+fcstor004 up=0
+fcstor005 up=0
+fcstor006 up=0
+== start all four
+fcstor003 up=1 perf=0
+fcstor004 up=1 perf=0
+fcstor005 up=1 perf=0
+fcstor006 up=1 perf=0
+== wait for both groups
+  group 0 hosted=1 role=FOLLOWER leader=-1 term=119 commit=4244360 applied=4244360 voters=0x7 joint=0
+== node 1 caught up
+  group 0 hosted=1 role=FOLLOWER leader=0 term=130 commit=4244361 applied=4244361 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=69 commit=4487736 applied=4487736 voters=0xe joint=0
+== node 2 caught up
+  group 0 hosted=1 role=FOLLOWER leader=0 term=130 commit=4244361 applied=4244361 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=69 commit=4487736 applied=4487736 voters=0xe joint=0
+== node 3 caught up
+  group 2 hosted=1 role=LEADER leader=3 term=69 commit=4487736 applied=4487736 voters=0xe joint=0
+== node 4 caught up
+ROLL_OK
+--- fcstor003 ---
+efsd=1 perf=1 strace=0
+./efsd --node-id 1 --addr 172.16.223.57 --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io --perf 
+--- fcstor004 ---
+efsd=1 perf=1 strace=0
+./efsd --node-id 2 --addr 172.16.223.58 --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io --perf 
+--- fcstor005 ---
+efsd=1 perf=1 strace=0
+./efsd --node-id 3 --addr 172.16.223.59 --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io --perf 
+--- fcstor006 ---
+efsd=1 perf=1 strace=0
+./efsd --node-id 4 --addr 172.16.223.60 --port 19810 --storage /data1/01/efs,/data1/02/efs,/data1/03/efs,/data1/04/efs,/data1/05/efs,/data1/06/efs --quota 36T --direct-io --perf 
+[cluster] servers up
+[cluster] remounting efs-fuse on fcstor003-015 (RDMA, no recorders)
+fcstor003: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=1 bin=13:01:05 
+fcstor004: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=1 bin=13:01:05 
+fcstor005: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=1 bin=13:01:05 
+fcstor006: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=1 bin=13:01:05 
+fcstor007: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+fcstor008: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+fcstor009: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+fcstor010: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+fcstor011: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+fcstor012: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+fcstor013: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+fcstor014: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+fcstor015: fstype=fuse.efs-fuse MOUNT_OK fuse=1 perf=0 bin=13:01:05 
+[cluster] clients up
+[cluster] CLUSTER_OK restart clients=1 perf=1 strace=0

@@ -1,0 +1,36 @@
+--- fcstor003 ---
+647
+2026-10-02T19:52:12.492Z raft-host: gc-pass ms=258 reap=0 frag=258 spread=0 recover=0 fscans=2 fsegs=2 fkeys=516 femit=514 ftomb=2 scans=3 segs=2 keys=516 emit=514 tomb=2
+2026-10-02T19:52:13.760Z raft-host: gc-pass ms=265 reap=0 frag=265 spread=0 recover=0 fscans=2 fsegs=2 fkeys=516 femit=514 ftomb=2 scans=3 segs=2 keys=516 emit=514 tomb=2
+2026-10-02T19:52:15.025Z raft-host: gc-pass ms=261 reap=0 frag=261 spread=0 recover=0 fscans=2 fsegs=2 fkeys=516 femit=514 ftomb=2 scans=3 segs=2 keys=516 emit=514 tomb=2
+1288
+2026-10-02T19:52:13.598Z raft-obs: tx->2 enq=50530 drop=0 sent=50530 fail=0 hi=13 rtt_avg=34us get_avg=177us get_max=8934ms
+2026-10-02T19:52:13.598Z raft-obs: wait_timeouts=0 pump_hold_max=91us lock_wait_max=428us drain_max=91us tick_max=7us apply_max=84us persist_max=544us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+0
+--- fcstor004 ---
+28
+2026-10-02T19:39:40.688Z raft-host: gc-pass ms=28 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T19:39:41.731Z raft-host: gc-pass ms=40 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T19:40:53.937Z raft-host: gc-pass ms=8 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2580
+2026-10-02T19:52:12.762Z raft-obs: tx->3 enq=50878 drop=0 sent=50458 fail=0 hi=6 rtt_avg=29us get_avg=0us get_max=2ms
+2026-10-02T19:52:12.762Z raft-obs: wait_timeouts=0 pump_hold_max=426us lock_wait_max=1us drain_max=426us tick_max=1us apply_max=273us persist_max=605us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=75901us pub_max=0us inbox_drop=0
+0
+--- fcstor005 ---
+19
+2026-10-02T19:39:38.938Z raft-host: gc-pass ms=14 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T19:39:40.958Z raft-host: gc-pass ms=14 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T19:39:41.967Z raft-host: gc-pass ms=6 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2570
+2026-10-02T19:52:12.534Z raft-obs: tx->3 enq=50272 drop=0 sent=50056 fail=0 hi=5 rtt_avg=28us get_avg=0us get_max=3ms
+2026-10-02T19:52:12.534Z raft-obs: wait_timeouts=0 pump_hold_max=437us lock_wait_max=4us drain_max=437us tick_max=1us apply_max=264us persist_max=537us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+0
+--- fcstor006 ---
+626
+2026-10-02T19:52:13.559Z raft-host: gc-pass ms=260 reap=0 frag=260 spread=0 recover=0 fscans=2 fsegs=4 fkeys=516 femit=514 ftomb=2 scans=3 segs=4 keys=516 emit=514 tomb=2
+2026-10-02T19:52:14.822Z raft-host: gc-pass ms=260 reap=0 frag=260 spread=0 recover=0 fscans=2 fsegs=4 fkeys=516 femit=514 ftomb=2 scans=3 segs=4 keys=516 emit=514 tomb=2
+2026-10-02T19:52:16.081Z raft-host: gc-pass ms=256 reap=0 frag=256 spread=0 recover=0 fscans=2 fsegs=4 fkeys=516 femit=514 ftomb=2 scans=3 segs=4 keys=516 emit=514 tomb=2
+1286
+2026-10-02T19:52:13.472Z raft-obs: tx->2 enq=50306 drop=0 sent=50306 fail=0 hi=5 rtt_avg=34us get_avg=80us get_max=4059ms
+2026-10-02T19:52:13.472Z raft-obs: wait_timeouts=0 pump_hold_max=85us lock_wait_max=948us drain_max=85us tick_max=5us apply_max=80us persist_max=508us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+0

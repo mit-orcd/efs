@@ -1,0 +1,90 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 149K of event 'cycles:P'
+# Event count (approx.): 456051409599
+#
+# Overhead       Samples  Command  Shared Object            Symbol                                        
+# ........  ............  .......  .......................  ..............................................
+#
+     7.41%         10613  efsd     libc.so.6                [.] __memmove_avx_unaligned_erms
+            |          
+            |--5.45%--__memmove_avx_unaligned_erms
+            |          |          
+            |           --5.08%--lsm_batch
+            |                     |          
+            |                     |--3.43%--efs_meta_apply_lane_sweep
+            |                     |          host_apply
+            |                     |          |          
+            |                     |           --3.42%--apply_committed
+            |                     |                     on_ae_req
+            |                     |                     drain_inbox
+            |                     |                     host_pump
+            |                     |                     start_thread
+            |                     |          
+            |                     |--0.85%--efs_meta_apply_gc_ack
+            |                     |          apply_gc_ack_cmd.constprop.0
+            |                     |          host_apply
+            |                     |          apply_committed
+            |                     |          on_ae_req
+            |                     |          drain_inbox
+            |                     |          host_pump
+            |                     |          start_thread
+            |                     |          
+            |                      --0.80%--efs_meta_apply_publish
+            |                                host_apply
+            |                                apply_committed
+            |                                on_ae_req
+            |                                drain_inbox
+            |                                host_pump
+            |                                start_thread
+            |          
+            |--0.60%--__memcmp_avx2_movbe
+            |          
+             --0.35%--kv_mtab_pos
+     4.48%          6642  efsd     [kernel.kallsyms]        [k] retbleed_return_thunk
+     2.79%          3986  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+            |          
+            |--0.89%--__memcmp_avx2_movbe
+            |          |          
+            |           --0.34%--kv_compact_locked
+            |                     compactor_main
+            |                     start_thread
+            |          
+             --0.45%--lookup
+                       lsm_get
+     1.97%          2802  efsd     [kernel.kallsyms]        [k] rep_movs_alternative
+            |          
+             --0.76%--rep_movs_alternative
+                       |          
+                        --0.76%--copyout
+                                  _copy_to_iter
+                                  |          
+                                   --0.72%--copy_page_to_iter
+                                             filemap_read
+                                             xfs_file_buffered_read
+                                             xfs_file_read_iter
+                                             vfs_read
+                                             __x64_sys_pread64
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             __libc_pread
+                                             |          
+                                              --0.70%--kv_msrc_advance
+                                                        |          
+                                                         --0.70%--kv_compact_locked
+                                                                   compactor_main
+                                                                   start_thread
+     1.73%          2488  efsd     efsd                     [.] efs_crc32
+            |          
+             --1.04%--efs_crc32
+                       |          
+                       |--0.59%--rec_encode.isra.0
+                       |          raft_log_append
+                       |          disk_append
+                       |          on_ae_req
+                       |          drain_inbox
+                       |          host_pump
+                       |          start_thread

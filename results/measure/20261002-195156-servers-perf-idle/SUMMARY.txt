@@ -1,0 +1,147 @@
+Server perf capture, Oct 2 2026 19:22:32Z -> 19:52:16Z (1764 s), build efc0f499cbae-dirty
+=====================================================================================
+
+What ran
+--------
+Servers fcstor003-006 started 19:22Z by `cluster.sh start --perf` (perf record -g
+-F 999 -p <efsd>, attached from the start). Clients fcstor003-015 DOWN the whole
+window. The only load: the user's fstor007 client, one
+`dd if=/data1/... of=/tmp/efs-mount/001/dat16 bs=1M count=10240 status=progress`
+at 19:39:11-19:39:43Z (O_TRUNC over an existing file, no conv=fsync; traced with
+strace -T and perf -g on efs-fuse by the user — files in
+~/orcd/scratch/efs/perf/efs-mount/: dd.out.txt, dd.trace.txt, fuse.data, flat.txt,
+callers.txt). `cluster.sh stop` at 19:52Z SIGTERMed efsd then perf; every
+efsd.data has a footer (perf_header=ok). Raw perf data (24-31 MB each):
+~/orcd/scratch/efs/perf/servers-20261002-195156/efsd-<host>.data. Reports here:
+perf-self-*, perf-children-*, perf-tid-*, perf-header-*; full efsd logs efsd-*.log.
+
+CPU budget (samples / 999 Hz over 1764 s)
+-----------------------------------------
+  fcstor003 (g0 leader)   140 K ->  ~8.0 % of one core
+  fcstor004 (follower x2) 181 K -> ~10.3 %
+  fcstor005 (follower x2) 149 K ->  ~8.5 %
+  fcstor006 (g2 leader)   155 K ->  ~8.8 %
+The servers were near idle; the shares below are of that small total. Most of
+it is concentrated in the 32 s dd window (compactions: 1215 of fcstor004's 1290
+in minute 19:39; all 317 apply-sleep lines on fcstor003 in that minute).
+
+Inclusive shares (perf-children-*)
+----------------------------------
+                         003     004     005     006
+  writer_thread (PUT)   23.5%   20.1%   24.4%   23.8%   dd's fragment writes
+  server_handle_conn    13.0%   17.6%    9.5%   12.7%   RPC handlers (REPORT pack, remote GC del)
+  host_pump              6.9%   15.2%   16.6%    7.6%   raft apply (publish, lane_sweep, gc_ack)
+  compactor_main          -      6.9%    8.4%     -     L0 flushes (followers only in top list)
+  host_gc_thread         6.7%     -       -     (same)  leaders only
+  nvme_del_if_sum        7.6%     -       -      7.6%   GC fragment deletes (local + remote-handled)
+  lsm_batch               -      8.2%    9.4%     -     KV puts of the applies
+
+1. PUT path (writer_thread, 20-24 % on every node) — all of it is the kernel:
+   __libc_open -> path_openat -> xfs_create (11-12 %) and writev -> iomap_dio_rw
+   -> xfs_file_dio_write_aligned -> xfs_bmapi_write/xfs_alloc_ag_vextent_near
+   (17-21 %). Per fragment: one O_CREAT open with a 5-level directory walk
+   (__d_lookup_rcu 2 %, link_path_walk 6.6 % self+children on 003), one DIO
+   writev with an XFS extent allocation, xfs_trans_commit 7-8 %. efsd user code
+   in this path is ~0.3 %. 10 GiB = 81 920 chunks x 3 fragments / 4 nodes =
+   ~61 K fragment creates per node in 32 s (~1.9 K/s), each a fresh inode +
+   extent. This is the per-fragment-file store design (one file per 128 KiB
+   fragment, 5-deep hashed dir), not a bug; it is where server CPU goes under
+   writes, and it is all filesystem metadata, not data copy (memcpy is 1.5 %).
+
+2. Follower apply + compaction (004/005: host_pump 15-17 %, lsm_batch 8-9 %,
+   compactor_main 7-8 %). The dd's 153 REPORTs (8192-8384 recs each, 1.39 M
+   publish records, D24 landed batches) apply as KV puts; L0 fills every ~50 ms
+   during the dd: fcstor004 ran 1215 compactions in that minute (20/s, ~12 MB
+   each, `kv-compact: start l0=270 inputs=3 range=2`), 1290 over the window,
+   15.6 GB rewritten, 25 s of compactor time. L0 count sat at 260-270 the
+   whole time on both followers (135-137 on the leaders) and did not come down
+   while idle. `pub_p50=75901us` on fcstor004 during the dd (publish p50 76 ms).
+   apply-sleep on fcstor003: 317 lines, mean 35.5 ms, max 118.5 ms, max
+   gap 6 entries — the pump lagged commit during the REPORT applies. No
+   backpressure line. Compaction shape is D9/D10 (ask); the L0-per-shard
+   partitioned flush is the unread follow-on from W13.
+
+3. Leader GC (003/006: host_gc_thread 6.7 %, nvme_del_if_sum 7.6 %, and the
+   remote half of the deletes inside server_handle_conn on the peers). From the
+   dd's first second (19:39:12) to the stop (19:52:15), both leaders logged a
+   `gc-pass` every ~1.27 s with IDENTICAL counters: `ms=256-307 fscans=2
+   fkeys=516 femit=514 ftomb=2` (591 passes on 003, 594 on 006; `gc-frag
+   scans=2 records=512`). The constant is structural, not the queue:
+   GC_FRAG_BUDGET_US (200 ms per group per 1 s loop) stops the pass after the
+   second 256-record scan because each scan costs ~130 ms. That cost is
+   host_gc_record: up to three serial fragment deletes per record, two of
+   them remote RPCs (`tx->2 get_avg=177us`), ~0.5 ms per record -> ~400
+   records/s = ~1.2 K fragments/s per leader. 591 x 512 = 302 K record
+   emissions in 13 min against the 81 920 records the dd's overwrite of a
+   10 GiB file produces (CAS supersede -> gc_queue per chunk) — so EITHER the
+   queue was larger than one file (the user's earlier dat* overwrites, reaps
+   of the posix/IO-500 trees, the 16 `apply lane-fence rc=-2` inodes at
+   19:38:59) and was draining at 400/s, OR some records fail every pass
+   (`rc != EFS_OK -> retry next pass`) and the D26 cursor wraps over the same
+   set. `efs_meta_apply_gc_ack` is in fcstor004's profile (0.7 %), so acks
+   were applied; the W50 verdict ("not stuck") was on 30 s windows. The
+   discriminator is the GC-prefix key count on a KV copy (servers are down
+   now, so `mdraft/kv` can be copied safely) or a W50-style EFS_GC_DBG run
+   with the cursor in tree. Not decided here.
+   Cost statement that holds either way: GC drains at <= ~400 records/s per
+   group for ~20 % of one core; a 100 GiB overwrite/delete (819 K records)
+   is >= 34 min of GC per group at that rate; the morning's 1 M-tombstone
+   walk (W44 a) is gone from the leaders' passes (ftomb=2; the 19:22 start
+   pass showed `fkeys=2172 ftomb=2172` once and then the cursor skipped
+   them).
+
+4. host_pump on the leaders (6.9-7.6 %) is efs_meta_apply_lane_sweep ->
+   lsm_batch -> memmove (1.65-2.9 % per node, the single biggest efsd user
+   symbol): reaper LANE_SWEEP entries for unlinked inodes (the deleted
+   test trees) delete chunk rows 32-64 at a time; the memmove is the KV
+   memtable insert. Expected background work; it is the only apply kind
+   besides publish/gc_ack visible on an idle cluster.
+
+5. Nothing else: no `kv-compact: backpressure`, wait_timeouts=0 on all
+   four, `tx->N fail=0`, apply_max 80-273 us, persist_max ~0.5 ms, three
+   CANDIDATE->CANDIDATE lines at startup only, one 5-term election at
+   19:22:37 (restart), terms stable afterwards (g0 term 144).
+
+The user's client-side capture (fstor007, same dd)
+---------------------------------------------------
+dd: 10 GiB bs=1M, 31.85 s, 337 MB/s, close() 0.19 s. Per 1 MiB write():
+mean 2.24 ms (3045 <1 ms, 4921 1-3 ms, 2139 3-10 ms, 135 >10 ms, max 65.6 ms);
+dd's own read() of the source: 7.96 s of the 31.85 (0.78 ms per MiB, serial)
+— the source read is 25 % of the wall. Not a baseline: strace -T on dd,
+perf -g on efs-fuse, O_TRUNC over an existing 10 GiB file (every PUT
+supersedes a chunk and queues a GC record — item 3). Compare: fcstor007
+untraced fresh-file 8 GiB dd+fsync 1518 MB/s (P0.1); fstor007 Oct 1 20 GiB
+~1.1 GB/s after the NUMA pin.
+efs-fuse profile (flat.txt / callers.txt, 139 K samples):
+  blake3_hash_many_avx512           21.0 %  hash_write_fragments <- dcache_put_now
+  __memmove_avx512_unaligned_erms   14.3 %  of which 7.7 % under efs_rdma_send_frame
+                                            <- efs_conn_send_msg_parts <- put_fragments_parallel_once
+  xor_into                          10.7 %  efs_encode_chunk (parity)
+  memcpy_erms (kernel)               5.9 %  fuse_copy_page <- fuse_dev_do_read (the 1 MiB write copy)
+  dcache_put_now inclusive          58.9 %  (put_pool_thread 54.5 %, reclaim 3.8 %)
+  read(/dev/fuse) inclusive         11.3 %
+Hot-path reading: the client is the known blake3 + parity + copy shape. The
+one new item is the 7.7 % memmove under efs_rdma_send_frame on the PUT send
+path: W39's two-SGE zero-copy send applies to bufpool buffers >= 4 KiB with
+a registered region; a memmove there means the fragment payload is being
+copied into the frame on this client (payload not in a registered slab, or
+the region add failed on fstor007's HCA) — count `efs_rdma_zc_region_add`
+results on that host before assuming W39 is engaged everywhere. The FUSE
+kernel copy (5.9 %) is inherent to a non-splice write path.
+
+Hint: next performance package
+------------------------------
+P3 `efsd --bench` first (no cluster), expected to confirm P4.1 (fragment
+on-disk layout) as the server package: the PUT path is 98 % kernel XFS
+metadata per fragment file, which is where a 9-client shared ceiling at 6 %
+of NVMe would sit. Client package: P4.2 W40 (FUSE write copy), preceded by
+the W39 engagement check on fstor007. GC fan-out is background cost (D26 ii),
+not a throughput wall. Correctness rows 0i/0j go before any of it.
+
+Files
+-----
+before.txt stop.txt logs-summary.txt  — pre-stop state, cluster.sh stop transcript, grep summaries
+efsd-<host>.log                        — full efsd logs of the window
+perf-self/-children/-tid/-header-<host>.txt
+~/orcd/scratch/efs/perf/servers-20261002-195156/efsd-<host>.data (raw)
+~/orcd/scratch/efs/perf/efs-mount/{dd.out.txt,dd.trace.txt,fuse.data,flat.txt,callers.txt,by_thread.txt} (user's)

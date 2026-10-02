@@ -1,0 +1,38 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 140K of event 'cycles:P'
+# Event count (approx.): 452345089621
+#
+# Overhead       Samples      Pid:Command  Symbol                                        
+# ........  ............  ...............  ..............................................
+#
+     2.81%          3882  1079439:efsd     [.] __memmove_avx_unaligned_erms
+            |          
+             --2.16%--__memmove_avx_unaligned_erms
+                       |          
+                        --2.11%--lsm_batch
+                                  |          
+                                   --1.65%--efs_meta_apply_lane_sweep
+                                             host_apply
+                                             apply_committed
+                                             try_commit
+                                             efs_raft_recv
+                                             drain_inbox
+                                             host_pump
+                                             start_thread
+     1.25%          2035  1079438:efsd     [.] recv_poller
+     1.03%          1329  1079445:efsd     [k] __d_lookup_rcu
+     0.99%          1344  1079440:efsd     [.] efs_rdma_recv_wait
+     0.90%          1450  1079438:efsd     [k] entry_SYSCALL_64
+     0.62%           798  1079445:efsd     [k] retbleed_return_thunk
+     0.58%           789  1079440:efsd     [k] __d_lookup_rcu
+     0.57%           801  1079439:efsd     [.] efs_crc32
+     0.56%           779  1079431:efsd     [k] rep_movs_alternative
+     0.55%           805  1079439:efsd     [.] __memcmp_avx2_movbe
+     0.51%           829  1079438:efsd     [k] pollwake
+#
+# (Tip: To show information about system the samples were collected on use perf report --header)
+#

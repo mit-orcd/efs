@@ -1,0 +1,90 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 181K of event 'cycles:P'
+# Event count (approx.): 551997485706
+#
+# Overhead       Samples  Command  Shared Object            Symbol                                          
+# ........  ............  .......  .......................  ................................................
+#
+     6.49%         11345  efsd     libc.so.6                [.] __memmove_avx_unaligned_erms
+            |          
+            |--4.88%--__memmove_avx_unaligned_erms
+            |          |          
+            |           --4.52%--lsm_batch
+            |                     |          
+            |                     |--2.91%--efs_meta_apply_lane_sweep
+            |                     |          host_apply
+            |                     |          |          
+            |                     |           --2.91%--apply_committed
+            |                     |                     on_ae_req
+            |                     |                     drain_inbox
+            |                     |                     host_pump
+            |                     |                     start_thread
+            |                     |          
+            |                     |--0.89%--efs_meta_apply_publish
+            |                     |          host_apply
+            |                     |          apply_committed
+            |                     |          on_ae_req
+            |                     |          drain_inbox
+            |                     |          host_pump
+            |                     |          start_thread
+            |                     |          
+            |                      --0.71%--efs_meta_apply_gc_ack
+            |                                apply_gc_ack_cmd.constprop.0
+            |                                host_apply
+            |                                apply_committed
+            |                                on_ae_req
+            |                                drain_inbox
+            |                                host_pump
+            |                                start_thread
+            |          
+             --0.44%--__memcmp_avx2_movbe
+     4.49%          8050  efsd     [kernel.kallsyms]        [k] retbleed_return_thunk
+     3.03%          5381  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+            |          
+            |--0.89%--__memcmp_avx2_movbe
+            |          
+             --0.67%--lookup
+                       |          
+                        --0.67%--lsm_get
+     2.30%          4143  efsd     efsd                     [.] lookup
+            |          
+            |--1.00%--__memcmp_avx2_movbe
+            |          |          
+            |          |--0.50%--kv_seg_probe
+            |          |          lookup
+            |          |          lsm_get
+            |          |          
+            |           --0.44%--lookup
+            |                     |          
+            |                      --0.44%--lsm_get
+            |          
+             --0.30%--lookup
+                       |          
+                        --0.30%--lsm_get
+     1.81%          3196  efsd     [kernel.kallsyms]        [k] __d_lookup_rcu
+            |          
+             --0.85%--__d_lookup_rcu
+                       |          
+                        --0.85%--lookup_fast
+                                  |          
+                                   --0.56%--walk_component
+                                             |          
+                                              --0.55%--link_path_walk.part.0.constprop.0
+                                                        |          
+                                                         --0.53%--path_openat
+                                                                   do_filp_open
+                                                                   do_sys_openat2
+                                                                   __x64_sys_openat
+                                                                   do_syscall_64
+                                                                   entry_SYSCALL_64_after_hwframe
+                                                                   __GI___libc_open
+     1.80%          3081  efsd     [kernel.kallsyms]        [k] rep_movs_alternative
+            |          
+             --0.70%--rep_movs_alternative
+                       |          
+                        --0.68%--copyout
+                                  _copy_to_iter

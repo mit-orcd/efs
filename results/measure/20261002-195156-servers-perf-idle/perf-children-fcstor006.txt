@@ -1,0 +1,60 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 155K of event 'cycles:P'
+# Event count (approx.): 455627655022
+#
+# Children      Self       Samples  Command  Shared Object            Symbol                                                      
+# ........  ........  ............  .......  .......................  ............................................................
+#
+    76.90%     0.24%           374  efsd     [kernel.kallsyms]        [k] entry_SYSCALL_64_after_hwframe
+    76.43%     0.33%           510  efsd     [kernel.kallsyms]        [k] do_syscall_64
+    50.11%     0.00%             2  efsd     libc.so.6                [.] start_thread
+    27.89%     0.11%           176  efsd     libc.so.6                [.] __GI___libc_open
+    26.94%     0.10%           156  efsd     [kernel.kallsyms]        [k] __x64_sys_openat
+    26.87%     0.06%            84  efsd     [kernel.kallsyms]        [k] do_sys_openat2
+    25.66%     0.12%           178  efsd     [kernel.kallsyms]        [k] path_openat
+    25.65%     0.04%            59  efsd     [kernel.kallsyms]        [k] do_filp_open
+    23.78%     0.05%            76  efsd     efsd                     [.] writer_thread
+    23.54%     0.07%           101  efsd     efsd                     [.] run_job
+    23.39%     0.10%           149  efsd     efsd                     [.] server_write_fragment_with_sum_sync
+    22.88%     0.05%            76  efsd     efsd                     [.] server_write_fragment_to_path.constprop.0
+    21.63%     0.03%            51  efsd     libc.so.6                [.] __GI___writev
+    21.24%     0.02%            35  efsd     [kernel.kallsyms]        [k] do_writev
+    21.16%     0.03%            46  efsd     [kernel.kallsyms]        [k] vfs_writev
+    21.15%     0.11%           167  efsd     [kernel.kallsyms]        [k] __iomap_dio_rw
+    21.15%     0.02%            24  efsd     [kernel.kallsyms]        [k] iomap_dio_rw
+    21.05%     0.02%            36  efsd     [kernel.kallsyms]        [k] do_iter_write
+    21.00%     0.03%            42  efsd     [kernel.kallsyms]        [k] do_iter_readv_writev
+    20.86%     0.04%            63  efsd     [xfs]                    [k] xfs_file_write_iter
+    20.79%     0.05%            70  efsd     [xfs]                    [k] xfs_file_dio_write_aligned
+    18.20%     0.14%           203  efsd     [kernel.kallsyms]        [k] open_last_lookups
+    16.16%     0.17%           251  efsd     [kernel.kallsyms]        [k] lookup_open.isra.0
+    14.45%     0.04%            59  efsd     [kernel.kallsyms]        [k] iomap_iter
+    13.80%     0.11%           152  efsd     [xfs]                    [k] xfs_direct_write_iomap_begin
+    13.59%     0.03%            36  efsd     [xfs]                    [k] xfs_iomap_write_direct
+    12.71%     0.23%           343  efsd     efsd                     [.] server_handle_conn
+    11.76%     0.04%            59  efsd     [xfs]                    [k] xfs_generic_create
+    11.73%     0.09%           130  efsd     [xfs]                    [k] xfs_bmapi_write
+    11.49%     0.06%            79  efsd     [xfs]                    [k] xfs_create
+    11.37%     0.02%            26  efsd     [xfs]                    [k] xfs_bmapi_allocate
+    11.21%     0.04%            61  efsd     [xfs]                    [k] xfs_bmap_btalloc
+    11.11%     0.03%            39  efsd     [xfs]                    [k] xfs_bmap_btalloc_best_length
+    11.02%     0.03%            38  efsd     [xfs]                    [k] xfs_alloc_vextent_start_ag
+    10.90%     0.02%            35  efsd     [xfs]                    [k] xfs_alloc_vextent_iterate_ags.constprop.0
+    10.33%     0.07%           108  efsd     [xfs]                    [k] xfs_alloc_ag_vextent_near
+     8.43%     0.02%            36  efsd     [xfs]                    [k] xfs_trans_commit
+     8.39%     0.08%           119  efsd     [xfs]                    [k] __xfs_trans_commit
+     7.62%     1.45%          2081  efsd     [xfs]                    [k] xfs_btree_lookup
+     7.60%     0.02%            26  efsd     efsd                     [.] nvme_del_if_sum
+     7.55%     0.18%           301  efsd     efsd                     [.] host_pump
+     7.09%     2.19%          3436  efsd     [kernel.kallsyms]        [k] __d_lookup_rcu
+     6.92%     0.24%           356  efsd     [kernel.kallsyms]        [k] schedule
+     6.83%     0.00%             5  efsd     efsd                     [.] drain_inbox
+     6.82%     0.01%             9  efsd     efsd                     [.] efs_raft_recv
+     6.78%     0.07%           102  efsd     [xfs]                    [k] xlog_cil_commit
+     6.75%     0.01%            11  efsd     efsd                     [.] try_commit
+     6.74%     0.00%             3  efsd     efsd                     [.] apply_committed
+     6.73%     0.56%           863  efsd     [kernel.kallsyms]        [k] link_path_walk.part.0.constprop.0

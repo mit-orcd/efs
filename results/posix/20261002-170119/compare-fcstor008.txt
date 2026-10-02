@@ -1,0 +1,58 @@
+================================================================
+POSIX baseline comparison: 201 tests
+  both pass        : 161
+  EFS BUGS         : 36  (baseline PASS, target FAIL)
+  both fail (match): 0
+  not equivalent   : 0  (status or detail differs)
+  target better    : 3
+  target skipped   : 1  (baseline PASS, target SKIP)
+  incomplete       : 0  (cut, missing, or NOTRUN)
+  target only      : 0
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  attr_chmod                       [FAIL] chmod 0: got 420, want 0
+  attr_stat_fields                 [FAIL] size: got 0, want 5
+  attr_touch_terminal              [FAIL] touch -d: got 1790960502, want 1000000000
+  attr_utimens_ns                  [FAIL] mtime ns precision: got 1790960502305494789, want 1234567890987654321
+  basic_chunk_boundary             [FAIL] size after boundary write: got 0, want 131073
+  basic_dd_rw                      [FAIL] dd size: got 0, want 32768
+  basic_ftruncate_vs_truncate      [FAIL] ftruncate size: got 0, want 2000
+  basic_o_trunc                    [FAIL] O_TRUNC size: got 10, want 1
+  basic_seek_cur_past_eof_write    [FAIL] implicit hole size: got 0, want 11
+  chmod_preserves_mtime            [FAIL] chmod must not change mtime: got 1111111111000000000, want 1790960518685517175
+  content_nul_and_control          [FAIL] binary size: got 0, want 256
+  content_random_large_multichunk  [FAIL] large size: got 0, want 2097152
+  content_random_overwrite_append  [FAIL] size after overwrite+append: got 0, want 70536
+  content_random_roundtrip         [FAIL] size n=1: got 0, want 1
+  dir_chmod_and_create_denied      [FAIL] dir chmod: got 493, want 320
+  dir_nlink                        [FAIL] mkdir child bumps dir nlink: got 2, want 3
+  dir_nlink_after_rmdir_child      [FAIL] mkdir child did not bump parent nlink (got 3 want 3)
+  fdatasync_write                  [FAIL] fdatasync size: got 0, want 1000
+  fsync_then_fstat_size            [FAIL] path size after fsync: got 0, want 777
+  hardlink_basic                   [FAIL] nlink=2: got 1, want 2
+  hardlink_three_names             [FAIL] nlink=3: got 2, want 3
+  link_across_dirs                 [FAIL] nlink after cross-dir link: got 1, want 2
+  mtime_bumps_on_write             [FAIL] mtime did not advance on write (1790960520215219122 -> 1000000000000000000)
+  opt_fallocate                    [FAIL] size after close: got 0, want 1048576
+  perm_fchmod                      [FAIL] fchmod: got 420, want 384
+  perm_hardlink_shares_mode        [FAIL] mode via other name: got 420, want 292
+  perm_owner_utime_readonly        [FAIL] owner utime on 0444: got 1790960503, want 1000000000
+  perm_suid_sgid_sticky_stored     [FAIL] suid: got 420, want 2541
+  sparse_st_blocks                 [FAIL] sparse size: got 0, want 1048579
+  sparse_write_huge_offset         [FAIL] sparse size: got 0, want 1048579
+  symlink_chmod_follows            [FAIL] chmod via symlink follows: got 420, want 384
+  trunc_grow_sparse                [FAIL] grow size: got 100, want 100000
+  trunc_shrink                     [FAIL] shrink size: got 10000, want 4000
+  trunc_to_zero                    [FAIL] truncate to 0: got 4, want 0
+  trunc_zero_then_high_pwrite      [FAIL] size: got 9, want 1048577
+  zero_length_write                [FAIL] zero-length write must not change size: got 0, want 4
+
+--- target passes where baseline does not ---
+  virt_find_not_a_real_dir        
+  virt_find_query                 
+  virt_stats_readable             
+
+--- target skipped a check the baseline ran ---
+  mmap_write_read                  [SKIP] mmap unsupported: [Errno 19] No such device

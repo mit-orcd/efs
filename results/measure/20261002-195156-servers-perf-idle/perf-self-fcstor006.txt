@@ -1,0 +1,90 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 155K of event 'cycles:P'
+# Event count (approx.): 455627655022
+#
+# Overhead       Samples  Command  Shared Object            Symbol                                          
+# ........  ............  .......  .......................  ................................................
+#
+     5.11%          7791  efsd     [kernel.kallsyms]        [k] retbleed_return_thunk
+            |          
+             --0.34%--__d_lookup_rcu
+                       |          
+                        --0.34%--lookup_fast
+                                  |          
+                                   --0.31%--walk_component
+                                             link_path_walk.part.0.constprop.0
+     3.23%          4542  efsd     libc.so.6                [.] __memmove_avx_unaligned_erms
+            |          
+             --2.36%--__memmove_avx_unaligned_erms
+                       |          
+                        --2.16%--lsm_batch
+                                  |          
+                                  |--1.72%--efs_meta_apply_lane_sweep
+                                  |          host_apply
+                                  |          apply_committed
+                                  |          try_commit
+                                  |          efs_raft_recv
+                                  |          drain_inbox
+                                  |          |          
+                                  |           --1.72%--host_pump
+                                  |                     start_thread
+                                  |          
+                                   --0.37%--efs_meta_apply_publish
+                                             host_apply
+                                             apply_committed
+                                             try_commit
+                                             efs_raft_recv
+                                             drain_inbox
+                                             host_pump
+                                             start_thread
+     2.19%          3436  efsd     [kernel.kallsyms]        [k] __d_lookup_rcu
+            |          
+             --1.00%--__d_lookup_rcu
+                       |          
+                        --1.00%--lookup_fast
+                                  |          
+                                  |--0.64%--walk_component
+                                  |          |          
+                                  |           --0.64%--link_path_walk.part.0.constprop.0
+                                  |                     |          
+                                  |                      --0.60%--path_openat
+                                  |                                do_filp_open
+                                  |                                do_sys_openat2
+                                  |                                __x64_sys_openat
+                                  |                                do_syscall_64
+                                  |                                entry_SYSCALL_64_after_hwframe
+                                  |                                __GI___libc_open
+                                  |          
+                                   --0.36%--open_last_lookups
+                                             path_openat
+                                             do_filp_open
+                                             do_sys_openat2
+                                             __x64_sys_openat
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             __GI___libc_open
+     2.08%          3442  efsd     [kernel.kallsyms]        [k] entry_SYSCALL_64
+     1.54%          2235  efsd     [kernel.kallsyms]        [k] __memcpy
+            |          
+             --0.33%--__memcpy
+                       |          
+                        --0.33%--xfs_buf_item_format_segment
+                                  xfs_buf_item_format
+                                  xlog_cil_insert_items
+                                  xlog_cil_commit
+                                  __xfs_trans_commit
+                                  |          
+                                   --0.33%--xfs_trans_commit
+     1.45%          2081  efsd     [xfs]                    [k] xfs_btree_lookup
+     1.43%          2095  efsd     [xfs]                    [k] xfs_buf_get_map
+     1.32%          2393  efsd     efsd                     [.] recv_poller
+            |          
+             --0.35%--__GI___pthread_enable_asynccancel
+                       start_thread
+     1.19%          1706  efsd     libc.so.6                [.] __memcmp_avx2_movbe
+            |          
+             --0.43%--__memcmp_avx2_movbe

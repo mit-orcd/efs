@@ -1,0 +1,51 @@
+Redeploy of 20745142 (client: one readdir listing per opendir, LOOKUP
+row answers the following GETATTR) then posix jobs=1, posix2, IO-500
+9×4 debug. 2026-10-02 16:59–17:09Z. cluster.sh restart --clients --perf,
+storage kept. All four efsd and the clients are build=20745142ad79-dirty
+(the -dirty is untracked results/ in the rsynced tree; the four servers
+match). Servers had been 111a07527093-dirty.
+
+== posix jobs=1 fcstor008
+
+  this     results/posix/20261002-170119     164/201  36 fail  mmap SKIP
+  prior    results/posix/20261002-151947     200/201  0 fail
+  gate     200/201
+
+  36 EFS BUGS, all a stat that still shows the pre-mutation row:
+  size 0 after a write, old mode after chmod, old nlink after link,
+  old mtime after utimens. Matches lookup_memo_take in efs_fuse.c:
+  GETATTR within 50 ms of LOOKUP returns the LOOKUP row and does not
+  RPC. Prior gate had 0 of these.
+
+== posix2 fcstor008+009
+
+  this     results/posix2/20261002-170203    63/63  0 fail  47.3 s
+  prior    results/posix2/20261002-152031    63/63
+  gate     63/63
+
+  Match. The peer stats the other client, which does not hold the memo.
+
+== IO-500 9×4 debug (fcstor007–015, 36 ranks, 1 s stonewall)
+
+  this     results/io500/20261002-165956-rdma   ABORT in ior-hard-read
+  prior    results/io500/20261002-152126-rdma   every phase, hard-read 0 errors
+  also     results/io500/20261001-074905-rdma   hard-read 1 data error, finished
+
+  SCORE [INVALID] only because stonewall is 1 s, on the phases that ran.
+  Reads are same-mount. No score: the driver MPI_ABORTed.
+
+                     this            15:21Z           Oct 1
+  ior-easy-write     4.393 GiB/s     6.837            5.173
+  mdtest-easy-write  4.573 kIOPS     5.779            6.185
+  ior-hard-write     0.530 GiB/s     0.600 (48.6 s)   0.519 (63.2 s)
+                     (64.8 s)
+  mdtest-hard-write  2.791 kIOPS     4.154            2.818
+  ior-easy-read      25.819 GiB/s    20.334           22.521
+  mdtest-easy-stat   19.809 kIOPS    17.907           24.445
+  ior-hard-read      ABORT           0.845, 0 err     0.824, 1 err
+                     rank 34 (fcstor015): read() EIO, no score,
+                     phases after hard-read did not run
+  later mdtest       not run         ran              ran
+
+  Hard file: /tmp/efs-mount/io500/2026.10.02-13.02.57/ior-hard/file
+  -G=1817656206

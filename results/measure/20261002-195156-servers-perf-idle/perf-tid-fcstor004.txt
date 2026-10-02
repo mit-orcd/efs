@@ -1,0 +1,70 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 181K of event 'cycles:P'
+# Event count (approx.): 551997485706
+#
+# Overhead       Samples      Pid:Command  Symbol                                          
+# ........  ............  ...............  ................................................
+#
+     5.65%          9917   998700:efsd     [.] __memmove_avx_unaligned_erms
+            |          
+             --4.62%--__memmove_avx_unaligned_erms
+                       |          
+                        --4.52%--lsm_batch
+                                  |          
+                                  |--2.91%--efs_meta_apply_lane_sweep
+                                  |          host_apply
+                                  |          |          
+                                  |           --2.91%--apply_committed
+                                  |                     on_ae_req
+                                  |                     drain_inbox
+                                  |                     host_pump
+                                  |                     start_thread
+                                  |          
+                                  |--0.89%--efs_meta_apply_publish
+                                  |          host_apply
+                                  |          apply_committed
+                                  |          on_ae_req
+                                  |          drain_inbox
+                                  |          host_pump
+                                  |          start_thread
+                                  |          
+                                   --0.71%--efs_meta_apply_gc_ack
+                                             apply_gc_ack_cmd.constprop.0
+                                             host_apply
+                                             apply_committed
+                                             on_ae_req
+                                             drain_inbox
+                                             host_pump
+                                             start_thread
+     1.43%          2439   998658:efsd     [k] rep_movs_alternative
+            |          
+             --0.60%--rep_movs_alternative
+                       |          
+                        --0.59%--copyout
+                                  _copy_to_iter
+                                  copy_page_to_iter
+                                  filemap_read
+                                  xfs_file_buffered_read
+                                  xfs_file_read_iter
+                                  vfs_read
+                                  __x64_sys_pread64
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  __libc_pread
+                                  |          
+                                   --0.59%--kv_msrc_advance
+                                             kv_compact_locked
+                                             compactor_main
+                                             start_thread
+     1.42%          2506   998700:efsd     [.] efs_crc32
+            |          
+             --0.86%--efs_crc32
+     1.41%          2549   998700:efsd     [.] __memcmp_avx2_movbe
+     1.29%          2322   998700:efsd     [.] lookup
+            |          
+             --0.64%--__memcmp_avx2_movbe
+     0.99%          1682   998658:efsd     [.] __memcmp_avx2_movbe

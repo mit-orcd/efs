@@ -1,0 +1,76 @@
+fcstor003 efsd=1 perf=1 build=efc0f499cbae-dirty
+Fri Oct  2 15:22:32 2026
+total 29372076
+-rw-r--r-- 1 erbmi1 erbmi1        1132 Oct  2 00:25 by_thread.txt
+-rw-r--r-- 1 erbmi1 erbmi1       97003 Oct  2 00:25 callers.txt
+-rw------- 1 erbmi1 erbmi1   299631932 Oct  2 00:24 efsd-0423.data
+-rw-r--r-- 1 erbmi1 erbmi1 21062083364 Oct  2 00:24 efsd-0423.strace
+-rw------- 1 erbmi1 erbmi1    71574624 Oct  1 14:40 efsd-1823.data
+-rw------- 1 erbmi1 erbmi1   108886720 Oct  1 17:34 efsd-2056.data
+-rw-r--r-- 1 erbmi1 erbmi1  7745320402 Oct  1 17:34 efsd-2056.strace
+-rw-r--r-- 1 erbmi1 erbmi1   595804927 Oct  1 17:37 efsd-2056-win.strace
+-rw------- 1 erbmi1 erbmi1    24400288 Oct  2 15:51 efsd.data
+-rw-r--r-- 1 erbmi1 erbmi1        2027 Oct  2 00:24 flat.txt
+-rw------- 1 erbmi1 erbmi1      949128 Sep 29 13:39 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1   160899641 Sep 29 13:39 fuse.strace
+node 1 root=1 salt=4206459926809775694 groups=2
+  group 0 hosted=1 role=LEADER leader=0 term=144 commit=4275468 applied=4275468 voters=0x7 joint=0
+632
+644
+fcstor004 efsd=1 perf=1 build=efc0f499cbae-dirty
+Fri Oct  2 15:22:33 2026
+total 8739564
+-rw-r--r-- 1 erbmi1 erbmi1       1752 Oct  2 00:25 by_thread.txt
+-rw-r--r-- 1 erbmi1 erbmi1     169172 Oct  2 00:25 callers.txt
+-rw------- 1 erbmi1 erbmi1   64120192 Oct  2 00:23 efsd-0423.data
+-rw-r--r-- 1 erbmi1 erbmi1 5362553545 Oct  2 00:23 efsd-0423.strace
+-rw------- 1 erbmi1 erbmi1   78957296 Oct  1 14:40 efsd-1823.data
+-rw------- 1 erbmi1 erbmi1   29178856 Oct  1 17:34 efsd-2056.data
+-rw-r--r-- 1 erbmi1 erbmi1 2631979194 Oct  1 17:34 efsd-2056.strace
+-rw-r--r-- 1 erbmi1 erbmi1  573587094 Oct  1 17:37 efsd-2056-win.strace
+-rw------- 1 erbmi1 erbmi1   30651744 Oct  2 15:51 efsd.data
+-rw-r--r-- 1 erbmi1 erbmi1       4158 Oct  2 00:25 flat.txt
+-rw------- 1 erbmi1 erbmi1     989216 Sep 29 13:39 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1  162713695 Sep 29 13:39 fuse.strace
+node 1 root=1 salt=4206459926809775694 groups=2
+  group 0 hosted=1 role=LEADER leader=0 term=144 commit=4275479 applied=4275479 voters=0x7 joint=0
+28
+1290
+fcstor005 efsd=1 perf=1 build=efc0f499cbae-dirty
+Fri Oct  2 15:22:34 2026
+total 8662576
+-rw-r--r-- 1 erbmi1 erbmi1       1816 Oct  2 00:25 by_thread.txt
+-rw-r--r-- 1 erbmi1 erbmi1     173801 Oct  2 00:25 callers.txt
+-rw------- 1 erbmi1 erbmi1   62292248 Oct  2 00:23 efsd-0423.data
+-rw-r--r-- 1 erbmi1 erbmi1 5311242139 Oct  2 00:23 efsd-0423.strace
+-rw------- 1 erbmi1 erbmi1   76674844 Oct  1 14:40 efsd-1823.data
+-rw------- 1 erbmi1 erbmi1   28459352 Oct  1 17:34 efsd-2056.data
+-rw-r--r-- 1 erbmi1 erbmi1 2647648360 Oct  1 17:34 efsd-2056.strace
+-rw-r--r-- 1 erbmi1 erbmi1  555149861 Oct  1 17:37 efsd-2056-win.strace
+-rw------- 1 erbmi1 erbmi1   25144760 Oct  2 15:48 efsd.data
+-rw-r--r-- 1 erbmi1 erbmi1       4051 Oct  2 00:25 flat.txt
+-rw------- 1 erbmi1 erbmi1     914564 Sep 29 13:39 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1  162739699 Sep 29 13:39 fuse.strace
+node 1 root=1 salt=4206459926809775694 groups=2
+  group 0 hosted=1 role=LEADER leader=0 term=144 commit=4275479 applied=4275479 voters=0x7 joint=0
+19
+1285
+fcstor006 efsd=1 perf=1 build=efc0f499cbae-dirty
+Fri Oct  2 15:22:35 2026
+total 24277524
+-rw-r--r-- 1 erbmi1 erbmi1        1205 Oct  2 00:25 by_thread.txt
+-rw-r--r-- 1 erbmi1 erbmi1      115047 Oct  2 00:25 callers.txt
+-rw------- 1 erbmi1 erbmi1   207888364 Oct  2 00:23 efsd-0423.data
+-rw-r--r-- 1 erbmi1 erbmi1 16098231710 Oct  2 00:23 efsd-0423.strace
+-rw------- 1 erbmi1 erbmi1    70679620 Oct  1 14:40 efsd-1823.data
+-rw------- 1 erbmi1 erbmi1   106013048 Oct  1 17:34 efsd-2056.data
+-rw-r--r-- 1 erbmi1 erbmi1  7598517974 Oct  1 17:34 efsd-2056.strace
+-rw-r--r-- 1 erbmi1 erbmi1   585071187 Oct  1 17:37 efsd-2056-win.strace
+-rw------- 1 erbmi1 erbmi1    27227216 Oct  2 15:51 efsd.data
+-rw-r--r-- 1 erbmi1 erbmi1        2417 Oct  2 00:25 flat.txt
+-rw------- 1 erbmi1 erbmi1      843956 Sep 29 13:39 fuse.data
+-rw-r--r-- 1 erbmi1 erbmi1   162769246 Sep 29 13:39 fuse.strace
+node 1 root=1 salt=4206459926809775694 groups=2
+  group 0 hosted=1 role=LEADER leader=0 term=144 commit=4275491 applied=4275491 voters=0x7 joint=0
+612
+643

@@ -1,0 +1,43 @@
+[cluster] stopping efs-fuse on fcstor003-015
+--- fcstor003 ---
+fuse=0
+--- fcstor004 ---
+fuse=0
+--- fcstor005 ---
+fuse=0
+--- fcstor006 ---
+fuse=0
+--- fcstor007 ---
+fuse=0
+--- fcstor008 ---
+fuse=0
+--- fcstor009 ---
+fuse=0
+--- fcstor010 ---
+fuse=0
+--- fcstor011 ---
+fuse=0
+--- fcstor012 ---
+fuse=0
+--- fcstor013 ---
+fuse=0
+--- fcstor014 ---
+fuse=0
+--- fcstor015 ---
+fuse=0
+[cluster] clients down
+[cluster] stopping efsd on fcstor003-006 (SIGTERM, then recorders, then -9)
+--- fcstor003 ---
+efsd=0 perf=0 strace=0
+perf_bytes=34736744 perf_header=ok
+--- fcstor004 ---
+efsd=0 perf=0 strace=0
+perf_bytes=51960412 perf_header=ok
+--- fcstor005 ---
+efsd=0 perf=0 strace=0
+perf_bytes=40348908 perf_header=ok
+--- fcstor006 ---
+efsd=0 perf=0 strace=0
+perf_bytes=34978516 perf_header=ok
+[cluster] servers down
+[cluster] CLUSTER_OK stop clients=1 perf=0 strace=0

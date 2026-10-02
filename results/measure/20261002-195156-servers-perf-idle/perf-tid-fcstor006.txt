@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 155K of event 'cycles:P'
+# Event count (approx.): 455627655022
+#
+# Overhead       Samples      Pid:Command  Symbol                                          
+# ........  ............  ...............  ................................................
+#
+     2.80%          3924   752381:efsd     [.] __memmove_avx_unaligned_erms
+            |          
+             --2.22%--__memmove_avx_unaligned_erms
+                       |          
+                        --2.16%--lsm_batch
+                                  |          
+                                   --1.72%--efs_meta_apply_lane_sweep
+                                             host_apply
+                                             apply_committed
+                                             try_commit
+                                             efs_raft_recv
+                                             drain_inbox
+                                             |          
+                                              --1.72%--host_pump
+                                                        start_thread
+     1.32%          2393   752352:efsd     [.] recv_poller
+     1.12%          1734   752388:efsd     [k] __d_lookup_rcu
+            |          
+             --0.51%--__d_lookup_rcu
+                       |          
+                        --0.51%--lookup_fast
+     0.97%          1764   752352:efsd     [k] entry_SYSCALL_64
+     0.91%          1538   752382:efsd     [.] efs_rdma_recv_wait
+     0.79%          1142   752381:efsd     [.] __memcmp_avx2_movbe
+     0.66%           985   752388:efsd     [k] retbleed_return_thunk
+     0.60%          1002   752382:efsd     [k] __d_lookup_rcu
+     0.56%           793   752381:efsd     [.] efs_crc32
+     0.56%           799   752381:efsd     [.] lookup
+     0.50%           715   752374:efsd     [k] rep_movs_alternative
+#
+# (Tip: To record every process run by a user: perf record -u <user>)
+#

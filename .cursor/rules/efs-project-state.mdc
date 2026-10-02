@@ -69,22 +69,28 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`voters=0x7`); group 2 = even shards = nodes 2–4 (`0xe`). Export
   `efs-test` (id 1), mount `/tmp/efs-mount`. 19820 is retired; do not
   stand it up. Do not roll back to TCP unless a suite fails.
-- **State at 15:27Z Oct 2 2026:** servers UP since `start760`
- (`111a07527093-dirty` after the W50 `--all`, `--perf` attached;
- `/tmp/efs-perf/efsd.data` on fcstor003–006 — `start` deletes it).
- Clients fcstor007–015 remounted 15:19Z from `$HOME/git/efs` (P1
- client); fstor007 no mount. Same table as the Oct 1 07:18Z `raft-mkfs`
- (salt 4206459926809775694); a restart needs no `--join`, no
- `--fresh`. Gate 15:19Z: `results/measure/20261002-151920-posix-ior/`.
- Full roll/remount history: `docs/project-history.md` ("Cluster-state
- narrative").
-- **Current gate signature on that tree:** posix jobs=1 **200/201**
-  (`mmap_write_read` SKIP by spec; `results/posix/20261002-151947`),
-  posix2 **63/63** (`results/posix2/20261002-152031`), 9-host posix
-  **200/201** on all nine (`results/posix/20261001-160049`); IO-500 9×4
-  debug every phase (`results/io500/20261002-152126-rdma`, hard-read 0
-  same-mount errors; Oct 1 `20261001-074905-rdma` had 1 = W38 open).
-  Anything below that is a regression, not noise.
+- **State at 19:52Z Oct 2 2026: the whole cluster is DOWN.** Servers
+ ran 19:22–19:52Z on `efc0f499cbae-dirty` under `perf record -g`
+ (`cluster.sh start --perf`) and were stopped by `cluster.sh stop`
+ (`efsd=0 perf=0` on all four, perf footers OK; data copied to
+ `~/orcd/scratch/efs/perf/servers-20261002-195156/`, reports in
+ `results/measure/20261002-195156-servers-perf-idle/`). Storage kept:
+ same table as the Oct 1 07:18Z `raft-mkfs` (salt
+ 4206459926809775694); the next start is `cluster.sh start [--perf]`
+ — no `--join`, no `--fresh`. Clients fcstor003–015 are **down**
+ (`fuse=0`); fstor007's mount is the user's. The 17:00Z gate opened two
+ correctness rows (START-HERE 0i = W54, 0j):
+ `results/measure/20261002-165956-redeploy-posix-ior/`. Full roll/remount
+ history: `docs/project-history.md` ("Cluster-state narrative").
+- **Last clean gate (15:19Z, `111a07527093` client, before 20745142):**
+  posix jobs=1 **200/201** (`mmap_write_read` SKIP by spec;
+  `results/posix/20261002-151947`), posix2 **63/63**
+  (`results/posix2/20261002-152031`), 9-host posix **200/201** on all
+  nine (`results/posix/20261001-160049`); IO-500 9×4 debug every phase
+  (`results/io500/20261002-152126-rdma`, hard-read 0 same-mount errors).
+  The 17:00Z tree is below that: posix **164/201** (36 stale-stat
+  fails) and IO-500 hard-read **ABORT** (`results/io500/20261002-165956-rdma`).
+  Anything below the 15:19Z line is a regression, not noise.
 - Restart on unwiped storage: no `--join`. After a wipe: node 1 seed,
   2–4 `--join 172.16.223.57:19810`, all 4 up THEN `raft-mkfs`. HELLO
   rejects mixed `EFS_BUILD_ID` → after a new commit (or dirty↔clean) stop
@@ -120,8 +126,10 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  (`results/measure/20261002-060052-p1-d23-w41/SUMMARY.txt`). Open from
  it: **W53** (W41's create/close-storm p99 37 → 100–120 ms under four
  8 GiB writers, same host; keep/revert is the user's), **W52** (serial
- reservation resolves make an O_APPEND REPORT exceed 30 s). P2 (W50 →
- D26, W23 test, W51) is next.
+ reservation resolves make an O_APPEND REPORT exceed 30 s). W50/W51
+ closed 15:00Z; D26 cursor in tree. **Blocked on two correctness rows
+ opened 19:05Z (START-HERE 0i = W54 fold-GC-deletes-live-base, 0j =
+ lookup-memo stale stat); P2.2 D26 waits behind them.**
 - **Numbers (RDMA, flush in the clock; START-HERE §1a "Baselines"):**
  1 client 8 GiB dd+fsync **1.3 GB/s** (`dd539`; Oct 2 P0.1 1518 MB/s),
  16 GiB **1.5 GB/s**, cold 16 GiB read **3.6 GB/s**, four readers
@@ -227,6 +235,21 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  with deletes failing every pass but does not prove it — W50 records
  identities, verdicts and acks first
  (`results/measure/20261002-040242-dd16x10g-review/SUMMARY.txt` §4).
+ **With the D26 cursor rolled (19:22Z) the tombstone walk is gone
+ (`ftomb=2`) and the pass is delete-bound:** `GC_FRAG_BUDGET_US`
+ (200 ms) ends every pass after two 256-record scans because each
+ scan is ~130 ms of `host_gc_record` — up to three serial fragment
+ deletes per record, two of them remote RPCs (~170 µs) → ~0.5 ms per
+ record, ≤ ~400 records/s per group, 591 identical `gc-frag scans=2
+ records=512` passes in the 13 min after a 10 GiB overwrite
+ (`results/measure/20261002-195156-servers-perf-idle/SUMMARY.txt` §3).
+ A constant `fkeys=516 femit=514` is therefore the budget cap, not a
+ queue size; only a GC-prefix key count (KV copy) says whether the
+ queue drains. Server CPU under a single-client write is the kernel:
+ one XFS create + DIO extent allocation per fragment file (20–24 % of
+ efsd cycles on every node, efsd user code ~0.3 % in that path), and
+ followers flush/compact L0 20×/s during D24's 8192-record REPORT
+ applies (`l0=270`, stays ~260 idle) — D9/D10 shape, same SUMMARY §1–2.
 - **A REPORT the host has committed can still be answered BUSY
  (`report-split … fail=wait/-13`), and the client then resends it
  byte-identical to the other dual host, which packs it again and finds
@@ -507,8 +530,24 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  now → BUSY → the client retries → ENOENT. Any new unversioned DEL
  in the log path probes its key first.
 
+- **A fold's GC must not queue a generation the new row still names
+  (W54, Oct 2 17:04Z, OPEN — MUST FIX).** Two clients merging one
+  chunk to the identical image share one object gen (content hash);
+  one publishes it as a span, the other folds the same object as the
+  base. `efs_meta_apply_publish`'s fold branch tombstones every span
+  and `gc_queue`s its gen with no check against `stored.generation` /
+  `chunk_aliases`; `host_gc_local_del` → `efs_store_del_if_sum` passes
+  on the same object's sum; the reaper unlinks the live fragments; the
+  next cache-miss read decodes with 0 of 3 fragments → `EFS_ERR_DECODE`
+  → EIO (ior-hard-read `MPI_ABORT`, ino 656804 ci 181944, base ==
+  tombstone `15366554570668337119 seq=3731`, on disk only an older
+  gen). `fetch published … rc=-9 then pull rc=0 rc=-9` with the same
+  row before and after is this class, not a stale map. No repair tool;
+  the bytes are gone. Server code; unchanged since `2b5a25df`;
+  probabilistic, so one clean same-mount hard-read clears nothing — a
+  cold `hardscan` after each 9×4 run does.
 - **A span record's identity is (object gen, off, len), never the gen
- alone (Sep 30, `results/io500/20260930-183504-rdma`).** The object
+  alone (Sep 30, `results/io500/20260930-183504-rdma`).** The object
  name is a content hash of the 128 KiB PUT image; two clients that
  merge a shared chunk to the same image PUT one object under two
  ranges. `apply_publish` took the second range as "replay of this

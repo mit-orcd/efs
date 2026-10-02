@@ -2122,6 +2122,123 @@ Original steps (1–4 done twice, kept for the commands):
 
 ---
 
+<a id="ph-oct-2-2026-20-05z-servers-perf-idle-window"></a>
+## Oct 2 2026 20:05Z — servers profiled 19:22–19:52Z under `--perf`, then stopped; GC pass is delete-bound, PUT cost is XFS metadata
+
+Sequence: 19:22Z `cluster.sh start --perf` on `efc0f499cbae-dirty`
+(clients fcstor003–015 already down since the 19:05Z stop); the user ran
+one 10 GiB `dd bs=1M` (O_TRUNC over an existing `001/dat16`, no fsync,
+strace -T on dd and `perf -g` on efs-fuse) from fstor007 at
+19:39:11–19:39:43Z — 337 MB/s, 2.24 ms mean per 1 MiB `write()`, the
+serial source `read()` 25 % of the wall; 19:52Z `cluster.sh stop`
+(SIGTERM efsd, then perf; all four footers OK). `~/efs-runs/rstop.sh`
+copied `efsd.log` and `/tmp/efs-perf/efsd.data` off each node and ran
+`perf report` on the node; everything is in
+`results/measure/20261002-195156-servers-perf-idle/` (SUMMARY.txt,
+perf-self/-children/-tid/-header per host, full efsd logs) and the raw
+data in `~/orcd/scratch/efs/perf/servers-20261002-195156/`. **The whole
+cluster is down after this**; the next start is `cluster.sh start`
+with storage kept (no `--join`, no `--fresh`).
+
+Findings (details and numbers in the SUMMARY):
+
+1. Servers at 8–10 % of one core over the 30 min, almost all of it in
+   the 32 s dd window. The PUT path (`writer_thread`, 20–24 % of efsd
+   cycles on every node) is kernel XFS: `path_openat → xfs_create`
+   11–12 % and `writev → iomap_dio_rw → xfs_bmapi_write /
+   xfs_alloc_ag_vextent_near` 17–21 %, `xfs_trans_commit` 7–8 %;
+   ~61 K fragment creates per node in 32 s. efsd user code in that path
+   is ~0.3 %; data memcpy 1.5 %. That is the one-file-per-fragment
+   store design showing as filesystem metadata cost.
+2. Followers (fcstor004/005): `host_pump` 15–17 %, `lsm_batch` 8–9 %,
+   `compactor_main` 7–8 %. The dd's 153 REPORTs (1.39 M publish
+   records) filled L0 every ~50 ms: 1215 compactions in minute 19:39
+   (20/s, ~12 MB each), `l0=270` during, ~260 idle and not coming
+   down; 15.6 GB rewritten. Leader `apply-sleep` 317 lines in that
+   minute (mean 35.5 ms, max 118.5 ms, gap ≤ 6). `pub_p50=75.9 ms`.
+   Compaction shape stays D9/D10.
+3. Leaders (fcstor003 g0, fcstor006 g2): `host_gc_thread` 6.7 %,
+   `nvme_del_if_sum` 7.6 %. From the dd's first second to the stop
+   both logged a `gc-pass` every ~1.27 s with identical counters
+   `fscans=2 fkeys=516 femit=514 ftomb=2` / `gc-frag scans=2
+   records=512` (591 and 594 passes). Read against the code: the
+   D26 cursor removed the tombstone walk (W44 a's 1 M-tombstone pass
+   is gone — the 19:22 start pass walked `ftomb=2172` once), and
+   `GC_FRAG_BUDGET_US` (200 ms per group per loop) ends the pass after
+   the second 256-record scan because each scan is ~130 ms of
+   `host_gc_record`: up to three serial fragment deletes per record,
+   two remote (`get_avg=177us`) → ~0.5 ms per record, ≤ ~400
+   records/s per group. 302 K record emissions in 13 min against the
+   81 920 records one 10 GiB overwrite queues: either a larger queue
+   draining (the user's earlier dat* overwrites, reaps of the test
+   trees, 16 `lane-fence rc=-2` inodes at 19:38:59) or a set that
+   fails every pass and the cursor wraps over. `efs_meta_apply_gc_ack`
+   is in the follower profile, so acks were applied. The
+   discriminator is a GC-prefix key count on a copy of `mdraft/kv`
+   (safe while the servers are down) or a W50-style `EFS_GC_DBG` run
+   with the cursor in tree. Not decided; recorded on the P2.2 row.
+4. Leader pump 7–8 %: `efs_meta_apply_lane_sweep → lsm_batch →
+   memmove` — the reaper's LANE_SWEEP entries for the unlinked test
+   trees; the single largest efsd user symbol (1.7–2.9 %).
+5. Nothing else moved: `wait_timeouts=0`, `tx fail=0`, no
+   backpressure line, `apply_max` 80–273 µs, `persist_max` ~0.5 ms,
+   stable terms after the restart election.
+6. Client side (user's capture): blake3 21 %, memmove 14.3 %
+   (**7.7 % under `efs_rdma_send_frame` on the PUT send path — W39's
+   zero-copy send apparently not engaged on fstor007; check
+   `efs_rdma_zc_region_add` there**), `xor_into` 10.7 %, kernel
+   `fuse_copy_page` memcpy 5.9 %; `dcache_put_now` 58.9 % inclusive.
+   Known shape apart from the send-path copy.
+
+No code changed. START-HERE §1b item 0 and the P2.2 row carry the
+findings; the rule file's cluster fact says DOWN.
+
+---
+
+<a id="ph-oct-2-2026-19-05z-w54-fold-gc-live-base-lookup-memo"></a>
+## Oct 2 2026 19:05Z — redeploy gate opens W54 (fold GC deletes the live base) and the lookup-memo stat regression
+
+Redeployed `20745142` (client: one readdir listing per opendir, LOOKUP
+row answers the next GETATTR) with `cluster.sh restart --clients --perf`
+at 17:00Z — a build-id change, so stop-all/start-all; storage kept.
+Gate (`results/measure/20261002-165956-redeploy-posix-ior/SUMMARY.txt`):
+
+- posix jobs=1 fcstor008 **164/201, 36 fail** (`results/posix/20261002-170119`)
+  vs 200/201 at 15:19Z. Every failure is a same-client stat showing the
+  pre-mutation row (size 0 after write, old mode after chmod, old nlink
+  after link, old mtime after utimens): `lookup_memo_take` answers a
+  GETATTR within 50 ms of the LOOKUP from the LOOKUP row. posix2 63/63
+  (the peer holds no memo). START-HERE row 0j.
+- IO-500 9×4 debug (`results/io500/20261002-165956-rdma`) **aborted in
+  ior-hard-read**: rank 34 on fcstor015 `read() EIO`, `MPI_ABORT`, no
+  score. Phases that ran: easy-write 4.393 GiB/s, hard-write 0.530,
+  easy-read 25.8, mdtest-easy-stat 19.8 kIOPS.
+
+The abort: fcstor015 `fuse.log` 17:04:40Z `fetch published ino=656804
+ci=181944 rc=-9 then pull rc=0 rc=-9` with the row identical before and
+after the pull, then `efs-fuse read: decode error (efs_rc=-9)
+off=23847816512 len=47008`. `raft-getchunks 656804 181944`:
+`base_gen=15366554570668337119 spans=2`, tombstones
+`4218386339069290638 seq=1088` and `15366554570668337119 seq=3731` — the
+base is the second tombstone. On disk under `…/0065/6804/177/` only
+`181944.{0,1,2}.3089159234672355549` (fcstor003/004/005); the live
+generation's three fragments are unlinked. Mechanism: two clients
+merged the chunk to the same image (same content hash → same object
+gen); one published it as a span, the other folded the same object as
+the base; the fold branch of `efs_meta_apply_publish` tombstoned the
+span and `gc_queue`d its gen (no check against `stored.generation` or
+`chunk_aliases`); `host_gc_local_del` → `efs_store_del_if_sum` passed on
+the identical sum; the reaper deleted the live fragments. **W54**,
+START-HERE row 0i, before every performance row. Server code unchanged
+since `2b5a25df`; the 15:21Z clean same-mount hard-read does not clear
+it. The file is unrecoverable (IOR test data).
+
+Tree pulled to `efc0f499` at 19:01Z (metadata reads to the group leader;
+the lookup memo is still in it). Not deployed. Servers remain
+`20745142ad79-dirty`.
+
+---
+
 <a id="ph-oct-2-2026-15-00z-w50-w51-d26-cursor"></a>
 ## Oct 2 2026 15:00Z — W50 closed (not stuck), W51 table written, D26 cursor unrolled
 

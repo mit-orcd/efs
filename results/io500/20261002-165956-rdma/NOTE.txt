@@ -1,0 +1,4 @@
+IO-500 debug 9×4 after redeploy of 20745142ad79-dirty, 17:02Z Oct 2.
+Aborted in ior-hard-read: rank 34 on fcstor015, read() EIO, MPI_ABORT.
+No SCORE. Phases that finished are in result.txt. Compare:
+results/measure/20261002-165956-redeploy-posix-ior/SUMMARY.txt
