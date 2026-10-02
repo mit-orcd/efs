@@ -5390,15 +5390,31 @@ static int host_cfg(struct efs_raft_host *h, uint8_t group,
 struct gc_scan_ctx {
     int n;
     int full;
+    uint32_t skip_len;
+    uint8_t skip[GC_KEY_LEN];
     uint8_t keys[GC_SCAN_MAX][GC_KEY_LEN];
     uint8_t vals[GC_SCAN_MAX][EFS_META_GC_VAL];
 };
+
+/* D26: last emitted GC key per group, so the next pass scan_from's
+ * past the tombstone prefix instead of restarting at the head. */
+static uint8_t g_gc_cur[HOST_NGROUPS][GC_KEY_LEN];
+static uint32_t g_gc_cur_len[HOST_NGROUPS];
+
+static int gc_gi(uint8_t group)
+{
+    return group == 0 ? 0 : 1;
+}
 
 static int gc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
                       const uint8_t *val, uint32_t vlen)
 {
     struct gc_scan_ctx *c = user;
 
+    /* scan_from is inclusive; skip the cursor key we already emitted. */
+    if (c->skip_len && klen == c->skip_len &&
+        memcmp(key, c->skip, klen) == 0)
+        return 0;
     if (c->n >= GC_SCAN_MAX) {
         c->full = 1;
         return 1;
@@ -6035,6 +6051,9 @@ static int host_gc_ack_flush(struct efs_raft_host *h, uint8_t group,
         off += 22;
     }
     rc = host_gc_propose(h, group, cmd, (uint32_t)off);
+    if (env_on("EFS_GC_DBG"))
+        fprintf(stderr, "raft-host: gc ack flush group=%u n=%d rc=%d\n",
+                group, *nack, rc);
     *nack = 0;
     return rc;
 }
@@ -6057,17 +6076,41 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     if (prc != EFS_OK)
         return;
     for (;;) {
+        int gi = gc_gi(group);
+        int wrapped = 0;
+
         memset(&c, 0, sizeof(c));
-        src = efs_kv_scan_prefix(h->kv, prefix, plen, gc_scan_cb, &c);
+        if (g_gc_cur_len[gi]) {
+            memcpy(c.skip, g_gc_cur[gi], g_gc_cur_len[gi]);
+            c.skip_len = g_gc_cur_len[gi];
+        }
+        /* D26: resume after the last emitted key (scan_from is inclusive,
+         * gc_scan_cb drops the start key). A wrap (0 live keys past the
+         * cursor) restarts at the prefix head once per pass. */
+        src = efs_kv_scan_from(h->kv, prefix, plen,
+                               g_gc_cur_len[gi] ? g_gc_cur[gi] : NULL,
+                               g_gc_cur_len[gi], gc_scan_cb, &c);
         scans++;
         if (!ex)
             ex = host_gc_export(h);
         if (env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc frag pass group=%u anchor=%u prc=%d src=%d records=%d ex=%p\n",
-                    group, anchor, prc, src, c.n, (void *)ex);
+            fprintf(stderr, "raft-host: gc frag pass group=%u anchor=%u prc=%d src=%d records=%d ex=%p cur=%u\n",
+                    group, anchor, prc, src, c.n, (void *)ex, g_gc_cur_len[gi]);
         /* src > 0 is the scan callback's "batch full" stop, not an error.
-         * No export yet (pre-mkfs): nothing to delete under. */
-        if (src < 0 || c.n == 0 || !ex)
+         * No export yet (pre-mkfs / post-restart before a PUT or GET):
+         * nothing to delete under — do not advance the cursor. */
+        if (src < 0)
+            break;
+        if (c.n == 0) {
+            if (g_gc_cur_len[gi]) {
+                g_gc_cur_len[gi] = 0;
+                wrapped = 1;
+            }
+            if (!wrapped || !h->gc_running)
+                break;
+            continue;
+        }
+        if (!ex)
             break;
         for (i = 0; i < c.n && h->gc_running && h->running; i++) {
             /* Room for one whole record's acks, so a record is never
@@ -6079,11 +6122,13 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             host_gc_record(h, ex, c.keys[i], c.vals[i], acks, &nack);
             recs++;
         }
+        memcpy(g_gc_cur[gi], c.keys[c.n - 1], GC_KEY_LEN);
+        g_gc_cur_len[gi] = GC_KEY_LEN;
         if (host_gc_ack_flush(h, group, acks, &nack) != EFS_OK)
             break;
         /* The records just acked are still in the KV until the entry
-         * applies; a rescan now would re-delete them (harmless, wasted).
-         * Stop when the scan was not full, the budget is spent, or the
+         * applies; a rescan from the cursor starts after them. Stop
+         * when the scan was not full, the budget is spent, or the
          * host is going down; otherwise yield the KV lock and rescan. */
         if (!c.full || !h->gc_running || !h->running ||
             now_us_() - t0 > GC_FRAG_BUDGET_US)

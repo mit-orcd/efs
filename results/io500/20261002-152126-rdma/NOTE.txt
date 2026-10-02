@@ -1,0 +1,26 @@
+IO-500 debug 9×4 (36 ranks, fcstor007–015, 1 s stonewall, config-debug.ini),
+RDMA, launched 15:21Z Oct 2 2026 (gsuite / rec-gsuite-iorcopy). Same table
+as the Oct 1 07:18Z raft-mkfs (not empty — leftover io500 trees, Used FS
+0.8 %). Servers 111a07527093-dirty --perf; clients remounted 15:19Z.
+
+Every phase completed. No fsync failure. ior-easy-read 0 errors.
+ior-hard-read: 0 Incorrect-data lines (Oct 1 had 1 = W38). Same-mount
+reads; do not quote as cold. SCORE [INVALID] only because stonewall is 1 s.
+
+                     this run              20261001-074905   20260930-183504
+ior-easy-write       6.837 GiB/s           5.173             4.563
+mdtest-easy-write    5.779 kIOPS           6.185             4.632
+ior-hard-write       0.600 GiB/s (48.6 s)  0.519 (63.2 s)    0.640 (52.6 s)
+mdtest-hard-write    4.154 kIOPS           2.818             2.612
+ior-easy-read        20.334 GiB/s          22.521            16.807
+mdtest-easy-stat     17.907 kIOPS          24.445            16.478
+ior-hard-read        0.845 GiB/s, 0 err    0.824, 1 error    1.034, 0 errors
+mdtest-hard-stat     11.125 kIOPS          30.447            23.763
+mdtest-easy-delete   5.643 kIOPS           5.649             4.987
+mdtest-hard-read     5.607 kIOPS           5.923             5.577
+mdtest-hard-delete   4.087 kIOPS           4.835             4.182
+SCORE (invalid)      BW 2.897 / IOPS 6.719 / 4.412
+
+Hard file: /tmp/efs-mount/io500/2026.10.02-11.21.26/ior-hard/file
+-G=1817648449  31168560384 B. Compare write-up:
+results/measure/20261002-151920-posix-ior/SUMMARY.txt

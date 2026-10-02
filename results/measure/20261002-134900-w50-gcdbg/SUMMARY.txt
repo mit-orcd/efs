@@ -1,0 +1,82 @@
+W50 — the repeating GC record set (investigation, Oct 2 2026 14:12–14:57Z)
+
+Question (START-HERE row 13 / plan P2.1): `gc-frag … records=126` (or 257)
+identical for minutes — are those the same stuck records, or only the
+same count? Identical counts alone do not prove failed deletes. This
+pass records identities, each fragment delete's verdict, and whether a
+GC_ACK for them was proposed.
+
+Cluster: 19810, same Oct 1 table, servers rolled from 6163d51e339e-dirty
+to 111a07527093-dirty (`--all` then rolling). One-line `gc ack flush`
+log added under `EFS_GC_DBG` (raft_host.c). Clients fcstor007–010
+remounted at the end. No wipe.
+
+1. Pass 1 (no clients) — export nil, deletes never run
+
+`cluster.sh stop --clients` then `--all` with `EFS_GC_DBG=1`. Leaders
+printed every ~1.1 s:
+
+    gc frag pass group=0 anchor=1 … records=256 ex=(nil)
+    gc-pass … fkeys=438533 femit=257 ftomb=438276
+
+`host_gc_export` is the first RAM export (`exports[0]`). That slot is
+created on PUT_CHUNK / GET_CHUNK (`handler.c`), not at mkfs and not on
+HELLO. With no client data RPC, `ex` is NULL, the pass breaks before
+`host_gc_record`, there are no `gc del` lines and no ACK. The same
+head-of-prefix 256 live records are emitted every pass. This is a
+real mechanism for "identical counts" after a restart until a PUT or
+GET has hit that process. It is not the live-cluster shape that prints
+`gc-frag` (that line is gated on `recs > 0`, which requires an export).
+
+2. Pass 2 (clients still "mounted", no remount after roll)
+
+Rolling restart with `EFS_GC_DBG=1` left the old FUSE daemons talking
+to new efsd. Leaders still `ex=(nil)`, 0 deletes. Same skip as pass 1:
+a remount or a PUT/GET on the *new* process is what creates the export.
+
+3. Pass 3 (remount + 1 MiB non-zero kick, then roll, remount, kick)
+
+`ex=0x…` on both group leaders. 30 s window:
+
+| host (role) | gc del | del rc | ack flush | flush rc | apply gc-ack fail | unique (ino,ci,frag) | consecutive-pass repeats |
+| --- | ---: | --- | ---: | --- | ---: | ---: | ---: |
+| fcstor003 (g0 leader) | 33792 | all 0 | 308 | all 0 | 0 | 33792 | 0 |
+| fcstor004 (g2 leader) | 36864 | all 0 | 336 | all 0 | 0 | 36864 | 0 |
+| fcstor005 / 006 | 0 | — | 0 | — | 0 | 0 | 0 |
+
+`gc-frag records=512` every pass (two inner scans of 256, the batch
+cap). Every identity appears in one pass only. Deletes and ACK
+proposes succeeded. The repeating *count* is the scan batch walking a
+large pending queue, not the same records failing.
+
+Raw: `dbg3-fcstor003.log`, `dbg3-fcstor004.log`, `analysis-v3.txt`,
+`idents-fcstor00{3,4}.txt` (pass/ino/ci/frag/node/rc). Pass 1 logs
+`dbg-*.log`; pass 2 `dbg2-*.log`.
+
+4. Verdict
+
+Closes as **not a stuck-delete set** on the live path: a record seen
+with a non-OK delete and no ACK did not occur in this window. The
+morning `records=126` / `femit=257` lines are the batch size, not
+evidence those identities failed.
+
+Two follow-ons, neither named as "the 126 are stuck":
+
+- **D26 (already decided):** the pass still walks ~438 k tombstones
+  (`ftomb`) to emit 256 live keys when it starts at the prefix head.
+  Watermark (skip a truly empty pass) plus a `scan_from` cursor
+  (resume past the last emitted key) are the pair. This investigation
+  says the live records *do* drain, so a watermark of remaining live
+  records will eventually reach 0; the cursor is what stops the
+  tombstone rewalk while they remain.
+- **Export-nil skip:** after restart, GC cannot delete until that
+  process has seen a PUT or GET. Not a W50 "stuck record" and not a
+  design ask — the comment in `host_gc_frag_pass` already calls this
+  pre-mkfs; it is also post-restart. Bring it with D26 if the cursor
+  is implemented, do not treat it as the morning 11/s GC_ACK cause
+  (those `gc-frag` lines required an export).
+
+5. Cluster after
+
+Servers `111a07527093-dirty`, `--perf`, RDMA, `EFS_RAFT_OBS=1`, no
+`EFS_GC_DBG`. Clients fcstor007–010 remounted. Salt unchanged.

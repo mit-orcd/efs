@@ -1,0 +1,406 @@
+# posix-suite host=fcstor008 mnt=/tmp/efs-mount 2026-10-02T15:20:30Z
+# select	basic_write_read
+# select	basic_empty_file
+# select	basic_append
+# select	basic_oappend_flag
+# select	basic_seek_read
+# select	basic_overwrite_middle
+# select	basic_read_past_eof
+# select	basic_terminal_cp_cat
+# select	basic_dd_rw
+# select	basic_o_trunc
+# select	basic_pread_pwrite
+# select	basic_dup_write
+# select	basic_chunk_boundary
+# select	fsync_reopen_visible
+# select	basic_ftruncate_vs_truncate
+# select	basic_seek_end_then_write
+# select	basic_seek_cur_past_eof_write
+# select	basic_rdwr_no_reopen
+# select	trunc_shrink
+# select	trunc_grow_sparse
+# select	sparse_write_huge_offset
+# select	trunc_to_zero
+# select	sparse_st_blocks
+# select	dir_mkdir_rmdir
+# select	dir_mkdir_p_terminal
+# select	dir_readdir_listing
+# select	dir_rename_file
+# select	dir_rename_over_existing
+# select	dir_rename_dir_with_contents
+# select	dir_move_into_subdir
+# select	dir_rename_file_over_dir
+# select	dir_rename_dir_over_file
+# select	dir_rename_dir_over_nonempty
+# select	dir_rename_noreplace
+# select	dir_rename_symlink
+# select	dir_deep_nesting
+# select	dir_many_files
+# select	dir_dot_entries
+# select	dir_hidden_files
+# select	dir_mkdir_umask
+# select	dir_chmod_and_create_denied
+# select	dir_nlink
+# select	dir_readdir_while_unlink
+# select	symlink_create_readlink
+# select	symlink_to_dir
+# select	symlink_dangling
+# select	symlink_chain
+# select	symlink_absolute
+# select	hardlink_basic
+# select	hardlink_shared_data
+# select	hardlink_unlink_one
+# select	hardlink_terminal_ln
+# select	hardlink_rename_one_name
+# select	symlink_unlink_keeps_target
+# select	symlink_relative_after_parent_rename
+# select	symlink_chmod_follows
+# select	attr_chmod
+# select	attr_chown_self
+# select	attr_utimens
+# select	attr_utimens_ns
+# select	attr_touch_terminal
+# select	attr_stat_fields
+# select	attr_umask_respected
+# select	attr_access
+# select	attr_ctime_after_chmod
+# select	perm_file_000_denied
+# select	perm_file_write_only
+# select	perm_file_read_only_ops
+# select	perm_owner_bits_not_other
+# select	perm_owner_bits_not_group
+# select	perm_create_mode_000_reopen
+# select	perm_open_fd_survives_chmod
+# select	perm_owner_chmod_restore
+# select	perm_owner_utime_readonly
+# select	perm_fchmod
+# select	perm_ftruncate_after_chmod
+# select	perm_access_rwx
+# select	perm_exec_denied_no_x
+# select	perm_exec_allowed_with_x
+# select	perm_suid_sgid_sticky_stored
+# select	perm_sticky_owner_can_unlink
+# select	perm_chown_other_uid_denied
+# select	perm_chown_other_gid_denied
+# select	perm_dir_readonly_mutate
+# select	perm_dir_no_x_search
+# select	perm_dir_no_r_list
+# select	perm_dir_wx_no_r
+# select	perm_dir_000_restore
+# select	perm_unlink_mode_000_file
+# select	perm_nested_parent_no_x
+# select	perm_rename_into_readonly_dir
+# select	perm_symlink_target_denied
+# select	perm_hardlink_shares_mode
+# select	names_crazy_roundtrip
+# select	names_dash_prefix_terminal
+# select	names_too_long_component
+# select	names_reserved_dots
+# select	names_near_path_max
+# select	names_near_path_max_dir
+# select	names_path_too_long
+# select	names_control_and_high_bytes
+# select	names_unicode_nfc_nfd_coexist
+# select	names_crazy_dirs
+# select	dir_deep_nesting_beyond_64
+# select	content_random_roundtrip
+# select	content_all_byte_values
+# select	content_whitespace_and_line_endings
+# select	content_nul_and_control
+# select	content_random_overwrite_append
+# select	content_random_large_multichunk
+# select	err_mkdir_existing
+# select	err_rmdir_nonempty
+# select	err_rmdir_a_file
+# select	err_open_dir_for_write
+# select	err_read_from_dir
+# select	err_create_excl_existing
+# select	err_rename_dir_into_itself
+# select	err_hardlink_to_dir
+# select	err_unlink_nonexistent
+# select	err_hardlink_nonexistent_src
+# select	err_write_readonly_file
+# select	err_symlink_loop
+# select	err_create_under_a_file
+# select	err_chdir_into_file
+# select	err_stat_nonexistent
+# select	err_unlink_a_directory
+# select	err_rmdir_dot_dotdot
+# select	fsync_write
+# select	fdatasync_write
+# select	fsync_dir
+# select	unlink_open_file
+# select	flock_basic
+# select	fcntl_lock_basic
+# select	flock_shared_then_exclusive
+# select	flock_two_proc_exclusive
+# select	fcntl_byte_range_lock
+# select	mmap_write_read
+# select	mmap_private_not_visible
+# select	statfs_sane
+# select	concurrent_creates_same_dir
+# select	concurrent_appends
+# select	concurrent_appends_two_proc
+# select	concurrent_writes_disjoint
+# select	concurrent_create_unlink_two_proc
+# select	concurrent_write_and_readdir
+# select	virt_stats_readable
+# select	virt_find_query
+# select	virt_find_not_a_real_dir
+# select	opt_fallocate
+# select	opt_xattr
+# select	opt_seek_hole_data
+# select	opt_copy_file_range
+# select	opt_openat
+# select	flock_second_fd_exclusive
+# select	direct_aligned_rdwr
+# select	direct_unaligned_einval
+# select	direct_rmw_4k_in_chunk
+# select	packed_then_grow_past_chunk
+# select	writev_readv_chunk_straddle
+# select	zero_length_write
+# select	fcntl_setfl_oappend
+# select	two_fds_size_mtime
+# select	trunc_open_other_fd
+# select	link_across_dirs
+# select	last_link_unlink_other_dir
+# select	nlink_after_unlink_open
+# select	o_nofollow
+# select	o_directory
+# select	ctime_on_link_rename
+# select	st_ino_unique_hardlink_same
+# select	create_excl_two_proc
+# select	concurrent_overlap_write
+# select	fstat_size_after_write
+# select	trunc_shrink_same_fd
+# select	unlink_open_then_recreate
+# select	rename_to_self
+# select	rename_empty_over_empty_dir
+# select	lstat_symlink_size
+# select	chmod_preserves_mtime
+# select	unlink_recreate_new_ino
+# select	case_sensitive_names
+# select	o_append_pwrite_absolute
+# select	two_fds_independent_offset
+# select	dir_nlink_after_rmdir_child
+# select	access_f_ok_after_unlink
+# select	write_hole_pread_zeros
+# select	hardlink_three_names
+# select	rename_file_over_symlink
+# select	flock_unlock_on_close
+# select	mkdirat_unlinkat
+# select	trailing_slash_on_file
+# select	creat_existing_dir_eisdir
+# select	fsync_then_fstat_size
+# select	chdir_dotdot_after_mkdir
+# select	mtime_bumps_on_write
+# select	rename_dir_same_parent
+# select	link_of_symlink
+# select	concurrent_extend_high_then_low
+# select	mtime_monotonic_many_writes
+# select	trunc_zero_then_high_pwrite
+# select	write_beyond_eof_then_seek_end
+test	result	detail
+basic_write_read	PASS	
+basic_empty_file	PASS	
+basic_append	PASS	
+basic_oappend_flag	PASS	
+basic_seek_read	PASS	
+basic_overwrite_middle	PASS	
+basic_read_past_eof	PASS	
+basic_terminal_cp_cat	PASS	
+basic_dd_rw	PASS	
+basic_o_trunc	PASS	
+basic_pread_pwrite	PASS	
+basic_dup_write	PASS	
+basic_chunk_boundary	PASS	
+fsync_reopen_visible	PASS	
+basic_ftruncate_vs_truncate	PASS	
+basic_seek_end_then_write	PASS	
+basic_seek_cur_past_eof_write	PASS	
+basic_rdwr_no_reopen	PASS	
+trunc_shrink	PASS	
+trunc_grow_sparse	PASS	
+sparse_write_huge_offset	PASS	
+trunc_to_zero	PASS	
+sparse_st_blocks	PASS	
+dir_mkdir_rmdir	PASS	
+dir_mkdir_p_terminal	PASS	
+dir_readdir_listing	PASS	
+dir_rename_file	PASS	
+dir_rename_over_existing	PASS	
+dir_rename_dir_with_contents	PASS	
+dir_move_into_subdir	PASS	
+dir_rename_file_over_dir	PASS	
+dir_rename_dir_over_file	PASS	
+dir_rename_dir_over_nonempty	PASS	
+dir_rename_noreplace	PASS	
+dir_rename_symlink	PASS	
+dir_deep_nesting	PASS	
+dir_many_files	PASS	
+dir_dot_entries	PASS	
+dir_hidden_files	PASS	
+dir_mkdir_umask	PASS	
+dir_chmod_and_create_denied	PASS	
+dir_nlink	PASS	
+dir_readdir_while_unlink	PASS	
+symlink_create_readlink	PASS	
+symlink_to_dir	PASS	
+symlink_dangling	PASS	
+symlink_chain	PASS	
+symlink_absolute	PASS	
+hardlink_basic	PASS	
+hardlink_shared_data	PASS	
+hardlink_unlink_one	PASS	
+hardlink_terminal_ln	PASS	
+hardlink_rename_one_name	PASS	
+symlink_unlink_keeps_target	PASS	
+symlink_relative_after_parent_rename	PASS	
+symlink_chmod_follows	PASS	
+attr_chmod	PASS	
+attr_chown_self	PASS	
+attr_utimens	PASS	
+attr_utimens_ns	PASS	
+attr_touch_terminal	PASS	
+attr_stat_fields	PASS	
+attr_umask_respected	PASS	
+attr_access	PASS	
+attr_ctime_after_chmod	PASS	
+perm_file_000_denied	PASS	
+perm_file_write_only	PASS	
+perm_file_read_only_ops	PASS	
+perm_owner_bits_not_other	PASS	
+perm_owner_bits_not_group	PASS	
+perm_create_mode_000_reopen	PASS	
+perm_open_fd_survives_chmod	PASS	
+perm_owner_chmod_restore	PASS	
+perm_owner_utime_readonly	PASS	
+perm_fchmod	PASS	
+perm_ftruncate_after_chmod	PASS	
+perm_access_rwx	PASS	
+perm_exec_denied_no_x	PASS	
+perm_exec_allowed_with_x	PASS	
+perm_suid_sgid_sticky_stored	PASS	
+perm_sticky_owner_can_unlink	PASS	
+perm_chown_other_uid_denied	PASS	
+perm_chown_other_gid_denied	PASS	
+perm_dir_readonly_mutate	PASS	
+perm_dir_no_x_search	PASS	
+perm_dir_no_r_list	PASS	
+perm_dir_wx_no_r	PASS	
+perm_dir_000_restore	PASS	
+perm_unlink_mode_000_file	PASS	
+perm_nested_parent_no_x	PASS	
+perm_rename_into_readonly_dir	PASS	
+perm_symlink_target_denied	PASS	
+perm_hardlink_shares_mode	PASS	
+names_crazy_roundtrip	PASS	
+names_dash_prefix_terminal	PASS	
+names_too_long_component	PASS	
+names_reserved_dots	PASS	
+names_near_path_max	PASS	
+names_near_path_max_dir	PASS	
+names_path_too_long	PASS	
+names_control_and_high_bytes	PASS	
+names_unicode_nfc_nfd_coexist	PASS	
+names_crazy_dirs	PASS	
+dir_deep_nesting_beyond_64	PASS	
+content_random_roundtrip	PASS	
+content_all_byte_values	PASS	
+content_whitespace_and_line_endings	PASS	
+content_nul_and_control	PASS	
+content_random_overwrite_append	PASS	
+content_random_large_multichunk	PASS	
+err_mkdir_existing	PASS	
+err_rmdir_nonempty	PASS	
+err_rmdir_a_file	PASS	
+err_open_dir_for_write	PASS	
+err_read_from_dir	PASS	
+err_create_excl_existing	PASS	
+err_rename_dir_into_itself	PASS	
+err_hardlink_to_dir	PASS	
+err_unlink_nonexistent	PASS	
+err_hardlink_nonexistent_src	PASS	
+err_write_readonly_file	PASS	
+err_symlink_loop	PASS	
+err_create_under_a_file	PASS	
+err_chdir_into_file	PASS	
+err_stat_nonexistent	PASS	
+err_unlink_a_directory	PASS	
+err_rmdir_dot_dotdot	PASS	
+fsync_write	PASS	
+fdatasync_write	PASS	
+fsync_dir	PASS	
+unlink_open_file	PASS	
+flock_basic	PASS	
+fcntl_lock_basic	PASS	
+flock_shared_then_exclusive	PASS	
+flock_two_proc_exclusive	PASS	
+fcntl_byte_range_lock	PASS	
+mmap_write_read	SKIP	mmap unsupported: [Errno 19] No such device
+mmap_private_not_visible	PASS	
+statfs_sane	PASS	
+concurrent_creates_same_dir	PASS	
+concurrent_appends	PASS	
+concurrent_appends_two_proc	PASS	
+concurrent_writes_disjoint	PASS	
+concurrent_create_unlink_two_proc	PASS	
+concurrent_write_and_readdir	PASS	
+virt_stats_readable	PASS	
+virt_find_query	PASS	
+virt_find_not_a_real_dir	PASS	
+opt_fallocate	PASS	
+opt_xattr	PASS	
+opt_seek_hole_data	PASS	
+opt_copy_file_range	PASS	
+opt_openat	PASS	
+flock_second_fd_exclusive	PASS	
+direct_aligned_rdwr	PASS	
+direct_unaligned_einval	PASS	
+direct_rmw_4k_in_chunk	PASS	
+packed_then_grow_past_chunk	PASS	
+writev_readv_chunk_straddle	PASS	
+zero_length_write	PASS	
+fcntl_setfl_oappend	PASS	
+two_fds_size_mtime	PASS	
+trunc_open_other_fd	PASS	
+link_across_dirs	PASS	
+last_link_unlink_other_dir	PASS	
+nlink_after_unlink_open	PASS	
+o_nofollow	PASS	
+o_directory	PASS	
+ctime_on_link_rename	PASS	
+st_ino_unique_hardlink_same	PASS	
+create_excl_two_proc	PASS	
+concurrent_overlap_write	PASS	
+fstat_size_after_write	PASS	
+trunc_shrink_same_fd	PASS	
+unlink_open_then_recreate	PASS	
+rename_to_self	PASS	
+rename_empty_over_empty_dir	PASS	
+lstat_symlink_size	PASS	
+chmod_preserves_mtime	PASS	
+unlink_recreate_new_ino	PASS	
+case_sensitive_names	PASS	
+o_append_pwrite_absolute	PASS	
+two_fds_independent_offset	PASS	
+dir_nlink_after_rmdir_child	PASS	
+access_f_ok_after_unlink	PASS	
+write_hole_pread_zeros	PASS	
+hardlink_three_names	PASS	
+rename_file_over_symlink	PASS	
+flock_unlock_on_close	PASS	
+mkdirat_unlinkat	PASS	
+trailing_slash_on_file	PASS	
+creat_existing_dir_eisdir	PASS	
+fsync_then_fstat_size	PASS	
+chdir_dotdot_after_mkdir	PASS	
+mtime_bumps_on_write	PASS	
+rename_dir_same_parent	PASS	
+link_of_symlink	PASS	
+concurrent_extend_high_then_low	PASS	
+mtime_monotonic_many_writes	PASS	
+trunc_zero_then_high_pwrite	PASS	
+write_beyond_eof_then_seek_end	PASS	
+# summary pass=200 fail=0 skip=1 notrun=0 total=201 dur=27.1
+# complete

@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/erbmi1/git/efs/tests/tools/raft_log_tail.py", line 81, in <module>
+    main()
+  File "/home/erbmi1/git/efs/tests/tools/raft_log_tail.py", line 31, in main
+    want = int(sys.argv[2]) if len(sys.argv) > 2 else 4 << 20
+ValueError: invalid literal for int() with base 10: '4M'

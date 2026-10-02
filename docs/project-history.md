@@ -2122,6 +2122,35 @@ Original steps (1–4 done twice, kept for the commands):
 
 ---
 
+<a id="ph-oct-2-2026-15-00z-w50-w51-d26-cursor"></a>
+## Oct 2 2026 15:00Z — W50 closed (not stuck), W51 table written, D26 cursor unrolled
+
+P2.1: three `EFS_GC_DBG=1` windows on 19810 after the P1 tree
+(`111a07527093-dirty`). Passes 1–2 had `ex=(nil)` (no RAM export until
+a PUT/GET on that process) and deleted nothing. Pass 3 remounted
+clients and kicked a 1 MiB non-zero write: every `gc del` and
+`gc ack flush` rc=0, zero consecutive-pass identity repeats
+(33792 / 36864 unique = del count). The repeating `records=256/512` is
+the scan batch, not a failed-delete set. Summary:
+`results/measure/20261002-134900-w50-gcdbg/SUMMARY.txt`.
+
+P2.4: classified the existing 144 `apply-sleep` lines from the P0.2
+file — compact-overlap 47, small-gap-no-compact 89, lag-gap 0. D30
+stays an ask. `results/measure/20261002-143815-w51/SUMMARY.txt`.
+
+D26 cursor (`efs_kv_scan_from` past the last emitted GC key) is in
+`raft_host.c` and not rolled. The apply-batch watermark is still to
+land. Servers at 15:00Z: `111a07527093-dirty`, `--perf`, clients
+fcstor007–010 remounted 14:57Z.
+
+15:19Z gate on that same server build (clients fcstor007–015 remounted,
+no wipe): posix jobs=1 200/201 (`results/posix/20261002-151947`),
+posix2 63/63 (`results/posix2/20261002-152031`), IO-500 9×4 debug
+(`results/io500/20261002-152126-rdma`): easy-write 6.837 GiB/s,
+hard-write 0.600, hard-read 0.845 with 0 Incorrect-data lines
+(Oct 1 had 1). Compare:
+`results/measure/20261002-151920-posix-ior/SUMMARY.txt`.
+
 <a id="ph-oct-2-2026-13-45z-performance-plan-p0-p1-d23-w41-landed"></a>
 ## Oct 2 2026 13:45Z — performance plan P0 (gates) and P1 (D23 + W41) done; W52, W53 opened
 

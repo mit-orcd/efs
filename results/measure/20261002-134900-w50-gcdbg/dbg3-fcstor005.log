@@ -1,0 +1,127 @@
+2026-10-02T14:56:06.039Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:06.039Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:06.039Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:07.042Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:07.042Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:07.042Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:08.045Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:08.045Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:08.045Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:09.047Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:09.047Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:09.047Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:10.028Z raft-obs: tx->0 enq=692 drop=0 sent=595 fail=0 hi=1 rtt_avg=30us get_avg=5us get_max=3ms
+2026-10-02T14:56:10.028Z raft-obs: tx->1 enq=720 drop=0 sent=618 fail=0 hi=1 rtt_avg=30us get_avg=5us get_max=3ms
+2026-10-02T14:56:10.028Z raft-obs: wait_timeouts=0 pump_hold_max=424us lock_wait_max=1us drain_max=424us tick_max=1us apply_max=401us persist_max=760us applies_in_worst=2 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:56:10.050Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:10.050Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:10.050Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:11.053Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:11.053Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:11.053Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:12.056Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:12.056Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:12.056Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:13.058Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:13.058Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:13.058Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:14.061Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:14.061Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:14.061Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:15.032Z raft-obs: tx->0 enq=882 drop=0 sent=786 fail=0 hi=1 rtt_avg=30us get_avg=4us get_max=3ms
+2026-10-02T14:56:15.032Z raft-obs: tx->1 enq=882 drop=0 sent=780 fail=0 hi=1 rtt_avg=29us get_avg=4us get_max=3ms
+2026-10-02T14:56:15.032Z raft-obs: wait_timeouts=0 pump_hold_max=703us lock_wait_max=1us drain_max=703us tick_max=4us apply_max=699us persist_max=520us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:56:15.064Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:15.064Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:15.064Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:16.067Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:16.067Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:16.067Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:16.657Z kv-compact: start l0=128 inputs=2 range=240 l0only=0
+2026-10-02T14:56:16.658Z kv-compact: end bytes=1763 ms=1 l0=127 l1=274 rc=0
+2026-10-02T14:56:16.658Z kv-compact: start l0=127 inputs=2 range=261 l0only=1
+2026-10-02T14:56:16.673Z kv-compact: end bytes=6101569 ms=15 l0=126 l1=274 rc=0
+2026-10-02T14:56:16.673Z kv-compact: start l0=126 inputs=2 range=2 l0only=1
+2026-10-02T14:56:16.682Z kv-compact: end bytes=2896132 ms=9 l0=125 l1=274 rc=0
+2026-10-02T14:56:16.682Z kv-compact: start l0=125 inputs=2 range=262 l0only=1
+2026-10-02T14:56:16.685Z kv-compact: end bytes=989003 ms=3 l0=124 l1=274 rc=0
+2026-10-02T14:56:16.685Z kv-compact: start l0=124 inputs=2 range=265 l0only=1
+2026-10-02T14:56:16.688Z kv-compact: end bytes=671664 ms=3 l0=123 l1=274 rc=0
+2026-10-02T14:56:16.688Z kv-compact: start l0=123 inputs=2 range=258 l0only=1
+2026-10-02T14:56:16.690Z kv-compact: end bytes=614987 ms=2 l0=122 l1=274 rc=0
+2026-10-02T14:56:16.690Z kv-compact: start l0=122 inputs=2 range=268 l0only=1
+2026-10-02T14:56:16.692Z kv-compact: end bytes=318720 ms=3 l0=121 l1=274 rc=0
+2026-10-02T14:56:16.692Z kv-compact: start l0=121 inputs=2 range=259 l0only=1
+2026-10-02T14:56:16.694Z kv-compact: end bytes=195227 ms=1 l0=120 l1=274 rc=0
+2026-10-02T14:56:17.069Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:17.069Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:17.069Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:18.072Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:18.072Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:18.072Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:19.075Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:19.075Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:19.075Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:20.034Z raft-obs: tx->0 enq=1058 drop=0 sent=962 fail=0 hi=1 rtt_avg=30us get_avg=3us get_max=3ms
+2026-10-02T14:56:20.034Z raft-obs: tx->1 enq=1067 drop=0 sent=965 fail=0 hi=1 rtt_avg=28us get_avg=3us get_max=3ms
+2026-10-02T14:56:20.034Z raft-obs: wait_timeouts=0 pump_hold_max=9015us lock_wait_max=1us drain_max=9015us tick_max=1us apply_max=9011us persist_max=1030us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:56:20.078Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:20.078Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:20.078Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:21.080Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:21.080Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:21.080Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:22.083Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:22.083Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:22.083Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:23.086Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:23.086Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:23.086Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:24.089Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:24.089Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:24.089Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:25.037Z raft-obs: tx->0 enq=1242 drop=0 sent=1146 fail=0 hi=1 rtt_avg=30us get_avg=3us get_max=3ms
+2026-10-02T14:56:25.037Z raft-obs: tx->1 enq=1253 drop=0 sent=1151 fail=0 hi=1 rtt_avg=28us get_avg=3us get_max=3ms
+2026-10-02T14:56:25.037Z raft-obs: wait_timeouts=0 pump_hold_max=461us lock_wait_max=1us drain_max=461us tick_max=4us apply_max=274us persist_max=755us applies_in_worst=2 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:56:25.091Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:25.091Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:25.091Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:26.094Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:26.094Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:26.094Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:27.097Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:27.097Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:27.097Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:28.099Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:28.100Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:28.100Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:29.102Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:29.102Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:29.102Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:30.039Z raft-obs: tx->0 enq=1434 drop=0 sent=1338 fail=0 hi=1 rtt_avg=30us get_avg=2us get_max=3ms
+2026-10-02T14:56:30.039Z raft-obs: tx->1 enq=1440 drop=0 sent=1338 fail=0 hi=1 rtt_avg=27us get_avg=2us get_max=3ms
+2026-10-02T14:56:30.039Z raft-obs: wait_timeouts=0 pump_hold_max=400us lock_wait_max=4us drain_max=400us tick_max=3us apply_max=245us persist_max=535us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:56:30.105Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:30.105Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:30.105Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:31.108Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:31.108Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:31.108Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:32.110Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:32.110Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:32.110Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:33.113Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:33.113Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:33.113Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:34.116Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:34.116Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:34.116Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:35.039Z raft-obs: tx->0 enq=1621 drop=0 sent=1525 fail=0 hi=1 rtt_avg=29us get_avg=2us get_max=3ms
+2026-10-02T14:56:35.039Z raft-obs: tx->1 enq=1627 drop=0 sent=1525 fail=0 hi=1 rtt_avg=27us get_avg=2us get_max=3ms
+2026-10-02T14:56:35.039Z raft-obs: wait_timeouts=0 pump_hold_max=403us lock_wait_max=4us drain_max=403us tick_max=4us apply_max=217us persist_max=523us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:56:35.119Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:35.119Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:35.119Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T14:56:36.121Z raft-host: gc loop g=0 group=0 r=0x2e1adf80 role=0 lead=0
+2026-10-02T14:56:36.121Z raft-host: gc loop g=1 group=2 r=0x2e1ae310 role=0 lead=0
+2026-10-02T14:56:36.121Z raft-host: gc-pass ms=0 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0

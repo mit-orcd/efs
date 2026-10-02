@@ -1,0 +1,141 @@
+2026-10-02T14:36:55.811Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:36:55.811Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:36:55.855Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:36:55.855Z raft-host: gc-pass ms=44 reap=0 frag=44 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:36:56.543Z raft-obs: tx->1 enq=1585 drop=0 sent=1584 fail=1 hi=1 rtt_avg=33us get_avg=4us get_max=3ms
+2026-10-02T14:36:56.543Z raft-obs: tx->2 enq=1669 drop=0 sent=1659 fail=10 hi=99 rtt_avg=31us get_avg=3013us get_max=5025ms
+2026-10-02T14:36:56.543Z raft-obs: wait_timeouts=0 pump_hold_max=8us lock_wait_max=1us drain_max=2us tick_max=8us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:36:56.858Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:36:56.858Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:36:56.902Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:36:56.902Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:36:57.905Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:36:57.905Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:36:57.949Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:36:57.949Z raft-host: gc-pass ms=44 reap=0 frag=44 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:36:58.952Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:36:58.952Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:36:58.995Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:36:58.995Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:36:59.998Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:36:59.998Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:00.042Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:00.042Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:01.044Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:01.044Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:01.088Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:01.088Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:01.544Z raft-obs: tx->1 enq=1684 drop=0 sent=1683 fail=1 hi=1 rtt_avg=33us get_avg=4us get_max=3ms
+2026-10-02T14:37:01.544Z raft-obs: tx->2 enq=1768 drop=0 sent=1758 fail=10 hi=99 rtt_avg=31us get_avg=2844us get_max=5025ms
+2026-10-02T14:37:01.544Z raft-obs: wait_timeouts=0 pump_hold_max=19us lock_wait_max=5us drain_max=2us tick_max=19us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:37:02.091Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:02.091Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:02.135Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:02.135Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:03.137Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:03.137Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:03.181Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:03.181Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:04.184Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:04.184Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:04.228Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:04.228Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:05.230Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:05.230Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:05.274Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:05.274Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:06.277Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:06.277Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:06.320Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:06.320Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:06.545Z raft-obs: tx->1 enq=1783 drop=0 sent=1782 fail=1 hi=1 rtt_avg=33us get_avg=3us get_max=3ms
+2026-10-02T14:37:06.545Z raft-obs: tx->2 enq=1867 drop=0 sent=1857 fail=10 hi=99 rtt_avg=31us get_avg=2693us get_max=5025ms
+2026-10-02T14:37:06.545Z raft-obs: wait_timeouts=0 pump_hold_max=9us lock_wait_max=1us drain_max=3us tick_max=9us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:37:07.323Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:07.323Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:07.367Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:07.367Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:08.369Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:08.370Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:08.413Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:08.413Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:09.416Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:09.416Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:09.460Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:09.460Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:10.463Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:10.463Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:10.506Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:10.506Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:11.509Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:11.509Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:11.546Z raft-obs: tx->1 enq=1882 drop=0 sent=1881 fail=1 hi=1 rtt_avg=33us get_avg=3us get_max=3ms
+2026-10-02T14:37:11.546Z raft-obs: tx->2 enq=1966 drop=0 sent=1956 fail=10 hi=99 rtt_avg=32us get_avg=2558us get_max=5025ms
+2026-10-02T14:37:11.546Z raft-obs: wait_timeouts=0 pump_hold_max=14us lock_wait_max=1us drain_max=2us tick_max=13us apply_max=0us persist_max=3us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:37:11.553Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:11.553Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:12.556Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:12.556Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:12.599Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:12.599Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:13.602Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:13.602Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:13.646Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:13.646Z raft-host: gc-pass ms=44 reap=0 frag=44 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:14.649Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:14.649Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:14.693Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:14.693Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:15.695Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:15.695Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:15.739Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:15.739Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:16.547Z raft-obs: tx->1 enq=1980 drop=0 sent=1979 fail=1 hi=1 rtt_avg=33us get_avg=3us get_max=3ms
+2026-10-02T14:37:16.547Z raft-obs: tx->2 enq=2064 drop=0 sent=2054 fail=10 hi=99 rtt_avg=32us get_avg=2436us get_max=5025ms
+2026-10-02T14:37:16.547Z raft-obs: wait_timeouts=0 pump_hold_max=6us lock_wait_max=1us drain_max=5us tick_max=4us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:37:16.742Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:16.742Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:16.785Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:16.785Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:17.788Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:17.788Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:17.832Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:17.832Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:18.835Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:18.835Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:18.878Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:18.879Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:19.881Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:19.881Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:19.925Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:19.925Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:20.928Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:20.928Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:20.972Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:20.972Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:21.548Z raft-obs: tx->1 enq=2079 drop=0 sent=2078 fail=1 hi=1 rtt_avg=33us get_avg=3us get_max=3ms
+2026-10-02T14:37:21.548Z raft-obs: tx->2 enq=2163 drop=0 sent=2153 fail=10 hi=99 rtt_avg=32us get_avg=2325us get_max=5025ms
+2026-10-02T14:37:21.548Z raft-obs: wait_timeouts=0 pump_hold_max=7us lock_wait_max=1us drain_max=1us tick_max=7us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-02T14:37:21.974Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:21.974Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:22.018Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:22.018Z raft-host: gc-pass ms=44 reap=0 frag=44 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:23.021Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:23.021Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:23.065Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:23.065Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:24.067Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:24.068Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:24.111Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:24.111Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:25.114Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:25.114Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:25.158Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:25.158Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:26.160Z raft-host: gc loop g=0 group=0 r=0x17482020 role=2 lead=1
+2026-10-02T14:37:26.160Z raft-host: gc reap pass group=0 anchor=1 prc=0 src=0 markers=0 kv=0xc834b0
+2026-10-02T14:37:26.204Z raft-host: gc frag pass group=0 anchor=1 prc=0 src=1 records=256 ex=(nil)
+2026-10-02T14:37:26.204Z raft-host: gc-pass ms=43 reap=0 frag=43 spread=0 recover=0 fscans=1 fsegs=4 fkeys=438533 femit=257 ftomb=438276 scans=2 segs=4 keys=438533 emit=257 tomb=438276
+2026-10-02T14:37:26.549Z raft-obs: tx->1 enq=2178 drop=0 sent=2177 fail=1 hi=1 rtt_avg=33us get_avg=3us get_max=3ms
+2026-10-02T14:37:26.549Z raft-obs: tx->2 enq=2262 drop=0 sent=2252 fail=10 hi=99 rtt_avg=32us get_avg=2223us get_max=5025ms
+2026-10-02T14:37:26.549Z raft-obs: wait_timeouts=0 pump_hold_max=4us lock_wait_max=1us drain_max=3us tick_max=4us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0

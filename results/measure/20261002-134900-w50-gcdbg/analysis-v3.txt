@@ -1,0 +1,25 @@
+host dels flushes gc-frag apply-err inner-passes ex-nil ex-set
+fcstor003 33792 308 22 0 44 nil=0 set=44
+  del rc {0: 33792}
+  flush rc {0: 308}
+  gc-frag records min=512 max=512 n=22
+  consecutive-pass repeats 0 non-OK 0 all-OK 0
+  unique (ino,ci,frag)=33792
+fcstor004 36864 336 24 0 48 nil=0 set=48
+  del rc {0: 36864}
+  flush rc {0: 336}
+  gc-frag records min=512 max=512 n=24
+  consecutive-pass repeats 0 non-OK 0 all-OK 0
+  unique (ino,ci,frag)=36864
+fcstor005 0 0 0 0 0 nil=0 set=0
+  del rc {}
+  flush rc {}
+  consecutive-pass repeats 0 non-OK 0 all-OK 0
+  unique (ino,ci,frag)=0
+fcstor006 0 0 0 0 0 nil=0 set=0
+  del rc {}
+  flush rc {}
+  consecutive-pass repeats 0 non-OK 0 all-OK 0
+  unique (ino,ci,frag)=0
+
+VERDICT: no consecutive-pass repeat after a failed delete; once-only identities with flush rc=0 are transient

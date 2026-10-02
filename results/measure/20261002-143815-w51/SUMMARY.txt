@@ -1,0 +1,54 @@
+W51 — what follower apply lag is made of (investigation, Oct 2 2026)
+
+Question (START-HERE row 14 / plan P2.4): per `apply-sleep` episode,
+was the pump blocked on `l->mu` / the compactor, inside
+`efs_meta_apply_*`, or idle waiting for AppendEntries? D30 stays an
+ask until this table.
+
+This pass classifies existing traces only (no new `--strace` on a
+follower). Raw: `results/measure/20261002-054132-p0-x16/apply-sleep-compact-gc.txt`
+(16 × 10 GiB dd, 05:41Z) and the P1 gate notes in
+`results/measure/20261002-060052-p1-d23-w41/SUMMARY.txt`.
+
+Classifier: `~/efs-runs/w51-classify.py`. An apply-sleep overlaps a
+`kv-compact: start`/`end` window on the same host → compact-overlap;
+within 50 ms of a window edge → compact-adjacent; `idx-applied >= 8`
+→ lag-gap; `us >= 100000` → long-wait; else small-gap-no-compact.
+
+1. P0.2 16× dd file (144 apply-sleep lines)
+
+| class | n | what it is | what it is not |
+| --- | ---: | --- | --- |
+| compact-overlap | 47 | sleep timestamp is inside a `kv-compact` start/end on that host (example: fcstor003 05:41:35.608Z us=20472 gap=1 during a 60 ms compact, l0=61) | not proof the waiter held `l->mu` — the compact thread holds it; the apply path waiting for `applied` to move is consistent with the pump being in `kv_maybe_flush` / apply of the next index under the same KV lock |
+| compact-adjacent | 7 | sleep within 50 ms of a compact window | same class, edge |
+| small-gap-no-compact | 89 | `idx-applied` 1–3, us 20–36 ms, no compact line on that host in the file at that time | not transport (a follower idle on AE would show a growing `idx-applied`, not 1–2); the compact may be on another voter, or the apply itself is 20–36 ms |
+| long-wait | 1 | fcstor004 05:41:53.191Z us=101412 gap=1, no compact window in the file | one sample; not a 400 ms `host_wait_applied` deadline |
+| lag-gap | 0 | — | no episode had `idx-applied >= 8` |
+
+us min=20066 p50=28484 max=101412. idx-applied min=1 p50=1 max=3.
+By host: fcstor004 95, fcstor003 32, fcstor006 17, fcstor005 0.
+
+2. Other raw named by the plan row (not re-parsed here)
+
+- fcstor006 `apply_max` 100–160 ms, 06:01–06:08Z, during 8192-record
+  REPORT applies (P1 append / wedge). That is the apply of a large
+  publish batch, not an AE wait: `apply_max` is the pump's apply of
+  committed entries. Class: slow application of REPORT/publish.
+- 12:54Z `l0=143` compaction storm (P1 gate pass 4): dd fsync tails
+  5.4–6.4 s. Class: compact-overlap on the write path's REPORT wait,
+  same family as the 47 overlapping sleeps above.
+
+3. What the table can decide
+
+| class | n in the 144 | D30 candidate (not chosen) |
+| --- | ---: | --- |
+| lock / compact overlap | 47 + 7 adjacent | compaction shape (D9/D10 already say the pump must not wait; these sleeps are waiters on applied, which moves only when the pump applies — if the pump is in a compact-related KV lock, that is the D9 hold) |
+| slow application (small gap, 20–36 ms, or REPORT `apply_max` 100–160 ms) | 89 + the 06:01Z / 12:54Z notes | apply batching of publish/REPORT |
+| transport / AE wait | 0 in this file (`idx-applied` never ≥ 8) | sender pacing — no episode of this class here |
+
+D30 remains an ask. The 144-episode file does not contain a
+follower sitting hundreds of entries behind waiting for
+AppendEntries. The two populated classes are compact-overlap and
+small-gap apply (1–2 entries, 20–36 ms). A follower `--perf --strace`
+during a 16× write would separate "pump in `kv_compact`/`l->mu`" from
+"pump in `efs_meta_apply_publish`" for the 89; this table does not.

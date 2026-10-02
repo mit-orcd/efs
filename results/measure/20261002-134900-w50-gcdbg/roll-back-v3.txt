@@ -1,0 +1,35 @@
+== node 1 (fcstor003) build
+BUILD_OK
+build=111a07527093-dirty
+build=111a07527093-dirty
+== node 1 restart
+up=1 perf=0
+  group 0 hosted=1 role=FOLLOWER leader=2 term=118 commit=663798 applied=663798 voters=0x7 joint=0
+== node 1 caught up
+== node 2 (fcstor004) build
+BUILD_OK
+build=111a07527093-dirty
+build=111a07527093-dirty
+== node 2 restart
+up=1 perf=0
+  group 0 hosted=1 role=FOLLOWER leader=2 term=118 commit=663927 applied=663927 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=3 term=52 commit=870649 applied=870649 voters=0xe joint=0
+== node 2 caught up
+== node 3 (fcstor005) build
+BUILD_OK
+build=111a07527093-dirty
+build=111a07527093-dirty
+== node 3 restart
+up=1 perf=0
+  group 0 hosted=1 role=FOLLOWER leader=-1 term=118 commit=664035 applied=664035 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=-1 term=52 commit=870733 applied=870733 voters=0xe joint=0
+== node 3 caught up
+== node 4 (fcstor006) build
+BUILD_OK
+build=111a07527093-dirty
+build=111a07527093-dirty
+== node 4 restart
+up=1 perf=0
+  group 2 hosted=1 role=FOLLOWER leader=-1 term=52 commit=870793 applied=870793 voters=0xe joint=0
+== node 4 caught up
+ROLL_OK

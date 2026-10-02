@@ -1,0 +1,20 @@
+2026-10-02T14:11:52.578Z raft-host: gc-frag group=0 scans=2 records=512 ms=255
+2026-10-02T14:11:52.578Z raft-host: gc-pass ms=255 reap=0 frag=255 spread=0 recover=0 fscans=2 fsegs=4 fkeys=4866 femit=514 ftomb=4352 scans=3 segs=4 keys=4866 emit=514 tomb=4352
+2026-10-02T14:11:53.839Z raft-host: gc-frag group=0 scans=2 records=512 ms=258
+2026-10-02T14:11:53.839Z raft-host: gc-pass ms=258 reap=0 frag=258 spread=0 recover=0 fscans=2 fsegs=4 fkeys=5890 femit=514 ftomb=5376 scans=3 segs=4 keys=5890 emit=514 tomb=5376
+2026-10-02T14:11:55.098Z raft-host: gc-frag group=0 scans=2 records=512 ms=256
+2026-10-02T14:11:55.098Z raft-host: gc-pass ms=256 reap=0 frag=256 spread=0 recover=0 fscans=2 fsegs=4 fkeys=6914 femit=514 ftomb=6400 scans=3 segs=4 keys=6914 emit=514 tomb=6400
+2026-10-02T14:11:56.363Z raft-host: gc-frag group=0 scans=2 records=512 ms=261
+2026-10-02T14:11:56.363Z raft-host: gc-pass ms=261 reap=0 frag=261 spread=0 recover=0 fscans=2 fsegs=4 fkeys=7938 femit=514 ftomb=7424 scans=3 segs=4 keys=7938 emit=514 tomb=7424
+2026-10-02T14:11:57.628Z raft-host: gc-frag group=0 scans=2 records=512 ms=262
+2026-10-02T14:11:57.628Z raft-host: gc-pass ms=262 reap=0 frag=262 spread=0 recover=0 fscans=2 fsegs=4 fkeys=8962 femit=514 ftomb=8448 scans=3 segs=4 keys=8962 emit=514 tomb=8448
+2026-10-02T14:11:58.895Z raft-host: gc-frag group=0 scans=2 records=512 ms=264
+2026-10-02T14:11:58.895Z raft-host: gc-pass ms=264 reap=0 frag=264 spread=0 recover=0 fscans=2 fsegs=4 fkeys=9986 femit=514 ftomb=9472 scans=3 segs=4 keys=9986 emit=514 tomb=9472
+2026-10-02T14:12:00.159Z raft-host: gc-frag group=0 scans=2 records=512 ms=260
+2026-10-02T14:12:00.159Z raft-host: gc-pass ms=260 reap=0 frag=260 spread=0 recover=0 fscans=2 fsegs=4 fkeys=11010 femit=514 ftomb=10496 scans=3 segs=4 keys=11010 emit=514 tomb=10496
+2026-10-02T14:12:01.421Z raft-host: gc-frag group=0 scans=2 records=512 ms=259
+2026-10-02T14:12:01.421Z raft-host: gc-pass ms=259 reap=0 frag=259 spread=0 recover=0 fscans=2 fsegs=4 fkeys=12034 femit=514 ftomb=11520 scans=3 segs=4 keys=12034 emit=514 tomb=11520
+2026-10-02T14:12:02.685Z raft-host: gc-frag group=0 scans=2 records=512 ms=261
+2026-10-02T14:12:02.685Z raft-host: gc-pass ms=261 reap=0 frag=261 spread=0 recover=0 fscans=2 fsegs=4 fkeys=13058 femit=514 ftomb=12544 scans=3 segs=4 keys=13058 emit=514 tomb=12544
+2026-10-02T14:12:03.950Z raft-host: gc-frag group=0 scans=2 records=512 ms=261
+2026-10-02T14:12:03.950Z raft-host: gc-pass ms=261 reap=0 frag=261 spread=0 recover=0 fscans=2 fsegs=4 fkeys=14082 femit=514 ftomb=13568 scans=3 segs=4 keys=14082 emit=514 tomb=13568

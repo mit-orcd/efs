@@ -1,0 +1,4 @@
+fcstor003 perf_bytes=236977544
+fcstor004 perf_bytes=169079020
+fcstor005 perf_bytes=210781924
+fcstor006 perf_bytes=269147016

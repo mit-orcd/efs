@@ -1,0 +1,23 @@
+host dels flushes gc-frag apply-err inner-passes ex-nil ex-set
+fcstor003 0 0 0 0 30 nil=30 set=0
+  del rc {}
+  flush rc {}
+  consecutive-pass repeats 0 non-OK 0 all-OK 0
+  unique (ino,ci,frag)=0
+fcstor004 0 0 0 0 31 nil=31 set=0
+  del rc {}
+  flush rc {}
+  consecutive-pass repeats 0 non-OK 0 all-OK 0
+  unique (ino,ci,frag)=0
+fcstor005 0 0 0 0 0 nil=0 set=0
+  del rc {}
+  flush rc {}
+  consecutive-pass repeats 0 non-OK 0 all-OK 0
+  unique (ino,ci,frag)=0
+fcstor006 0 0 0 0 0 nil=0 set=0
+  del rc {}
+  flush rc {}
+  consecutive-pass repeats 0 non-OK 0 all-OK 0
+  unique (ino,ci,frag)=0
+
+VERDICT: export still nil — this window is the no-export skip, not the live ACK path

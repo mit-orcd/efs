@@ -1,0 +1,32 @@
+host  dels  flushes  gc-frag  apply-err  passes
+fcstor003  0  0  0  0  28
+  del rc hist: {}
+  ack-flush rc hist: {}
+  consecutive-pass repeats: 0 (of 0 del-keys)
+  repeats with any non-OK del: 0
+  repeats with all-OK dels: 0 (ack did not retire the fragment)
+fcstor004  0  0  0  0  0
+  del rc hist: {}
+  ack-flush rc hist: {}
+  consecutive-pass repeats: 0 (of 0 del-keys)
+  repeats with any non-OK del: 0
+  repeats with all-OK dels: 0 (ack did not retire the fragment)
+fcstor005  0  0  0  0  0
+  del rc hist: {}
+  ack-flush rc hist: {}
+  consecutive-pass repeats: 0 (of 0 del-keys)
+  repeats with any non-OK del: 0
+  repeats with all-OK dels: 0 (ack did not retire the fragment)
+fcstor006  0  0  0  0  28
+  del rc hist: {}
+  ack-flush rc hist: {}
+  consecutive-pass repeats: 0 (of 0 del-keys)
+  repeats with any non-OK del: 0
+  repeats with all-OK dels: 0 (ack did not retire the fragment)
+
+Verdict sketch (counts are not a cause):
+  ack-flush rc!=0: 0
+  apply gc-ack logged failures: 0
+  (ino,ci,frag) in two consecutive passes with non-OK del: 0
+  (ino,ci,frag) in two consecutive passes with OK dels: 0
+  closes as contention/transient if every identity appears in one pass only and ACK flush rc=0

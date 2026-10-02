@@ -69,22 +69,22 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   (`voters=0x7`); group 2 = even shards = nodes 2–4 (`0xe`). Export
   `efs-test` (id 1), mount `/tmp/efs-mount`. 19820 is retired; do not
   stand it up. Do not roll back to TCP unless a suite fails.
-- **State at 13:45Z Oct 2 2026:** servers UP since `start760`
- (05:25Z, `cluster.sh start --clients --perf`, build
- `6163d51e339e-dirty`/`2b5a25df419c` server code, `--perf` attached;
+- **State at 15:27Z Oct 2 2026:** servers UP since `start760`
+ (`111a07527093-dirty` after the W50 `--all`, `--perf` attached;
  `/tmp/efs-perf/efsd.data` on fcstor003–006 — `start` deletes it).
- Clients: fcstor007 mounted on the committed tree; fcstor008/009/010
- mounted on the P1 (D23+W41) tree built in `/tmp/efs`; fcstor011–015
- down; fstor007 no mount. Same table as the Oct 1 07:18Z `raft-mkfs`
+ Clients fcstor007–015 remounted 15:19Z from `$HOME/git/efs` (P1
+ client); fstor007 no mount. Same table as the Oct 1 07:18Z `raft-mkfs`
  (salt 4206459926809775694); a restart needs no `--join`, no
- `--fresh`. The `r749` reports are at
- `~/orcd/scratch/efs/perf/cluster-20261002-0423/`. Full roll/remount
- history: `docs/project-history.md` ("Cluster-state narrative").
+ `--fresh`. Gate 15:19Z: `results/measure/20261002-151920-posix-ior/`.
+ Full roll/remount history: `docs/project-history.md` ("Cluster-state
+ narrative").
 - **Current gate signature on that tree:** posix jobs=1 **200/201**
-  (`mmap_write_read` SKIP by spec), posix2 **63/63**, 9-host posix
+  (`mmap_write_read` SKIP by spec; `results/posix/20261002-151947`),
+  posix2 **63/63** (`results/posix2/20261002-152031`), 9-host posix
   **200/201** on all nine (`results/posix/20261001-160049`); IO-500 9×4
-  debug every phase (`results/io500/20261001-074905-rdma`, hard-read 1
-  read error = W38 open). Anything below that is a regression, not noise.
+  debug every phase (`results/io500/20261002-152126-rdma`, hard-read 0
+  same-mount errors; Oct 1 `20261001-074905-rdma` had 1 = W38 open).
+  Anything below that is a regression, not noise.
 - Restart on unwiped storage: no `--join`. After a wipe: node 1 seed,
   2–4 `--join 172.16.223.57:19810`, all 4 up THEN `raft-mkfs`. HELLO
   rejects mixed `EFS_BUILD_ID` → after a new commit (or dirty↔clean) stop

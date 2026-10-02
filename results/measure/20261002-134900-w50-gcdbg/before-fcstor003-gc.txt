@@ -1,0 +1,20 @@
+2026-10-02T12:48:05.324Z raft-host: gc-pass ms=243 reap=0 frag=243 spread=0 recover=0 fscans=2 fsegs=2 fkeys=42846 femit=514 ftomb=42332 scans=3 segs=2 keys=42846 emit=514 tomb=42332
+2026-10-02T12:48:06.532Z raft-host: gc-frag group=0 scans=2 records=425 ms=205
+2026-10-02T12:48:06.532Z raft-host: gc-pass ms=205 reap=0 frag=205 spread=0 recover=0 fscans=2 fsegs=2 fkeys=43782 femit=426 ftomb=43356 scans=3 segs=2 keys=43782 emit=426 tomb=43356
+2026-10-02T12:49:43.981Z raft-host: gc-frag group=0 scans=1 records=176 ms=71
+2026-10-02T12:49:43.981Z raft-host: gc-pass ms=71 reap=0 frag=71 spread=0 recover=0 fscans=1 fsegs=1 fkeys=22151 femit=176 ftomb=21975 scans=2 segs=1 keys=22151 emit=176 tomb=21975
+2026-10-02T12:49:45.011Z raft-host: gc-frag group=0 scans=1 records=75 ms=27
+2026-10-02T12:49:45.011Z raft-host: gc-pass ms=27 reap=0 frag=27 spread=0 recover=0 fscans=1 fsegs=1 fkeys=22226 femit=75 ftomb=22151 scans=2 segs=1 keys=22226 emit=75 tomb=22151
+2026-10-02T12:49:47.059Z raft-host: gc-frag group=0 scans=1 records=144 ms=21
+2026-10-02T12:49:47.088Z raft-host: gc-pass ms=70 reap=20 frag=21 spread=0 recover=28 fscans=1 fsegs=1 fkeys=22242 femit=144 ftomb=22098 scans=83 segs=151 keys=22339 emit=145 tomb=22194
+2026-10-02T12:54:20.350Z raft-host: gc-pass ms=595 reap=0 frag=0 spread=0 recover=1 fscans=1 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=5 segs=6 keys=8 emit=0 tomb=8
+2026-10-02T12:54:27.379Z raft-host: gc-pass ms=10 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T12:54:32.405Z raft-host: gc-pass ms=8 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T13:01:43.592Z raft-host: gc-pass ms=9 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T13:29:22.100Z raft-host: gc-pass ms=8 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T13:29:24.137Z raft-host: gc-pass ms=29 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T13:33:42.864Z raft-host: gc-pass ms=7 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T13:34:01.932Z raft-host: gc-pass ms=10 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T13:34:28.021Z raft-host: gc-pass ms=13 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T13:34:57.116Z raft-host: gc-pass ms=9 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-02T13:35:01.149Z raft-host: gc-pass ms=21 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0

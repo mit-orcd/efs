@@ -35,11 +35,12 @@ apply pending"; its live symptom did not appear untraced — P0.2),
 under four concurrent 8 GiB writers), **W52**'s fix shape (serial
 reservation resolves make an O_APPEND REPORT exceed 30 s). Open
 **investigations** — evidence gathering, not approved implementations:
-**W48** (four dd streams ended early), **W50** (the repeating GC record
-set), **W51** (what the apply lag is made of), **W53**. D27 was
+**W48** (four dd streams ended early), **W53**. **W50** and **W51**
+closed as investigations (14:57Z / 14:38Z). D27 was
 corrected 04:20Z and is to be implemented as its row now reads. The
-performance plan's P0 and P1 are done (§1b); P2 is next on that
-track. Everything else in the Oct 2 plan is decided, asked, closed or
+performance plan's P0, P1, P2.1 and P2.4 are done (§1b); **P2.2 D26**
+is next on that track (cursor in the tree, watermark not yet).
+Everything else in the Oct 2 plan is decided, asked, closed or
 deferred — see that table.
 
 **What this page is not.** Approvals and decisions recorded here are
@@ -72,13 +73,17 @@ is a bug in this page. One block only; the previous one moves to
 [project-history.md](../project-history.md) "START-HERE handoff archive"
 when it is replaced.
 
-**Oct 2 2026 13:45Z — performance plan P0 and P1 are done; the cluster
-is UP (servers `2b5a25df419c-dirty` under `--perf` since `start760`
-05:25Z; clients fcstor007–010 mounted, 007 on the committed tree,
-008/009/010 on the P1 tree; 011–015 and fstor007 down).** Nothing in
-this block needs a wipe. Results: `results/measure/20261002-054132-p0-x16/
-SUMMARY.txt` (P0) and `results/measure/20261002-060052-p1-d23-w41/
-SUMMARY.txt` (P1 — read §4 of it before quoting W41).
+**Oct 2 2026 15:00Z — P2.1 W50 and P2.4 W51 are done (investigations);
+D26 cursor is in the working tree, watermark not yet; cluster UP
+(`111a07527093-dirty`, `--perf`, RDMA). Clients fcstor007–015 remounted
+15:19Z (gate); fstor007 down.** Nothing in this block needs a
+wipe. W50: `results/measure/20261002-134900-w50-gcdbg/SUMMARY.txt`.
+W51: `results/measure/20261002-143815-w51/SUMMARY.txt`. Gate 15:19Z:
+posix 200/201, posix2 63/63, IO-500 9×4 debug
+`results/io500/20261002-152126-rdma` (compare
+`results/measure/20261002-151920-posix-ior/SUMMARY.txt`). The 13:45Z
+P0/P1 block is the previous handoff (same file history / project-history
+"START-HERE handoff archive Oct 2 2026 13:45Z").
 
 1. **P0 (gates on what was already in the tree):** W28 gate PASS (8 GiB
    dd+fsync 1518 MB/s, cold read 3297 MB/s, CMP_OK, fcstor007); W46/W47
@@ -134,15 +139,23 @@ SUMMARY.txt` (P1 — read §4 of it before quoting W41).
    size lags (completed prefix) and converges later. ~5 ms per O_APPEND
    write. Fix shape is a question (batch the resolves into one
    proposal? resolve asynchronously after the reply?) — not decided.
-4. **Next (P2 onward, the plan's order):** P2.1 W50 `EFS_GC_DBG=1` pass
-   on the group-0 leader (one roll with `EFSD_ENV='EFS_TRANSPORT=rdma
-   EFS_RAFT_OBS=1 EFS_GC_DBG=1' EFSD_ARGS=--perf bash tests/roll_efsd.sh
-   1 2 3 4`, collect `gc del … rc=` lines, roll back) → P2.2 D26
-   watermark + per-anchor cursor → P2.3 W23 test → P2.4 W51 table
-   (raw material: `p0-x16/apply-sleep-compact-gc.txt`, the 06:01–06:08Z
-   fcstor006 holds, the 12:54Z `l0=143` compaction storm during gate
-   pass 4) → P3 benches → P5 re-baseline. Asks unchanged: D28, D29,
-   D30; plus W53's keep/revert and W52's shape.
+4. **P2.1 W50 CLOSED 14:57Z** as not a stuck-delete set: with a RAM
+   export, 30 s of `EFS_GC_DBG` on both leaders had every `gc del` rc=0,
+   every `gc ack flush` rc=0, 0 apply-gc-ack failures, and 0
+   `(ino,ci,frag)` repeats across consecutive passes (33792 / 36864
+   unique identities = the del count). The repeating `records=256/512`
+   is the scan batch walking a large queue. Separate finding: without a
+   PUT/GET on that process, `ex=(nil)` and the pass emits the same head
+   256 forever (no deletes). Do not name that as the morning 11/s
+   GC_ACK cause — those `gc-frag` lines required an export.
+5. **P2.4 W51 table written** from the existing 144 `apply-sleep` lines
+   (`compact-overlap` 47, `small-gap-no-compact` 89, `lag-gap` 0). D30
+   stays an ask; this file has no AE-wait class.
+6. **Next:** finish P2.2 D26 — cursor (`scan_from` past the last
+   emitted key) is in `raft_host.c` unrolled; the apply-batch watermark
+   (insert +1 / retire −1, re-derive on GET miss) is still to land.
+   Then P2.3 W23 stalled-compactor test on the private 3-node cluster.
+   Then P3 benches. Asks unchanged: D28, D29, D30, W53, W52.
 
 The 05:00Z block (the r749 review: 16 streams not one, the publish
 path, W44 a reading, compaction pressure, syscall counts) is in
@@ -483,10 +496,10 @@ measures where the next one is.
 
 | row | item | status | what changes (server) | gate / done when | forbidden |
 | --- | --- | --- | --- | --- | --- |
-| P2.1 | **W50** | investigate (first) | one `EFS_GC_DBG=1` pass on the group-0 leader: the 126 identities, each delete's verdict per node, GC_ACK committed or not | a table; closes as "contention/transient" or opens a bug row | naming a cause from counts |
-| P2.2 | **D26** GC pass | decided (shape) | (a) per-anchor pending-GC watermark maintained in the apply (insert bumps, ack/removal lowers, re-derived at recovery from a prefix scan once) so a truly empty pass costs one get; (b) **bounded scan progress**: the frag pass resumes from a per-anchor cursor instead of restarting at the prefix head, so a set that fails to delete does not cost a 1 M-key rewalk per pass; (c) tombstone-aware emit: a pass that walked N tombstones to reach K records logs it (already on the `gc-pass` line) and compaction of that prefix is requested when `ftomb/fkeys` exceeds a documented ratio — that last part only if (ii) in the D26 row is taken | idle leaders: no `gc-pass` line > 5 ms for 10 min and leader `efsd` CPU < 5 % idle; `md_latency.py` medians unchanged; a 10 GiB `rm` still drains at ≥ 512 records per pass; the raft tail of an idle cluster is no longer 99.7 % GC_ACK (preflight's "idle" becomes true) | a longer `GC_LOOP_MS`; scanning from a handler thread; a watermark that is not updated in the same apply as the record |
+| P2.1 | **W50** | **CLOSED 14:57Z** — not stuck; `…w50-gcdbg/SUMMARY.txt` | one `EFS_GC_DBG=1` pass: identities, delete verdicts, ACK flush rc | table: all del/flush rc=0, 0 consecutive-pass repeats; `ex=(nil)` skip documented separately | naming a cause from counts |
+| P2.2 | **D26** GC pass | decided (shape); **cursor in tree, unrolled; watermark not yet** | (a) per-anchor pending-GC watermark maintained in the apply (insert bumps, ack/removal lowers, re-derived at recovery from a prefix scan once) so a truly empty pass costs one get; (b) **bounded scan progress**: the frag pass resumes from a per-anchor cursor instead of restarting at the prefix head (`efs_kv_scan_from` + skip the inclusive start); (c) tombstone-aware emit already on the `gc-pass` line — prefix compact on `ftomb/fkeys` only if D26 (ii) is taken | idle leaders: no `gc-pass` line > 5 ms for 10 min and leader `efsd` CPU < 5 % idle; `md_latency.py` medians unchanged; a 10 GiB `rm` still drains at ≥ 512 records per pass; the raft tail of an idle cluster is no longer 99.7 % GC_ACK (preflight's "idle" becomes true) | a longer `GC_LOOP_MS`; scanning from a handler thread; a watermark that is not updated in the same apply as the record |
 | P2.3 | **W23** stalled-compactor test | open (remaining action) | the test written in work-items.md W23 "correction": compactor stalled by a fault, measure memory and lag bound | numbers in `results/measure/`; feeds W51/D30 | — |
-| P2.4 | **W51** | investigate | per `apply-sleep` episode on a follower during the 16× dd: pump blocked on `l->mu`/compactor, inside `efs_meta_apply_*`, or waiting for AE — one table | the table; D30 is decided only on it | a remedy before the table |
+| P2.4 | **W51** | **DONE 14:38Z** — table only; `…w51/SUMMARY.txt` | 144 apply-sleep episodes from the P0.2 file | compact-overlap 47, small-gap 89, lag-gap 0; D30 still ask | a remedy before the table |
 | P2.5 | **D30** apply-lag remedy | **ask**, blocked on P2.4 | candidate per class: compaction shape (D9/D10 revisit), apply batching, sender pacing | — | code before the decision |
 
 **P3 — the benches (asked; they decide P4).** `efsd --bench` per its

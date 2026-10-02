@@ -1,0 +1,67 @@
+posix jobs=1 + posix2 + IO-500 9×4 debug (SLOTS=4, 1 s stonewall).
+2026-10-02 15:19–15:27Z. Servers 111a07527093-dirty --perf RDMA,
+same table as the Oct 1 07:18Z raft-mkfs. Clients fcstor007–015
+remounted 15:19Z from $HOME/git/efs (P1 client + dirty D26 cursor
+is server-only and not rolled). No wipe.
+
+Harness: ~/efs-runs/gsuite.sh (screen gsuite). IOR wait missed
+`[SCORE ]` (space before `]`); results copied by rec-gsuite-iorcopy.
+
+== posix (jobs=1, fcstor008)
+
+  this     results/posix/20261002-151947     200/201  0 fail  mmap SKIP  29.0 s
+  prior    results/posix/20261002-130142     200/201  0 EFS BUGS  mmap SKIP
+  gate     200/201 (mmap_write_read SKIP by spec)
+
+  Match. virt_* pass on efs, skip on XFS baseline. 0 FAIL.
+
+== posix2 (fcstor008 + fcstor009)
+
+  this     results/posix2/20261002-152031    63/63  0 fail  47.8 s
+  prior    results/posix2/20261002-130227    63/63
+  gate     63/63
+
+  Match. peer_rename_vs_unlink_src PASS (W36).
+
+  9-host posix not rerun this pass (Oct 1 9-way is
+  results/posix/20261001-160049, 200/201 on all nine).
+
+== IO-500 9×4 debug (fcstor007–015, 36 ranks, config-debug.ini)
+
+  this     results/io500/20261002-152126-rdma
+  prior    results/io500/20261001-074905-rdma   (fresh table, 1 hard-read error)
+  also     results/io500/20260930-183504-rdma   (0 hard-read errors)
+
+  Every SCORE is [INVALID] only because stonewall is 1 s (same as priors).
+  Reads are same-mount (dcache/rdcache); do not quote as cold.
+
+                     this          Oct 1 074905     Sep 30 183504
+  ior-easy-write     6.837 GiB/s   5.173            4.563
+  mdtest-easy-write  5.779 kIOPS   6.185            4.632
+  ior-hard-write     0.600 GiB/s   0.519 (63.2 s)   0.640 (52.6 s)
+                     (48.6 s, wear-out max 18418 pairs, 31.2 GiB)
+  mdtest-hard-write  4.154 kIOPS   2.818            2.612
+  ior-easy-read      20.334 GiB/s  22.521           16.807
+  mdtest-easy-stat   17.907 kIOPS  24.445           16.478
+  ior-hard-read      0.845 GiB/s   0.824, 1 error   1.034, 0 errors
+                     0 Incorrect-data lines
+  mdtest-hard-stat   11.125 kIOPS  30.447           23.763
+  mdtest-easy-delete 5.643 kIOPS   5.649            4.987
+  mdtest-hard-read   5.607 kIOPS   5.923            5.577
+  mdtest-hard-delete 4.087 kIOPS   4.835            4.182
+  SCORE (invalid)    BW 2.897 / IOPS 6.719 / 4.412
+                     Oct 1: 2.657 / 8.001 / 4.610
+                     Sep 30: 2.669 / 6.609 / 4.200
+
+  Writes: easy-write and hard-write are up vs Oct 1; hard-write still
+  below Sep 30's 0.640. Hard-read this run has 0 data errors (Oct 1
+  had 1 = W38; Sep 30 had 0). That is same-mount, not a cold verify.
+  mdtest-*-stat dropped vs Oct 1 (easy-stat 24.4 → 17.9, hard-stat
+  30.4 → 11.1). 1 s stonewall + wear-out is short; the table is also
+  not empty (Used FS 0.8 %, leftover Oct 1 io500 trees still on the
+  mount). Do not treat the stat drop as a new item without a second
+  run or a cold-empty table.
+
+  Hard file kept on the mount:
+  /tmp/efs-mount/io500/2026.10.02-11.21.26/ior-hard/file
+  -G=1817648449  bytes=31168560384
