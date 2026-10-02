@@ -433,6 +433,87 @@ Reading: `cpu` ≫ `put` ⇒ latency-bound (more in flight or a shorter RTT; not
 
 **Done when.** One log per host count has the four levels side by side (dd from the honest-fio rule's run dir), each with ops/s, p50/p99 at the four depths, GiB/s, thread count, and the top symbols; the two largest gaps between adjacent levels name the next item. Forbidden: a cleaner code path than the handlers use, a GiB/s number without its queue depth and latency, zero payload, running against port 19810's export, tracing the bench process with strace.
 
+#### Performance plan — PROPOSED Oct 2 2026 05:45Z (a plan, not an approval; the "Order of work" above still governs when this track starts)
+
+**Scope.** Every item in this page and in work-items.md whose motivation
+is throughput, latency, CPU or memory. Correctness items (D25, D27,
+D28, W36, W38, W27, W48) are not here; they come first per §1a. Each row
+below names its status class — **decided** (implement as its row
+reads), **in tree** (gate owed), **investigate** (evidence only),
+**ask** (no code until the user decides), **deferred** (no code until a
+bench number says so) — so a reader cannot mistake a proposal for an
+approval. Discipline for every row: one change per roll; before/after
+on the same tree and the same files; servers `--perf` only, client
+untraced (plan row M); flush in the clock; a results dir cited from
+the row; `md_latency.py` medians and the posix/posix2 signature
+unchanged or the change is reverted.
+
+**Where the time goes today (from the Oct 2 review, `results/measure/20261002-040242-dd16x10g-review`):**
+one client writes 663 MB/s with 16 streams (~4 % of its 16.7 GB/s
+ceiling); the servers' writer pools are ~10 % busy; the client's CPU is
+0.9 core; the walls are (1) the publish path — 2.7 k rec/s against 5 k
+chunks/s of PUTs, every REPORT packed twice because of
+BUSY-after-commit — (2) the group leaders burning 38 % of a core on a
+GC pass that re-walks 1 M tombstones to find 257 records, (3) follower
+apply lag under compaction (`apply-sleep`, 400 ms BUSY). Nothing below
+is a tuning knob; each row removes a software serialization point or
+measures where the next one is.
+
+**P0 — close the gates owed on what is already in the tree (one roll, no recorders on the client).**
+
+| row | item | status | what | gate / done when |
+| --- | --- | --- | --- | --- |
+| P0.1 | W46 + W47 | in tree | 10 s `strace -e futex,write -p` attach on one server and on the client during an 8 GiB dd, untraced otherwise | futex and `write` per fragment recorded beside the Oct 2 traced counts (2 eventfd writes + 2 writev per fragment server-side; 1 poll + 1 read per reply client-side); the W28 gate (8 GiB dd+fsync, remount, read) within noise of `dd539` 1.3 GB/s |
+| P0.2 | row 11 | in tree | the untraced 16× 10 GiB dd, fresh names, servers `--perf` only | `report-split` with `push_ms > 0`, `skip ≈ 0`, and the count of `fail=wait` lines (the D29 motivation measured untraced); aggregate MB/s replaces the 20:56Z/04:02Z numbers in the baseline table |
+| P0.3 | W19 | unverified | re-profile one group leader during P0.2 | `memmove` under the pump's AE path < 2 % and `try_commit` < 1 % → close; else W19 steps 1–2 as written in work-items.md |
+| P0.4 | W49 | unverified, low | `strace -c -f -p efs-fuse` 10 s during an ecopy | `fstat` + `getsockopt` + `recvfrom(MSG_PEEK)` < 1 % of syscalls → close; else its steps 1–2 |
+
+**P1 — decided client items (no spec change; take in this order).**
+
+| row | item | status | what changes | gate / done when | forbidden |
+| --- | --- | --- | --- | --- | --- |
+| P1.1 | **D23** clean dcache bodies | decided | `dcache_flush_keep` / `dcache_install_image`: a body whose PUT landed is dropped (full overwrites already are; append and partial paths still install); reads go to the rdcache, which has a budget. Keep the body-less node that names the object | RSS flat across a 20 GiB dd (`VmRSS` sampled per second); `cmp` after remount unchanged; posix `concurrent_appends` still passes (the Sep 30 reason the body was kept — the sparse/append replay source must stay: keep the body while the entry has ranges, drop only when the PUT image is the whole chunk) | a second clean-body cache without a budget |
+| P1.2 | **W41** remove `report_mu` | decided | `write.c`: the dirty set becomes per-inode (or per `EFS_DIR_LOCKS` stripe) so `dirty_snap_save_locked` detaches one inode's marks, not the process's; `pub_ino_keys` becomes a multi-slot table (one slot per in-flight REPORT); the flush thread becomes a small pool keyed by inode so one inode's STALE loop or 120 s `recvfrom` blocks only that inode; D24's landed counter kicks the inode(s) that landed; `close()`/`fsync` REPORT only their inode | the D24 wedge gate (4 × 8 GiB dd + 300-file create/close storm p99 ≤ 51 ms); a file looping on a withheld rec (`EFS_FAULT_WITHHOLD`, D27's hook) does not delay another file's `close()` beyond its own REPORT; the 16× dd's last `close()` drops from 74.6 s to its own tail (≤ 1 GiB of records) | splitting one REPORT into several RPCs; publish-on-every-write; a second global lock replacing `report_mu` |
+| P1.3 | **D29** REPORT receipt | **ask** — bring with P1.2 | a "committed, apply pending" receipt (group, index, term, op identity) the client waits on / queries instead of re-sending; not a publication, frees no dirty bytes; with it the per-record `efs_meta_apply_chunk_holds` get in pack (one get per record, 100–133 µs under `l0=100–170`, added only to make byte-identical resends cheap) can be skipped on a first send — that skip is part of the ask, not a separate change | lost receipt and leader change tests (row N); pack_ms per record on the 16× dd drops from ~130 µs to the proposal cost | implementing any of it before the decision |
+
+**P2 — decided server items.**
+
+| row | item | status | what changes (server) | gate / done when | forbidden |
+| --- | --- | --- | --- | --- | --- |
+| P2.1 | **W50** | investigate (first) | one `EFS_GC_DBG=1` pass on the group-0 leader: the 126 identities, each delete's verdict per node, GC_ACK committed or not | a table; closes as "contention/transient" or opens a bug row | naming a cause from counts |
+| P2.2 | **D26** GC pass | decided (shape) | (a) per-anchor pending-GC watermark maintained in the apply (insert bumps, ack/removal lowers, re-derived at recovery from a prefix scan once) so a truly empty pass costs one get; (b) **bounded scan progress**: the frag pass resumes from a per-anchor cursor instead of restarting at the prefix head, so a set that fails to delete does not cost a 1 M-key rewalk per pass; (c) tombstone-aware emit: a pass that walked N tombstones to reach K records logs it (already on the `gc-pass` line) and compaction of that prefix is requested when `ftomb/fkeys` exceeds a documented ratio — that last part only if (ii) in the D26 row is taken | idle leaders: no `gc-pass` line > 5 ms for 10 min and leader `efsd` CPU < 5 % idle; `md_latency.py` medians unchanged; a 10 GiB `rm` still drains at ≥ 512 records per pass; the raft tail of an idle cluster is no longer 99.7 % GC_ACK (preflight's "idle" becomes true) | a longer `GC_LOOP_MS`; scanning from a handler thread; a watermark that is not updated in the same apply as the record |
+| P2.3 | **W23** stalled-compactor test | open (remaining action) | the test written in work-items.md W23 "correction": compactor stalled by a fault, measure memory and lag bound | numbers in `results/measure/`; feeds W51/D30 | — |
+| P2.4 | **W51** | investigate | per `apply-sleep` episode on a follower during the 16× dd: pump blocked on `l->mu`/compactor, inside `efs_meta_apply_*`, or waiting for AE — one table | the table; D30 is decided only on it | a remedy before the table |
+| P2.5 | **D30** apply-lag remedy | **ask**, blocked on P2.4 | candidate per class: compaction shape (D9/D10 revisit), apply batching, sender pacing | — | code before the decision |
+
+**P3 — the benches (asked; they decide P4).** `efsd --bench` per its
+plan above (ceiling first, 1→6 paths, QD 1/16/64/256, meta kind,
+`--perf` in-process, one fcstor not serving 19810), then `efs-fuse
+--bench` (`cpu` / `put` / `write` / dd ladder against the private
+3-node cluster, never 19810). Done when each log has the four levels
+beside the fio ceiling; the two largest adjacent gaps name P4's first
+item.
+
+**P4 — deferred until P3's numbers (long; one is a wipe).**
+
+| row | item | taken only if | what |
+| --- | --- | --- | --- |
+| P4.1 | plan row I — fragment on-disk layout (W34 residual) | `efsd --bench` shows the server PUT path (create + O_DIRECT write per 64 KiB fragment, 16 K/s per server at the cluster wall) is the wall | fewer path components / larger containers per fragment; **wipe**; design row first |
+| P4.2 | plan row J — **W40** FUSE write copy | `efs-fuse --bench` shows `write` ≫ dd (the kernel FUSE path is the wall) | own `/dev/fuse` receive loop into pool buffers; W15 step 5 (`FUSE_CAP_SPLICE_READ`, kernel prerequisite done Sep 29) rides with it |
+| P4.3 | plan row K — RDMA zero-copy receive | `efs-fuse --bench` shows `put` ≈ `write` ≈ dd with RTT the whole wall and reads in-flight bound | per-request posted receives into chunk buffers; transport change, design row first |
+| P4.4 | 9-client scaling | after P1/P2 | `dd_wall.sh` 1/4/9 and `fio_honest_matrix.sh`; if 9 clients still share one ceiling (Sep 28: 2.5–2.8 GB/s = 6 % of 44 GB/s), the shared point is on the servers — P3's `efsd --bench` meta line vs data line says which |
+
+**P5 — re-baseline and close.** After each of P1.2, P2.2 and P4.x: 1-client
+8/16 GiB dd+fsync, 16× dd, 4-reader cold read, 9-client dd, IO-500 9×4
+debug; update the ceiling table and `efs-fio-honest.mdc`; commit the
+results dirs; move this plan's finished rows to project-history.
+
+**Dependencies, in one line.** P0 needs a cluster roll (no `--strace`).
+P1.1 and P1.2 are independent of each other and of the servers; P1.2
+wants P1.3 decided to realise its full effect but does not need it.
+P2.2 waits for P2.1; P2.5 waits for P2.4. P3 needs no cluster. P4 needs
+P3. Nothing here needs a wipe except P4.1.
+
 #### Long-form items (W6–W25) — in work-items.md
 
 The full text of the open long-form items — source evidence, numbered
