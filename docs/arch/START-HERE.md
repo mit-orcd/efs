@@ -27,8 +27,9 @@ performance. Each item names what to change, how to measure it, what
 proves it, and what is forbidden. If an item needs a decision the spec
 does not contain, **stop and ask** (§4). Decisions already taken are the
 rows marked **decided** in §1a "Decisions"; implement them, do not
-re-ask. Open asks as of Oct 2 03:50Z: **D28** only (who owns
-acknowledged bytes across a forced client teardown). Everything else in
+re-ask. Open asks as of Oct 2 04:20Z: **D28** only (who owns
+acknowledged bytes across client death; D27 was corrected 04:20Z and
+is to be implemented as its row now reads). Everything else in
 the Oct 2 plan is decided, asked, closed or deferred — see that table.
 
 **What this page is not.** Approvals and decisions recorded here are
@@ -106,24 +107,25 @@ used 1.21 TiB = Σ node used × 2/3; `efs-mgmt status` prints the same
 Those six commands are now on `host_apply`'s ring-only list (a non-OK
 verdict is a reply, never a halted log).
 
-**Next, in order (Oct 2 03:50Z):**
+**Next, in order (Oct 2 04:20Z; the same list as "Order of work from
+here" in §1a — correctness first, no measurement before it):**
 
-1. The owed gates on the tree that is rolled: the W36 posix2
-   `peer_rename_vs_unlink_src` 20/20 repeat; the W44 step a idle-hour
-   reading (`gc-pass … fsegs= fkeys= ftomb=` on the live table; any pass
-   over 5 ms prints it) — that number is D26's input; the W46/W47
-   `strace -e futex,write -p` counts per PUT (plan rows 9/10); the W42
-   one-QUOTA-member PUT question (queue row 2a).
-2. Plan rows 4, 6, 11 (W38, W27 rerun, the untraced 16× dd re-measurement
-   with `--perf` only on the servers).
-3. The decided design items, in this order: **D25** inside W43 (the
-   `truncate_big.sh` gate goes from exit 3 to exit 0), **D27** with 0a
-   (a)–(c), **D23**, **W41**, **D17**, **D26** after step 1's reading.
-4. `efsd --bench`, then `efs-fuse --bench` (both asked Oct 2).
-5. Open ask: **D28** — bring it with 0a (a)'s answer and D27's gate.
-
-Correctness rows 0a (a)–(c), 0e (W38), 0c (W36 gate) stay ahead of
-every performance row.
+1. **D25** — the truncate drain inside the entry; W43 is done when
+   `tests/stress/truncate_big.sh` exits 0 and no `apply truncate rc=`
+   / `apply lane-fence rc=` line appears during a 16× `O_TRUNC` dd.
+2. **D27** — stalled publication, with 0a (a)–(c) and the gates g1–g7
+   in the D27 row (`tests/stress/stalled_publish.sh`, `test_wb_err`).
+3. Correctness gates owed: W36 posix2 `peer_rename_vs_unlink_src`
+   20/20; W38 (plan row 4); W27 rerun (row 6); the W42 one-QUOTA-member
+   PUT question (queue row 2a).
+4. Measurements: the W44 step a idle-hour reading (`gc-pass … fsegs=
+   fkeys= ftomb=`; D26's input); W46/W47 `strace -e futex,write -p`
+   counts per PUT (rows 9/10); the untraced 16× dd (row 11, servers
+   `--perf` only).
+5. D23, W41, D17, D26.
+6. `efsd --bench`, then `efs-fuse --bench`.
+7. **D28** — the one open ask; bring it with 0a (a)'s answer and D27's
+   gate result.
 
 Handoff blocks before Oct 2 01:20Z (Sep 28 – Oct 1 22:00Z) are verbatim
 in [project-history.md](../project-history.md) under "START-HERE handoff
@@ -239,11 +241,16 @@ unconverging STALE rec is still handled as today (logged, dropped at the
 | L | **`efs-fuse --bench` — asked Oct 2, after G** | the client-side ladder | medium | implement the plan below after `efsd --bench` |
 | M | **recorders — decided** | for the re-measurement (row 11) | — | `--perf` only on the servers; the client untraced |
 
-**Order of work from here:** the eleven rows of the first table (W43
-b/c first, with D25 as part of W43), then D23 (quick), W41, D17, D26
-after W44 a, then `efsd --bench`, then `efs-fuse --bench`. Correctness
-rows 0a (a)–(c), 0e, 0c in the table above are interleaved as before
-(correctness before performance).
+**Order of work from here (one order, correctness first — Oct 2
+04:20Z):** (1) **D25** completes W43 (`truncate_big.sh` exit 3 → 0);
+(2) **D27** with 0a (a)–(c) and its gates; (3) the correctness gates
+still owed — W36 20/20, W38 (row 4), W27 rerun (row 6), the W42
+one-QUOTA-member PUT question; (4) only then the measurements — W44 a
+idle-hour reading, W46/W47 counts (rows 9/10), the untraced 16× dd
+re-measurement (row 11); (5) D23, W41, D17, D26 (after step 4's W44
+reading); (6) `efsd --bench`, then `efs-fuse --bench`; (7) D28 is the
+one open ask and goes to the user with 0a (a)'s answer and D27's gate
+result. §1b "Next" is this list and nothing else.
 
 #### Decisions — taken and pending (register D1–D28)
 
@@ -316,8 +323,8 @@ D9, D10, and D11 were rolled 05:31Z (`a53b253f2455-dirty`). The 12:02Z trace (§
 
 | item | decided | implementation (binding where stated; the constants are proposals until the gate) |
 | --- | --- | --- |
-| **D27 · stalled publication** | **"Detect stalled publication, surface a persistent writeback failure, retain unresolved dirty state, and prohibit successful clean teardown while it remains."** Four parts: (1) **bound recovery attempts, not data retention** — on demonstrable non-progress stop the replay loop, keep the dirty bytes, record a writeback error that synchronization calls observe; (2) **contention is not breakage** — a STALE whose server row generation advanced since the last round is contention and keeps replaying; repeated STALE against the **same** generation with no intervening writer is a protocol/client defect and is what "stalled" means; a count alone decides nothing; (3) **ordinary unmount fails visibly while unresolved writes remain**, the client stays running where FUSE permits; a forced teardown may lose unsynchronized bytes but **must report ino, chunk, byte range and cause** for each; (4) a dirty chunk is **never discarded automatically** — if a discard-after-report policy is ever chosen it is written down as an explicit unrecoverable-writeback policy (that is D28, not D27) | (1) `report-stale` keeps per (ino, ci) the last server generation and a same-gen counter; `STALL_SAME_GEN` consecutive rounds (proposal 8) against one generation = stalled: the rec leaves the replay loop, its dcache entry stays dirty + pinned (counts against the dirty cap, never reclaimed), one log line `publish-stalled ino= ci= off= len= gen= rounds=` + `efs_stat` counter. (2) a round whose returned gen differs resets the counter; a gen-advance stream is logged every 256 rounds as `report-contended` and never trips (1). (3) per-inode `wb_err` sequence in the errseq model: every open file description samples it at open, `fsync`/`fdatasync`/`flush`(close) return EIO once per description after a new error; a later `fsync` on a stalled inode runs **one** more publish round first and clears the mark only if it lands. (4) `efs_unmount_drain` refuses while any stalled rec exists: `scripts/client.sh stop` exits non-zero with the ino list; the FUSE session stays up (the daemon holds the mount; verify what `fusermount3 -u` does against an open-but-stalled session — if the kernel detaches regardless, that path is the forced one). Forced (`-z`, SIGKILL, 60 s drain expiry) prints `UNMOUNT DATA LOSS ino= ci= off= len= cause=` per rec, not one summary line. Gate: the 0a (b) repro (eight `dd`, SIGINT, stop) ends with `client.sh stop` refused + the ino list, no `rc=-14` summary; `fsync` on the stalled file returns EIO; a healthy contended file (two clients, one chunk) never trips the stall. Forbidden: dropping a dirty chunk on a count, widening the drain, publishing a rec the server rejected |
-| **D28 · who owns the bytes across client death — ASK** | after D27 the choice is real and the spec does not make it: **(i) accept loss on forced client teardown** — written down as the unrecoverable-writeback policy, with D27's per-rec report as the whole contract; or **(ii) give the server durable recovery ownership** — the client persists a *write intent* on the servers (dirty byte ranges + operation identity, referencing the PUT object; a PUT alone is insufficient because nothing durably references it) and publication is resolved server-side, so a dead client's acknowledged bytes are recovered by the group, not by a local spill | not to be built either way until decided. (ii) is a protocol and metadata change (intent key kind per chunk, recovery pass on the leader like `host_txn_recover_pass`, client identity that survives restart); bring its cost after D27's gate exists. Recommendation withheld until (a) of 0a says whether the Oct 1 stall was a defect (same gen) or contention |
+| **D27 · stalled publication** | **"Detect stalled publication, surface a persistent writeback failure, retain unresolved dirty state, and prohibit successful clean teardown while it remains."** Four parts: (1) **bound recovery attempts, not data retention** — on demonstrable non-progress stop the replay loop, keep the dirty bytes, record a writeback error that synchronization calls observe; (2) **contention is not breakage** — a cycle after which the observed server state moved is contention and keeps replaying; repeated cycles against the **same** observed state are a protocol/client defect and are what "stalled" means; a count of STALE replies alone decides nothing; (3) **the drain happens before unmount or daemon exit; ordinary teardown fails visibly while unresolved writes remain** and the daemon and mount stay up; forcing is an explicit operator action, and only a controlled forced teardown can report what it discards; (4) a dirty chunk is **never discarded automatically** — a discard-after-report policy, if ever chosen, is written down as an explicit unrecoverable-writeback policy (D28, not D27). **Corrected Oct 2 04:20Z (user):** the error is sticky, not consumed once; the drain precedes termination; SIGKILL promises nothing; the stall counter counts completed cycles with their identity | **Stall detection.** The unit is one completed *fetch → rebase → publish* cycle of a rec, keyed by (ino, ci, content epoch of the row the rebase used, the rec's operation identity — the client's publish op-id/seq). After each cycle record the observed server state (row generation, content epoch, span count). `STALL_CYCLES` (proposal 8) completed cycles in a row with the observed state unchanged = stalled; any change resets the count (that was contention; a contention stream is logged every 256 cycles as `report-contended`, never trips). On stall: the rec leaves the replay loop, its dcache entry stays dirty + pinned (counts against the dirty cap, is never a reclaim victim, and the cap must still admit other inodes' writes), one `publish-stalled ino= ci= off= len= gen= epoch= opid= cycles=` line + counter. **Error surfacing.** Per-inode `wb_err` (errseq model) **plus a sticky "unresolved" state**: while any stalled rec of the inode exists, **every** `fsync`/`fdatasync`/`flush`(close) on **any** description of that inode — including one opened after the stall, after close/reopen, from another process — returns EIO; observing the error never clears it. Only a landed publish clears the unresolved state; after that, descriptions opened before the resolution still see the error once (errseq), new ones see success. A later `fsync` on a stalled inode runs **one** publish cycle first and clears only if it landed. `write()` keeps succeeding (the FS owns the bytes) until the dirty cap says otherwise. **Teardown.** The drain runs *before* the mount is detached and before the daemon exits: `efs_unmount_drain` with unresolved recs after its 60 s refuses — `scripts/client.sh stop` exits non-zero, prints the ino/ci list, the mount and the daemon stay up. `client.sh stop --force-discard` is the explicit action: it prints `UNMOUNT DATA LOSS ino= ci= off= len= epoch= opid= cause=` per rec and then unmounts. Where the kernel detaches without asking the daemon (`fusermount3 -uz`, a kernel umount of an idle mount): the daemon's session end runs the same drain and refuses to exit the same way where libfuse permits, else logs the per-rec lines before exiting — verify which during implementation and write the answer here. **SIGKILL / node death:** no logging, no per-record report, no promise; what survives is what the servers durably accepted — D28's question. **Gates (deterministic; the 0a (b) dd repro stays as a smoke test, it is not the gate).** Fault hook on the client only: `EFS_FAULT_STALE=<ino>:<ci>` (read at mount, logged once) makes the classifier treat every reply for that rec as "same observed state" — no server change, so the gate runs on any cluster. `tests/stress/stalled_publish.sh` on one client: (g1) **repeated fsync** — write the chunk, `fsync` ×3 → EIO ×3, `close`, `open`, `fsync` → EIO, second process `open`+`fsync` → EIO; (g2) **isolation** — `fsync` on another file in the same mount → 0; (g3) **memory pressure** — with the stalled chunk pinned, write 4× the dirty cap to other files with `fsync` → all 0, the stalled entry still dirty + pinned afterwards (`EFS_DCACHE_TRACE`), RSS bounded by the cap + one chunk; (g4) **teardown** — `client.sh stop` → non-zero with the ino list, `findmnt` still `fuse.efs-fuse`, daemon alive; (g5) **recovery** — clear the hook in-process (a control file `/tmp/efs/fault` the hook re-reads per cycle; a remount is not recovery, it is teardown), next `fsync` → 0, the unresolved state is gone, remount, `cmp` the chunk against the source; (g6) **forced discard** — repeat g1, `client.sh stop --force-discard` → one `UNMOUNT DATA LOSS` line per rec with ino/ci/off/len/epoch/opid/cause, remount, the chunk holds the server's bytes, nothing else of the file is lost; (g7) **contention is not a stall** — two clients, one chunk, 1000 alternating writes with `fsync` → 0 and no `publish-stalled` line. Unit: `test_wb_err` for the sequence semantics (sticky while unresolved; once-per-description after resolution; a description opened after resolution sees 0). Forbidden: dropping a dirty chunk on a count; widening the drain; publishing a rec the server rejected; clearing the error on observation; a teardown path that discards without the explicit flag |
+| **D28 · who owns the bytes across client death — ASK** | after D27 the choice is real and the spec does not make it: **(i) accept loss on forced client teardown and on client death** — written down as the unrecoverable-writeback policy, with D27's per-rec report (controlled teardown only) as the whole contract; or **(ii) give the server durable recovery ownership** — the client persists a *write intent* on the servers (dirty byte ranges + operation identity, referencing the PUT object; a PUT alone is insufficient because nothing durably references it) and publication is resolved server-side. **Constraint (user, Oct 2 04:20Z): bytes can only survive client death if the server durably accepted them *before* the acknowledgment that is being protected** — so under (ii) `fsync` (the durability boundary) returns only after the intent is durable on a quorum, and a buffered `write()` is still client-owned until then | not to be built either way until decided. (ii) is a protocol and metadata change (intent key kind per chunk, recovery pass on the leader like `host_txn_recover_pass`, client identity that survives restart, an fsync that waits for intent durability); bring its cost after D27's gate exists. Recommendation withheld until 0a (a) says whether the Oct 1 stall was a defect (same observed state) or contention |
 
 #### Single-node storage bench `efsd --bench` — ASKED Oct 2 2026 (user). Queue position: after W41 / D23 / D17 / D26 in "Plan after the Oct 1 22:00Z review"; its number decides the fragment layout, W40 and zero-copy receive.
 
