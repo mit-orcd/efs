@@ -1,5 +1,5 @@
 ---
-description: efs project memory — current facts, live do-not-re-chase learnings, where the work queue lives (keep under ~250 lines; history goes to docs/project-history.md)
+description: efs project memory — current facts, live do-not-re-chase learnings, where the work queue lives (keep under ~250 lines; history goes to docs/archive/project-history.md)
 alwaysApply: true
 ---
 
@@ -9,16 +9,17 @@ efs: distributed FS, 2+1 XOR EC, FUSE low-level client, 128 KiB chunks,
 metadata = one Raft group per shard over an on-disk ordered KV (Step 11,
 Sep 11 2026 — the ONLY metadata engine; the old snapshot/2PC engine is
 deleted, no on-disk compat). Pre-alpha. Goal: ≥ 2^32 files, throughput
-tracks hardware, no software serialization point (`docs/architecture.md`).
+tracks hardware, no software serialization point (`docs/how-it-works/architecture.md`).
 
 **This file holds facts and learnings only. The work queue, the current
 item, and the in-flight handoff live in ONE place:
-`docs/arch/START-HERE.md` §1 / §1a / §1b.** When you finish a milestone,
-update START-HERE (queue + §1b) and the *relevant* fact below; move any
-narrative you would have written here to `docs/project-history.md`. Do not
+`docs/status/README.md` §1 / §1a, with the handoff in
+`docs/status/in-flight.md`.** When you finish a milestone,
+update the status page (queue + in-flight) and the *relevant* fact below; move any
+narrative you would have written here to `docs/archive/project-history.md`. Do not
 let this file grow past ~250 lines of facts; the learnings section is the
 one part allowed to be long. The full Aug–Oct log (incl. everything about
-the deleted engine and every roll) is `docs/project-history.md` — search
+the deleted engine and every roll) is `docs/archive/project-history.md` — search
 it by date / `results/` dir / symptom before re-deriving a root cause.
 
 ## Standing permissions and hard limits
@@ -29,7 +30,7 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   block mutating commands — retry the same command with
   `request_smart_mode_approval=true` and the verbatim reason (deploy rule
   pre-flight §7). **Exception:** `raft-mkfs` / wipe of 19810 — ask first
-  (START-HERE says which items need a fresh table).
+  (the status page says which items need a fresh table).
 - **Never** `pkill -f` / `pgrep -f` (matches your own ssh). `-x` only.
 - **Anything estimated over 10 s runs in a screen on node9901, fstor007,
  or an fcstor** (`efs-bg.sh start`, `EFS_RUNNER=` to pick the host), not
@@ -52,7 +53,7 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   lock, splitting REPORT into several RPCs, publish-on-every-`write()`,
   relaxing `entry/attr_timeout=0`, `hard_remove`, moving `mdraft/`,
   zero-copy RDMA receive, a second `report_mu`. Bring the measured symptom
-  to the user. Decisions already taken (D1–D24) are the table in START-HERE
+  to the user. Decisions already taken (D1–D24) are the table in `docs/status/decisions.md`
   "Decisions — taken and pending": implement those, do not re-ask; items
   marked pending there are asks. `EFS_RAFT_SNAP_BYTES`, the retained log
   window, `HOST_SNAP_SLICE`, `TAB_SCAN`/`TAB_EVICT` are internal
@@ -79,9 +80,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  4206459926809775694); the next start is `cluster.sh start [--perf]`
  — no `--join`, no `--fresh`. Clients fcstor003–015 are **down**
  (`fuse=0`); fstor007's mount is the user's. The 17:00Z gate opened two
- correctness rows (START-HERE 0i = W54, 0j):
+ correctness rows (`docs/status/README.md` 0i = W54, 0j):
  `results/measure/20261002-165956-redeploy-posix-ior/`. Full roll/remount
- history: `docs/project-history.md` ("Cluster-state narrative").
+ history: `docs/archive/project-history.md` ("Cluster-state narrative").
 - **Last clean gate (15:19Z, `111a07527093` client, before 20745142):**
   posix jobs=1 **200/201** (`mmap_write_read` SKIP by spec;
   `results/posix/20261002-151947`), posix2 **63/63**
@@ -111,15 +112,15 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   fio shows `Disk stats: md0`. That is NOT data loss: `findmnt` + `stat`
   before believing a disappearance (deploy rule pre-flight §5).
 
-## Where we are (one screen; details in START-HERE)
+## Where we are (one screen; details in docs/status/README.md)
 
 - Step 11 Raft+KV engine and Step 12 FUSE landed and gated (Sep 11–16);
   W1–W13, I16/I17, W22 (snapshot by log bytes), W39 (RDMA zero-copy
   send), the Oct 1 read path (R1–R5, 64 get workers), D18 (cold-tab
   eviction), D24 (landed-PUT REPORTs) are in. The queue, decisions and
   the open items (W36 rename-vs-unlink, W38 fold tombstone, W40, W41
-  `report_mu`, D17 `st_blocks`, D23 clean-body budget) are START-HERE §1a.
-- **Performance plan (START-HERE §1a) P0 + P1 done Oct 2 13:30Z:**
+  `report_mu`, D17 `st_blocks`, D23 clean-body budget) are `docs/status/README.md` §1a.
+- **Performance plan (`docs/status/README.md` §1a) P0 + P1 done Oct 2 13:30Z:**
  W19/W49 closed, W28 gate PASS, row 11 = 16 × 10 GiB dd on one
  client **3815 MB/s** untraced (no close tail, no BUSY-after-commit —
  D29's symptom is absent untraced); D23 and W41 in the client tree
@@ -128,9 +129,9 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  8 GiB writers, same host; keep/revert is the user's), **W52** (serial
  reservation resolves make an O_APPEND REPORT exceed 30 s). W50/W51
  closed 15:00Z; D26 cursor in tree. **Blocked on two correctness rows
- opened 19:05Z (START-HERE 0i = W54 fold-GC-deletes-live-base, 0j =
+ opened 19:05Z (`docs/status/README.md` 0i = W54 fold-GC-deletes-live-base, 0j =
  lookup-memo stale stat); P2.2 D26 waits behind them.**
-- **Numbers (RDMA, flush in the clock; START-HERE §1a "Baselines"):**
+- **Numbers (RDMA, flush in the clock; `docs/status/README.md` §1a "Baselines"):**
  1 client 8 GiB dd+fsync **1.3 GB/s** (`dd539`; Oct 2 P0.1 1518 MB/s),
  16 GiB **1.5 GB/s**, cold 16 GiB read **3.6 GB/s**, four readers
  **6.5 GB/s** (`agent-rd-20261001-*`); 9 clients **2551–2810 MiB/s** aggregate
@@ -385,7 +386,8 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
   setattr, rename, utimens, unlink, link, getattr callers). It cost
   50 ms per hit on the skip-the-voter client and 16× → 10 s EBUSY
   before (the 810 `exhausted` lines in fstor007's ecopy log). Fix is
-  START-HERE §1b 20:55Z item 2 (hint a dual host, check before
+  the §1b 20:55Z handoff block item 2 (`docs/archive/project-history.md`,
+  "START-HERE handoff archive"; hint a dual host, check before
   propose). An ENOENT/EIO from a
  FUSE dir op whose target exists is a reply-path RPC failure first —
  grep `fuse: mkdir ... but getattr` / `inode-rpc:` in `fuse.log` before
@@ -479,7 +481,7 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  BUSY with `arc_miss` +1 per call — `raft-mkfs` rc=-13 on every node
  of a fresh cluster (the SALT step on group 2 from fcstor003). The
  leader's submit reply is the verdict for a forwarded command.
-- **`raft-mkfs` once, on one node (Oct 1, START-HERE 0d / W37).** Each
+- **`raft-mkfs` once, on one node (Oct 1, `docs/status/README.md` 0d / W37).** Each
  node proposes its own `h->salt`; retrying the mkfs on another node
  while the SALT step is BUSY gives group 0 one salt and group 2's
  anchor another → `efs_meta_apply_salt_record` PROTO → `apply salt
@@ -516,7 +518,7 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  forever, the W37 salt shape). The documented idempotent cases are in
  the apply bodies (utimens STALE = a later `mtime_gen` landed;
  activate-lane's two OKs live in meta_apply). Lock GRANT still maps
- AGAIN/NOLCK → OK (flagged, START-HERE §1b). Do not add silent
+ AGAIN/NOLCK → OK (flagged, `docs/status/in-flight.md`). Do not add silent
  "replay" mappings; a committed-replay verdict comes from the op-id
  window, never from the apply.
 - **The log path must probe EVERY key it deletes unversioned, not just
@@ -927,7 +929,8 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
 
 ## Habit
 
-After any milestone: update START-HERE (§1a item state, §1b handoff), fix
+After any milestone: update `docs/status/README.md` (§1a item state) and
+`docs/status/in-flight.md` (the handoff block), fix
 the fact here that changed, and append the narrative to
-`docs/project-history.md` under a dated heading. Commit result directories
-that a rule or START-HERE cites; delete the rest.
+`docs/archive/project-history.md` under a dated heading. Commit result directories
+that a rule or the status page cites; delete the rest.

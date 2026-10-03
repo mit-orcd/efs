@@ -1,6 +1,6 @@
 # The data plane, specified precisely
 
-[Architecture](../../architecture.md) · [Transactions](transactions.md) ·
+[Architecture](../architecture.md) · [Transactions](transactions.md) ·
 [Sessions](sessions.md) · [Failure tolerance](../failure-tolerance.md) ·
 [Performance](../performance.md)
 
@@ -10,7 +10,7 @@ this protocol adds is a precise commit and concurrency protocol.
 
 **Erasure coding is k+f, matched to the failure target.** The stripe is k
 data + f parity fragments on k+f distinct nodes, where f is the configured
-failure target ([§2 of the spec](../../architecture.md)): 2+1 at f=1, 2+2 at
+failure target ([§2 of the spec](../architecture.md)): 2+1 at f=1, 2+2 at
 f=2, 2+3 at f=3 (storage overhead 1.5×/2×/2.5×). k=2 is the minimal-width
 default; larger clusters may widen k (e.g. 4+3 = 1.75×) to trade encode CPU
 for capacity. Any k fragments reconstruct the chunk, so reads survive any f
@@ -21,7 +21,7 @@ silently under-protected.
 
 **Every persistent data identity is scoped by `FileID`, not by `ino`.** An
 ino is reused after deletion, and the inode generation is what makes a
-handle ABA-safe ([§5 of the spec](../../architecture.md)) — so the data
+handle ABA-safe ([§5 of the spec](../architecture.md)) — so the data
 plane must carry the same incarnation, or a delayed fragment PUT from the
 *previous* occupant of ino 100 can collide with the new one:
 
@@ -140,7 +140,7 @@ A returned `write()` is **not** durable or cross-client visible. Bytes
 land in the client dcache; same-client read-your-writes hold. Publication
 (the machine above) runs at `fsync`, last `close`, or `O_SYNC`/`O_DSYNC`/
 `-o sync`. That is POSIX and every production PFS. The stronger
-"`write()` publishes" alternative was measured (START-HERE W2) and
+"`write()` publishes" alternative was measured ([project-history.md](../../archive/project-history.md) "START-HERE closed items", W2) and
 rejected: a peer sees none of an un-`fsync`ed 4 KiB write, and `kill -9`
 of `efs-fuse` loses a 64 MiB acknowledged `write()`. `O_SYNC` is the
 specified write-through path; it is not wired yet. `fsync()` covers the

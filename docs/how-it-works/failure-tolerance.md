@@ -1,10 +1,10 @@
 # Failure tolerance — derivation and operations
 
-[Architecture](../architecture.md) · [Design rationale](design.md) ·
+[Architecture](architecture.md) · [Design rationale](design-rationale.md) ·
 [Data protocol](protocols/data.md)
 
 The normative rule lives in
-[§2 of the spec](../architecture.md): **N ≥ max(2f+1, k+f), RF = 2f+1**.
+[§2 of the spec](architecture.md): **N ≥ max(2f+1, k+f), RF = 2f+1**.
 This document derives it, explains why there is no weaker mode, and
 specifies how f and k change online.
 

@@ -1,11 +1,11 @@
 # Cross-shard transactions
 
-[Architecture](../../architecture.md) · [Data protocol](data.md) ·
+[Architecture](../architecture.md) · [Data protocol](data.md) ·
 [Directory protocol](directory.md) · [Sessions](sessions.md)
 
 The operations that genuinely touch more than one shard (see the
 operation→participant matrix in
-[§6 of the spec](../../architecture.md): mkdir/rmdir, cross-dir rename,
+[§6 of the spec](../architecture.md): mkdir/rmdir, cross-dir rename,
 hardlink, unlink with nlink>1 or with the dentry on a different shard than
 the inode, and every multi-lane atomic `write()`) need **atomic visibility**,
 which a reconcile rule alone does not provide. efs uses a **Raft-backed

@@ -1,11 +1,12 @@
 # Roadmap — landed history and parked ideas
 
-[Architecture](architecture.md) · [What to work on](arch/START-HERE.md) ·
-[Operations](operations.md) · [Testing](testing.md)
+[Architecture](../how-it-works/architecture.md) · [What to work on](../status/README.md) ·
+[Operations](../operations/operations.md) · [Testing](../how-it-works/testing.md)
 
-> **The work queue lives in [arch/START-HERE.md §1a](arch/START-HERE.md).**
-> That is the single home for "what do I do next". This file is history plus
-> the ideas that are deliberately parked — never instructions.
+> **The work queue lives in [the status page §1a](../status/README.md).**
+> That is the single home for "what do I do next". This file is where the
+> ideas that are deliberately parked live — never instructions. The landed
+> history is in [../archive/project-history.md](../archive/project-history.md).
 
 ## Where the scaling plan ended up
 
@@ -19,7 +20,7 @@ phases over the pre-Raft engine. All of that is either landed or superseded:
 | Phase 3 / 3b — shard the table, extent-shard chunk metadata, spread hot dirs | shipped; the sharding model is now the spec's shard → Raft group → KV mapping |
 | Phase 4 — slim the in-memory inode | **moot**: the in-memory whole table it slimmed no longer exists |
 | Phase M — carve the monolith into `raft/ kv/ meta/ wire/ data/ client/` | complete |
-| [architecture.md §10](architecture.md) steps 0–12 | all landed and gated |
+| [architecture.md §10](../how-it-works/architecture.md) steps 0–12 | all landed and gated |
 
 So the metadata engine is Raft + an on-disk ordered KV, and the old whole-table
 snapshot, CoW page flush and 2PC root commit are **deleted code**. Anything
@@ -27,7 +28,7 @@ elsewhere in the tree that describes `g_server->lock`, shard tabs,
 `EFS_INO_RAM_MB`, extras catchup or `meta-rebuild` is history.
 
 What is left is measured performance and harness work, ordered in
-[START-HERE §1a](arch/START-HERE.md). Design choices the spec did not make
+[the status page §1a](../status/README.md). Design choices the spec did not make
 are listed there under "Decisions — taken and pending"; the taken ones
 (D1–D13, D18–D20, D24) are implemented, the pending ones are asks.
 
@@ -78,13 +79,13 @@ Decisions already made, if it is picked up:
 Rejected: client-local expiry; per-chunk expiry; sub-second/lease-style
 expiry; MVCC "expired versions".
 
-## Queued in START-HERE, not here
+## Queued in the status page, not here
 
 The Sep 28 2026 `perf` analysis of the four `efsd` and of `efs-fuse` under
 `ecopy` (snapshot install on the pump thread, six `access()` per PUT,
 leftover `snap-*.kvx.tmp`, client copies and reply busy-wait) is two
 work-queue items with steps and gates:
-[START-HERE §1a W14 and W15](arch/START-HERE.md#1a-the-work-queue). Take
+[the status page §1a W14 and W15](../status/README.md#1a-the-work-queue). Take
 them from there.
 
 ## Parked: cross-group directory `utimens`
@@ -100,7 +101,7 @@ Seen from `ecopy` restamping directories under `/tmp/efs-mount/knouse/`
 (Sep 28): `futimens: Invalid argument` on directory paths. The copy
 continues; only those timestamps are skipped.
 
-The spec already requires this ([architecture.md](architecture.md) §7.4,
+The spec already requires this ([architecture.md](../how-it-works/architecture.md) §7.4,
 directory `utimens`): `dir_mtime_gen` on the directory row, bumped only by
 `utimens`, distributed to the used lanes by the same bounded fence a file
 uses (≤65 authorities). Do not leave the `EINVAL` as the behavior.
@@ -161,4 +162,4 @@ baseline so `compare.py` sees new names, and keep crash/EC/partition out of
 
 Consensus-group sprawl (one group per directory), MVCC, SPDK, universal hashed
 dentries for every directory, and range leases. The reasons are in
-[arch/design-history.md](arch/design-history.md).
+[design-history.md](../archive/design-history.md).

@@ -119,7 +119,7 @@ all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
 FORCE:
 
-# Architecture doc machine-gate (docs/arch/development.md). Python only;
+# Architecture doc machine-gate (docs/how-it-works/developing.md). Python only;
 # safe on the login node. `make test` on a build node runs it too.
 docs-check:
 	python3 docs/check-architecture.py

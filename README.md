@@ -9,7 +9,7 @@ transport is TCP or RDMA (InfiniBand), chosen at mount time.
 
 Goal: ≥ 2³² files, throughput that tracks the hardware, no software
 serialization point — the normative spec is
-[docs/architecture.md](docs/architecture.md).
+[docs/how-it-works/architecture.md](docs/how-it-works/architecture.md).
 
 ## What you need
 
@@ -34,7 +34,7 @@ serialization point — the normative spec is
 ```bash
 make            # efsd efs-fuse efs-mgmt efs-query efs-bench + unit tests
 make test       # runs the unit suites (test_sim is the protocol correctness gate)
-make docs-check # the generated docs/architecture-full.md matches its sources
+make docs-check # the generated docs/how-it-works/architecture-full.md matches its sources
 ```
 
 Builds are `-O3 -g -march=native`. **Build on the machine class that will
@@ -51,37 +51,14 @@ there.
 | `efs-query` | file / per-user totals |
 | `efs-bench` | metadata op-rate bench (`--meta`) |
 
-## Quick start — three local servers
+## Quick start
 
-Start **all** servers first (the metadata engine needs a Raft quorum before
-`mkfs`); the second and third join the first:
-
-```bash
-./scripts/server.sh 127.0.0.1:17432 /tmp/efs/s1:5G
-./scripts/server.sh 127.0.0.1:17433 /tmp/efs/s2:5G 127.0.0.1:17432
-./scripts/server.sh 127.0.0.1:17434 /tmp/efs/s3:5G 127.0.0.1:17432
-```
-
-Format once, on one node only, then mount:
-
-```bash
-./efs-mgmt mkfs 127.0.0.1:17432          # once; never retry it on another node
-./scripts/client.sh 127.0.0.1:17432 /mnt/efs
-echo hello > /mnt/efs/world.txt && cat /mnt/efs/world.txt
-```
-
-Stop:
-
-```bash
-./scripts/client.sh stop /mnt/efs
-./scripts/server.sh stop 127.0.0.1:17432   # and 17433, 17434
-```
-
-`server.sh --perf` / `client.sh --perf --strace` attach recorders and
-write `flat.txt` / `by_thread.txt` / `callers.txt` at `stop`.
-`EFS_TRANSPORT=auto|tcp|rdma` (default auto: RDMA if InfiniBand is up).
-Restarting a server on its existing storage needs no join address;
-membership is persisted.
+The quick start moved to
+[docs/using/quickstart.md](docs/using/quickstart.md) (three local servers,
+`mkfs`, mount, first file). More user-facing knobs (mount options,
+environment variables, quotas, `efs-mgmt`, `df`/`du`) are in
+[docs/using/power-user.md](docs/using/power-user.md); the full
+documentation index is [docs/README.md](docs/README.md).
 
 ## The fcstor test cluster
 
@@ -112,14 +89,14 @@ that cluster — pre-flight, timeouts, what a dead mount looks like, why
 | `tests/run_tests.sh posix2 <h1> <h2>` | cross-client visibility — expected **63/63** |
 | `tests/run_tests.sh posixpersist` | durability across unmount/remount |
 | `tests/run_tests.sh leaks` | valgrind, client and server |
-| `tests/measure/dd_wall.sh`, `tests/perf/io500/run.sh` | throughput (dd+fsync walls, IO-500 debug); see `docs/testing.md` |
+| `tests/measure/dd_wall.sh`, `tests/perf/io500/run.sh` | throughput (dd+fsync walls, IO-500 debug); see `docs/how-it-works/testing.md` |
 
 A write number counts only with the flush inside the clock (`dd
 conv=fsync`, fio `--end_fsync=1`) and only from a mount `findmnt` shows as
 `fuse.efs-fuse`. Current references (Oct 1 2026, RDMA): one client writes
 1.3–1.5 GB/s and reads a cold file at 3.6 GB/s (6.5 GB/s with four
 readers); nine clients write 2.5–2.8 GB/s aggregate; IO-500 9×4 debug
-runs every phase. The table with hardware ceilings is START-HERE §1a.
+runs every phase. The table with hardware ceilings is [docs/status/README.md](docs/status/README.md) §1a.
 Results that a document cites live under `results/`
 ([results/README.md](results/README.md) has the retention rule).
 
@@ -136,22 +113,26 @@ drops to 2 of 3 stays that way, so the cluster reads fine while being one
 failure from losing that data, and reports no degradation. Repair and
 degraded publication are specified, not written. Also absent: client-side
 fencing, fsck, authentication. See
-[docs/product-gaps.md](docs/product-gaps.md).
+[docs/backlog/product-gaps.md](docs/backlog/product-gaps.md).
 
 ## Documentation map
 
+The index is [docs/README.md](docs/README.md). The short version:
+
 | Read this | For |
 |---|---|
-| [docs/arch/START-HERE.md](docs/arch/START-HERE.md) | the work queue, decisions taken and pending, current numbers, in-flight handoff — start here before changing code |
-| [docs/architecture.md](docs/architecture.md) | the normative spec (invariants, protocols); `docs/arch/protocols/*` for the wire-level detail |
-| [docs/arch/failure-tolerance.md](docs/arch/failure-tolerance.md) | how the node count sets the guarantee and why a healthy write needs every fragment |
-| [docs/operations.md](docs/operations.md) | start/stop, storage layout, quotas, `efs-mgmt`, rejoin, profiling |
-| [docs/testing.md](docs/testing.md) | unit tests, POSIX suites, honest throughput, profiling |
-| [docs/arch/runbooks.md](docs/arch/runbooks.md) | measurement scripts under `tests/measure/` and the numbers they last produced |
-| [docs/arch/development.md](docs/arch/development.md) | source layout, how the spec and the generated docs are kept in sync |
-| [docs/product-gaps.md](docs/product-gaps.md) | what is missing before this is a filesystem you could run |
-| [docs/scaling-roadmap.md](docs/scaling-roadmap.md) | the longer-range plan |
-| [docs/project-history.md](docs/project-history.md) | the archive: every roll, gate and root cause since Aug 2026 — search it before re-deriving one |
+| [docs/using/quickstart.md](docs/using/quickstart.md) | three local servers, `mkfs`, mount, first file |
+| [docs/status/README.md](docs/status/README.md) | the work queue, decisions taken and pending, current numbers — start here before changing code |
+| [docs/status/in-flight.md](docs/status/in-flight.md) | the current handoff block — finish it before taking a queue item |
+| [docs/how-it-works/architecture.md](docs/how-it-works/architecture.md) | the normative spec (invariants, protocols); `docs/how-it-works/protocols/*` for the wire-level detail |
+| [docs/how-it-works/failure-tolerance.md](docs/how-it-works/failure-tolerance.md) | how the node count sets the guarantee and why a healthy write needs every fragment |
+| [docs/operations/operations.md](docs/operations/operations.md) | start/stop, storage layout, quotas, `efs-mgmt`, rejoin, profiling |
+| [docs/how-it-works/testing.md](docs/how-it-works/testing.md) | unit tests, POSIX suites, honest throughput, profiling |
+| [docs/operations/runbooks.md](docs/operations/runbooks.md) | measurement scripts under `tests/measure/` and the numbers they last produced |
+| [docs/how-it-works/developing.md](docs/how-it-works/developing.md) | source layout, task routing, how the spec and the generated docs are kept in sync |
+| [docs/backlog/product-gaps.md](docs/backlog/product-gaps.md) | what is missing before this is a filesystem you could run |
+| [docs/backlog/ideas.md](docs/backlog/ideas.md) | parked ideas and landed scaling history |
+| [docs/archive/project-history.md](docs/archive/project-history.md) | the archive: every roll, gate and root cause since Aug 2026 — search it before re-deriving one |
 | `.cursor/rules/efs-project-state.mdc` | current facts and the do-not-re-chase learnings |
 
 MIT. See [LICENSE](LICENSE).

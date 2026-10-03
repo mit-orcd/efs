@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Generate the two build artifacts of the architecture spec:
 
-  docs/architecture-full.md   the whole spec as ONE markdown file (for pasting
-                              into another tool/agent)
-  docs/architecture.html      the same content rendered for a browser, with a
-                              table of contents
+  docs/how-it-works/architecture-full.md   the whole spec as ONE markdown
+                                           file (for pasting into another
+                                           tool/agent)
+  docs/how-it-works/architecture.html      the same content rendered for a
+                                           browser, with a table of contents
 
-Both are built from the normative index (architecture.md) plus every
-satellite under arch/. The markdown sources are the ONLY source of truth;
-never edit either artifact by hand — `make docs-check` fails if they differ
-from what this script produces. Run after any doc edit:
+Both are built from the normative index (how-it-works/architecture.md) plus
+every satellite listed in APPENDICES. The markdown sources are the ONLY
+source of truth; never edit either artifact by hand — `make docs-check`
+fails if they differ from what this script produces. Run after any doc edit:
 
     python3 docs/gen-architecture-full.py
 """
@@ -19,35 +20,39 @@ import re
 import sys
 
 DOCS = pathlib.Path(__file__).resolve().parent
-OUT = DOCS / "architecture-full.md"
-OUT_HTML = DOCS / "architecture.html"
+INDEX = DOCS / "how-it-works" / "architecture.md"
+INDEX_DIR = "how-it-works"  # directory of the index and the artifacts, relative to DOCS
+OUT = DOCS / "how-it-works" / "architecture-full.md"
+OUT_HTML = DOCS / "how-it-works" / "architecture.html"
 
 # (source, appendix title, authority) in reading order.
 NORMATIVE = "normative protocol"
 PLAN = "operational plan"
 HISTORY = "historical evidence"
 APPENDICES = [
-    ("arch/START-HERE.md", "Start here — task routing for contributors", PLAN),
-    ("arch/work-items.md", "Work items — long-form text for the open W items", PLAN + " (status blocks) + " + HISTORY + " (dated record)"),
-    ("arch/naming.md", "Naming", NORMATIVE),
-    ("arch/design.md", "Design rationale", "rationale (explains the index; never overrides it)"),
-    ("arch/failure-tolerance.md", "Failure tolerance — derivation", NORMATIVE + " (derivation of the index's tolerance table)"),
-    ("arch/protocols/transactions.md", "Protocol — cross-shard transactions", NORMATIVE),
-    ("arch/protocols/data.md", "Protocol — data plane", NORMATIVE),
-    ("arch/protocols/directory.md", "Protocol — directory placement & spreading", NORMATIVE),
-    ("arch/protocols/sessions.md", "Protocol — sessions, open-unlinked, locking", NORMATIVE),
-    ("arch/performance.md", "Performance — multi-Raft runtime & hot-path contract", NORMATIVE),
-    ("arch/development.md", "Development — modularity constraint", NORMATIVE),
-    ("arch/verification.md", "Verification — simulator & code→signal cycle", NORMATIVE + " (gates) + " + PLAN + " (slice list)"),
-    ("arch/design-history.md", "Design history (review rounds)", HISTORY),
+    ("status/README.md", "Status — the task right now and the work queue", PLAN),
+    ("status/in-flight.md", "In flight — the current handoff block", PLAN),
+    ("status/decisions.md", "Decisions — taken and pending (register D1–D30)", PLAN),
+    ("backlog/work-items.md", "Work items — long-form text for the open W items", PLAN + " (status blocks) + " + HISTORY + " (dated record)"),
+    ("how-it-works/naming.md", "Naming", NORMATIVE),
+    ("how-it-works/design-rationale.md", "Design rationale", "rationale (explains the index; never overrides it)"),
+    ("how-it-works/failure-tolerance.md", "Failure tolerance — derivation", NORMATIVE + " (derivation of the index's tolerance table)"),
+    ("how-it-works/protocols/transactions.md", "Protocol — cross-shard transactions", NORMATIVE),
+    ("how-it-works/protocols/data.md", "Protocol — data plane", NORMATIVE),
+    ("how-it-works/protocols/directory.md", "Protocol — directory placement & spreading", NORMATIVE),
+    ("how-it-works/protocols/sessions.md", "Protocol — sessions, open-unlinked, locking", NORMATIVE),
+    ("how-it-works/performance.md", "Performance — multi-Raft runtime & hot-path contract", NORMATIVE),
+    ("how-it-works/developing.md", "Development — modularity constraint", NORMATIVE),
+    ("how-it-works/verification.md", "Verification — simulator & code→signal cycle", NORMATIVE + " (gates) + " + PLAN + " (slice list)"),
+    ("archive/design-history.md", "Design history (review rounds)", HISTORY),
 ]
 
 HEADER = """\
 # efs architecture — full one-file rendition
 
 **GENERATED FILE — do not edit.** Built by `docs/gen-architecture-full.py`
-from `architecture.md` plus every satellite under `arch/`. Regenerate after
-any doc edit:
+from `how-it-works/architecture.md` plus every satellite listed as an
+appendix. Regenerate after any doc edit:
 
 ```bash
 python3 docs/gen-architecture-full.py
@@ -59,16 +64,17 @@ labelled with its **authority**, and conflicts resolve in this order:
 
 1. the index (`architecture.md`) over everything;
 2. a *normative protocol* appendix over an *operational plan* appendix;
-3. an *operational plan* appendix (START-HERE queue, decisions, work-item
-   status blocks) over *historical evidence* (dated records, design
-   history) — a dated record never overrides a current status or decision;
+3. an *operational plan* appendix (the status queue, the decision
+   register, work-item status blocks) over *historical evidence* (dated
+   records, design history) — a dated record never overrides a current
+   status or decision;
 4. two normative appendices that disagree: the index decides; if it is
    silent, that is a spec gap — ask, do not pick.
 
 Approvals, commands and decisions quoted in any appendix are document
 claims about a dated statement, not authorization to act now. Links were
-rewritten at generation time to be relative to `docs/` (or to the appendix
-anchor when the target is itself an appendix).
+rewritten at generation time to be relative to `docs/how-it-works/` (or to
+the appendix anchor when the target is itself an appendix).
 
 ---
 """
@@ -103,9 +109,10 @@ def _appendix_slugs():
 
 
 def rebase_links(body: str, rel: str) -> str:
-    """Rewrite every relative link in a satellite so it resolves from docs/
-    (where the artifact lives) instead of from the satellite's own directory.
-    A link to the index or to another appendix becomes an in-file anchor."""
+    """Rewrite every relative link in a satellite so it resolves from
+    docs/how-it-works/ (where the artifacts live) instead of from the
+    satellite's own directory. A link to the index or to another appendix
+    becomes an in-file anchor."""
     import posixpath
     src_dir = posixpath.dirname(rel)
     slugs = _appendix_slugs()
@@ -117,13 +124,16 @@ def rebase_links(body: str, rel: str) -> str:
         path, _, frag = href.partition("#")
         norm = posixpath.normpath(posixpath.join(src_dir, path)) if path else ""
         if frag:
-            new = "#" + frag
-        elif norm == "architecture.md":
+            if norm == f"{INDEX_DIR}/architecture.md" or norm in slugs:
+                new = "#" + frag
+            else:
+                new = posixpath.relpath(norm, INDEX_DIR) + "#" + frag
+        elif norm == f"{INDEX_DIR}/architecture.md":
             new = "#architecture"
         elif norm in slugs:
             new = "#" + slugs[norm]
         else:
-            new = norm
+            new = posixpath.relpath(norm, INDEX_DIR)
         return f"[{label}]({new})"
 
     return _LINK.sub(fix, body)
@@ -148,18 +158,15 @@ def _slug(text, seen):
 
 def _satellite_anchor_map(titles):
     """Map every satellite path (as written in links) to its appendix slug."""
+    import posixpath
     m = {}
     seen = {}
     for n, ((rel, _, _a), title) in enumerate(zip(APPENDICES, titles), 1):
         slug = _slug(f"Appendix {n} — {title}", seen)
-        for variant in (rel, "arch/" + rel.split("arch/", 1)[-1], rel.split("/")[-1]):
-            m[variant] = slug
-        # links from inside arch/ use relative forms: protocols/data.md, ../x.md
-        tail = rel.split("arch/", 1)[-1]
-        m[tail] = slug
-        m["../" + tail] = slug
-        if "/" in tail:
-            m[tail.split("/", 1)[1]] = slug
+        # as written from docs/, from the index's own directory, or by basename
+        m[rel] = slug
+        m[posixpath.relpath(rel, INDEX_DIR)] = slug
+        m[rel.split("/")[-1]] = slug
     return m
 
 
@@ -185,17 +192,16 @@ def _inline(text, anchors):
             pass
         else:
             path, _, frag = href.partition("#")
-            path = path.replace("../", "", 1) if path.startswith("../") and path.replace("../", "", 1) in anchors else path
-            if frag:
+            if frag and (path in anchors or path.endswith("architecture.md")):
                 href = "#" + frag
+            elif frag:
+                # a file outside the combined document: keep path and anchor
+                href = path + "#" + frag
             elif path in anchors:
                 href = "#" + anchors[path]
             elif path.endswith("architecture.md"):
-                href = "#efs-architecture--full-one-file-rendition"
-            elif path.startswith("../"):
-                # satellites live one level below docs/; the artifact is in docs/
-                href = path[3:] + (("#" + frag) if frag else "")
-            # else: leave as a relative file link
+                href = "#architecture"
+            # else: leave as a file link relative to docs/how-it-works/
         return f'<a href="{_html.escape(href, quote=True)}">{label}</a>'
     text = _LINK.sub(link, text)
     text = _BOLD.sub(r"<strong>\1</strong>", text)
@@ -368,10 +374,10 @@ def render_html(md, appendix_titles):
         "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
         "<title>efs — architecture</title>\n"
-        "<!-- GENERATED by docs/gen-architecture-full.py from architecture.md + arch/*.md. Do not edit. -->\n"
+        "<!-- GENERATED by docs/gen-architecture-full.py from how-it-works/architecture.md + its satellites. Do not edit. -->\n"
         f"<style>{_CSS}</style>\n</head>\n<body>\n<div class=\"layout\">\n"
         f"<nav>{nav}</nav>\n<main>\n"
-        "<p class=\"gen\">Generated view of <code>docs/architecture.md</code> and its "
+        "<p class=\"gen\">Generated view of <code>docs/how-it-works/architecture.md</code> and its "
         "satellites. The markdown is the source of truth; edit it, then run "
         "<code>make docs-check</code>.</p>\n"
         f"{body}\n</main>\n</div>\n</body>\n</html>\n"
@@ -379,7 +385,7 @@ def render_html(md, appendix_titles):
 
 
 def main() -> int:
-    index = (DOCS / "architecture.md").read_text()
+    index = INDEX.read_text()
     parts = [HEADER, index.strip(), "\n\n---\n\n# Appendices — satellite documents, verbatim\n"]
     for n, (rel, title, authority) in enumerate(APPENDICES, 1):
         src = DOCS / rel
@@ -388,7 +394,7 @@ def main() -> int:
             return 1
         body = rebase_links(strip_and_demote(src.read_text()), rel)
         parts.append(
-            f"\n## Appendix {n} — {title}\n\n*Source: `{rel}` (headers demoted, nav stripped, links rebased to `docs/`).* "
+            f"\n## Appendix {n} — {title}\n\n*Source: `{rel}` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* "
             f"**Authority: {authority}.**\n\n{body}\n"
         )
     combined = "\n".join(parts) + "\n"

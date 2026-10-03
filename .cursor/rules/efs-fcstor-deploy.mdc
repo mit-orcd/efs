@@ -69,7 +69,7 @@ DELETED from the tree (commits 94c4c15..f5c4390). Operationally:
   node rejoins by catching up from the group).
 - Old-engine operational lore (2PC commit, CoW pages, GC races,
   `meta-rebuild`, shard tabs, `EFS_INO_RAM_MB`, extras catchup) lives in
-  `docs/project-history.md` and describes DELETED code.
+  `docs/archive/project-history.md` and describes DELETED code.
 - **The only live cluster is port 19810** on fcstor003–006
   (`/data1/01–06/efs`, `--quota 36T --direct-io`). The 19820
   `/tmp/efs-raft-scratch` cluster is retired — `wipe_cluster.sh`

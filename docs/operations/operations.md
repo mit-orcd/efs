@@ -1,8 +1,8 @@
 # Operations
 
-[Quick start](../README.md#quick-start) ·
-[Failure tolerance](arch/failure-tolerance.md) ·
-[Architecture](architecture.md) · [Testing](testing.md)
+[Quick start](../../README.md#quick-start) ·
+[Failure tolerance](../how-it-works/failure-tolerance.md) ·
+[Architecture](../how-it-works/architecture.md) · [Testing](../how-it-works/testing.md)
 
 ## Scripts
 

@@ -1,6 +1,6 @@
 # Naming
 
-[Architecture](../architecture.md) · [Design rationale](design.md)
+[Architecture](architecture.md) · [Design rationale](design-rationale.md)
 
 **Naming intent.** The bar for this design is that it earns the *idea* of an
 "extreme filesystem": it scales as close as possible to the raw hardware.

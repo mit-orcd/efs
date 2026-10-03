@@ -1,13 +1,13 @@
 # Work items — long-form text for the open W items
 
-Companion to [START-HERE.md](START-HERE.md). START-HERE holds the queue,
+Companion to [the status page](../status/README.md). The status page holds the queue,
 the plan and the decisions; this page holds the full text of the open
 long-form items that the plan rows point at: the source evidence, the
 numbered steps with their status, and the binding **Forbidden** list.
-Nothing here is a queue position — the order is START-HERE §1a. A step
+Nothing here is a queue position — the order is the status page §1a. A step
 marked done here is a document claim about the date given; the gate
 result directory is the evidence. Closed items (W1–W5, W7, W11, W13,
-W26, W28–W35) are in [project-history.md](../project-history.md)
+W26, W28–W35) are in [project-history.md](../archive/project-history.md)
 "START-HERE closed items". `§1b <time> block` references point at the
 "START-HERE handoff archive" there. Every item below opens with its
 current status, remaining action, governing decision and gate; what
@@ -15,7 +15,7 @@ follows that block is the dated record. W23 is the server compaction
 item; the client connection-liveness item is W49 (renamed Oct 2).
 
 **Durability and visibility.** The normative statement is
-[architecture.md §3](../architecture.md) (the three "Data —" bullets) and
+[architecture.md §3](../how-it-works/architecture.md) (the three "Data —" bullets) and
 is not repeated here — earlier copies drifted. Vocabulary used by the
 items below, defined there: a buffered byte is *pending* (not yet
 published, in flight, or retrying on contention), *transiently failed*
@@ -31,7 +31,7 @@ publishes nothing; `fsync` waits for this client's writes only.
 
 > **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** correctness DONE (Sep 20; every IO-500 phase, 0 read errors). Of the three perf residuals: (1) ior-hard-write rate is W17/D1 (span publish in the tree, Sep 30 36-rank hard-write 0.640 GiB/s, 0 errors) with W38 (fold tombstone, 1 read error Oct 1) the open residual; (2) 1 GiB open is D2, implemented (`open()` adopts the row only; see the project-state rule); (3) rmdir rate fixed Sep 27.
 >
-> **Remaining action:** none under this number. W38 is plan row 4 in [START-HERE.md](START-HERE.md) §1a; hard-write scaling beyond that is measured by the 9×4 debug run after each roll.
+> **Remaining action:** none under this number. W38 is plan row 4 in [the status page](../status/README.md) §1a; hard-write scaling beyond that is measured by the 9×4 debug run after each roll.
 >
 > **Governing decision:** D1 (span publish commutes), D2 (open adopts the row), D3 (no raised REAP gate). A chunk lock stays forbidden.
 >
@@ -45,7 +45,7 @@ publishes nothing; `fsync` waits for this client's writes only.
 and ior-hard-read 0 verification errors, every unlink OK**. The path from
 the Sep 18 numbers (hard-write DNF in 2 h 18 m, `-W` 4244 errors, 76108
 easy-read errors, 27 undeletable files) to this is in
-[../project-history.md](../project-history.md) "W6"; the fixes were: client
+[../project-history.md](../archive/project-history.md) "W6"; the fixes were: client
 STALE retry cost + server partial-commit on STALE (hard-write livelock);
 `dcache_image_current` / `snap_seq` ordering / forwarded-cmd reply index
 (read coherency, `concurrent_appends`); Raft follower dedupe + leader AE
@@ -63,7 +63,7 @@ batch-full misread as error (no file >8 MiB/lane was ever reclaimed).
 | mdtest-hard-write | 2.612 kIOPS | — | — |
 | mdtest-easy-stat | 16.478 kIOPS | — | — |
 
-Sep 30 row: `results/io500/20260930-183504-rdma/NOTE.txt` (handoff archive, [../project-history.md](../project-history.md)).
+Sep 30 row: `results/io500/20260930-183504-rdma/NOTE.txt` (handoff archive, [../project-history.md](../archive/project-history.md)).
 Not a list submission (stonewall 1 s). Do not quote the Sep 19 easy-read
 4.0 GiB/s — it was zero-fill. Do not quote stonewall intra GiB/s.
 
@@ -86,7 +86,7 @@ Not a list submission (stonewall 1 s). Do not quote the Sep 19 easy-read
    fold by the chain-filler or a reader). Implement as W17 step 3.**
 2. **1 GiB open costs 20 s of a 22 s easy-read** — 128 sequential
    GETCHUNKS + a 64-lane stat per open. Spec §8 per-lane range fetch
-   ([performance.md](performance.md)) is the fix. **Decision D2 (Sep
+   ([performance.md](../how-it-works/performance.md)) is the fix. **Decision D2 (Sep
    28): `open()` adopts the inode row only; `pull_layout_miss` is the
    one pull path, one GETCHUNKS per lane group in parallel, a metadata
    window one data window ahead of the prefetcher, size adaptive and
@@ -131,7 +131,7 @@ its data at the end of a run).
   (matches the agent). Kill hung `io500` with `pkill -9 -x io500`. **Do not remount as the
   next step:** a remount is a client teardown and the killed ranks may
   hold unpublished bytes. Follow D27's procedure in
-  [START-HERE.md](START-HERE.md) (decisions table): `scripts/client.sh stop` must
+  [decisions.md](../status/decisions.md) (decisions table): `scripts/client.sh stop` must
   complete its drain; if it refuses, the stalled recs it lists are part
   of the run's result, and a forced teardown is the explicit
   `--force-discard` only. Until D27 is implemented the 60 s drain
@@ -154,7 +154,7 @@ its data at the end of a run).
 
 **State (Sep 21 22:15): 191–195 / 201 on every host, 0 NOTRUN, all nine
 finish in ~62 s** (`results/posix/20260922-020950`). History and the
-three fixes that got here are in the handoff archive ([../project-history.md](../project-history.md)) (harness clock at
+three fixes that got here are in the handoff archive ([../project-history.md](../archive/project-history.md)) (harness clock at
 submit; `h->mu` contention after `read_mu`; KV WAL fsync per apply).
 Earlier symptoms — nine hosts at the 385 s cap with `[None]` rows
 (`results/posix/20260917-191430`), the 1.2 s / 1.03–1.08 s root mkdir,
@@ -163,12 +163,12 @@ are closed: whole-shard txn scans (`165e779`), stranded txn records
 (`9534e53`, `3291c6d`), `read_mu` (`223da15`), peer-pool starvation
 (`f10fec0`), harness (`a683def`), view (`4eb1419`), WAL hold (`84a2a55`).
 
-What still fails, in order (details in the handoff archive, [../project-history.md](../project-history.md)):
+What still fails, in order (details in the handoff archive, [../project-history.md](../archive/project-history.md)):
 0. Half-applied cross-shard txns (I17) — **fixed `46d54e6` and gated**
    (Sep 22): freeze both leaders during `same_parent_storm`. The parent
    row stayed consistent (`nlink=5 nents=3` with three real children on
    the run that left names behind; the other run removed the parent).
-   `arc_term_miss` moved. Details in the handoff archive ([../project-history.md](../project-history.md)).
+   `arc_term_miss` moved. Details in the handoff archive ([../project-history.md](../archive/project-history.md)).
 1. Retry of a committed non-idempotent op after a BUSY (EEXIST on a
    fresh LINK name, EIO, empty read) → I16 op-id dedup for
    LINK/UNLINK/MKDIR/RENAME. Mechanical, spec §7.9.
@@ -194,7 +194,7 @@ do not raise the election timeout.
 >
 > **Governing decision:** D18 (evict whole cold tabs).
 >
-> **Gate:** the walk-RSS gate in [../client-cache-design.md](../client-cache-design.md); `test_stage_evict`; posix 1 + 2; `leaks`.
+> **Gate:** the walk-RSS gate in [client-cache-design.md](../archive/landed/client-cache-design.md); `test_stage_evict`; posix 1 + 2; `leaks`.
 
 **Historical record (dated).** Evidence and steps as they were written at the time. A step marked *done* or *superseded* in the status block above is not to be executed; its text stays so the gate directories and the reasoning remain findable.
 
@@ -206,7 +206,7 @@ The evictor and the pin rules are in the client as of Sep 27.
 
 The plan, the pin rules that make eviction safe (a report builds its records
 out of this table, so evicting a dirty row is data loss), and the gate are in
-[../client-cache-design.md](../client-cache-design.md). The Sep 23
+[client-cache-design.md](../archive/landed/client-cache-design.md). The Sep 23
 recommendation below is in the client as of Sep 27. Posix 1 is
 200/201, posix 2 is 59/63, the leak gate is clean, and a cold stat
 of 1M files leveled at 233 MB RSS
@@ -313,7 +313,7 @@ mismatch, destroy refuses to close a recycled fd. The **live** repro was never
 re-run, because it only reproduces on a freshly `mkfs`'d / effectively empty
 table, and 19810 is populated. A remount there is *not* this gate.
 
-19810's transport is RDMA as of the Sep 28 gate (the handoff archive in [../project-history.md](../project-history.md)). Suites pass.
+19810's transport is RDMA as of the Sep 28 gate (the handoff archive in [../project-history.md](../archive/project-history.md)). Suites pass.
 Posix and the 9-client write are still slower than TCP, so the speed
 bar in step 3 is open. Every ceiling in the table above assumes the
 data path can use the fabric; TCP over IPoIB will not reach it.
@@ -345,8 +345,8 @@ Steps:
    9-host posix (≥185/201, 0 not-run), `i17_leader_freeze.sh` ×2 with
    0 worker errors, idle `md_latency.py` within the TCP reference.
 4. Re-baseline the write wall (`efs-fio-honest`: 8 GiB dd+fsync 1/4/9
-   clients) and record it in the ceiling table of [START-HERE.md](START-HERE.md) §1a. Then TCP is no longer
-   the default in the deploy rule and START-HERE.
+   clients) and record it in the ceiling table of [the status page](../status/README.md) §1a. Then TCP is no longer
+   the default in the deploy rule and the status page.
 5. If step 3 fails on anything that passes on TCP, roll back to TCP with
    the same `roll_efsd.sh --all` and bring the failure; do not debug
    RDMA on the live cluster with the suites down.
@@ -512,7 +512,7 @@ Steps, in this order; each is its own change with its own gate:
   1-client and 9-client 8 GiB dd with the flush in the clock, none worse
   than the Sep 28 numbers in `.cursor/rules/efs-fio-honest.mdc`.
 - **Forbidden:** raising the election timeout or `HOST_TICK_US`;
-  chunking InstallSnapshot differently (W11 is done; [../project-history.md](../project-history.md)); the global or
+  chunking InstallSnapshot differently (W11 is done; [../project-history.md](../archive/project-history.md)); the global or
   thread-local fd cache; changing `EFS_RAFT_SNAP_CHUNK`, `HOST_PUB_BATCH_N`
   or `EFS_RAFT_AE_BYTES` (all three were measured worse on Sep 28).
 
@@ -532,7 +532,7 @@ Steps, in this order; each is its own change with its own gate:
 (`efs_rdma_reply_ready_us` pauses at most 16 times, then the caller
 blocks on the CQ fd); on the run-3 profile the vDSO is 0.87% and the
 symbol is under the 0.5% floor. Step 1's fresh profile is run 2 /
-run 3 (handoff archive, [../project-history.md](../project-history.md)): `ll_write_buf` `memmove` 7.5%, RDMA send `memmove`
+run 3 (handoff archive, [../project-history.md](../archive/project-history.md)): `ll_write_buf` `memmove` 7.5%, RDMA send `memmove`
 6.3% (step 3 stands), and no `memmove` caller under
 `dcache_flush_slot_inner` above the 0.5% floor (the body-drop path is
 taken). Run 2's client report files were overwritten by run 3 (same
@@ -735,7 +735,7 @@ Steps:
 Type 47 is `EFS_MSG_INODE_GETATTR`; shard 0 is the root's shard (even →
 group 2). The mount was alive; `client.sh stop` unmounted cleanly. Same
 class as the `INODE_LOOKUP` on shard 3745 that aborted IOR's `stat` in the
-22:00Z run (handoff archive, [../project-history.md](../project-history.md)). Not data loss, not a dead mount, not RDMA.
+22:00Z run (handoff archive, [../project-history.md](../archive/project-history.md)). Not data loss, not a dead mount, not RDMA.
 
 Two defects, one visible and one underneath:
 
@@ -755,7 +755,7 @@ Two defects, one visible and one underneath:
    line means group 2 could not satisfy a read for ten seconds straight:
    either `applied` trailed `commit` by more than 400 ms the whole time
    (36 ranks publishing; REPORT/publish applies on the pump; L1 pressure
-   from this same IOR is recorded in the handoff archive, [../project-history.md](../project-history.md)), or group 2 was re-electing
+   from this same IOR is recorded in the handoff archive, [../project-history.md](../archive/project-history.md)), or group 2 was re-electing
    (a hintless NOT_PRIMARY lands in the same BUSY/STALE bucket). A fresh
    client is the victim because its first op is the root GETATTR and it
    has no cached row; the IOR ranks mostly write and read their own
@@ -842,7 +842,7 @@ in-flight batch stays forbidden. Order-table row 10.
 
 > **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** PARTIAL. Step 1 (a FUSE request returns): D24's landed-PUT REPORTs and the record-sized REPORT wait removed the 20-minute class; the unconverging STALE loop itself is now **D27** (stalled publication: stop, retain, sticky EIO, refuse clean teardown). Step 3 (D1 span publish) is in the tree per the Sep 30 IO-500 (36-rank hard-write 0.640 GiB/s, 0 errors). Open residuals: **W38** (a fold tombstone without the span's bytes, plan row 4) and **W41** (`report_mu`, decided, plan row C). Step 2's per-chunk attribution counters are not recorded as landed.
 >
-> **Remaining action:** W38, then W41, in the START-HERE order; implement D27 under 0a.
+> **Remaining action:** W38, then W41, in the status page order; implement D27 under 0a.
 >
 > **Governing decision:** D1, D24, D27, W41 (decided). **Fold actors, precisely:** a fold may be performed only by (a) the publisher whose span fills the last delta slot, inside that publish, or (b) a reader that observes a full chain, as a background PUT off the read path that never blocks the read. No other rank's `fsync`/`close` folds; no fold on a chain that is not full; a fold's observation must come from a body that holds every span it folds (W38).
 >
@@ -1091,7 +1091,7 @@ What to implement:
 
 > **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** steps 1–2 DONE (Sep 29, `present_chunks`/`present_extra`, `ll_setattr` reads `size` from the row). The residual — `st_blocks` is 0 for files this client did not write — is **D17, decided Oct 2** (per-lane present-chunk count in the lane stamp), plan row E.
 >
-> **Remaining action:** D17 per its row in START-HERE.
+> **Remaining action:** D17 per its row in [decisions.md](../status/decisions.md).
 >
 > **Governing decision:** D17.
 >
@@ -1560,7 +1560,7 @@ accepted-failure list.
 
 The user asked how transport and at-rest encryption could work, and whether a key created with the cluster would let only the Linux user who mounts with that key see the contents. Conclusions, for a later design pass:
 
-- Nothing encrypts today. `EFS_MSG_HELLO` checks the build id. Any host that can reach 19810 is a peer. Modes are enforced in the FUSE process; the client tells the server its uid (`docs/product-gaps.md`).
+- Nothing encrypts today. `EFS_MSG_HELLO` checks the build id. Any host that can reach 19810 is a peer. Modes are enforced in the FUSE process; the client tells the server its uid (`docs/backlog/product-gaps.md`).
 - One key, created at `raft-mkfs` and shown once. The cluster stores a verifier, not the key. A mount proves it knows the key. The key file is mode `0600` and the mount is not `allow_other`, so other uids on that machine see nothing at the mount point. Root on that machine can still read the key (ptrace is open here). Any other host that has the key can mount. Every holder of the key sees every byte it encrypts. Per-user secrecy is a different key per user.
 - Fragments, on the client, after parity. Split the chunk, XOR the parity, then encrypt each of the three fragments with its own IV stored beside the fragment. `PUT` and the disk see only ciphertext. A read decrypts, then XORs if it must rebuild one fragment. XOR of ciphertext does not reconstruct, so encryption sits outside the parity. The object name stays a hash of the plaintext, so two clients still agree on one object; the IV is not part of that name. The server stores opaque fragments and does not need the key to hold them.
 - Metadata is the open choice. Names and directory updates are applied by the servers. Without the key they cannot apply encrypted names, so either the namespace stays plaintext on disk (a pulled NVMe reveals names, not file bytes) or `efsd` is unlocked with the key at start and the KV and Raft log are encrypted on the way to disk. The key must not live in the Raft log, or the disk contains the key that decrypts the disk. A server that was not unlocked cannot serve.
@@ -1576,14 +1576,14 @@ cheap measurement an agent can produce first, named here:
   there is no per-file or per-directory equivalent of Lustre's `lfs
   setstripe`. A 4 KiB-record checkpoint and a 1 GiB-per-rank dump therefore
   get the same 128 KiB geometry, and the declared 32× small-write
-  amplification ([architecture.md §9](../architecture.md)) has no opt-out.
+  amplification ([architecture.md §9](../how-it-works/architecture.md)) has no opt-out.
   Evidence to bring: W6's IOR-hard/IOR-easy ratio and rw-4k from W4.
 - **An interface beyond FUSE.** FUSE is the only client. libfuse 3.10.2 cannot
   negotiate `FUSE_MAX_PAGES`, so every request is ≤128 KiB regardless of
   `max_write`; it cannot emit `FOPEN_PARALLEL_DIRECT_WRITES`; and Linux takes
   the inode lock exclusively for extending direct writes and the parent
   directory lock for `O_CREAT`, **per mount** (already in
-  [architecture.md §9](../architecture.md) as an open kernel-interface item).
+  [architecture.md §9](../how-it-works/architecture.md) as an open kernel-interface item).
   So 64 ranks on one node writing one file serialize in the kernel before efs
   is called. Every production PFS has a kernel client, a user-space library,
   or an MPI-IO ADIO driver. Evidence to bring: W4's per-client scaling and a
@@ -1595,13 +1595,13 @@ cheap measurement an agent can produce first, named here:
   directory-spread bound (unspecified); cutover of a 36T `efs-test`; any new
   REPORT or SNAP wire shape.
 
-**Bigger than this queue.** [product-gaps.md](../product-gaps.md) inventories
+**Bigger than this queue.** [product-gaps.md](product-gaps.md) inventories
 what is missing before efs is a filesystem anyone could run — including the
 things that contradict a guarantee the spec already makes (no fragment
 repair, no protection-debt tracking, no session/fencing on the client, and
-W1/W2 in [../project-history.md](../project-history.md) "START-HERE closed items"). Those are not queue items beyond what W1–W2 say; each needs a
+W1/W2 in [../project-history.md](../archive/project-history.md) "START-HERE closed items"). Those are not queue items beyond what W1–W2 say; each needs a
 design decision first. Do not start one without asking, and do not treat the
-queue in [START-HERE.md](START-HERE.md) §1a as the whole distance to a product.
+queue in [the status page](../status/README.md) §1a as the whole distance to a product.
 
 #### W22 — Server: the snapshot cadence makes InstallSnapshot the steady state, and a follower inside an import campaigns
 
@@ -1760,7 +1760,7 @@ change — the file cap still forces a compaction, but of one subrange.
 
 **Source (Sep 29 2026 04:07–04:27Z, `results/measure/20260929-040800-idle-trace/ana`,
 perf + `strace -f -tt -T` on every daemon, a user `ecopy` 04:15–04:22Z
-writing 408K fragments per server; the handoff archive in [../project-history.md](../project-history.md) has the full list).**
+writing 408K fragments per server; the handoff archive in [../project-history.md](../archive/project-history.md) has the full list).**
 
 - `kv_maybe_flush_locked` (`kv_compact.c:711`) waits on `l->cv` while
   `n_l0 + KV_LSM_RANGE_MAX > KV_LSM_MAX_SEGS` (i.e. L0 ≥ 48 files). The
@@ -1869,7 +1869,7 @@ follower-lag admission rule) — bring the numbers, do not pick.
 
 - **Read:** `src/kv/kv_compact.c` (`kv_maybe_flush_locked`, `compactor_main`,
   `kv_compact_locked`), `src/kv/kv_lsm.c` (`kv_flush_locked`), `src/kv/kv_seg.c`,
-  W13 (closed; [../project-history.md](../project-history.md) "START-HERE closed items") and the
+  W13 (closed; [../project-history.md](../archive/project-history.md) "START-HERE closed items") and the
   "L1 compaction is a background thread" learning in the project-state rule.
 - **Forbidden:** raising `KV_LSM_MEM_DEFAULT` or `KV_LSM_L0_DEFAULT` as the
   fix (W13, closed); raising the election timeout, `HOST_TICK_US`, or the 400 ms
@@ -1877,10 +1877,10 @@ follower-lag admission rule) — bring the numbers, do not pick.
   on a merged-back dirty set; moving `mdraft/` to another device to hide
   the compactor's I/O (D11 says it is not the sharing).
 
-**When START-HERE's queue is empty,** the next task comes from a measurement,
-not from this page: run the gates in [testing.md](../testing.md), and take
+**When the status page's queue is empty,** the next task comes from a measurement,
+not from this page: run the gates in [testing.md](../how-it-works/testing.md), and take
 the largest gap between what a gate reports and what the ceiling table in
-[START-HERE.md](START-HERE.md) §1a says the hardware allows. If closing it needs a design
-decision the spec does not contain, stop and ask ([START-HERE.md](START-HERE.md) §4).
+[the status page](../status/README.md) §1a says the hardware allows. If closing it needs a design
+decision the spec does not contain, stop and ask ([developing.md](../how-it-works/developing.md) §4).
 
 ---

@@ -1,6 +1,6 @@
 # Verification — the deterministic simulator and the code→signal cycle
 
-[Architecture](../architecture.md) · [Development](development.md) ·
+[Architecture](architecture.md) · [Development](developing.md) ·
 [Performance](performance.md)
 
 ## The simulator (build first, architecture-independent)
@@ -31,7 +31,7 @@ interfaces. Two backends implement those interfaces: the real one (sockets +
 NVMe, what ships) and the simulated one (a message queue + a fault-injecting
 in-memory disk, what the simulator drives). The same compiled state machine
 runs in both, so "passes in simulation" is meaningful. (This is also why
-[development.md](development.md) makes state-machine purity an architectural
+[development.md](developing.md) makes state-machine purity an architectural
 rule.)
 
 **Harness (Sep 2).** `include/efs/sim.h` + `src/sim/` + `tests/test_sim`
@@ -665,7 +665,7 @@ Deliberate moves that shorten the loop:
   `gdb -p` on a wedged `efsd` answers in seconds what an NDJSON-probe redeploy
   answers in tens of minutes.
 - **Bounded-context change.** Modularity
-  ([development.md](development.md)) keeps the unit of work small: a change
+  ([development.md](developing.md)) keeps the unit of work small: a change
   loads one module + its interface header, not the whole tree. This is what
   makes both fast isolated tests and model-assisted editing tractable.
 - **Invariants as executable checks** (simulator assertions + `fsck`), not

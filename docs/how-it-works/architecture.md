@@ -1,22 +1,22 @@
 # Architecture
 
-**New here, or looking for the next task? → [START-HERE](arch/START-HERE.md)**
+**New here, or looking for the next task? → [Project status](../status/README.md)**
 (what to work on now, which pages govern a given change, what "done" means).
 
 [Browser view (generated)](architecture.html) ·
 [One-file full version](architecture-full.md) ·
-[Design rationale](arch/design.md) ·
-[Failure tolerance](arch/failure-tolerance.md) ·
-[Protocols: transactions](arch/protocols/transactions.md) ·
-[data](arch/protocols/data.md) ·
-[directories](arch/protocols/directory.md) ·
-[sessions](arch/protocols/sessions.md) ·
-[Performance](arch/performance.md) ·
-[Development](arch/development.md) ·
-[Verification](arch/verification.md) ·
-[Design history](arch/design-history.md) ·
-[Naming](arch/naming.md) ·
-[Scaling roadmap](scaling-roadmap.md)
+[Design rationale](design-rationale.md) ·
+[Failure tolerance](failure-tolerance.md) ·
+[Protocols: transactions](protocols/transactions.md) ·
+[data](protocols/data.md) ·
+[directories](protocols/directory.md) ·
+[sessions](protocols/sessions.md) ·
+[Performance](performance.md) ·
+[Development](developing.md) ·
+[Verification](verification.md) ·
+[Design history](../archive/design-history.md) ·
+[Naming](naming.md) ·
+[Parked ideas](../backlog/ideas.md)
 
 This is the **normative specification** — the index of architectural truth.
 It states the goal, the failure model, the consistency contract, the
@@ -24,19 +24,19 @@ invariants, where every piece of state lives, which protocol governs each
 operation, and the performance contract. Rationale, derivations, and full
 protocol detail live in the linked satellites; **if this file and a
 satellite disagree, this file wins.** The [scaling
-roadmap](scaling-roadmap.md) is the *increment plan* for the current
+roadmap](../backlog/ideas.md) is the *increment plan* for the current
 implementation; this is the *specification*. When a design question comes
 up, the answer is decided here first, then reflected in the roadmap.
 
 **Status: ratified Sep 1 2026; revised Sep 1 2026 after external protocol
-review (nine rounds — see [design history](arch/design-history.md)).** The
+review (nine rounds — see [design history](../archive/design-history.md)).** The
 metadata layer described here replaces the current whole-table snapshot +
 2PC design. The data path is unchanged in mechanism (client-direct RDMA,
 k+f EC) but its commit semantics are specified precisely (§7.3). The bar
 for the design is that it earns the *idea* of an "extreme filesystem": it
 scales as close as possible to the raw hardware — a component is wrong if
 it serializes work the hardware could have done in parallel
-([naming](arch/naming.md)).
+([naming](naming.md)).
 
 ---
 
@@ -199,14 +199,14 @@ information died with the majority, and splicing survivor logs can
 manufacture a command sequence no leader ever authorized. Permanent majority
 loss is disaster territory (an operator procedure over surviving state), not
 an efs operating mode. (Full argument:
-[failure-tolerance.md](arch/failure-tolerance.md).)
+[failure-tolerance.md](failure-tolerance.md).)
 
 **Changing f or k is an online control-plane operation** with an explicit
 `effective_f` → `target_f` transition state: add shard replicas (joint
 consensus, §7.8), re-stripe every protected data generation to the new k+f
 width as **new immutable generations under the new coding profile** (§7.3),
 verify, and only then commit the new guarantee. Derivation and transition
-detail: [failure-tolerance.md](arch/failure-tolerance.md).
+detail: [failure-tolerance.md](failure-tolerance.md).
 
 ## 3. Consistency contract
 
@@ -242,7 +242,7 @@ this list, before it ships.
   waits for another client's writes. A transient failure of that drain
   (transport, RPC budget, node down) returns EIO from that call with the
   bytes retained as pending; the next `fsync` retries. If a publish of
-  the file has been classified **stalled** (D27, START-HERE: repeated
+  the file has been classified **stalled** (D27, [decisions.md](../status/decisions.md): repeated
   cycles against an unchanged server state), `fsync`, `fdatasync` and
   `flush` return EIO on every description of the file until that publish
   lands, and the client retains the bytes; it never discards them on its
@@ -310,7 +310,7 @@ promising distributed snapshot isolation. A `readdir` scan guarantees:
 It does **not** promise a point-in-time snapshot: a concurrent create may or
 may not appear, a concurrent unlink may or may not disappear. If a future
 feature needs snapshot readdir, that is an MVCC read (rejected for now —
-[design.md](arch/design.md)) introduced deliberately, not an accident of the
+[design.md](design-rationale.md)) introduced deliberately, not an accident of the
 scan.
 
 **CAP-accurate availability.** At the configured failure target f (§2,
@@ -326,7 +326,7 @@ client.
 ## 4. Invariants
 
 These are the test oracle for the simulator
-([verification.md](arch/verification.md)) and for `fsck`. A bug is a
+([verification.md](verification.md)) and for `fsck`. A bug is a
 violation of one of these. Invariants are stated over the **committed,
 externally-visible projection** of state; cross-shard transaction *intents*
 (§7.2) are internal and are governed by I17/I18, not by the naïve forms of
@@ -623,7 +623,7 @@ what makes I1–I4 and I10 true. The 4096 logical groups run on a **multi-Raft
 runtime** (reactors per NUMA domain, messages batched by destination,
 heartbeats coalesced, WAL group-committed across groups, KV applies batched)
 — an architectural requirement, not an optimization
-([performance.md](arch/performance.md)).
+([performance.md](performance.md)).
 
 Authoritative reads (LOOKUP/GETATTR/readdir) go to the **shard leader**,
 which establishes quorum-backed read authority (ReadIndex-style) and waits
@@ -712,7 +712,7 @@ participant has acknowledged them.
 
 Invariants: I16, I17; the namespace transactions it carries (MKDIR/RMDIR,
 LINK, cross-shard UNLINK and RENAME — §6) additionally preserve I5–I7.
-Full protocol: [protocols/transactions.md](arch/protocols/transactions.md)
+Full protocol: [protocols/transactions.md](protocols/transactions.md)
 
 ### 7.3 Data publication
 
@@ -874,7 +874,7 @@ reconstructs confidently from a corrupt fragment; a fragment failing
 verification counts as unavailable and is repaired, never decoded.
 
 Invariants: I11–I15, I20–I22, I24, I25.
-Full protocol: [protocols/data.md](arch/protocols/data.md)
+Full protocol: [protocols/data.md](protocols/data.md)
 
 ### 7.4 Directory placement and spreading
 
@@ -930,7 +930,7 @@ chain at those versions **into its conditional PREPARE**, so any concurrent
 reparent in the chain aborts it. O(depth) and rare.
 
 Invariants: I5–I8.
-Full protocol: [protocols/directory.md](arch/protocols/directory.md)
+Full protocol: [protocols/directory.md](protocols/directory.md)
 
 ### 7.5 Client sessions and fencing
 
@@ -968,7 +968,7 @@ partitioned-but-alive client is an availability sacrifice, never a safety
 one; the session epoch is the fencing token.
 
 Invariants: I23, I16.
-Full protocol: [protocols/sessions.md](arch/protocols/sessions.md)
+Full protocol: [protocols/sessions.md](protocols/sessions.md)
 
 ### 7.6 Open-unlinked files and POSIX locking
 
@@ -1017,7 +1017,7 @@ previous occupant of a reused ino cannot release a live file's state. Any
 operation acting through an inode handle validates the inode generation
 before mutating; a mismatch is a stale-handle error, never a silent no-op.
 
-Full protocol: [protocols/sessions.md](arch/protocols/sessions.md)
+Full protocol: [protocols/sessions.md](protocols/sessions.md)
 
 ### 7.7 FUSE / kernel interface contract
 
@@ -1106,7 +1106,7 @@ decision records have the matching participant-ACK condition (§7.2).
 
 Binding requirements, each traceable to P1/P4 — the difference between "the
 architecture scales" and "the implementation scales." Full contract with
-rationale: [performance.md](arch/performance.md).
+rationale: [performance.md](performance.md).
 
 - **NUMA-local, asynchronous, queue-depth-driven execution.** Ordinary
   PUT/GET and ordinary metadata commits take no cross-core lock and make no
@@ -1216,7 +1216,7 @@ stays runnable. **Do not** go straight `KV → Raft → done`.
 8. Client sessions + fencing (§7.5), then the open-unlinked inode
    lifecycle (§7.6) on top of them.
 9. Data-generation publication / fencing integration (§7.3), with the
-   simulator checking the logical data protocol (arch/verification.md).
+   simulator checking the logical data protocol (verification.md).
 10. Directory layout-epoch spread (§7.4) + distributed locking (§7.6).
 10.5 Durable backends, then production adoption: an on-disk ordered KV and
     an on-disk Raft log behind the step 3/4 interfaces, then the applied SM
@@ -1240,7 +1240,7 @@ backends first (gated by re-running the whole simulator against them,
 for the single export. **Current status (Oct 1 2026): steps 0–12 are
 landed; there is no in-memory metadata table and no snapshot / root-2PC
 flush in the tree.** The 10.5c slices (listed one by one with their gates in
-[arch/verification.md](arch/verification.md)) were gated behind an
+[verification.md](verification.md)) were gated behind an
 `EFS_MD_RAFT` flag on a scratch cluster; step 11 (Sep 11) removed the flag
 and deleted the old snapshot / root-2PC engine, so the Raft+KV engine is
 the only metadata engine and every FUSE metadata op is a Raft proposal.
@@ -1249,7 +1249,7 @@ posix2 63/63, 9-host suite 200/201 on every host. The KV engine is
 a WAL plus immutable sorted segments with compaction, and there is **one
 engine and one group-committed WAL per node** — the shard prefix in every key
 multiplexes all groups into it, which is the same "logical groups, not
-physical WALs" rule as [performance.md](arch/performance.md) §5.4. The Raft
+physical WALs" rule as [performance.md](performance.md) §5.4. The Raft
 log follows the same shape for the same reason — **one multiplexed record log
 per node**, every group appending to it, concurrent appends sharing one fsync.
 
@@ -1266,11 +1266,11 @@ KV's own sync mode is therefore a performance choice, not a correctness one.
 
 **Step 1 had a hard prerequisite: the carve-up (Phase M, complete).** The
 tree is `raft/ kv/ meta/ wire/ data/ client/ server/` behind interfaces
-([development.md](arch/development.md)); the simulator reuses the same
+([development.md](developing.md)); the simulator reuses the same
 state machines production runs. Build nothing as new monolith code; every
 new component lands inside the carved boundaries.
 
-The detailed, gated steps live in the [scaling roadmap](scaling-roadmap.md);
+The detailed, gated steps live in the [scaling roadmap](../backlog/ideas.md);
 this document is the invariant they are measured against.
 
 ---

@@ -1,8 +1,8 @@
 # Design history
 
-[Architecture](../architecture.md)
+[Architecture](../how-it-works/architecture.md)
 
-The normative specification is [../architecture.md](../architecture.md). It
+The normative specification is [architecture.md](../how-it-works/architecture.md). It
 states rules without narrating their discovery. This note records how it got
 here — the review rounds and the mistakes they caught — so the reasoning
 stays available without cluttering the spec.
@@ -90,7 +90,7 @@ gained the session-scoped open lease. Chunk identity gained
 round-robin within a file (`(chunk_index + hash(ino)) % L`) so sequential
 read windows are one range request per lane. And the specification itself
 was split: this file plus the satellites, leaving
-[../architecture.md](../architecture.md) as the normative index.
+[architecture.md](../how-it-works/architecture.md) as the normative index.
 
 **Round 7 — protocol closure.** The structure was accepted; this round only
 closed remaining protocol holes, and every one of them was a place where an

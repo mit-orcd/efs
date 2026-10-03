@@ -1,11 +1,11 @@
 # Namespace placement and directory spreading
 
-[Architecture](../../architecture.md) · [Transactions](transactions.md) ·
+[Architecture](../architecture.md) · [Transactions](transactions.md) ·
 [Data protocol](data.md)
 
 This is the placement decision everything else hangs off. The authoritative
 operation→participant matrix derived from these rules is
-[§6 of the spec](../../architecture.md); this document is the placement
+[§6 of the spec](../architecture.md); this document is the placement
 protocol itself.
 
 ## Placement rules
@@ -215,7 +215,7 @@ used set grow to 4096, and `stat(dir)` with it; "bounded like a file's
 lanes" would be wishful. A directory therefore has at most 64 dentry shards,
 chosen by the same construction data.md uses for lanes — a name hashes to
 one of 64 lanes, and the lane maps to a shard by the odd-stride permutation
-defined in [§5/§7.3 of the spec](../../architecture.md) (odd stride over a
+defined in [§5/§7.3 of the spec](../architecture.md) (odd stride over a
 power-of-two shard count ⇒ 64 DISTINCT shards; lane 0 is the directory's own
 inode shard):
 

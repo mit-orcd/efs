@@ -112,7 +112,8 @@ if [ "${tm:-0}" -le "${tb:-0}" ]; then
 fi
 # Worker errors by errno. Since I16 (43bdf6a) a retry of a committed op is
 # answered from its op-id window, so EEXIST / ENOENT here means the window
-# missed (see START-HERE §1b: 16-entry cache, or an op without an id).
+# missed (see the §1b handoff archive in docs/archive/project-history.md:
+# 16-entry cache, or an op without an id).
 # EBUSY / EIO during the freeze are still expected.
 rb=$(grep replay_total= "$OUT/obs-before.txt" | cut -d= -f2); ra=$(grep replay_total= "$OUT/obs-after.txt" | cut -d= -f2)
 say "opid_replay ${rb:-0} -> ${ra:-0} (I16 replays answered from the window)"

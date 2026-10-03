@@ -1,5 +1,5 @@
 /* Client staging-table evictor — client-cache design Part A
- * (docs/client-cache-design.md §4).
+ * (docs/archive/landed/client-cache-design.md §4).
  *
  * g_client.export is a cache of what this client is DOING, not a replica of
  * what exists. Everything in it is re-fetchable from the servers (rows via
@@ -548,7 +548,7 @@ static uint64_t evict_pass(uint64_t cap, int *evicted, uint64_t min_tick,
  * lock set, check and drop under one hold) until it is under. The tab
  * is rebuilt empty by efs_export_table() on the next use of its shard;
  * everything it held is re-fetchable. The user chose this over counting
- * the cap above the floor or shrinking the floor (START-HERE D18). */
+ * the cap above the floor or shrinking the floor (docs/status/decisions.md D18). */
 #define TAB_SCAN  256
 #define TAB_EVICT 64
 

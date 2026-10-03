@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """docs/check-architecture.py — the machine gate for the architecture docs.
 
-Implements the documentation gate specified in docs/arch/development.md
+Implements the documentation gate specified in docs/how-it-works/developing.md
 ("The specification itself is under a machine gate"):
 
-  1. regen-diff          regenerate docs/architecture-full.md (to a temp
-                         file — the checked-in file is never clobbered) and
-                         fail on any diff.
+  1. regen-diff          regenerate docs/how-it-works/architecture-full.md (to
+                         a temp file — the checked-in file is never clobbered)
+                         and fail on any diff.
   2. links               every internal markdown link in the doc sources
                          resolves (target file exists; #anchor, when present,
                          names a header or an explicit <a id> in the target).
@@ -19,14 +19,17 @@ Implements the documentation gate specified in docs/arch/development.md
   5. single-home         no normative table (same header row), no invariant
                          definition, and no placement-formula definition is
                          stated in more than one place. Satellites explain,
-                         they never restate; arch/START-HERE.md links rather
-                         than restates; architecture.html is generated,
+                         they never restate; the status pages link rather
+                         than restate; architecture.html is generated,
                          not an md source.
 
-Scope: the normative index (docs/architecture.md) plus the satellites under
-docs/arch/. The generated docs/architecture-full.md is covered by check 1
-and excluded from the content checks. Exit 0 on pass, 1 with per-check
-diagnostics on failure. Python 3 standard library only; CWD-independent.
+Scope: the normative index (docs/how-it-works/architecture.md) plus the
+satellites that docs/gen-architecture-full.py renders as appendices (the
+status pages, backlog/work-items.md, the how-it-works/ satellites and
+archive/design-history.md) and operations/runbooks.md. The generated
+docs/how-it-works/architecture-full.md is covered by check 1 and excluded
+from the content checks. Exit 0 on pass, 1 with per-check diagnostics on
+failure. Python 3 standard library only; CWD-independent.
 
     python3 docs/check-architecture.py
 """
@@ -39,19 +42,37 @@ import sys
 import tempfile
 
 DOCS = pathlib.Path(__file__).resolve().parent
-INDEX = DOCS / "architecture.md"
-FULL = DOCS / "architecture-full.md"
-HTML = DOCS / "architecture.html"
+INDEX = DOCS / "how-it-works" / "architecture.md"
+FULL = DOCS / "how-it-works" / "architecture-full.md"
+HTML = DOCS / "how-it-works" / "architecture.html"
 GEN = DOCS / "gen-architecture-full.py"
+
+
+def _gen_module():
+    spec = importlib.util.spec_from_file_location("gen_arch_full", GEN)
+    gen = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(gen)
+    return gen
 
 
 def doc_sources():
     """The index + every satellite. The generated full file is NOT a source."""
-    return [INDEX] + sorted((DOCS / "arch").rglob("*.md"))
+    srcs = [INDEX]
+    srcs += sorted((DOCS / "how-it-works").rglob("*.md"))
+    srcs += [DOCS / rel for rel, _, _ in _gen_module().APPENDICES]
+    srcs.append(DOCS / "operations" / "runbooks.md")
+    out = []
+    for s in srcs:
+        if s != FULL and s not in out:
+            out.append(s)
+    return out
 
 
 def rel(path):
-    return path.relative_to(DOCS).as_posix()
+    try:
+        return path.relative_to(DOCS).as_posix()
+    except ValueError:
+        return path.relative_to(DOCS.parent).as_posix()
 
 
 def lines_without_fences(text):
@@ -75,9 +96,7 @@ def check_regen_diff():
     for art in (FULL, HTML):
         if not art.exists():
             return [f"{rel(art)} is missing; run: python3 {rel(GEN)}"]
-    spec = importlib.util.spec_from_file_location("gen_arch_full", GEN)
-    gen = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(gen)
+    gen = _gen_module()
     tmps = {}
     for art in (FULL, HTML):
         with tempfile.NamedTemporaryFile(

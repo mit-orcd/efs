@@ -22,12 +22,13 @@ DELETED pre-Sep-11 snapshot/2PC metadata engine and say so inline).
 
 Authoritative, current sources:
 
-- **What to work on:** [arch/START-HERE.md](arch/START-HERE.md) §1 / §1a
-  (work queue) / §1b (in-flight handoff).
+- **What to work on:** [status/README.md](../status/README.md) §1 / §1a
+  (work queue) / [status/in-flight.md](../status/in-flight.md) (in-flight
+  handoff).
 - **Current facts and live do-not-re-chase learnings:**
   `.cursor/rules/efs-project-state.mdc` (kept under ~250 lines).
 - **Architecture review history (rounds 1–9):**
-  [arch/design-history.md](arch/design-history.md).
+  [design-history.md](design-history.md).
 
 Use this file when a rule or START-HERE cites a date or a result directory
 and you want the full narrative, or when you are about to re-derive a root
@@ -9860,7 +9861,7 @@ Full text (measurements, steps, forbidden list) is in [project-history.md](proje
 
 #### W2 — `write()` is specified as durable-and-visible; the code buffers — DONE
 
-**Done Sep 18 2026**, option (i): the spec moved. [architecture.md §3](architecture.md)
+**Done Sep 18 2026**, option (i): the spec moved. [architecture.md §3](../how-it-works/architecture.md)
 now lists three deviations; a returned `write()` is client-buffered;
 durable + cross-client visible at `fsync` / last `close` / `O_SYNC`.
 `O_SYNC`/`O_DSYNC`/`-o sync` is specified write-through and is **not

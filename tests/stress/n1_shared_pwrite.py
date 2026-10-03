@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""W1 N-1 shared-file repro (START-HERE).
+"""W1 N-1 shared-file repro (docs/archive/project-history.md, "START-HERE closed items").
 
 Two clients concurrently pwrite disjoint 4 KiB ranges that share 128 KiB
 chunks, fsync after each write. A third client remounts and counts 4 KiB

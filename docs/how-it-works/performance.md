@@ -1,9 +1,9 @@
 # Performance — the multi-Raft runtime and the hot-path contract
 
-[Architecture](../architecture.md) · [Data protocol](protocols/data.md) ·
+[Architecture](architecture.md) · [Data protocol](protocols/data.md) ·
 [Verification](verification.md)
 
-The topology in [the spec](../architecture.md) makes linear scaling
+The topology in [the spec](architecture.md) makes linear scaling
 *possible*. This document is the contract that makes it *actual* — the
 difference between "the architecture scales" and "the implementation
 scales." Each item is a requirement, traceable to P1/P4, not a tuning

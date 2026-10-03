@@ -11,7 +11,7 @@ the per-shard-tab floor sat above the cap, so after the row LRU the
 evictor now drops whole cold tabs whose every ino passes the pin rules
 (`src/client/stage_evict.c`, `evict_cold_tabs`); readers peek and do not
 rebuild a dropped tab. Where this doc and the spec
-([architecture.md](architecture.md)) disagree, the spec wins.
+([architecture.md](../../how-it-works/architecture.md)) disagree, the spec wins.
 
 The other three parts of step 12 have landed: low-level (inode-based) FUSE
 (part B), exact self-invalidation with timeouts still 0 (part C), and

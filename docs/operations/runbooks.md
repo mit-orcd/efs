@@ -10,7 +10,7 @@ remount them plain afterwards.
 
 **Status (Oct 1 2026):** the items these runbooks were written for (W4,
 W6 residuals, W7, W8, W11) are closed; their closing numbers are quoted
-inline below and in START-HERE §1a. The scripts remain the way to
+inline below and in [the status page §1a](../status/README.md). The scripts remain the way to
 remeasure the same thing after a change — run the same script, compare
 against the number here. Every script's pre-flight prints the running
 build; pass `--expect-build <id>` to `tests/preflight.sh` to make it refuse
@@ -51,7 +51,7 @@ call.
    for a measurement. Never start a daemon under strace/perf; attach to
    the running one (the scripts do).
 6. **Deliverable = `SUMMARY.txt` + the raw files, committed under
-   `results/measure/`, plus 3–6 lines in START-HERE §1b progress log** saying
+   `results/measure/`, plus 3–6 lines in [in-flight.md](../status/in-flight.md) progress log** saying
    what the number is and what it rules in or out. Do **not** change the
    protocol, the backoff, the budgets, or build a feature from the finding:
    each runbook says what the decision is and that it is the user's.
@@ -145,7 +145,7 @@ of the group leader during the parallel phase to see whether it is the KV
 scan, the apply pump or the socket path.
 
 **Hand back.** The table, the slope, and the parallel line. The spec
-answer is §8 per-lane range fetch (`docs/arch/performance.md`), not
+answer is §8 per-lane range fetch (`docs/how-it-works/performance.md`), not
 implemented — the user decides whether to build it. Do not implement it
 as part of this runbook.
 
@@ -301,7 +301,7 @@ question; do not wipe.
 
 ## 9. After a runbook
 
-- `git add results/measure/<dir>` and commit it with the START-HERE §1b
+- `git add results/measure/<dir>` and commit it with the [in-flight.md](../status/in-flight.md)
   progress-log lines (newest first) and, if a fact changed, the one line in
   `.cursor/rules/efs-project-state.mdc`.
 - Clients you remounted with `EFS_RPC_PROF=1` are remounted plain by the

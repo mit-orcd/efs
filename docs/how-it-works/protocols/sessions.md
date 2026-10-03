@@ -1,6 +1,6 @@
 # Client sessions, fencing, open-unlinked files, and POSIX locking
 
-[Architecture](../../architecture.md) · [Transactions](transactions.md) ·
+[Architecture](../architecture.md) · [Transactions](transactions.md) ·
 [Data protocol](data.md)
 
 These four mechanisms share one foundation: a real client-session protocol.
@@ -153,7 +153,7 @@ by the client's allowed in-flight depth.
 
 **Reclamation is driven by acknowledgement, not by elapsed time.** The
 failure model allows a message to be delayed arbitrarily and duplicated
-([the spec §2](../../architecture.md)), so no timer can *prove* that a
+([the spec §2](../architecture.md)), so no timer can *prove* that a
 straggler will not arrive — a "retention window" would be an assumption the
 network never agreed to. The client instead carries a **response-ack
 watermark**: the **highest *contiguous*** sequence number whose reply it has

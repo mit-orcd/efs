@@ -1,7 +1,7 @@
 # Testing and profiling
 
-[Quick start](../README.md#quick-start) · [Operations](operations.md) ·
-[What to work on](arch/START-HERE.md) · [Verification plan](arch/verification.md)
+[Quick start](../../README.md#quick-start) · [Operations](../operations/operations.md) ·
+[What to work on](../status/README.md) · [Verification plan](verification.md)
 
 ## `make test`
 
@@ -48,7 +48,7 @@ every reading client. A `time_based` fio with `--direct=1` skips the kernel
 page cache but not the client's userspace dcache, so its write column is
 memory bandwidth. Method and the number history live in
 `.cursor/rules/efs-fio-honest.mdc`; the current references are in
-START-HERE §1a ("Baselines"). `tests/stress/fio_honest_matrix.sh` is the
+[the status page §1a](../status/README.md) ("Baselines"). `tests/stress/fio_honest_matrix.sh` is the
 fio form; `tests/measure/*.sh` hold the dd and IOR runbooks.
 
 Before every number: `findmnt -o FSTYPE /tmp/efs-mount` must print

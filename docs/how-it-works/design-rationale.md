@@ -1,10 +1,10 @@
 # Design rationale — why the theory holds up
 
-[Architecture](../architecture.md) · [Design history](design-history.md) ·
+[Architecture](architecture.md) · [Design history](../archive/design-history.md) ·
 [Naming](naming.md)
 
 This is the rationale document: why the architecture in
-[../architecture.md](../architecture.md) has the shape it has, what is
+[architecture.md](architecture.md) has the shape it has, what is
 claimed and what is not, and what was deliberately rejected. The spec itself
 is normative; this file argues for it.
 
@@ -96,7 +96,7 @@ POSIX namespace
 
 And the principles that tie it together — the things that, if we execute
 them, are the actual contribution
-([§0 of the spec](../architecture.md)):
+([§0 of the spec](architecture.md)):
 
 > **P1 · Never serialize work that the semantics and the hardware allow to
 > happen in parallel.**
@@ -194,7 +194,7 @@ namespace-as-database minimalism — is where the design earns an identity.
 - **Client-side metadata caching for correctness.** Caches may exist for
   performance but are never authoritative (and the kernel cache is actively
   invalidated — see the FUSE contract in
-  [../architecture.md](../architecture.md)).
+  [architecture.md](architecture.md)).
 - **Kernel module.** Stay on FUSE; the low-level (inode-based) FUSE API
   migration is a separate, orthogonal client rewrite.
 - **Clock-based leader leases on the authoritative read path.** Clocks are

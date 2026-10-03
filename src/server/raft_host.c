@@ -1446,7 +1446,7 @@ static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
      * ring-only in host_apply, so a failed apply never halts the log).
      * Before, every failure became OK: a lane holding more than the
      * TRUNC_IT_CAP 32 chunk DELs returned NOMEM, the row kept its size,
-     * and `truncate -s 0` of a big file reported success (START-HERE
+     * and `truncate -s 0` of a big file reported success (docs/status/README.md
      * W43). Now the SETATTR answers EIO (W16 mapping) until D25 decides
      * the multi-entry shape. NOT_FOUND (row gone after the leader's
      * pre-read) is ENOENT; STALE cannot occur (expect_gen = 0). */
