@@ -4134,6 +4134,24 @@ static void efs_fuse_init(void *userdata, struct fuse_conn_info *conn)
                 conn->want &= ~FUSE_CAP_SPLICE_READ;
         }
 #endif
+#ifdef FUSE_CAP_EXPORT_SUPPORT
+        /* NFS re-export of an efs mount (e.g. a gateway VM exporting to
+         * clients that only speak NFS) needs the kernel to build file
+         * handles via fs/fuse/export.c, which requires this cap. libfuse
+         * keeps the nodeid->(parent,name) table, so by-handle lookups ride
+         * the normal lookup/forget path. Handles do not survive an
+         * efs-fuse restart. Off by default; EFS_FUSE_EXPORT=1 at mount
+         * time enables it. */
+        {
+            const char *ex = getenv("EFS_FUSE_EXPORT");
+
+            if (ex && *ex && strcmp(ex, "0") != 0 &&
+                (conn->capable & FUSE_CAP_EXPORT_SUPPORT))
+                conn->want |= FUSE_CAP_EXPORT_SUPPORT;
+            else
+                conn->want &= ~FUSE_CAP_EXPORT_SUPPORT;
+        }
+#endif
         if (conn->congestion_threshold < 96)
             conn->congestion_threshold = 96;
     }
