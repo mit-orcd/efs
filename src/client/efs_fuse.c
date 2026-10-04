@@ -3017,7 +3017,8 @@ static int fuse_create_errno(efs_ino_t parent, const char *name)
 }
 
 static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
-                              mode_t mode, struct fuse_file_info *fi)
+                              mode_t mode, struct fuse_file_info *fi,
+                              efs_ino_t *out_ino)
 {
     struct efs_inode parent;
     int rc;
@@ -3084,6 +3085,8 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
         if (!noted)
             (void)efs_open_note(ino);
     }
+    if (out_ino)
+        *out_ino = ino;
     return 0;
 }
 
@@ -4945,13 +4948,41 @@ static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
+/* nfsd creates through vfs_create, which the FUSE kernel module turns
+ * into FUSE_MKNOD, not FUSE_CREATE (only open(O_CREAT) uses the atomic
+ * create). With no .mknod handler libfuse replied ENOSYS and the NFS
+ * client saw EIO for every create. Regular files reuse the create path;
+ * there is no open here, so no fh/open-note bookkeeping. */
+static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
+                     mode_t mode, dev_t rdev)
+{
+    efs_ino_t new_ino = 0;
+    struct fuse_entry_param e;
+    int rc;
+    (void)rdev;
+    t_req = req;
+    if (!S_ISREG(mode))
+        rc = -EPERM;
+    else {
+        rc = efs_fuse_create_at(parent, name, mode, NULL, &new_ino);
+        if (rc == 0)
+            rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "mknod",
+                                       parent, name);
+    }
+    t_req = NULL;
+    if (rc)
+        fuse_reply_err(req, -rc);
+    else
+        fuse_reply_entry(req, &e);
+}
+
 static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
                       mode_t mode, struct fuse_file_info *fi)
 {
     struct fuse_entry_param e;
     int rc;
     t_req = req;
-    rc = efs_fuse_create_at(parent, name, mode, fi);
+    rc = efs_fuse_create_at(parent, name, mode, fi, NULL);
     if (rc == 0)
         rc = lookup_fill(fi ? (fuse_ino_t)fi->fh : 0, &e, fi);
     t_req = NULL;
@@ -5137,6 +5168,7 @@ static const struct fuse_lowlevel_ops efs_ll_ops = {
     .getattr = ll_getattr,
     .setattr = ll_setattr,
     .readlink = ll_readlink,
+    .mknod = ll_mknod,
     .mkdir = ll_mkdir,
     .unlink = ll_unlink,
     .rmdir = ll_rmdir,
