@@ -8,6 +8,7 @@
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
 #include "efs/txn.h"
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -3154,6 +3155,85 @@ int efs_meta_unpack_reap(const uint8_t *p, uint32_t n, uint64_t *generation,
     return EFS_OK;
 }
 
+/* D26: per-anchor pending-GC watermark (anchors are 1 = odd group,
+ * 2 = even group; efs_kv_anchor_shard). Bumped in gc_queue, lowered in
+ * gc_ack_apply, both inside the record's own apply. Unknown until the
+ * GC thread derives it from one prefix scan (process start, snapshot
+ * import); while unknown, inserts accumulate in gc_wm_pos and lowers are
+ * dropped — the derive recounts live keys, so a dropped lower lands in
+ * the count or not at all, never twice, and a folded insert may double
+ * (upward only: an extra bounded scan, never a missed record). */
+#define GC_WM_ANCHOR_MAX 2
+
+static pthread_mutex_t gc_wm_mu = PTHREAD_MUTEX_INITIALIZER;
+static int64_t gc_wm_pending[GC_WM_ANCHOR_MAX + 1];
+static int64_t gc_wm_pos[GC_WM_ANCHOR_MAX + 1];
+static int gc_wm_known[GC_WM_ANCHOR_MAX + 1];
+
+void efs_meta_gc_pending_note(uint32_t anchor, int delta)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&gc_wm_mu);
+    if (gc_wm_known[anchor]) {
+        gc_wm_pending[anchor] += delta;
+        if (gc_wm_pending[anchor] < 0)
+            gc_wm_pending[anchor] = 0;
+    } else if (delta > 0) {
+        gc_wm_pos[anchor] += delta;
+    }
+    pthread_mutex_unlock(&gc_wm_mu);
+}
+
+int64_t efs_meta_gc_pending_peek(uint32_t anchor)
+{
+    int64_t r;
+
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return 0;
+    pthread_mutex_lock(&gc_wm_mu);
+    r = gc_wm_known[anchor] ? gc_wm_pending[anchor] : -1;
+    pthread_mutex_unlock(&gc_wm_mu);
+    return r;
+}
+
+void efs_meta_gc_pending_derived(uint32_t anchor, uint64_t n)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&gc_wm_mu);
+    gc_wm_pending[anchor] = (int64_t)n + gc_wm_pos[anchor];
+    gc_wm_pos[anchor] = 0;
+    gc_wm_known[anchor] = 1;
+    pthread_mutex_unlock(&gc_wm_mu);
+}
+
+void efs_meta_gc_pending_invalidate(uint32_t anchor)
+{
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return;
+    pthread_mutex_lock(&gc_wm_mu);
+    gc_wm_known[anchor] = 0;
+    gc_wm_pending[anchor] = 0;
+    gc_wm_pos[anchor] = 0;
+    pthread_mutex_unlock(&gc_wm_mu);
+}
+
+int efs_meta_gc_pending_zero_if(uint32_t anchor, int64_t expect)
+{
+    int ok = 0;
+
+    if (anchor == 0 || anchor > GC_WM_ANCHOR_MAX)
+        return 0;
+    pthread_mutex_lock(&gc_wm_mu);
+    if (gc_wm_known[anchor] && gc_wm_pending[anchor] == expect) {
+        gc_wm_pending[anchor] = 0;
+        ok = 1;
+    }
+    pthread_mutex_unlock(&gc_wm_mu);
+    return ok;
+}
+
 /* Queue one GC record for a dead chunk generation. The record lands on the
  * anchor shard of the chunk's lane shard, so the reaper scans one prefix
  * per group. gc_keys/gc_vals are caller storage indexed by the global item
@@ -3164,13 +3244,13 @@ static int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
                     efs_ino_t ino, uint8_t lane, uint32_t ci,
                     const struct efs_meta_chunk *dead)
 {
-    uint32_t kg = 0;
+    uint32_t kg = 0, anch;
     int rc;
 
     if (*n >= cap)
         return EFS_ERR_NOMEM;
-    rc = efs_kv_key_gc(efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane)),
-                       ino, dead->generation, lane, ci,
+    anch = efs_kv_anchor_shard(efs_kv_lane_shard(ino, lane));
+    rc = efs_kv_key_gc(anch, ino, dead->generation, lane, ci,
                        gc_keys[*n], &kg);
     if (rc != EFS_OK)
         return rc;
@@ -3181,6 +3261,9 @@ static int gc_queue(struct efs_kv_item *it, uint32_t *n, uint32_t cap,
     it[*n].val = gc_vals[*n];
     it[*n].vlen = EFS_META_GC_VAL;
     (*n)++;
+    /* The bump is at queue time, not batch commit: a failed apply drifts
+     * the watermark upward (an extra bounded scan), never downward. */
+    efs_meta_gc_pending_note(anch, 1);
     return EFS_OK;
 }
 
@@ -4167,7 +4250,18 @@ static int gc_ack_apply(struct efs_kv *kv, const struct efs_gc_ack_item *it,
     }
     if (bn == 0)
         return EFS_OK;
-    return efs_kv_batch(kv, batch, bn);
+    rc = efs_kv_batch(kv, batch, bn);
+    if (rc != EFS_OK)
+        return rc;
+    /* A retired record lowers its anchor's pending-GC watermark (D26).
+     * The anchor is the key's shard field; replays skipped above never
+     * reach here, so each retirement lowers exactly once. */
+    for (i = 0; i < bn; i++) {
+        if (retired[i])
+            efs_meta_gc_pending_note(
+                ((uint32_t)batch[i].key[0] << 8) | batch[i].key[1], -1);
+    }
+    return EFS_OK;
 }
 
 /* Reads a lane's sequence number. Absent is seq 0, which is a real value:

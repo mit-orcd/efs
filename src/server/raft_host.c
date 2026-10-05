@@ -2292,6 +2292,9 @@ static void snap_import_cancel(struct efs_raft_host *h, struct host_group *g)
     st = g->import_state;
     g->import_gen++;
     g->import_state = SNAP_IMP_IDLE;
+    /* A cancelled import may have applied slices already: the watermark
+     * no longer tracks this anchor's GC records (D26). */
+    efs_meta_gc_pending_invalidate(g->group == 0 ? 1u : 2u);
     /* RUN: the GC thread owns the buffers. APPLY: the pump is mid-slice
      * and frees them when it notices the state left APPLY. */
     if (st != SNAP_IMP_RUN && !g->import_applying)
@@ -2362,6 +2365,9 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
         g->part_off = 0;
         g->import_state = SNAP_IMP_IDLE;
         snap_import_free_diff(g);
+        /* The diff replaced this group's keyspace — the pending-GC
+         * watermark is re-derived on the next pass (D26). */
+        efs_meta_gc_pending_invalidate(g->group == 0 ? 1u : 2u);
         pthread_mutex_unlock(&h->snap_mu);
         unlink(g->part_path);
         __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
@@ -2370,6 +2376,7 @@ static int snap_import_poll(struct efs_raft_host *h, struct host_group *g,
     }
     *rc = g->import_rc ? g->import_rc : EFS_ERR_IO;
     g->import_state = SNAP_IMP_IDLE;
+    efs_meta_gc_pending_invalidate(g->group == 0 ? 1u : 2u);
     __atomic_store_n(&g->import_block, 0, __ATOMIC_RELEASE);
     pthread_mutex_unlock(&h->snap_mu);
     return 1;
@@ -5586,6 +5593,20 @@ static int gc_scan_cb(void *user, const uint8_t *key, uint32_t klen,
     return 0;
 }
 
+/* D26: derive the pending-GC watermark — count the live records under
+ * one anchor's prefix, once per recovery/import. */
+static int gc_count_cb(void *user, const uint8_t *key, uint32_t klen,
+                       const uint8_t *val, uint32_t vlen)
+{
+    uint64_t *n = user;
+
+    (void)key;
+    (void)val;
+    if (klen == GC_KEY_LEN && vlen >= EFS_META_GC_VAL)
+        (*n)++;
+    return 0;
+}
+
 struct reap_scan_ctx {
     int n;
     int full;
@@ -6226,6 +6247,7 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     uint8_t prefix[3];
     uint32_t plen = 0;
     uint64_t t0 = now_us_();
+    int64_t pend;
     int nack = 0, scans = 0, recs = 0;
     int i;
 
@@ -6234,6 +6256,26 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
     prc = efs_kv_key_gc_prefix(anchor, prefix, &plen);
     if (prc != EFS_OK)
         return;
+    /* D26: the pending-GC watermark gates the scan. Unknown (process
+     * start, snapshot import): derive it once by counting the prefix.
+     * Zero: nothing to collect — an empty pass is this peek, no scan. */
+    pend = efs_meta_gc_pending_peek(anchor);
+    if (pend < 0) {
+        uint64_t n = 0;
+
+        src = efs_kv_scan_prefix(h->kv, prefix, plen, gc_count_cb, &n);
+        if (src < 0)
+            return;
+        efs_meta_gc_pending_derived(anchor, n);
+        pend = efs_meta_gc_pending_peek(anchor);
+        if (env_on("EFS_GC_DBG"))
+            fprintf(stderr, "raft-host: gc watermark group=%u anchor=%u derived=%llu\n",
+                    group, anchor, (unsigned long long)n);
+    }
+    if (pend == 0) {
+        g_gc_cur_len[gc_gi(group)] = 0;
+        return;
+    }
     for (;;) {
         int gi = gc_gi(group);
         int wrapped = 0;
@@ -6265,8 +6307,20 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
                 g_gc_cur_len[gi] = 0;
                 wrapped = 1;
             }
-            if (!wrapped || !h->gc_running)
+            if (!wrapped || !h->gc_running) {
+                /* An empty scan that started at the prefix head covers
+                 * the anchor; if a wrap preceded it the pair covered it
+                 * too. Nothing was emitted either way, so a drifted
+                 * watermark (derives only ever overshoot) clamps back to
+                 * zero and the next pass is a peek. A note that raced
+                 * the scans changed the count and zero_if declines. */
+                if (!recs && h->gc_running &&
+                    efs_meta_gc_pending_zero_if(anchor, pend) &&
+                    env_on("EFS_GC_DBG"))
+                    fprintf(stderr, "raft-host: gc watermark group=%u anchor=%u drained\n",
+                            group, anchor);
                 break;
+            }
             continue;
         }
         if (!ex)

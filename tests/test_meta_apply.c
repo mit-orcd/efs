@@ -3463,6 +3463,117 @@ static void test_gc_tail_alias(void)
     efs_kv_mem_free(kv);
 }
 
+/* D26: the pending-GC watermark tracks records through insert (publish
+ * supersede, lane sweep) and removal (GC_ACK retire), folds inserts that
+ * land while unknown into the derive (upward only, never undercounts),
+ * and clamps back to zero via zero_if only when nothing raced. */
+static int wm_count_cb(void *user, const uint8_t *key, uint32_t klen,
+                       const uint8_t *val, uint32_t vlen)
+{
+    uint64_t *n = user;
+
+    (void)key;
+    (void)val;
+    if (klen == 24 && vlen >= EFS_META_GC_VAL)
+        (*n)++;
+    return 0;
+}
+
+static uint64_t wm_count_anchor(struct efs_kv *kv, uint32_t anch)
+{
+    uint8_t pre[EFS_KV_KEY_MAX];
+    uint32_t plen = 0;
+    uint64_t n = 0;
+
+    if (efs_kv_key_gc_prefix(anch, pre, &plen) != EFS_OK)
+        return UINT64_MAX;
+    if (efs_kv_scan_prefix(kv, pre, plen, wm_count_cb, &n) != EFS_OK)
+        return UINT64_MAX;
+    return n;
+}
+
+static void test_gc_watermark(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row r;
+    struct efs_gc_ack_item ack;
+    efs_ino_t ino = 0;
+    uint64_t gen = 0;
+    uint32_t anch;
+    int64_t p0;
+    int i;
+
+    CHECK(kv != NULL, "kv");
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "wm", &ino) == EFS_OK && ino, "create");
+    anch = efs_kv_anchor_shard(efs_kv_lane_shard(ino, 0));
+
+    /* Unknown (post-recovery/import) state: inserts accumulate out of
+     * sight of a peek until the derive folds them in. */
+    efs_meta_gc_pending_invalidate(anch);
+    CHECK(efs_meta_gc_pending_peek(anch) < 0, "unknown after invalidate");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xF1, 0, T0 + 1, "pub0");
+    CHECK(efs_meta_gc_pending_peek(anch) < 0, "first publish queues no GC");
+    {
+        struct efs_meta_chunk newc;
+
+        fill_ch(&newc);
+        for (i = 0; i < EFS_NUM_FRAGMENTS; i++)
+            newc.checksums[i][0] = (uint8_t)(0x60 + i);
+        pub_ch(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0xF2, 0xF1, T0 + 2, &newc,
+               "re-pub0");
+    }
+    CHECK(efs_meta_gc_pending_peek(anch) < 0, "bump while unknown stays hidden");
+    CHECK(wm_count_anchor(kv, anch) == 1, "scan sees the superseded record");
+    efs_meta_gc_pending_derived(anch, 1);
+    p0 = efs_meta_gc_pending_peek(anch);
+    /* The scan counted the record and the fold adds the queued bump:
+     * upward only, never undercounts. */
+    CHECK(p0 == 2, "insert while unknown folds into the derive");
+
+    /* A partial ack keeps the record and the watermark; retiring lowers.
+     * A replayed ack is a no-op for the count. */
+    memset(&ack, 0, sizeof(ack));
+    ack.ino = ino;
+    ack.gen = 0xF1;
+    ack.lane = 0;
+    ack.ci = 0;
+    ack.frag = 0;
+    CHECK(efs_meta_apply_gc_ack(kv, &ack, 1) == EFS_OK, "ack 1");
+    CHECK(efs_meta_gc_pending_peek(anch) == p0, "partial ack keeps count");
+    ack.frag = 1;
+    CHECK(efs_meta_apply_gc_ack(kv, &ack, 1) == EFS_OK, "ack 2");
+    ack.frag = 2;
+    CHECK(efs_meta_apply_gc_ack(kv, &ack, 1) == EFS_OK, "ack 3");
+    CHECK(wm_count_anchor(kv, anch) == 0, "record retired");
+    CHECK(efs_meta_gc_pending_peek(anch) == p0 - 1, "retire lowers");
+    CHECK(efs_meta_apply_gc_ack(kv, &ack, 1) == EFS_OK, "ack replay");
+    CHECK(efs_meta_gc_pending_peek(anch) == p0 - 1, "replay keeps count");
+
+    /* Lane sweep bumps per swept record; its acks lower. */
+    CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK, "row pre-unlink");
+    gen = r.generation;
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "wm", T0 + 3) == EFS_OK,
+          "unlink");
+    CHECK(efs_meta_apply_lane_sweep(kv, ino, gen, 0) == EFS_OK, "sweep");
+    CHECK(efs_meta_gc_pending_peek(anch) == p0, "sweep bumps one");
+    gc_ack_all(kv, ino, 0xF2, 0, 0, "ack swept");
+    CHECK(efs_meta_gc_pending_peek(anch) == p0 - 1, "ack lowers again");
+    CHECK(wm_count_anchor(kv, anch) == 0, "drained");
+
+    /* Upward drift clamps only when a full pass found nothing and no
+     * note raced it (a stale expect fails). */
+    efs_meta_gc_pending_note(anch, 1); /* counted, nothing live */
+    CHECK(efs_meta_gc_pending_zero_if(anch, p0 - 1) == 0,
+          "stale expect fails");
+    CHECK(efs_meta_gc_pending_zero_if(anch, p0) == 1, "zeroed");
+    CHECK(efs_meta_gc_pending_peek(anch) == 0, "empty pass is a peek");
+
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
+    efs_kv_mem_free(kv);
+}
+
 static void test_xattr(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -3582,6 +3693,7 @@ int main(void)
     test_gc_reap();
     test_gc_tail_alias();
     test_gc_tail_alias();
+    test_gc_watermark();
     if (failures) {
         fprintf(stderr, "test_meta_apply: %d failure(s)\n", failures);
         return 1;

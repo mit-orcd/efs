@@ -578,6 +578,24 @@ struct efs_gc_ack_item {
 int efs_meta_apply_gc_ack(struct efs_kv *kv, const struct efs_gc_ack_item *it,
                           uint32_t n);
 
+/* D26: per-anchor pending-GC watermark. The apply bumps it where a GC
+ * record is queued (gc_queue) and lowers it where one retires
+ * (gc_ack_apply), so the leader's frag pass costs one peek when the
+ * anchor has nothing to collect instead of a full prefix scan. The count
+ * is in-memory and starts unknown (-1 from peek): the GC thread derives
+ * it once from a prefix scan (recovery, snapshot import) and the apply
+ * keeps it in step from then on. Deltas while unknown accumulate so the
+ * derive can fold them in; a drift is only ever upward (an extra bounded
+ * scan), never below the live record count. */
+void efs_meta_gc_pending_note(uint32_t anchor, int delta);
+int64_t efs_meta_gc_pending_peek(uint32_t anchor);
+void efs_meta_gc_pending_derived(uint32_t anchor, uint64_t n);
+void efs_meta_gc_pending_invalidate(uint32_t anchor);
+/* Clamp an upward drift: the GC thread calls this after a pass scanned
+ * the anchor's whole prefix and found nothing. Fails (returns 0) if a
+ * note raced the scans, so a live record is never zeroed away. */
+int efs_meta_gc_pending_zero_if(uint32_t anchor, int64_t expect);
+
 /* O_APPEND: serialized EOF reservation on the inode shard, then ordinary
  * distributed publish. `op` is required (I16: a retried reserve must recover
  * the same offset). `coord` is the same getattr collect so pending reductions
