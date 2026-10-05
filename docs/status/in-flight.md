@@ -113,8 +113,8 @@ clean on `111a07527093`) is below as history; W50:
    why=recv rc=-6 recv_ms=30312`), it resends byte-identical, the server
    packs again (`skip=all`), dd prints `fsync: I/O error`; the published
    size lags (completed prefix) and converges later. ~5 ms per O_APPEND
-   write. Fix shape is a question (batch the resolves into one
-   proposal? resolve asynchronously after the reply?) — not decided.
+   write. Fix shape DECIDED Oct 5 (user): shape A — batch the resolves
+   into one proposal before the reply (not resolve-after-reply).
 4. **P2.1 W50 CLOSED 14:57Z** as not a stuck-delete set: with a RAM
    export, 30 s of `EFS_GC_DBG` on both leaders had every `gc del` rc=0,
    every `gc ack flush` rc=0, 0 apply-gc-ack failures, and 0
@@ -131,7 +131,8 @@ clean on `111a07527093`) is below as history; W50:
    emitted key) is in `raft_host.c` unrolled; the apply-batch watermark
    (insert +1 / retire −1, re-derive on GET miss) is still to land.
    Then P2.3 W23 stalled-compactor test on the private 3-node cluster.
-   Then P3 benches. Asks unchanged: D28, D29, D30, W53, W52.
+   Then P3 benches. Asks unchanged: D28, D29, D30, W53. W52's shape
+   decided Oct 5 (A: one batched proposal).
 7. **Hint — the next performance package (20:15Z, from the 19:22–19:52Z
    profile; after 0i/0j):** run **P3 `efsd --bench` first** (no
    cluster, one day), because today's data already says what it will

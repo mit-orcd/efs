@@ -2013,13 +2013,13 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ## W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
-**W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s — NEW Oct 2 13:45Z (both builds; fix shape is a question)**
+**W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s — NEW Oct 2 13:45Z (both builds); DECIDED Oct 5 2026 (user): fix shape A — one batched proposal for all caught-up reservations before the reply**
 
 **What.** `host_resolve_caught_up` (raft_host.c, after the `report-split` line, before `set_inode_rc`) runs one serial `host_propose_wait` per OPEN reservation at/below the published size — N appends = N proposals before the reply. Client: `inode-rpc: retry type=67 why=recv rc=-6 recv_ms=30312`, byte-identical resend, server `skip=all`, dd `fsync: I/O error`; the published size lags (completed prefix) then converges. ~5 ms per O_APPEND write. fcstor004 `report-split nrec=1133` 06:03:30Z then `skip=1133` 06:04:01Z (old build); `nrec=625` ×3 at 06:06:45/07:15/07:46Z (P1 build) — `results/measure/20261002-060052-p1-d23-w41/SUMMARY.txt` §5
 
 **Effort.** medium
 
-**Gate.** bring the shape to the user (one proposal for all caught-up reservations? resolve after the reply?); gate = `tests/measure/append_gate` 20 000 × 4 KiB O_APPEND then fsync returns 0 and the size is exact. Forbidden: widening the client's REPORT timeout
+**Gate.** the shape question was brought to the user Oct 5 2026 — decided: **shape A, batch all caught-up reservations into one raft proposal before the REPORT reply** (not per-reservation serial `host_propose_wait`, not resolve-after-reply); gate = `tests/measure/append_gate` 20 000 × 4 KiB O_APPEND then fsync returns 0 and the size is exact. Forbidden: widening the client's REPORT timeout
 
 
 ## W53 · W41's create/close-storm tail under concurrent big writers — INVESTIGATE (plan row 16)

@@ -867,7 +867,8 @@ it by date / `results/` dir / symptom before re-deriving a root cause.
  client's recv timeout resends byte-identical (`retry type=67
  why=recv rc=-6`, server `skip=all`), dd prints `fsync: I/O error`;
  the size lags (completed prefix) and converges. Not a data-loss
- class; the fix shape is a question.
+ class; fix shape DECIDED Oct 5 (user): shape A — one batched
+ proposal for all caught-up reservations before the reply.
 - **`EFS_NO_BUILD=1 deploy_fuse_clients.sh` remounts the EXISTING
  `/tmp/efs/efs-fuse`** — it does not pick up a new tree. A `perf
  report` that shows `efsd (deleted)` after a `--clients` roll is the
