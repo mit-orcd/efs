@@ -1,0 +1,7 @@
+Filesystem     1K-blocks    Used Available Use% Mounted on
+/dev/vda3       18403808 1538268  16460900   9% /var
+tmpfs            1476672  463588   1013084  32% /tmp
+               total        used        free      shared  buff/cache   available
+Mem:            2884         982         790         456        1723        1901
+Swap:           2883           0        2883
+main-cluster efsd up (untouched)

@@ -1,0 +1,79 @@
+W23 / P2.3 — stalled-compactor test — 20261005-014440 — SETUP ONLY, no measurement
+
+State: the test and its fault hook are written and built; the measurement
+run itself did not complete. No numbers exist yet. What this directory
+holds is the evidence of how far the run got.
+
+What is in the tree (Oct 4/5 2026, uncommitted, no commits made):
+
+- `src/kv/kv_compact.c` — the W23 fault hook, compiled only with
+  `-DEFS_FAULTS=1` (built via `make EXTRA_DEFS=-DEFS_FAULTS=1`): a
+  process started with `EFS_FAULT_COMPACT_STALL=1` parks its compactor at
+  the top of `compactor_main`'s loop, between iterations, holding neither
+  `l->mu` nor a pinned view, while `/tmp/efs/fault` exists. Memtable
+  flushes to L0 continue; only the L0->L1 and D12/D13 L0->L0 merges stop.
+  It logs `kv-fault: compactor parked` / `kv-fault: compactor released`;
+  removing the file releases the compactor. Poll cadence 100 ms;
+  `compact_stop` is honoured while parked. `strings` gate: the hook is in
+  the faults binary and NOT in the normal build (faults-build.txt:
+  FAULTS_STR=1 NORMAL_STR=0).
+- `src/kv/kv_lsm.c` + `include/efs/kv_lsm.h` — `efs_kv_lsm_stats()`
+  (mt_bytes, l0_bytes, n_l0, n_l1 snapshot), following the
+  `efs_kv_lsm_sync_hold` guard pattern.
+- `src/server/raft_host.c` — a `kv-obs: mt_bytes= l0_bytes= l0= l1=` line
+  printed from the raft pump next to `efs_iostats_dump`, always-on (like
+  iostats), one line per ~5 s while any of the four numbers moved; idle
+  tables print once and stay quiet. This is what the sampler scrapes for
+  memtable bytes and n_l0 per node.
+- `tests/measure/w23_stalled_compactor.sh` — the test. Private 3-node
+  cluster on ONE dev-cluster VM (tests/rdma_first_inode.sh layout, ports
+  19550-19552, TCP, scratch storage under /var/tmp), one FUSE client, dd
+  bs=1M conv=fsync of a non-zero source to fresh 256 MiB files. Nodes 1+2
+  start and raft-mkfs first so node 3 (EFS_FAULT_COMPACT_STALL=1) joins
+  as a follower of both groups. Sampler (5 s per node): kv-obs
+  mt_bytes/l0_bytes/n_l0/n_l1, raft-obs pump_hold_max, apply-sleep and
+  kv-compact: backpressure line counts, raft-status commit-applied, RSS,
+  role. Stops at the first of the W23 text's bounds: follower
+  backpressure line, follower RSS > 2x pre-run, follower commit-applied
+  > 10000 for 30 s, the byte cap (10 GiB, lowered by a disk preflight —
+  2+1 EC puts 1.5x the logical bytes on the one VM disk; this VM had
+  16 GiB free -> cap 8.75 GiB), or 10 minutes. Then clears
+  /tmp/efs/fault and times the follower to commit == applied (> 2 min is
+  a second finding). A dd EIO/ENOSPC or a 120 s dd hang stops the run as
+  its own finding. Never touches the dev cluster's efsd (port 17432) or
+  /efs/data; kills only its own ports/mount.
+
+Gates that DID pass (Oct 5 01:44Z, dev Tart cluster):
+
+- `cluster/deploy.sh`: build on efs1 + all 16 unit suites PASS
+  (test_wire test_data test_kv test_kv_lsm test_raft_store
+  test_meta_apply test_raft test_sim test_txn test_session test_erasure
+  test_placement test_lock test_stage_evict test_conn_fd test_rdma_xprt);
+  docs gate 5/5 on the VM too.
+- `cluster/cluster.sh restart`: the 3-node dev cluster came up on the new
+  binaries with its existing table (no wipe).
+- faults-binary strings gate (faults-build.txt): hook present only in the
+  faults build.
+
+Where the run stopped (driver.log, s1.log): the driver's scratch dir was
+`/efs/w23-scratch`, and /efs on the VM is root-owned — mkdir failed with
+EACCES, node 1's efsd had no storage dir, FATAL before mkfs. No sampler
+row, no dd, no numbers. Fixed in the script after the run (scratch moved
+to /var/tmp/w23-scratch, same 18 GiB vda3 disk, admin-writable; a second
+bug in the script's own results path — tests/results/ instead of
+results/measure/ — fixed at the same time). The measurement was not
+re-run within the session timebox: BLOCKED ON TIME, not on a code or
+cluster defect. Rerun is one command:
+
+    cd ~/git/cluster && ./deploy.sh      # build + 16-suite gate
+    bash ~/git/efs/tests/measure/w23_stalled_compactor.sh
+
+The 19810 part of W23 does not apply: the W23 text places this test on a
+private 3-node cluster, which the dev Tart cluster provides; fcstor003-006
+are down and were not needed.
+
+Files here:
+- preflight.txt   VM disk/memory at run time; main-cluster efsd untouched
+- faults-build.txt  strings gate for the hook (1 in faults, 0 in normal)
+- driver.log      the driver's own log, ending in the mkdir FATAL
+- s1.log          node 1's efsd stderr tail (the same EACCES)

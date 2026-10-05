@@ -1,0 +1,43 @@
+W23 / P2.3 — stalled-compactor test — 20261005-040810
+
+Setup: private 3-node cluster on efs1 (tests/rdma_first_inode.sh
+layout, ports 19550-19552, TCP, scratch storage), one FUSE client,
+dd bs=1M conv=fsync of a non-zero source to fresh 256 MiB files.
+Node 3 (follower of both groups) ran EFS_FAULT_COMPACT_STALL=1 with
+/tmp/efs/fault present: its compactor parked between iterations;
+flushes to L0 continued, L0 merges stopped. Sampled every 5 s per
+node: kv-obs mt_bytes/l0_bytes/n_l0/n_l1, raft-obs pump_hold_max,
+apply-sleep and kv-compact: backpressure line counts, raft-status
+commit-applied, RSS.
+
+W23 stalled-compactor run (dev Tart cluster, one VM, private 3-node)
+bound=rss-2x
+written_mib=4352 files=17 wall_s=27
+node3_prerun_rss_kb=12248
+recovered=1 recovery_s=0
+bytes_cap_mib=8704 time_cap_s=600
+
+node1 peak_mt_bytes=4184596 peak_l0_bytes=30316 peak_n_l0=0 peak_rss_kb=48 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
+node2 peak_mt_bytes=4184596 peak_l0_bytes=25936 peak_n_l0=0 peak_rss_kb=1 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
+node3 peak_mt_bytes=3758884 peak_l0_bytes=25624 peak_n_l0=0 peak_rss_kb=0 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
+
+## Interpretation (added after the run)
+
+- bound=rss-2x fired at 4352 MiB / 27 s, but the healthy nodes' KV
+  counters grew identically (node1 l0_bytes 4180->30316, node3
+  3904->24200; mt_bytes ~4 MB everywhere; n_l0=0 on ALL nodes) — the
+  2x-pre-run stop is a calibration artifact of a small VM, not
+  stalled-merge growth.
+- No stall-specific effect up to 4.35 GiB: lag_max=0, no apply-sleep,
+  no backpressure, recovery instant (recovery_s=0). With these flush
+  sizes n_l0 never left 0 — merges were never needed, so "compactor
+  stalled" was indistinguishable from "compactor idle".
+- Hook fix this run needed: the parked check only ran after a compactor
+  wake, so an idle compactor never noticed the fault file; the
+  EFS_FAULTS build now wakes the wait every 100 ms while armed
+  (kv_compact.c, faults builds only).
+- Known defect: the sampler's RSS column under-reads nodes 2/3
+  (pid_of in the background sampler; the foreground bound loop read
+  node3 fine). Next refinement: differential RSS bound (node3 vs
+  max(leaders)) and a pre-stall phase that forces n_l0 > 0 so the
+  stall actually bites.

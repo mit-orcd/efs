@@ -1,0 +1,23 @@
+[driver 04:06:32] free=16065 MiB -> BYTES_CAP=8704 MiB TIME_CAP=600s
+[driver 04:06:34] node3 initial raft-status:
+node 3 root=1 salt=12847282735202439865 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=1 commit=2 applied=2 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=0 term=1 commit=2 applied=2 voters=0x7 joint=0
+[driver 04:06:36] pre-run: node3 RSS 3988 kB; arming the fault
+[driver 04:06:36] node 3 compactor parked; starting the dd loop
+[driver 04:06:37] STOP bound=rss-2x written_mib=256 files=1 wall_s=1
+[driver 04:06:37] compactor released flag=1; waiting for commit==applied on node 3
+[driver 04:06:37] recovery: recovered=1 after 0s
+node1 peak_mt_bytes=420175 peak_l0_bytes=13024 peak_n_l0=0 peak_rss_kb=9 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
+node2 peak_mt_bytes=420175 peak_l0_bytes=11428 peak_n_l0=0 peak_rss_kb=0 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
+node3 peak_mt_bytes=420175 peak_l0_bytes=11352 peak_n_l0=0 peak_rss_kb=0 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
+W23 stalled-compactor run (dev Tart cluster, one VM, private 3-node)
+bound=rss-2x
+written_mib=256 files=1 wall_s=1
+node3_prerun_rss_kb=3988
+recovered=1 recovery_s=0
+bytes_cap_mib=8704 time_cap_s=600
+[driver 04:06:46] driver done
+/tmp/w23/run.sh: line 17: 288771 Killed                  env EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" "$FBIN" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$STORE/s$id" --quota 4G --no-direct-io ${JOIN:+--join 127.0.0.1:$PORT} > "$WORK/s$id.log" 2>&1 < /dev/null
+/tmp/w23/run.sh: line 17: 288867 Killed                  env EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" "$FBIN" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$STORE/s$id" --quota 4G --no-direct-io ${JOIN:+--join 127.0.0.1:$PORT} > "$WORK/s$id.log" 2>&1 < /dev/null
+/tmp/w23/run.sh: line 17: 289021 Killed                  env EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" "$FBIN" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$STORE/s$id" --quota 4G --no-direct-io ${JOIN:+--join 127.0.0.1:$PORT} > "$WORK/s$id.log" 2>&1 < /dev/null

@@ -45,6 +45,16 @@ int efs_kv_lsm_flush(struct efs_kv *kv);
 int efs_kv_lsm_flush_nowait(struct efs_kv *kv);
 int efs_kv_lsm_compact(struct efs_kv *kv);
 int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1);
+/* Shape snapshot for the pump's `kv-obs` line (the W23 stalled-compactor
+ * test samples it). mt_bytes grows past memtable_max while L0 stays hot
+ * (D9); l0_bytes is the D9/D10 byte budget. */
+struct efs_kv_lsm_stats {
+    uint64_t mt_bytes;
+    uint64_t l0_bytes;
+    uint32_t n_l0;
+    uint32_t n_l1;
+};
+int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out);
 /* 1 when L0 is within one flush of the file cap. Publish admission
  * returns BUSY; the apply path does not wait. */
 int efs_kv_lsm_l0_hot(struct efs_kv *kv);

@@ -1,0 +1,22 @@
+W23 / P2.3 — stalled-compactor test — 20261005-040631
+
+Setup: private 3-node cluster on efs1 (tests/rdma_first_inode.sh
+layout, ports 19550-19552, TCP, scratch storage), one FUSE client,
+dd bs=1M conv=fsync of a non-zero source to fresh 256 MiB files.
+Node 3 (follower of both groups) ran EFS_FAULT_COMPACT_STALL=1 with
+/tmp/efs/fault present: its compactor parked between iterations;
+flushes to L0 continued, L0 merges stopped. Sampled every 5 s per
+node: kv-obs mt_bytes/l0_bytes/n_l0/n_l1, raft-obs pump_hold_max,
+apply-sleep and kv-compact: backpressure line counts, raft-status
+commit-applied, RSS.
+
+W23 stalled-compactor run (dev Tart cluster, one VM, private 3-node)
+bound=rss-2x
+written_mib=256 files=1 wall_s=1
+node3_prerun_rss_kb=3988
+recovered=1 recovery_s=0
+bytes_cap_mib=8704 time_cap_s=600
+
+node1 peak_mt_bytes=420175 peak_l0_bytes=13024 peak_n_l0=0 peak_rss_kb=9 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
+node2 peak_mt_bytes=420175 peak_l0_bytes=11428 peak_n_l0=0 peak_rss_kb=0 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
+node3 peak_mt_bytes=420175 peak_l0_bytes=11352 peak_n_l0=0 peak_rss_kb=0 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0

@@ -1,0 +1,30 @@
+2026-10-05T04:08:14.062Z Discovered 3 cluster nodes from 127.0.0.1:19550
+2026-10-05T04:08:14.062Z   node id=1 127.0.0.1:19550
+2026-10-05T04:08:14.062Z   node id=2 127.0.0.1:19551
+2026-10-05T04:08:14.062Z   node id=3 127.0.0.1:19552
+2026-10-05T04:08:14.062Z fetching metadata...
+2026-10-05T04:08:14.062Z meta: raft host mounted export 'w23' (bits=12, no GET_META table)
+2026-10-05T04:08:14.062Z export id=1 name=w23
+2026-10-05T04:08:14.062Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=89248 root_get=0 mode=40755
+2026-10-05T04:08:14.062Z efs-fuse daemon pid=292025
+2026-10-05T04:08:14.064Z fuse serving
+2026-10-05T04:08:15.483Z fsync-split ino=5449 flush_ms=837 report_ms=0 rc=0
+2026-10-05T04:08:19.120Z inode-rpc: slow-ok type=67 attempts=5 saw_busy=1 status=0 us=2464881
+2026-10-05T04:08:19.121Z fsync-split ino=9545 flush_ms=3253 report_ms=0 rc=0
+2026-10-05T04:08:30.581Z fsync-split ino=13641 flush_ms=928 report_ms=0 rc=0
+2026-10-05T04:08:32.050Z fsync-split ino=17737 flush_ms=1080 report_ms=0 rc=0
+2026-10-05T04:08:33.642Z fsync-split ino=21833 flush_ms=1239 report_ms=0 rc=0
+2026-10-05T04:08:35.081Z fsync-split ino=25929 flush_ms=1002 report_ms=0 rc=0
+2026-10-05T04:08:36.666Z fsync-split ino=30025 flush_ms=1044 report_ms=0 rc=0
+2026-10-05T04:08:38.062Z fsync-split ino=34121 flush_ms=1037 report_ms=0 rc=0
+2026-10-05T04:08:39.593Z fsync-split ino=38217 flush_ms=1092 report_ms=0 rc=0
+2026-10-05T04:08:41.004Z fsync-split ino=42313 flush_ms=954 report_ms=0 rc=0
+2026-10-05T04:08:45.830Z fsync-split ino=46409 flush_ms=4391 report_ms=0 rc=0
+2026-10-05T04:08:47.454Z fsync-split ino=50505 flush_ms=1291 report_ms=0 rc=0
+2026-10-05T04:08:48.780Z fsync-split ino=54601 flush_ms=961 report_ms=0 rc=0
+2026-10-05T04:08:50.176Z fsync-split ino=58697 flush_ms=1081 report_ms=0 rc=0
+2026-10-05T04:08:51.304Z fsync-split ino=62793 flush_ms=727 report_ms=0 rc=0
+2026-10-05T04:08:52.556Z fsync-split ino=66889 flush_ms=887 report_ms=0 rc=0
+2026-10-05T04:08:54.043Z fsync-split ino=70985 flush_ms=1256 report_ms=0 rc=0
+2026-10-05T04:08:55.427Z fsync-split ino=75081 flush_ms=1153 report_ms=0 rc=0
+2026-10-05T04:08:56.636Z fsync-split ino=79177 flush_ms=989 report_ms=0 rc=0

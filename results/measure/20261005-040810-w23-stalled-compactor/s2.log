@@ -1,0 +1,181 @@
+2026-10-05T04:08:12.209Z Joined cluster with 2 nodes
+2026-10-05T04:08:12.260Z heartbeat: enabled (2000 ms interval)
+2026-10-05T04:08:12.322Z raft-obs: wait_timeouts=0 pump_hold_max=10us lock_wait_max=3us drain_max=10us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.322Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-05T04:08:12.323Z raft-host: up raft_id=1 n=3 boot=1159929689828936 salt=1417570511198643553 g0=hosted g2=hosted
+2026-10-05T04:08:12.323Z efsd node 2 listening on 127.0.0.1:19551, storage=/var/tmp/w23-scratch/s2 (1 paths, stripe=none), used=0, quota=4294967296, direct_io=off, writers=1 shared, build=dca87c71c235-dirty
+2026-10-05T04:08:12.328Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.333Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.338Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.344Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.349Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.354Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.359Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.364Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.375Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.380Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.385Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.391Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.396Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.401Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.407Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.412Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.418Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.424Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.429Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.435Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.440Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=0us drain_max=3us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.445Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.451Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.457Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.462Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.467Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.478Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.483Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.494Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.499Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.510Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.521Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.531Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.536Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.542Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.547Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.553Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.558Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.564Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.569Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.574Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.585Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=1us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.591Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.596Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.607Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.618Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.624Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.634Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.655Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=0us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.667Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.672Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.678Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.683Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.688Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.694Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.699Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=1us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.705Z raft-obs: wait_timeouts=0 pump_hold_max=2us lock_wait_max=0us drain_max=2us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.710Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=0us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.715Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=2us tick_max=1us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.721Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=0us drain_max=3us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.726Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=1us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.731Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.737Z raft-obs: wait_timeouts=0 pump_hold_max=3us lock_wait_max=1us drain_max=2us tick_max=1us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.743Z raft-obs: wait_timeouts=0 pump_hold_max=1us lock_wait_max=0us drain_max=1us tick_max=0us apply_max=0us persist_max=1us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:12.835Z raft-obs: g0 term 0->1 role FOLLOWER->FOLLOWER leader=-1 commit=0 applied=0 t=1791173292835ms
+2026-10-05T04:08:12.835Z raft-obs: tx->0 enq=1 drop=0 sent=0 fail=0 hi=1 rtt_avg=0us get_avg=0us get_max=0ms
+2026-10-05T04:08:12.835Z raft-obs: wait_timeouts=0 pump_hold_max=89116us lock_wait_max=0us drain_max=89116us tick_max=0us apply_max=0us persist_max=0us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:13.061Z raft-obs: g2 term 0->1 role FOLLOWER->FOLLOWER leader=-1 commit=0 applied=0 t=1791173293061ms
+2026-10-05T04:08:14.479Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=371 bytes=24313856 errors=0 avg_us=3851 p50_us=2574 max_us=24248 wdisk ops=371 bytes=24313856 errors=0 avg_us=121 p50_us=47 max_us=2774
+2026-10-05T04:08:15.440Z raft-host: gc-pass ms=63 reap=0 frag=0 spread=0 recover=3 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:16.701Z raft-obs: g0 term 1->2 role FOLLOWER->CANDIDATE leader=-1 commit=7 applied=7 t=1791173296701ms
+2026-10-05T04:08:17.326Z kv-obs: mt_bytes=419752 l0_bytes=0 l0=0 l1=0
+2026-10-05T04:08:17.396Z raft-obs: g0 term 2->3 role CANDIDATE->CANDIDATE leader=-1 commit=7 applied=7 t=1791173297396ms
+2026-10-05T04:08:17.839Z raft-obs: tx->0 enq=115 drop=0 sent=100 fail=0 hi=2 rtt_avg=176us get_avg=2us get_max=0ms
+2026-10-05T04:08:17.839Z raft-obs: tx->2 enq=2 drop=0 sent=2 fail=0 hi=1 rtt_avg=30us get_avg=92us get_max=0ms
+2026-10-05T04:08:17.839Z raft-obs: wait_timeouts=0 pump_hold_max=72722us lock_wait_max=3us drain_max=72721us tick_max=48423us apply_max=3646us persist_max=290026us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:18.393Z raft-obs: g0 term 3->4 role CANDIDATE->FOLLOWER leader=-1 commit=7 applied=7 t=1791173298393ms
+2026-10-05T04:08:19.483Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=4096 bytes=268435456 errors=0 avg_us=5359 p50_us=323 max_us=100871 wdisk ops=4096 bytes=268435456 errors=0 avg_us=118 p50_us=29 max_us=9351
+2026-10-05T04:08:22.326Z kv-obs: mt_bytes=837800 l0_bytes=0 l0=0 l1=0
+2026-10-05T04:08:22.841Z raft-obs: tx->0 enq=278 drop=0 sent=261 fail=0 hi=2 rtt_avg=101us get_avg=1us get_max=0ms
+2026-10-05T04:08:22.841Z raft-obs: tx->2 enq=2 drop=0 sent=2 fail=0 hi=1 rtt_avg=30us get_avg=92us get_max=0ms
+2026-10-05T04:08:22.841Z raft-obs: wait_timeouts=0 pump_hold_max=165610us lock_wait_max=19us drain_max=165609us tick_max=20us apply_max=3929us persist_max=136264us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:24.484Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=4096 bytes=268435456 errors=0 avg_us=5359 p50_us=323 max_us=100871 wdisk ops=4096 bytes=268435456 errors=0 avg_us=118 p50_us=29 max_us=9351
+2026-10-05T04:08:27.843Z raft-obs: tx->0 enq=464 drop=0 sent=447 fail=0 hi=2 rtt_avg=81us get_avg=0us get_max=0ms
+2026-10-05T04:08:27.843Z raft-obs: tx->2 enq=2 drop=0 sent=2 fail=0 hi=1 rtt_avg=30us get_avg=92us get_max=0ms
+2026-10-05T04:08:27.843Z raft-obs: wait_timeouts=0 pump_hold_max=511us lock_wait_max=39us drain_max=510us tick_max=3us apply_max=0us persist_max=41us applies_in_worst=0 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:29.489Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=4134 bytes=270925824 errors=0 avg_us=5352 p50_us=995 max_us=100871 wdisk ops=4134 bytes=270925824 errors=0 avg_us=118 p50_us=49 max_us=9351
+2026-10-05T04:08:32.392Z kv-obs: mt_bytes=1674432 l0_bytes=0 l0=0 l1=0
+2026-10-05T04:08:32.843Z raft-obs: tx->0 enq=613 drop=0 sent=573 fail=0 hi=2 rtt_avg=85us get_avg=0us get_max=0ms
+2026-10-05T04:08:32.843Z raft-obs: tx->2 enq=2 drop=0 sent=2 fail=0 hi=1 rtt_avg=30us get_avg=92us get_max=0ms
+2026-10-05T04:08:32.843Z raft-obs: wait_timeouts=0 pump_hold_max=115014us lock_wait_max=41us drain_max=115013us tick_max=10us apply_max=6371us persist_max=193571us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:34.490Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=11896 bytes=779616256 errors=0 avg_us=4794 p50_us=621 max_us=131996 wdisk ops=11896 bytes=779616256 errors=0 avg_us=125 p50_us=67 max_us=131922
+2026-10-05T04:08:34.805Z raft-host: gc-pass ms=58 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:36.953Z raft-host: gc-pass ms=99 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:37.393Z kv-obs: mt_bytes=2929648 l0_bytes=0 l0=0 l1=0
+2026-10-05T04:08:37.937Z raft-obs: tx->0 enq=769 drop=0 sent=697 fail=0 hi=2 rtt_avg=106us get_avg=0us get_max=0ms
+2026-10-05T04:08:37.937Z raft-obs: tx->2 enq=2 drop=0 sent=2 fail=0 hi=1 rtt_avg=30us get_avg=92us get_max=0ms
+2026-10-05T04:08:37.937Z raft-obs: wait_timeouts=0 pump_hold_max=145154us lock_wait_max=1us drain_max=145153us tick_max=4us apply_max=10804us persist_max=229996us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:37.982Z raft-host: gc-pass ms=22 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:39.513Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=18432 bytes=1207959552 errors=0 avg_us=5073 p50_us=509 max_us=148154 wdisk ops=18432 bytes=1207959552 errors=0 avg_us=133 p50_us=36 max_us=131922
+2026-10-05T04:08:41.085Z raft-host: gc-pass ms=8 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:42.468Z kv-obs: mt_bytes=4184596 l0_bytes=0 l0=0 l1=0
+2026-10-05T04:08:42.938Z raft-obs: tx->0 enq=901 drop=0 sent=801 fail=0 hi=2 rtt_avg=108us get_avg=0us get_max=0ms
+2026-10-05T04:08:42.938Z raft-obs: tx->2 enq=2 drop=0 sent=2 fail=0 hi=1 rtt_avg=30us get_avg=92us get_max=0ms
+2026-10-05T04:08:42.938Z raft-obs: wait_timeouts=0 pump_hold_max=143322us lock_wait_max=1us drain_max=143322us tick_max=1us apply_max=13999us persist_max=212294us applies_in_worst=1 arc_miss=0 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=0us pub_max=0us inbox_drop=0
+2026-10-05T04:08:43.163Z raft-obs: g2 term 1->2 role FOLLOWER->FOLLOWER leader=-1 commit=12 applied=12 t=1791173323163ms
+2026-10-05T04:08:43.163Z raft-host: gc-pass ms=41 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:43.254Z raft-obs: g0 term 4->5 role FOLLOWER->CANDIDATE leader=-1 commit=36 applied=36 t=1791173323254ms
+2026-10-05T04:08:43.342Z raft-obs: g0 term 5->5 role CANDIDATE->LEADER leader=1 commit=36 applied=36 t=1791173323342ms
+2026-10-05T04:08:45.525Z kv-compact: start l0=22 inputs=1 range=265 l0only=0
+2026-10-05T04:08:45.532Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=22528 bytes=1476395008 errors=0 avg_us=4942 p50_us=2118 max_us=148154 wdisk ops=22528 bytes=1476395008 errors=0 avg_us=135 p50_us=37 max_us=131922
+2026-10-05T04:08:45.672Z kv-compact: end bytes=262665 ms=147 l0=21 l1=1 rc=0
+2026-10-05T04:08:45.672Z kv-compact: start l0=21 inputs=1 range=268 l0only=0
+2026-10-05T04:08:45.694Z raft-host: gc-pass ms=1517 reap=0 frag=0 spread=0 recover=162 fscans=1 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=3 keys=0 emit=0 tomb=0
+2026-10-05T04:08:45.786Z raft-obs: g0 term 5->6 role LEADER->FOLLOWER leader=0 commit=38 applied=38 t=1791173325786ms
+2026-10-05T04:08:45.786Z raft-host: apply-sleep us=254076 group=2 idx=15 applied=12
+2026-10-05T04:08:45.786Z report-split nrec=2048 pack_ms=0 push_ms=0 finish_ms=2628 skip=0 stale=0 inval=0 rc=-14 fail=wait/-14
+2026-10-05T04:08:45.899Z kv-compact: end bytes=262504 ms=226 l0=20 l1=2 rc=0
+2026-10-05T04:08:45.899Z kv-compact: start l0=20 inputs=1 range=260 l0only=0
+2026-10-05T04:08:46.137Z kv-compact: end bytes=213039 ms=238 l0=19 l1=3 rc=0
+2026-10-05T04:08:46.137Z kv-compact: start l0=19 inputs=1 range=267 l0only=0
+2026-10-05T04:08:46.459Z kv-compact: end bytes=210884 ms=322 l0=18 l1=4 rc=0
+2026-10-05T04:08:46.459Z kv-compact: start l0=18 inputs=1 range=264 l0only=0
+2026-10-05T04:08:46.742Z kv-compact: end bytes=210469 ms=284 l0=17 l1=5 rc=0
+2026-10-05T04:08:46.742Z kv-compact: start l0=17 inputs=1 range=261 l0only=0
+2026-10-05T04:08:46.960Z kv-compact: end bytes=210308 ms=218 l0=16 l1=6 rc=0
+2026-10-05T04:08:46.960Z kv-compact: start l0=16 inputs=1 range=262 l0only=0
+2026-10-05T04:08:47.107Z kv-compact: end bytes=210308 ms=146 l0=15 l1=7 rc=0
+2026-10-05T04:08:47.107Z kv-compact: start l0=15 inputs=1 range=269 l0only=0
+2026-10-05T04:08:47.276Z kv-compact: end bytes=210308 ms=169 l0=14 l1=8 rc=0
+2026-10-05T04:08:47.276Z kv-compact: start l0=14 inputs=1 range=270 l0only=0
+2026-10-05T04:08:47.463Z kv-compact: end bytes=210308 ms=187 l0=13 l1=9 rc=0
+2026-10-05T04:08:47.463Z kv-compact: start l0=13 inputs=1 range=256 l0only=0
+2026-10-05T04:08:47.470Z kv-obs: mt_bytes=621441 l0_bytes=1366435 l0=13 l1=9
+2026-10-05T04:08:47.632Z kv-compact: end bytes=210054 ms=169 l0=12 l1=10 rc=0
+2026-10-05T04:08:47.632Z kv-compact: start l0=12 inputs=1 range=263 l0only=0
+2026-10-05T04:08:47.925Z kv-compact: end bytes=210054 ms=293 l0=11 l1=11 rc=0
+2026-10-05T04:08:47.925Z kv-compact: start l0=11 inputs=1 range=266 l0only=0
+2026-10-05T04:08:48.129Z raft-obs: tx->0 enq=968 drop=0 sent=851 fail=0 hi=2 rtt_avg=118us get_avg=0us get_max=0ms
+2026-10-05T04:08:48.129Z raft-obs: tx->2 enq=55 drop=0 sent=42 fail=0 hi=1 rtt_avg=113us get_avg=5us get_max=0ms
+2026-10-05T04:08:48.129Z raft-obs: wait_timeouts=0 pump_hold_max=1569439us lock_wait_max=16us drain_max=1569438us tick_max=134us apply_max=1569396us persist_max=203764us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=2374228us pub_max=2374228us inbox_drop=0
+2026-10-05T04:08:48.273Z kv-compact: end bytes=210054 ms=348 l0=10 l1=12 rc=0
+2026-10-05T04:08:48.273Z kv-compact: start l0=10 inputs=1 range=257 l0only=0
+2026-10-05T04:08:48.424Z kv-compact: end bytes=158019 ms=151 l0=9 l1=13 rc=0
+2026-10-05T04:08:48.424Z kv-compact: start l0=9 inputs=1 range=259 l0only=0
+2026-10-05T04:08:48.600Z kv-compact: end bytes=157858 ms=176 l0=8 l1=14 rc=0
+2026-10-05T04:08:48.600Z kv-compact: start l0=8 inputs=1 range=258 l0only=0
+2026-10-05T04:08:48.775Z kv-compact: end bytes=157350 ms=176 l0=7 l1=15 rc=0
+2026-10-05T04:08:48.775Z kv-compact: start l0=7 inputs=1 range=173 l0only=0
+2026-10-05T04:08:48.979Z kv-compact: end bytes=52865 ms=203 l0=6 l1=16 rc=0
+2026-10-05T04:08:48.979Z kv-compact: start l0=6 inputs=1 range=0 l0only=0
+2026-10-05T04:08:48.992Z raft-host: gc-pass ms=243 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:49.283Z kv-compact: end bytes=52450 ms=304 l0=5 l1=17 rc=0
+2026-10-05T04:08:49.283Z kv-compact: start l0=5 inputs=1 range=35 l0only=0
+2026-10-05T04:08:49.382Z kv-compact: end bytes=52450 ms=99 l0=4 l1=18 rc=0
+2026-10-05T04:08:49.382Z kv-compact: start l0=4 inputs=1 range=208 l0only=0
+2026-10-05T04:08:49.826Z kv-compact: end bytes=52450 ms=444 l0=3 l1=19 rc=0
+2026-10-05T04:08:50.059Z raft-host: gc-pass ms=52 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:50.553Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=29383 bytes=1925644288 errors=0 avg_us=4960 p50_us=2735 max_us=179661 wdisk ops=29384 bytes=1925709824 errors=0 avg_us=131 p50_us=30 max_us=141346
+2026-10-05T04:08:52.486Z kv-obs: mt_bytes=2085685 l0_bytes=52831 l0=3 l1=19
+2026-10-05T04:08:53.131Z raft-obs: tx->0 enq=1042 drop=0 sent=904 fail=0 hi=2 rtt_avg=119us get_avg=0us get_max=0ms
+2026-10-05T04:08:53.131Z raft-obs: tx->2 enq=103 drop=0 sent=83 fail=0 hi=1 rtt_avg=100us get_avg=2us get_max=0ms
+2026-10-05T04:08:53.131Z raft-obs: wait_timeouts=0 pump_hold_max=302955us lock_wait_max=1us drain_max=302955us tick_max=14us apply_max=237405us persist_max=257012us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=2374228us pub_max=0us inbox_drop=0
+2026-10-05T04:08:54.284Z raft-host: gc-pass ms=133 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:55.626Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=36997 bytes=2424635392 errors=0 avg_us=5047 p50_us=2842 max_us=206066 wdisk ops=36997 bytes=2424635392 errors=0 avg_us=136 p50_us=31 max_us=141346
+2026-10-05T04:08:56.367Z raft-host: gc-pass ms=40 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0
+2026-10-05T04:08:57.488Z kv-obs: mt_bytes=3758684 l0_bytes=52831 l0=3 l1=19
+2026-10-05T04:08:58.131Z raft-obs: tx->0 enq=1122 drop=0 sent=975 fail=0 hi=2 rtt_avg=124us get_avg=0us get_max=0ms
+2026-10-05T04:08:58.131Z raft-obs: tx->2 enq=166 drop=0 sent=143 fail=0 hi=1 rtt_avg=101us get_avg=1us get_max=0ms
+2026-10-05T04:08:58.131Z raft-obs: wait_timeouts=0 pump_hold_max=168639us lock_wait_max=38us drain_max=168639us tick_max=1us apply_max=63533us persist_max=226182us applies_in_worst=2 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=2374228us pub_max=0us inbox_drop=0
+2026-10-05T04:09:00.628Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=38912 bytes=2550136832 errors=0 avg_us=4990 p50_us=207 max_us=206066 wdisk ops=38912 bytes=2550136832 errors=0 avg_us=135 p50_us=26 max_us=141346
+2026-10-05T04:09:03.135Z raft-obs: tx->0 enq=1215 drop=0 sent=1068 fail=0 hi=2 rtt_avg=118us get_avg=0us get_max=0ms
+2026-10-05T04:09:03.135Z raft-obs: tx->2 enq=259 drop=0 sent=237 fail=0 hi=1 rtt_avg=89us get_avg=1us get_max=0ms
+2026-10-05T04:09:03.135Z raft-obs: wait_timeouts=0 pump_hold_max=72us lock_wait_max=20us drain_max=72us tick_max=12us apply_max=0us persist_max=9us applies_in_worst=0 arc_miss=1 arc_term_miss=0 opid_replay=0 fin_q=0 fin_done=0 fin_drop=0 fin_full=0 pub_p50=2374228us pub_max=0us inbox_drop=0
+2026-10-05T04:09:05.631Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=38912 bytes=2550136832 errors=0 avg_us=4990 p50_us=207 max_us=206066 wdisk ops=38912 bytes=2550136832 errors=0 avg_us=135 p50_us=26 max_us=141346

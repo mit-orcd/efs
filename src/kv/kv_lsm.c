@@ -1134,6 +1134,24 @@ int efs_kv_lsm_seg_count(struct efs_kv *kv, uint32_t *l0, uint32_t *l1)
     return EFS_OK;
 }
 
+int efs_kv_lsm_stats(struct efs_kv *kv, struct efs_kv_lsm_stats *out)
+{
+    struct kv_lsm *l;
+
+    if (!kv || kv->ops != &lsm_ops || !kv->ctx || !out)
+        return EFS_ERR_INVAL;
+    l = kv->ctx;
+    if (l->magic != KV_LSM_MAGIC)
+        return EFS_ERR_INVAL;
+    pthread_mutex_lock(&l->mu);
+    out->mt_bytes = l->mt.bytes;
+    out->l0_bytes = kv_l0_bytes(l);
+    out->n_l0 = l->n_l0;
+    out->n_l1 = l->n_l1;
+    pthread_mutex_unlock(&l->mu);
+    return EFS_OK;
+}
+
 int efs_kv_lsm_sync_hold(struct efs_kv *kv)
 {
     struct kv_lsm *l;

@@ -23,6 +23,22 @@
 #include <time.h>
 #include <unistd.h>
 
+/* W23 stalled-compactor hook, compiled only with -DEFS_FAULTS=1 (the
+ * stalled-compactor test, tests/measure/w23_stalled_compactor.sh). A
+ * process started with EFS_FAULT_COMPACT_STALL=1 parks its compactor
+ * between iterations — holding neither l->mu nor a pinned view — while
+ * the fault file exists. Memtable flushes to L0 continue; only the
+ * L0->L1 and L0->L0 merges stop. Removing the file releases it. */
+#if EFS_FAULTS
+#define KV_FAULT_COMPACT_FILE "/tmp/efs/fault"
+static int fault_compact_stall_on(void)
+{
+    const char *v = getenv("EFS_FAULT_COMPACT_STALL");
+
+    return v && v[0] && !(v[0] == '0' && !v[1]);
+}
+#endif
+
 /* Range ids: kv_key_range / KV_RANGE_N in kv_lsm_internal.h (the point
  * get filters segments by the same ids). */
 #define key_range kv_key_range
@@ -870,15 +886,67 @@ int kv_maybe_flush_locked(struct kv_lsm *l)
 static void *compactor_main(void *arg)
 {
     struct kv_lsm *l = arg;
+#if EFS_FAULTS
+    const int fault_stall = fault_compact_stall_on();
+    int fault_parked = 0;
+#endif
 
     for (;;) {
         uint32_t l0max;
         int rc;
 
+#if EFS_FAULTS
+        while (fault_stall && access(KV_FAULT_COMPACT_FILE, F_OK) == 0) {
+            int stop;
+
+            if (!fault_parked) {
+                fprintf(stderr, "kv-fault: compactor parked (%s)\n",
+                        KV_FAULT_COMPACT_FILE);
+                fault_parked = 1;
+            }
+            usleep(100 * 1000);
+            pthread_mutex_lock(&l->mu);
+            stop = l->compact_stop;
+            pthread_mutex_unlock(&l->mu);
+            if (stop)
+                break;
+        }
+        if (fault_parked) {
+            fprintf(stderr, "kv-fault: compactor released\n");
+            fault_parked = 0;
+        }
+#endif
         pthread_mutex_lock(&l->mu);
         l0max = l->cfg.l0_max ? l->cfg.l0_max : KV_LSM_L0_DEFAULT;
-        while (!l->compact_stop && !l->compact_req && l->n_l0 < l0max)
+        while (!l->compact_stop && !l->compact_req && l->n_l0 < l0max) {
+#if EFS_FAULTS
+            /* Armed: wake periodically so a fault file created while the
+             * compactor is idle is still noticed (the park check at the
+             * loop top runs only after a wake). */
+            if (fault_stall) {
+                struct timespec ts;
+
+                clock_gettime(CLOCK_REALTIME, &ts);
+                ts.tv_nsec += 100 * 1000 * 1000;
+                if (ts.tv_nsec >= 1000000000) {
+                    ts.tv_sec++;
+                    ts.tv_nsec -= 1000000000;
+                }
+                pthread_cond_timedwait(&l->compact_cv, &l->mu, &ts);
+                if (access(KV_FAULT_COMPACT_FILE, F_OK) == 0)
+                    break;
+                continue;
+            }
+#endif
             pthread_cond_wait(&l->compact_cv, &l->mu);
+        }
+#if EFS_FAULTS
+        if (fault_stall && !l->compact_stop &&
+            access(KV_FAULT_COMPACT_FILE, F_OK) == 0) {
+            pthread_mutex_unlock(&l->mu);
+            continue;
+        }
+#endif
         if (l->compact_stop) {
             pthread_mutex_unlock(&l->mu);
             break;

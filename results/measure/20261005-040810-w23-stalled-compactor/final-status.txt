@@ -1,0 +1,12 @@
+== node 1
+node 1 root=1 salt=2182902148067560822 groups=2
+  group 0 hosted=1 role=LEADER leader=0 term=6 commit=63 applied=63 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=2 term=2 commit=23 applied=23 voters=0x7 joint=0
+== node 2
+node 2 root=1 salt=2182902148067560822 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=6 commit=63 applied=63 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=2 term=2 commit=23 applied=23 voters=0x7 joint=0
+== node 3
+node 3 root=1 salt=2182902148067560822 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=6 commit=63 applied=63 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=2 term=2 commit=23 applied=23 voters=0x7 joint=0

@@ -1,0 +1,4 @@
+[driver 01:44:42] free=16142 MiB -> BYTES_CAP=8704 MiB TIME_CAP=600s
+mkdir: cannot create directory ‘/efs/w23-scratch’: Permission denied
+[driver 01:45:02] FATAL: node 1 did not start
+2026-10-05T01:44:42.127Z mkdir storage /efs/w23-scratch/s1: No such file or directory

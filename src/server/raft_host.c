@@ -5074,6 +5074,34 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
         h->obs_last_dump_ms = now_ms;
 }
 
+/* The KV shape line the W23 stalled-compactor test samples: one line per
+ * ~5 s while any of the four numbers moved (an idle table prints once and
+ * then stays quiet). Always-on, like iostats; the snapshot is one short
+ * l->mu hold, taken off the pump lock. One pump thread per process, so
+ * the last-printed state is a function-local static. */
+static void host_kv_obs_dump(struct efs_raft_host *h)
+{
+    static uint64_t last_ms;
+    static struct efs_kv_lsm_stats prev;
+    static int printed;
+    struct efs_kv_lsm_stats s;
+    uint64_t now_ms = now_us_() / 1000ull;
+
+    if (now_ms - last_ms < 5000)
+        return;
+    last_ms = now_ms;
+    if (!h->kv || efs_kv_lsm_stats(h->kv, &s) != EFS_OK)
+        return;
+    if (printed && s.mt_bytes == prev.mt_bytes && s.l0_bytes == prev.l0_bytes &&
+        s.n_l0 == prev.n_l0 && s.n_l1 == prev.n_l1)
+        return;
+    prev = s;
+    printed = 1;
+    fprintf(stderr, "kv-obs: mt_bytes=%llu l0_bytes=%llu l0=%u l1=%u\n",
+            (unsigned long long)s.mt_bytes, (unsigned long long)s.l0_bytes,
+            s.n_l0, s.n_l1);
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -5191,6 +5219,7 @@ static void *host_pump(void *arg)
         /* iostats: is always-on (not EFS_RAFT_OBS-gated); the 5 s cadence
          * lives in efs_iostats_dump. */
         efs_iostats_dump(0);
+        host_kv_obs_dump(h);
         /* Durability tail, off the lock: the KV WAL fsync for this
          * cycle's applies, then (throttled) the saved applied index.
          * Order matters — the index must not pass the durable KV. Only

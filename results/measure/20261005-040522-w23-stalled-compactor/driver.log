@@ -1,0 +1,10 @@
+[driver 04:05:23] free=16077 MiB -> BYTES_CAP=8704 MiB TIME_CAP=600s
+[driver 04:05:26] node3 initial raft-status:
+node 3 root=1 salt=11154619731505605853 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=1 commit=3 applied=3 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=0 term=2 commit=2 applied=2 voters=0x7 joint=0
+[driver 04:05:27] pre-run: node3 RSS 3956 kB; arming the fault
+[driver 04:05:42] FATAL: hook did not engage on node 3
+/tmp/w23/run.sh: line 17: 284168 Killed                  env EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" "$FBIN" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$STORE/s$id" --quota 4G --no-direct-io ${JOIN:+--join 127.0.0.1:$PORT} > "$WORK/s$id.log" 2>&1 < /dev/null
+/tmp/w23/run.sh: line 17: 284263 Killed                  env EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" "$FBIN" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$STORE/s$id" --quota 4G --no-direct-io ${JOIN:+--join 127.0.0.1:$PORT} > "$WORK/s$id.log" 2>&1 < /dev/null
+/tmp/w23/run.sh: line 17: 284157 Killed                  env EFS_MD_RAFT_N=3 EFS_TRANSPORT=tcp EFS_RAFT_OBS=1 "$@" "$FBIN" --node-id "$id" --addr 127.0.0.1 --port "$port" --storage "$STORE/s$id" --quota 4G --no-direct-io ${JOIN:+--join 127.0.0.1:$PORT} > "$WORK/s$id.log" 2>&1 < /dev/null
