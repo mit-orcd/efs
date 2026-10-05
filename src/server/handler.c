@@ -5,6 +5,7 @@
 #include "efs/checksum.h"
 #include "efs/store.h"
 #include "efs/opid.h"
+#include "efs/version.h"
 #include "server_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -573,6 +574,16 @@ send_reply:
             struct efs_msg_io_stats_reply reply;
             efs_iostats_snapshot(&reply);
             efs_conn_send_msg(conn, EFS_MSG_IO_STATS_REPLY, &reply,
+                              sizeof(reply));
+            break;
+        }
+        case EFS_MSG_VERSION: {
+            struct efs_msg_version_reply reply;
+            char ver[256];
+            memset(&reply, 0, sizeof(reply));
+            snprintf(reply.version, sizeof(reply.version), "%s",
+                     efs_version_string("efsd", ver, sizeof(ver)));
+            efs_conn_send_msg(conn, EFS_MSG_VERSION_REPLY, &reply,
                               sizeof(reply));
             break;
         }

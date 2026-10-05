@@ -5,6 +5,7 @@
 #include "efs/network.h"
 #include "efs/placement.h"
 #include "efs/protocol.h"
+#include "efs/version.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <errno.h>
@@ -1158,6 +1159,8 @@ static void bench_fatal_install(void)
 
 int main(int argc, char **argv)
 {
+    efs_version_check_argv("efs-bench", argc, argv);
+
     setlinebuf(stdout);
     setlinebuf(stderr);
     bench_fatal_install();

@@ -6,6 +6,7 @@
 #include "efs/protocol.h"
 #include "efs/kv_key.h"
 #include "efs/log_ts.h"
+#include "efs/version.h"
 #include "efs/placement.h"
 #include "efs/checksum.h"
 #include "efs/erasure.h"
@@ -5944,6 +5945,8 @@ static int efs_fuse_bench_run(const char *kind, double time_sec)
 
 int main(int argc, char **argv)
 {
+    efs_version_check_argv("efs-fuse", argc, argv);
+
     /* Line-buffer logs even when stdout is a pipe (client.sh | tee). */
     setvbuf(stdout, NULL, _IOLBF, 0);
     setvbuf(stderr, NULL, _IOLBF, 0);
@@ -6011,6 +6014,13 @@ int main(int argc, char **argv)
         size_t mpl = strlen(g_mountpoint);
         while (mpl > 1 && g_mountpoint[mpl - 1] == '/')
             g_mountpoint[--mpl] = '\0';
+    }
+
+    {
+        char ver[256];
+        fprintf(stderr, "%s, build=%s: starting export=%s mount=%s\n",
+                efs_version_string("efs-fuse", ver, sizeof(ver)),
+                EFS_BUILD_ID, export_name, g_mountpoint);
     }
 
     {

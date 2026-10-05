@@ -8,6 +8,7 @@
 #include "efs/opid.h"
 #include "efs/placement.h"
 #include "efs/session.h"
+#include "efs/version.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -223,6 +224,74 @@ static int cmd_status(int argc, char **argv)
 
     free(reply);
     reply = NULL;
+
+    /* Build identity across the cluster: probe VERSION on every node.
+     * Identical everywhere is the norm; after a partial deploy a mismatch
+     * deserves one line per node. The reply ends in "on <host>)" — the
+     * answering node, not the build — so identity is compared without it. */
+    {
+        char vers[EFS_MAX_NODES][EFS_VERSION_REPLY_LEN];
+        int have[EFS_MAX_NODES] = {0};
+        uint32_t nprobed = 0, nsame = 0, first = UINT32_MAX;
+        for (uint32_t i = 0; i < ncopy; i++) {
+            int vfd = efs_connect_tcp(nodes_copy[i].addr, nodes_copy[i].port);
+            if (vfd < 0)
+                continue;
+            efs_set_recv_timeout(vfd, EFS_STATUS_PROBE_MS);
+            efs_set_send_timeout(vfd, EFS_STATUS_PROBE_MS);
+            uint8_t vt = 0;
+            void *vp = NULL;
+            uint32_t vl = 0;
+            if (efs_send_msg(vfd, EFS_MSG_VERSION, NULL, 0) == 0 &&
+                efs_recv_msg(vfd, &vt, &vp, &vl) == 0 &&
+                vt == EFS_MSG_VERSION_REPLY &&
+                vl == sizeof(struct efs_msg_version_reply)) {
+                struct efs_msg_version_reply *vr = vp;
+                vr->version[sizeof(vr->version) - 1] = '\0';
+                snprintf(vers[i], sizeof(vers[i]), "%s", vr->version);
+                have[i] = 1;
+                nprobed++;
+            }
+            free(vp);
+            close(vfd);
+        }
+        /* ident[i] is vers[i] with the trailing "on <host>" removed. */
+        char ident[EFS_MAX_NODES][EFS_VERSION_REPLY_LEN];
+        for (uint32_t i = 0; i < ncopy; i++) {
+            char *on = NULL, *p;
+            size_t n;
+            if (!have[i]) {
+                ident[i][0] = '\0';
+                continue;
+            }
+            snprintf(ident[i], sizeof(ident[i]), "%s", vers[i]);
+            n = strlen(ident[i]);
+            for (p = ident[i]; (p = strstr(p, " on ")) != NULL; p += 4)
+                on = p;
+            if (on && n >= 1 && ident[i][n - 1] == ')')
+                memmove(on, ")", 2);
+        }
+        for (uint32_t i = 0; i < ncopy; i++) {
+            if (!have[i])
+                continue;
+            if (first == UINT32_MAX)
+                first = i;
+            else if (strcmp(ident[i], ident[first]) == 0)
+                nsame++;
+        }
+        if (nprobed > 0 && nsame == nprobed - 1 && nprobed == ncopy) {
+            printf("Versions: %s — %u/%u identical\n", ident[first],
+                   nprobed, ncopy);
+        } else if (nprobed > 0 && nsame == nprobed - 1) {
+            printf("Versions: %s — %u/%u identical (%u unreachable)\n",
+                   ident[first], nprobed, ncopy, ncopy - nprobed);
+        } else {
+            printf("Versions: MISMATCH (%u/%u probed)\n", nprobed, ncopy);
+            for (uint32_t i = 0; i < ncopy; i++)
+                printf("  node %u: %s\n", nodes_copy[i].id,
+                       have[i] ? vers[i] : "unreachable");
+        }
+    }
 
     /* Operational state of the contacted node (always active today). */
     if (send_recv(fd, EFS_MSG_STATUS, NULL, 0, &reply_type, &reply, &reply_len) == 0 &&
@@ -570,6 +639,48 @@ static int cmd_io_stats(int argc, char **argv)
                (unsigned long long)c->p50_us,
                (unsigned long long)c->us_max);
     }
+    free(reply);
+    return 0;
+}
+
+static int cmd_version(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_version_reply *r;
+
+    if (argc < 1) {
+        fprintf(stderr, "usage: version <node:port>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_VERSION, NULL, 0, &reply_type, &reply,
+                  &reply_len) != 0 ||
+        reply_type != EFS_MSG_VERSION_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to get version\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    r->version[sizeof(r->version) - 1] = '\0';
+    printf("version %s:%u %s\n", host, port, r->version);
     free(reply);
     return 0;
 }
@@ -2178,6 +2289,8 @@ static int cmd_raft_getchunks(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+    efs_version_check_argv("efs-mgmt", argc, argv);
+
     if (argc < 2) {
     fprintf(stderr, "Usage: %s <command> [args]\n"
                     "Commands:\n"
@@ -2187,6 +2300,7 @@ int main(int argc, char **argv)
                     "  shrink-quota <node:port> <amount>[T|G|M|K]\n"
                     "  add-storage <node:port> <path>[,path...]\n"
                     "  io-stats <node:port>\n"
+                    "  version <node:port>\n"
                     "  raft-status <node:port>\n"
                     "  raft-mkfs <node:port>\n"
                     "  raft-change <node:port> <group> <voters>\n"
@@ -2223,6 +2337,8 @@ int main(int argc, char **argv)
         return cmd_add_storage(argc - 2, argv + 2);
     if (strcmp(cmd, "io-stats") == 0)
         return cmd_io_stats(argc - 2, argv + 2);
+    if (strcmp(cmd, "version") == 0)
+        return cmd_version(argc - 2, argv + 2);
     /* One metadata engine: mkfs is the raft mkfs. */
     if (strcmp(cmd, "mkfs") == 0)
         return cmd_raft_mkfs(argc - 2, argv + 2);

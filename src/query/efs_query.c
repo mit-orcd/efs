@@ -1,6 +1,7 @@
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
+#include "efs/version.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -37,6 +38,8 @@ static const char *format_bytes(uint64_t bytes, char *buf, size_t len)
 
 int main(int argc, char **argv)
 {
+    efs_version_check_argv("efs-query", argc, argv);
+
     int raw = 0;
     const char *addr_arg = NULL;
     for (int i = 1; i < argc; i++) {

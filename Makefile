@@ -7,10 +7,18 @@ EFS_GIT_ID := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 ifneq ($(shell git status --porcelain 2>/dev/null | head -1),)
 EFS_GIT_ID := $(EFS_GIT_ID)-dirty
 endif
+# Human-facing version string (efs/version.h --version, startup logs, the
+# VERSION wire op). Informational only; EFS_BUILD_ID above stays the gate.
+EFS_GIT_DESCRIBE := $(shell git describe --tags --always --dirty 2>/dev/null || echo unknown)
+EFS_GIT_BRANCH   := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
+EFS_BUILD_TIME   := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
          -std=c99 -Wall -Wextra -D_GNU_SOURCE \
          -Wno-stringop-truncation -Wno-format-truncation \
-         -DEFS_BUILD_ID='"$(EFS_GIT_ID)"' $(EXTRA_DEFS)
+         -DEFS_BUILD_ID='"$(EFS_GIT_ID)"' \
+         -DEFS_VERSION='"$(EFS_GIT_DESCRIBE)"' \
+         -DEFS_GIT_BRANCH='"$(EFS_GIT_BRANCH)"' \
+         -DEFS_BUILD_TIME='"$(EFS_BUILD_TIME)"' $(EXTRA_DEFS)
 INCLUDES = -Iinclude -Isrc/common -Ideps/blake3
 
 LDFLAGS = -lpthread -lm -ldl -libverbs
@@ -36,6 +44,7 @@ endif
 
 COMMON_SRCS = $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/log_ts.c \
+              $(COMMON_DIR)/version.c \
               $(COMMON_DIR)/protocol.c \
               src/wire/wire.c \
               src/data/erasure.c \

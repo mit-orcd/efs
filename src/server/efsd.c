@@ -1,6 +1,7 @@
 #include "efs/common.h"
 #include "efs/log_ts.h"
 #include "efs/network.h"
+#include "efs/version.h"
 #include "bench_local.h"
 #include "server_internal.h"
 #include <stdio.h>
@@ -332,6 +333,8 @@ static void sigint_handler(int sig)
 
 int main(int argc, char **argv)
 {
+    efs_version_check_argv("efsd", argc, argv);
+
     /* Install before any work — imagenet load has produced silent SIGSEGVs. */
     efsd_install_crash_handlers();
     efs_log_timestamps_install();
@@ -582,15 +585,17 @@ int main(int argc, char **argv)
         struct efs_node *local = server_local_node(&server);
         if (local)
             used_disp = local->used;
-        printf("efsd node %u listening on %s:%u, storage=%s (%u paths, stripe=%s), "
-               "used=%llu, quota=%llu, direct_io=%s, writers=%d shared, "
-               "build=%s\n",
+        char ver[256];
+        printf("%s, build=%s: node %u listening on %s:%u, storage=%s "
+               "(%u paths, stripe=%s), used=%llu, quota=%llu, direct_io=%s, "
+               "writers=%d shared\n",
+               efs_version_string("efsd", ver, sizeof(ver)), EFS_BUILD_ID,
                server.id, server.addr, server.port, storage_disp,
                server.storage_path_count, stripe,
                (unsigned long long)used_disp,
                (unsigned long long)server.quota,
                server.direct_io ? "on" : "off",
-               server.nwriters, EFS_BUILD_ID);
+               server.nwriters);
     }
     fflush(stdout);
 

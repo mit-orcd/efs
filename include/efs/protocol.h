@@ -153,6 +153,11 @@ enum efs_msg_type {
      * consumers diff. Reply is struct efs_msg_io_stats_reply. */
     EFS_MSG_IO_STATS = 103,
     EFS_MSG_IO_STATS_REPLY = 104,
+    /* Human-facing build identity ("efsd v... (branch ..., built ... on
+     * host)"); informational only, the HELLO gate stays EFS_BUILD_ID.
+     * Reply is struct efs_msg_version_reply. */
+    EFS_MSG_VERSION = 105,
+    EFS_MSG_VERSION_REPLY = 106,
 };
 
 /* GC_FRAGMENT request: delete fragment `fragment_index` of chunk
@@ -340,6 +345,14 @@ struct efs_io_stats_class {
 struct efs_msg_io_stats_reply {
     uint64_t uptime_us;
     struct efs_io_stats_class cls[EFS_IO_STATS_CLASSES];
+};
+
+/* VERSION reply: fixed-size NUL-terminated string (efs_version_string of
+ * the answering efsd), truncated if longer. Fixed size keeps the strict
+ * reply_len == sizeof check valid. */
+#define EFS_VERSION_REPLY_LEN 128
+struct efs_msg_version_reply {
+    char version[EFS_VERSION_REPLY_LEN];
 };
 
 struct efs_msg_shrink_quota {
