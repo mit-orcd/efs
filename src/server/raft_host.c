@@ -5180,6 +5180,9 @@ static void *host_pump(void *arg)
             host_obs_dump(h, 0);
         }
         pthread_mutex_unlock(&h->mu);
+        /* iostats: is always-on (not EFS_RAFT_OBS-gated); the 5 s cadence
+         * lives in efs_iostats_dump. */
+        efs_iostats_dump(0);
         /* Durability tail, off the lock: the KV WAL fsync for this
          * cycle's applies, then (throttled) the saved applied index.
          * Order matters — the index must not pass the durable KV. Only

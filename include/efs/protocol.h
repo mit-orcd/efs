@@ -149,6 +149,10 @@ enum efs_msg_type {
      * can retry NOT_PRIMARY and BUSY, then nbytes and the bytes. */
     EFS_MSG_XATTR = 101,
     EFS_MSG_XATTR_REPLY = 102,
+    /* Data-plane I/O counters: cumulative per op class since efsd start;
+     * consumers diff. Reply is struct efs_msg_io_stats_reply. */
+    EFS_MSG_IO_STATS = 103,
+    EFS_MSG_IO_STATS_REPLY = 104,
 };
 
 /* GC_FRAGMENT request: delete fragment `fragment_index` of chunk
@@ -319,6 +323,23 @@ struct efs_msg_status_reply {
     uint64_t quota;
     uint64_t used;
     uint32_t state; /* efsd_server_state: 0=active, 3=draining, 4=drained, ... */
+};
+
+/* IO_STATS reply: one row per op class (0 = GET_CHUNK handler, 1 =
+ * PUT_CHUNK handler, 2 = writer-pool disk write). Counters are cumulative
+ * since efsd start; p50_us is the median of the last 64 latencies. */
+#define EFS_IO_STATS_CLASSES 3
+struct efs_io_stats_class {
+    uint64_t ops;
+    uint64_t bytes;
+    uint64_t errors;
+    uint64_t us_sum;
+    uint64_t us_max;
+    uint64_t p50_us;
+};
+struct efs_msg_io_stats_reply {
+    uint64_t uptime_us;
+    struct efs_io_stats_class cls[EFS_IO_STATS_CLASSES];
 };
 
 struct efs_msg_shrink_quota {

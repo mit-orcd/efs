@@ -273,6 +273,7 @@ void server_handle_conn(struct efs_conn *conn)
         case EFS_MSG_GET_CHUNK: {
             if (payload_len >= sizeof(struct efs_msg_get_chunk)) {
                 struct efs_msg_get_chunk *req = payload;
+                uint64_t io_t0 = efs_iostats_now_us();
                 pthread_mutex_lock(&g_server->lock);
                 struct efs_export *ex =
                     server_export_acquire_or_create_locked(g_server,
@@ -298,6 +299,8 @@ void server_handle_conn(struct efs_conn *conn)
                         if (!nb) {
                             uint8_t err = EFS_GET_CHUNK_ERROR;
                             efs_conn_send_msg(conn, EFS_MSG_GET_CHUNK_REPLY, &err, 1);
+                            efs_iostats_add(EFS_IOSTAT_GET, 0,
+                                            efs_iostats_now_us() - io_t0, 1);
                             server_export_put(g_server, ex);
                             break;
                         }
@@ -361,6 +364,12 @@ send_reply:
                 else
                     efs_conn_send_msg(conn, EFS_MSG_GET_CHUNK_REPLY, reply,
                                       out_len);
+                efs_iostats_add(EFS_IOSTAT_GET,
+                                reply[0] == EFS_GET_CHUNK_OK
+                                    ? out_len - 1 - EFS_HASH_SIZE
+                                    : 0,
+                                efs_iostats_now_us() - io_t0,
+                                reply[0] != EFS_GET_CHUNK_OK);
                 server_export_put(g_server, ex);
             }
             break;
@@ -368,6 +377,7 @@ send_reply:
         case EFS_MSG_PUT_CHUNK: {
             if (payload_len >= sizeof(struct efs_msg_put_chunk)) {
                 struct efs_msg_put_chunk *req = payload;
+                uint64_t io_t0 = efs_iostats_now_us();
                 const uint8_t *data =
                     (const uint8_t *)payload + sizeof(struct efs_msg_put_chunk);
                 pthread_mutex_lock(&g_server->lock);
@@ -434,6 +444,10 @@ send_reply:
                     efs_tls_path_used = -1;
                     efs_conn_send_msg(conn, EFS_MSG_PUT_CHUNK_REPLY, rep, 2);
                 }
+                efs_iostats_add(EFS_IOSTAT_PUT,
+                                reply == EFS_PUT_CHUNK_OK ? req->data_len : 0,
+                                efs_iostats_now_us() - io_t0,
+                                reply != EFS_PUT_CHUNK_OK);
             }
             break;
         }
@@ -552,6 +566,13 @@ send_reply:
             struct efs_msg_heal_status_reply reply;
             memset(&reply, 0, sizeof(reply));
             efs_conn_send_msg(conn, EFS_MSG_HEAL_STATUS_REPLY, &reply,
+                              sizeof(reply));
+            break;
+        }
+        case EFS_MSG_IO_STATS: {
+            struct efs_msg_io_stats_reply reply;
+            efs_iostats_snapshot(&reply);
+            efs_conn_send_msg(conn, EFS_MSG_IO_STATS_REPLY, &reply,
                               sizeof(reply));
             break;
         }

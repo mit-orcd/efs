@@ -172,22 +172,27 @@ static int run_job(struct writer_job *job)
                                            job->fragment_index));
     efs_tls_chunk_gen = job->chunk_generation;
 
-    switch (job->op) {
-    case WRITER_OP_FRAGMENT_WITH_SUM:
-        if (job->checksum)
-            rc = server_write_fragment_with_sum_sync(job->s, job->ex, job->ino,
-                                                     job->chunk_index,
-                                                     job->fragment_index,
-                                                     job->data, job->data_len,
-                                                     job->checksum);
-        else
-            rc = server_write_fragment_sync(job->s, job->ex, job->ino,
-                                            job->chunk_index, job->fragment_index,
-                                            job->data, job->data_len);
-        break;
-    default:
-        rc = EFS_ERR_INVAL;
-        break;
+    {
+        uint64_t io_t0 = efs_iostats_now_us();
+        switch (job->op) {
+        case WRITER_OP_FRAGMENT_WITH_SUM:
+            if (job->checksum)
+                rc = server_write_fragment_with_sum_sync(job->s, job->ex, job->ino,
+                                                         job->chunk_index,
+                                                         job->fragment_index,
+                                                         job->data, job->data_len,
+                                                         job->checksum);
+            else
+                rc = server_write_fragment_sync(job->s, job->ex, job->ino,
+                                                job->chunk_index, job->fragment_index,
+                                                job->data, job->data_len);
+            break;
+        default:
+            rc = EFS_ERR_INVAL;
+            break;
+        }
+        efs_iostats_add(EFS_IOSTAT_DISK_WRITE, job->data_len,
+                        efs_iostats_now_us() - io_t0, rc != EFS_OK);
     }
     efs_tls_path_used = efs_tls_write_root;
     efs_tls_write_known_zero = saved_zero;

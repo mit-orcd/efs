@@ -515,6 +515,65 @@ static const char *raft_role_name(uint8_t role)
     return "FOLLOWER";
 }
 
+static int cmd_io_stats(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    int fd;
+    uint8_t reply_type;
+    void *reply = NULL;
+    uint32_t reply_len = 0;
+    struct efs_msg_io_stats_reply *r;
+    static const char *names[EFS_IO_STATS_CLASSES] = {
+        "get_chunk", "put_chunk", "disk_write"
+    };
+    uint32_t i;
+
+    if (argc < 1) {
+        fprintf(stderr, "usage: io-stats <node:port>\n");
+        return 1;
+    }
+    if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "Invalid address: %s\n", argv[0]);
+        return 1;
+    }
+    fd = efs_connect_tcp(host, port);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
+        return 1;
+    }
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
+    if (send_recv(fd, EFS_MSG_IO_STATS, NULL, 0, &reply_type, &reply,
+                  &reply_len) != 0 ||
+        reply_type != EFS_MSG_IO_STATS_REPLY ||
+        reply_len != sizeof(*r)) {
+        fprintf(stderr, "Failed to get io-stats\n");
+        free(reply);
+        close(fd);
+        return 1;
+    }
+    close(fd);
+    r = reply;
+    printf("io-stats %s:%u uptime_s=%llu\n", host, port,
+           (unsigned long long)(r->uptime_us / 1000000ull));
+    for (i = 0; i < EFS_IO_STATS_CLASSES; i++) {
+        struct efs_io_stats_class *c = &r->cls[i];
+        printf("  %-10s ops=%llu bytes=%llu errors=%llu us_sum=%llu avg_us=%llu "
+               "p50_us=%llu max_us=%llu\n",
+               names[i],
+               (unsigned long long)c->ops,
+               (unsigned long long)c->bytes,
+               (unsigned long long)c->errors,
+               (unsigned long long)c->us_sum,
+               c->ops ? (unsigned long long)(c->us_sum / c->ops) : 0ull,
+               (unsigned long long)c->p50_us,
+               (unsigned long long)c->us_max);
+    }
+    free(reply);
+    return 0;
+}
+
 static int cmd_raft_status(int argc, char **argv)
 {
     char host[64];
@@ -2127,6 +2186,7 @@ int main(int argc, char **argv)
                     "  add-node <new-node:port> <existing-node:port>\n"
                     "  shrink-quota <node:port> <amount>[T|G|M|K]\n"
                     "  add-storage <node:port> <path>[,path...]\n"
+                    "  io-stats <node:port>\n"
                     "  raft-status <node:port>\n"
                     "  raft-mkfs <node:port>\n"
                     "  raft-change <node:port> <group> <voters>\n"
@@ -2161,6 +2221,8 @@ int main(int argc, char **argv)
         return cmd_shrink_quota(argc - 2, argv + 2);
     if (strcmp(cmd, "add-storage") == 0)
         return cmd_add_storage(argc - 2, argv + 2);
+    if (strcmp(cmd, "io-stats") == 0)
+        return cmd_io_stats(argc - 2, argv + 2);
     /* One metadata engine: mkfs is the raft mkfs. */
     if (strcmp(cmd, "mkfs") == 0)
         return cmd_raft_mkfs(argc - 2, argv + 2);

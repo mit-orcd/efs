@@ -88,6 +88,7 @@ SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/store_nvme.c \
               src/server/handler.c \
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
+              src/server/iostats.c \
               src/server/bench_local.c src/server/raft_host.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 

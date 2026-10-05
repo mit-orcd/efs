@@ -221,6 +221,19 @@ void server_writer_pool_stop(struct efsd_server *s);
 /* Grow the least-q path set after a live add-storage (append-only). */
 void server_writer_set_npaths(uint32_t n);
 
+/* Always-on per-op-class I/O stats (iostats.c): relaxed atomics, two
+ * clock_gettime(CLOCK_MONOTONIC) calls per op, no locks or allocation.
+ * Class ids index efs_msg_io_stats_reply.cls. */
+#define EFS_IOSTAT_GET        0 /* GET_CHUNK handler, conn thread */
+#define EFS_IOSTAT_PUT        1 /* PUT_CHUNK handler, conn thread */
+#define EFS_IOSTAT_DISK_WRITE 2 /* writer-pool disk write */
+uint64_t efs_iostats_now_us(void);
+void efs_iostats_add(int cls, uint64_t bytes, uint64_t us, int err);
+void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out);
+/* 5 s throttled `iostats:` stderr line once any class is nonzero; the
+ * raft host pump calls it on the host_obs_dump cadence. */
+void efs_iostats_dump(int force);
+
 /* Append local storage roots without restart. csv is comma-separated
  * absolute paths. Existing roots are skipped. count_out is the new total. */
 int server_add_storage_paths(struct efsd_server *s, const char *csv,
