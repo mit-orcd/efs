@@ -195,7 +195,7 @@ static int inode_slab_ensure(struct efs_export *ex, uint32_t si)
                                     sizeof(struct efs_inode_mem));
     if (!ex->ino_slabs[si].rows)
         return -1;
-    /* Count what calloc got (sizeof(struct efs_inode_mem), 192 B), not
+    /* Count what calloc got (sizeof(struct efs_inode_mem)), not
      * the 512 B on-disk row size: a one-row shard tab was booked at
      * 132 KB and 2400 such tabs (one du) put the client's estimate at
      * 412 MB against a 256 MB cap (Sep 30 2026). */
@@ -334,6 +334,7 @@ static void inode_copy_attr(struct efs_inode_mem *d, const struct efs_inode *s)
     d->pack_ino = s->pack_ino;
     d->pack_off = s->pack_off;
     d->pack_len = s->pack_len;
+    d->alloc_chunks = s->alloc_chunks;
 }
 
 static void inode_to_rpc_p(const struct efs_export *ex,
@@ -368,6 +369,7 @@ static void inode_to_rpc_p(const struct efs_export *ex,
     out->pack_ino = p->pack_ino;
     out->pack_off = p->pack_off;
     out->pack_len = p->pack_len;
+    out->alloc_chunks = p->alloc_chunks;
     if (p->name_len) {
         size_t n = p->name_len < EFS_MAX_NAME - 1 ? p->name_len : EFS_MAX_NAME - 1;
         memcpy(out->name, inamep(ex, p), n);

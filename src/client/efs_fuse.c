@@ -1303,8 +1303,8 @@ static int file_chunk_present(efs_ino_t ino, uint32_t ci)
 
 static uint64_t inode_allocated_bytes(const struct efs_inode *ino)
 {
-    uint32_t cs, n;
-    uint64_t alloc, partial;
+    uint32_t cs, n_loc;
+    uint64_t n, alloc, partial;
     int tail;
     if (!ino || efs_mode_is_dir(ino->mode) || efs_mode_is_lnk(ino->mode))
         return ino ? ino->size : 0;
@@ -1314,20 +1314,31 @@ static uint64_t inode_allocated_bytes(const struct efs_inode *ino)
     if (cs == 0 || ino->size == 0)
         return 0;
     /* W20: one counter, not a walk of every chunk. A partial tail is
-     * the only chunk that is not a full cs, so it is one extra probe. */
+     * the only chunk that is not a full cs, so it is one extra probe.
+     * D17: the row image's server-side count covers chunks this client
+     * never staged; the local sum still wins while it is ahead
+     * (unreported writes). */
     efs_client_lock_dir(ino->ino);
     pthread_mutex_lock(&g_client.idx_mu);
-    n = efs_export_present_count(&g_client.export, ino->ino);
+    n_loc = efs_export_present_count(&g_client.export, ino->ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino->ino);
+    n = ino->alloc_chunks > (uint64_t)n_loc ? ino->alloc_chunks
+                                            : (uint64_t)n_loc;
     partial = ino->size % cs;
     if (partial == 0 || n == 0)
-        return (uint64_t)n * cs;
-    tail = file_chunk_present(ino->ino,
-                              (uint32_t)(ino->size / cs));
+        return n * cs;
+    /* The partial tail counts cs unless it is provably in the count:
+     * staged by this client (probe), or the server count covers every
+     * chunk below size. */
+    if (n == (uint64_t)n_loc)
+        tail = file_chunk_present(ino->ino,
+                                  (uint32_t)(ino->size / cs));
+    else
+        tail = n * cs >= ino->size;
     if (!tail)
-        return (uint64_t)n * cs;
-    alloc = (uint64_t)(n - 1) * cs + partial;
+        return n * cs;
+    alloc = (n - 1) * cs + partial;
     return alloc;
 }
 

@@ -16,7 +16,7 @@
 #define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
 #define EFS_META_ALLOC_BYTES 8
-#define EFS_META_LANE_BYTES  56
+#define EFS_META_LANE_BYTES  64
 
 #define EFS_META_PROFILE_K2F1 1u
 
@@ -385,6 +385,9 @@ struct efs_meta_stat {
     uint64_t mtime;
     uint64_t atime;
     uint64_t ctime;
+    /* D17: present chunk rows, summed over the file's lanes (0 for dirs).
+     * The client's st_blocks source for files it never wrote. */
+    uint64_t alloc;
     uint32_t lanes;
     uint32_t attempts;
 };
@@ -511,7 +514,8 @@ int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
                                   uint64_t mask);
 /* EFS_MD_CMD_LANE_FENCE: one lane's share of a truncate, applied on the
  * LANE's group: fenced_epoch = new_epoch, max_end = 0, seq++, then the
- * range delete of that lane's chunk entries beyond size (tail_ci kept).
+ * range delete of that lane's chunk entries beyond size (tail_ci kept),
+ * subtracting what it dropped from the lane's present count (D17).
  * Idempotent via the epoch guard (a replay with the same new_epoch after
  * the lane already fenced at >= new_epoch is a no-op OK). */
 int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,

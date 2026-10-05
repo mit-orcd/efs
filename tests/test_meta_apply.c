@@ -1761,6 +1761,7 @@ static void test_stat_collect(void)
     CHECK(st.size == 0 && st.mtime == T0 && st.uid == 1000 && st.nlink == 1,
           "row attrs");
     CHECK((st.mode & S_IFMT) == S_IFREG, "mode");
+    CHECK(st.alloc == 0, "no lanes, no present chunks");
 
     /* One lane. */
     pub(kv, ino, 0, 64, 0xA1, 0, T0 + 5, "publish lane 0");
@@ -1768,6 +1769,7 @@ static void test_stat_collect(void)
     CHECK(st.lanes == 1 && st.size == 64, "lane size");
     CHECK(st.mtime == T0 + 5 && st.ctime == T0 + 5, "write moved both times");
     CHECK(st.atime == T0, "noatime: reads do not move atime");
+    CHECK(st.alloc == 1, "one present chunk");
 
     /* A second lane, on a different shard, with a larger high-water mark.
      * This is the case a single row could not represent. */
@@ -1775,6 +1777,12 @@ static void test_stat_collect(void)
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK, "stat");
     CHECK(st.lanes == 2 && st.size == 200, "MAX over lanes");
     CHECK(st.mtime == T0 + 7, "newest write wins");
+    CHECK(st.alloc == 2, "present counts sum across lanes");
+
+    /* A replay of a landed publish is a no-op, count included. */
+    pub(kv, ino, 0, 64, 0xA1, 0, T0 + 5, "replay publish lane 0");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK, "stat");
+    CHECK(st.alloc == 2, "replay does not double count");
 
     /* Committed, not yet materialized: a write that has returned to its
      * caller. Ignoring it would report a size older than that write. */
@@ -1785,6 +1793,7 @@ static void test_stat_collect(void)
     commit_reduce(kv, 1, ino, 1, 1, &red, 1);
     CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK, "stat");
     CHECK(st.size == 500 && st.mtime == T0 + 9, "committed reduction counted");
+    CHECK(st.alloc == 2, "a reduction carries no present count");
 
     /* Prepared but undecided: NOT part of the state yet, and its mere
      * presence must not make the collect retry — the vector is still
@@ -2518,8 +2527,12 @@ static void test_truncate_range_del(void)
     struct efs_meta_chunk got, ch;
     struct efs_meta_truncate t;
     struct efs_meta_pub tail, p;
+    struct coord_ctx cc;
+    struct efs_meta_stat st;
 
     CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
     CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "t", &ino)
               == EFS_OK,
@@ -2528,6 +2541,8 @@ static void test_truncate_range_del(void)
     pub(kv, ino, 64, 2ULL * EFS_MIN_CHUNK_SIZE, 0xA2, 0, T0 + 2, "pub64");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "chunk0");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_OK, "chunk64");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 2, "two chunks present");
 
     memset(&t, 0, sizeof(t));
     t.size = 0;
@@ -2540,6 +2555,8 @@ static void test_truncate_range_del(void)
           "c0 deleted");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
           "c64 deleted");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 0, "truncate to zero subtracts every chunk");
 
     fill_ch(&ch);
     memset(&p, 0, sizeof(p));
@@ -2554,6 +2571,8 @@ static void test_truncate_range_del(void)
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_STALE, "old epoch blocked");
     p.content_epoch = 1;
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "new epoch ok");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 1, "post-fence publish counts again");
 
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "u", &ino)
               == EFS_OK,
@@ -2567,6 +2586,8 @@ static void test_truncate_range_del(void)
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "prefix kept");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 64, &got) == EFS_ERR_NOT_FOUND,
           "suffix deleted");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 1, "aligned truncate subtracts the suffix");
 
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644, "v", &ino)
               == EFS_OK,
@@ -2594,6 +2615,8 @@ static void test_truncate_range_del(void)
           "tail cas");
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK && r.base_size == 4096,
           "partial size");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 1, "tail CAS keeps the present count");
 
     /* Multi-lane range delete: ci 0/64 are lane 0, ci 1/65 are lane 1, so a
      * truncate to 2 chunks must delete one key from EACH lane. Regression:
@@ -2617,6 +2640,8 @@ static void test_truncate_range_del(void)
           "m c64 deleted");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 65, &got) == EFS_ERR_NOT_FOUND,
           "m c65 deleted");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 2, "multi-lane truncate subtracts per lane");
 
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
@@ -2992,10 +3017,14 @@ static void test_cross_group_lane(void)
     struct efs_meta_row r;
     struct efs_meta_chunk got, ch;
     struct efs_meta_pub p;
+    struct coord_ctx cc;
+    struct efs_meta_stat st;
     uint8_t lane;
     uint32_t ci;
 
     CHECK(kv != NULL, "kv");
+    memset(&cc, 0, sizeof(cc));
+    cc.kv = kv;
     CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "init");
     CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
                                      "x", &ino) == EFS_OK, "create");
@@ -3043,6 +3072,8 @@ static void test_cross_group_lane(void)
     CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_OK &&
               got.generation == 0xF1,
           "chunk visible");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 1, "lane-local publish counts");
     CHECK(efs_meta_apply_get_inode(kv, ino, &r) == EFS_OK &&
               r.base_size == 0,
           "base_size untouched");
@@ -3056,6 +3087,8 @@ static void test_cross_group_lane(void)
           "lane fence");
     CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_ERR_NOT_FOUND,
           "lane chunk deleted");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 0, "lane fence subtracts");
     p.candidate_gen = 0xF2;
     p.expected_gen = 0;
     p.content_epoch = 0; /* pre-fence epoch: must be rejected by the lane */
@@ -3068,6 +3101,8 @@ static void test_cross_group_lane(void)
     CHECK(efs_meta_apply_get_chunk(kv, ino, ci, &got) == EFS_OK &&
               got.generation == 0xF2,
           "replay kept newer pub");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.alloc == 1, "fence replay does not subtract again");
 
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);

@@ -70,6 +70,10 @@ struct efs_inode {
     efs_ino_t pack_ino;
     uint32_t pack_off;
     uint32_t pack_len;
+    /* D17: server-side present-chunk count (the lane stamps reduced at
+     * getattr). Zero on rows answered without a lane collect (fresh
+     * create) and on locally synthesized rows. */
+    uint64_t alloc_chunks;
 };
 
 /* Live table row: same attrs as efs_inode but the 256 B name lives in the
@@ -84,7 +88,7 @@ struct efs_inode_mem {
     uint64_t size;
     uint64_t mtime;
     uint32_t mtime_nsec;
-    uint32_t ctime_nsec; /* was padding; sizeof unchanged (192 B) */
+    uint32_t ctime_nsec; /* was padding; sizeof was unchanged at the time */
     uint64_t ctime;
     uint64_t atime;
     uint32_t nlink;
@@ -106,6 +110,9 @@ struct efs_inode_mem {
      * are not in the table yet. st_blocks reads the sum. Not serialized. */
     uint32_t present_chunks;
     uint32_t present_extra;
+    /* D17: the server-side present-chunk count from the last adopted row
+     * image. st_blocks takes the larger of this and the local sum. */
+    uint64_t alloc_chunks;
 };
 
 /* One slab == one serialized inode page. names is the slab's private name

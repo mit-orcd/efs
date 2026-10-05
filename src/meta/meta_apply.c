@@ -15,7 +15,7 @@
 #define INO_VAL  EFS_META_INO_BYTES
 #define DENT_VAL 20
 #define ALLOC_VAL 8
-#define LANE_VAL 56
+#define LANE_VAL EFS_META_LANE_BYTES
 #define CHUNK_HDR 20
 #define CHUNK_VAL (CHUNK_HDR + 4 * EFS_NUM_FRAGMENTS + \
                    EFS_HASH_SIZE * EFS_NUM_FRAGMENTS)
@@ -79,7 +79,10 @@ static uint64_t max_u64(uint64_t a, uint64_t b)
  * utimens can move a timestamp backwards, so it bumps the inode row's
  * generation and a stat ignores lane mtimes stamped under an older one —
  * which invalidates every stale lane mtime at once instead of rewriting 64
- * lanes. `fenced_epoch` is the content-epoch fence a truncate installs. */
+ * lanes. `fenced_epoch` is the content-epoch fence a truncate installs.
+ * `present` counts the lane's live chunk rows (D17): a publish that creates
+ * a row adds one, a truncate's range delete subtracts what it dropped, and
+ * getattr sums it across lanes for st_blocks. */
 struct lane_rec {
     uint64_t max_end;
     uint64_t max_mtime;
@@ -88,6 +91,7 @@ struct lane_rec {
     uint64_t fenced_epoch;
     uint64_t mtime_gen;
     uint64_t append_bar; /* live reservation watermark; 0 = no barrier */
+    uint64_t present;
 };
 
 static void pack_lane(uint8_t *p, const struct lane_rec *l)
@@ -99,6 +103,7 @@ static void pack_lane(uint8_t *p, const struct lane_rec *l)
     be64(p + 32, l->fenced_epoch);
     be64(p + 40, l->mtime_gen);
     be64(p + 48, l->append_bar);
+    be64(p + 56, l->present);
 }
 
 /* Tolerates a record carrying only the reduce triple: a lane whose only
@@ -119,6 +124,8 @@ static int unpack_lane(const uint8_t *p, uint32_t n, struct lane_rec *l)
         l->mtime_gen = rd64(p + 40);
     if (n >= 56)
         l->append_bar = rd64(p + 48);
+    if (n >= 64)
+        l->present = rd64(p + 56);
     return EFS_OK;
 }
 
@@ -3338,6 +3345,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     uint32_t nd_old = 0;
     int appending = 0;
     int touch_inode = 0;
+    int had_row = 0;
     int rc;
     struct efs_meta_delta dlist[EFS_CHUNK_DELTA_MAX];
 
@@ -3409,6 +3417,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
             return rc;
         committed = got.generation;
         ch_vlen = vn;
+        had_row = 1;
     } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
     }
@@ -3504,6 +3513,11 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
             PUB_STALE(EFS_PUB_STALE_FOLD_LIST);
     }
     ln.max_end = max_u64(ln.max_end, p->new_size);
+    /* D17: the chunk row coming into existence is what st_blocks counts;
+     * a CAS over a live row changes no count, and the replay returns above
+     * never reach this. */
+    if (!had_row)
+        ln.present++;
     /* A write updates mtime AND ctime, and both live here rather than on the
      * inode row so that a million writers never touch the inode's leader.
      * MAX-clamped: CLOCK_REALTIME can step backwards, and re-applying a
@@ -3698,7 +3712,21 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint8_t (*del_keys)[EFS_KV_KEY_MAX],
                                    uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
                                    uint8_t (*gc_vals)[EFS_META_GC_VAL],
-                                   uint32_t *n, uint32_t cap);
+                                   uint32_t *n, uint32_t cap,
+                                   uint32_t *dropped);
+
+/* Subtract what a truncate's range delete dropped from the lane's staged
+ * stamp (packed by fence_lane_bits earlier in the same batch). Clamped: a
+ * drifted count must never underflow the wire value. */
+static void lane_present_sub(uint8_t *v_ln, uint32_t dropped)
+{
+    struct lane_rec ln;
+
+    if (unpack_lane(v_ln, LANE_VAL, &ln) != EFS_OK)
+        return;
+    ln.present = ln.present >= dropped ? ln.present - dropped : 0;
+    pack_lane(v_ln, &ln);
+}
 
 int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                               uint8_t lane, uint64_t new_epoch, uint64_t size,
@@ -3715,6 +3743,7 @@ int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
     uint8_t key[EFS_KV_KEY_MAX], old[LANE_VAL];
     uint32_t n = 0, klen = 0, vn;
+    uint32_t nfence, dropped = 0;
     struct lane_rec ln;
     int rc;
 
@@ -3742,11 +3771,15 @@ int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                          &new_epoch, it, &n, k_ln, v_ln);
     if (rc != EFS_OK)
         return rc;
+    nfence = n; /* nonzero means the lane stamp is staged for patching */
     rc = truncate_lane_range_del(kv, ino, gen, lane, size, tail_ci, has_tail,
                                  it, del_keys, gc_keys, gc_vals, &n,
-                                 (uint32_t)(sizeof(it) / sizeof(it[0])));
+                                 (uint32_t)(sizeof(it) / sizeof(it[0])),
+                                 &dropped);
     if (rc != EFS_OK)
         return rc;
+    if (dropped && nfence)
+        lane_present_sub(v_ln[lane], dropped);
     if (n == 0)
         return EFS_OK;
     return efs_kv_batch(kv, it, n);
@@ -4178,6 +4211,7 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
         struct efs_meta_row row, again;
         struct efs_txn_pending pend;
         uint64_t size, mtime, ctime, bits;
+        uint64_t alloc = 0;
         uint32_t i, nl = 0;
         int moved = 0, stable = 1, rc, is_dir;
 
@@ -4229,8 +4263,13 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
                 return rc;
             }
             seq1[i] = ln.seq;
-            if (!is_dir)
+            if (!is_dir) {
                 size = max_u64(size, red.max_end);
+                /* D17: present-chunk counts live only on materialized
+                 * lanes (a pending reduction never makes a chunk
+                 * present), so the reduce is a plain sum. */
+                alloc += ln.present;
+            }
             ctime = max_u64(ctime, red.max_ctime);
             /* A lane mtime stamped before the current utimens generation was
              * invalidated by it, and taking a MAX against it would let the
@@ -4294,6 +4333,7 @@ int efs_meta_apply_getattr(struct efs_kv *kv, efs_ino_t ino,
         out->size = size;
         out->mtime = mtime;
         out->ctime = ctime;
+        out->alloc = alloc;
         out->atime = row.base_atime; /* noatime: reads do not move it */
         out->lanes = nl;
         out->attempts = tries;
@@ -4374,6 +4414,7 @@ struct trunc_scan {
     uint8_t (*gc_vals)[EFS_META_GC_VAL];
     uint32_t n;
     uint32_t cap;
+    uint32_t dropped; /* chunk rows deleted — the lane's present count */
     int rc;
 };
 
@@ -4416,6 +4457,7 @@ del:
     ts->it[ts->n].key = ts->del_keys[ts->n];
     ts->it[ts->n].klen = klen;
     ts->n++;
+    ts->dropped++;
     /* The chunk key dies here; its fragment set must not (L7). */
     if (unpack_chunk(val, vlen, &dead) != EFS_OK) {
         ts->rc = EFS_ERR_PROTO;
@@ -4461,7 +4503,8 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
                                    uint8_t (*del_keys)[EFS_KV_KEY_MAX],
                                    uint8_t (*gc_keys)[EFS_KV_KEY_MAX],
                                    uint8_t (*gc_vals)[EFS_META_GC_VAL],
-                                   uint32_t *n, uint32_t cap)
+                                   uint32_t *n, uint32_t cap,
+                                   uint32_t *dropped)
 {
     uint8_t pref[EFS_KV_KEY_MAX];
     uint32_t plen = 0;
@@ -4490,6 +4533,7 @@ static int truncate_lane_range_del(struct efs_kv *kv, efs_ino_t ino,
     if (ts.rc != EFS_OK)
         return ts.rc;
     *n = ts.n;
+    *dropped = ts.dropped;
     return rc;
 }
 
@@ -4511,7 +4555,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     uint64_t committed = 0;
     struct lane_rec ln;
     struct efs_meta_chunk stored;
-    int rc, have_ln = 0;
+    int rc, have_ln = 0, had_row = 0;
 
     if (!tail)
         return EFS_OK;
@@ -4540,6 +4584,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
             return rc;
         committed = got.generation;
         ch_vlen = vn;
+        had_row = 1;
     } else if (rc != EFS_ERR_NOT_FOUND) {
         return rc;
     }
@@ -4568,6 +4613,8 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
     if (p.content_epoch < ln.fenced_epoch)
         return EFS_ERR_STALE;
     ln.max_end = max_u64(ln.max_end, p.new_size);
+    if (!had_row)
+        ln.present++;
     if (ln.mtime_gen < row->mtime_gen) {
         ln.max_mtime = p.now;
         ln.mtime_gen = row->mtime_gen;
@@ -4698,17 +4745,24 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     memset(k_ln, 0, sizeof(k_ln));
     memset(v_ln, 0, sizeof(v_ln));
     for (i = 0; i < EFS_META_LANES; i++) {
+        uint32_t n0, nf, dropped = 0;
+
         if ((row.active_lanes & t->lane_mask & (1ULL << i)) == 0)
             continue;
+        n0 = n;
         rc = fence_lane_bits(kv, ino, row.generation, 1ULL << i, epoch_lane_upd,
                              &new_epoch, it, &n, k_ln, v_ln);
         if (rc != EFS_OK)
             return rc;
+        nf = n; /* nf > n0 means lane i's stamp is staged for patching */
         rc = truncate_lane_range_del(kv, ino, row.generation, (uint8_t)i,
                                    t->size, tail_ci, has_tail, it, del_keys,
-                                   gc_keys, gc_vals, &n, TRUNC_IT_CAP);
+                                   gc_keys, gc_vals, &n, TRUNC_IT_CAP,
+                                   &dropped);
         if (rc != EFS_OK)
             return rc;
+        if (dropped && nf > n0)
+            lane_present_sub(v_ln[i], dropped);
     }
     if (!t->tail_external) {
         /* The tail's GC record shares the cap-sized gc arrays: gc_queue

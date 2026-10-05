@@ -4615,6 +4615,7 @@ static void stat_to_inode(const struct efs_meta_stat *st, struct efs_inode *ino)
     ino->ctime_nsec = (uint32_t)(st->ctime % 1000000000ull);
     ino->atime = st->atime / 1000000000ull;
     ino->atime_nsec = (uint32_t)(st->atime % 1000000000ull);
+    ino->alloc_chunks = st->alloc;
 }
 
 /* Fresh create/mkdir: no write lanes, no used dir-shards. The inode row

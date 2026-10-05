@@ -644,6 +644,9 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
                 local.nlink = rpc->nlink;
                 local.ctime = rpc->ctime;
             }
+            /* The accepted row's present count rides along; stat still
+             * takes the max with the local table at read time. */
+            local.alloc_chunks = rpc->alloc_chunks;
             (void)efs_export_upsert_inode(&g_client.export, &local);
             if (grow || shrink || (same && take_mtime)) {
                 take_remote = 1;
