@@ -1,0 +1,104 @@
+2026-10-05T04:31:08.981Z FIO_CEIL begin root=/var/tmp/efs-bench/p1 (same-host ceiling; the engine runs below are judged against these)
+FIO_CEIL wseq64k 3;fio-3.37;ceil_wseq;0;0;0;0;0;0;0;0;0.000000;0.000000;0;0;0.000000;0.000000;1.000000%=0;5.000000%=0;10.000000%=0;20.000000%=0;30.000000%=0;40.000000%=0;50.000000%=0;60.000000%=0;70.000000%=0;80.000000%=0;90.000000%=0;95.000000%=0;99.000000%=0;99.500000%=0;99.900000%=0;99.950000%=0;99.990000%=0;0%=0;0%=0;0%=0;0;0;0.000000;0.000000;0;0;0.000000%;0.000000;0.000000;1048576;52827;825;19849;0;0;0.000000;0.000000;54;54566;1208.621542;3189.445567;1.000000%=62;5.000000%=74;10.000000%=79;20.000000%=86;30.000000%=92;40.000000%=99;50.000000%=109;60.000000%=122;70.000000%=148;80.000000%=209;90.000000%=4145;95.000000%=9633;99.000000%=14352;99.500000%=16187;99.900000%=19267;99.950000%=21364;99.990000%=46923;0%=0;0%=0;0%=0;54;54567;1209.418260;3189.946467;7296;216960;96.404471%;50927.589744;58855.436007;0.231761%;4.796453%;16763;0;10;100.0%;0.0%;0.0%;0.0%;0.0%;0.0%;0.0%;0.00%;0.00%;0.00%;0.00%;0.00%;40.23%;42.27%;3.42%;0.74%;0.20%;0.14%;2.32%;6.17%;4.43%;0.07%;0.01%;0.00%;0.00%;0.00%;0.00%;0.00%;0.00%
+FIO_CEIL rseq64k 3;fio-3.37;ceil_rseq;0;0;1048576;50812;793;20636;0;0;0.000000;0.000000;31;78446;1257.929128;3702.689804;1.000000%=35;5.000000%=41;10.000000%=45;20.000000%=50;30.000000%=55;40.000000%=62;50.000000%=70;60.000000%=82;70.000000%=109;80.000000%=195;90.000000%=3588;95.000000%=10944;99.000000%=16187;99.500000%=17432;99.900000%=19529;99.950000%=21364;99.990000%=72876;0%=0;0%=0;0%=0;31;78446;1258.123225;3702.788328;11648;310272;100.000000%;51012.292683;64072.783970;0;0;0;0;0;0;0.000000;0.000000;0;0;0.000000;0.000000;1.000000%=0;5.000000%=0;10.000000%=0;20.000000%=0;30.000000%=0;40.000000%=0;50.000000%=0;60.000000%=0;70.000000%=0;80.000000%=0;90.000000%=0;95.000000%=0;99.000000%=0;99.500000%=0;99.900000%=0;99.950000%=0;99.990000%=0;0%=0;0%=0;0%=0;0;0;0.000000;0.000000;0;0;0.000000%;0.000000;0.000000;0.184153%;1.226072%;16451;0;26;100.0%;0.0%;0.0%;0.0%;0.0%;0.0%;0.0%;0.00%;0.00%;0.00%;0.00%;18.58%;48.94%;15.62%;4.99%;1.12%;0.29%;0.37%;0.16%;3.88%;5.96%;0.06%;0.02%;0.00%;0.00%;0.00%;0.00%;0.00%;0.00%
+FIO_CEIL wsync4k 3;fio-3.37;ceil_wsync;0;0;0;0;0;0;0;0;0.000000;0.000000;0;0;0.000000;0.000000;1.000000%=0;5.000000%=0;10.000000%=0;20.000000%=0;30.000000%=0;40.000000%=0;50.000000%=0;60.000000%=0;70.000000%=0;80.000000%=0;90.000000%=0;95.000000%=0;99.000000%=0;99.500000%=0;99.900000%=0;99.950000%=0;99.990000%=0;0%=0;0%=0;0%=0;0;0;0.000000;0.000000;0;0;0.000000%;0.000000;0.000000;65536;109;27;597916;0;0;0.000000;0.000000;44;20303;836.772720;1948.273893;1.000000%=69;5.000000%=85;10.000000%=99;20.000000%=126;30.000000%=158;40.000000%=199;50.000000%=246;60.000000%=309;70.000000%=391;80.000000%=497;90.000000%=3227;95.000000%=4423;99.000000%=10158;99.500000%=13828;99.900000%=17956;99.950000%=18219;99.990000%=20054;0%=0;0%=0;0%=0;45;20304;837.977996;1948.551981;65;192;100.000000%;109.579564;13.628558;0.069241%;1.280450%;98652;0;11;200.0%;0.0%;0.0%;0.0%;0.0%;0.0%;0.0%;0.00%;0.00%;0.00%;0.00%;0.02%;10.21%;40.28%;29.68%;7.67%;1.43%;0.59%;1.15%;7.87%;1.09%;0.01%;0.00%;0.00%;0.00%;0.00%;0.00%;0.00%;0.00%
+FIO_CEIL rrand4k 3;fio-3.37;ceil_rrand;0;0;65536;1951;487;33582;0;0;0.000000;0.000000;22;72341;2048.072341;4450.116548;1.000000%=24;5.000000%=28;10.000000%=35;20.000000%=38;30.000000%=46;40.000000%=126;50.000000%=150;60.000000%=177;70.000000%=234;80.000000%=460;90.000000%=10027;95.000000%=13303;99.000000%=15925;99.500000%=17694;99.900000%=20840;99.950000%=23199;99.990000%=51642;0%=0;0%=0;0%=0;22;72341;2048.264434;4450.179352;624;21280;99.622849%;1943.641791;3484.904158;0;0;0;0;0;0;0.000000;0.000000;0;0;0.000000;0.000000;1.000000%=0;5.000000%=0;10.000000%=0;20.000000%=0;30.000000%=0;40.000000%=0;50.000000%=0;60.000000%=0;70.000000%=0;80.000000%=0;90.000000%=0;95.000000%=0;99.000000%=0;99.500000%=0;99.900000%=0;99.950000%=0;99.990000%=0;0%=0;0%=0;0%=0;0;0;0.000000;0.000000;0;0;0.000000%;0.000000;0.000000;0.119115%;0.509217%;16440;0;11;100.0%;0.0%;0.0%;0.0%;0.0%;0.0%;0.0%;0.00%;0.00%;0.00%;0.00%;31.47%;6.53%;33.97%;8.35%;0.95%;0.56%;1.17%;0.23%;6.70%;9.93%;0.13%;0.01%;0.00%;0.00%;0.00%;0.00%;0.00%;0.00%
+2026-10-05T04:42:22.451Z FIO_CEIL end
+2026-10-05T04:42:22.451Z bench data paths=1..6 time_s=5.000 writers=8 direct_io=on frag_bytes=65536 qds=1,16,64,256
+2026-10-05T04:42:22.475Z store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+2026-10-05T04:42:27.480Z BENCH_OK kind=data rw=write paths=1 qd=1 ops=1864 wall_s=5.004 ops_s=372.5 p50_us=192 p99_us=27125 max_us=103714 GiB_s=0.023 errors=0 diskw_ops=1864 diskw_avg_us=2641
+2026-10-05T04:42:27.480Z  diskutil: vda=93% vda3=96%
+2026-10-05T04:42:32.497Z BENCH_OK kind=data rw=write paths=1 qd=16 ops=3410 wall_s=5.016 ops_s=679.8 p50_us=6646 p99_us=319019 max_us=765528 GiB_s=0.041 errors=0 diskw_ops=3410 diskw_avg_us=11574
+2026-10-05T04:42:32.497Z  diskutil: vda=94% vda3=99%
+2026-10-05T04:42:37.643Z BENCH_OK kind=data rw=write paths=1 qd=64 ops=3387 wall_s=5.146 ops_s=658.2 p50_us=9139 p99_us=1068450 max_us=2163203 GiB_s=0.040 errors=0 diskw_ops=3387 diskw_avg_us=11690
+2026-10-05T04:42:37.643Z  diskutil: vda=90% vda3=99%
+2026-10-05T04:42:43.304Z BENCH_OK kind=data rw=write paths=1 qd=256 ops=3333 wall_s=5.660 ops_s=588.9 p50_us=30895 p99_us=3442249 max_us=5000962 GiB_s=0.036 errors=7 diskw_ops=3333 diskw_avg_us=11951
+2026-10-05T04:42:43.304Z  diskutil: vda=88% vda3=98%
+2026-10-05T04:42:48.309Z BENCH_OK kind=data rw=read paths=1 qd=1 ops=1120 wall_s=5.005 ops_s=223.8 p50_us=469 p99_us=29601 max_us=39267 GiB_s=0.014 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:42:48.309Z  diskutil: vda=94% vda3=97%
+2026-10-05T04:42:53.330Z BENCH_OK kind=data rw=read paths=1 qd=16 ops=20960 wall_s=5.018 ops_s=4176.7 p50_us=967 p99_us=27980 max_us=44864 GiB_s=0.255 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:42:53.330Z  diskutil: vda=84% vda3=96%
+2026-10-05T04:42:58.351Z BENCH_OK kind=data rw=read paths=1 qd=64 ops=24988 wall_s=5.019 ops_s=4978.3 p50_us=10185 p99_us=34308 max_us=48686 GiB_s=0.304 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:42:58.351Z  diskutil: vda=83% vda3=98%
+2026-10-05T04:43:03.378Z BENCH_OK kind=data rw=read paths=1 qd=256 ops=60952 wall_s=5.022 ops_s=12136.6 p50_us=21382 p99_us=40283 max_us=90546 GiB_s=0.741 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:43:03.378Z  diskutil: vda=56% vda3=96%
+2026-10-05T04:43:08.494Z BENCH_OK kind=data rw=write paths=2 qd=1 ops=4941 wall_s=5.002 ops_s=987.9 p50_us=126 p99_us=13836 max_us=25915 GiB_s=0.060 errors=0 diskw_ops=4941 diskw_avg_us=981
+2026-10-05T04:43:08.494Z  diskutil: vda=87% vda3=90%
+2026-10-05T04:43:13.518Z BENCH_OK kind=data rw=write paths=2 qd=16 ops=7985 wall_s=5.023 ops_s=1589.6 p50_us=3959 p99_us=146398 max_us=633959 GiB_s=0.097 errors=0 diskw_ops=7985 diskw_avg_us=4874
+2026-10-05T04:43:13.518Z  diskutil: vda=90% vda3=98%
+2026-10-05T04:43:18.640Z BENCH_OK kind=data rw=write paths=2 qd=64 ops=9135 wall_s=5.121 ops_s=1783.7 p50_us=3127 p99_us=484695 max_us=1431378 GiB_s=0.109 errors=0 diskw_ops=9135 diskw_avg_us=4250
+2026-10-05T04:43:18.640Z  diskutil: vda=90% vda3=97%
+2026-10-05T04:43:24.340Z BENCH_OK kind=data rw=write paths=2 qd=256 ops=6445 wall_s=5.699 ops_s=1130.9 p50_us=12107 p99_us=2398918 max_us=4300786 GiB_s=0.069 errors=0 diskw_ops=6445 diskw_avg_us=6109
+2026-10-05T04:43:24.340Z  diskutil: vda=84% vda3=95%
+2026-10-05T04:43:29.346Z BENCH_OK kind=data rw=read paths=2 qd=1 ops=5119 wall_s=5.006 ops_s=1022.6 p50_us=150 p99_us=15819 max_us=28740 GiB_s=0.062 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:43:29.346Z  diskutil: vda=89% vda3=90%
+2026-10-05T04:43:34.359Z BENCH_OK kind=data rw=read paths=2 qd=16 ops=8996 wall_s=5.012 ops_s=1794.9 p50_us=7766 p99_us=29247 max_us=41220 GiB_s=0.110 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:43:34.359Z  diskutil: vda=93% vda3=99%
+2026-10-05T04:43:39.374Z BENCH_OK kind=data rw=read paths=2 qd=64 ops=21844 wall_s=5.013 ops_s=4357.3 p50_us=14165 p99_us=32845 max_us=47629 GiB_s=0.266 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:43:39.374Z  diskutil: vda=81% vda3=99%
+2026-10-05T04:43:44.403Z BENCH_OK kind=data rw=read paths=2 qd=256 ops=61405 wall_s=5.024 ops_s=12221.8 p50_us=21108 p99_us=35788 max_us=53622 GiB_s=0.746 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:43:44.403Z  diskutil: vda=54% vda3=98%
+2026-10-05T04:43:49.690Z BENCH_OK kind=data rw=write paths=3 qd=1 ops=842 wall_s=5.011 ops_s=168.0 p50_us=7041 p99_us=19608 max_us=27948 GiB_s=0.010 errors=0 diskw_ops=842 diskw_avg_us=5882
+2026-10-05T04:43:49.690Z  diskutil: vda=97% vda3=99%
+2026-10-05T04:43:54.717Z BENCH_OK kind=data rw=write paths=3 qd=16 ops=5760 wall_s=5.026 ops_s=1146.0 p50_us=8043 p99_us=166304 max_us=563788 GiB_s=0.070 errors=0 diskw_ops=5760 diskw_avg_us=6814
+2026-10-05T04:43:54.717Z  diskutil: vda=91% vda3=99%
+2026-10-05T04:43:59.870Z BENCH_OK kind=data rw=write paths=3 qd=64 ops=5603 wall_s=5.153 ops_s=1087.3 p50_us=9977 p99_us=702136 max_us=1434006 GiB_s=0.066 errors=0 diskw_ops=5603 diskw_avg_us=7051
+2026-10-05T04:43:59.870Z  diskutil: vda=89% vda3=97%
+2026-10-05T04:44:05.686Z BENCH_OK kind=data rw=write paths=3 qd=256 ops=4328 wall_s=5.815 ops_s=744.3 p50_us=17530 p99_us=3095255 max_us=5000479 GiB_s=0.045 errors=3 diskw_ops=4328 diskw_avg_us=9248
+2026-10-05T04:44:05.686Z  diskutil: vda=86% vda3=98%
+2026-10-05T04:44:10.702Z BENCH_OK kind=data rw=read paths=3 qd=1 ops=4743 wall_s=5.016 ops_s=945.6 p50_us=141 p99_us=19061 max_us=42526 GiB_s=0.058 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:44:10.702Z  diskutil: vda=89% vda3=91%
+2026-10-05T04:44:15.718Z BENCH_OK kind=data rw=read paths=3 qd=16 ops=26684 wall_s=5.014 ops_s=5321.7 p50_us=719 p99_us=25455 max_us=51604 GiB_s=0.325 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:44:15.718Z  diskutil: vda=82% vda3=92%
+2026-10-05T04:44:20.743Z BENCH_OK kind=data rw=read paths=3 qd=64 ops=34823 wall_s=5.022 ops_s=6933.6 p50_us=3771 p99_us=32774 max_us=43018 GiB_s=0.423 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:44:20.743Z  diskutil: vda=77% vda3=92%
+2026-10-05T04:44:25.774Z BENCH_OK kind=data rw=read paths=3 qd=256 ops=54896 wall_s=5.026 ops_s=10921.5 p50_us=23593 p99_us=38494 max_us=51751 GiB_s=0.667 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:44:25.774Z  diskutil: vda=56% vda3=97%
+2026-10-05T04:44:30.977Z BENCH_OK kind=data rw=write paths=4 qd=1 ops=563 wall_s=5.009 ops_s=112.4 p50_us=8278 p99_us=21115 max_us=25420 GiB_s=0.007 errors=0 diskw_ops=563 diskw_avg_us=8808
+2026-10-05T04:44:30.977Z  diskutil: vda=94% vda3=98%
+2026-10-05T04:44:36.024Z BENCH_OK kind=data rw=write paths=4 qd=16 ops=4663 wall_s=5.046 ops_s=924.0 p50_us=8188 p99_us=229428 max_us=697362 GiB_s=0.056 errors=0 diskw_ops=4663 diskw_avg_us=8365
+2026-10-05T04:44:36.024Z  diskutil: vda=88% vda3=99%
+2026-10-05T04:44:41.071Z BENCH_OK kind=data rw=write paths=4 qd=64 ops=4747 wall_s=5.046 ops_s=940.7 p50_us=11628 p99_us=735665 max_us=1660800 GiB_s=0.057 errors=0 diskw_ops=4747 diskw_avg_us=8167
+2026-10-05T04:44:41.071Z  diskutil: vda=87% vda3=99%
+2026-10-05T04:44:46.562Z BENCH_OK kind=data rw=write paths=4 qd=256 ops=5305 wall_s=5.491 ops_s=966.2 p50_us=12419 p99_us=2770816 max_us=5000130 GiB_s=0.059 errors=1 diskw_ops=5305 diskw_avg_us=7381
+2026-10-05T04:44:46.562Z  diskutil: vda=84% vda3=96%
+2026-10-05T04:44:51.567Z BENCH_OK kind=data rw=read paths=4 qd=1 ops=683 wall_s=5.005 ops_s=136.5 p50_us=945 p99_us=32437 max_us=42976 GiB_s=0.008 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:44:51.567Z  diskutil: vda=95% vda3=98%
+2026-10-05T04:44:56.593Z BENCH_OK kind=data rw=read paths=4 qd=16 ops=14225 wall_s=5.024 ops_s=2831.2 p50_us=1428 p99_us=29717 max_us=36701 GiB_s=0.173 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:44:56.593Z  diskutil: vda=90% vda3=98%
+2026-10-05T04:45:01.614Z BENCH_OK kind=data rw=read paths=4 qd=64 ops=20987 wall_s=5.019 ops_s=4181.5 p50_us=14884 p99_us=36086 max_us=50079 GiB_s=0.255 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:45:01.614Z  diskutil: vda=81% vda3=98%
+2026-10-05T04:45:06.632Z BENCH_OK kind=data rw=read paths=4 qd=256 ops=55906 wall_s=5.013 ops_s=11151.5 p50_us=23385 p99_us=36950 max_us=56965 GiB_s=0.681 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:45:06.632Z  diskutil: vda=55% vda3=97%
+2026-10-05T04:45:11.842Z BENCH_OK kind=data rw=write paths=5 qd=1 ops=1292 wall_s=5.010 ops_s=257.9 p50_us=277 p99_us=18423 max_us=27661 GiB_s=0.016 errors=0 diskw_ops=1292 diskw_avg_us=3822
+2026-10-05T04:45:11.842Z  diskutil: vda=95% vda3=98%
+2026-10-05T04:45:16.866Z BENCH_OK kind=data rw=write paths=5 qd=16 ops=5346 wall_s=5.024 ops_s=1064.1 p50_us=8962 p99_us=182062 max_us=500486 GiB_s=0.065 errors=0 diskw_ops=5346 diskw_avg_us=7292
+2026-10-05T04:45:16.866Z  diskutil: vda=90% vda3=98%
+2026-10-05T04:45:21.980Z BENCH_OK kind=data rw=write paths=5 qd=64 ops=5410 wall_s=5.113 ops_s=1058.0 p50_us=11512 p99_us=668852 max_us=1488647 GiB_s=0.065 errors=0 diskw_ops=5410 diskw_avg_us=7173
+2026-10-05T04:45:21.980Z  diskutil: vda=88% vda3=97%
+2026-10-05T04:45:28.062Z BENCH_OK kind=data rw=write paths=5 qd=256 ops=6113 wall_s=6.081 ops_s=1005.3 p50_us=12205 p99_us=2677477 max_us=5000203 GiB_s=0.061 errors=1 diskw_ops=6113 diskw_avg_us=6374
+2026-10-05T04:45:28.062Z  diskutil: vda=84% vda3=95%
+2026-10-05T04:45:33.069Z BENCH_OK kind=data rw=read paths=5 qd=1 ops=3774 wall_s=5.006 ops_s=753.8 p50_us=178 p99_us=17930 max_us=35308 GiB_s=0.046 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:45:33.069Z  diskutil: vda=90% vda3=91%
+2026-10-05T04:45:38.073Z BENCH_OK kind=data rw=read paths=5 qd=16 ops=22002 wall_s=5.003 ops_s=4398.1 p50_us=786 p99_us=27995 max_us=49077 GiB_s=0.268 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:45:38.073Z  diskutil: vda=85% vda3=92%
+2026-10-05T04:45:43.097Z BENCH_OK kind=data rw=read paths=5 qd=64 ops=28482 wall_s=5.022 ops_s=5671.6 p50_us=6943 p99_us=31347 max_us=42150 GiB_s=0.346 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:45:43.097Z  diskutil: vda=77% vda3=93%
+2026-10-05T04:45:48.122Z BENCH_OK kind=data rw=read paths=5 qd=256 ops=62345 wall_s=5.021 ops_s=12418.0 p50_us=21159 p99_us=35515 max_us=74368 GiB_s=0.758 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:45:48.122Z  diskutil: vda=54% vda3=95%
+2026-10-05T04:45:53.330Z BENCH_OK kind=data rw=write paths=6 qd=1 ops=1193 wall_s=5.009 ops_s=238.2 p50_us=304 p99_us=20011 max_us=25528 GiB_s=0.015 errors=0 diskw_ops=1193 diskw_avg_us=4133
+2026-10-05T04:45:53.330Z  diskutil: vda=93% vda3=97%
+2026-10-05T04:45:58.352Z BENCH_OK kind=data rw=write paths=6 qd=16 ops=10648 wall_s=5.020 ops_s=2120.9 p50_us=727 p99_us=115281 max_us=325307 GiB_s=0.129 errors=0 diskw_ops=10648 diskw_avg_us=3633
+2026-10-05T04:45:58.352Z  diskutil: vda=87% vda3=95%
+2026-10-05T04:46:03.357Z BENCH_OK kind=data rw=write paths=6 qd=64 ops=8510 wall_s=5.005 ops_s=1700.4 p50_us=4632 p99_us=476171 max_us=1503004 GiB_s=0.104 errors=0 diskw_ops=8510 diskw_avg_us=4484
+2026-10-05T04:46:03.357Z  diskutil: vda=85% vda3=94%
+2026-10-05T04:46:09.075Z BENCH_OK kind=data rw=write paths=6 qd=256 ops=8423 wall_s=5.717 ops_s=1473.2 p50_us=8200 p99_us=2693754 max_us=5000381 GiB_s=0.090 errors=4 diskw_ops=8423 diskw_avg_us=4555
+2026-10-05T04:46:09.075Z  diskutil: vda=78% vda3=90%
+2026-10-05T04:46:14.086Z BENCH_OK kind=data rw=read paths=6 qd=1 ops=5097 wall_s=5.010 ops_s=1017.3 p50_us=166 p99_us=16159 max_us=33514 GiB_s=0.062 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:46:14.086Z  diskutil: vda=85% vda3=87%
+2026-10-05T04:46:19.105Z BENCH_OK kind=data rw=read paths=6 qd=16 ops=6627 wall_s=5.019 ops_s=1320.5 p50_us=10824 p99_us=34048 max_us=50890 GiB_s=0.081 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:46:19.105Z  diskutil: vda=91% vda3=98%
+2026-10-05T04:46:24.124Z BENCH_OK kind=data rw=read paths=6 qd=64 ops=17182 wall_s=5.018 ops_s=3424.4 p50_us=20244 p99_us=34504 max_us=73131 GiB_s=0.209 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:46:24.124Z  diskutil: vda=82% vda3=99%
+2026-10-05T04:46:29.144Z BENCH_OK kind=data rw=read paths=6 qd=256 ops=63337 wall_s=5.015 ops_s=12630.0 p50_us=19741 p99_us=42168 max_us=134210 GiB_s=0.771 errors=0 diskw_ops=0 diskw_avg_us=0
+2026-10-05T04:46:29.144Z  diskutil: vda=52% vda3=96%

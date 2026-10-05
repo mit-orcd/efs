@@ -1,0 +1,117 @@
+P3 — efsd --bench + efs-fuse --bench — 20261005-045140
+
+First run of the two P3 bench tools (work-items.md "Single-node storage
+bench" and "Client bench", asked Oct 2). Host: efs1 of the dev Tart
+cluster — 2 vCPU, 2.8 GiB RAM, ONE virtio disk (vda, host-cached), fio
+3.37. This is NOT an fcstor node: the absolute numbers are the VM's, and
+the 1->6 path curve runs on one physical device (all six roots are
+directories on vda3). What the run proves: the tools drive the
+production paths, the ladders and ceilings line up, and the engine
+reaches the disk's own limit on this host. Owed: a run on a 6-NVMe
+fcstor node (the plan's real subject; needs a named host), the two-host
+client ladder (plan rule 6).
+
+Runs (all on efs1, dev cluster efsd at 192.168.2.4:17432 serving its own
+load; client benches ran sequentially after the server benches):
+  efsd --bench data --storage p1..p6 --time 5 --writers 8 --direct-io
+  efsd --bench meta --meta-storage /var/tmp/efs-bench-meta --time 10
+  efs-fuse 192.168.2.4:17432 fs /tmp/bench-mnt --bench cpu|put|write
+  efsd --bench data ... --time 2 --perf (top-symbols line)
+
+## Hot path, same process (--perf run, efsd-bench-data-perf.log)
+
+  PERF_TOP 42.69% blake3_hash_many_neon  2.78% __memcpy_generic
+  2.12% [k] try_to_wake_up — the read-verify hash (the GET handler's
+  I25 blake3-per-fragment verify, which the bench's slot_get runs
+  exactly like the handler) is the only user-space symbol above 2%;
+  diskutil sat at 75-100% vda3 on every round, so the wall was the
+  disk, not CPU, even on 2 vCPUs.
+
+## fio ceilings, same host (from the bench logs, FIO_CEIL lines)
+
+  wseq64k O_DIRECT+end_fsync : 51.6 MiB/s, 825 IOPS, clat mean 1209 us
+  rseq64k O_DIRECT           : 49.6 MiB/s, 793 IOPS, clat mean 1258 us
+  wsync4k write+fsync (WAL)  : 27 ops/s (~36.5 ms per write+fsync)
+  rrand4k O_DIRECT           : 487-2025 IOPS (~0.5-2 ms; host cache varies)
+
+## efsd --bench data (ops/s / p50 us / p99 us / GiB/s; 5 s rounds, errors=0 unless noted)
+
+write ladder
+  paths=1: QD1 372/192/27k/0.023  QD16 680/6646/319k/0.041  QD64 658/9139/1068k/0.040  QD256 589/31k/3442k/0.036 (7 err)
+  paths=2: QD1 988/126/14k/0.060  QD16 1590/3959/146k/0.097  QD64 1784/3127/485k/0.109  QD256 1131/12k/2399k/0.069
+  paths=3: QD1 168/7041/20k/0.010  QD16 1146/8043/166k/0.070  QD64 1087/9977/702k/0.066  QD256 744/18k/3095k/0.045 (3 err)
+  paths=4: QD1 112/8278/21k/0.007  QD16 924/8188/229k/0.056  QD64 941/12k/736k/0.057  QD256 966/12k/2771k/0.059 (1 err)
+  paths=5: QD1 258/277/18k/0.016  QD16 1064/8962/182k/0.065  QD64 1058/12k/669k/0.065  QD256 1005/12k/2677k/0.061 (1 err)
+  paths=6: QD1 238/304/20k/0.015  QD16 2121/727/115k/0.129  QD64 1700/4632/476k/0.104  QD256 1473/8200/2694k/0.090 (4 err)
+read ladder
+  paths=1: QD1 224/469/30k/0.014  QD16 4177/967/28k/0.255  QD64 4978/10k/34k/0.304  QD256 12137/21k/40k/0.741
+  paths=6: QD1 1017/166/16k/0.062  QD16 1321/11k/34k/0.081  QD64 3424/20k/35k/0.209  QD256 12630/20k/42k/0.771
+  (paths 2-5 in efsd-bench-data.log; same shape. diskutil vda3 82-99%
+   on every round — the wall was the disk, not CPU.)
+
+## efsd --bench meta (10 s phases; fio small-IO lines above are the bar)
+
+  kv-write QD1        : 27.0 ops/s, p50 36.1 ms, p99 68 ms — one WAL fsync
+                        per put; exactly the wsync4k ceiling (27 ops/s)
+  kv flush+compact    : flush 181 ms, compact 211 ms (the D11 segment-fsync
+                        mode on this host)
+  kv-read (270 keys)  : 5.33 M ops/s, p50 <1 us (memtable-resident working
+                        set — honest, but not a disk read)
+  raft-append-qd1     : 26.9 ops/s, p50 37.8 ms — the same fsync wall
+  raft-append-batch32 : 950 entries/s (35 ms per 32-entry batch) — batching
+                        amortizes the same fsync x32
+  raft-reopen         : 17 ms to reopen + replay 9806 entries
+
+## efs-fuse --bench (client on efs1, TCP to the dev cluster)
+
+  cpu (no network)    : 1 thread 11.8k chunks/s = 1.44 GiB/s (p50 84 us);
+                        >=2 threads 2.85 GiB/s — 2 vCPU saturates; blake3+
+                        XOR+copy is NOT the client wall at any dd rate
+  put (round trip)    : QD1 1416 chunks/s (4247 frags/s, p50 458 us,
+                        stored 0.26 GiB/s); QD16 1097 (p50 6.8 ms);
+                        QD64 1658 (p50 28.6 ms); QD256 256 (p99 5.1 s —
+                        server disk saturated)
+  write (pipeline)    : 1 file 51 MiB/s (fsync 0.75 s); 4 files 64 MiB/s;
+                        16 files 71 MiB/s (fsync avg 11.6 s, REPORT/flush
+                        contention on the 2-vCPU server VM); 64 files:
+                        efs-fuse OOM-killed (kernel oom-kill 04:54:33,
+                        2.8 GiB VM; 64 x 64 MiB writeback+dcache working
+                        set) — VM resource limit, not a bench defect
+
+## Interpretation
+
+- Reading per the plan's key: cpu (2.8 GiB/s) >> put (0.2-0.3 GiB/s) =>
+  latency-bound; put ~= write => the pipeline adds nothing over the
+  per-fragment round trip ON THIS HOST, where the server disk costs
+  10-100x a real NVMe (fsync 36 ms, 64 KiB write 1.2 ms). The dd level
+  was not re-measured — the plan defines it as the number we have, and a
+  dev-VM dd is not the fcstor baseline (1.3-1.5 GB/s there).
+- efsd --bench data: the write path reaches ~82% of the single-disk fio
+  ceiling at QD16 (680 vs 825 IOPS) and then holds flat-to-degrading
+  with depth because the disk is already saturated (p99 seconds at
+  QD256; diskutil 82-99% throughout). On one device the writer pool /
+  store is NOT the serialization point. The 1->6 path curve is noise on
+  a shared device — the multi-NVMe question needs the fcstor run.
+- efsd --bench meta: on this host a metadata write costs one disk fsync
+  (36 ms); the engine sits exactly on the fsync ceiling at QD1, and the
+  batch32 line (x32) is the amortization lever the hot-path contract
+  describes. Nothing between the engine and the fsync.
+- The few write errors at QD256 (1-7 per round) are EFS_ERR_BUSY slot
+  handoffs under multi-second disk stalls — recorded, not hidden.
+
+## Tool notes (what landed)
+
+  efsd --bench data|meta: fragment store + writer pool exactly as the
+  PUT/GET handlers drive them (same export bind, first-write path hint,
+  O_DIRECT, sidecar sum, read-verify), paths x QD 1/16/64/256 ladders,
+  exact p50/p99 per round, fio ceilings in the same log, iostats
+  disk-write cross-check, /proc/diskstats util per round, --perf for top
+  symbols. Bench roots must be scratch; the bench export tree is removed
+  between path counts and afterwards. Replaces the old pwrite loop.
+  efs-fuse <nodes> <export> <mnt> --bench cpu|put|write [--bench-time s]
+  [--bench-mib n] [--perf]: levels cpu (arith only), put
+  (efs_client_put_fragments_parallel at QD 1/16/64/256), write
+  (efs_fuse_create_at -> efs_fuse_write 1 MiB -> efs_fuse_fsync_ino ->
+  efs_fuse_release_ino, N files in parallel, flush in the clock, files
+  unlinked after). Production path only: per-chunk hashes, REPORT on
+  fsync, non-zero payloads.

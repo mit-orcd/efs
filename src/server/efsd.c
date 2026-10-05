@@ -103,13 +103,21 @@ static void usage(const char *prog)
             "[--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
             "[--writers <n>] [--join <host:port>] [--no-persist] [--perf] [--strace] "
             "[--meta-storage <root>]\n"
-            "   or: %s --bench <path> --time <seconds> "
-            "[--writers <n>] [--direct-io|--no-direct-io]\n"
+            "   or: %s --bench data --storage <path>[,path...] "
+            "[--time <seconds>] [--writers <n>] [--direct-io|--no-direct-io] "
+            "[--perf]\n"
+            "   or: %s --bench meta --meta-storage <dir> [--time <seconds>] "
+            "[--perf]\n"
             "  --storage        1..%d paths (comma and/or repeated).\n"
             "                   Multiple paths: least-queue write placement\n"
             "                   (chunk_index %% N) across disks for parallelism.\n"
-            "  --bench <path>   local disk saturate (fragment-sized writes); no cluster\n"
-            "  --time <sec>     duration for --bench (default 10)\n"
+            "  --bench <kind>   single-node storage bench; no cluster. data:\n"
+            "                   fragment store + writer pool exactly as the PUT/\n"
+            "                   GET handlers drive it, paths x QD 1/16/64/256\n"
+            "                   ladders with p50/p99; meta: KV + Raft log, sync on.\n"
+            "                   Bench roots must be scratch (created if absent,\n"
+            "                   bench trees removed afterwards). Never /efs/data.\n"
+            "  --time <sec>     duration per bench round (default 10)\n"
             "  --direct-io      O_DIRECT for fragment I/O\n"
             "  --no-direct-io   use the page cache for fragment I/O (default)\n"
             "  --writers <n>    shared writer threads across all storage paths "
@@ -117,7 +125,7 @@ static void usage(const char *prog)
             "  --meta-storage   directory whose mdraft/ holds the Raft log and KV.\n"
             "                   Default: the first --storage root. Does not move\n"
             "                   an existing mdraft.\n",
-            prog, prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_RESERVED);
+            prog, prog, prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_RESERVED);
 }
 
 static int add_storage_path(struct efsd_server *s, const char *path)
@@ -353,7 +361,7 @@ int main(int argc, char **argv)
     server_peer_pool_init();
 
     char *join_peer = NULL;
-    char *bench_path = NULL;
+    char *bench_kind = NULL;
     double bench_time = 10.0;
 
     for (int i = 1; i < argc; i++) {
@@ -373,7 +381,7 @@ int main(int argc, char **argv)
                     sizeof(server.meta_storage) - 1);
             server.meta_storage[sizeof(server.meta_storage) - 1] = '\0';
         } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
-            bench_path = argv[++i];
+            bench_kind = argv[++i];
         } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
             bench_time = atof(argv[++i]);
             if (bench_time <= 0.0) {
@@ -419,11 +427,14 @@ int main(int argc, char **argv)
         }
     }
 
-    if (bench_path) {
-        int writers = server.nwriters > 0 ? server.nwriters
-                                         : EFS_WRITERS_PER_PATH_DEFAULT;
-        return server_run_local_bench(bench_path, bench_time, writers,
-                                      server.direct_io);
+    if (bench_kind) {
+        if (strcmp(bench_kind, "data") == 0 && server.storage_path_count == 0) {
+            fprintf(stderr, "--bench data needs --storage <path>[,path...] "
+                            "(scratch roots, never a live data root)\n");
+            usage(argv[0]);
+            return 1;
+        }
+        return server_run_local_bench(&server, bench_kind, bench_time);
     }
 
     if (server.id == 0 || server.port == 0 || server.storage_path_count == 0) {

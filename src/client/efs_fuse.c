@@ -7,6 +7,8 @@
 #include "efs/kv_key.h"
 #include "efs/log_ts.h"
 #include "efs/placement.h"
+#include "efs/checksum.h"
+#include "efs/erasure.h"
 #include "efs/rdma.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -5475,6 +5477,471 @@ ready:
     return EFS_OK;
 }
 
+/* ---- --bench: the client-side ladder (P3, plan row L) ----
+ * Levels, one variable apart: cpu (the client's arithmetic ceiling:
+ * blake3 + XOR parity + the bounce copy, no network), put (the
+ * per-fragment round trip via efs_client_put_fragments_parallel, no
+ * FUSE/dcache/REPORT), write (efs_fuse_create -> efs_fuse_write 1 MiB ->
+ * efs_fuse_fsync -> release in-process: the full pipeline with the flush
+ * in the clock). dd through the mount is the fourth level and is measured
+ * outside. Rules from the plan: production path only (no skipped hash, no
+ * skipped REPORT), bytes counted after the reply/fsync, fixed queue depth
+ * with p50/p99 per level, non-zero payloads, never strace. */
+static const char *g_bench_kind;
+static double g_bench_time = 10.0;
+static uint64_t g_bench_mib = 64; /* per-file size for the write level */
+
+static double bench_now_sec(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+#define BENCH_LAT_MAX (1u << 20)
+struct bench_lat {
+    uint64_t *v;
+    uint32_t n;
+    uint32_t cap;
+};
+
+static void bench_lat_add(struct bench_lat *lv, uint64_t us)
+{
+    if (lv->n >= BENCH_LAT_MAX)
+        return;
+    if (lv->n == lv->cap) {
+        uint32_t ncap = lv->cap ? lv->cap * 2 : 4096;
+        if (ncap > BENCH_LAT_MAX)
+            ncap = BENCH_LAT_MAX;
+        uint64_t *nv = realloc(lv->v, (size_t)ncap * sizeof(*nv));
+        if (!nv)
+            return;
+        lv->v = nv;
+        lv->cap = ncap;
+    }
+    lv->v[lv->n++] = us;
+}
+
+static int bench_u64_cmp(const void *a, const void *b)
+{
+    uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
+    return (x > y) - (x < y);
+}
+
+/* Merge every worker's samples, sort once, print the level line. */
+static void bench_lat_report(const char *kind, const char *level, int qd,
+                             struct bench_lat *lvs, int nlvs, uint64_t ops,
+                             uint64_t errors, double wall, uint64_t op_bytes)
+{
+    uint64_t total = 0;
+    for (int i = 0; i < nlvs; i++)
+        total += lvs[i].n;
+    uint64_t *all = malloc((size_t)(total ? total : 1) * sizeof(*all));
+    uint64_t p50 = 0, p99 = 0, max = 0;
+    if (all) {
+        uint64_t k = 0;
+        for (int i = 0; i < nlvs; i++) {
+            memcpy(all + k, lvs[i].v, (size_t)lvs[i].n * sizeof(*all));
+            k += lvs[i].n;
+        }
+        qsort(all, (size_t)k, sizeof(*all), bench_u64_cmp);
+        if (k) {
+            p50 = all[k / 2];
+            p99 = all[(k * 99) / 100];
+            max = all[k - 1];
+        }
+        free(all);
+    }
+    if (wall < 1e-9)
+        wall = 1e-9;
+    printf("BENCH_OK kind=%s level=%s qd=%d ops=%llu wall_s=%.3f ops_s=%.1f "
+           "p50_us=%llu p99_us=%llu max_us=%llu GiB_s=%.3f errors=%llu\n",
+           kind, level, qd, (unsigned long long)ops, wall, (double)ops / wall,
+           (unsigned long long)p50, (unsigned long long)p99,
+           (unsigned long long)max,
+           (double)ops * op_bytes / (1 << 30) / wall,
+           (unsigned long long)errors);
+    fflush(stdout);
+}
+
+static void bench_fill_nonzero(uint8_t *buf, size_t len, uint64_t seed)
+{
+    uint64_t x = seed ? seed : 0x9E3779B97F4A7C15ULL;
+    for (size_t i = 0; i < len; i += 8) {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        uint64_t v = x | 1ULL;
+        size_t n = len - i < 8 ? len - i : 8;
+        memcpy(buf + i, &v, n);
+    }
+}
+
+/* Level cpu: chunk -> blake3 -> 2+1 encode -> bounce copy, then drop. */
+struct bench_cpu_arg {
+    int tid;
+    double deadline;
+    uint64_t ops;
+    struct bench_lat lat;
+};
+
+static void *bench_cpu_worker(void *arg)
+{
+    struct bench_cpu_arg *a = arg;
+    uint8_t *chunk = malloc(EFS_CHUNK_SIZE);
+    uint8_t *bounce = malloc(EFS_CHUNK_SIZE + EFS_FRAGMENT_SIZE);
+    uint8_t *f0 = malloc(EFS_FRAGMENT_SIZE);
+    uint8_t *f1 = malloc(EFS_FRAGMENT_SIZE);
+    uint8_t *f2 = malloc(EFS_FRAGMENT_SIZE);
+    if (!chunk || !bounce || !f0 || !f1 || !f2) {
+        free(chunk);
+        free(bounce);
+        free(f0);
+        free(f1);
+        free(f2);
+        return NULL;
+    }
+    bench_fill_nonzero(chunk, EFS_CHUNK_SIZE, (uint64_t)a->tid + 1);
+    uint8_t sum[EFS_HASH_SIZE];
+    uint8_t *frags[EFS_NUM_FRAGMENTS] = { f0, f1, f2 };
+    while (bench_now_sec() < a->deadline) {
+        uint64_t t0 = fuse_now_us();
+        efs_hash(chunk, EFS_CHUNK_SIZE, sum);
+        efs_encode_chunk(chunk, EFS_CHUNK_SIZE, EFS_CHUNK_SIZE, frags);
+        /* The RDMA bounce copy: fragments land in the registered buffer. */
+        memcpy(bounce, f0, EFS_FRAGMENT_SIZE);
+        memcpy(bounce + EFS_FRAGMENT_SIZE, f1, EFS_FRAGMENT_SIZE);
+        memcpy(bounce + 2 * EFS_FRAGMENT_SIZE, f2, EFS_FRAGMENT_SIZE);
+        bench_lat_add(&a->lat, fuse_now_us() - t0);
+        a->ops++;
+    }
+    free(chunk);
+    free(bounce);
+    free(f0);
+    free(f1);
+    free(f2);
+    return NULL;
+}
+
+static int efs_fuse_bench_cpu(double time_sec)
+{
+    static const int ladder[] = { 1, 2, 4, 8, 16 };
+    printf("bench cpu time_s=%.3f chunk_bytes=%d threads=1,2,4,8,16\n",
+           time_sec, EFS_CHUNK_SIZE);
+    for (uint32_t li = 0; li < sizeof(ladder) / sizeof(ladder[0]); li++) {
+        int nt = ladder[li];
+        struct bench_cpu_arg *args = calloc((size_t)nt, sizeof(*args));
+        pthread_t *tids = calloc((size_t)nt, sizeof(*tids));
+        if (!args || !tids) {
+            free(args);
+            free(tids);
+            return 1;
+        }
+        double deadline = bench_now_sec() + time_sec;
+        double t0 = bench_now_sec();
+        for (int i = 0; i < nt; i++) {
+            args[i].tid = i;
+            args[i].deadline = deadline;
+            if (pthread_create(&tids[i], NULL, bench_cpu_worker, &args[i]) != 0)
+                tids[i] = 0;
+        }
+        for (int i = 0; i < nt; i++) {
+            if (tids[i])
+                pthread_join(tids[i], NULL);
+        }
+        double wall = bench_now_sec() - t0;
+        uint64_t ops = 0;
+        struct bench_lat *lvs = calloc((size_t)nt, sizeof(*lvs));
+        for (int i = 0; i < nt; i++) {
+            ops += args[i].ops;
+            if (lvs)
+                lvs[i] = args[i].lat;
+        }
+        bench_lat_report("cpu", "arith", nt, lvs ? lvs : &args[0].lat, nt, ops,
+                         0, wall, EFS_CHUNK_SIZE);
+        free(lvs);
+        for (int i = 0; i < nt; i++)
+            free(args[i].lat.v);
+        free(args);
+        free(tids);
+    }
+    return 0;
+}
+
+/* Level put: efs_client_put_fragments_parallel at a fixed queue depth. */
+struct bench_put_arg {
+    int tid;
+    double deadline;
+    uint64_t ops;
+    uint64_t errors;
+    struct bench_lat lat;
+    uint8_t *frags[EFS_NUM_FRAGMENTS];
+};
+
+static void *bench_put_worker(void *arg)
+{
+    struct bench_put_arg *a = arg;
+    efs_ino_t ino = ((efs_ino_t)0xBEEF << 32) | (uint64_t)(a->tid + 1);
+    uint32_t ci_base = (uint32_t)a->tid * (1u << 22);
+    uint32_t seq = 0;
+    uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
+    while (bench_now_sec() < a->deadline) {
+        uint32_t ci = ci_base + seq++;
+        efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
+        efs_place_fragments(g_client.nodes, g_client.node_count, ino, ci, nodes);
+        /* Production hashes every fragment of every chunk; no skipped hash. */
+        for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
+            efs_hash(a->frags[i], EFS_FRAGMENT_SIZE, sums[i]);
+        uint64_t t0 = fuse_now_us();
+        int rc = efs_client_put_fragments_parallel(
+            ino, ci, nodes, (const uint8_t **)a->frags, EFS_FRAGMENT_SIZE, sums);
+        bench_lat_add(&a->lat, fuse_now_us() - t0);
+        if (rc == EFS_OK)
+            a->ops++;
+        else
+            a->errors++;
+    }
+    return NULL;
+}
+
+static int efs_fuse_bench_put(double time_sec)
+{
+    static const int ladder[] = { 1, 16, 64, 256 };
+    printf("bench put time_s=%.3f frag_bytes=%d qds=1,16,64,256 nodes=%u\n",
+           time_sec, EFS_FRAGMENT_SIZE, g_client.node_count);
+    for (uint32_t li = 0; li < sizeof(ladder) / sizeof(ladder[0]); li++) {
+        int nt = ladder[li];
+        struct bench_put_arg *args = calloc((size_t)nt, sizeof(*args));
+        pthread_t *tids = calloc((size_t)nt, sizeof(*tids));
+        if (!args || !tids) {
+            free(args);
+            free(tids);
+            return 1;
+        }
+        double deadline = bench_now_sec() + time_sec;
+        double t0 = bench_now_sec();
+        for (int i = 0; i < nt; i++) {
+            args[i].tid = i;
+            args[i].deadline = deadline;
+            int ok = 0;
+            for (int f = 0; f < EFS_NUM_FRAGMENTS; f++) {
+                args[i].frags[f] = malloc(EFS_FRAGMENT_SIZE);
+                if (args[i].frags[f])
+                    bench_fill_nonzero(args[i].frags[f], EFS_FRAGMENT_SIZE,
+                                       (uint64_t)i * 3 + (uint64_t)f + 1);
+                else
+                    ok = -1;
+            }
+            if (ok != 0 ||
+                pthread_create(&tids[i], NULL, bench_put_worker, &args[i]) != 0) {
+                args[i].errors++;
+                tids[i] = 0;
+            }
+        }
+        for (int i = 0; i < nt; i++) {
+            if (tids[i])
+                pthread_join(tids[i], NULL);
+        }
+        double wall = bench_now_sec() - t0;
+        uint64_t ops = 0, errors = 0;
+        struct bench_lat *lvs = calloc((size_t)nt, sizeof(*lvs));
+        for (int i = 0; i < nt; i++) {
+            ops += args[i].ops;
+            errors += args[i].errors;
+            if (lvs)
+                lvs[i] = args[i].lat;
+        }
+        /* ops are chunks (128 KiB logical, 3 x 64 KiB stored). */
+        bench_lat_report("put", "roundtrip", nt, lvs ? lvs : &args[0].lat, nt,
+                         ops, errors, wall, EFS_CHUNK_SIZE);
+        printf("BENCH_NOTE kind=put qd=%d frags_s=%.1f stored_GiB_s=%.3f\n", nt,
+               (double)ops * EFS_NUM_FRAGMENTS / (wall > 1e-9 ? wall : 1e-9),
+               (double)ops * EFS_NUM_FRAGMENTS * EFS_FRAGMENT_SIZE / (1 << 30) /
+                   (wall > 1e-9 ? wall : 1e-9));
+        fflush(stdout);
+        free(lvs);
+        for (int i = 0; i < nt; i++) {
+            for (int f = 0; f < EFS_NUM_FRAGMENTS; f++)
+                free(args[i].frags[f]);
+            free(args[i].lat.v);
+        }
+        free(args);
+        free(tids);
+    }
+    return 0;
+}
+
+/* Level write: create -> 1 MiB efs_fuse_write -> fsync -> release, the
+ * ll_* handlers minus the kernel. The fsync is inside the file's wall. */
+struct bench_wr_arg {
+    int tid;
+    double deadline;
+    uint64_t bytes;
+    uint64_t wops;
+    uint64_t errors;
+    uint64_t fsync_us;
+    double wall_s;
+    struct bench_lat lat;
+};
+
+static void *bench_wr_worker(void *arg)
+{
+    struct bench_wr_arg *a = arg;
+    double t_start = bench_now_sec();
+    char name[64];
+    snprintf(name, sizeof(name), "bench-%d-w%d", (int)getpid(), a->tid);
+    struct fuse_file_info fi;
+    memset(&fi, 0, sizeof(fi));
+    fi.flags = O_WRONLY | O_CREAT | O_TRUNC;
+    efs_ino_t ino = 0;
+    double t0 = bench_now_sec();
+    int rc = efs_fuse_create_at(EFS_ROOT_INO, name, 0644, &fi, &ino);
+    if (rc != 0) {
+        a->errors++;
+        a->wall_s = bench_now_sec() - t_start;
+        return NULL;
+    }
+    size_t wsz = 1u << 20;
+    uint8_t *buf = malloc(wsz);
+    if (!buf) {
+        a->errors++;
+        a->wall_s = bench_now_sec() - t_start;
+        return NULL;
+    }
+    bench_fill_nonzero(buf, wsz, (uint64_t)a->tid + 11);
+    uint64_t target = g_bench_mib << 20;
+    off_t off = 0;
+    while ((uint64_t)off < target && bench_now_sec() < a->deadline) {
+        uint64_t t = fuse_now_us();
+        int w = efs_fuse_write(NULL, (const char *)buf, wsz, off, &fi);
+        bench_lat_add(&a->lat, fuse_now_us() - t);
+        if (w != (int)wsz) {
+            a->errors++;
+            break;
+        }
+        a->wops++;
+        a->bytes += (uint64_t)w;
+        off += w;
+    }
+    free(buf);
+    uint64_t tf = fuse_now_us();
+    if (efs_fuse_fsync_ino(ino, 0, &fi) != 0)
+        a->errors++;
+    a->fsync_us = fuse_now_us() - tf;
+    (void)efs_fuse_release_ino(ino, &fi);
+    /* The level made a real file; remove it (REPORT already published). */
+    (void)efs_client_unlink(EFS_ROOT_INO, name, false);
+    a->wall_s = bench_now_sec() - t0;
+    return NULL;
+}
+
+static int efs_fuse_bench_write(double time_sec)
+{
+    static const int ladder[] = { 1, 4, 16, 64 };
+    printf("bench write time_s=%.3f file_mib=%llu files=1,4,16,64\n", time_sec,
+           (unsigned long long)g_bench_mib);
+    for (uint32_t li = 0; li < sizeof(ladder) / sizeof(ladder[0]); li++) {
+        int nt = ladder[li];
+        struct bench_wr_arg *args = calloc((size_t)nt, sizeof(*args));
+        pthread_t *tids = calloc((size_t)nt, sizeof(*tids));
+        if (!args || !tids) {
+            free(args);
+            free(tids);
+            return 1;
+        }
+        double deadline = bench_now_sec() + time_sec;
+        double t0 = bench_now_sec();
+        for (int i = 0; i < nt; i++) {
+            args[i].tid = i;
+            args[i].deadline = deadline;
+            if (pthread_create(&tids[i], NULL, bench_wr_worker, &args[i]) != 0) {
+                args[i].errors++;
+                tids[i] = 0;
+            }
+        }
+        for (int i = 0; i < nt; i++) {
+            if (tids[i])
+                pthread_join(tids[i], NULL);
+        }
+        double wall = bench_now_sec() - t0;
+        if (wall < 1e-9)
+            wall = 1e-9;
+        uint64_t bytes = 0, wops = 0, errors = 0, fsync_us = 0;
+        struct bench_lat *lvs = calloc((size_t)nt, sizeof(*lvs));
+        for (int i = 0; i < nt; i++) {
+            bytes += args[i].bytes;
+            wops += args[i].wops;
+            errors += args[i].errors;
+            fsync_us += args[i].fsync_us;
+            if (lvs)
+                lvs[i] = args[i].lat;
+        }
+        /* GiB/s counts bytes after fsync returned (the honest clock). */
+        bench_lat_report("write", "pipeline", nt, lvs ? lvs : &args[0].lat, nt,
+                         wops, errors, wall, 0);
+        printf("BENCH_NOTE kind=write files=%d bytes=%llu wall_s=%.3f "
+               "GiB_s=%.3f fsync_avg_ms=%.1f\n",
+               nt, (unsigned long long)bytes, wall,
+               (double)bytes / (1 << 30) / wall,
+               (double)fsync_us / (nt ? nt : 1) / 1000.0);
+        fflush(stdout);
+        free(lvs);
+        for (int i = 0; i < nt; i++)
+            free(args[i].lat.v);
+        free(args);
+        free(tids);
+    }
+    return 0;
+}
+
+static int efs_fuse_bench_run(const char *kind, double time_sec)
+{
+    if (strcmp(kind, "cpu") != 0) {
+        /* The serving-path init from efs_fuse_init, minus the conn knobs:
+         * dcache, stage pin hooks, the background REPORT thread. */
+        efs_dcache_init();
+        efs_client_stage_set_pin_hooks(efs_client_ino_is_open,
+                                       efs_client_ino_has_plock);
+        efs_client_enable_meta_batch(4096);
+    }
+    pid_t bench_perf = -1;
+    if (g_perf_want) {
+        bench_perf = start_perf_recorder(getpid(), g_perf_path);
+        if (bench_perf < 0)
+            fprintf(stderr, "Warning: could not start perf; continuing\n");
+    }
+    int rc;
+    if (strcmp(kind, "cpu") == 0)
+        rc = efs_fuse_bench_cpu(time_sec);
+    else if (strcmp(kind, "put") == 0)
+        rc = efs_fuse_bench_put(time_sec);
+    else if (strcmp(kind, "write") == 0)
+        rc = efs_fuse_bench_write(time_sec);
+    else {
+        fprintf(stderr, "bench: unknown kind '%s' (cpu|put|write)\n", kind);
+        rc = 1;
+    }
+    if (bench_perf > 0) {
+        kill(bench_perf, SIGTERM);
+        for (int i = 0; i < 50; i++) {
+            if (waitpid(bench_perf, NULL, WNOHANG) == bench_perf)
+                break;
+            usleep(100000);
+        }
+        kill(bench_perf, SIGKILL);
+        waitpid(bench_perf, NULL, 0);
+        char cmd[600];
+        snprintf(cmd, sizeof(cmd),
+                 "perf report --stdio --no-children --percent-limit=2 -i '%s' "
+                 "2>/dev/null | grep -E '^\\s+[0-9]+\\.[0-9]+%%' | head -8 | "
+                 "sed 's/^/PERF_TOP/'",
+                 g_perf_path);
+        (void)system(cmd);
+        printf("perf report: %s\n", g_perf_path);
+    }
+    return rc;
+}
+
 int main(int argc, char **argv)
 {
     /* Line-buffer logs even when stdout is a pipe (client.sh | tee). */
@@ -5489,7 +5956,15 @@ int main(int argc, char **argv)
             perf = 1;
         else if (strcmp(argv[i], "--strace") == 0)
             strace_opt = 1;
+        else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc)
+            g_bench_kind = argv[i + 1];
+        else if (strcmp(argv[i], "--bench-time") == 0 && i + 1 < argc)
+            g_bench_time = atof(argv[i + 1]);
+        else if (strcmp(argv[i], "--bench-mib") == 0 && i + 1 < argc)
+            g_bench_mib = strtoull(argv[i + 1], NULL, 10);
     }
+    if (g_bench_time <= 0.0)
+        g_bench_time = 10.0;
 
     if (argc < 4) {
         fprintf(stderr,
@@ -5520,6 +5995,11 @@ int main(int argc, char **argv)
         return 1;
     }
     const char *mountpoint = argv[arg_idx++];
+
+    /* Level cpu needs no cluster, no export and no mount: the client's
+     * arithmetic only. Run before any network or NUMA setup. */
+    if (g_bench_kind && strcmp(g_bench_kind, "cpu") == 0)
+        return efs_fuse_bench_run(g_bench_kind, g_bench_time);
 
     /* Canonical absolute mountpoint, used to render host-absolute .find
      * results. realpath(..., NULL) mallocs; fall back to the raw argument. */
@@ -5645,6 +6125,12 @@ int main(int argc, char **argv)
             arg_idx++;
             continue;
         }
+        if (strcmp(argv[arg_idx], "--bench") == 0 ||
+            strcmp(argv[arg_idx], "--bench-time") == 0 ||
+            strcmp(argv[arg_idx], "--bench-mib") == 0) {
+            arg_idx += 2; /* flag + value */
+            continue;
+        }
         fuse_argv[fuse_argc++] = argv[arg_idx++];
     }
     fuse_argv[fuse_argc] = NULL;
@@ -5669,6 +6155,14 @@ int main(int argc, char **argv)
         else
             snprintf(g_strace_path, sizeof(g_strace_path), "/tmp/efs-fuse-strace-%d.txt", (int)getpid());
         g_strace_want = 1;
+    }
+
+    /* P3 client ladder: put/write run here — the client is fully
+     * bootstrapped (discovery + metadata), no FUSE session exists. */
+    if (g_bench_kind) {
+        int brc = efs_fuse_bench_run(g_bench_kind, g_bench_time);
+        efs_client_shutdown();
+        return brc;
     }
 
     int ret = efs_fuse_main_mt(fuse_argc, fuse_argv);

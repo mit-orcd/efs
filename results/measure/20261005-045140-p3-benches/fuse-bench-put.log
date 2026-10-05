@@ -1,0 +1,29 @@
+2026-10-05T04:53:49.708Z Discovered 3 cluster nodes from 192.168.2.4:17432
+2026-10-05T04:53:49.708Z   node id=1 192.168.2.4:17432
+2026-10-05T04:53:49.708Z   node id=2 192.168.2.2:17432
+2026-10-05T04:53:49.708Z   node id=3 192.168.2.3:17432
+2026-10-05T04:53:49.708Z fetching metadata...
+2026-10-05T04:53:49.708Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-05T04:53:49.708Z export id=1 name=fs
+2026-10-05T04:53:49.708Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=89248 root_get=0 mode=40755
+2026-10-05T04:53:49.708Z bench put time_s=5.000 frag_bytes=65536 qds=1,16,64,256 nodes=3
+2026-10-05T04:53:54.710Z BENCH_OK kind=put level=roundtrip qd=1 ops=7081 wall_s=5.002 ops_s=1415.8 p50_us=458 p99_us=2365 max_us=15130 GiB_s=0.173 errors=0
+2026-10-05T04:53:54.710Z BENCH_NOTE kind=put qd=1 frags_s=4247.3 stored_GiB_s=0.259
+2026-10-05T04:53:59.715Z BENCH_OK kind=put level=roundtrip qd=16 ops=5491 wall_s=5.005 ops_s=1097.2 p50_us=6815 p99_us=110118 max_us=418046 GiB_s=0.134 errors=0
+2026-10-05T04:53:59.715Z BENCH_NOTE kind=put qd=16 frags_s=3291.6 stored_GiB_s=0.201
+2026-10-05T04:54:04.729Z BENCH_OK kind=put level=roundtrip qd=64 ops=8312 wall_s=5.014 ops_s=1657.9 p50_us=28578 p99_us=149373 max_us=307951 GiB_s=0.202 errors=0
+2026-10-05T04:54:04.729Z BENCH_NOTE kind=put qd=64 frags_s=4973.7 stored_GiB_s=0.304
+2026-10-05T04:54:10.338Z efs: conn pool node=2 exhausted for 5 s (pool=1 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #1)
+2026-10-05T04:54:10.338Z efs: conn pool node=2 exhausted for 5 s (pool=2 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #2)
+2026-10-05T04:54:10.338Z efs: conn pool node=2 exhausted for 5 s (pool=3 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #3)
+2026-10-05T04:54:10.338Z efs: conn pool node=2 exhausted for 5 s (pool=5 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #5)
+2026-10-05T04:54:10.338Z efs: conn pool node=2 exhausted for 5 s (pool=4 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #4)
+2026-10-05T04:54:10.339Z efs: conn pool node=2 exhausted for 5 s (pool=6 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #6)
+2026-10-05T04:54:10.339Z efs: conn pool node=2 exhausted for 5 s (pool=7 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #7)
+2026-10-05T04:54:10.341Z efs: conn pool node=2 exhausted for 5 s (pool=8 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #8)
+2026-10-05T04:54:10.342Z efs: conn pool node=2 exhausted for 5 s (pool=9 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #9)
+2026-10-05T04:54:10.342Z efs: conn pool node=2 exhausted for 5 s (pool=10 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #10)
+2026-10-05T04:54:10.370Z efs: conn pool node=3 exhausted for 5 s (pool=101 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #101)
+2026-10-05T04:54:10.455Z BENCH_OK kind=put level=roundtrip qd=256 ops=1466 wall_s=5.725 ops_s=256.1 p50_us=55312 p99_us=5147345 max_us=5202096 GiB_s=0.031 errors=0
+2026-10-05T04:54:10.455Z BENCH_NOTE kind=put qd=256 frags_s=768.2 stored_GiB_s=0.047
+PUT_EXIT=0

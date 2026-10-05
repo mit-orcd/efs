@@ -1,0 +1,39 @@
+2026-10-05T04:54:10.475Z Discovered 3 cluster nodes from 192.168.2.4:17432
+2026-10-05T04:54:10.475Z   node id=1 192.168.2.4:17432
+2026-10-05T04:54:10.475Z   node id=2 192.168.2.2:17432
+2026-10-05T04:54:10.475Z   node id=3 192.168.2.3:17432
+2026-10-05T04:54:10.475Z fetching metadata...
+2026-10-05T04:54:10.498Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-05T04:54:10.498Z export id=1 name=fs
+2026-10-05T04:54:10.498Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=89248 root_get=0 mode=40755
+2026-10-05T04:54:10.498Z bench write time_s=30.000 file_mib=64 files=1,4,16,64
+2026-10-05T04:54:11.566Z fsync-split ino=159745 flush_ms=749 report_ms=0 rc=0
+2026-10-05T04:54:11.728Z BENCH_OK kind=write level=pipeline qd=1 ops=64 wall_s=1.229 ops_s=52.1 p50_us=424 p99_us=41398 max_us=41398 GiB_s=0.000 errors=0
+2026-10-05T04:54:11.728Z BENCH_NOTE kind=write files=1 bytes=67108864 wall_s=1.229 GiB_s=0.051 fsync_avg_ms=749.8
+2026-10-05T04:54:13.753Z fsync-split ino=172033 flush_ms=1723 report_ms=0 rc=0
+2026-10-05T04:54:14.257Z fsync-split ino=163841 flush_ms=2191 report_ms=0 rc=0
+2026-10-05T04:54:14.811Z fsync-split ino=167937 flush_ms=2645 report_ms=0 rc=0
+2026-10-05T04:54:15.406Z fsync-split ino=176129 flush_ms=3154 report_ms=0 rc=0
+2026-10-05T04:54:15.625Z BENCH_OK kind=write level=pipeline qd=4 ops=256 wall_s=3.897 ops_s=65.7 p50_us=344 p99_us=31536 max_us=44192 GiB_s=0.000 errors=0
+2026-10-05T04:54:15.625Z BENCH_NOTE kind=write files=4 bytes=268435456 wall_s=3.897 GiB_s=0.064 fsync_avg_ms=2428.0
+2026-10-05T04:54:19.916Z fsync-split ino=180225 flush_ms=3435 report_ms=0 rc=0
+2026-10-05T04:54:25.139Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=5184122
+2026-10-05T04:54:25.853Z fsync-split ino=221185 flush_ms=9362 report_ms=0 rc=0
+2026-10-05T04:54:26.535Z fsync-split ino=241665 flush_ms=9998 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=3461878
+2026-10-05T04:54:29.318Z fsync-split ino=212993 flush_ms=12715 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=196609 flush_ms=12613 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=192513 flush_ms=12578 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=184321 flush_ms=12573 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=237569 flush_ms=12555 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=208897 flush_ms=12554 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=217089 flush_ms=12667 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=200705 flush_ms=12547 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=233473 flush_ms=12505 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=188417 flush_ms=12482 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=229377 flush_ms=12457 report_ms=0 rc=0
+2026-10-05T04:54:29.318Z fsync-split ino=225281 flush_ms=12419 report_ms=0 rc=0
+2026-10-05T04:54:29.319Z fsync-split ino=204801 flush_ms=12280 report_ms=0 rc=0
+2026-10-05T04:54:29.727Z BENCH_OK kind=write level=pipeline qd=16 ops=1024 wall_s=14.102 ops_s=72.6 p50_us=849 p99_us=100616 max_us=176042 GiB_s=0.000 errors=0
+2026-10-05T04:54:29.727Z BENCH_NOTE kind=write files=16 bytes=1073741824 wall_s=14.102 GiB_s=0.071 fsync_avg_ms=11608.9
+WRITE_EXIT=137

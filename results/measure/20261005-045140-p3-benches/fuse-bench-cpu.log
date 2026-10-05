@@ -1,0 +1,7 @@
+2026-10-05T04:53:24.683Z bench cpu time_s=5.000 chunk_bytes=131072 threads=1,2,4,8,16
+2026-10-05T04:53:29.686Z BENCH_OK kind=cpu level=arith qd=1 ops=59082 wall_s=5.000 ops_s=11816.0 p50_us=84 p99_us=129 max_us=33216 GiB_s=1.442 errors=0
+2026-10-05T04:53:34.690Z BENCH_OK kind=cpu level=arith qd=2 ops=114360 wall_s=5.000 ops_s=22871.6 p50_us=84 p99_us=161 max_us=3104 GiB_s=2.792 errors=0
+2026-10-05T04:53:39.695Z BENCH_OK kind=cpu level=arith qd=4 ops=116790 wall_s=5.000 ops_s=23357.2 p50_us=84 p99_us=2096 max_us=7091 GiB_s=2.851 errors=0
+2026-10-05T04:53:44.700Z BENCH_OK kind=cpu level=arith qd=8 ops=116834 wall_s=5.000 ops_s=23365.3 p50_us=84 p99_us=6098 max_us=11145 GiB_s=2.852 errors=0
+2026-10-05T04:53:49.706Z BENCH_OK kind=cpu level=arith qd=16 ops=115595 wall_s=5.001 ops_s=23115.9 p50_us=84 p99_us=14104 max_us=23093 GiB_s=2.822 errors=0
+CPU_EXIT=0
