@@ -79,3 +79,54 @@ hardware the groups were meant to exploit.
   What batching removes is paying that boundary once per chunk when one
   boundary could have covered thousands; it cannot remove the boundary
   itself.
+
+---
+
+## Baselines and ceilings (current)
+
+Moved here verbatim from the work queue ([../status/README.md](../status/README.md))
+on Oct 3 2026; the queue links here instead of carrying the tables.
+
+**What the hardware allows.** Every performance item is measured against
+this, not against last week's number. Cluster traffic rides `ibs1f0`
+(200 Gb/s IPoIB, `ip route get 172.16.223.57` on a client); servers have six
+NVMe each.
+
+| ceiling | value | derivation |
+| --- | --- | --- |
+| one client, logical write | **~16.7 GB/s** | 25 GB/s line rate ÷ 1.5 (2+1 EC sends 3 fragments per 2 data) |
+| one client, logical read | ~25 GB/s | line rate; a read fetches k=2 fragments |
+| cluster, logical write | **~44–57 GB/s** | 4 hosts × 16.7–21.4 GB/s NVMe (`results/nvme/`) ÷ 1.5 |
+| 1-client honest write today (Oct 1) | ~1.3–1.5 GB/s | **~8–9 %** of the client's ceiling (8 GiB dd+fsync 1.3 GB/s; 16 GiB 1.5 GB/s) |
+| 9-client honest write today (Sep 28) | 2551–2810 MiB/s aggregate | **~6 %** of 44 GB/s (8 GiB dd+fsync, 9 own files) |
+| 1-client cold read today (Oct 1) | 3.6 GB/s; 4 readers 6.5 GB/s | ~14 % of the client's ceiling (16 GiB, remount before read) |
+
+[architecture.md §1](architecture.md) says: if a benchmark stops at a
+mutex, one leader, one thread, FUSE serialization, one WAL or one
+coordinator before a physical resource, *that is by definition an EFS bug*.
+By that rule the write path is still a bug, not a tuning task.
+
+Baselines, all honest (flush in the clock, reads after remount, `findmnt`
+verified `fuse.efs-fuse`). The full history of these numbers is in
+`.cursor/rules/efs-fio-honest.mdc`.
+
+| measurement | value | where |
+| --- | --- | --- |
+| 1-client 8 GiB `dd bs=1M conv=fsync`, fcstor007 | **1.3 GB/s** (6.80 s) | §1b 13:20Z block (`dd539`), Oct 1 |
+| 1-client 16 GiB write / cold read / 4 readers | **1.5 / 3.6 / 6.5 GB/s** | §1b 18:00Z block (`agent-rd-20261001-*`), Oct 1 |
+| 1-client 8 GiB dd+fsync / cold read, fcstor007, Oct 2 (P0.1) | **1518 / 3297 MB/s** | `results/measure/20261002-054132-p0-x16/SUMMARY.txt`, `-053311-p0-gates/` |
+| 1-client **16 × 10 GiB dd+fsync** aggregate, fcstor007, untraced (row 11) | **3815 MB/s** (every stream 44.7–45.0 s, no close tail) | `results/measure/20261002-054132-p0-x16/SUMMARY.txt` P0.2 (the traced 04:02Z 663 MB/s on fstor007 is not a baseline) |
+| 1-client 8 GiB bs=1M / 4 GiB bs=64k dd+fsync, fcstor008, P1 tree (D23+W41) | **1678 / 737 MB/s** | `results/measure/20261002-060052-p1-d23-w41/SUMMARY.txt` §4 (v2–v5 spread 1363–1678 / 737–828) |
+| 4 × 8 GiB dd + 300-file create/close storm, fcstor010, old → P1 tree | dd wall **9.70 → 8.30 s**; storm p50 4.9 → 3.8 ms, **p99 37 → 101 ms** | same SUMMARY §4 (W53) |
+| 9-client 8 GiB dd+fsync, aggregate | **2551** MiB/s (best 2810) | `results/measure/20260928-134637-dd-prof-r5b`, `-131651-dd-prof-r2b` |
+| per-host local NVMe ceiling | 16.7–21.4 GB/s | `results/nvme/` |
+| `efsd --bench data`, efs1 dev VM (1 virtio disk, **not** an fcstor node) | write 680 frag/s QD16 ≈ 82 % of the 1-disk fio ceiling, disk 82–99 % util; read 12.6 k frag/s (0.77 GiB/s) QD256 | `results/measure/20261005-045140-p3-benches/SUMMARY.txt`, Oct 5 |
+| `efsd --bench meta`, efs1 dev VM | KV put / Raft append QD1 = 27 ops/s p50 36 ms = the host's fsync ceiling (fio wsync4k 27 ops/s); Raft batch32 = 950 entries/s | same SUMMARY, Oct 5 |
+| `efs-fuse --bench`, efs1 → dev cluster (TCP) | cpu 2.85 GiB/s (2 vCPU saturate) ≫ put 0.26 GiB/s stored QD1 (p50 458 µs) ≈ write 51–71 MiB/s — the RTT is everything on this host | same SUMMARY, Oct 5 |
+| IO-500 9×4 debug, fresh table | easy-write **5.173 GiB/s**, hard-write 0.519, mdtest-easy-write 6.185 kIOPS, hard-read 1 error (W38) | `results/io500/20261001-074905-rdma/` |
+| IO-500 9×4 debug, 0 errors | easy-write 4.563, hard-write 0.640, hard-read 1.034, cold hardscan bad=0 | `results/io500/20260930-183504-rdma/` |
+
+**Never quote intra-job fio write samples or `dd` progress lines** — those are
+pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
+inside. `dd if=/dev/zero` is also invalid here: all-zero payloads skip PUTs.
+Use a non-zero source file.

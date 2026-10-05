@@ -10,7 +10,7 @@ remount them plain afterwards.
 
 **Status (Oct 1 2026):** the items these runbooks were written for (W4,
 W6 residuals, W7, W8, W11) are closed; their closing numbers are quoted
-inline below and in [the status page §1a](../status/README.md). The scripts remain the way to
+inline below and in [performance.md](../how-it-works/performance.md#baselines-and-ceilings-current). The scripts remain the way to
 remeasure the same thing after a change — run the same script, compare
 against the number here. Every script's pre-flight prints the running
 build; pass `--expect-build <id>` to `tests/preflight.sh` to make it refuse

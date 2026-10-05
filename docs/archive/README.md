@@ -31,11 +31,14 @@ is not closed — check [../status/README.md](../status/README.md).
 - **W49** · client conn-liveness syscalls · closed Oct 2 2026 (P0.4: fstat + getsockopt + MSG_PEEK = 0.04 % of syscalls under an ecopy)
 - **W50** · the repeating GC record set — investigation · closed Oct 2 2026 14:57Z as not-a-stuck-set · `results/measure/20261002-134900-w50-gcdbg/`
 - **W51** · what the follower apply lag is made of — investigation · closed Oct 2 2026 14:38Z (table only; D30 stays an ask) · `results/measure/20261002-143815-w51/`
+- **W41** · remove `report_mu` (per-inode dirty sets/publish slots, meta-flush pool) · landed + gated Oct 2 2026 13:30Z (P1.2) — but the storm-p99 gate was NOT met; keep/revert review is W53 (open) · `results/measure/20261002-060052-p1-d23-w41/`
+- **Row 11 / P0.2** · untraced 16 × 10 GiB dd+fsync re-measurement · done Oct 2 2026 05:41Z: **3815 MB/s** aggregate, no close tail, `fail=wait` 0, `skip=all` 0 — the D29 symptom did not occur untraced · `results/measure/20261002-054132-p0-x16/`
 
 ## Decisions (D)
 
 - **D15/D16** · leader stickiness / peer transport class · closed Oct 2 2026 01:45Z — the motivating 30 s stall was the sender's channel bug (`85f5b31c`); neither is to be built
 - **D18** · client staging-table floor · decided Oct 1 2026, implemented `f073e136` (evict whole cold tabs)
+- **D23** · clean dcache body budget (hand the body to the rdcache when the REPORT commits the full-image object) · landed + gated Oct 2 2026 13:30Z (P1.1): RSS 2.55 GB flat vs 4.64 GB old · `results/measure/20261002-060052-p1-d23-w41/`
 - **D24** · close-time REPORT of a long sequential write (row 0f) · decided and in tree Oct 1 2026 14:00Z (8192-PUT landed kick + record-sized REPORT wait)
 
 ## Closed queue rows (no W number)

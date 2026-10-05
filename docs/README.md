@@ -14,7 +14,7 @@ Who are you? That picks your file.
 
 ## Project status
 
-- **AI agent (or briefing one)** → [status/README.md](status/README.md) — the task right now and the work queue; [status/in-flight.md](status/in-flight.md) — the current handoff block, finish it first.
+- **AI agent (or briefing one)** → [status/README.md](status/README.md) — the task right now and the queue index (one line per open item, links out); [status/in-flight.md](status/in-flight.md) — the current handoff block, finish it first.
 - **Master of the agents** → [status/decisions.md](status/decisions.md) — the decision register (decided = implemented; asks are not code until decided); [backlog/](backlog/README.md) — what is not scheduled.
 
 ## Backlog

@@ -31,8 +31,9 @@ on-disk `du` of `/data1/0*/efs` (× ~1.5 for 2+1 EC).
   `bash tests/stress/fio_honest_matrix.sh results/perf/<id>-honest`
   `FIO_SKIP1=1` skips the 1-client sweep; `FIO_ONLY=1` skips 4/9. The dd
   form is `tests/measure/dd_wall.sh` (1 / 4 / 9 clients, own file each,
-  `conv=fsync`, non-zero source). Current references: `docs/status/README.md` §1a
-  "Baselines" and the tables below.
+  `conv=fsync`, non-zero source). Current references:
+  `docs/how-it-works/performance.md` ("Baselines and ceilings") and the
+  tables below.
 
 ## Oct 2 2026 (RDMA, same table, P0/P1 of the performance plan)
 

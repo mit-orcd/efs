@@ -33,7 +33,7 @@ APPENDICES = [
     ("status/README.md", "Status — the task right now and the work queue", PLAN),
     ("status/in-flight.md", "In flight — the current handoff block", PLAN),
     ("status/decisions.md", "Decisions — taken and pending (register D1–D30)", PLAN),
-    ("backlog/work-items.md", "Work items — long-form text for the open W items", PLAN + " (status blocks) + " + HISTORY + " (dated record)"),
+    ("backlog/work-items.md", "Work items — long-form text for the open W items and the queue rows", PLAN + " (status blocks) + " + HISTORY + " (dated record)"),
     ("how-it-works/naming.md", "Naming", NORMATIVE),
     ("how-it-works/design-rationale.md", "Design rationale", "rationale (explains the index; never overrides it)"),
     ("how-it-works/failure-tolerance.md", "Failure tolerance — derivation", NORMATIVE + " (derivation of the index's tolerance table)"),

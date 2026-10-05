@@ -122,7 +122,7 @@ parallel filesystem has and efs does not.
 | per-file / per-directory layout (`lfs setstripe`-style chunk size, EC profile) | absent | export-wide only; the declared 32× small-write amplification has no opt-out. |
 | a client other than FUSE (kernel module, user-space library, MPI-IO ADIO driver) | absent | FUSE-only. libfuse 3.10.2: ≤128 KiB per request, no `FOPEN_PARALLEL_DIRECT_WRITES`; Linux serializes extending direct writes and `O_CREAT` per inode/dir per mount, so many ranks on one node serialize above efs. Already an open item in [§9](../how-it-works/architecture.md). |
 | the data path on the fast interconnect | **RDMA** (since Sep 28) | `EFS_TRANSPORT=rdma` on the test cluster; zero-copy sends (W39); zero-copy receive is still a design ask. |
-| a hardware-relative throughput statement | 1 client: 1.3–1.5 GB/s write (~8–9 % of 16.7 GB/s), 3.6 GB/s cold read, 6.5 GB/s with four readers. 9 clients: 2.5–2.8 GB/s aggregate write (~6 % of 44 GB/s). | derivation in [the status page §1a](../status/README.md). |
+| a hardware-relative throughput statement | 1 client: 1.3–1.5 GB/s write (~8–9 % of 16.7 GB/s), 3.6 GB/s cold read, 6.5 GB/s with four readers. 9 clients: 2.5–2.8 GB/s aggregate write (~6 % of 44 GB/s). | derivation in [performance.md](../how-it-works/performance.md#baselines-and-ceilings-current). |
 | MPI-IO hints, collective-buffering guidance, Darshan/instrumentation hooks | absent | — |
 | burst-buffer / tiering / HSM | absent, not designed | flash-only by decision (§1); no policy layer exists either way. |
 
@@ -168,7 +168,7 @@ repair and fencing, and repair and fencing are the things that do not exist.
 ## 4. Performance distance
 
 Not a capability gap, but it belongs in "usable product". Current references
-(Oct 1 2026, RDMA, flush inside the clock; [the status page §1a](../status/README.md) has the table):
+(Oct 1 2026, RDMA, flush inside the clock; [performance.md](../how-it-works/performance.md#baselines-and-ceilings-current) has the table):
 one client writes 8 GiB `dd bs=1M conv=fsync` at **1.3–1.5 GB/s** and reads
 a cold 16 GiB file at **3.6 GB/s** (6.5 GB/s with four readers); nine
 clients write **2.5–2.8 GB/s** aggregate. The binding ceilings are the

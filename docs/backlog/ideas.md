@@ -85,8 +85,10 @@ The Sep 28 2026 `perf` analysis of the four `efsd` and of `efs-fuse` under
 `ecopy` (snapshot install on the pump thread, six `access()` per PUT,
 leftover `snap-*.kvx.tmp`, client copies and reply busy-wait) is two
 work-queue items with steps and gates:
-[the status page §1a W14 and W15](../status/README.md#1a-the-work-queue). Take
-them from there.
+[W14](work-items.md#w14--server-snapshot-install-and-the-fragment-probe-are-on-the-write-path)
+and
+[W15](work-items.md#w15--client-copies-and-busy-waits-are-the-write-cpu)
+in work-items.md. Take them from there.
 
 ## Parked: cross-group directory `utimens`
 

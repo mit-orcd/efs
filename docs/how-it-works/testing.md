@@ -48,7 +48,7 @@ every reading client. A `time_based` fio with `--direct=1` skips the kernel
 page cache but not the client's userspace dcache, so its write column is
 memory bandwidth. Method and the number history live in
 `.cursor/rules/efs-fio-honest.mdc`; the current references are in
-[the status page §1a](../status/README.md) ("Baselines"). `tests/stress/fio_honest_matrix.sh` is the
+[performance.md](performance.md) ("Baselines"). `tests/stress/fio_honest_matrix.sh` is the
 fio form; `tests/measure/*.sh` hold the dd and IOR runbooks.
 
 Before every number: `findmnt -o FSTYPE /tmp/efs-mount` must print

@@ -96,7 +96,8 @@ conv=fsync`, fio `--end_fsync=1`) and only from a mount `findmnt` shows as
 `fuse.efs-fuse`. Current references (Oct 1 2026, RDMA): one client writes
 1.3–1.5 GB/s and reads a cold file at 3.6 GB/s (6.5 GB/s with four
 readers); nine clients write 2.5–2.8 GB/s aggregate; IO-500 9×4 debug
-runs every phase. The table with hardware ceilings is [docs/status/README.md](docs/status/README.md) §1a.
+runs every phase. The table with hardware ceilings is
+[docs/how-it-works/performance.md](docs/how-it-works/performance.md#baselines-and-ceilings-current).
 Results that a document cites live under `results/`
 ([results/README.md](results/README.md) has the retention rule).
 
