@@ -6,14 +6,20 @@ gets a UTC `run_id` directory.
 
 ## Retention
 
-A `results/<kind>/<run_id>` directory stays only while something outside
-`results/` cites it: `README.md`, `docs/` (excluding `project-history.md`,
-`design-history.md` and the generated `architecture-full.md` /
-`architecture.html`), `.cursor/rules/`, `tests/`, `scripts/`, `tools/`,
-`src/`. Everything else is deleted at the next review (last done Oct 1
-2026: 454 of 517 runs removed). A number that matters goes into
-START-HERE §1a or a rule with its directory named; the narrative goes to
-`docs/project-history.md`, and the directory may then go.
+Keep recent correctness gates, current investigations, reference baselines,
+and runs cited by active documentation, tests or scripts. An uncited recent
+report can remain while it supports work in progress. Old failed setup attempts,
+superseded runs and repetitive debug captures can be removed once their useful
+findings are recorded. Generated documentation and history-only citations do not
+require indefinite raw-log retention. When pruning a cited run's raw files, keep
+its summary and explicitly identify the evidence that was removed.
+
+Oct 6 2026 cleanup removed two uncited older POSIX2 runs, an unused server-perf
+attempt, three superseded W23 setup attempts, and the W50 pass-3 leader logs and
+derived identity dumps. W50's summary, counts, analyses and earlier logs remain.
+Current Oct 6 gates/reviews, XFS references and cited performance results remain.
+Removed tracked evidence is recoverable from Git before this cleanup; this does
+not rewrite repository history. Cursor runtime logs are ignored separately.
 
 ## Layout
 

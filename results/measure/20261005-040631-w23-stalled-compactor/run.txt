@@ -1,6 +1,0 @@
-W23 stalled-compactor run (dev Tart cluster, one VM, private 3-node)
-bound=rss-2x
-written_mib=256 files=1 wall_s=1
-node3_prerun_rss_kb=3988
-recovered=1 recovery_s=0
-bytes_cap_mib=8704 time_cap_s=600

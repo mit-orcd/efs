@@ -1,3 +1,0 @@
-node1 peak_mt_bytes=420175 peak_l0_bytes=13024 peak_n_l0=0 peak_rss_kb=9 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
-node2 peak_mt_bytes=420175 peak_l0_bytes=11428 peak_n_l0=0 peak_rss_kb=0 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0
-node3 peak_mt_bytes=420175 peak_l0_bytes=11352 peak_n_l0=0 peak_rss_kb=0 peak_lag=0 max_pump_hold_us=0 apply_sleep_lines=0 backpressure_lines=0

@@ -35,6 +35,7 @@ tests/faults/fault_sim
 /logs/
 
 # editor / tooling
+/.cursor/*.log
 /.codex
 /notes.txt
 /.build_id.stamp

@@ -49,9 +49,10 @@ cap). Every identity appears in one pass only. Deletes and ACK
 proposes succeeded. The repeating *count* is the scan batch walking a
 large pending queue, not the same records failing.
 
-Raw: `dbg3-fcstor003.log`, `dbg3-fcstor004.log`, `analysis-v3.txt`,
-`idents-fcstor00{3,4}.txt` (pass/ino/ci/frag/node/rc). Pass 1 logs
-`dbg-*.log`; pass 2 `dbg2-*.log`.
+Retained evidence: `analysis-v3.txt`, the table above, and pass 1/2 logs
+(`dbg-*.log`, `dbg2-*.log`). The two large pass-3 leader logs and derived
+identity listings were pruned Oct 6 2026 after the verdict was recorded;
+they remain recoverable from Git before the cleanup commit.
 
 4. Verdict
 
