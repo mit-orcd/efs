@@ -41,6 +41,7 @@ static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
     case EFS_KV_KIND_INODE:
     case EFS_KV_KIND_LANE:
     case EFS_KV_KIND_CONTENT_FENCE:
+    case EFS_KV_KIND_LANE_AUTHORITY:
         return efs_txn_key_exclusive(kv, key, kl);
     case EFS_KV_KIND_CHUNK:
         if (kl != 24)
@@ -393,6 +394,43 @@ int efs_meta_get_fence_history(struct efs_kv *kv, efs_ino_t ino,
                                struct efs_fence_history *out)
 {
     return fence_history_read(kv, ino, gen, authority, NULL, NULL, NULL, out);
+}
+
+static uint64_t writer_history_floor(uint64_t epoch, const struct efs_fence_history *h)
+{
+    uint64_t floor = epoch;
+    for (uint32_t i = h->count; i && h->entries[i - 1].epoch == floor; --i)
+        --floor;
+    return floor;
+}
+
+static int lane_authority_key(efs_ino_t ino, uint64_t gen, uint8_t lane,
+                               uint8_t *key, uint32_t *kl)
+{
+    if (!ino || !gen || lane >= EFS_META_LANES)
+        return EFS_ERR_INVAL;
+    int rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane, key, kl);
+    if (rc == EFS_OK)
+        key[2] = EFS_KV_KIND_LANE_AUTHORITY;
+    return rc;
+}
+
+static void pack_lane_authority(uint8_t *v, uint32_t cs, uint64_t epoch, uint64_t floor)
+{
+    memset(v, 0, EFS_META_LANE_AUTHORITY_BYTES);
+    be32(v, 1); be32(v + 4, cs); be64(v + 8, epoch); be64(v + 16, floor);
+    be32(v + 24, EFS_META_LANES);
+}
+
+static int unpack_lane_authority(const uint8_t *v, uint32_t len, uint32_t *cs,
+                                  uint64_t *epoch, uint64_t *floor)
+{
+    if (len != EFS_META_LANE_AUTHORITY_BYTES || rd32(v) != 1 ||
+        !efs_chunk_size_valid(rd32(v + 4)) || rd32(v + 24) != EFS_META_LANES ||
+        rd32(v + 28) || rd64(v + 16) > rd64(v + 8))
+        return EFS_ERR_PROTO;
+    *cs = rd32(v + 4); *epoch = rd64(v + 8); *floor = rd64(v + 16);
+    return EFS_OK;
 }
 
 static void pack_dentry(uint8_t *p, const struct efs_meta_dentry *d)
@@ -4052,10 +4090,13 @@ int efs_meta_apply_content_fence(struct efs_kv *kv, efs_ino_t ino,
     struct efs_fence_history history;
     struct efs_meta_row row;
     struct lane_rec lane;
-    struct efs_kv_item items[2] = {0};
+    struct efs_kv_item items[3] = {0};
     uint8_t hk[EFS_KV_KEY_MAX], hv[EFS_META_FENCE_BYTES];
     uint8_t key[EFS_KV_KEY_MAX], value[INO_VAL];
     uint32_t hkl = 0, hvl = 0, kl = 0, vl = 0;
+    uint8_t ak[EFS_KV_KEY_MAX], av[EFS_META_LANE_AUTHORITY_BYTES];
+    uint32_t akl = 0, avl = sizeof(av), acs = 0, count = 2;
+    uint64_t ae = 0, af = 0;
     uint64_t current;
     int rc;
     if (!kv || !ino || !gen || authority > EFS_META_FENCE_INODE ||
@@ -4124,7 +4165,23 @@ int efs_meta_apply_content_fence(struct efs_kv *kv, efs_ino_t ino,
     }
     items[0] = (struct efs_kv_item){EFS_KV_PUT, hk, hkl, hv, hvl};
     items[1] = (struct efs_kv_item){EFS_KV_PUT, key, kl, value, vl};
-    return meta_write_batch(kv, items, 2);
+    if (authority != EFS_META_FENCE_INODE) {
+        rc = lane_authority_key(ino, gen, authority, ak, &akl);
+        if (rc == EFS_OK)
+            rc = efs_kv_get(kv, ak, akl, av, &avl);
+        if (rc == EFS_OK) {
+            rc = unpack_lane_authority(av, avl, &acs, &ae, &af);
+            if (rc != EFS_OK)
+                return rc;
+            if (ae != expected_epoch)
+                return EFS_ERR_BUSY;
+            pack_lane_authority(av, acs, epoch, max_u64(af, writer_history_floor(epoch, &history)));
+            items[count++] = (struct efs_kv_item){EFS_KV_PUT, ak, akl, av, sizeof(av)};
+        } else if (rc != EFS_ERR_NOT_FOUND) {
+            return rc;
+        }
+    }
+    return meta_write_batch(kv, items, count);
 }
 
 /* A lane may skip past earlier global fences only while it has no chunks.
@@ -4153,6 +4210,11 @@ static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
     uint32_t kl = 0, hkl = 0, old_len = sizeof(old), vl;
     uint32_t old_hlen = sizeof(old_history), hlen = 0;
     struct efs_txn_value_cas requests[3];
+    uint8_t auth_key[EFS_KV_KEY_MAX], auth_old[EFS_META_LANE_AUTHORITY_BYTES],
+            auth_new[EFS_META_LANE_AUTHORITY_BYTES];
+    uint32_t auth_kl = 0, auth_len = sizeof(auth_old), auth_cs = 0;
+    uint64_t auth_epoch = 0, auth_floor = 0;
+    int has_authority = 0;
     uint8_t ak[EFS_KV_KEY_MAX], av[APPEND_CUR_VAL];
     uint32_t akl = 0, avl = sizeof(av), count = 1;
     struct append_cur cursor = {0};
@@ -4225,6 +4287,21 @@ static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
     } else if (lane.fenced_epoch != expected_epoch || lane.seq != expected_seq) {
         return EFS_ERR_STALE;
     }
+    if (authority != EFS_META_FENCE_INODE) {
+        rc = lane_authority_key(ino, gen, authority, auth_key, &auth_kl);
+        if (rc == EFS_OK)
+            rc = efs_kv_get(kv, auth_key, auth_kl, auth_old, &auth_len);
+        if (rc == EFS_OK) {
+            rc = unpack_lane_authority(auth_old, auth_len, &auth_cs, &auth_epoch, &auth_floor);
+            if (rc != EFS_OK)
+                return rc;
+            if (auth_epoch != expected_epoch)
+                return EFS_ERR_BUSY;
+            has_authority = 1;
+        } else if (rc != EFS_ERR_NOT_FOUND) {
+            return rc;
+        }
+    }
     if (authority != EFS_META_FENCE_INODE && action) {
         if (lane.append_bar)
             return EFS_ERR_BUSY;
@@ -4288,6 +4365,15 @@ static int prepare_content_resize(struct efs_kv *kv, const struct efs_txid *t,
     if (action != EFS_META_RESIZE_EXTEND)
         requests[count++] = (struct efs_txn_value_cas){hk, hkl, old_history, old_hlen,
                                                        EFS_TXN_PUT, new_history, hlen};
+    if (has_authority) {
+        uint64_t floor = action == EFS_META_RESIZE_EXTEND ?
+                         (epoch == auth_epoch ? auth_floor : epoch) :
+                         writer_history_floor(epoch, &history);
+        floor = max_u64(floor, auth_floor);
+        pack_lane_authority(auth_new, auth_cs, epoch, floor);
+        requests[count++] = (struct efs_txn_value_cas){auth_key, auth_kl,
+            auth_old, auth_len, EFS_TXN_PUT, auth_new, sizeof(auth_new)};
+    }
     if (has_cursor)
         requests[count++] = (struct efs_txn_value_cas){ak, akl, av, avl,
                                                        EFS_TXN_DEL, NULL, 0};
@@ -4459,6 +4545,241 @@ static int resize_lane_read(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         return EFS_OK;
     }
     return rc == EFS_OK ? unpack_lane(val, *len, stamp) : rc;
+}
+
+int efs_meta_get_lane_writer_view(struct efs_kv *kv, efs_ino_t ino,
+                                  uint64_t gen, uint32_t ci, uint32_t cs,
+                                  struct efs_meta_writer_view *out)
+{
+    uint8_t lane = ci % EFS_META_LANES;
+    uint8_t keys[3][EFS_KV_KEY_MAX], before[3][EFS_META_FENCE_BYTES],
+            after[3][EFS_META_FENCE_BYTES];
+    uint32_t kl[3], bl[3], al[3];
+    if (!kv || !out || !efs_chunk_size_valid(cs))
+        return EFS_ERR_INVAL;
+    int rc = lane_authority_key(ino, gen, lane, keys[0], &kl[0]);
+    if (rc == EFS_OK)
+        rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, gen, lane, keys[1], &kl[1]);
+    if (rc == EFS_OK)
+        rc = content_fence_key(ino, gen, lane, keys[2], &kl[2]);
+    if (rc != EFS_OK)
+        return rc;
+    for (unsigned attempt = 0; attempt < 4; ++attempt) {
+        struct efs_meta_writer_view view = {.ino = ino, .generation = gen};
+        struct lane_rec stamp;
+        uint32_t got_cs;
+        int stable = 1;
+        for (unsigned pass = 0; pass < 2; ++pass) {
+            for (unsigned i = 0; i < 3; ++i) {
+                uint32_t *n = pass ? &al[i] : &bl[i];
+                uint8_t *v = pass ? after[i] : before[i];
+                rc = efs_txn_key_exclusive(kv, keys[i], kl[i]);
+                if (rc != EFS_OK)
+                    return rc;
+                *n = EFS_META_FENCE_BYTES;
+                rc = efs_kv_get(kv, keys[i], kl[i], v, n);
+                /* Absence of the authority itself is a cold bootstrap request;
+                 * a partially installed stamp/history is never a valid view. */
+                if (rc != EFS_OK)
+                    return rc == EFS_ERR_NOT_FOUND && i ? EFS_ERR_BUSY : rc;
+            }
+        }
+        for (unsigned i = 0; i < 3; ++i) {
+            rc = efs_txn_key_exclusive(kv, keys[i], kl[i]);
+            if (rc != EFS_OK)
+                return rc;
+            stable &= bl[i] == al[i] && !memcmp(before[i], after[i], bl[i]);
+        }
+        if (!stable)
+            continue;
+        rc = unpack_lane_authority(before[0], bl[0], &got_cs,
+                                      &view.authority_epoch, &view.oldest_complete_epoch);
+        if (rc == EFS_OK)
+            rc = unpack_lane(before[1], bl[1], &stamp);
+        if (rc == EFS_OK)
+            rc = efs_meta_unpack_fence_history(before[2], bl[2], &view.history);
+        if (rc != EFS_OK)
+            return rc;
+        if (got_cs != cs)
+            return EFS_ERR_STALE;
+        if (stamp.fenced_epoch != view.authority_epoch)
+            return EFS_ERR_BUSY;
+        if ((view.history.count && view.history.entries[view.history.count - 1].epoch >
+             view.authority_epoch) || view.oldest_complete_epoch <
+             writer_history_floor(view.authority_epoch, &view.history))
+            return EFS_ERR_PROTO;
+        *out = view;
+        return EFS_OK;
+    }
+    return EFS_ERR_BUSY;
+}
+
+int efs_meta_capture_lane_bootstrap(struct efs_kv *kv, efs_ino_t ino,
+                                    uint64_t gen, uint32_t ci, uint32_t cs,
+                                    efs_txn_coord_fn coord, void *ctx,
+                                    struct efs_meta_lane_bootstrap *out)
+{
+    if (!kv || !out || !coord || !efs_chunk_size_valid(cs))
+        return EFS_ERR_INVAL;
+    struct efs_meta_lane_bootstrap q = {.chunk_size = cs, .lane = ci % EFS_META_LANES};
+    struct efs_meta_writer_view again;
+    struct efs_meta_row row;
+    struct lane_rec stamp;
+    struct efs_txn_pending pending = {0};
+    uint8_t value[LANE_VAL];
+    uint32_t len;
+    int moved = 0;
+    int rc = efs_meta_get_writer_view_tx(kv, ino, gen, coord, ctx, &q.view);
+    if (rc == EFS_OK)
+        rc = inode_read_tx(kv, ino, coord, ctx, &pending, &row);
+    if (rc == EFS_OK)
+        rc = resize_lane_read(kv, ino, gen, q.lane, coord, ctx, &pending, value, &len, &stamp);
+    if (rc == EFS_OK)
+        rc = efs_meta_get_writer_view_tx(kv, ino, gen, coord, ctx, &again);
+    if (rc == EFS_OK)
+        rc = efs_txn_pending_recheck(&pending, coord, ctx, &moved);
+    if (rc != EFS_OK)
+        return rc;
+    if (moved || memcmp(&q.view, &again, sizeof(again)) || row.generation != gen ||
+        row.content_epoch != q.view.authority_epoch)
+        return EFS_ERR_BUSY;
+    if (len && stamp.fenced_epoch != q.view.authority_epoch)
+        return EFS_ERR_BUSY; /* lagging populated lanes must finish coordinated fencing */
+    q.active_lanes = row.active_lanes; q.base_size = row.base_size;
+    q.lane_epoch = stamp.fenced_epoch; q.lane_seq = stamp.seq; q.lane_present = len != 0;
+    *out = q;
+    return EFS_OK;
+}
+
+static int lane_bootstrap_valid(const struct efs_meta_lane_bootstrap *q, uint8_t authority)
+{
+    if (!q || !q->view.ino || !q->view.generation || q->lane >= EFS_META_LANES ||
+        (authority != q->lane && authority != EFS_META_FENCE_INODE) ||
+        q->lane_present > 1 || !efs_chunk_size_valid(q->chunk_size) ||
+        efs_fence_history_valid(&q->view.history) != EFS_OK ||
+        q->view.oldest_complete_epoch > q->view.authority_epoch ||
+        q->view.oldest_complete_epoch < writer_history_floor(q->view.authority_epoch, &q->view.history) ||
+        (q->view.history.count && q->view.history.entries[q->view.history.count - 1].epoch > q->view.authority_epoch) ||
+        (q->lane_present && q->lane_epoch != q->view.authority_epoch) ||
+        (!q->lane_present && (q->lane_epoch || q->lane_seq)))
+        return EFS_ERR_INVAL;
+    return EFS_OK;
+}
+
+int efs_meta_encode_lane_bootstrap(const struct efs_meta_lane_bootstrap *q,
+                                   uint8_t authority, uint8_t *key, uint32_t *kl,
+                                   uint8_t pay[EFS_META_LANE_BOOTSTRAP_BYTES])
+{
+    if (!key || !kl || !pay || lane_bootstrap_valid(q, authority) != EFS_OK)
+        return EFS_ERR_INVAL;
+    int rc = authority == EFS_META_FENCE_INODE ?
+        efs_kv_key_inode(efs_kv_inode_shard(q->view.ino), q->view.ino, key, kl) :
+        efs_kv_key_lane(efs_kv_lane_shard(q->view.ino, q->lane), q->view.ino,
+                         q->view.generation, q->lane, key, kl);
+    if (rc != EFS_OK)
+        return rc;
+    memset(pay, 0, EFS_META_LANE_BOOTSTRAP_BYTES);
+    be64(pay, q->view.ino); be64(pay + 8, q->view.generation);
+    be64(pay + 16, q->view.authority_epoch); be64(pay + 24, q->view.oldest_complete_epoch);
+    be64(pay + 32, q->active_lanes); be64(pay + 40, q->base_size);
+    be64(pay + 48, q->lane_epoch); be64(pay + 56, q->lane_seq);
+    be32(pay + 64, q->chunk_size); pay[68] = q->lane; pay[69] = q->lane_present;
+    pay[70] = authority;
+    uint32_t len;
+    return efs_meta_pack_fence_history(&q->view.history, pay + 80, EFS_META_FENCE_BYTES, &len);
+}
+
+int efs_meta_apply_lane_bootstrap(struct efs_kv *kv, const struct efs_txid *t,
+                                  const struct efs_txn_parts *parts,
+                                  const uint8_t *key, uint32_t kl,
+                                  const uint8_t *pay, uint32_t plen)
+{
+    struct efs_meta_lane_bootstrap q = {0};
+    uint8_t expected[EFS_KV_KEY_MAX], encoded[EFS_META_LANE_BOOTSTRAP_BYTES];
+    uint8_t hk[EFS_KV_KEY_MAX], ak[EFS_KV_KEY_MAX];
+    uint8_t old[INO_VAL], value[INO_VAL], hv[EFS_META_FENCE_BYTES], av[EFS_META_LANE_AUTHORITY_BYTES];
+    uint32_t len, hkl, akl, old_len = sizeof(old), hlen = sizeof(hv), vl;
+    struct efs_txn_value_cas requests[3];
+    if (!kv || !t || !parts || !key || !pay || plen != EFS_META_LANE_BOOTSTRAP_BYTES ||
+        rd32(pay + 80 + 4) > EFS_FENCE_HISTORY_MAX)
+        return EFS_ERR_PROTO;
+    q.view.ino = rd64(pay); q.view.generation = rd64(pay + 8);
+    q.view.authority_epoch = rd64(pay + 16); q.view.oldest_complete_epoch = rd64(pay + 24);
+    q.active_lanes = rd64(pay + 32); q.base_size = rd64(pay + 40);
+    q.lane_epoch = rd64(pay + 48); q.lane_seq = rd64(pay + 56);
+    q.chunk_size = rd32(pay + 64); q.lane = pay[68]; q.lane_present = pay[69];
+    uint8_t authority = pay[70];
+    int rc = efs_meta_unpack_fence_history(pay + 80, 8u + 16u * rd32(pay + 84), &q.view.history);
+    if (rc != EFS_OK || efs_meta_encode_lane_bootstrap(&q, authority, expected, &len, encoded) != EFS_OK ||
+        kl != len || memcmp(key, expected, kl) || memcmp(pay, encoded, plen))
+        return EFS_ERR_PROTO;
+    /* Freeze the bitmap before adopting the lane. Both shards must participate,
+     * even when inode and lane happen to share a shard or a Raft group. */
+    struct efs_txn_parts needed = {0};
+    resize_parts_add(&needed, efs_kv_inode_shard(q.view.ino));
+    resize_parts_add(&needed, efs_kv_lane_shard(q.view.ino, q.lane));
+    if (parts->n != needed.n || memcmp(parts->shard, needed.shard, needed.n * sizeof(uint32_t)))
+        return EFS_ERR_INVAL;
+    rc = efs_kv_get(kv, key, kl, old, &old_len);
+    if (rc == EFS_ERR_NOT_FOUND && authority != EFS_META_FENCE_INODE) {
+        old_len = EFS_TXN_ABSENT; rc = EFS_OK;
+    }
+    if (rc != EFS_OK)
+        return rc;
+    rc = content_fence_key(q.view.ino, q.view.generation, authority, hk, &hkl);
+    if (rc == EFS_OK)
+        rc = efs_kv_get(kv, hk, hkl, hv, &hlen);
+    if (rc == EFS_ERR_NOT_FOUND) { hlen = EFS_TXN_ABSENT; rc = EFS_OK; }
+    if (rc != EFS_OK)
+        return rc;
+    if (authority == EFS_META_FENCE_INODE) {
+        struct efs_meta_row row;
+        struct efs_fence_history history = {0};
+        rc = unpack_inode(old, old_len, &row);
+        if (rc == EFS_OK && hlen != EFS_TXN_ABSENT)
+            rc = efs_meta_unpack_fence_history(hv, hlen, &history);
+        if (rc != EFS_OK)
+            return rc;
+        if (row.generation != q.view.generation || row.content_epoch != q.view.authority_epoch ||
+            row.active_lanes != q.active_lanes || row.base_size != q.base_size ||
+            memcmp(&history, &q.view.history, sizeof(history)) ||
+            q.view.oldest_complete_epoch != writer_history_floor(row.content_epoch, &history))
+            return EFS_ERR_STALE;
+        if (!S_ISREG(row.mode))
+            return EFS_ERR_INVAL;
+        row.active_lanes |= 1ull << q.lane;
+        pack_inode(value, &row); vl = INO_VAL;
+    } else {
+        struct lane_rec stamp = {0};
+        if (old_len != EFS_TXN_ABSENT && unpack_lane(old, old_len, &stamp) != EFS_OK)
+            return EFS_ERR_PROTO;
+        if ((old_len != EFS_TXN_ABSENT) != q.lane_present || stamp.seq != q.lane_seq ||
+            stamp.fenced_epoch != q.lane_epoch)
+            return EFS_ERR_STALE;
+        if (stamp.seq == UINT64_MAX || stamp.append_bar)
+            return EFS_ERR_BUSY;
+        /* A missing stamp with existing chunks cannot be re-aged as a new lane. */
+        if (!q.lane_present) {
+            uint8_t prefix[EFS_KV_KEY_MAX]; uint32_t pl;
+            rc = efs_kv_key_chunk(efs_kv_lane_shard(q.view.ino, q.lane), q.view.ino,
+                                  q.view.generation, q.lane, 0, prefix, &pl);
+            if (rc == EFS_OK)
+                rc = efs_kv_scan_prefix(kv, prefix, pl - 4, resize_nonempty_lane, NULL);
+            if (rc != EFS_OK)
+                return rc;
+        }
+        stamp.fenced_epoch = q.view.authority_epoch; ++stamp.seq;
+        pack_lane(value, &stamp); vl = LANE_VAL;
+        lane_authority_key(q.view.ino, q.view.generation, q.lane, ak, &akl);
+        pack_lane_authority(av, q.chunk_size, q.view.authority_epoch, q.view.oldest_complete_epoch);
+    }
+    requests[0] = (struct efs_txn_value_cas){key, kl, old, old_len, EFS_TXN_PUT, value, vl};
+    uint32_t nh = 8u + 16u * q.view.history.count;
+    requests[1] = (struct efs_txn_value_cas){hk, hkl, hv, hlen, EFS_TXN_PUT, pay + 80, nh};
+    if (authority != EFS_META_FENCE_INODE)
+        requests[2] = (struct efs_txn_value_cas){ak, akl, NULL, EFS_TXN_ABSENT, EFS_TXN_PUT, av, sizeof(av)};
+    return efs_txn_prepare_excl_batch(kv, t, parts, requests,
+                                      authority == EFS_META_FENCE_INODE ? 2 : 3);
 }
 
 int efs_meta_get_writer_chunk_view_tx(struct efs_kv *kv, efs_ino_t ino,
@@ -6932,6 +7253,16 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
         if (r.ino == EFS_ROOT_INO)
             c->saw_root = 1;
         if (efs_kv_inode_shard(r.ino) != (((uint32_t)key[0] << 8) | key[1])) {
+            c->rc = EFS_ERR_PROTO;
+            return 1;
+        }
+        return 0;
+    }
+    if (key[2] == EFS_KV_KIND_LANE_AUTHORITY) {
+        uint32_t cs; uint64_t epoch, floor;
+        if (klen != 20 || !rd64(key + 3) || !rd64(key + 11) || key[19] >= EFS_META_LANES ||
+            efs_kv_lane_shard(rd64(key + 3), key[19]) != (((uint32_t)key[0] << 8) | key[1]) ||
+            unpack_lane_authority(val, vlen, &cs, &epoch, &floor) != EFS_OK) {
             c->rc = EFS_ERR_PROTO;
             return 1;
         }

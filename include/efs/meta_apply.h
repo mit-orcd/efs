@@ -57,6 +57,38 @@ int efs_meta_get_writer_chunk_view_tx(struct efs_kv *kv, efs_ino_t ino,
                                       efs_txn_coord_fn coord, void *ctx,
                                       struct efs_meta_writer_view *out);
 
+/* Lane-local admission requires an exact FileID and geometry. No inode or
+ * coordinator read is permitted here: outstanding local EXCL intents are BUSY.
+ * Missing authority is NOT_FOUND, requiring cold transactional bootstrap. */
+#define EFS_META_LANE_AUTHORITY_BYTES 32u
+int efs_meta_get_lane_writer_view(struct efs_kv *kv, efs_ino_t ino,
+                                  uint64_t generation, uint32_t ci,
+                                  uint32_t chunk_size,
+                                  struct efs_meta_writer_view *out);
+struct efs_meta_lane_bootstrap {
+    struct efs_meta_writer_view view;
+    uint64_t active_lanes, base_size, lane_epoch, lane_seq;
+    uint32_t chunk_size;
+    uint8_t lane, lane_present;
+};
+#define EFS_META_LANE_BOOTSTRAP_BYTES (80u + EFS_META_FENCE_BYTES)
+/* Cold capture needs inode and lane authority; chunk_size must come from
+ * the configured export geometry, not an unvalidated application request.
+ * Apply freezes inode/history
+ * first, then atomically installs lane stamp/history/authority. Same-shard
+ * participants resolve together through the existing transaction machinery. */
+int efs_meta_capture_lane_bootstrap(struct efs_kv *kv, efs_ino_t ino,
+                                    uint64_t generation, uint32_t ci,
+                                    uint32_t chunk_size, efs_txn_coord_fn coord,
+                                    void *ctx, struct efs_meta_lane_bootstrap *out);
+int efs_meta_encode_lane_bootstrap(const struct efs_meta_lane_bootstrap *q,
+                                   uint8_t authority, uint8_t *key, uint32_t *kl,
+                                   uint8_t pay[EFS_META_LANE_BOOTSTRAP_BYTES]);
+int efs_meta_apply_lane_bootstrap(struct efs_kv *kv, const struct efs_txid *t,
+                                  const struct efs_txn_parts *parts,
+                                  const uint8_t *key, uint32_t kl,
+                                  const uint8_t *pay, uint32_t plen);
+
 /* Atomic single-authority fence, for the future serialized TRUNCATE path.
  * Caller owns Raft apply serialization and cross-authority coordination.
  * This does not replace the current public truncate command by itself. */

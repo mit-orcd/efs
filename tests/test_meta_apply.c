@@ -3931,7 +3931,7 @@ static void test_w36_split_source_snapshots(void)
               efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, name,
                                              &dent, &drop) == EFS_ERR_STALE,
           "W36 hashed tombstone masks a lingering local source");
-    efs_kv_destroy(kv);
+    efs_kv_mem_free(kv);
 }
 
 static void test_w36_unlink_before_rename_prepare(void)
@@ -4012,7 +4012,7 @@ static void test_w36_unlink_before_rename_prepare(void)
               efs_meta_apply_resolve(kv, EFS_ROOT_INO, "w36-b", &dent, &row) == EFS_OK &&
               row.ino == replacement && row.nlink == 1,
           "W36 winning rename resolves to a live destination inode");
-    efs_kv_destroy(kv);
+    efs_kv_mem_free(kv);
 }
 
 static void test_resize_coordinator(void)
@@ -5155,6 +5155,183 @@ static void test_xattr(void)
     efs_kv_mem_free(kv);
 }
 
+static int lane_bootstrap_part(struct efs_kv *kv, const struct efs_txid *t,
+                                const struct efs_txn_parts *parts,
+                                const struct efs_meta_lane_bootstrap *q, uint8_t authority)
+{
+    uint8_t key[EFS_KV_KEY_MAX], pay[EFS_META_LANE_BOOTSTRAP_BYTES];
+    uint32_t kl;
+    int rc = efs_meta_encode_lane_bootstrap(q, authority, key, &kl, pay);
+    return rc == EFS_OK ? efs_txn_apply_prepare(kv, EFS_TXN_LANE_BOOTSTRAP,
+                                               t, parts, key, kl, pay, sizeof(pay)) : rc;
+}
+
+static const struct efs_kv_ops *lane_only_ops;
+static uint32_t lane_only_shard;
+static unsigned lane_foreign_reads;
+static int lane_only_get(void *ctx, const uint8_t *key, uint32_t kl, uint8_t *v, uint32_t *len)
+{
+    if (kl < 3 || (((uint32_t)key[0] << 8) | key[1]) != lane_only_shard ||
+        key[2] == EFS_KV_KIND_INODE || key[2] == EFS_KV_KIND_DECISION) {
+        ++lane_foreign_reads;
+        return EFS_ERR_IO;
+    }
+    return lane_only_ops->get(ctx, key, kl, v, len);
+}
+
+static struct {
+    struct efs_kv *kv;
+    const struct efs_kv_ops *ops;
+    efs_ino_t ino;
+    uint64_t generation, epoch;
+    unsigned reads, injections;
+    int continuous;
+} lane_admission_race;
+static int lane_admission_racing_get(void *ctx, const uint8_t *key, uint32_t kl,
+                                      uint8_t *v, uint32_t *len)
+{
+    int rc = lane_admission_race.ops->get(ctx, key, kl, v, len);
+    if (kl == 20 && key[2] == EFS_KV_KIND_CONTENT_FENCE && key[19] == 17 &&
+        (++lane_admission_race.reads % 2) == 1 &&
+        (lane_admission_race.continuous || !lane_admission_race.injections)) {
+        const struct efs_kv_ops *wrapped = lane_admission_race.kv->ops;
+        lane_admission_race.kv->ops = lane_admission_race.ops;
+        uint64_t epoch = lane_admission_race.epoch++;
+        CHECK(efs_meta_apply_content_fence(lane_admission_race.kv, lane_admission_race.ino,
+                  lane_admission_race.generation, 17, epoch, epoch + 1, 10, T0) == EFS_OK,
+              "inject lane admission fence race");
+        ++lane_admission_race.injections;
+        lane_admission_race.kv->ops = wrapped;
+    }
+    return rc;
+}
+static int lane_bootstrap_fail_batch(void *ctx, const struct efs_kv_item *items, uint32_t count)
+{
+    (void)ctx; (void)items;
+    CHECK(count == 3, "bootstrap authority/stamp/history install has bounded atomic batch");
+    return EFS_ERR_IO;
+}
+
+static void test_lane_local_writer_views(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx coord = {.kv = kv};
+    struct efs_meta_row row;
+    struct efs_meta_lane_bootstrap q;
+    struct efs_meta_writer_view view, saved;
+    efs_ino_t ino = 0;
+    struct efs_txid t = {{0x71}}, fence = {{0x72}}, aborted = {{0x73}};
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+          efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                    "lane-local", &ino) == EFS_OK &&
+          efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "lane local fixture");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation, EFS_META_FENCE_INODE,
+              0, 1, 100, T0 + 1) == EFS_OK, "lane bootstrap current global fence");
+    memset(&view, 0x5a, sizeof(view)); saved = view;
+    CHECK(efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_ERR_NOT_FOUND && !memcmp(&view, &saved, sizeof(view)),
+          "absent chunk/lane never synthesizes authority");
+    CHECK(efs_meta_capture_lane_bootstrap(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              coord_fn, &coord, &q) == EFS_OK && q.view.authority_epoch == 1 &&
+              q.view.history.count == 1 && !q.lane_present, "cold bootstrap captures history of absent lane");
+    struct efs_txn_parts parts = {0};
+    parts.shard[parts.n++] = efs_kv_inode_shard(ino);
+    uint32_t lsh = efs_kv_lane_shard(ino, 17);
+    if (lsh != parts.shard[0]) parts.shard[parts.n++] = lsh;
+    CHECK(lane_bootstrap_part(kv, &t, &parts, &q, EFS_META_FENCE_INODE) == EFS_OK &&
+          lane_bootstrap_part(kv, &t, &parts, &q, 17) == EFS_OK,
+          "bootstrap prepares inode guard and lane triple");
+    CHECK(lane_bootstrap_part(kv, &t, &parts, &q, 17) == EFS_OK, "bootstrap prepare replay idempotent");
+    CHECK(efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_ERR_BUSY && !memcmp(&view, &saved, sizeof(view)),
+          "undecided bootstrap is local BUSY");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&t, &parts), &t, EFS_TXN_COMMIT) == EFS_OK &&
+          efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_ERR_BUSY, "committed unresolved bootstrap does not query coordinator");
+    CHECK(efs_txn_resolve(kv, &t, lsh, EFS_TXN_COMMIT) == EFS_OK,
+          "resolve only lane participant first");
+    lane_only_ops = kv->ops; lane_only_shard = lsh; lane_foreign_reads = 0;
+    struct efs_kv_ops wrapped = *kv->ops; wrapped.get = lane_only_get; kv->ops = &wrapped;
+    CHECK(efs_meta_get_lane_writer_view(kv, ino, row.generation, 17 + 64, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_OK && view.authority_epoch == 1 && !view.oldest_complete_epoch &&
+              view.history.count == 1 && !lane_foreign_reads,
+          "steady lane admission reads neither inode nor transaction coordinator, including holes");
+    saved = view;
+    CHECK(efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE * 2,
+              &view) == EFS_ERR_STALE && !memcmp(&view, &saved, sizeof(view)), "geometry mismatch retains output");
+    CHECK(efs_meta_get_lane_writer_view(kv, ino, row.generation + 1, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_ERR_NOT_FOUND && !memcmp(&view, &saved, sizeof(view)), "FileID cannot inherit lane authority");
+    kv->ops = lane_only_ops;
+    CHECK(efs_txn_resolve(kv, &t, parts.shard[0], EFS_TXN_COMMIT) == EFS_OK &&
+          efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK && (row.active_lanes & (1ull << 17)),
+          "bootstrap durable bitmap includes adopted lane");
+    uint8_t key[EFS_KV_KEY_MAX], val[EFS_META_LANE_BYTES]; uint32_t kl, vl = sizeof(val);
+    efs_kv_key_lane(lsh, ino, row.generation, 17, key, &kl);
+    CHECK(efs_kv_get(kv, key, kl, val, &vl) == EFS_OK, "lane stamp after bootstrap");
+    uint64_t seq = 0; for (unsigned i = 24; i < 32; ++i) seq = (seq << 8) | val[i];
+    CHECK(efs_meta_prepare_content_fence(kv, &fence, &parts, ino, row.generation,
+              17, 1, seq, 0, 0, 2, 50, T0 + 2) == EFS_OK &&
+          efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_ERR_BUSY, "fence holds admission stamp and history together");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&fence, &parts), &fence, EFS_TXN_COMMIT) == EFS_OK &&
+          efs_txn_resolve(kv, &fence, lsh, EFS_TXN_COMMIT) == EFS_OK &&
+          efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_OK && view.authority_epoch == 2 && view.history.count == 2 &&
+              !view.oldest_complete_epoch, "resolved fence advances matching lane authority");
+    saved = view;
+    CHECK(efs_meta_prepare_content_fence(kv, &aborted, &parts, ino, row.generation,
+              17, 2, seq + 1, 0, 0, 3, 25, T0 + 3) == EFS_OK &&
+          efs_txn_decide(kv, efs_txn_coordinator(&aborted, &parts), &aborted, EFS_TXN_ABORT) == EFS_OK &&
+          efs_txn_resolve(kv, &aborted, lsh, EFS_TXN_ABORT) == EFS_OK &&
+          efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_OK && !memcmp(&view, &saved, sizeof(view)), "aborted fence preserves view");
+    key[2] = EFS_KV_KIND_CONTENT_FENCE;
+    uint8_t hv[EFS_META_FENCE_BYTES]; uint32_t hl;
+    struct efs_fence_history retired = {.count = 1, .entries = {{2, 50}}};
+    CHECK(efs_meta_pack_fence_history(&retired, hv, sizeof(hv), &hl) == EFS_OK &&
+          efs_kv_put(kv, key, kl, hv, hl) == EFS_OK &&
+          efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_ERR_PROTO && !memcmp(&view, &saved, sizeof(view)),
+          "retired history cannot keep an obsolete complete floor");
+    CHECK(efs_meta_pack_fence_history(&saved.history, hv, sizeof(hv), &hl) == EFS_OK &&
+          efs_kv_put(kv, key, kl, hv, hl) == EFS_OK, "restore complete lane history");
+    memset(&lane_admission_race, 0, sizeof(lane_admission_race));
+    lane_admission_race.kv = kv; lane_admission_race.ops = kv->ops;
+    lane_admission_race.ino = ino; lane_admission_race.generation = row.generation;
+    lane_admission_race.epoch = 2;
+    wrapped = *kv->ops; wrapped.get = lane_admission_racing_get; kv->ops = &wrapped;
+    CHECK(efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_OK && view.authority_epoch == 3 && lane_admission_race.injections == 1,
+          "lane admission retries changed authority/history without mixed view");
+    saved = view; lane_admission_race.continuous = 1;
+    lane_admission_race.injections = lane_admission_race.reads = 0;
+    CHECK(efs_meta_get_lane_writer_view(kv, ino, row.generation, 17, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_ERR_BUSY && lane_admission_race.injections == 4 &&
+              !memcmp(&view, &saved, sizeof(view)), "lane admission race bound preserves prior snapshot");
+    kv->ops = lane_admission_race.ops;
+    struct efs_txid fail = {{0x74}};
+    CHECK(efs_meta_capture_lane_bootstrap(kv, ino, row.generation, 18, EFS_MIN_CHUNK_SIZE,
+              coord_fn, &coord, &q) == EFS_OK, "new bootstrap failure fixture");
+    parts.n = 1; parts.shard[0] = efs_kv_inode_shard(ino);
+    lsh = efs_kv_lane_shard(ino, 18);
+    if (lsh != parts.shard[0]) parts.shard[parts.n++] = lsh;
+    CHECK(lane_bootstrap_part(kv, &fail, &parts, &q, EFS_META_FENCE_INODE) == EFS_OK,
+          "freeze inode before failing lane storage");
+    const struct efs_kv_ops *base = kv->ops;
+    wrapped = *base; wrapped.batch = lane_bootstrap_fail_batch; kv->ops = &wrapped;
+    CHECK(lane_bootstrap_part(kv, &fail, &parts, &q, 18) == EFS_ERR_IO,
+          "bootstrap propagates atomic lane storage failure");
+    kv->ops = base;
+    CHECK(efs_meta_get_lane_writer_view(kv, ino, row.generation, 18, EFS_MIN_CHUNK_SIZE,
+              &view) == EFS_ERR_NOT_FOUND, "failed bootstrap never leaves partial authority");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&fail, &parts), &fail, EFS_TXN_ABORT) == EFS_OK,
+          "abort failed bootstrap durably");
+    for (uint32_t i = 0; i < parts.n; ++i)
+        CHECK(efs_txn_resolve(kv, &fail, parts.shard[i], EFS_TXN_ABORT) == EFS_OK,
+              "failed bootstrap releases inode/history holds");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_lookup_unlink();
@@ -5190,6 +5367,7 @@ int main(void)
     test_utimens_fence();
     test_writer_authority_view();
     test_writer_lane_authority();
+    test_lane_local_writer_views();
     test_sparse_grow_tail_epoch();
     test_truncate_range_del();
     test_cross_group_lane();

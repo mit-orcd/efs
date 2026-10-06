@@ -37,6 +37,7 @@
  * The durable intent is the existing EXCL format. */
 #define EFS_TXN_EXCL_VALUE 7
 #define EFS_TXN_CONTENT_FENCE 8 /* atomic inode/lane stamp + history pair */
+#define EFS_TXN_LANE_BOOTSTRAP 10 /* inode guard + lane authority adoption */
 #define EFS_TXN_CONTENT_RESIZE 9 /* coordinated shrink or epoch-preserving extension */
 
 #define EFS_TXN_UNDECIDED 0

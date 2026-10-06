@@ -789,6 +789,8 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
     }
     case EFS_TXN_CONTENT_FENCE:
         return efs_meta_apply_fence_prepare(kv, t, p, key, klen, pay, plen);
+    case EFS_TXN_LANE_BOOTSTRAP:
+        return efs_meta_apply_lane_bootstrap(kv, t, p, key, klen, pay, plen);
     case EFS_TXN_CONTENT_RESIZE:
         return efs_meta_apply_resize_prepare(kv, t, p, key, klen, pay, plen);
     case EFS_TXN_GUARD:
