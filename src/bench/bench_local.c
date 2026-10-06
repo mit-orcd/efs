@@ -6,11 +6,12 @@
 #include "efs/raft.h"
 #include "efs/raft_disk.h"
 #include "efs/store.h"
-#include "server_internal.h"
+#include "../server/server_internal.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
+#include <math.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -919,7 +920,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec)
     return errors ? 1 : 0;
 }
 
-int server_run_local_bench(struct efsd_server *s, const char *kind,
+static int run_local_bench(struct efsd_server *s, const char *kind,
                            double time_sec)
 {
     if (!s || !kind || time_sec <= 0.0) {
@@ -928,7 +929,6 @@ int server_run_local_bench(struct efsd_server *s, const char *kind,
     }
     setlinebuf(stdout);
     setlinebuf(stderr);
-    g_server = s;
 
     char perf_path[EFS_MAX_PATH];
     perf_path[0] = '\0';
@@ -937,7 +937,7 @@ int server_run_local_bench(struct efsd_server *s, const char *kind,
         if (pp && *pp)
             snprintf(perf_path, sizeof(perf_path), "%s", pp);
         else
-            snprintf(perf_path, sizeof(perf_path), "/tmp/efsd-bench-perf-%d/perf.data",
+            snprintf(perf_path, sizeof(perf_path), "/tmp/efs-bench-local-perf-%d/perf.data",
                      (int)getpid());
         g_perf_pid = start_perf_recorder(getpid(), perf_path);
         if (g_perf_pid < 0)
@@ -962,4 +962,82 @@ int server_run_local_bench(struct efsd_server *s, const char *kind,
         printf("perf report: %s\n", perf_path);
     }
     return rc;
+}
+
+static void local_usage(const char *prog)
+{
+    fprintf(stderr,
+        "Usage: %s --bench data --storage <path>[,path...] [--time seconds]\n"
+        "       [--writers N] [--direct-io|--no-direct-io] [--perf]\n"
+        "   or: %s --bench meta --meta-storage <path> [--time seconds] [--perf]\n"
+        "Local engine benchmarks; no cluster or sockets. Scratch roots must be\n"
+        "empty. Data sweeps paths x QD 1/16/64/256; meta measures KV and Raft log.\n"
+        "--storage may repeat; meta also accepts its first root. Default time: 10s.\n",
+        prog, prog);
+}
+
+static int local_storage_arg(struct efsd_server *s, const char *arg)
+{
+    char *copy = strdup(arg), *save = NULL;
+    if (!copy) return -1;
+    unsigned before = s->storage_path_count;
+    for (char *p = strtok_r(copy, ",", &save); p; p = strtok_r(NULL, ",", &save)) {
+        while (*p == ' ' || *p == '\t') p++;
+        if (!*p || strlen(p) >= EFS_MAX_PATH ||
+            s->storage_path_count == EFS_MAX_STORAGE_PATHS) {
+            free(copy); return -1;
+        }
+        strcpy(s->storage_paths[s->storage_path_count++], p);
+    }
+    free(copy);
+    return s->storage_path_count == before ? -1 : 0;
+}
+
+int efs_bench_local_main(int argc, char **argv)
+{
+    struct efsd_server s = {0};
+    s.nwriters = -1;
+    s.listen_fd = -1;
+    const char *kind = NULL;
+    double duration = 10.0;
+    for (int i = 1; i < argc; i++) {
+        const char *opt = argv[i];
+        if (!strcmp(opt, "--help")) { local_usage(argv[0]); return 0; }
+        if (!strcmp(opt, "--perf")) { s.perf = 1; continue; }
+        if (!strcmp(opt, "--direct-io")) { s.direct_io = 1; continue; }
+        if (!strcmp(opt, "--no-direct-io")) { s.direct_io = 0; continue; }
+        if (i + 1 >= argc) goto invalid;
+        const char *value = argv[++i];
+        char *end = NULL;
+        if (!strcmp(opt, "--bench")) {
+            if (kind || (strcmp(value, "data") && strcmp(value, "meta"))) goto invalid;
+            kind = value;
+        } else if (!strcmp(opt, "--storage")) {
+            if (local_storage_arg(&s, value)) goto invalid;
+        } else if (!strcmp(opt, "--meta-storage")) {
+            if (!*value || strlen(value) >= sizeof(s.meta_storage)) goto invalid;
+            strcpy(s.meta_storage, value);
+        } else if (!strcmp(opt, "--time")) {
+            errno = 0; duration = strtod(value, &end);
+            if (errno || end == value || *end || !isfinite(duration) || duration <= 0)
+                goto invalid;
+        } else if (!strcmp(opt, "--writers")) {
+            errno = 0; long n = strtol(value, &end, 10);
+            if (errno || end == value || *end || n < 0 || n > EFS_MAX_WRITERS)
+                goto invalid;
+            s.nwriters = (int)n;
+        } else goto invalid;
+    }
+    if (!kind || (!s.storage_path_count &&
+        (!strcmp(kind, "data") || !s.meta_storage[0]))) goto invalid;
+    pthread_mutex_init(&s.lock, NULL);
+    pthread_cond_init(&s.export_idle_cv, NULL);
+    int rc = run_local_bench(&s, kind, duration);
+    pthread_cond_destroy(&s.export_idle_cv);
+    pthread_mutex_destroy(&s.lock);
+    return rc;
+invalid:
+    fprintf(stderr, "Invalid local benchmark arguments\n");
+    local_usage(argv[0]);
+    return 1;
 }

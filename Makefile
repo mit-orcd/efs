@@ -102,15 +102,24 @@ SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/store_nvme.c \
               src/server/handler.c \
               src/server/cluster.c \
               src/server/peer_pool.c src/server/writer.c \
-              src/server/iostats.c \
-              src/server/bench_local.c src/server/raft_host.c
+              src/server/iostats.c src/server/thread.c \
+              src/server/raft_host.c
 SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 
 CLIENT_SRCS = src/client/efs_fuse.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 
-BENCH_CLIENT_SRC = src/client/efs_bench.c
+BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c
+# Reuse production storage/writer code without linking daemon/network startup.
+# Separate sectioned objects let the linker discard unrelated server functions.
+BENCH_STORE_OBJS = src/bench/store.o src/bench/store_nvme.o \
+                   src/bench/writer.o src/bench/iostats.o src/bench/thread.o
+src/bench/%.o: src/server/%.c .build_id.stamp
+	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -c -o $@ $<
+
 BENCH_CLIENT_OBJ = $(BENCH_CLIENT_SRC:.c=.o)
+$(BENCH_CLIENT_OBJ): src/bench/bench_local.h
+$(BENCH_STORE_OBJS) src/bench/bench_local.o src/server/thread.o: src/server/server_internal.h
 
 MGMT_SRC = src/mgmt/efs_mgmt.c
 MGMT_OBJ = $(MGMT_SRC:.c=.o)
@@ -216,6 +225,7 @@ docs-check:
 	python3 docs/check-architecture.py
 
 test: all
+	python3 tests/test_bench_cli.py
 	python3 docs/check-architecture.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
@@ -256,7 +266,7 @@ test: all
 .build_id.stamp: FORCE
 	@echo '$(EFS_GIT_ID)' | cmp -s - $@ 2>/dev/null || echo '$(EFS_GIT_ID)' > $@
 
-$(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ): \
+$(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ): \
 	include/efs/common.h include/efs/metadata.h include/efs/protocol.h \
 	include/efs/wire.h include/efs/store.h include/efs/transport.h \
 	include/efs/kv.h include/efs/fence_view.h \
@@ -276,8 +286,8 @@ efs-fuse: $(CLIENT_OBJS) $(LIB)
 	  exit 1; }
 	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -o $@ $(CLIENT_OBJS) $(LIB) $(LDFLAGS) $(FUSE_LIBS)
 
-efs-bench: $(BENCH_CLIENT_OBJ) $(LIB)
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(BENCH_CLIENT_OBJ) $(LIB) $(LDFLAGS)
+efs-bench: $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(LIB)
+	$(CC) $(CFLAGS) $(INCLUDES) -Wl,--gc-sections -o $@ $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(LIB) $(LDFLAGS)
 
 $(CLIENT_OBJS): CFLAGS += $(FUSE_CFLAGS)
 
@@ -349,7 +359,7 @@ blake3-bench: $(BLAKE3_OBJS) FORCE
 		-o blake3-bench tools/blake3-bench.c $(BLAKE3_OBJS) $(LDFLAGS)
 
 clean:
-	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ)
+	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ)
 	rm -f src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o src/sim/opid.o
 	rm -f $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query blake3-bench
 	rm -f tests/perf/tcp_rdma/xprt_bench tests/faults/fault_sim

@@ -1824,7 +1824,7 @@ existing local correctness fix; none of these items is closed by this triage.
 | E | **D17** · `st_blocks` = 0 for files this client did not write | performance | in tree + gated (dev cluster, Oct 4): lane-stamp present count, summed at getattr, client takes max with its local table; `du` on a non-writing client = size/512 | [D17](#appendix-3--decisions--taken-and-pending-register-d1d30) |
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d30) |
 | P2.3 | **W23** · stalled-compactor test | performance | test + hook in tree; measured Oct 5Z (dev cluster): no stall-specific effect to 4.35 GiB (n_l0 never left 0 — the stall never bit; rss-2x stop = small-VM calibration artifact); refinements named in SUMMARY | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
-| P3 | `efsd --bench`, then `efs-fuse --bench` | performance | tools in tree + gated (dev cluster, Oct 5); first numbers measured on efs1 (write ≈82 % of the 1-disk fio ceiling at QD16; meta = the 36 ms fsync wall, batch ×32; client cpu 2.8 ≫ put 0.26 ≈ write GiB/s). Owed: the 6-NVMe fcstor run (named host) and the two-host client ladder | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) |
+| P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools in tree + gated (dev cluster, Oct 5); first numbers measured on efs1 (write ≈82 % of the 1-disk fio ceiling at QD16; meta = the 36 ms fsync wall, batch ×32; client cpu 2.8 ≫ put 0.26 ≈ write GiB/s). Owed: the 6-NVMe fcstor run (named host) and the two-host client ladder | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](../status/metadata-scaling.md) |
 | — | **D28** (who owns acknowledged bytes across client death) · **D29** (a REPORT receipt for "committed, apply pending") · **D30** (the remedy for compaction-induced apply lag) | ask | ask — not code until the user decides | [decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d30) |
@@ -1838,7 +1838,7 @@ still owed — W36 20/20, W38 (row 4), W27 rerun (row 6), the W42
 one-QUOTA-member PUT question; (4) only then the measurements — W44 a
 idle-hour reading, W46/W47 counts (rows 9/10), the untraced 16× dd
 re-measurement (row 11); (5) D23, W41, D17, D26 (after step 4's W44
-reading); (6) `efsd --bench`, then `efs-fuse --bench`; (7) the open
+reading); (6) `efs-bench --bench data/meta`, then `efs-fuse --bench`; (7) the open
 asks go to the user — D28 with 0a (a)'s answer and D27's gate result,
 D29 with W41, D30 with W51's table. The investigations W48 / W50 / W51
 (rows 12–14) are quick evidence tasks that may run at any point the
@@ -2443,7 +2443,7 @@ unconverging STALE rec is still handled as today (logged, dropped at the
 | D | **D23 — decided; IN TREE + gated Oct 2 13:30Z (P1.1)** | clean dcache bodies have no budget; RSS tracks bytes written | quick | **landed as "hand the body to the rdcache when the REPORT commits the full-image object"** (`dcache_note_committed` → `dcache_body_to_rdcache`, put outside the slot lock) — not "when the PUT lands": a STALE replay needs the body and its ranges until the commit, and a span-only row (table gen 0) cannot enter the rdcache. Gate: 4 × 1 GiB bs=64k dd+fsync RSS 2.55 GB flat (old build 4.64 GB); `cmp` after remount OK (`…p1-d23-w41/SUMMARY.txt` §3). Original: drop a clean body once its PUT lands; reads go to the rdcache |
 | E | **D17 — decided; IN TREE + gated Oct 4 (dev cluster)** | `st_blocks` = 0 for files this client did not write | medium (row/wire) | **per-lane present-chunk count in the lane stamp**, reduced at getattr like `max_end`, returned in the row image; the client sums it. Gate: `du` of a file written by another client ≈ size/512 (× EC not counted), ecrawl sparse heuristic 0 false positives. **Landed:** lane records carry `present` (publish adds on creation, truncate's range delete subtracts, LANE_FENCE same), getattr sums it into the row image's `alloc_chunks`, the client takes max with its local present count. Gate result: `du` on a non-writer = size/512 exactly (partial tail exact, sparse stays sparse, truncate drops the count); 16 unit suites + posix2 two-client PASS. The ecrawl half is owed to 19810 (down) |
 | F | **D26 — decided; IN TREE + gated Oct 4 (dev cluster)** | GC frag pass / L0 steady state | medium | **pending-GC watermark first** (one get per empty pass) — W44 a says a pass walks ~1 M tombstones under the GC prefix, **but it also emits 257 live records each time, so these are not empty passes and the watermark alone does not help while they remain** (user, 05:30Z): pair it with bounded scan progress (resume where the last pass stopped) and with W50 (row 13), and maintain the watermark atomically with insertion/removal and across recovery; the L0 width (`l0=100–170` during a 16× write, 50–54 idle) is a separate cost that shows in REPORT pack (100–133 µs per record get) — bring that number when D12/D13 come up. **Landed:** the apply maintains a per-anchor pending-GC watermark (`efs_meta_gc_pending_*`: `gc_queue` bumps, a retiring GC_ACK lowers, one counting prefix scan re-derives it at start and after a snapshot import, a fully-empty pass clamps drift with `zero_if`); the frag pass peeks it before scanning and resumes from the in-tree cursor. Gate: 16 unit suites PASS (`test_gc_watermark`); dev cluster — a 5120-record `rm` drained at ~514 records/pass, then idle leaders printed no `gc-pass` line for 10 min; the 19810 idle-hour reading and the raft-tail 99.7 % GC_ACK check are owed to the live cluster (down). Gate: W44's |
-| G | **`efsd --bench` — asked Oct 2** | the server storage bench | medium–long | implement the plan below ("Single-node storage bench"); its number decides I–K |
+| G | **`efs-bench --bench` — original ask Oct 2** | local server storage bench; CLI moved from `efsd` Oct 6 | medium–long | tool in tree; same production backends, scratch roots and no network. The named-host storage curve remains owed; its number decides I–K |
 | H | **D15 / D16 — closed** | leader stickiness / peer transport class | — | closed; the motivating 30 s stall was the sender's channel bug (`85f5b31c`) |
 | I | **fragment on-disk layout — deferred** | fewer path components per fragment (W34 residual) | long + **wipe** | not before G says the server PUT path is the wall (writers were 10 % busy in the 20:56Z trace) |
 | J | **W40 — deferred** | FUSE write copy — own `/dev/fuse` receive loop | long | not before G; the write wall is RTT × in-flight depth, client at 1.35 cores |
@@ -4732,6 +4732,12 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 
 ### Single-node storage bench `efsd --bench` — ASKED Oct 2 2026 (user). Queue position: after W41 / D23 / D17 / D26 in "Plan after the Oct 1 22:00Z review"; its number decides the fragment layout, W40 and zero-copy receive.
+
+**CLI relocation (Oct 6 2026).** Local `data|meta` modes moved to
+`efs-bench --bench`, reusing the same storage backends without daemon/network
+startup. `efsd --bench` is removed. The original Oct 5 results below keep their
+historical command labels; future measurements use `efs-bench`. See
+[local usage](#local-storage-benchmarks).
 
 **Status (Oct 5 2026).** **Tool in tree + gated (dev cluster): 16 unit suites PASS.** `efsd --bench data|meta` as specified below (fio ceilings in the same log, store + writer pool exactly as the handlers drive them, paths × QD 1/16/64/256 ladders with exact p50/p99, iostats cross-check, diskstats util, `--perf` top symbols; the old pwrite loop is deleted). First numbers measured on efs1 (dev VM, one virtio disk — not an fcstor node): `results/measure/20261005-045140-p3-benches/SUMMARY.txt`. Write ≈ 82 % of the single-disk fio ceiling at QD16 with the disk at 82–99 % util (the engine reaches the disk's limit on this host); meta sits exactly on the fsync wall (27 puts/s QD1 = fio wsync4k, batch32 ×32). **Owed:** the 1→6 real-NVMe curve on a named fcstor host — the dev VM's six roots share one device, so the path-scaling question the plan asks is not answered by this run.
 
@@ -7202,6 +7208,29 @@ verified `fuse.efs-fuse`). The full history of these numbers is in
 pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
 inside. `dd if=/dev/zero` is also invalid here: all-zero payloads skip PUTs.
 Use a non-zero source file.
+
+### Local storage benchmarks
+
+Local engine benchmarks now belong to `efs-bench` (Oct 6 2026):
+
+```sh
+./efs-bench --bench data --storage /scratch/efs-bench --time 10 --writers 8
+./efs-bench --bench meta --meta-storage /scratch/efs-meta --time 10
+./efs-bench --bench data --help
+```
+
+Roots must be empty scratch directories; the tool refuses nonempty roots.
+Data supports repeated/comma-separated storage roots, `--direct-io`, and `--perf`;
+metadata also accepts the first `--storage` root. The implementation reuses the
+production fragment store, writer pool, KV and Raft log, with no cluster startup
+or network. Existing seed-based network/store/read/metadata benchmark commands
+remain in `efs-bench`. The server's benchmark RPC handler remains necessary for
+the remote network-discard measurement.
+
+Historical measurements using `efsd --bench` retain their original
+command labels. New runs use `efs-bench --bench`; `efsd` no longer offers local
+benchmark execution. The move changes command ownership, not measured workload
+or backend behavior. No new storage-performance claim follows from this move.
 
 
 ## Appendix 13 — Development — modularity constraint

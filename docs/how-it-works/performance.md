@@ -130,3 +130,26 @@ verified `fuse.efs-fuse`). The full history of these numbers is in
 pre-flush and read several GiB/s. The number is bytes ÷ wall with the flush
 inside. `dd if=/dev/zero` is also invalid here: all-zero payloads skip PUTs.
 Use a non-zero source file.
+
+## Local storage benchmarks
+
+Local engine benchmarks now belong to `efs-bench` (Oct 6 2026):
+
+```sh
+./efs-bench --bench data --storage /scratch/efs-bench --time 10 --writers 8
+./efs-bench --bench meta --meta-storage /scratch/efs-meta --time 10
+./efs-bench --bench data --help
+```
+
+Roots must be empty scratch directories; the tool refuses nonempty roots.
+Data supports repeated/comma-separated storage roots, `--direct-io`, and `--perf`;
+metadata also accepts the first `--storage` root. The implementation reuses the
+production fragment store, writer pool, KV and Raft log, with no cluster startup
+or network. Existing seed-based network/store/read/metadata benchmark commands
+remain in `efs-bench`. The server's benchmark RPC handler remains necessary for
+the remote network-discard measurement.
+
+Historical measurements using `efsd --bench` retain their original
+command labels. New runs use `efs-bench --bench`; `efsd` no longer offers local
+benchmark execution. The move changes command ownership, not measured workload
+or backend behavior. No new storage-performance claim follows from this move.

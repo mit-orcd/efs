@@ -1,0 +1,34 @@
+CEIL_RAW wseq64k bytes=536870912 wall_s=0.402 GiB_s=1.242
+CEIL_RAW rseq64k bytes=536870912 wall_s=0.248 GiB_s=2.015
+CEIL_RAW wsync4k ops=1529 wall_s=5.002 ops_s=305.7 avg_us=3271.1
+CEIL_RAW rrand4k ops=0 wall_s=0.000 ops_s=0.0 avg_us=13.1
+BENCH_OK kind=meta phase=kv-write ops=10 wall_s=0.031 ops_s=323.9 p50_us=3037 p99_us=3707 max_us=3707 MB_s=0.047 errors=0
+kv-compact: start l0=1 inputs=1 range=353 l0only=0
+kv-compact: end bytes=1610 ms=11 l0=0 l1=1 rc=0
+BENCH_OK kind=meta phase=kv-flush-compact flush_s=0.011 compact_s=0.011 mt_bytes=0 l0_bytes=0 n_l0=0 n_l1=1
+BENCH_OK kind=meta phase=kv-read ops=144211 wall_s=0.030 ops_s=4807011.4 p50_us=0 p99_us=1 max_us=17 MB_s=0.000 errors=0
+BENCH_OK kind=meta phase=raft-append-qd1 ops=10 wall_s=0.030 ops_s=328.9 p50_us=3002 p99_us=3255 max_us=3255 MB_s=0.080 errors=0
+BENCH_OK kind=meta phase=raft-append-batch32 batches=9 entries=288 wall_s=0.031 entries_s=9232.6 batch_p50_us=3446 batch_p99_us=3631 batch_max_us=3631 MB_s=2.254 errors=0
+BENCH_OK kind=meta phase=raft-reopen reopen_s=0.001 last_idx=298 entries=298
+CEIL_RAW wseq64k bytes=536870912 wall_s=0.368 GiB_s=1.359
+CEIL_RAW rseq64k bytes=536870912 wall_s=0.252 GiB_s=1.984
+CEIL_RAW wsync4k ops=1541 wall_s=5.001 ops_s=308.2 avg_us=3245.2
+CEIL_RAW rrand4k ops=0 wall_s=0.000 ops_s=0.0 avg_us=11.3
+bench data paths=1..1 time_s=0.030 writers=2 direct_io=off frag_bytes=65536 qds=1,16,64,256
+BENCH_OK kind=data rw=write paths=1 qd=1 ops=1019 wall_s=0.030 ops_s=33884.2 p50_us=28 p99_us=63 max_us=420 GiB_s=2.068 errors=0 diskw_ops=1019 diskw_avg_us=23
+ diskutil:
+BENCH_OK kind=data rw=write paths=1 qd=16 ops=1433 wall_s=0.031 ops_s=46848.3 p50_us=213 p99_us=1566 max_us=2943 GiB_s=2.859 errors=0 diskw_ops=1433 diskw_avg_us=27
+ diskutil:
+BENCH_OK kind=data rw=write paths=1 qd=64 ops=896 wall_s=0.035 ops_s=25967.4 p50_us=150 p99_us=16445 max_us=23243 GiB_s=1.585 errors=0 diskw_ops=896 diskw_avg_us=32
+ diskutil:
+BENCH_OK kind=data rw=write paths=1 qd=256 ops=780 wall_s=0.053 ops_s=14731.7 p50_us=327 p99_us=27784 max_us=31083 GiB_s=0.899 errors=0 diskw_ops=780 diskw_avg_us=40
+ diskutil:
+BENCH_OK kind=data rw=read paths=1 qd=1 ops=1641 wall_s=0.030 ops_s=54496.7 p50_us=18 p99_us=25 max_us=65 GiB_s=3.326 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil:
+BENCH_OK kind=data rw=read paths=1 qd=16 ops=8566 wall_s=0.030 ops_s=281039.4 p50_us=27 p99_us=57 max_us=7037 GiB_s=17.153 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil:
+BENCH_OK kind=data rw=read paths=1 qd=64 ops=8214 wall_s=0.035 ops_s=232476.1 p50_us=28 p99_us=1997 max_us=15003 GiB_s=14.189 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil:
+BENCH_OK kind=data rw=read paths=1 qd=256 ops=8328 wall_s=0.064 ops_s=129615.0 p50_us=27 p99_us=1630 max_us=16877 GiB_s=7.911 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil:
+benchmark CLI: ownership, parsing and scratch protection PASS

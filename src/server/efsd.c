@@ -2,7 +2,6 @@
 #include "efs/log_ts.h"
 #include "efs/network.h"
 #include "efs/version.h"
-#include "bench_local.h"
 #include "server_internal.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,25 +19,6 @@
 
 struct efsd_server *g_server = NULL;
 
-
-/* Conn/writer stacks: hello_ack is heap-allocated now, so 1 MiB is ample and
- * avoids ~8 GiB of VA when 512 conn threads are live. */
-#define EFSD_THREAD_STACK (1 * 1024 * 1024)
-
-int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg)
-{
-    pthread_attr_t attr;
-    int rc;
-    if (pthread_attr_init(&attr) != 0)
-        return pthread_create(tid, NULL, fn, arg);
-    if (pthread_attr_setstacksize(&attr, EFSD_THREAD_STACK) != 0) {
-        pthread_attr_destroy(&attr);
-        return pthread_create(tid, NULL, fn, arg);
-    }
-    rc = pthread_create(tid, &attr, fn, arg);
-    pthread_attr_destroy(&attr);
-    return rc;
-}
 
 /* Alternate stack so SIGSEGV from stack overflow can still report. */
 static char g_efsd_altstack[256 * 1024];
@@ -104,21 +84,9 @@ static void usage(const char *prog)
             "[--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
             "[--writers <n>] [--join <host:port>] [--no-persist] [--perf] [--strace] "
             "[--meta-storage <root>]\n"
-            "   or: %s --bench data --storage <path>[,path...] "
-            "[--time <seconds>] [--writers <n>] [--direct-io|--no-direct-io] "
-            "[--perf]\n"
-            "   or: %s --bench meta --meta-storage <dir> [--time <seconds>] "
-            "[--perf]\n"
             "  --storage        1..%d paths (comma and/or repeated).\n"
             "                   Multiple paths: least-queue write placement\n"
             "                   (chunk_index %% N) across disks for parallelism.\n"
-            "  --bench <kind>   single-node storage bench; no cluster. data:\n"
-            "                   fragment store + writer pool exactly as the PUT/\n"
-            "                   GET handlers drive it, paths x QD 1/16/64/256\n"
-            "                   ladders with p50/p99; meta: KV + Raft log, sync on.\n"
-            "                   Bench roots must be scratch (created if absent,\n"
-            "                   bench trees removed afterwards). Never /efs/data.\n"
-            "  --time <sec>     duration per bench round (default 10)\n"
             "  --direct-io      O_DIRECT for fragment I/O\n"
             "  --no-direct-io   use the page cache for fragment I/O (default)\n"
             "  --writers <n>    shared writer threads across all storage paths "
@@ -126,7 +94,7 @@ static void usage(const char *prog)
             "  --meta-storage   directory whose mdraft/ holds the Raft log and KV.\n"
             "                   Default: the first --storage root. Does not move\n"
             "                   an existing mdraft.\n",
-            prog, prog, prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_RESERVED);
+            prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_RESERVED);
 }
 
 static int add_storage_path(struct efsd_server *s, const char *path)
@@ -364,8 +332,6 @@ int main(int argc, char **argv)
     server_peer_pool_init();
 
     char *join_peer = NULL;
-    char *bench_kind = NULL;
-    double bench_time = 10.0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--node-id") == 0 && i + 1 < argc) {
@@ -383,15 +349,6 @@ int main(int argc, char **argv)
             strncpy(server.meta_storage, argv[++i],
                     sizeof(server.meta_storage) - 1);
             server.meta_storage[sizeof(server.meta_storage) - 1] = '\0';
-        } else if (strcmp(argv[i], "--bench") == 0 && i + 1 < argc) {
-            bench_kind = argv[++i];
-        } else if (strcmp(argv[i], "--time") == 0 && i + 1 < argc) {
-            bench_time = atof(argv[++i]);
-            if (bench_time <= 0.0) {
-                fprintf(stderr, "Invalid --time value\n");
-                usage(argv[0]);
-                return 1;
-            }
         } else if (strcmp(argv[i], "--quota") == 0 && i + 1 < argc) {
             server.quota = efs_parse_quota(argv[++i]);
             if (server.quota == 0) {
@@ -428,16 +385,6 @@ int main(int argc, char **argv)
             usage(argv[0]);
             return 1;
         }
-    }
-
-    if (bench_kind) {
-        if (strcmp(bench_kind, "data") == 0 && server.storage_path_count == 0) {
-            fprintf(stderr, "--bench data needs --storage <path>[,path...] "
-                            "(scratch roots, never a live data root)\n");
-            usage(argv[0]);
-            return 1;
-        }
-        return server_run_local_bench(&server, bench_kind, bench_time);
     }
 
     if (server.id == 0 || server.port == 0 || server.storage_path_count == 0) {
