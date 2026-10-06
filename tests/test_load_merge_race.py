@@ -23,6 +23,7 @@ source = r'''
 static struct dcache_ent entry;
 static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
 static int replaced, frees, charged, inject;
+static uint64_t dcache_seq_now(void) { return 50; }
 static void dcache_account_extra(efs_ino_t ino,uint32_t ci) { (void)ino;(void)ci; }
 static int observed_unlock(pthread_mutex_t *m) {
     int rc=pthread_mutex_unlock(m);
@@ -53,7 +54,7 @@ static int dcache_store_owned(efs_ino_t ino,uint32_t ci,uint8_t *chunk,
     entry.dirty=entry.pin_held=1;entry.nrange=1;entry.roff[0]=in->off;entry.rlen[0]=in->len;
     STORE_UNLOCK; return 0;
 }
-''' .replace('dcache_store_owned(',store_name+'(').replace('STORE_LOCK;', 'assert(pthread_mutex_trylock(&mu)!=0);' if store_name.endswith('_locked') else 'pthread_mutex_lock(&mu);').replace('STORE_UNLOCK;', '' if store_name.endswith('_locked') else 'pthread_mutex_unlock(&mu);') + '\n#define pthread_mutex_unlock observed_unlock\n' + '\n'.join(function(n) for n in ['dcache_keep_on_drop','dcache_add_range','dcache_merge_owned']) + r'''
+''' .replace('dcache_store_owned(',store_name+'(').replace('STORE_LOCK;', 'assert(pthread_mutex_trylock(&mu)!=0);' if store_name.endswith('_locked') else 'pthread_mutex_lock(&mu);').replace('STORE_UNLOCK;', '' if store_name.endswith('_locked') else 'pthread_mutex_unlock(&mu);') + '\n#define pthread_mutex_unlock observed_unlock\n' + '\n'.join(function(n) for n in ['dcache_keep_on_drop','dcache_add_range','dcache_apply_init','dcache_merge_owned']) + r'''
 #undef pthread_mutex_unlock
 int main(void) {
     for (unsigned mode=0;mode<3;++mode) {
@@ -78,6 +79,16 @@ int main(void) {
     assert(dcache_merge_owned(1,0,200,src,100,loaded,CS,&in)==0);
     for (unsigned i=0;i<100;++i) assert(entry.data[i]=='A' && entry.data[200+i]=='B');
     assert(entry.nrange==2);free(entry.data);
+    memset(&entry,0,sizeof(entry));entry.ino=1;entry.len=CS;
+    entry.data=calloc(1,CS);entry.dirty=entry.pin_held=1;
+    entry.nrange=1;entry.rlen[0]=10;entry.img_seq=1;
+    loaded=malloc(CS);memset(loaded,'F',CS);in=(struct dcache_init){.full=1};
+    inject=1;
+    assert(dcache_merge_owned(1,0,0,loaded,CS,loaded,CS,&in)==1);
+    assert(entry.base_gen==EFS_CHUNK_BASE_UNCOND && entry.have_base);
+    assert(entry.img_seq==50 && entry.nrange==1 && entry.rlen[0]==100);
+    for(unsigned i=0;i<CS;++i) assert(entry.data[i]==(i<100?'A':'F'));
+    free(entry.data);
     puts("load merge: pending PUT, retained pin and dirty ownership survive late loaders PASS");
 }
 '''

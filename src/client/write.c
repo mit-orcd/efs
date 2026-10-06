@@ -4277,7 +4277,7 @@ static void dcache_kick_complete(void);
 static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
                                    const uint8_t *src, uint32_t cs)
 {
-    if (dcache_patch(ino, ci, 0, src, cs) != 0) {
+    {
         uint8_t *chunk = efs_buf_alloc(cs);
         if (!chunk)
             return -1;
@@ -4288,16 +4288,6 @@ static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
             return -1;
         }
     }
-    uint32_t s = dcache_slot(ino, ci);
-    pthread_mutex_t *mu = dcache_mu(s);
-    pthread_mutex_lock(mu);
-    struct dcache_ent *e = dcache_find(s, ino, ci);
-    if (e) {
-        e->have_base = 1;
-        e->nrange = 0;
-        e->base_gen = EFS_CHUNK_BASE_UNCOND;
-    }
-    pthread_mutex_unlock(mu);
     dcache_kick_complete();
     return 0;
 }
@@ -4310,24 +4300,12 @@ int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
 {
     if (!chunk || !cs)
         return -1;
-    if (dcache_patch(ino, ci, 0, chunk, cs) == 0) {
-        efs_buf_free(chunk, cs);
-    } else {
+    {
         struct dcache_init in = { 1, 0, 1, 0, 0 };
 
         if (dcache_merge_owned(ino, ci, 0, chunk, cs, chunk, cs, &in) < 0)
             return -1;
     }
-    uint32_t s = dcache_slot(ino, ci);
-    pthread_mutex_t *mu = dcache_mu(s);
-    pthread_mutex_lock(mu);
-    struct dcache_ent *e = dcache_find(s, ino, ci);
-    if (e) {
-        e->have_base = 1;
-        e->nrange = 0;
-        e->base_gen = EFS_CHUNK_BASE_UNCOND;
-    }
-    pthread_mutex_unlock(mu);
     dcache_note_size(ino, ((uint64_t)ci + 1) * cs);
     dcache_kick_complete();
     return 0;
@@ -4746,6 +4724,12 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
         }
         memcpy(e->data + off, src, len);
         dcache_add_range(e, off, len);
+        if (in && in->full) {
+            /* Full bytes and ownership become visible in the same lock hold.
+             * Older in-flight images cannot replace this accepted overwrite. */
+            dcache_apply_init(e, in);
+            e->img_seq = dcache_seq_now();
+        }
         DTRACE(e, "merge-fold off=%u len=%u", off, len);
         pthread_mutex_unlock(mu);
         efs_buf_free(chunk, cs);
