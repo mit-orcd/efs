@@ -153,3 +153,91 @@ Historical measurements using `efsd --bench` retain their original
 command labels. New runs use `efs-bench --bench`; `efsd` no longer offers local
 benchmark execution. The move changes command ownership, not measured workload
 or backend behavior. No new storage-performance claim follows from this move.
+
+## Benchmark profiling harness
+
+`./efs-bench.sh` on a Linux benchmark host runs an untraced baseline and a
+separate perf rerun for each case, then writes `ANALYSIS.md`. Build with
+`make efs-bench` first. The host needs `perf` and permission to record the chosen
+event; missing tools or failed/empty profiles produce failure, never a silent
+unprofiled success. The script does not install packages or change kernel policy.
+
+```sh
+# Full local matrix; use an existing scratch parent on the device of interest.
+./efs-bench.sh --storage-root /data1/bench-scratch
+# Repeat --storage-root to sweep 1..N paths on multiple devices.
+./efs-bench.sh --storage-root /data1/bench-scratch --storage-root /data2/bench-scratch
+# Add the cluster network, bounded PUT/GET and metadata modes.
+./efs-bench.sh --storage-root /data1/bench-scratch --seed HOST:17432
+# Optional syscall summary in a third, separate rerun for each case.
+./efs-bench.sh --storage-root /data1/bench-scratch --strace
+# Show the matrix without running tools or allocating scratch.
+./efs-bench.sh --dry-run
+```
+
+Defaults: BLAKE3 one-shot and streaming at 4 KiB, 64 KiB, 128 KiB and 1 MiB,
+with 1/2/4/affinity-CPU-count workers (deduplicated and capped by affinity);
+data buffered/direct I/O, inline/two-thread/automatic writer pools and QD
+1/16/64/256; local KV and Raft workloads including individual and batch32
+appends. The fixed data payload remains 64 KiB. The harness bounds the local resident
+working set to 256 MiB of fragment payload across QD slots (`--data-size`);
+filesystem/checksum overhead is additional. Writes wrap after filling that
+window, measuring creation followed by replacement. Direct CLI runs without
+`--window` keep the original append-only workload. `--time` defaults to three
+seconds **per timed phase**, so the full baseline/profile matrix takes minutes,
+plus setup, compaction/reopen and report generation. This is a bounded set of
+meaningful configurations, not every combination of arbitrary numeric options.
+`--threads`, `--hash-sizes`, `--writers` and `--qds` customize the ladders.
+Data CPU profiles combine write/read phases and, with multiple roots, the
+path-count ladder; metadata profiles combine their KV/Raft phases.
+
+The default result directory is `logs/efs-bench-<UTC timestamp>`. Without
+`--storage-root`, scratch is created there on that directory's filesystem.
+Every baseline/perf/strace run gets fresh private children; only those children
+are removed. Caller-provided parent directories and their contents are preserved.
+`--output` selects a **new** directory; existing paths are refused. A single
+untraced fio/raw ceiling probe precedes the first local engine case;
+`--skip-ceiling` omits it. Profiles omit the ceiling probe. Host/device/mount
+metadata is recorded to distinguish tmpfs, page cache and actual storage.
+
+Each case saves commands, stdout/stderr, baseline metrics and `perf/perf.data`,
+plus flat, per-thread (`pid` sort identifies thread IDs), caller and top-three
+benchmark-symbol source/assembly annotations. The matching executable and
+`sources.zip` are retained with a SHA256/version/commit manifest. Source lookup
+by perf annotation still uses the build paths; the archive preserves source
+for later review. `ANALYSIS.md` reports the best observed baseline configurations,
+hot symbols and heuristic CPU categories. Sample shares measure CPU execution,
+not time blocked on disk/network, and do not prove the bottleneck. Call chains,
+latency and device ceilings must support an optimization choice.
+
+Perf defaults to `cycles`, 499 Hz and frame-pointer call graphs. Select
+`--event cpu-clock` on a VM lacking a PMU, or `--call-graph dwarf` when needed.
+`--no-perf` is an explicit baseline-only diagnostic mode and is labelled as such.
+Strace uses `-f -c` and saves per-syscall counts/time/errors; optionally restrict
+it with `--strace-expr trace=writev,fsync,futex`. Traced timings do not replace
+baseline throughput. `--timeout` bounds each subprocess. Timeout/interruption
+stops the owned process group and retains completed evidence; regenerate the
+summary with `./efs-bench.sh --analyze <result-directory>`.
+
+Cluster modes require a compatible deployed benchmark binary/build ID and a
+seed. They profile **the benchmark process**, not the remote daemons. A
+fixed-size PUT primes the full GET window; timed PUTs wrap within that window.
+The default working set is 256 MiB logical, configurable through `--store-size`.
+It remains in the dedicated benchmark export after the run. Use a separate
+`--chunk-base` to avoid another benchmark writer. Remote metadata runs all phases
+and removes their created names normally; `--export`, `--files` and `--dirs`
+control that workload. With no seed, remote modes are explicitly omitted.
+
+BLAKE3 can also run directly:
+
+```sh
+./efs-bench --bench blake3 --oneshot --size 64K --threads 1 --time 3
+./efs-bench --bench blake3 --stream --size 1M --threads 8 --time 3
+```
+
+The existing `make blake3-bench` standalone tool shares the implementation.
+It reports selected SIMD implementation, actual affinity-constrained workers,
+hashes/bytes and throughput. One-shot includes init/finalize per buffer;
+streaming reuses a hasher. Both reuse warm per-worker buffers and measure CPU
+throughput, not end-to-end storage or cold-memory bandwidth. Worker timing uses
+atomic coordination after warm-up and includes completion of the final batch.
