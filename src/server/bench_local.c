@@ -10,6 +10,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -158,8 +159,9 @@ static int ds_read(struct ds_row *rows)
         unsigned maj, mino;
         char name[32];
         uint64_t r1, r2, r3, r4, w1, w2, w3, w4, inflight, io_ms, wio_ms;
-        int got = sscanf(line, "%u %u %31s %llu %llu %llu %llu %llu %llu %llu "
-                         "%llu %llu %llu %llu",
+        int got = sscanf(line, "%u %u %31s %" SCNu64 " %" SCNu64 " %" SCNu64 " %" SCNu64
+                         " %" SCNu64 " %" SCNu64 " %" SCNu64 " %" SCNu64
+                         " %" SCNu64 " %" SCNu64 " %" SCNu64,
                          &maj, &mino, name, &r1, &r2, &r3, &r4, &w1, &w2, &w3,
                          &w4, &inflight, &io_ms, &wio_ms);
         if (got != 14)
@@ -246,7 +248,7 @@ static void perf_print_top(const char *perf_path)
     char cmd[EFS_MAX_PATH + 160];
     snprintf(cmd, sizeof(cmd),
              "perf report --stdio --no-children --percent-limit=2 -i '%s' "
-             "2>/dev/null | grep -E '^\\s+[0-9]+\\.[0-9]+%' | head -8 | "
+             "2>/dev/null | grep -E '^\\s+[0-9]+\\.[0-9]+%%' | head -8 | "
              "sed 's/^/PERF_TOP/'", perf_path);
     (void)system(cmd);
 }
