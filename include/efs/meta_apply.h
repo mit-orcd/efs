@@ -679,6 +679,10 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
 int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
 /* NOT_FOUND means unknown, NEVER permission to rebase. Read under lane ReadIndex. */
+/* Retired is a replay barrier, not evidence of commit or rejection. */
+#define EFS_META_PUBLICATION_RETIRED 1
+#define EFS_META_PUBLICATION_MAX_RECEIPTS 64u
+int efs_meta_apply_publication_retire(struct efs_kv *, const struct efs_meta_pub *);
 int efs_meta_publication_result(struct efs_kv *, const struct efs_meta_pub *, int *verdict);
 /* Which rule STALEd the last efs_meta_apply_publish on this thread. */
 enum {

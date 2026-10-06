@@ -99,9 +99,50 @@ static void failures(void)
     identical_span_operations(kv,other,other_row.generation);
     efs_kv_mem_free(kv);
 }
+static void retirement(struct efs_kv *kv,efs_ino_t ino,uint64_t gen)
+{
+    struct efs_meta_pub p=publication(ino,gen,0,10),q=publication(ino,gen,0,11);int v;
+    assert(efs_meta_apply_publication_retire(kv,&q)==EFS_ERR_BUSY); /* first unacknowledged */
+    struct efs_meta_pub changed=p;changed.new_size++;
+    assert(efs_meta_apply_publication_retire(kv,&changed)==EFS_ERR_PROTO);
+    assert(efs_kv_mem_fail_next_batch(kv)==EFS_OK);
+    assert(efs_meta_apply_publication_retire(kv,&p)==EFS_ERR_IO);
+    assert(result(kv,&p,&v)==EFS_OK && v==EFS_OK);
+    assert(efs_meta_apply_publication_retire(kv,&p)==EFS_OK);
+    assert(result(kv,&p,&v)==EFS_OK && v==EFS_META_PUBLICATION_RETIRED);
+    assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_STALE);
+    assert(efs_meta_apply_publication_retire(kv,&p)==EFS_OK);
+    assert(efs_meta_apply_publication_retire(kv,&q)==EFS_OK);
+    assert(efs_meta_apply_check(kv)==EFS_OK);
+}
+static void bounded_receipts(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();assert(kv);struct efs_meta_attrs at={0,0,1};
+    efs_ino_t ino;struct efs_meta_row row;
+    assert(efs_meta_apply_init(kv,1)==EFS_OK);
+    assert(efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"bounded",&ino)==EFS_OK);
+    assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);
+    struct efs_meta_pub first=publication(ino,row.generation,0,10);
+    assert(efs_meta_apply_publish(kv,&first)==EFS_OK);
+    for(unsigned i=1;i<EFS_META_PUBLICATION_MAX_RECEIPTS;i++) {
+        struct efs_meta_pub p=publication(ino,row.generation,0,10+i);
+        assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_STALE);
+    }
+    struct efs_meta_pub extra=publication(ino,row.generation,0,1000);int v;
+    assert(efs_meta_apply_publish(kv,&extra)==EFS_ERR_BUSY);
+    assert(result(kv,&extra,&v)==EFS_ERR_NOT_FOUND);
+    assert(efs_meta_apply_publication_retire(kv,&first)==EFS_OK);
+    assert(efs_meta_apply_publish(kv,&extra)==EFS_ERR_STALE);
+    /* A fresh identity below the acknowledged floor cannot be admitted. */
+    first.publication_id.seq=5;assert(efs_meta_apply_publish(kv,&first)==EFS_ERR_STALE);
+    assert(efs_meta_apply_check(kv)==EFS_OK);efs_kv_mem_free(kv);
+}
 int main(void)
 {
-    failures();char dir[]="/tmp/efs-publication-XXXXXX";assert(mkdtemp(dir));
+    struct efs_kv *mem=efs_kv_mem_create();assert(mem);struct efs_meta_attrs ma={0,0,1};efs_ino_t mi;struct efs_meta_row mr;
+    assert(efs_meta_apply_init(mem,1)==EFS_OK);assert(efs_meta_apply_create_file(mem,&ma,EFS_ROOT_INO,S_IFREG|0644,"retire",&mi)==EFS_OK);
+    assert(efs_meta_apply_get_inode(mem,mi,&mr)==EFS_OK);exercise(mem,mi,mr.generation);retirement(mem,mi,mr.generation);efs_kv_mem_free(mem);
+    failures();bounded_receipts();char dir[]="/tmp/efs-publication-XXXXXX";assert(mkdtemp(dir));
     struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);
     struct efs_meta_attrs at={0,0,1};efs_ino_t ino;struct efs_meta_row row;
     assert(efs_meta_apply_init(kv,1)==EFS_OK);
@@ -116,6 +157,13 @@ int main(void)
     assert(result(kv,&loser,&v)==EFS_OK && v==EFS_ERR_STALE);
     assert(efs_meta_apply_publish(kv,&first)==EFS_OK);
     struct efs_meta_chunk got;assert(efs_meta_apply_get_chunk(kv,ino,0,&got)==EFS_OK && got.generation==12);
+    efs_kv_lsm_close(kv);child=fork();assert(child>=0);
+    if(!child){kv=efs_kv_lsm_open(dir,NULL);assert(kv);assert(efs_meta_apply_publication_retire(kv,&first)==EFS_OK);_exit(0);}
+    assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
+    kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+    assert(result(kv,&first,&v)==EFS_OK && v==EFS_META_PUBLICATION_RETIRED);
+    assert(efs_meta_apply_publish(kv,&first)==EFS_ERR_STALE);
+    assert(efs_meta_apply_get_chunk(kv,ino,0,&got)==EFS_OK && got.generation==12);
     assert(efs_meta_apply_check(kv)==EFS_OK);efs_kv_lsm_close(kv);
     DIR *d=opendir(dir);assert(d);struct dirent *e;
     while((e=readdir(d))){if(e->d_name[0]=='.')continue;char p[512];snprintf(p,sizeof(p),"%s/%s",dir,e->d_name);assert(!unlink(p));}

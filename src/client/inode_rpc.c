@@ -906,7 +906,7 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
                                struct efs_msg_publication_reply *out)
 {
     struct efs_meta_pub p;uint8_t digest[EFS_HASH_SIZE];
-    if(!out || !request)return EFS_ERR_INVAL;
+    if(query_only<0 || query_only>2 || !out || !request)return EFS_ERR_INVAL;
     struct efs_msg_publication req=*request;
     memset(out,0,sizeof(*out));
     if(efs_publication_from_rec(&req.rec,req.size,&p)!=EFS_OK)return EFS_ERR_INVAL;
@@ -919,7 +919,7 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
         efs_node_id_t nid=target;
         struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
         if(!conn)return EFS_ERR_NET;
-        uint8_t msg=query_only?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION;
+        uint8_t msg=query_only==2?EFS_MSG_PUBLICATION_RETIRE:query_only?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION;
         if(efs_conn_send_msg(conn,msg,&req,sizeof(req))) {
             efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
         }
@@ -928,7 +928,7 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
             free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
         }
         efs_client_conn_release(nid,conn);
-        if(type!=(query_only?EFS_MSG_PUBLICATION_STATUS_REPLY:EFS_MSG_PUBLICATION_REPLY) || len!=sizeof(*out)) {
+        if(type!=(query_only==2?EFS_MSG_PUBLICATION_RETIRE_REPLY:query_only?EFS_MSG_PUBLICATION_STATUS_REPLY:EFS_MSG_PUBLICATION_REPLY) || len!=sizeof(*out)) {
             free(payload);return EFS_ERR_PROTO;
         }
         struct efs_msg_publication_reply reply;memcpy(&reply,payload,sizeof(reply));free(payload);
@@ -941,7 +941,9 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
         }
         int rc=rpc_status_to_efs(reply.rpc.status);if(rc!=EFS_OK)return rc;
         if(memcmp(digest,reply.digest,sizeof(digest)) ||
-           (reply.state!=EFS_PUBLICATION_COMMITTED && reply.state!=EFS_PUBLICATION_REJECTED) ||
+           (reply.state!=EFS_PUBLICATION_COMMITTED && reply.state!=EFS_PUBLICATION_REJECTED && reply.state!=EFS_PUBLICATION_RETIRED) ||
+           (reply.state==EFS_PUBLICATION_RETIRED && reply.verdict!=EFS_META_PUBLICATION_RETIRED) ||
+           (query_only==2 && reply.state!=EFS_PUBLICATION_RETIRED) ||
            (reply.state==EFS_PUBLICATION_COMMITTED && reply.verdict!=EFS_OK) ||
            (reply.state==EFS_PUBLICATION_REJECTED && reply.verdict!=EFS_ERR_STALE && reply.verdict!=EFS_ERR_INVAL))
             return EFS_ERR_PROTO;

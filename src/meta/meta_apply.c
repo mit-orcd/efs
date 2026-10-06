@@ -3768,11 +3768,61 @@ static void publication_key(const struct efs_meta_pub *p, uint8_t key[51])
     memcpy(key+23,p->publication_id.client_uuid,EFS_OPID_UUID_LEN);
     be32(key+39,p->publication_id.session_epoch);be64(key+43,p->publication_id.seq);
 }
+/* One compact floor per FileID/chunk/mount-session. The floor survives receipt
+ * deletion and inode deletion: neither expiry nor reuse may re-enable replay. */
+static int publication_floor(struct efs_kv *kv, const struct efs_meta_pub *p, uint64_t *floor)
+{
+    uint8_t key[51], value[12]; uint32_t len=sizeof(value);
+    publication_key(p,key); key[2]=EFS_KV_KIND_PUBLICATION_FLOOR;
+    int rc=efs_kv_get(kv,key,43,value,&len);
+    if(rc==EFS_ERR_NOT_FOUND) { *floor=0; return EFS_OK; }
+    if(rc!=EFS_OK)return rc;
+    if(len!=sizeof(value) || rd32(value)!=1 || !rd64(value+4))return EFS_ERR_PROTO;
+    *floor=rd64(value+4); return EFS_OK;
+}
+struct publication_scan { unsigned count; uint64_t first; int rc; };
+static int publication_scan_cb(void *ctx,const uint8_t *key,uint32_t klen,
+                               const uint8_t *value,uint32_t vlen)
+{
+    struct publication_scan *s=ctx;
+    if(klen!=51 || !rd64(key+43) || vlen!=8+EFS_HASH_SIZE ||
+       rd32(value)!=1 || rd32(value+4)<1 || rd32(value+4)>3) {
+        s->rc=EFS_ERR_PROTO; return 1;
+    }
+    if(!s->count)s->first=rd64(key+43);
+    return ++s->count>=EFS_META_PUBLICATION_MAX_RECEIPTS+1;
+}
+static int publication_scan(struct efs_kv *kv,const struct efs_meta_pub *p,
+                            struct publication_scan *scan)
+{
+    uint8_t key[51];publication_key(p,key);memset(scan,0,sizeof(*scan));
+    int rc=efs_kv_scan_prefix(kv,key,43,publication_scan_cb,scan);
+    return rc==EFS_OK || rc==1 ? scan->rc : rc;
+}
+int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pub *p)
+{
+    int verdict; uint64_t floor; uint8_t digest[EFS_HASH_SIZE];
+    if(!kv || !p)return EFS_ERR_INVAL;
+    int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
+    rc=publication_floor(kv,p,&floor);if(rc!=EFS_OK)return rc;
+    if(p->publication_id.seq<=floor)return EFS_OK; /* lost ACK reply */
+    rc=efs_meta_publication_result(kv,p,&verdict);if(rc!=EFS_OK)return rc;
+    struct publication_scan scan;rc=publication_scan(kv,p,&scan);if(rc!=EFS_OK)return rc;
+    /* Never discard another unresolved receipt while advancing the floor. */
+    if(!scan.count || scan.first!=p->publication_id.seq)return EFS_ERR_BUSY;
+    uint8_t key[51],fk[51],value[12];publication_key(p,key);memcpy(fk,key,sizeof(fk));
+    fk[2]=EFS_KV_KIND_PUBLICATION_FLOOR;be32(value,1);be64(value+4,p->publication_id.seq);
+    struct efs_kv_item items[2]={{EFS_KV_DEL,key,sizeof(key),NULL,0},
+        {EFS_KV_PUT,fk,43,value,sizeof(value)}};
+    return meta_write_batch(kv,items,2);
+}
 int efs_meta_publication_result(struct efs_kv *kv, const struct efs_meta_pub *p, int *verdict)
 {
     if(!kv || !p || !verdict)return EFS_ERR_INVAL;
     uint8_t digest[EFS_HASH_SIZE],key[51],v[8+EFS_HASH_SIZE];uint32_t len=sizeof(v);
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
+    uint64_t floor;rc=publication_floor(kv,p,&floor);if(rc!=EFS_OK)return rc;
+    if(p->publication_id.seq<=floor) { *verdict=EFS_META_PUBLICATION_RETIRED; return EFS_OK; }
     publication_key(p,key);rc=efs_kv_get(kv,key,sizeof(key),v,&len);if(rc!=EFS_OK)return rc;
     if(len!=sizeof(v)||rd32(v)!=1||rd32(v+4)<1||rd32(v+4)>3 ||
        memcmp(v+8,digest,sizeof(digest)))return EFS_ERR_PROTO;
@@ -4158,8 +4208,10 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     uint8_t digest[EFS_HASH_SIZE],key[51],value[8+EFS_HASH_SIZE];int verdict;
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
     rc=efs_meta_publication_result(kv,p,&verdict);
-    if(rc==EFS_OK)return verdict;
+    if(rc==EFS_OK)return verdict==EFS_META_PUBLICATION_RETIRED?EFS_ERR_STALE:verdict;
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    struct publication_scan scan;rc=publication_scan(kv,p,&scan);if(rc!=EFS_OK)return rc;
+    if(scan.count>=EFS_META_PUBLICATION_MAX_RECEIPTS)return EFS_ERR_BUSY;
     publication_key(p,key);
     be32(value,1);be32(value+4,1);memcpy(value+8,digest,sizeof(digest));
     struct efs_kv_item receipt={EFS_KV_PUT,key,sizeof(key),value,sizeof(value)};
@@ -7385,6 +7437,14 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
         if (efs_kv_inode_shard(r.ino) != (((uint32_t)key[0] << 8) | key[1])) {
             c->rc = EFS_ERR_PROTO;
             return 1;
+        }
+        return 0;
+    }
+    if (key[2] == EFS_KV_KIND_PUBLICATION_FLOOR) {
+        if(klen!=43 || !rd64(key+3) || !rd64(key+11) || !rd32(key+39) ||
+           efs_kv_lane_shard(rd64(key+3),rd32(key+19)%EFS_META_LANES)!=
+             (((uint32_t)key[0]<<8)|key[1]) || vlen!=12 || rd32(val)!=1 || !rd64(val+4)) {
+            c->rc=EFS_ERR_PROTO;return 1;
         }
         return 0;
     }

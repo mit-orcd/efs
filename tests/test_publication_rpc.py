@@ -38,13 +38,13 @@ static void efs_client_conn_drop(efs_node_id_t n,struct efs_conn *c){(void)n;(vo
 static void efs_client_conn_release(efs_node_id_t n,struct efs_conn *c){(void)n;(void)c;releases++;}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t t,const void *p,uint32_t n)
 {
- (void)c;assert(t==(query?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION));
+ (void)c;assert(t==(query==2?EFS_MSG_PUBLICATION_RETIRE:query?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION));
  assert(n==sizeof(struct efs_msg_publication));const struct efs_msg_publication *r=p;
  assert(!memcmp(&r->rec,&rec,sizeof(rec))&&r->size==100);return fail_send;
 }
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *t,void **p,uint32_t *n)
 {
- (void)c;*t=bad_type?EFS_MSG_VERSION_REPLY:(query?EFS_MSG_PUBLICATION_STATUS_REPLY:EFS_MSG_PUBLICATION_REPLY);
+ (void)c;*t=bad_type?EFS_MSG_VERSION_REPLY:(query==2?EFS_MSG_PUBLICATION_RETIRE_REPLY:query?EFS_MSG_PUBLICATION_STATUS_REPLY:EFS_MSG_PUBLICATION_REPLY);
  *n=sizeof(replies[0])-bad_length;*p=malloc(sizeof(replies[0]));assert(*p);
  memcpy(*p,&replies[calls++],sizeof(replies[0]));return fail_recv;
 }
@@ -94,6 +94,10 @@ int main(void)
  reset();expired=1;assert(efs_client_rpc_publication(&request,0,&out)==EFS_ERR_BUSY && !calls);
  reset();request.id.seq=0;out.state=EFS_PUBLICATION_COMMITTED;
  assert(efs_client_rpc_publication(&request,0,&out)==EFS_ERR_INVAL && out.state==EFS_PUBLICATION_UNKNOWN && !calls);
+ request.id=expected;reset();query=2;
+ assert(efs_client_rpc_publication(&request,2,&out)==EFS_ERR_PROTO);
+ reset();query=2;replies[0].state=EFS_PUBLICATION_RETIRED;replies[0].verdict=EFS_META_PUBLICATION_RETIRED;
+ assert(efs_client_rpc_publication(&request,2,&out)==EFS_OK && out.state==EFS_PUBLICATION_RETIRED);
  puts("publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply PASS");
 }
 '''

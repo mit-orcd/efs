@@ -270,6 +270,11 @@ int main(void) {
     struct efs_msg_publication_reply outcome={0};
     assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_BUSY);
     assert(owned->writer->has_publication && owned->dirty && owned->pin_held);
+    outcome.state=EFS_PUBLICATION_RETIRED;outcome.verdict=EFS_META_PUBLICATION_RETIRED;
+    memcpy(outcome.digest,owned->writer->publication.result_digest,EFS_HASH_SIZE);
+    assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_BUSY);
+    assert(owned->writer->has_publication && owned->dirty && owned->pin_held && owned->data);
+    memset(outcome.digest,0,sizeof(outcome.digest));
     outcome.state=EFS_PUBLICATION_REJECTED;outcome.verdict=EFS_ERR_STALE;
     assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_STALE);
     assert(owned->writer->has_publication && owned->dirty && owned->pin_held);

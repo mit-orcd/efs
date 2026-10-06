@@ -169,6 +169,8 @@ enum efs_msg_type {
     EFS_MSG_PUBLICATION_REPLY = 114,
     EFS_MSG_PUBLICATION_STATUS = 115,
     EFS_MSG_PUBLICATION_STATUS_REPLY = 116,
+    EFS_MSG_PUBLICATION_RETIRE = 117,
+    EFS_MSG_PUBLICATION_RETIRE_REPLY = 118,
 };
 
 /* D25 read authority for write admission, including holes and new lanes.
@@ -791,6 +793,7 @@ struct efs_chunk_rec {
 #define EFS_PUBLICATION_UNKNOWN 0u
 #define EFS_PUBLICATION_COMMITTED 1u
 #define EFS_PUBLICATION_REJECTED 2u
+#define EFS_PUBLICATION_RETIRED 3u /* do not drop/rebase dirty bytes from this state */
 struct efs_msg_publication {
     struct efs_opid id;
     struct efs_chunk_rec rec;
