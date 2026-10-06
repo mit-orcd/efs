@@ -1790,15 +1790,15 @@ existing local correctness fix; none of these items is closed by this triage.
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | IN TREE Oct 5, uncommitted — apply alias filters + regression; full metadata suite and ASan/UBSan pass locally; roll + cold cluster gate pending | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | IN TREE Oct 5, uncommitted — guarded memo invalidation + mutation serial; local regressions and ASan/UBSan pass; Linux posix + Spark du gates pending | [full text](#0j--the-clients-50-ms-lookup-memo-returns-pre-mutation-stats-queue-row-0j) |
 | 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — found Oct 5 on the xorinox test cluster (write via the nfsd re-export from a macOS client); trigger not isolated | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
-| 0l | **W56** · root-level rename leaves a ghost name in the renaming client's local lookup | correctness | open — posix gate in tree Oct 5 (`root_rename_dir_old_name_gone`, fails on the Oct 5 build); narrowed to **directory** renames with a root parent; fix in `metadata.c` rename local-apply (tab order of `efs_export_lookup`) | [full text](#w56--root-level-rename-leaves-a-ghost-name-in-the-renaming-clients-local-lookup-queue-row-0l) |
+| 0l | **W56** · root-level rename leaves a ghost name in the renaming client's local lookup | correctness | fixed in `f8fef814` — exact old directory-name cache eviction across parent/hash tabs; NUC full POSIX jobs=4/jobs=1 and two-client suites PASS Oct 6; xorinox roll still owed | [full text](#w56--root-level-rename-leaves-a-ghost-name-in-the-renaming-clients-local-lookup-queue-row-0l) |
 | mem1 | sparse dirty writes bypass reclaim; cache admission has no hard bound | correctness / resource exhaustion | in tree — Oct 5 working-tree implementation; local memory gates PASS; Linux load/cold-read/failure gates owed | [evidence, fix shape and gates](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound) |
 | mem2 | read/readdir reply buffers leak when FUSE workers exit | resource lifetime | in tree — Oct 5 working-tree cleanup; 128 retired-worker and allocation/TLS-failure tests PASS; Linux FUSE worker gate owed | [evidence, fix shape and gates](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit) |
 | 0m | parent dir mtime/ctime bump on entry create/unlink/rename/link (POSIX, §7.4) — ruled a bug if missing (user, Oct 6) | correctness | gate Oct 6 (nuc bare-metal cluster): posix `dir_times_*` 6/7 — create/unlink/mkdir/rmdir/link + same-dir rename all bump same-client; the cross-dir rename dst-parent failure is **W57**; posix2 `peer_dir_mtime_bump_visible` owed | [full text](#0m--parent-directory-mtimectime-must-bump-on-entry-createunlinkrenamelink-queue-row-0m) |
-| 0n | **W57** · cross-directory rename never refreshes the dst parent's attrs on the renaming client | correctness | open — found Oct 6 on the nuc bare-metal cluster; posix gate in tree (`dir_times_rename` cross-dir phases, fail on the Oct 6 build); server verified correct via a second mount (ns-resolution bumps); a sibling layout also stales the SRC parent | [full text](#w57--cross-directory-rename-never-refreshes-the-dst-parents-attrs-on-the-renaming-client-queue-row-0n) |
+| 0n | **W57** · cross-directory rename never refreshes the dst parent's attrs on the renaming client | correctness | fixed in `f8fef814` — refresh both parent attrs after rename and adopt authoritative directory attrs; NUC full POSIX jobs=4/jobs=1 and two-client suites PASS Oct 6 | [full text](#w57--cross-directory-rename-never-refreshes-the-dst-parents-attrs-on-the-renaming-client-queue-row-0n) |
 | 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | analyzed Oct 6 (xorinox, build `3d3f17c2-dirty`): the file exists (created 05:17:31.319Z, size 0), the retry was answered BUSY (rc=-13, 05:17:31.733Z), no server logged EEXIST; suspect the retry path — an opid replay must return the recorded verdict (I16), not EEXIST; BUSY on unique-name creates is new with the dirty D25 intent probes | [full text](#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
 | 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | IN TREE Oct 6, uncommitted — metadata diagnostics + protected published-entry reclaim; local admission returns EAGAIN/ENOMEM; 8 MiB cap retained; metadata saturation + admitted-writer/drain reservation regressions and ASan/UBSan PASS; follow-up 251 MiB ENOMEM reproduced locally and reservation fix added; remount + sustained-write and posix jobs=1 gates owed | [full text](#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | IN TREE Oct 5, uncommitted — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced IOR-hard + cold hardscan gate pending | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
-| 0c | **W36** · rename-vs-unlink of one source both succeed, dangling dentry | correctness | in tree — **RECURRED Oct 6 00:41Z on the xorinox cluster** (build `3d3f17c2-dirty`, which contains the fix): dangling `b` in `posix-2c/peer_rename_vs_unlink_src` — `raft-readdir` lists it, `raft-lookup` returns ino=0; second pre-PREPARE race reproduced and exact-source fix now local/uncommitted; D25 causation unproven; Linux build and 20/20 gate still owed | [full text](#w36--rename-vs-unlink-of-one-source-both-succeed-dangling-dentry-queue-row-0c) |
+| 0c | **W36** · rename-vs-unlink of one source both succeed, dangling dentry | correctness | exact-source PREP guards committed earlier; `75b06624` also returns simple UNLINK apply verdict; NUC rename-vs-unlink 20/20 PASS Oct 6 plus full two-client suite; xorinox recurrence remains historical evidence and its current-build roll gate is still owed | [full text](#w36--rename-vs-unlink-of-one-source-both-succeed-dangling-dentry-queue-row-0c) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | in tree — verify on 19810; one-QUOTA-member PUT question open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
 | 0b | **W27** · REPORT identity from the staging table | correctness | rerun on the current client; close if `putid miss` is 0 | [full text](#w27--report-identity-from-the-staging-table-queue-row-0b) |
 | 0g | **W43** · big truncate is a silent no-op past 32 chunks per lane; step a = **D25** (decided) | correctness | D25 metadata primitives, committed readers and internal resize coordinator in tree, uncommitted; public read-cache/writer/sweep integration open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-3--decisions--taken-and-pending-register-d1d30) |
@@ -1958,6 +1958,61 @@ These results include the preceding partial-merge change but predate the
 dirty-range primitive commits. That primitive is not connected to FUSE and
 cannot explain or resolve this live failure. Do not claim the NUC acceptance
 gate passed. Preserve current pending writes and test artifacts for diagnosis.
+
+### NUC correctness fixes — Oct 6 2026, follow-up
+
+The original NUC mounts and three servers were retained. The clean-stop
+failure was diagnosed by reading the old client's cache without modifying it:
+eight dirty chunk bodies initially, then twelve at capture time, reference
+inodes that authoritative GETATTR says are deleted. The twelve bodies (1.5 MiB)
+and a checksum manifest are preserved at
+`/data1/efs/logs/retained-350696-20261006/`. This is diagnostic evidence, not a
+claim that the deleted files have been recovered. The old binary still needs
+an explicit recovery/discard decision before its mount can be replaced.
+
+Six fixes are committed:
+
+- `a07fbfb5`: CREATE takes the inode HOLD required for unlink-open semantics.
+  Serialize first-open/last-close lease RPCs; flock flush no longer drops an
+  inode lease while another descriptor exists. Allocation/HOLD failures unwind.
+- `75b06624`: simple UNLINK returns its apply verdict, rather than reporting
+  success merely because the Raft index settled. A losing rename/unlink race
+  now reaches the client as a rejection.
+- `f8fef814`: W56/W57 directory cache fixes. Forget only matching old-name
+  dentry copies and refresh both rename parents from committed GETATTR; cached
+  directory attrs are updated without overwriting regular-file dirty bytes.
+- `1a12aa25`: sparse truncate-grow creates a new tail lane at the truncate
+  epoch. Previously its chunk was epoch 1 while its lane stamp remained 0,
+  making captured-epoch writes repeatedly STALE (`concurrent_writes_disjoint`).
+- `c7a56201`: a dirty range overlapping a committed span uses a full CAS fold.
+  The former suffix-only selection dropped the application's overlapping
+  overwrite (`peer_overlap_pwrite_chunk_straddle`). Disjoint spans remain spans.
+- `febc55e5`: clear phantom span-only REPORT marks when neither a PUT identity
+  nor local dirty/stalled/pinned/unreported ownership remains. Both initial and
+  STALE-rebuild paths preserve marks for actual local bytes. This addresses a
+  W27-adjacent clean-stop loop; the nonzero staging-identity fallback is still
+  a separate open audit item.
+
+Validation ran on separate NUC loopback clusters (ports 18432–18434 and
+19432–19434), without replacing the original cluster on 17432–17434. These
+source snapshots have build ID `unknown` because they contain no Git metadata;
+they contain the listed code changes. Linux `make test` passes. Both sparse-tail
+and overlap-selection regressions fail against the preceding production source
+and pass with their fixes; lease and span-selection ASan/UBSan checks pass.
+Full POSIX jobs=4 and jobs=1 each return **216 PASS, 0 FAIL, 1 mmap SKIP**;
+full two-client suite returns **64 PASS, 0 FAIL**. W36 and chunk-straddle gates
+pass **20/20** each. Clean-unmount/remount durability has **26/26 prepare and
+26/26 verify PASS**. Test teardown then exposed phantom span-only marks on
+older peer clients; the final drain fix reran **64/64 PASS**, followed by clean
+stop of both new clients without discard. Older diagnostic/test mounts with
+pending work were retained; no force-stop was used. [Saved results](../../results/measure/20261006-nuc-correctness/SUMMARY.md).
+
+This does not finish D25: logical resize remains internal, the epoch-owned
+range primitive is not wired into FUSE, and complete writer/absent-chunk
+authority is still pending. CREATE then HOLD is also still two RPCs: the lease
+is guaranteed before returning the descriptor, but an atomic create-and-open
+operation is needed to close the remote-unlink window between those RPCs.
+The NUC gates do not replace the xorinox roll, IOR-hard, or fault/RSS gates.
 
 
 ## Appendix 2 — In flight — the current handoff block
@@ -4095,6 +4150,8 @@ cold IOR-hard verification and hardscan. No cluster rollout performed here.
 
 ### W56 · root-level rename leaves a ghost name in the renaming client's local lookup (queue row 0l)
 
+**Oct 6 fix:** `f8fef814` drops matching old-directory-name cache rows from both lookup tabs after authoritative rename. It preserves other names/chunks and ignores a replacement inode. NUC full POSIX jobs=4/jobs=1 and full posix2 PASS; the root directory regression now passes. Xorinox roll remains owed.
+
 **W56 · after `mv /export/A /export/B` with the parent the export root (or any spread directory), the renaming FUSE client keeps resolving the old name in LOOKUP — stat/open on the old path still succeed and return the renamed inode — while the server metadata and every other view (parent READDIR, other clients, fresh mounts) are correct. The ghost lasts until remount (Oct 5 2026, xorinox test cluster, gateway FUSE mount). User-visible trigger: a tool that stats the output dir before creating refuses to run against the ghost of a just-renamed directory.**
 
 **Follow-up steps.** (a) fix: the rename local-apply must resolve the old dentry with the same tab order as `efs_export_lookup` (dentry-hash tab first for root/spread parents) and delete the name-index entry there — today `efs_export_rename_at` (`metadata.c`) probes only the parent's shard tab, so for a root-level entry `name_idx_get` misses, the by-ino fallback `efs_export_rename` upserts the row under the new name, and nothing removes `(root, old_name)` from the hash tab; (b) audit `efs_client_unlink`'s local apply for the same tab asymmetry (rmdir tested clean Oct 5 at both levels, but confirm the code uses the lookup tab order rather than the parent shard only); (c) gate: IN TREE Oct 5 — `tests/posix/posix_suite.py` `@root` group (`root_rename_dir_old_name_gone` FAILS on the Oct 5 build, reproducing the ghost within the suite; the sibling root-level rename/create/unlink/mkdir tests pass) — then full posix jobs=1 + posix2 on the dev cluster after the fix
@@ -4171,6 +4228,8 @@ Next code item in the agreed sequence is W43/D25 production wiring.
 
 ### W36 · rename-vs-unlink of one source both succeed, dangling dentry (queue row 0c)
 
+**Oct 6 reply-path fix:** `75b06624` makes simple UNLINK wait for the actual apply verdict. Previously an apply NOT_FOUND/BUSY was hidden by `host_wait_settled`, allowing both operations to report success even when unlink lost. This is distinct from the earlier exact-source PREP protection against dangling entries. NUC race gate 20/20 and full posix2 PASS; repeat on the current xorinox build before closing its recurrence.
+
 **W36 · rename-vs-unlink of one source both succeed, dangling dentry** (posix2 `peer_rename_vs_unlink_src`, 1 in 6)
 
 **Plan row 5 (in tree).** the hole was one path: `efs_meta_apply_unlink_op` / `rmdir_op` probed the inode row for a pending intent (`efs_txn_key_busy`) but not the DENTRY they delete unversioned, so an unlink could drop the source name + row under a RENAME whose dentry EXCL had landed and whose inode-row REDUCE had not; the rename's RESOLVE then PUT the dest dentry over a dead row (`-?????????`). Both log paths now probe `k_loc`/`k_hash` and answer BUSY (client retries → ENOENT after the rename resolves). The silent NOT_FOUND→OK in `apply_unlink_cmd`/`apply_rmdir_cmd` is gone (W45) Gate: posix2 `peer_rename_vs_unlink_src` 20/20.
@@ -4211,6 +4270,14 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 
 
 ### W27 · REPORT identity from the staging table (queue row 0b)
+
+**Oct 6 drain follow-up:** `febc55e5` distinguishes a phantom span-only
+staging-row mark from actual local ownership before requeuing a missing PUT
+identity. The old zero-node branch requeued indefinitely and blocked clean
+stop even after all data tests passed. Both report construction paths now
+retain dirty/stalled/pinned/unreported local cache work, but drop an ownership-
+free mark. NUC full posix2 64/64 and both fresh client clean stops PASS. The
+nonzero-node staging-identity fallback remains; this is not a complete W27 close.
 
 **W27 · REPORT identity from the staging table**
 
@@ -4267,6 +4334,8 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 
 
 ### W57 · cross-directory rename never refreshes the dst parent's attrs on the renaming client (queue row 0n)
+
+**Oct 6 fix:** `f8fef814` refreshes both parents after committed rename, updates cached directory attrs from authoritative rows, and prevents dirty namespace state from overlaying stale directory attrs. The existing directory LOOKUP shortcut remains. NUC full POSIX jobs=4/jobs=1 and full posix2 PASS, including cross-directory parent-time phases.
 
 **W57 · after any cross-directory rename (`mv a/f b/f`), the renaming FUSE client keeps serving the DST parent directory's pre-rename attributes indefinitely — mtime/ctime still show the pre-rename value ≥ 25 s later, a readdir of the dst parent does not refresh them, only another mount shows the truth — while the server stamps BOTH parents correctly (verified from a second mount on the same cluster: ns-resolution bumps). With a SIBLING layout (`a/f → b/f`, no shared ancestors) the SRC parent goes stale as well; with a parent→child layout (`d/f → d/sub/f`) the src parent survives because it is an ancestor of the dst path and gets refreshed along it (Oct 6 2026, nuc bare-metal 3-node loopback cluster, build `4e4c10ff-dirty`). This is the same-client failure 0m predicted would localize to the client's directory attr path.**
 
