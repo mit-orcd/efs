@@ -59,6 +59,35 @@ class ProfileTests(unittest.TestCase):
             p.write_text('# header\n55.00%;efs-bench;[.] blake3_compress\n10.00%;libc;[.] memcpy\n')
             self.assertEqual(bench.profile_rows(p)[0]['symbol'], 'blake3_compress')
 
+    def test_failed_metrics_and_unresolved_samples(self):
+        with tempfile.TemporaryDirectory() as root:
+            p = Path(root) / 'metrics'
+            p.write_text('BENCH_FAIL kind=io ops=10 errors=0 GiB_s=999999\n')
+            self.assertFalse(bench.valid_metrics(bench.metric_rows(p)))
+        self.assertFalse(bench.valid_metrics([{'ops': '10', 'idle_workers': '1'}]))
+        self.assertEqual(bench.category({'symbol': '0x123', 'dso': '[vdso]'}), 'time/vDSO')
+        self.assertEqual(bench.category({'symbol': '0x123', 'dso': '[kernel.kallsyms]'}), 'unresolved samples')
+
+    def test_analysis_excludes_bad_baseline_but_retains_good_perf_failure(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root)
+            manifest = dict(host='test', event='cycles', binary_sha256='test', commit='test', cases=[], seed=None)
+            good = dict(name='io-good', status='FAIL(perf)', metrics=[dict(kind='io', ops='10', errors='0', GiB_s='1.234', rw='read')],
+                        runs={'baseline': dict(returncode=0, metrics_valid=True)})
+            bad = dict(name='io-bad', status='FAIL(baseline)', metrics=[dict(kind='io', ops='10', errors='1', GiB_s='999999')],
+                       runs={'baseline': dict(returncode=1, metrics_valid=False)})
+            (output / 'manifest.json').write_text(json.dumps(manifest))
+            (output / 'results.json').write_text(json.dumps([good, bad]))
+            profile = output / 'io-good' / 'perf'
+            profile.mkdir(parents=True)
+            (profile / 'symbols.stdout').write_text("# event 'cycles:u'\n45.00%;[kernel.kallsyms];[k] 0x123\n")
+            bench.analyze(output)
+            analysis = (output / 'ANALYSIS.md').read_text()
+            self.assertNotIn('999999', analysis)
+            self.assertIn('best observed 1.234', analysis)
+            self.assertIn('unresolved symbols', analysis)
+            self.assertIn('`cycles:u`', analysis)
+
     def run_harness(self, fail=False, empty=False):
         with tempfile.TemporaryDirectory(prefix='profile test ') as tmp:
             root = Path(tmp)

@@ -8,7 +8,6 @@
 #include <math.h>
 #include <poll.h>
 #include <pthread.h>
-#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,13 +18,20 @@
 
 #define IO_MAX_WORKERS 256
 #define IO_MAX_ROOTS 32
+struct io_start {
+    pthread_mutex_t mu;
+    pthread_cond_t ready_cv, go_cv;
+    unsigned ready;
+    int released, abort;
+    uint64_t deadline_ns;
+};
 struct io_worker {
     int fd, reading, hashing, sync_writes;
     uint32_t size, window;
     unsigned char pattern;
     uint8_t *buf, sum[EFS_HASH_SIZE];
-    int *go, *ready;
-    double *deadline;
+    struct io_start *start;
+    int error_no;
     uint64_t ops, errors, latency_ns, max_ns;
 };
 static uint64_t now_ns(void)
@@ -40,7 +46,7 @@ static int transfer(int fd, uint8_t *buf, uint32_t n, off_t off, int reading)
         ssize_t rc = reading ? pread(fd, buf + done, n - done, off + done) :
                                pwrite(fd, buf + done, n - done, off + done);
         if (rc < 0 && errno == EINTR) continue;
-        if (rc <= 0) return -1;
+        if (rc <= 0) { if (!rc) errno = EIO; return -1; }
         done += (uint32_t)rc;
     }
     return 0;
@@ -48,25 +54,45 @@ static int transfer(int fd, uint8_t *buf, uint32_t n, off_t off, int reading)
 static void *io_worker_run(void *arg)
 {
     struct io_worker *w = arg;
-    __atomic_add_fetch(w->ready, 1, __ATOMIC_RELEASE);
-    while (!__atomic_load_n(w->go, __ATOMIC_ACQUIRE)) sched_yield();
-    while ((double)now_ns() / 1e9 < *w->deadline) {
-        off_t off = (off_t)(w->ops % w->window) * w->size;
-        uint64_t start = now_ns();
+    struct io_start *gate = w->start;
+    pthread_mutex_lock(&gate->mu);
+    ++gate->ready;
+    pthread_cond_signal(&gate->ready_cv);
+    while (!gate->released)
+        pthread_cond_wait(&gate->go_cv, &gate->mu);
+    uint64_t deadline = gate->deadline_ns;
+    int abort = gate->abort;
+    pthread_mutex_unlock(&gate->mu);
+    if (abort) return NULL;
+
+    uint64_t ops = 0, errors = 0, latency_ns = 0, max_ns = 0;
+    uint32_t block = 0;
+    const uint32_t size = w->size, window = w->window;
+    /* One integer clock read per operation replaces three reads and floating
+     * point deadline division. Latency covers the complete worker operation
+     * cycle, including its loop bookkeeping, rather than syscall time alone. */
+    uint64_t start = now_ns();
+    while (start < deadline) {
+        off_t off = (off_t)block * size;
         uint8_t hash[EFS_HASH_SIZE];
-        if (w->hashing && !w->reading) efs_hash(w->buf, w->size, hash);
-        int rc = transfer(w->fd, w->buf, w->size, off, w->reading);
+        if (w->hashing && !w->reading) efs_hash(w->buf, size, hash);
+        int rc = transfer(w->fd, w->buf, size, off, w->reading);
         if (!rc && w->hashing && w->reading) {
-            efs_hash(w->buf, w->size, hash);
-            if (memcmp(hash, w->sum, sizeof(hash))) rc = -1;
+            efs_hash(w->buf, size, hash);
+            if (memcmp(hash, w->sum, sizeof(hash))) { errno = EIO; rc = -1; }
         }
         if (!rc && !w->reading && w->sync_writes && fdatasync(w->fd)) rc = -1;
-        uint64_t latency = now_ns() - start;
-        w->latency_ns += latency;
-        if (latency > w->max_ns) w->max_ns = latency;
-        if (rc) { w->errors++; break; }
-        w->ops++;
+        int error_no = rc ? errno : 0;
+        uint64_t end = now_ns(), latency = end - start;
+        latency_ns += latency;
+        if (latency > max_ns) max_ns = latency;
+        if (rc) { errors++; w->error_no = error_no; break; }
+        ops++;
+        if (++block == window) block = 0; /* no division in the hot loop */
+        start = end;
     }
+    w->ops = ops; w->errors = errors;
+    w->latency_ns = latency_ns; w->max_ns = max_ns;
     return NULL;
 }
 /* perf starts disabled for this driver. Preparation and post-run integrity
@@ -75,14 +101,19 @@ static int perf_command(const char *command)
 {
     const char *ctl = getenv("EFS_BENCH_PERF_CONTROL"), *ack = getenv("EFS_BENCH_PERF_ACK");
     if (!ctl && !ack) return 0;
-    if (!ctl || !ack) return -1;
-    int fd = open(ctl, O_RDWR | O_CLOEXEC), af = open(ack, O_RDWR | O_CLOEXEC);
-    if (fd < 0 || af < 0) { if (fd >= 0) close(fd); if (af >= 0) close(af); return -1; }
+    if (!ctl || !ack) { errno = EINVAL; return -1; }
+    int fd = open(ctl, O_RDWR | O_CLOEXEC);
+    if (fd < 0) return -1;
+    int af = open(ack, O_RDWR | O_CLOEXEC);
+    if (af < 0) { int saved = errno; close(fd); errno = saved; return -1; }
     char buf[32]; struct pollfd p = { .fd = af, .events = POLLIN };
-    int rc = write(fd, command, strlen(command)) == (ssize_t)strlen(command) ? 0 : -1;
-    if (!rc && poll(&p, 1, 5000) <= 0) rc = -1;
-    if (!rc) { ssize_t n = read(af, buf, sizeof(buf)); if (n < 3 || memcmp(buf, "ack", 3)) rc = -1; }
-    close(fd); close(af); return rc;
+    ssize_t written = write(fd, command, strlen(command));
+    int rc = written == (ssize_t)strlen(command) ? 0 : -1;
+    if (rc && written >= 0) errno = EIO;
+    if (!rc) { int prc = poll(&p, 1, 5000); if (prc <= 0) { if (!prc) errno = ETIMEDOUT; rc = -1; } }
+    if (!rc) { ssize_t n = read(af, buf, sizeof(buf)); if (n < 3 || memcmp(buf, "ack", 3)) { if (n >= 0) errno = EPROTO; rc = -1; } }
+    int saved = errno;
+    close(fd); close(af); errno = saved; return rc;
 }
 static int empty_root(const char *path)
 {
@@ -129,7 +160,7 @@ int efs_bench_io_main(int argc, char **argv)
             rw = v;
         } else if (!strcmp(opt, "--time")) {
             errno = 0; duration = strtod(v, &end);
-            if (errno || end == v || *end || !isfinite(duration) || duration <= 0) goto invalid;
+            if (errno || end == v || *end || !isfinite(duration) || duration < 1e-9 || duration > 86400) goto invalid;
         } else if (!strcmp(opt, "--io-size")) {
             errno = 0; unsigned long long n = strtoull(v, &end, 10);
             uint64_t mult = 1;
@@ -155,72 +186,101 @@ int efs_bench_io_main(int argc, char **argv)
     pthread_t *threads = calloc((size_t)qd, sizeof(*threads));
     char (*paths)[4096] = calloc((size_t)qd, sizeof(*paths));
     if (!w || !threads || !paths) { free(w); free(threads); free(paths); return 1; }
-    int go = 0, ready = 0, created = 0, rc = 1;
-    double deadline = 0;
+    int created = 0, rc = 1, saved_error = 0;
+    const char *phase = "scratch creation";
+    struct io_start gate = {.mu = PTHREAD_MUTEX_INITIALIZER,
+        .ready_cv = PTHREAD_COND_INITIALIZER, .go_cv = PTHREAD_COND_INITIALIZER};
     for (int i = 0; i < qd; i++) w[i].fd = -1;
-    for (int i = 0; i < nroots; i++) if (mkdir(roots[i], 0755) && errno != EEXIST) goto done;
+    for (int i = 0; i < nroots; i++) if (mkdir(roots[i], 0755) && errno != EEXIST) {
+        saved_error = errno; goto done;
+    }
+    phase = "worker preparation";
     for (int i = 0; i < qd; i++) {
         struct io_worker *a = &w[i];
         a->reading = !strcmp(rw, "read"); a->hashing = hashing; a->sync_writes = sync_writes;
         a->size = size; a->window = window; a->pattern = (unsigned char)(i % 251 + 1);
-        a->go = &go; a->ready = &ready; a->deadline = &deadline;
-        if (snprintf(paths[i], sizeof(paths[i]), "%s/io-worker-%d.bin", roots[i % nroots], i) >= (int)sizeof(paths[i])) goto done;
+        a->start = &gate;
+        if (snprintf(paths[i], sizeof(paths[i]), "%s/io-worker-%d.bin", roots[i % nroots], i) >= (int)sizeof(paths[i])) { saved_error = ENAMETOOLONG; goto done; }
         a->fd = open(paths[i], O_CREAT | O_EXCL | O_RDWR | (direct ? O_DIRECT : 0), 0600);
-        if (a->fd < 0) goto done;
-        if (posix_memalign((void **)&a->buf, 4096, size)) goto done;
+        if (a->fd < 0) { saved_error = errno; goto done; }
+        int alloc_rc = posix_memalign((void **)&a->buf, 4096, size);
+        if (alloc_rc) { saved_error = alloc_rc; goto done; }
         memset(a->buf, a->pattern, size);
         if (hashing) efs_hash(a->buf, size, a->sum);
         if (a->reading) {
-            for (uint32_t b = 0; b < window; b++) if (transfer(a->fd, a->buf, size, (off_t)b * size, 0)) goto done;
-            if (fdatasync(a->fd)) goto done;
+            for (uint32_t b = 0; b < window; b++) if (transfer(a->fd, a->buf, size, (off_t)b * size, 0)) { saved_error = errno; goto done; }
+            if (fdatasync(a->fd)) { saved_error = errno; goto done; }
         }
     }
     for (int i = 0; i < qd; i++) {
-        if (pthread_create(&threads[i], NULL, io_worker_run, &w[i])) goto stop;
+        int thread_rc = pthread_create(&threads[i], NULL, io_worker_run, &w[i]);
+        if (thread_rc) { phase = "thread creation"; saved_error = thread_rc; goto stop; }
         created++;
     }
-    while (__atomic_load_n(&ready, __ATOMIC_ACQUIRE) != qd) sched_yield();
-    if (perf_command("enable\n")) goto stop;
-    uint64_t start = now_ns(); deadline = (double)start / 1e9 + duration;
-    __atomic_store_n(&go, 1, __ATOMIC_RELEASE);
+    pthread_mutex_lock(&gate.mu);
+    while (gate.ready != (unsigned)qd)
+        pthread_cond_wait(&gate.ready_cv, &gate.mu);
+    pthread_mutex_unlock(&gate.mu);
+    phase = "perf enable";
+    if (perf_command("enable\n")) { saved_error = errno; goto stop; }
+    pthread_mutex_lock(&gate.mu);
+    uint64_t start = now_ns();
+    gate.deadline_ns = start + (uint64_t)(duration * 1e9);
+    gate.released = 1;
+    pthread_cond_broadcast(&gate.go_cv);
+    pthread_mutex_unlock(&gate.mu);
     for (int i = 0; i < created; i++) pthread_join(threads[i], NULL);
     created = 0;
     uint64_t end = now_ns();
-    if (perf_command("disable\n")) goto done;
-    uint64_t ops = 0, errors = 0, ns = 0, max_ns = 0, verified = 0;
+    phase = "perf disable";
+    if (perf_command("disable\n")) { saved_error = errno; goto done; }
+    phase = "timed operations or verification";
+    uint64_t ops = 0, errors = 0, ns = 0, max_ns = 0, verified = 0, idle = 0;
+    uint64_t min_ops = UINT64_MAX, max_ops = 0;
     /* Validation and end-of-run flushing are outside measured work. */
     for (int i = 0; i < qd; i++) {
         struct io_worker *a = &w[i]; ops += a->ops; errors += a->errors; ns += a->latency_ns;
-        if (!a->ops) errors++;
+        if (!a->ops) { errors++; idle++; }
+        if (a->ops < min_ops) min_ops = a->ops;
+        if (a->ops > max_ops) max_ops = a->ops;
+        if (a->error_no) fprintf(stderr, "io bench: worker=%d I/O failed: %s\n", i, strerror(a->error_no));
         if (a->max_ns > max_ns) max_ns = a->max_ns;
         uint64_t resident = a->reading ? window : (a->ops < window ? a->ops : window);
-        if (fdatasync(a->fd)) errors++;
+        if (fdatasync(a->fd)) { errors++; fprintf(stderr, "io bench: worker=%d flush: %s\n", i, strerror(errno)); }
         for (uint64_t b = 0; b < resident; b++) {
-            if (transfer(a->fd, a->buf, size, (off_t)b * size, 1)) { errors++; break; }
+            if (transfer(a->fd, a->buf, size, (off_t)b * size, 1)) { errors++; fprintf(stderr, "io bench: worker=%d verification read: %s\n", i, strerror(errno)); break; }
             uint32_t j; for (j = 0; j < size && a->buf[j] == a->pattern; j++);
-            if (j != size) { errors++; break; }
+            if (j != size) { errors++; fprintf(stderr, "io bench: worker=%d block=%llu data mismatch\n", i, (unsigned long long)b); break; }
             verified++;
         }
     }
     double wall = (double)(end - start) / 1e9;
-    printf("BENCH_OK kind=io checksum=%s rw=%s paths=%d qd=%d io_bytes=%u window_per_slot=%u "
+    if (idle) fprintf(stderr, "io bench: %llu/%d workers completed no I/O before the deadline\n", (unsigned long long)idle, qd);
+    printf("%s kind=io checksum=%s rw=%s paths=%d qd=%d io_bytes=%u window_per_slot=%u "
            "direct=%d sync=%d ops=%llu bytes=%llu wall_s=%.6f GiB_s=%.6f avg_us=%.3f max_us=%.3f "
-           "verified_blocks=%llu errors=%llu\n", hashing ? "blake3" : "none", rw, nroots, qd, size, window,
+           "verified_blocks=%llu errors=%llu idle_workers=%llu min_worker_ops=%llu max_worker_ops=%llu latency=operation_cycle\n", errors ? "BENCH_FAIL" : "BENCH_OK", hashing ? "blake3" : "none", rw, nroots, qd, size, window,
            direct, sync_writes, (unsigned long long)ops, (unsigned long long)(ops * size), wall,
            (double)ops * size / (1ull << 30) / wall, ops ? (double)ns / ops / 1000 : 0, (double)max_ns / 1000,
-           (unsigned long long)verified, (unsigned long long)errors);
+           (unsigned long long)verified, (unsigned long long)errors,
+           (unsigned long long)idle, (unsigned long long)min_ops, (unsigned long long)max_ops);
     rc = errors ? 1 : 0;
     goto done;
 stop:
-    /* Release waiting threads with an already-expired deadline. */
-    __atomic_store_n(&go, 1, __ATOMIC_RELEASE);
+    /* Partial creation/perf failure wakes every owned thread for cleanup. */
+    pthread_mutex_lock(&gate.mu);
+    gate.abort = 1; gate.released = 1;
+    pthread_cond_broadcast(&gate.go_cv);
+    pthread_mutex_unlock(&gate.mu);
     for (int i = 0; i < created; i++) pthread_join(threads[i], NULL);
 done:
-    if (rc) fprintf(stderr, "io bench failed: %s\n", strerror(errno));
+    if (rc) fprintf(stderr, "io bench failed during %s%s%s\n", phase,
+                    saved_error ? ": " : "", saved_error ? strerror(saved_error) : "");
     for (int i = 0; i < qd; i++) {
         if (w[i].fd >= 0) { close(w[i].fd); unlink(paths[i]); }
         free(w[i].buf);
     }
+    pthread_cond_destroy(&gate.ready_cv); pthread_cond_destroy(&gate.go_cv);
+    pthread_mutex_destroy(&gate.mu);
     free(w); free(threads); free(paths); return rc;
 invalid:
     usage(argv[0]); return 1;

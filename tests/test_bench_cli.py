@@ -70,7 +70,16 @@ def main():
                 row = dict(re.findall(r'(\w+)=([^\s]+)', next(line for line in out.splitlines() if line.startswith('BENCH_OK '))))
                 assert row['checksum'] == ('none' if kind == 'io' else 'blake3')
                 assert row['rw'] == rw and row['errors'] == '0' and row['verified_blocks'] == '2', out
+                assert row['idle_workers'] == '0' and int(row['min_worker_ops']) > 0, out
+                assert row['latency'] == 'operation_cycle', out
                 assert not list(pathlib.Path(root).iterdir())
+    # Oversubscribe the CPU without spinning at the all-ready start gate.
+    with tempfile.TemporaryDirectory(prefix='efs-io-many-workers-') as root:
+        out = run('efs-bench', '--bench', 'io', '--storage', root, '--rw', 'write',
+                  '--io-size', '4K', '--qd', '256', '--window', '1', '--time', '1')
+        row = dict(re.findall(r'(\w+)=([^\s]+)', next(line for line in out.splitlines() if line.startswith('BENCH_OK '))))
+        assert row['idle_workers'] == '0' and row['verified_blocks'] == '256', out
+        assert int(row['min_worker_ops']) > 0 and not list(pathlib.Path(root).iterdir()), out
     with tempfile.TemporaryDirectory(prefix='efs-io-refusal-') as root:
         keep = pathlib.Path(root) / 'keep'; keep.write_text('keep')
         run('efs-bench', '--bench', 'io', '--storage', root, ok=False)

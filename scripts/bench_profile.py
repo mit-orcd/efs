@@ -186,8 +186,11 @@ def execute(cmd, directory, stem, timeout, env=None):
 def metric_rows(path):
     rows = []
     for line in path.read_text(errors='replace').splitlines():
-        if line.startswith('BENCH_OK '):
-            rows.append(dict(re.findall(r'(\w+)=([^\s]+)', line)))
+        if line.startswith(('BENCH_OK ', 'BENCH_FAIL ')):
+            row = dict(re.findall(r'(\w+)=([^\s]+)', line))
+            if line.startswith('BENCH_FAIL '):
+                row['result'] = 'FAIL'
+            rows.append(row)
     return rows
 
 
@@ -195,7 +198,9 @@ def valid_metrics(rows):
     if not rows:
         return False
     for r in rows:
-        if any(int(r.get(k, '0')) != 0 for k in ['errors', 'chunks_fail']):
+        if r.get('result') == 'FAIL':
+            return False
+        if any(int(r.get(k, '0')) != 0 for k in ['errors', 'chunks_fail', 'idle_workers']):
             return False
         if 'ops' in r and int(r['ops']) == 0:
             return False
@@ -255,6 +260,10 @@ def reports(perf, directory, a):
 
 def category(row):
     s = row['symbol'].lower()
+    if row['dso'] == '[vdso]' or 'clock_gettime' in s:
+        return 'time/vDSO'
+    if s.startswith('0x') or row['dso'] == '[unknown]':
+        return 'unresolved samples'
     if 'blake3' in s or 'efs_hash' in s:
         return 'BLAKE3'
     if 'memcpy' in s or 'memmove' in s or 'memset' in s:
@@ -266,6 +275,12 @@ def category(row):
     if any(k in s for k in ['fsync', 'fdatasync', 'pwrite', 'pread', 'writev', 'xfs_', 'ext4_', 'blk_', 'nvme']):
         return 'storage I/O/filesystem'
     return 'other'
+
+
+def baseline_valid(result):
+    baseline = result.get('runs', {}).get('baseline', {})
+    return (baseline.get('returncode') == 0 and baseline.get('metrics_valid') is True
+            and valid_metrics(result.get('metrics', [])))
 
 
 def analyze(output):
@@ -280,6 +295,10 @@ def analyze(output):
             'Raw I/O profiles capture only the parallel timed loop; setup, read population and post-run validation are excluded by perf-control acknowledgement.',
             'Data profiles combine write and read phases (and path-count ladder when multiple roots are supplied).', '',
             '| Case | Result | Baseline measurements | Hottest sampled symbols |', '|---|---|---|---|']
+    failures = [r for r in results if r['status'] != 'PASS']
+    if failures:
+        text[4:4] = ['', f"**{len(failures)}/{len(results)} cases failed. Invalid baselines are excluded from comparisons; raw failed output is retained.**", '']
+    effective_events = set()
     done = set()
     details = []
     for r in results:
@@ -288,9 +307,14 @@ def analyze(output):
         for m in r.get('metrics', []):
             tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd'] if k in m)
             numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_us', 'avg_us', 'max_us'] if k in m)
-            if numbers:
+            if baseline_valid(r) and numbers:
                 measurements.append(f'{tag} {numbers}'.strip())
-        symbols = profile_rows(output / r['name'] / 'perf' / 'symbols.stdout')
+            elif not baseline_valid(r):
+                measurements.append(f"INVALID baseline: errors={m.get('errors', '?')}, idle_workers={m.get('idle_workers', 'not recorded')}")
+        symbols_path = output / r['name'] / 'perf' / 'symbols.stdout'
+        symbols = profile_rows(symbols_path)
+        if symbols_path.exists():
+            effective_events.update(re.findall(r"event '([^']+)'", symbols_path.read_text(errors='replace')))
         hot = ', '.join(f"{s['symbol']} ({s['percent']:.1f}%)" for s in symbols[:3]) or 'no CPU profile'
         text.append(f"| [{r['name']}]({r['name']}/baseline.stdout) | {r['status']} | {'; '.join(measurements)} | {hot.replace('|', '/')} |")
         if 'strace' in r.get('runs', {}):
@@ -305,13 +329,16 @@ def analyze(output):
             for s in symbols:
                 key = category(s)
                 totals[key] = totals.get(key, 0) + s['percent']
+            unresolved = sum(s['percent'] for s in symbols if s['symbol'].startswith('0x') or s['dso'] == '[unknown]')
+            if unresolved >= 20:
+                details.append(f"**{r['name']}: {unresolved:.1f}% of reported samples have unresolved symbols.** Do not assign those addresses to a storage or algorithm hot path.")
             details += ['', f"**{r['name']} sampled CPU:** " + ', '.join(f'{k} {v:.1f}%' for k, v in sorted(totals.items(), key=lambda x: -x[1])),
                      f"[Flat]({r['name']}/perf/flat.stdout), [threads]({r['name']}/perf/by-thread.stdout), [call chains]({r['name']}/perf/callers.stdout), source annotations under `{r['name']}/perf/annotate-*.stdout`.", '']
     text += ['', '## Baseline comparisons', '']
     hash_best = {}
     data_best = {}
     for r in results:
-        if r['status'] != 'PASS':
+        if not baseline_valid(r):
             continue
         for m in r.get('metrics', []):
             if m.get('kind') == 'blake3' and 'GiB_s' in m:
@@ -334,7 +361,12 @@ def analyze(output):
         text += ['', 'Uncompleted cases: ' + ', '.join(missing)]
     if not manifest.get('seed'):
         text += ['', 'Cluster net/store/read/metadata modes were not requested: no seed supplied.']
-    text += ['', 'Category totals are heuristic, mutually exclusive self-sample classifications above the 0.3% report threshold; inspect symbols/callers before choosing changes.',
+    if effective_events:
+        text += ['', 'Recorded perf events: ' + ', '.join(f'`{e}`' for e in sorted(effective_events)) + '. Requested events can be narrowed by host permissions.']
+    text += ['', 'Raw buffered I/O is a warm bounded working-set measurement, not physical-device throughput. High QD means more synchronous workers, not asynchronous queue slots.',
+             'Raw operation-cycle latency includes benchmark loop bookkeeping and scheduling; compare throughput and latency together. Idle workers invalidate a case.',
+             'Unresolved kernel/vDSO addresses are retained, not guessed. Time/vDSO and unresolved samples are separate categories.',
+             'Category totals are heuristic, mutually exclusive self-sample classifications above the 0.3% report threshold; inspect symbols/callers before choosing changes.',
              'BLAKE3 reuses per-worker buffers: this measures warm-buffer CPU throughput, not disk bandwidth. Streaming omits per-buffer finalize overhead.',
              'Local data writes wrap within the configured bounded working set after filling it; profiles include create and replacement work. Direct local CLI without --window retains append-only writes.',
              'Buffered storage reads are warm; compare direct-I/O cases and the separate ceiling probe before inferring device limits.', '']
@@ -395,6 +427,13 @@ def main(argv=None):
                     binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(), commit=commit,
                     seed=a.seed, created_utc=stamp, options={k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}, cases=cases)
     manifest['options']['storage_root'] = [str(p) for p in roots]
+    manifest['affinity_cpus'] = sorted(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else None
+    manifest['perf_policy'] = {}
+    for name in ['perf_event_paranoid', 'kptr_restrict']:
+        try:
+            manifest['perf_policy'][name] = Path('/proc/sys/kernel', name).read_text().strip()
+        except OSError:
+            manifest['perf_policy'][name] = 'unavailable'
     (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     results = []
     try:
