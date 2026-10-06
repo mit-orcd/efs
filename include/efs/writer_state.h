@@ -14,6 +14,14 @@ static inline int efs_writer_state_owned(const struct efs_writer_state *state)
     return state && (state->ranges.bytes.count || state->has_publication);
 }
 struct efs_writer_state *efs_writer_state_alloc(uint32_t chunk_size);
+/* Caller holds the cache slot lock. NULL creates a budgeted sidecar only
+ * after authority/range validation; failures leave both body and ownership
+ * unchanged. The caller must not attach this to legacy accepted bytes whose
+ * admission authority was never captured. src may overlap body. */
+int efs_writer_state_write(struct efs_writer_state **state,
+                            const struct efs_msg_inode_writer_view_reply *view,
+                            uint8_t *body, uint32_t body_len,
+                            uint32_t off, const uint8_t *src, uint32_t len);
 /* BUSY preserves the sidecar whenever accepted bytes/publication are owned. */
 int efs_writer_state_free(struct efs_writer_state *state);
 int efs_writer_state_put(struct efs_writer_state *state,

@@ -13,6 +13,33 @@ struct efs_writer_state *efs_writer_state_alloc(uint32_t chunk_size)
     }
     return state;
 }
+int efs_writer_state_write(struct efs_writer_state **slot,
+                            const struct efs_msg_inode_writer_view_reply *view,
+                            uint8_t *body, uint32_t body_len,
+                            uint32_t off, const uint8_t *src, uint32_t len)
+{
+    if (!slot || !body || !src || !efs_chunk_size_valid(body_len))
+        return EFS_ERR_INVAL;
+    struct efs_writer_state *state = *slot;
+    if (state && state->ranges.bytes.chunk_size != body_len)
+        return EFS_ERR_INVAL;
+    struct efs_writer_ranges next = state ? state->ranges :
+        (struct efs_writer_ranges){.bytes.chunk_size = body_len};
+    int rc = efs_writer_ranges_admit(&next, view, off, len);
+    if (rc != EFS_OK)
+        return rc;
+    if (!state) {
+        state = efs_writer_state_alloc(body_len);
+        if (!state)
+            return EFS_ERR_NOMEM;
+    }
+    /* No remaining failure point after accepted ownership becomes visible. */
+    memmove(body + off, src, len);
+    state->ranges = next;
+    *slot = state;
+    return EFS_OK;
+}
+
 int efs_writer_state_free(struct efs_writer_state *state)
 {
     if (!state)

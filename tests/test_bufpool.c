@@ -74,6 +74,34 @@ static void writer_state_lifetime(void)
     assert(efs_writer_state_free(state) == EFS_OK && g_metadata == before);
 }
 
+static void writer_admission_copy(void)
+{
+    uint64_t before=g_metadata;
+    struct efs_writer_state *state=NULL;
+    uint8_t body[EFS_MIN_CHUNK_SIZE], saved[EFS_MIN_CHUNK_SIZE], src[4]={1,2,3,4};
+    memset(body, 0x55, sizeof(body));memcpy(saved,body,sizeof(body));
+    struct efs_msg_inode_writer_view_reply view={.ino=100,.generation=1};
+    view.generation=0;
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),0,src,4)!=EFS_OK);
+    assert(!state && !memcmp(body,saved,sizeof(body)) && g_metadata==before);
+    view.generation=1;fail_calloc=1;
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),0,src,4)==EFS_ERR_NOMEM);
+    assert(!state && !memcmp(body,saved,sizeof(body)) && g_metadata==before);
+    fail_calloc=0;
+    for (unsigned i=0;i<EFS_DIRTY_RANGE_MAX;++i)
+        assert(efs_writer_state_write(&state,&view,body,sizeof(body),i*8,src,1)==EFS_OK);
+    struct efs_writer_state old=*state;memcpy(saved,body,sizeof(body));
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),1024,src,1)==EFS_ERR_BUSY);
+    assert(!memcmp(state,&old,sizeof(old)) && !memcmp(body,saved,sizeof(body)));
+    view.generation=2;
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),0,src,1)==EFS_ERR_STALE);
+    assert(!memcmp(state,&old,sizeof(old)) && !memcmp(body,saved,sizeof(body)));
+    view.generation=1;
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),0,body+8,1)==EFS_OK);
+    state->ranges.bytes.count=0;
+    assert(efs_writer_state_free(state)==EFS_OK && g_metadata==before);
+}
+
 int main(void)
 {
     setenv("EFS_DCACHE_HARD_BYTES", "33554432", 1);
@@ -157,6 +185,7 @@ int main(void)
     for (int i = 0; i < 32; i++) efs_buf_metadata_free(m[i], 256u << 10);
     assert(g_metadata == 0);
     writer_state_lifetime();
+    writer_admission_copy();
     puts("test_bufpool: OK (hard bound, reserve, failures, concurrency, metadata)");
     return 0;
 }
