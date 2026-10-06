@@ -169,7 +169,7 @@ test-dirty-ranges:
 test-writer-ranges:
 	@set -e; writer_test=$$(mktemp /tmp/efs-test-writer-ranges.XXXXXX); \
 	trap 'rm -f "$$writer_test"' EXIT; \
-	$(CC) $(CFLAGS) $(INCLUDES) -o "$$writer_test" tests/test_writer_ranges.c; \
+	$(CC) $(CFLAGS) $(INCLUDES) -o "$$writer_test" tests/test_writer_ranges.c src/common/common.c; \
 	"$$writer_test"
 
 .PHONY: test-wb-recovery test-wb-runtime test-stop-control

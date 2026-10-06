@@ -1,6 +1,7 @@
 #include "efs/writer_ranges.h"
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static struct efs_msg_inode_writer_view_reply authority(uint64_t epoch)
@@ -9,8 +10,41 @@ static struct efs_msg_inode_writer_view_reply authority(uint64_t epoch)
     v.ino = 100; v.generation = 7; v.authority_epoch = epoch;
     return v;
 }
+static void test_base_identity(void)
+{
+    struct efs_writer_ranges writer = {0};
+    struct efs_msg_inode_writer_view_reply view = authority(0);
+    struct efs_msg_inode_getchunks_reply *base = calloc(1, sizeof(*base));
+    struct efs_writer_plan plan, saved;
+    assert(base);
+    writer.bytes.chunk_size = EFS_MIN_CHUNK_SIZE;
+    assert(efs_writer_ranges_admit(&writer, &view, 0, 200) == EFS_OK);
+    view.authority_epoch = 1; view.history.count = 1;
+    view.history.entries[0] = (struct efs_content_fence){1, 100};
+    base->ino = writer.ino; base->generation = writer.generation; base->authority_epoch = 1;
+    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_OK);
+    assert(plan.surviving.ranges[0].len == 100);
+    saved = plan;
+    base->authority_epoch = 0;
+    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_ERR_STALE);
+    base->authority_epoch = 1; ++base->generation;
+    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_ERR_STALE);
+    --base->generation; base->count = 1;
+    base->recs[0].ino = writer.ino; base->recs[0].read_view.chunk_size = EFS_MIN_CHUNK_SIZE;
+    base->recs[0].read_view.count = 1;
+    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_ERR_STALE);
+    base->recs[0].read_view.fence_epoch = base->recs[0].read_view.revision = 1;
+    ++base->recs[0].chunk_index;
+    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_ERR_STALE);
+    --base->recs[0].chunk_index;
+    assert(!memcmp(&plan, &saved, sizeof(plan)));
+    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_OK);
+    free(base);
+}
+
 int main(void)
 {
+    test_base_identity();
     struct efs_writer_ranges writer = {0}, saved;
     struct efs_writer_plan plan, sentinel;
     struct efs_msg_inode_writer_view_reply v = authority(0);

@@ -104,6 +104,41 @@ static inline int efs_writer_ranges_plan(
     return EFS_OK;
 }
 
+/* Prefer this boundary when planning from an actual GETCHUNKS reply. Even
+ * an empty result carries FileID and inode authority: absence is not epoch
+ * zero. A row additionally must match chunk geometry and lane authority. */
+static inline int efs_writer_ranges_plan_base(
+    const struct efs_writer_ranges *writer,
+    const struct efs_msg_inode_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base,
+    struct efs_writer_plan *out)
+{
+    int rc = efs_writer_ranges_authority(writer, view);
+    if (rc != EFS_OK)
+        return rc;
+    if (!base || base->status != EFS_INODE_RPC_OK)
+        return EFS_ERR_INVAL;
+    if (base->ino != writer->ino || base->generation != writer->generation ||
+        base->authority_epoch != view->authority_epoch)
+        return EFS_ERR_STALE;
+    struct efs_msg_inode_getchunks req = {0};
+    req.ino = writer->ino;
+    req.generation = writer->generation;
+    req.start = writer->chunk_index;
+    req.max = 1;
+    rc = efs_getchunks_reply_valid(&req, base);
+    if (rc != EFS_OK)
+        return rc;
+    /* max=1 alone can skip a hole and return a later chunk in the group.
+     * Such a row is not a base for the requested chunk. */
+    if (base->count && base->recs[0].chunk_index != writer->chunk_index)
+        return EFS_ERR_STALE;
+    if (base->count && (base->recs[0].read_view.chunk_size != writer->bytes.chunk_size ||
+        base->recs[0].read_view.fence_epoch != view->authority_epoch))
+        return EFS_ERR_STALE;
+    return efs_writer_ranges_plan(writer, view, base->authority_epoch, out);
+}
+
 /* Caller first matches the committed PUT/REPORT object and snapshot sequence.
  * A clipped view is never the acknowledgement token. A later mutation, even
  * at the same authority epoch, prevents the old plan clearing its ownership. */
