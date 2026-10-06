@@ -1,5 +1,6 @@
 #include "client_internal.h"
 #include "../bench/bench_local.h"
+#include "../bench/blake3_bench.h"
 #include "efs/checksum.h"
 #include "efs/common.h"
 #include "efs/metadata.h"
@@ -51,12 +52,14 @@ static void usage(const char *prog)
             "      [--workers W] [--size bytes] [--phases csv] [--keep] [--id n]\n"
             "      Metadata read+write phases (mkdir/create/stat/getattr/readdir/\n"
             "      setattr/rename/unlink). No caches; every op is a real RPC.\n"
+            "  CPU:   %s --bench blake3 [--size 64K] [--threads N] [--time seconds]\n"
+            "         [--oneshot|--stream] (no storage or cluster).\n"
             "  Local: %s --bench data --storage <scratch> [--time seconds]\n"
             "         %s --bench meta --meta-storage <scratch> [--time seconds]\n"
             "         --bench data|meta --help for local options (no cluster).\n"
             "  Optional: --perf  (perf record -g on this process; EFS_PERF_PATH)\n"
             "            --id <n>  chunk-index base so parallel writers do not collide\n",
-            prog, prog, prog, prog, prog, prog, prog);
+            prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 static pid_t g_perf_pid = -1;
@@ -1169,9 +1172,18 @@ int main(int argc, char **argv)
     setlinebuf(stderr);
     bench_fatal_install();
 
-    for (int i = 1; i < argc; i++)
-        if (!strcmp(argv[i], "--bench"))
+    for (int i = 1; i < argc; i++) {
+        if (!strcmp(argv[i], "--bench")) {
+            if (i + 1 < argc && !strcmp(argv[i + 1], "blake3")) {
+                /* Strip only the local mode selector; the shared microbench
+                 * validates every remaining argument. */
+                for (int j = i; j + 2 < argc; j++) argv[j] = argv[j + 2];
+                argc -= 2; argv[argc] = NULL;
+                return efs_bench_blake3_main(argc, argv);
+            }
             return efs_bench_local_main(argc, argv);
+        }
+    }
 
     const char *seed = NULL;
     enum bench_mode mode = BENCH_MODE_NONE;

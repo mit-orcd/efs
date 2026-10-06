@@ -1,0 +1,490 @@
+#!/usr/bin/env python3
+"""Run isolated benchmark cases and retain evidence for CPU hot-path analysis."""
+import argparse
+import datetime
+import hashlib
+import itertools
+import json
+import math
+import os
+from pathlib import Path
+import re
+import shlex
+import shutil
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def integers(value):
+    try:
+        values = list(dict.fromkeys(int(v) for v in value.split(',')))
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError('expected comma-separated integers') from exc
+    if not values or any(v < 0 for v in values):
+        raise argparse.ArgumentTypeError('values must be nonnegative')
+    return values
+
+
+def writers(value):
+    values = []
+    for v in value.split(','):
+        if v == 'auto':
+            values.append(v)
+        elif v.isdigit() and 0 <= int(v) <= 64:
+            values.append(int(v))
+        else:
+            raise argparse.ArgumentTypeError('writers must be 0..64 or auto')
+    return list(dict.fromkeys(values))
+
+
+def sizes(value):
+    out = []
+    for item in value.split(','):
+        m = re.fullmatch(r'([1-9][0-9]*)([KkMmGg]?)', item)
+        if not m:
+            raise argparse.ArgumentTypeError('sizes must be positive bytes or K/M/G')
+        n = int(m[1]) * {'': 1, 'k': 1024, 'm': 1024**2, 'g': 1024**3}[m[2].lower()]
+        if n > 1024**3:
+            raise argparse.ArgumentTypeError('maximum size is 1 GiB')
+        out.append(n)
+    return list(dict.fromkeys(out))
+
+
+def parser():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    p.add_argument('--binary', type=Path, default=ROOT / 'efs-bench')
+    p.add_argument('--output', type=Path, help='new result directory; refuses existing paths')
+    p.add_argument('--storage-root', type=Path, action='append', default=[],
+                   help='existing scratch parent on a storage device; repeat for multiple paths')
+    p.add_argument('--time', type=float, default=3, help='seconds per timed benchmark phase')
+    p.add_argument('--hash-sizes', type=sizes, default=sizes('4K,64K,128K,1M'))
+    p.add_argument('--threads', type=integers, help='BLAKE3 thread ladder; default 1,2,4,affinity CPU count')
+    p.add_argument('--writers', type=writers, default=writers('0,2,auto'), help='inline, fixed pool and automatic pool variants')
+    p.add_argument('--data-size', type=sizes, default=sizes('256M'), help='bounded local data working set across all QD slots (fragment bytes)')
+    p.add_argument('--qds', type=integers, default=integers('1,16,64,256'))
+    p.add_argument('--modes', default='blake3,data,meta', help='comma-separated modes; all adds remote modes')
+    p.add_argument('--seed', help='seed host:port; adds net,store,read,remote-meta to the default matrix')
+    p.add_argument('--export', default='efs-test', help='export for remote metadata benchmark')
+    p.add_argument('--files', type=int, default=5000, help='remote metadata files')
+    p.add_argument('--dirs', type=int, default=64, help='remote metadata directories')
+    p.add_argument('--store-size', type=sizes, default=sizes('256M'), help='bounded remote read/write working set')
+    p.add_argument('--chunk-base', type=int, default=0, help='remote benchmark chunk-index base; avoid other writers')
+    p.add_argument('--strace', action='store_true', help='separate syscall-traced rerun, after baseline and perf')
+    p.add_argument('--strace-expr', help='strace -e expression, e.g. trace=writev,fsync,futex')
+    p.add_argument('--frequency', type=int, default=499)
+    p.add_argument('--event', default='cycles', help='perf sampling event; use cpu-clock on VMs without PMU')
+    p.add_argument('--call-graph', choices=['fp', 'dwarf'], default='fp')
+    p.add_argument('--no-perf', action='store_true', help='explicit unprofiled run; analysis marks profiles absent')
+    p.add_argument('--skip-ceiling', action='store_true', help='omit fio/raw ceiling probe; engine tests still run')
+    p.add_argument('--timeout', type=float, default=600, help='timeout per subprocess (including each workload)')
+    p.add_argument('--dry-run', action='store_true', help='print matrix; do not build, create scratch or run tools')
+    p.add_argument('--analyze', type=Path, help='regenerate analysis from a completed/interrupted result directory')
+    return p
+
+
+def cases_for(a, cpus):
+    modes = a.modes.split(',')
+    remote = ['net', 'store', 'read', 'remote-meta']
+    if modes == ['all']:
+        modes = ['blake3', 'data', 'meta'] + remote
+    elif a.seed and a.modes == 'blake3,data,meta':
+        modes += remote
+    if not modes or len(set(modes)) != len(modes) or any(m not in ['blake3', 'data', 'meta'] + remote for m in modes):
+        raise ValueError('unknown --modes entry')
+    if any(m in remote for m in modes) and not a.seed:
+        raise ValueError('remote modes require --seed')
+    threads = a.threads or sorted(set([1, min(2, cpus), min(4, cpus), cpus]))
+    if any(t < 1 or t > cpus for t in threads):
+        raise ValueError('--threads must fit the current CPU affinity mask')
+    if any(q < 1 or q > 256 for q in a.qds):
+        raise ValueError('--qds must be 1..256')
+    if len(a.data_size) != 1 or a.data_size[0] < max(a.qds) * 65536:
+        raise ValueError('--data-size must hold at least one 64 KiB fragment per QD slot')
+    if any(w != 'auto' and w > 64 for w in a.writers):
+        raise ValueError('--writers must be 0..64')
+    if len(a.store_size) != 1 or a.store_size[0] < 131072 or a.store_size[0] % 131072:
+        raise ValueError('--store-size must be one multiple of the 128 KiB logical chunk')
+    if a.chunk_base < 0 or a.chunk_base + a.store_size[0] // 131072 >= 2**32:
+        raise ValueError('remote working set exceeds chunk-index range')
+    duration = str(a.time)
+    cases = []
+
+    def add(name, mode, args, **kw):
+        cases.append(dict(name=name, mode=mode, args=args, **kw))
+
+    if 'blake3' in modes:
+        for size, nt, style in itertools.product(a.hash_sizes, threads, ['oneshot', 'stream']):
+            add(f'blake3-{style}-{size}-t{nt}', 'blake3',
+                ['--bench', 'blake3', '--time', duration, '--size', str(size), '--threads', str(nt), f'--{style}'])
+    if 'data' in modes:
+        for direct, writer, qd in itertools.product([False, True], a.writers, a.qds):
+            add(f'data-{"direct" if direct else "buffered"}-w{writer}-qd{qd}', 'data',
+                ['--bench', 'data', '--time', duration, '--qd', str(qd), '--window', str(a.data_size[0] // (65536 * qd)),
+                 '--direct-io' if direct else '--no-direct-io'] + ([] if writer == 'auto' else ['--writers', str(writer)]))
+    if 'meta' in modes:
+        add('meta-local', 'meta', ['--bench', 'meta', '--time', duration])
+    # A fixed-size PUT primes the entire read window; no reads of uninitialized
+    # chunks, and timed PUTs wrap inside this bounded working set.
+    chunks = a.store_size[0] // 131072
+    common = [a.seed, '--id', str(a.chunk_base)] if a.seed else []
+    if 'net' in modes:
+        add('net', 'net', [a.seed, '--time', duration])
+    if 'store' in modes or 'read' in modes:
+        add('store-prime', 'store', common + ['--size', str(a.store_size[0])], prerequisite=True)
+    if 'store' in modes:
+        add('store-timed', 'store', common + ['--store', '--time', duration, '--window', str(chunks)])
+    if 'read' in modes:
+        add('read', 'read', common + ['--read', '--time', duration, '--window', str(chunks)])
+    if 'remote-meta' in modes:
+        add('meta-remote', 'remote-meta', common + ['--meta', '--export', a.export,
+            '--files', str(a.files), '--dirs', str(a.dirs), '--phases', 'all'])
+    return cases
+
+
+def execute(cmd, directory, stem, timeout, env=None):
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f'{stem}.command.json').write_text(json.dumps(cmd, indent=2) + '\n')
+    start = time.monotonic()
+    with (directory / f'{stem}.stdout').open('w') as out, (directory / f'{stem}.stderr').open('w') as err:
+        proc = subprocess.Popen(cmd, stdout=out, stderr=err, env=env, start_new_session=True)
+        try:
+            rc = proc.wait(timeout=timeout)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            # Signal the owned process group, including perf/strace and workers.
+            os.killpg(proc.pid, signal.SIGTERM)
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
+            raise
+    return dict(returncode=rc, elapsed_s=time.monotonic() - start)
+
+
+def metric_rows(path):
+    rows = []
+    for line in path.read_text(errors='replace').splitlines():
+        if line.startswith('BENCH_OK '):
+            rows.append(dict(re.findall(r'(\w+)=([^\s]+)', line)))
+    return rows
+
+
+def valid_metrics(rows):
+    if not rows:
+        return False
+    for r in rows:
+        if any(int(r.get(k, '0')) != 0 for k in ['errors', 'chunks_fail']):
+            return False
+        if 'ops' in r and int(r['ops']) == 0:
+            return False
+        if 'chunks_ok' in r and int(r['chunks_ok']) == 0:
+            return False
+        if r.get('kind') == 'blake3' and int(r.get('hashes', '0')) == 0:
+            return False
+    return True
+
+
+def profile_rows(path):
+    out = []
+    if not path.exists():
+        return out
+    for line in path.read_text(errors='replace').splitlines():
+        fields = [s.strip() for s in line.split(';')]
+        if len(fields) < 3:
+            continue
+        try:
+            share = float(fields[0].rstrip('%'))
+        except ValueError:
+            continue
+        out.append(dict(percent=share, dso=fields[1], symbol=re.sub(r'^\[[^]]+\]\s*', '', fields[2])))
+    return out
+
+
+def reports(perf, directory, a):
+    base = [perf, 'report', '-i', str(directory / 'perf.data'), '--stdio', '--comms', 'efs-bench']
+    report_options = {
+        'flat': ['--no-children', '--sort', 'dso,symbol', '--percent-limit', '0.3', '-g', 'none'],
+        'by-thread': ['--no-children', '--sort', 'comm,pid,symbol', '--percent-limit', '0.5', '-g', 'none'],
+        'callers': ['--children', '--sort', 'symbol', '--percent-limit', '2', '-g', 'caller,0.5,callee,function,percent'],
+        'symbols': ['--no-children', '--sort', 'dso,symbol', '--percent-limit', '0.3', '-g', 'none', '--field-separator', ';'],
+    }
+    good = True
+    for name, options in report_options.items():
+        result = execute(base + options, directory, name, a.timeout)
+        good &= result['returncode'] == 0
+    symbols = profile_rows(directory / 'symbols.stdout')
+    good &= bool(symbols)
+    # Annotate up to three hottest benchmark symbols with C source + assembly.
+    # Missing source/debug info is retained as an explicit annotation failure.
+    annotated = []
+    for row in symbols:
+        if 'efs-bench' not in row['dso'] or row['symbol'].startswith('0x'):
+            continue
+        name = f'annotate-{len(annotated) + 1}'
+        result = execute([perf, 'annotate', '-i', str(directory / 'perf.data'), '--stdio', '--source',
+                          '--symbol', row['symbol']], directory, name, a.timeout)
+        annotated.append(dict(symbol=row['symbol'], **result))
+        if len(annotated) == 3:
+            break
+    (directory / 'annotations.json').write_text(json.dumps(annotated, indent=2) + '\n')
+    good &= all(r['returncode'] == 0 for r in annotated)
+    return good, symbols
+
+
+def category(row):
+    s = row['symbol'].lower()
+    if 'blake3' in s or 'efs_hash' in s:
+        return 'BLAKE3'
+    if 'memcpy' in s or 'memmove' in s or 'memset' in s:
+        return 'memory copies/fills'
+    if any(k in s for k in ['futex', 'pthread', 'sched_', 'mutex']):
+        return 'synchronization/scheduling'
+    if any(k in s for k in ['tcp_', 'recv', 'send', 'efs_conn', 'rdma', 'ibv_']):
+        return 'network'
+    if any(k in s for k in ['fsync', 'fdatasync', 'pwrite', 'pread', 'writev', 'xfs_', 'ext4_', 'blk_', 'nvme']):
+        return 'storage I/O/filesystem'
+    return 'other'
+
+
+def analyze(output):
+    manifest = json.loads((output / 'manifest.json').read_text())
+    results_path = output / 'results.json'
+    results = json.loads(results_path.read_text()) if results_path.exists() else []
+    text = ['# EFS benchmark analysis', '', f"Host: `{manifest['host']}`. Event: `{manifest['event']}`.",
+            f"Binary SHA256: `{manifest['binary_sha256']}`. Commit: `{manifest['commit']}`.", '',
+            'Throughput comes from untraced baseline runs. Perf is a separate rerun; optional strace is another rerun.',
+            'CPU sample shares show where execution was sampled, not wall-time spent waiting or proof of an I/O bottleneck.',
+            'Profiles filter to efs-bench threads; fio ceiling child processes are excluded. Source annotations need matching debug/source files.',
+            'Data profiles combine write and read phases (and path-count ladder when multiple roots are supplied).', '',
+            '| Case | Result | Baseline measurements | Hottest sampled symbols |', '|---|---|---|---|']
+    done = set()
+    details = []
+    for r in results:
+        done.add(r['name'])
+        measurements = []
+        for m in r.get('metrics', []):
+            tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd'] if k in m)
+            numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_us'] if k in m)
+            if numbers:
+                measurements.append(f'{tag} {numbers}'.strip())
+        symbols = profile_rows(output / r['name'] / 'perf' / 'symbols.stdout')
+        hot = ', '.join(f"{s['symbol']} ({s['percent']:.1f}%)" for s in symbols[:3]) or 'no CPU profile'
+        text.append(f"| [{r['name']}]({r['name']}/baseline.stdout) | {r['status']} | {'; '.join(measurements)} | {hot.replace('|', '/')} |")
+        if 'strace' in r.get('runs', {}):
+            details.append(f"**{r['name']} syscall trace:** [summary]({r['name']}/strace/summary.txt); this separate run includes ptrace overhead.")
+        annotations = output / r['name'] / 'perf' / 'annotations.json'
+        if annotations.exists():
+            for annotation in json.loads(annotations.read_text()):
+                if annotation['returncode']:
+                    details.append(f"Source annotation failed for `{annotation['symbol']}`; inspect annotation stderr.")
+        if symbols:
+            totals = {}
+            for s in symbols:
+                key = category(s)
+                totals[key] = totals.get(key, 0) + s['percent']
+            details += ['', f"**{r['name']} sampled CPU:** " + ', '.join(f'{k} {v:.1f}%' for k, v in sorted(totals.items(), key=lambda x: -x[1])),
+                     f"[Flat]({r['name']}/perf/flat.stdout), [threads]({r['name']}/perf/by-thread.stdout), [call chains]({r['name']}/perf/callers.stdout), source annotations under `{r['name']}/perf/annotate-*.stdout`.", '']
+    text += ['', '## Baseline comparisons', '']
+    hash_best = {}
+    data_best = {}
+    for r in results:
+        if r['status'] != 'PASS':
+            continue
+        for m in r.get('metrics', []):
+            if m.get('kind') == 'blake3' and 'GiB_s' in m:
+                key = (m.get('mode'), m.get('size'))
+                if key not in hash_best or float(m['GiB_s']) > float(hash_best[key][1]['GiB_s']):
+                    hash_best[key] = (r['name'], m)
+            if m.get('kind') == 'data' and 'GiB_s' in m:
+                key = ('direct' if 'direct' in r['name'] else 'buffered', m.get('rw'), m.get('paths'))
+                if key not in data_best or float(m['GiB_s']) > float(data_best[key][1]['GiB_s']):
+                    data_best[key] = (r['name'], m)
+    for key, (name, m) in hash_best.items():
+        text.append(f"- BLAKE3 {key[0]}, {key[1]} bytes: best observed {m['GiB_s']} GiB/s at {m.get('threads')} thread(s), `{name}`.")
+    for key, (name, m) in data_best.items():
+        text.append(f"- {key[0]} {key[1]}, {key[2]} path(s): best observed {m['GiB_s']} GiB/s, p99 {m.get('p99_us', '?')} us, `{name}`.")
+    text += ['', 'These are best observations within this run, not production configuration recommendations.', '', '## CPU hot paths', '']
+    text += details
+    missing = [c['name'] for c in manifest['cases'] if c['name'] not in done]
+    if missing:
+        text += ['', 'Uncompleted cases: ' + ', '.join(missing)]
+    if not manifest.get('seed'):
+        text += ['', 'Cluster net/store/read/metadata modes were not requested: no seed supplied.']
+    text += ['', 'Category totals are heuristic, mutually exclusive self-sample classifications above the 0.3% report threshold; inspect symbols/callers before choosing changes.',
+             'BLAKE3 reuses per-worker buffers: this measures warm-buffer CPU throughput, not disk bandwidth. Streaming omits per-buffer finalize overhead.',
+             'Local data writes wrap within the configured bounded working set after filling it; profiles include create and replacement work. Direct local CLI without --window retains append-only writes.',
+             'Buffered storage reads are warm; compare direct-I/O cases and the separate ceiling probe before inferring device limits.', '']
+    (output / 'ANALYSIS.md').write_text('\n'.join(text))
+    return output / 'ANALYSIS.md'
+
+
+def save_results(output, results):
+    tmp = output / 'results.json.tmp'
+    tmp.write_text(json.dumps(results, indent=2) + '\n')
+    tmp.replace(output / 'results.json')
+
+
+def main(argv=None):
+    a = parser().parse_args(argv)
+    if a.analyze:
+        print(analyze(a.analyze.resolve()))
+        return 0
+    if not math.isfinite(a.time) or a.time <= 0 or not math.isfinite(a.timeout) or a.timeout <= 0:
+        raise ValueError('--time and --timeout must be finite and positive')
+    if a.frequency < 1 or a.files < 1 or a.dirs < 1:
+        raise ValueError('frequency/files/dirs must be positive')
+    cpus = len(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else os.cpu_count() or 1
+    cases = cases_for(a, cpus)
+    binary = a.binary.resolve()
+    if a.dry_run:
+        for c in cases:
+            print(c['name'] + ': ' + shlex.join([str(binary)] + c['args']) + (' <fresh scratch roots>' if c['mode'] in ['data', 'meta'] else ''))
+        print(f'{len(cases)} cases: baseline + ' + ('no perf' if a.no_perf else 'perf') + (' + separate strace' if a.strace else ''))
+        return 0
+    if sys.platform != 'linux':
+        raise ValueError('execute profiling on the Linux benchmark host; --dry-run works here')
+    if not binary.is_file() or not os.access(binary, os.X_OK):
+        raise ValueError(f'build the benchmark first: make efs-bench ({binary})')
+    perf = shutil.which('perf')
+    strace = shutil.which('strace')
+    if not a.no_perf and not perf:
+        raise ValueError('perf is missing; install the host perf package or explicitly use --no-perf')
+    if a.strace and not strace:
+        raise ValueError('strace is missing')
+    roots = [p.resolve() for p in a.storage_root]
+    if any(not p.is_dir() for p in roots):
+        raise ValueError('--storage-root parents must already exist')
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
+    output = (a.output or ROOT / 'logs' / f'efs-bench-{stamp}').resolve()
+    output.mkdir(parents=True, exist_ok=False)
+    # Keep a matching executable with profiles even after a later rebuild.
+    shutil.copy2(binary, output / 'efs-bench')
+    with zipfile.ZipFile(output / 'sources.zip', 'w', zipfile.ZIP_DEFLATED) as archive:
+        for parent in ['src', 'include', 'deps/blake3']:
+            for source in sorted((ROOT / parent).rglob('*')):
+                if source.suffix in ['.c', '.h', '.S', '.s']:
+                    archive.write(source, source.relative_to(ROOT))
+        archive.write(ROOT / 'Makefile', 'Makefile')
+    profiled_binary = str(output / 'efs-bench')
+    commit = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip() or 'unknown'
+    manifest = dict(host=os.uname().nodename, event='none' if a.no_perf else a.event,
+                    binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(), commit=commit,
+                    seed=a.seed, created_utc=stamp, options={k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}, cases=cases)
+    manifest['options']['storage_root'] = [str(p) for p in roots]
+    (output / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    results = []
+    try:
+        execute([profiled_binary, '--version'], output, 'version', a.timeout)
+        if perf and not a.no_perf:
+            execute([perf, 'version'], output, 'perf-version', a.timeout)
+        for name, cmd in [('uname', ['uname', '-a']), ('cpu', ['lscpu']), ('memory', ['free', '-h']),
+                          ('mounts', ['findmnt', '-T', str(output)]), ('devices', ['lsblk', '-o', 'NAME,SIZE,TYPE,FSTYPE,MOUNTPOINTS'])]:
+            if shutil.which(cmd[0]):
+                execute(cmd, output, name, a.timeout)
+        if shutil.which('findmnt'):
+            for i, root in enumerate(roots):
+                execute(['findmnt', '-T', str(root)], output, f'storage-mount-{i + 1}', a.timeout)
+        if not a.no_perf:
+            preflight = execute([perf, 'record', '-e', a.event, '-F', str(a.frequency), '-g', '--call-graph', a.call_graph,
+                                 '-o', str(output / 'preflight.data'), '--', sys.executable, '-c', 'sum(range(1000000))'],
+                                output, 'perf-preflight', a.timeout)
+            if preflight['returncode']:
+                raise ValueError(f'perf cannot record event {a.event}; see {output}/perf-preflight.stderr (try --event cpu-clock for a missing PMU)')
+        ceiling_done = False
+        prime_ok = True
+        for index, case in enumerate(cases, 1):
+            print(f"[{index}/{len(cases)}] {case['name']}", flush=True)
+            directory = output / case['name']
+            directory.mkdir()
+            result = dict(name=case['name'], status='RUNNING', runs={})
+            results.append(result)
+            save_results(output, results)
+            if case['mode'] == 'read' and not prime_ok:
+                result['status'] = 'SKIP (store prime failed)'
+                save_results(output, results)
+                continue
+            for stage in ['baseline'] + ([] if a.no_perf else ['perf']) + (['strace'] if a.strace else []):
+                scratch = []
+                cmd = [profiled_binary] + case['args']
+                if case['mode'] in ['data', 'meta']:
+                    parents = roots or [output / 'scratch']
+                    for parent in parents:
+                        parent.mkdir(exist_ok=True)
+                        scratch.append(Path(tempfile.mkdtemp(prefix='efs-bench-', dir=parent)))
+                    if case['mode'] == 'data':
+                        for root in scratch:
+                            cmd += ['--storage', str(root)]
+                    else:
+                        cmd += ['--meta-storage', str(scratch[0])]
+                    # One unprofiled same-host ceiling probe only; no fio cost
+                    # or samples mixed into engine CPU profiles.
+                    if a.skip_ceiling or ceiling_done or stage != 'baseline':
+                        cmd += ['--skip-ceiling']
+                    else:
+                        ceiling_done = True
+                stage_dir = directory if stage == 'baseline' else directory / stage
+                workload_cmd = cmd[:]
+                if stage == 'perf':
+                    cmd = [perf, 'record', '-e', a.event, '-F', str(a.frequency), '-g', '--call-graph', a.call_graph,
+                           '-o', str(stage_dir / 'perf.data'), '--'] + cmd
+                elif stage == 'strace':
+                    cmd = [strace, '-f', '-c', '-o', str(stage_dir / 'summary.txt')] + (['-e', a.strace_expr] if a.strace_expr else []) + cmd
+                # Prevent inherited EFS_PERF_PATH from causing nested profiling.
+                env = os.environ.copy()
+                env.pop('EFS_PERF_PATH', None)
+                try:
+                    run = execute(cmd, stage_dir, stage, a.timeout, env)
+                    rows = metric_rows(stage_dir / f'{stage}.stdout')
+                    run['metrics_valid'] = valid_metrics(rows)
+                    run['command'] = workload_cmd
+                    result['runs'][stage] = run
+                    if stage == 'baseline':
+                        result['metrics'] = rows
+                    if stage == 'perf' and run['returncode'] == 0:
+                        run['reports_valid'], _ = reports(perf, stage_dir, a)
+                    if run['returncode'] != 0 or not run['metrics_valid'] or run.get('reports_valid') is False:
+                        result['status'] = f'FAIL ({stage})'
+                        break
+                finally:
+                    # Delete only the private children created by this process.
+                    # Caller-provided storage roots are never cleared.
+                    for root in scratch:
+                        shutil.rmtree(root)
+            if result['status'] == 'RUNNING':
+                result['status'] = 'PASS'
+            if case.get('prerequisite'):
+                prime_ok = result['status'] == 'PASS'
+            save_results(output, results)
+            analyze(output)
+        print(f"Results and analysis: {analyze(output)}")
+        return 0 if all(r['status'] == 'PASS' for r in results) else 1
+    except BaseException as exc:
+        if results and results[-1]['status'] == 'RUNNING':
+            results[-1]['status'] = 'INTERRUPTED/FAILED'
+            results[-1]['error'] = str(exc) or type(exc).__name__
+        raise
+    finally:
+        save_results(output, results)
+        analyze(output)
+
+
+def terminated(signum, frame):
+    raise KeyboardInterrupt
+
+
+if __name__ == '__main__':
+    signal.signal(signal.SIGTERM, terminated)
+    try:
+        sys.exit(main())
+    except (ValueError, OSError, subprocess.TimeoutExpired) as exc:
+        print(f'ERROR: {exc}', file=sys.stderr)
+        sys.exit(2)
+    except KeyboardInterrupt:
+        print('Interrupted; completed evidence and analysis retained.', file=sys.stderr)
+        sys.exit(130)

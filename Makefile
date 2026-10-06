@@ -109,7 +109,7 @@ SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 CLIENT_SRCS = src/client/efs_fuse.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 
-BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c
+BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c
 # Reuse production storage/writer code without linking daemon/network startup.
 # Separate sectioned objects let the linker discard unrelated server functions.
 BENCH_STORE_OBJS = src/bench/store.o src/bench/store_nvme.o \
@@ -118,7 +118,7 @@ src/bench/%.o: src/server/%.c .build_id.stamp
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -c -o $@ $<
 
 BENCH_CLIENT_OBJ = $(BENCH_CLIENT_SRC:.c=.o)
-$(BENCH_CLIENT_OBJ): src/bench/bench_local.h
+$(BENCH_CLIENT_OBJ): src/bench/bench_local.h src/bench/blake3_bench.h
 $(BENCH_STORE_OBJS) src/bench/bench_local.o src/server/thread.o: src/server/server_internal.h
 
 MGMT_SRC = src/mgmt/efs_mgmt.c
@@ -226,6 +226,7 @@ docs-check:
 
 test: all
 	python3 tests/test_bench_cli.py
+	python3 tests/test_bench_profile.py
 	python3 docs/check-architecture.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
@@ -354,9 +355,9 @@ tests/faults/fault_sim: tests/faults/fault_sim.c src/sim/sim.o src/sim/sim_raft.
 %: %.c $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -I. -o $@ $< $(LIB) $(LDFLAGS)
 
-blake3-bench: $(BLAKE3_OBJS) FORCE
+blake3-bench: $(BLAKE3_OBJS) src/bench/blake3_bench.o FORCE
 	$(CC) $(CFLAGS) $(INCLUDES) \
-		-o blake3-bench tools/blake3-bench.c $(BLAKE3_OBJS) $(LDFLAGS)
+		-o blake3-bench tools/blake3-bench.c src/bench/blake3_bench.o $(BLAKE3_OBJS) $(LDFLAGS)
 
 clean:
 	rm -f $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ)

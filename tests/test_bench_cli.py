@@ -2,6 +2,7 @@
 """Exercise benchmark command ownership, parsing and scratch-root protection."""
 import argparse
 import pathlib
+import re
 import subprocess
 import tempfile
 
@@ -24,6 +25,12 @@ def main():
     assert '--bench data' in run('efs-bench', '--help')
     assert 'no cluster' in run('efs-bench', '--bench', 'data', '--help')
     run('efsd', '--bench', 'meta', ok=False)
+    assert 'BENCH_OK kind=blake3' in run('efs-bench', '--bench', 'blake3', '--threads', '1',
+                                        '--size', '1000', '--time', '.03', '--oneshot')
+    for value in ['nan', 'inf', '1x', '0']:
+        run('efs-bench', '--bench', 'blake3', '--time', value, ok=False)
+    run('efs-bench', '--bench', 'blake3', '--threads', '1x', ok=False)
+    run('efs-bench', '--bench', 'blake3', '--size', '18446744073709551615M', ok=False)
     with tempfile.TemporaryDirectory(prefix='efs-bench-cli-') as root:
         sentinel = pathlib.Path(root) / 'keep'
         sentinel.write_text('preserve me')
@@ -38,11 +45,23 @@ def main():
             run('efs-bench', '--bench', 'data', '--storage', root,
                 '--writers', bad, ok=False)
         run('efs-bench', '--bench', 'data', '--storage', '', ok=False)
+        for qd in ['0', '257', 'nan']:
+            run('efs-bench', '--bench', 'data', '--storage', root, '--qd', qd, ok=False)
+        run('efs-bench', '--bench', 'meta', '--storage', root, '--qd', '1', ok=False)
+        run('efs-bench', '--bench', 'meta', '--storage', root, '--window', '1', ok=False)
+        for window in ['0', '-1', '4294967295', '1x']:
+            run('efs-bench', '--bench', 'data', '--storage', root, '--window', window, ok=False)
         run('efs-bench', '--bench', 'other', '--storage', root, ok=False)
         run('efs-bench', '--bench', 'meta', '--store', '--storage', root, ok=False)
         run('efs-bench', '127.0.0.1:1', '--bench', 'meta', '--storage', root, ok=False)
         run('efs-bench', '--bench', 'data', '--storage', root, '--bench', 'meta', ok=False)
         assert list(pathlib.Path(root).iterdir()) == [sentinel]
+    with tempfile.TemporaryDirectory(prefix='efs-bench-window-') as root:
+        out = run('efs-bench', '--bench', 'data', '--storage', root, '--time', '.05',
+                  '--writers', '0', '--qd', '1', '--window', '1', '--skip-ceiling')
+        rows = [dict(re.findall(r'(\w+)=([^\s]+)', line))
+                for line in out.splitlines() if line.startswith('BENCH_OK ')]
+        assert len(rows) == 2 and all(int(row['ops']) > 1 and row['errors'] == '0' for row in rows), out
     if args.smoke:
         for kind, option in [('meta', '--meta-storage'), ('data', '--storage')]:
             with tempfile.TemporaryDirectory(prefix='efs-bench-smoke-') as root:
