@@ -7,7 +7,10 @@ NUC initial state: four healthy nodes on loopback ports 17432–17435, two clien
 mounts; identical deployed f8bf47b4. Advertised logical capacity 500 GiB.
 Configured storage: n1/n2 under /data1, n3/n4 under /data2. Actual /data2 resolves
 onto the 70 GiB root filesystem (about 64 GiB free), unlike /data1's 745 GiB disk.
-Configured per-node quotas are not proof that their backing filesystem has room.
+Correction after user clarification: `/data2/efs` is a symlink, so checking
+`/data2` did not measure the nodes' actual backing store. Verified target is
+`/home/efs/additional-work-dir`, on the 843 GiB home filesystem with 827 GiB free.
+The earlier root-filesystem capacity concern does not apply to n3/n4.
 
 ## Rounds
 

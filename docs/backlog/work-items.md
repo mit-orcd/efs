@@ -2024,6 +2024,16 @@ Next code item in the agreed sequence is W43/D25 production wiring.
 
 **Recurrence (Oct 6 2026, xorinox cluster).** The same dangling dentry appeared at `/mnt/efs/posix-2c/peer_rename_vs_unlink_src/b` (found by the user's `find -ls`: readdir lists `b`, stat → ENOENT), created ~00:41Z by a posix2 run on a fresh (mkfs Oct 5 19:31Z) 3-node cluster running `v0.1.0-pre-alpha-12-g3d3f17c2-dirty` — a build that **contains** this fix (`2b5a25df`) plus the uncommitted Oct 5 D25 transaction/`meta_apply.c` work. KV-level proof, no client cache involved: `raft-readdir 3492` lists `b`, `raft-lookup 3492 b` → `ino=0 mode=00 nlink=0`. So either the fix's BUSY-probe does not cover the path this run took, or the dirty tree's txn changes reopened the hole — the owed 20/20 gate would have caught this; run it before anything else on the next cluster. The dangling name is still in the KV for inspection (cleanup: `efs-mgmt raft-unlink <node> 3492 b` — itself a probe of the fixed path).
 
+**Guarded cleanup (Oct 6, b4a75492).** The retained `b` was still present after
+xorinox deployed d0e8dce4; its parent mtime/ctime still matched 00:41:38 UTC.
+This is persisted damage, not evidence of a new occurrence on d0e8dce4.
+Unlink now removes a dangling regular-file name only when its missing inode and
+LOCAL parent are in the same shard, with parent/dentry/inode/dseq intent guards
+and atomic directory/opid updates. No inode or object is fabricated or erased.
+Directory and foreign-shard corruption still fails closed.
+[Repair and live acceptance checkpoint](../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md).
+
+
 **Local follow-up (Oct 6 2026, uncommitted).** Reproduced the complementary
 race before rename's first source PREPARE: log-path unlink deletes the source
 and its last-link inode without bumping the dentry's transaction version, so

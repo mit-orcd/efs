@@ -1,0 +1,6 @@
+# posix-2client host_a=xefsct1 host_b=xefsct2 mnt=/mnt/efs 2026-10-06T21:18:08Z
+# select	peer_rename_vs_unlink_src
+test	result	detail
+peer_rename_vs_unlink_src	PASS	
+# summary pass=1 fail=0 skip=0 total=1 dur=0.9
+# complete

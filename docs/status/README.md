@@ -390,7 +390,7 @@ existing local correctness fix; none of these items is closed by this triage.
 | 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | analyzed Oct 6 (xorinox, build `3d3f17c2-dirty`): the file exists (created 05:17:31.319Z, size 0), the retry was answered BUSY (rc=-13, 05:17:31.733Z), no server logged EEXIST; suspect the retry path — an opid replay must return the recorded verdict (I16), not EEXIST; BUSY on unique-name creates is new with the dirty D25 intent probes | [full text](../backlog/work-items.md#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
 | 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | IN TREE Oct 6, uncommitted — metadata diagnostics + protected published-entry reclaim; local admission returns EAGAIN/ENOMEM; 8 MiB cap retained; metadata saturation + admitted-writer/drain reservation regressions and ASan/UBSan PASS; follow-up 251 MiB ENOMEM reproduced locally and reservation fix added; remount + sustained-write and posix jobs=1 gates owed | [full text](../backlog/work-items.md#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | IN TREE Oct 5, uncommitted — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced IOR-hard + cold hardscan gate pending | [full text](../backlog/work-items.md#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
-| 0c | **W36** · rename-vs-unlink of one source both succeed, dangling dentry | correctness | exact-source PREP guards committed earlier; `75b06624` also returns simple UNLINK apply verdict; NUC rename-vs-unlink 20/20 and full two-client 64/64 PASS again on 79983128 Oct 6; xorinox recurrence remains historical evidence and its current-build roll gate is still owed | [full text](../backlog/work-items.md#w36--rename-vs-unlink-of-one-source-both-succeed-dangling-dentry-queue-row-0c) |
+| 0c | **W36** · rename-vs-unlink of one source both succeed, dangling dentry | correctness | exact-source PREP guards committed earlier; `75b06624` also returns simple UNLINK apply verdict; NUC rename-vs-unlink 20/20 and full two-client 64/64 PASS again on 79983128 Oct 6; xorinox b4a75492 current-build race gate 20/20 PASS; historical dangling b repaired by guarded Raft unlink; du/dua clean | [full text](../backlog/work-items.md#w36--rename-vs-unlink-of-one-source-both-succeed-dangling-dentry-queue-row-0c) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | in tree — verify on 19810; one-QUOTA-member PUT question open | [full text](../backlog/work-items.md#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
 | 0b | **W27** · REPORT identity from the staging table | correctness | rerun on the current client; close if `putid miss` is 0 | [full text](../backlog/work-items.md#w27--report-identity-from-the-staging-table-queue-row-0b) |
 | 0g | **W43** · big truncate is a silent no-op past 32 chunks per lane; step a = **D25** (decided) | correctness | D25 metadata primitives, committed readers and internal resize coordinator in tree, uncommitted; public read-cache/writer/sweep integration open | [full text](../backlog/work-items.md#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](decisions.md) |
@@ -827,3 +827,14 @@ finish coherent retirement, live sweep and distribution acceptance gates.
 [accepted route and remaining work](d25-admission-routing.md).
 
 [Lane-authority verification evidence](../../results/measure/20261006-lane-authority/SUMMARY.md).
+
+## Xorinox retained W36 artifact repaired — Oct 6 2026
+
+All three servers were current at d0e8dce4 when du reported the retained
+`/posix-2c/peer_rename_vs_unlink_src/b`. Its directory timestamp matched the old
+00:41:38 UTC occurrence. Prevention alone does not repair persisted names.
+b4a75492 adds single-shard guarded unlink cleanup; the name was removed through
+Raft, server readdir is empty, and full-export du now completes without errors.
+The current xorinox build passed the rename-vs-unlink gate 20/20 after repair.
+Directory/foreign-shard orphan recovery remains outside this narrow fix.
+[Evidence and scope](../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md).
