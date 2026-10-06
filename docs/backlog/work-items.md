@@ -1904,6 +1904,18 @@ project-history.md "START-HERE closed items".**
 
 ## W54 · a fold's GC deletes the live base (queue row 0i)
 
+**Oct 5 implementation checkpoint — IN TREE, local gates pass; uncommitted,
+cluster gate pending.** `efs_meta_apply_publish` now skips GC for a superseded
+base or span (including replay tombstones) whose generation matches the new
+base or whose nodes/checksums alias it. Distinct superseded objects still emit
+GC records. `test_gc_fold_live_alias` covers live-span and tombstone aliases,
+same-generation and different-generation cases, fold replay, and a non-alias
+reclamation control. The regression produced 12 failed assertions before the
+fix; the complete `test_meta_apply` suite passes after the fix, including under
+ASan/UBSan. No GC-side guard was added; that remains undecided below. Remaining:
+roll and the two-peer fold / wait-for-GC / remount cold-read gate in (c), plus
+cold IOR-hard verification and hardscan. No cluster rollout performed here.
+
 **W54 · a fold's GC deletes the live base: when the folded image's object is also a tombstoned span (same content hash → same generation), `efs_meta_apply_publish` queues that generation for GC and the reaper unlinks the fragments the row still names; the next cache-miss read is EIO (Oct 2 17:04Z, IO-500 9×4 ior-hard-read `MPI_ABORT`). MUST FIX before any performance row; data loss with no repair**
 
 **Follow-up steps.** (a) **fix the apply (mechanical, L7 already says a fragment set the live row names is not an orphan):** in the fold branch of `efs_meta_apply_publish` (`meta_apply.c` ~3625, "A full image replaces the spans") skip a span whose `generation == stored.generation` or whose `(nodes, checksums)` alias `stored` (`chunk_aliases`); apply the same filter to the tombstone walk, which today would also GC the previous base when a new image aliases it; (b) `test_meta_apply`: span of object X, then full image with `candidate_gen == X` → the batch holds no GC key for X; (c) repro + gate: two peers write adjacent ranges of one chunk so both merge to the identical image (ior-hard shape; or a posix2 `peer_shared_chunk_fold_gc`), wait past the GC latency (≥ 2 s), remount, cold read; plus a cold `ior-hard-verify` + `hardscan` after every 9×4 run (this run surfaced it only because a same-mount read missed the cache); (d) **ask (not decided):** a GC-side guard — `host_gc_record` point-gets the chunk row before each delete and skips a generation it still references (one get per record on the GC thread = D26's cost; the GC key lacks the inode generation the chunk key needs); (e) stop-all/start-all roll of the four servers, then the gate in (c)
@@ -1920,7 +1932,37 @@ project-history.md "START-HERE closed items".**
 **Evidence and limits.** xorinox cluster, Oct 5 2026 (efsd built 20:59Z; both hits on gateway xefsgw, fuse log `/mnt/efs-fuse-efs.log`, server logs `/data1/efsd.log`). **Hit 1** — ino 8193, written 21:38:06Z (pre-`all_squash` export, macOS EXCLUSIVE4 mode-0 create, uid 501): read 21:39:45Z → `fetch published ino=8193 ci=0 rc=-9 then pull rc=0 rc=-9`, row identical before/after the pull (`gen=0 nd=1 seq=5`), empty `{…}/8193/0/` fragment dirs on all nodes; raft applied only lease open/close (kind 8/9) for the ino; the staged span's **seq advanced 5→9 across pure read attempts** (22:00:04 → 22:00:25Z, no writes — reads mutating the staged record). **Hit 2** — ino 32769 (`/tiny_files.py`, 2922 B), written 22:00:38Z *after* the export fix, cluster fully up (no efsd restarts 21:14 → 22:05Z): `raft-getchunks 32769` = `ci=0 nodes=0,0,0 base_gen=0 ck0=00000000 spans=1 seq=1; span off=0 len=2922 gen=5683377705060155088 nodes=3,1,2`; `find /data1/data/exports/1 -path '*32769*'` on all three nodes: **zero fragment objects**; reads EIO persistently from Mac NFS and FUSE-direct on the gateway. **Excluded:** GC/reaper (no delete records near either hit; W54's mechanism needs objects that exist); the export uid/squash (hit 2 post-dates the `all_squash` fix by 20 min); a stale client map (row identical across pull). **Controls, same window, same mount, all landed + read back fine:** rsync of a git tree (20:44–21:08Z), fresh 2922 B random file (21:48Z), same content to a new name (21:49Z), create-then-overwrite (21:52Z), FUSE-direct write on the gateway. Both hits were `cp` of the same source file from the same Mac client; the trigger is not isolated (a third cp onto the broken name at 22:05Z also failed but is contaminated — it raced an efsd roll). Client log in the same window shows `efs: report rec … identity from staging table (putid miss, n=1)` for two other inos (29918, 31158) whose files read fine. Both hit files unrecoverable (objects never existed; test data — delete). Forbidden: zero-filling the read (I9); treating this as NFS-export configuration (FUSE-direct reads fail identically); a read-side retry that papers over the missing objects
 
 
+## W56 · root-level rename leaves a ghost name in the renaming client's local lookup (queue row 0l)
+
+**W56 · after `mv /export/A /export/B` with the parent the export root (or any spread directory), the renaming FUSE client keeps resolving the old name in LOOKUP — stat/open on the old path still succeed and return the renamed inode — while the server metadata and every other view (parent READDIR, other clients, fresh mounts) are correct. The ghost lasts until remount (Oct 5 2026, xorinox test cluster, gateway FUSE mount). User-visible trigger: a tool that stats the output dir before creating refuses to run against the ghost of a just-renamed directory.**
+
+**Follow-up steps.** (a) fix: the rename local-apply must resolve the old dentry with the same tab order as `efs_export_lookup` (dentry-hash tab first for root/spread parents) and delete the name-index entry there — today `efs_export_rename_at` (`metadata.c`) probes only the parent's shard tab, so for a root-level entry `name_idx_get` misses, the by-ino fallback `efs_export_rename` upserts the row under the new name, and nothing removes `(root, old_name)` from the hash tab; (b) audit `efs_client_unlink`'s local apply for the same tab asymmetry (rmdir tested clean Oct 5 at both levels, but confirm the code uses the lookup tab order rather than the parent shard only); (c) gate: IN TREE Oct 5 — `tests/posix/posix_suite.py` `@root` group (`root_rename_dir_old_name_gone` FAILS on the Oct 5 build, reproducing the ghost within the suite; the sibling root-level rename/create/unlink/mkdir tests pass) — then full posix jobs=1 + posix2 on the dev cluster after the fix
+
+**Evidence and limits.** Repro on xefsgw (xorinox 3-node libvirt, bits=12 export, efsd built Oct 5 22:05Z): root-level `mkdir rt; mv rt rt2; stat rt` → still resolves ≥ 65 s later (bug); nested `nt/sub → nt/sub2` → ENOENT (clean); root-level and nested `rm -rf` → ENOENT (clean). Narrowed Oct 5 by the new posix `@root` group on xefsct1: only **directory** renames with a root parent ghost — root-level **file** renames and root→nested dir moves are clean, i.e. the missed tab holds directory dentries, not file dentries. Ghost is not the 0j 50 ms lookup memo (old dir name still resolves ≥ 2 s later). Mechanism chain: `efs_fuse_lookup_at` answers directory LOOKUPs from the local staged table with no RPC (by design, the mkdir-walk O(n²) note in `efs_fuse.c`); on a sharded export, dentries of root/spread parents live on the `hash(parent,name)` dentry shard and `efs_export_lookup` (`metadata.c`, the "Dentry shards only" fix) checks that tab first — the rename local-apply never does. Not server-side: parent READDIR, other clients and fresh mounts are all correct; it is not the kernel dentry cache either (the VFS moves the old dentry on a same-mount rename — the stale answer comes from efs-fuse). Forbidden: routing directory LOOKUPs via RPC as the "fix" (that path exists for files and was deliberately not taken for dirs); a time-based expiry that papers over the missed removal
+
+
 ## 0j · the client's 50 ms lookup memo returns pre-mutation stats (queue row 0j)
+
+**Oct 5 implementation checkpoint — IN TREE, uncommitted; local gates pass,
+Linux integration gates pending.** FUSE mutation requests clear the 32-slot
+memo at entry and exit, and a balanced active-mutation count suppresses memo
+use while operations overlap. LOOKUP captures a mutation serial before reading
+its row; a reply spanning a mutation cannot reinsert stale attributes after
+invalidation. Coverage includes write/write_buf, setattr (chmod/chown/size/times),
+namespace mutations and replacement targets, O_TRUNC, fallocate, xattrs,
+flush/fsync/release publication, and asynchronous writeback. Clearing all slots
+is conservative: unrelated mutations also cause misses; no inode-resolution
+RPC is added solely for invalidation. No-mutation LOOKUP → GETATTR still gets
+its one-shot 50 ms hit, and attr_timeout remains zero.
+
+`make test-lookup-memo` extracts the production memo and representative FUSE
+callbacks with RPC stubs: writes, setattr reply attributes, link/unlink/rename,
+O_TRUNC, failures, fallocate early exits, overlapping mutations, stale RPC
+completion, TTL expiry and read-only/fresh hits pass. ASan/UBSan pass; earlier
+client-memory tests pass again. An adapted-copy Mac FUSE syntax check passes;
+this is not a production Linux build. Remaining gates: Linux posix jobs=1 back
+to the recorded 200/201 baseline and Spark du performance measurement. No roll
+performed. Next code item in the agreed sequence is W38.
 
 **Client regression in `20745142`/`efc0f499` (not W54, same gate run): `lookup_memo_take` answers a GETATTR within 50 ms of the LOOKUP from the LOOKUP row — a stat right after write/chmod/link/utimens on the SAME client shows the pre-mutation row.** posix jobs=1 **164/201, 36 fail** (`results/posix/20261002-170119`: `basic_dd_rw` size 0, `attr_chmod` mode 420, `hardlink_basic` nlink 1, `attr_utimens_ns` old mtime …); posix2 63/63 (the peer holds no memo). The 15:19Z tree was 200/201
 
@@ -1930,6 +1972,34 @@ project-history.md "START-HERE closed items".**
 
 
 ## W38 · ior-hard fold tombstone without the span's bytes (queue row 0e)
+
+**Oct 5 implementation checkpoint — IN TREE, uncommitted; deterministic
+local regressions pass, historical IOR gate pending.** Two unsafe paths were
+identified in the current client. STALE replay fetched a base plus live spans,
+then copied the older local image over it when the base still matched this
+client's object (including the no-range branch); the PUT named the fetched
+span list despite lacking its bytes. Replay now preserves fetched live spans
+and overlays only owned dirty ranges; tombstones do not count as live bytes.
+A full image without a byte-backed observation now names an empty list unless
+it is a true whole-chunk overwrite, forcing a server STALE/refetch if spans
+exist. Metadata-only list/sequence learning is removed. A span whose local
+chain fills during PUT can become a full image only with the captured byte
+observation; otherwise it returns STALE without replacing the staged mapping
+or PUT identity. The existing flush failure path retains/re-dirties its body
+for a later retry; this race can surface an error on the current flush rather
+than silently publish an incomplete fold.
+
+`make test-fold-observation` compiles production replay and PUT functions with
+separate byte images and metadata plus RPC stubs. Restoring the old replay
+conditions in a temporary copy reproduces loss of the acknowledged 4256-byte
+span. Tests cover owned ranges, cleared ranges, tombstones, table changes during
+PUT, missing observations, chain-full fallback, whole overwrites, failed PUTs
+and no failed-object publication. Local regression and ASan/UBSan pass; write.c
+syntax, earlier client-memory/0j/D25-helper tests and metadata suite pass. This
+proves the identified paths, not that the cited historical IOR run has been
+reproduced on the cluster. Remaining: traced one-client four-rank IOR-hard,
+cold hardscan, inspect bad rows, then the 9×4 cold verification gate below.
+Next code item in the agreed sequence is W43/D25 production wiring.
 
 **W38 · ior-hard: a client's full image folds its own published span without the span's bytes (4256 B of zeros, committed)**
 
@@ -1947,6 +2017,27 @@ project-history.md "START-HERE closed items".**
 **Follow-up steps.** the F1 block in §1b (Oct 1 07:45Z): trace the two txns with `APPLY_LOG`, decide between `apply_unlink_cmd`'s silent NOT_FOUND→OK and an EXCL DEL that passes on an absent key, fix that one
 
 **Evidence and limits.** evidence `/tmp/efs-mount/posix-2c-r422-6/peer_rename_vs_unlink_src/b` on 19810 (`-?????????`), `~/efs-runs/p2r422.log`, `results/posix2/20261001-073048`. Correctness: goes before 1a–1h
+
+**Recurrence (Oct 6 2026, xorinox cluster).** The same dangling dentry appeared at `/mnt/efs/posix-2c/peer_rename_vs_unlink_src/b` (found by the user's `find -ls`: readdir lists `b`, stat → ENOENT), created ~00:41Z by a posix2 run on a fresh (mkfs Oct 5 19:31Z) 3-node cluster running `v0.1.0-pre-alpha-12-g3d3f17c2-dirty` — a build that **contains** this fix (`2b5a25df`) plus the uncommitted Oct 5 D25 transaction/`meta_apply.c` work. KV-level proof, no client cache involved: `raft-readdir 3492` lists `b`, `raft-lookup 3492 b` → `ino=0 mode=00 nlink=0`. So either the fix's BUSY-probe does not cover the path this run took, or the dirty tree's txn changes reopened the hole — the owed 20/20 gate would have caught this; run it before anything else on the next cluster. The dangling name is still in the KV for inspection (cleanup: `efs-mgmt raft-unlink <node> 3492 b` — itself a probe of the fixed path).
+
+**Local follow-up (Oct 6 2026, uncommitted).** Reproduced the complementary
+race before rename's first source PREPARE: log-path unlink deletes the source
+and its last-link inode without bumping the dentry's transaction version, so
+version-only EXCL DEL still accepts the absent source. The original BUSY probes
+protect already prepared names, not that earlier window. The committed code
+already has this mechanism; the dirty build does not prove D25 introduced it.
+`efs_meta_capture_dentry_drop` now checks the original dentry identity and
+captures exact local/hashed bytes or absence. The shared server source-drop
+helper for rename/unlink/rmdir prepares those comparisons through EXCL_VALUE;
+unlink or name reuse before capture/PREPARE answers STALE, and prepared keys
+continue to reject log deletion with BUSY. Split tombstones mask local copies
+and cannot satisfy a live source. Regression tests reproduce old unsafe
+acceptance and cover both race orders, ABA, split/hashed captures and a live
+resolved destination. Full metadata/transaction tests pass normally and under
+ASan/UBSan, simulator and strict local server syntax pass. Still owed: Linux
+server/FUSE build and cluster `peer_rename_vs_unlink_src` 20/20, first on the
+next rollout. No cluster rollout or artifact cleanup in this follow-up.
+
 
 
 ## W42 · df / efs-mgmt status report the 3-node capacity model on any node count (queue row 2a)
@@ -1981,6 +2072,8 @@ project-history.md "START-HERE closed items".**
 
 **Plan row 3 (in tree).** repro + gate for big-file truncate: `dd bs=1M count=10 conv=fsync` onto an existing 1 GiB and a 300 MiB file, same and different content, plus `truncate -s 0`; `stat`, `md5sum` through `iflag=direct`, `raft-getchunks` on chunk 100 Gate: exit 3 = truncate refused and file unchanged (today); exit 0 = all four PASS (after D25); exit 1 = a lie.
 
+**Oct 6 note (nuc bare-metal cluster, posix `truncate_big_ftruncate_honest` / `truncate_big_o_trunc_honest`).** Two lane-spanning truncates in flight at once (the two tests at jobs ≥ 2) make the REFUSED file's subsequent reads fail with EIO for ~1 s while the lane settles; size and bytes stay intact and reads recover (solo runs are clean, verified 3/3 rounds). The tests are now `@serial` and `_verify_big_unchanged` retries reads through that window, so the lie gate is deterministic again. Whether the transient EIO is acceptable (vs EAGAIN/queued behind the in-flight truncate) is open — no bytes at risk, but an honest EIO on an intact file can still spook a reader that races a refused truncate.
+
 ## 0a · STALE replay that never converges (queue row 0a)
 
 **STALE replay that never converges** (no W number; the earlier `W26` label here collided with the `fallocate` item)
@@ -1997,6 +2090,48 @@ project-history.md "START-HERE closed items".**
 **Follow-up steps.** (a) count what one `host_gc_frag_pass` scan visits (`EFS_GC_DBG`, plus a per-scan key/segment counter on the `gc-pass` line) on the live table while idle; (b) if the 205 ms empty scan is the 50–54 L0 segments, that is D12/D13's file count — bring the number to the user (**D26**); if it is tombstones under the GC prefix, the fix is a per-anchor "GC records pending" watermark the apply maintains so an empty pass costs one get; (c) gate: idle leaders show no `gc-pass` line (> 5 ms) for 10 min, `md_latency.py` medians unchanged, a 10 GiB `rm` still drains at ≥ today's 140 records/s per group
 
 **Evidence and limits.** fcstor003 `perf-pid.txt`: tid 1056219 79.7 % of 780 K samples, flat `__memcmp_avx2_movbe` 24.9 % + `merge_scan` 16.7 % + `kv_seg_iter_next` 4.1 % + `kv_msrc_advance` 2.8 %; `gc-pass ms=205 frag=205 reap=0` every 1.2 s from 20:11 to 20:56 with nothing to collect; `kv-compact: end … l0=54 l1=149` once per 7 min. Forbidden: a longer `GC_LOOP_MS` to hide it (the rm drain rate is already 78 min per 160 GiB); scanning from a handler thread
+
+
+## 0m · parent directory mtime/ctime must bump on entry create/unlink/rename/link (queue row 0m)
+
+**Parent directory mtime/ctime must bump on entry create/unlink/rename/link/mkdir/rmdir — POSIX, and ruled a bug if missing (user, Oct 6 2026: "EFS is as much as possible POSIX compliant").** The open "bug vs. intended" question is closed: intended = POSIX.
+
+**Status (Oct 6).** Code audit: the apply implements the bump for all six entry ops — create (`efs_meta_apply_create_file_op`), mkdir, unlink, link, rename (src and dst parents via `stamp_dir_items`), rmdir. A LOCAL directory's times ride the parent row in the same atomic batch; a HASHED directory's live in the dentry shard's dir lane (`dir_lane_stamp`, §7.4); `efs_meta_apply_getattr` reduces the `used_shards` lanes for a spread directory. **Unverified end-to-end:** client-side visibility (the getattr path, dcache, the 0j memo window) — the tests below are the arbiter, and a failure is a bug. **Gate ran Oct 6 (nuc bare-metal 3-node loopback cluster):** create/unlink/mkdir/rmdir/link and same-dir rename all bump same-client (posix `dir_times_*` 6/7 after the test-wait fix below); the only failure is `dir_times_rename`'s cross-dir dst parent — localized to the renaming client's attr invalidation and filed as **W57**. Note the Oct 5 session's `dir_times_bump_on_child_mutation` (posix) was added as a *failing* gate on the Oct 5 build — since the apply is verified correct, a same-client failure localizes the bug to the client's directory attr path (0j-adjacent).
+
+**Tests in tree Oct 6.** posix: `dir_times_create`, `dir_times_unlink`, `dir_times_mkdir_rmdir`, `dir_times_rename` (same-dir and cross-dir, both parents), `dir_times_link`, `dir_times_write_no_bump` (the negative: content writes never touch the directory). posix2: `peer_dir_mtime_bump_visible` (A creates, B sees the directory's mtime+ctime advance). Every re-stat waits a full wall-clock second (the original 0.06 s — meant only to sit outside the 50 ms lookup-memo window, 0j — could not see a legitimate bump: creation rows show whole-second granularity, and on a fast loopback cluster the mutation lands in the same second as the baseline; 1 s crosses a boundary under any client/server clock offset).
+
+**Follow-up steps.** run both suites on a live cluster; if a `dir_times_*` test fails, the failing op's stamp path (above) is the suspect; if only the posix2 test fails, look at the peer's getattr reduction or the client's directory attr caching. The spread-directory case (≥ `EFS_DIR_SPREAD_MIN` = 65536 entries) is not covered by these tests — add it when a spread-dir fixture exists.
+
+**Forbidden.** declaring the bump "intended to be absent" to avoid the cross-shard stamp — §7.4 already solved that with dir lanes.
+
+
+## W57 · cross-directory rename never refreshes the dst parent's attrs on the renaming client (queue row 0n)
+
+**W57 · after any cross-directory rename (`mv a/f b/f`), the renaming FUSE client keeps serving the DST parent directory's pre-rename attributes indefinitely — mtime/ctime still show the pre-rename value ≥ 25 s later, a readdir of the dst parent does not refresh them, only another mount shows the truth — while the server stamps BOTH parents correctly (verified from a second mount on the same cluster: ns-resolution bumps). With a SIBLING layout (`a/f → b/f`, no shared ancestors) the SRC parent goes stale as well; with a parent→child layout (`d/f → d/sub/f`) the src parent survives because it is an ancestor of the dst path and gets refreshed along it (Oct 6 2026, nuc bare-metal 3-node loopback cluster, build `4e4c10ff-dirty`). This is the same-client failure 0m predicted would localize to the client's directory attr path.**
+
+**Follow-up steps.** (a) fix: the rename reply/local-apply path must invalidate (or restamp) the client's attr state for BOTH parent inos, including when the dst parent is not on the source path — today only the components along the two rename paths are refreshed and the dst parent's dir-lane-reduced GETATTR row is never re-fetched; (b) audit `link(2)` into an already-statted directory for the same gap (`dir_times_link` passes, so likely clean — confirm in code); (c) gate: IN TREE Oct 6 — `tests/posix/posix_suite.py` `dir_times_rename` cross-dir phases (parent→child dst-parent check and sibling src+dst checks, each with a 0.1 s post-rename wait to sit outside the 50 ms rename-reply memo; both FAIL on the Oct 6 build) — then full posix jobs=4 and jobs=1 after the fix
+
+**Evidence and limits.** nuc bare-metal cluster (3× efsd on loopback, efs-fuse mount): `dir_times_rename` fails on the dst-parent check with identical before/after ns values; a second mount on the same cluster shows the server bumping BOTH parents at ns resolution (e.g. `:55.641246728`) while the renaming mount still shows the pre-rename whole-second row 25 s later; a sibling-layout probe shows the src parent ALSO stale at +0.15 s and +2 s. Not the 0j 50 ms memo (persists ≥ 25 s); not `attr_timeout` (0 per 0j). Same-dir rename and the create/unlink/mkdir/rmdir/link bumps are all visible same-client (`dir_times_*` pass once the test waits cross a wall-clock second — creation rows were observed at whole-second granularity, so the old 0.06 s re-stat wait could not see a legitimate bump and failed spuriously on a fast cluster), i.e. the invalidation gap is specific to the rename's implicit dst parent (and a non-ancestor src parent). Forbidden: a time-based expiry that papers over the missed invalidation; routing every dir GETATTR through an extra RPC as the "fix" (0m's dir-lane reduction already makes the fresh answer cheap — the client just has to ask)
+
+
+## W58 · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed (queue row 0o)
+
+**`open("xb")` on a never-before-used name raised `FileExistsError`** (user, Oct 6 2026, xorinox cluster, build `3d3f17c2-dirty`): `tiny_files.py --depth 4 --files-per-folder 100 --total 1000000 --workers 16 /mnt/efs/tiny_files7/` died at `folder_000231/…/file_000049.txt`.
+
+**Analysis (Oct 6, evidence on the cluster).** The script is innocent by construction: every leaf path is namespaced by a unique `folder_index`, each leaf is written by exactly one task, each file index once — no duplicate path is generatable, and `open("xb")` failed at file 50 of 100 in that leaf. The filesystem state contradicts the verdict: `file_000049.txt` **exists** (ino 623812, created 05:17:31.319Z, **size 0** — the create landed, the write never happened because the caller got an error). Server logs: xefs1 `05:17:31.733Z raft-host: create parent=419012 name=file_000049.txt rc=-13` (BUSY) — after the successful apply; **no server ever logged rc=-17 (EEXIST) for anything in the run**. Client log: `05:17:32.459Z inode-rpc: slow-ok type=67 attempts=2 saw_busy=1 status=0 us=1173252` ×4 — concurrent creates each taking >1 s through BUSY. Chain: the create applied (05:17:31.319), a retry saw BUSY (.733), and the application ultimately received EEXIST — a verdict the server never logged, so it was either fabricated client-side or returned by a retry whose opid no longer matched its own recorded verdict (I16: a replay in the window returns the recorded verdict). BUSY on *unique-name* creates is itself new behavior on this build — the uncommitted D25 intent probes make plain creates contend.
+
+**Follow-up steps.** (a) in the client create path, check that every retry of one logical create carries the *same* opid and that a post-BUSY retry re-probes the opid window before falling through to the name-exists check; (b) decide where the EEXIST was born — server name check on a new opid, or a client-side lookup fallback after an ambiguous verdict; (c) repro is cheap: rerun the same tiny_files command into a fresh dir under 16 workers — recurred within 23k files on Oct 6; (d) a posix2 or stress gate: parallel `open(O_CREAT|O_EXCL)` of unique names must never yield EEXIST.
+
+**Forbidden.** "Fixing" it by having the client swallow EEXIST on create retries (that hides real EEXIST for genuinely existing names); treating BUSY as terminal.
+
+
+## W59 · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains (queue row 0p)
+
+**W59 · `dd bs=1M count=1024 conv=fsync` on a FUSE mount died on the FIRST write with `No space left on device` (0 bytes) while the export showed 156 GiB free and every node disk 85 GiB free (Oct 6 2026, xorinox cluster, xefsct1). Not a capacity problem: the client maps its internal write-cache budget exhaustion to ENOSPC, and one of the two budgets — the fixed 8 MiB dcache metadata pool — never drains, so once it pins at its cap every subsequent write on that mount fails ENOSPC until remount.**
+
+**Follow-up steps.** (a) **log first, then fix:** the `dcache-pressure` line (`efs_fuse.c:2799`) prints only body counters (live/reserved/backing/limit/request) — add `g_metadata`/`g_meta_reserved` and which admission leg failed, so the exhausted resource is visible on the next occurrence; (b) **errno semantics:** a server QUOTA verdict (cluster genuinely full) → ENOSPC; a client-local admission failure → block with bounded backoff, worst case ENOMEM/EAGAIN — never ENOSPC (the two sites: `efs_fuse.c:2815` flush-returned-QUOTA and `:2824` drains-exhausted); POSIX apps (dd, rsync, git) treat ENOSPC as fatal-full and abort a transfer that could have proceeded; (c) **metadata reclaim:** body-less dcache entries are kept per published chunk for report/CAS base (`write.c` `dcache_find_meta`; `dcache_keep_on_drop` blocks dropping the unreported) and chain nodes stay charged when reused ("Heap nodes remain charged when reused", `bufpool.c`), so `g_metadata` grows to a peak and never shrinks — release or evict body-less entries once their report has landed (cap per-slot chains; reclaim reported-clean entries in the pressure path), so the 8 MiB cap cannot pin; (d) **relation to mem1** (sparse writes bypass reclaim; admission hard bound — in tree): mem1 bounds the body side; W59's metadata cap is the remaining leg — confirm the mem1 implementation does not already reclaim these entries; (e) **gate:** repro loop — a multi-GiB sequential dd through one FUSE mount (thousands of 128 KiB chunk entries), then keep writing while `df` shows free space: after the fix no ENOSPC; plus posix jobs=1 regression
+
+**Evidence and limits.** xorinox 3-node libvirt cluster, xefsct1 FUSE mount, Oct 6 2026. Symptom: `dd if=/dev/urandom of=/mnt/efs/002.dat bs=1M count=1024 status=progress conv=fsync` → `No space left on device`, 0+0 records. Capacity checks all green: `df -h /mnt/efs` = 200G total / 45G used / 156G avail; `/data1` on xefs1-3 = 112G with 85G avail each, inodes 2%; no `nospc` in any efsd log. Client log `/mnt/efs-fuse-efs.log` shows two regimes. **(1) 06:16–06:18Z, genuine transient pressure:** `dcache-pressure live=266993664 reserved=0 backing=301989888 limit=335544320 request=1572864` in a minutes-long storm — live pinned at 254.6 MiB so `g_live + g_reserved > g_hard − bytes` (266862592), failing the byte leg (`bufpool.c:93`) — while `inode-rpc: slow-ok type=67` (= `EFS_MSG_REPORT_CHUNKS`) took 5.2 s with `saw_busy=1`: the server answered REPORT with BUSY, drains could not keep up, the 16 pressure-drain rounds were insufficient → `-ENOSPC`. Real congestion, wrong errno. **(2) 06:26Z, the dd, permanent failure:** `dcache-pressure live=0 reserved=0 backing=301989888 limit=335544320 request=5242880` — cache EMPTY, yet a 5 MiB admission fails. The byte leg provably passes (0 ≤ 256 MiB − 5 MiB); per-thread credits are clean (reserved=0); the only remaining leg is metadata (`g_metadata + g_meta_reserved ≤ 8 MiB − metadata`, `bufpool.c:94-95`) → `g_metadata` pinned at the 8 MiB cap. backing=301989888 is NOT a leak: 9 warm slabs × SLAB_BYTES (256 × 128 KiB = 32 MiB) that stay registered for process lifetime by design, and slab bytes do not count against admission. Arithmetic checks out: chunk size 128 KiB → a 1 MiB dd write = 8 chunks + 2 guard = 10 → request `10 × 4 × 128 KiB = 5242880`, metadata `10 × 1024`; the drain loop finds no dirty ino (live=0, `efs_dcache_pressure_ino` → 0, break) → `-ENOSPC` at `efs_fuse.c:2824`. Persistence: identical failures minutes apart on an idle cluster — a pinned counter, not congestion. The mount had accumulated entries over its lifetime (≈45 GiB written into the export earlier; posix 2client runs on xefsct1/2). Red herring: the user's first `dd bs=1m` failed on coreutils argument parsing (lowercase `m`), unrelated. Forbidden: returning ENOSPC for any client-local budget condition; raising the 8 MiB cap (or `EFS_DCACHE_HARD_BYTES`) as "the fix" without metadata reclaim; a time-based expiry that papers over the missing release
 
 
 #### Plan after the Oct 1 22:00Z review — what runs without a decision, what is asked
