@@ -109,7 +109,7 @@ SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 CLIENT_SRCS = src/client/efs_fuse.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 
-BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c
+BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c src/bench/io_bench.c
 # Reuse production storage/writer code without linking daemon/network startup.
 # Separate sectioned objects let the linker discard unrelated server functions.
 BENCH_STORE_OBJS = src/bench/store.o src/bench/store_nvme.o \
@@ -118,7 +118,7 @@ src/bench/%.o: src/server/%.c .build_id.stamp
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -c -o $@ $<
 
 BENCH_CLIENT_OBJ = $(BENCH_CLIENT_SRC:.c=.o)
-$(BENCH_CLIENT_OBJ): src/bench/bench_local.h src/bench/blake3_bench.h
+$(BENCH_CLIENT_OBJ): src/bench/bench_local.h src/bench/blake3_bench.h src/bench/io_bench.h
 $(BENCH_STORE_OBJS) src/bench/bench_local.o src/server/thread.o: src/server/server_internal.h
 
 MGMT_SRC = src/mgmt/efs_mgmt.c

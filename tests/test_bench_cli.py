@@ -62,6 +62,22 @@ def main():
         rows = [dict(re.findall(r'(\w+)=([^\s]+)', line))
                 for line in out.splitlines() if line.startswith('BENCH_OK ')]
         assert len(rows) == 2 and all(int(row['ops']) > 1 and row['errors'] == '0' for row in rows), out
+    for kind in ['io', 'io-blake3']:
+        for rw in ['read', 'write']:
+            with tempfile.TemporaryDirectory(prefix='efs-raw-io-') as root:
+                out = run('efs-bench', '--bench', kind, '--storage', root, '--rw', rw,
+                          '--io-size', '4K', '--qd', '2', '--window', '1', '--time', '.05')
+                row = dict(re.findall(r'(\w+)=([^\s]+)', next(line for line in out.splitlines() if line.startswith('BENCH_OK '))))
+                assert row['checksum'] == ('none' if kind == 'io' else 'blake3')
+                assert row['rw'] == rw and row['errors'] == '0' and row['verified_blocks'] == '2', out
+                assert not list(pathlib.Path(root).iterdir())
+    with tempfile.TemporaryDirectory(prefix='efs-io-refusal-') as root:
+        keep = pathlib.Path(root) / 'keep'; keep.write_text('keep')
+        run('efs-bench', '--bench', 'io', '--storage', root, ok=False)
+        for size in ['nan', '1Mx', '8193', '-1', '999999999999999999999M']:
+            run('efs-bench', '--bench', 'io', '--storage', root, '--io-size', size, ok=False)
+        run('efs-bench', '--bench', 'io', '--storage', root, '--rw', 'read', '--sync', ok=False)
+        assert keep.read_text() == 'keep'
     if args.smoke:
         for kind, option in [('meta', '--meta-storage'), ('data', '--storage')]:
             with tempfile.TemporaryDirectory(prefix='efs-bench-smoke-') as root:

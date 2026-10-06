@@ -1,6 +1,7 @@
 #include "client_internal.h"
 #include "../bench/bench_local.h"
 #include "../bench/blake3_bench.h"
+#include "../bench/io_bench.h"
 #include "efs/checksum.h"
 #include "efs/common.h"
 #include "efs/metadata.h"
@@ -52,6 +53,8 @@ static void usage(const char *prog)
             "      [--workers W] [--size bytes] [--phases csv] [--keep] [--id n]\n"
             "      Metadata read+write phases (mkdir/create/stat/getattr/readdir/\n"
             "      setattr/rename/unlink). No caches; every op is a real RPC.\n"
+            "  I/O:   %s --bench io|io-blake3 --storage <scratch> --rw read|write\n"
+            "         [--io-size 64K] [--qd 16] [--window 64] [--direct-io] [--sync]\n"
             "  CPU:   %s --bench blake3 [--size 64K] [--threads N] [--time seconds]\n"
             "         [--oneshot|--stream] (no storage or cluster).\n"
             "  Local: %s --bench data --storage <scratch> [--time seconds]\n"
@@ -59,7 +62,7 @@ static void usage(const char *prog)
             "         --bench data|meta --help for local options (no cluster).\n"
             "  Optional: --perf  (perf record -g on this process; EFS_PERF_PATH)\n"
             "            --id <n>  chunk-index base so parallel writers do not collide\n",
-            prog, prog, prog, prog, prog, prog, prog, prog);
+            prog, prog, prog, prog, prog, prog, prog, prog, prog);
 }
 
 static pid_t g_perf_pid = -1;
@@ -1174,6 +1177,8 @@ int main(int argc, char **argv)
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bench")) {
+            if (i + 1 < argc && (!strcmp(argv[i + 1], "io") || !strcmp(argv[i + 1], "io-blake3")))
+                return efs_bench_io_main(argc, argv);
             if (i + 1 < argc && !strcmp(argv[i + 1], "blake3")) {
                 /* Strip only the local mode selector; the shared microbench
                  * validates every remaining argument. */

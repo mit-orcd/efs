@@ -19,6 +19,8 @@ import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+LOCAL_MODES = ['io', 'io-blake3', 'blake3', 'data', 'meta']
+DEFAULT_MODES = ','.join(LOCAL_MODES)
 
 
 def integers(value):
@@ -63,12 +65,14 @@ def parser():
     p.add_argument('--storage-root', type=Path, action='append', default=[],
                    help='existing scratch parent on a storage device; repeat for multiple paths')
     p.add_argument('--time', type=float, default=3, help='seconds per timed benchmark phase')
+    p.add_argument('--io-sizes', type=sizes, default=sizes('4K,64K,1M'), help='raw I/O sizes, identical with/without BLAKE3')
+    p.add_argument('--io-sync', action='store_true', help='include fdatasync in each raw write operation')
     p.add_argument('--hash-sizes', type=sizes, default=sizes('4K,64K,128K,1M'))
     p.add_argument('--threads', type=integers, help='BLAKE3 thread ladder; default 1,2,4,affinity CPU count')
     p.add_argument('--writers', type=writers, default=writers('0,2,auto'), help='inline, fixed pool and automatic pool variants')
     p.add_argument('--data-size', type=sizes, default=sizes('256M'), help='bounded local data working set across all QD slots (fragment bytes)')
     p.add_argument('--qds', type=integers, default=integers('1,16,64,256'))
-    p.add_argument('--modes', default='blake3,data,meta', help='comma-separated modes; all adds remote modes')
+    p.add_argument('--modes', default=DEFAULT_MODES, help='comma-separated modes; all adds remote modes')
     p.add_argument('--seed', help='seed host:port; adds net,store,read,remote-meta to the default matrix')
     p.add_argument('--export', default='efs-test', help='export for remote metadata benchmark')
     p.add_argument('--files', type=int, default=5000, help='remote metadata files')
@@ -92,10 +96,10 @@ def cases_for(a, cpus):
     modes = a.modes.split(',')
     remote = ['net', 'store', 'read', 'remote-meta']
     if modes == ['all']:
-        modes = ['blake3', 'data', 'meta'] + remote
-    elif a.seed and a.modes == 'blake3,data,meta':
+        modes = LOCAL_MODES + remote
+    elif a.seed and a.modes == DEFAULT_MODES:
         modes += remote
-    if not modes or len(set(modes)) != len(modes) or any(m not in ['blake3', 'data', 'meta'] + remote for m in modes):
+    if not modes or len(set(modes)) != len(modes) or any(m not in LOCAL_MODES + remote for m in modes):
         raise ValueError('unknown --modes entry')
     if any(m in remote for m in modes) and not a.seed:
         raise ValueError('remote modes require --seed')
@@ -104,8 +108,8 @@ def cases_for(a, cpus):
         raise ValueError('--threads must fit the current CPU affinity mask')
     if any(q < 1 or q > 256 for q in a.qds):
         raise ValueError('--qds must be 1..256')
-    if len(a.data_size) != 1 or a.data_size[0] < max(a.qds) * 65536:
-        raise ValueError('--data-size must hold at least one 64 KiB fragment per QD slot')
+    if len(a.data_size) != 1 or ('data' in modes and a.data_size[0] < max(a.qds) * 65536):
+        raise ValueError('--data-size must be one value, holding one 64 KiB fragment per data QD slot')
     if any(w != 'auto' and w > 64 for w in a.writers):
         raise ValueError('--writers must be 0..64')
     if len(a.store_size) != 1 or a.store_size[0] < 131072 or a.store_size[0] % 131072:
@@ -118,6 +122,18 @@ def cases_for(a, cpus):
     def add(name, mode, args, **kw):
         cases.append(dict(name=name, mode=mode, args=args, **kw))
 
+    if any(n < 4096 or n > 16 * 1024 * 1024 or n % 4096 for n in a.io_sizes):
+        raise ValueError('--io-sizes must be 4 KiB aligned, 4 KiB..16 MiB')
+    if any(m in modes for m in ['io', 'io-blake3']) and a.data_size[0] < max(a.io_sizes) * max(a.qds):
+        raise ValueError('--data-size must hold one largest I/O block per QD slot')
+    for mode in ['io', 'io-blake3']:
+        if mode not in modes:
+            continue
+        for size, qd, direct, rw in itertools.product(a.io_sizes, a.qds, [False, True], ['write', 'read']):
+            add(f'{mode}-{rw}-{size}-qd{qd}-{"direct" if direct else "buffered"}', mode,
+                ['--bench', mode, '--rw', rw, '--io-size', str(size), '--qd', str(qd),
+                 '--window', str(a.data_size[0] // (size * qd)), '--time', duration,
+                 '--direct-io' if direct else '--no-direct-io'] + (['--sync'] if a.io_sync and rw == 'write' else []))
     if 'blake3' in modes:
         for size, nt, style in itertools.product(a.hash_sizes, threads, ['oneshot', 'stream']):
             add(f'blake3-{style}-{size}-t{nt}', 'blake3',
@@ -261,6 +277,7 @@ def analyze(output):
             'Throughput comes from untraced baseline runs. Perf is a separate rerun; optional strace is another rerun.',
             'CPU sample shares show where execution was sampled, not wall-time spent waiting or proof of an I/O bottleneck.',
             'Profiles filter to efs-bench threads; fio ceiling child processes are excluded. Source annotations need matching debug/source files.',
+            'Raw I/O profiles capture only the parallel timed loop; setup, read population and post-run validation are excluded by perf-control acknowledgement.',
             'Data profiles combine write and read phases (and path-count ladder when multiple roots are supplied).', '',
             '| Case | Result | Baseline measurements | Hottest sampled symbols |', '|---|---|---|---|']
     done = set()
@@ -270,7 +287,7 @@ def analyze(output):
         measurements = []
         for m in r.get('metrics', []):
             tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd'] if k in m)
-            numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_us'] if k in m)
+            numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_us', 'avg_us', 'max_us'] if k in m)
             if numbers:
                 measurements.append(f'{tag} {numbers}'.strip())
         symbols = profile_rows(output / r['name'] / 'perf' / 'symbols.stdout')
@@ -301,14 +318,15 @@ def analyze(output):
                 key = (m.get('mode'), m.get('size'))
                 if key not in hash_best or float(m['GiB_s']) > float(hash_best[key][1]['GiB_s']):
                     hash_best[key] = (r['name'], m)
-            if m.get('kind') == 'data' and 'GiB_s' in m:
-                key = ('direct' if 'direct' in r['name'] else 'buffered', m.get('rw'), m.get('paths'))
+            if m.get('kind') in ['data', 'io'] and 'GiB_s' in m:
+                key = ('direct' if 'direct' in r['name'] else 'buffered', m.get('rw'), m.get('paths'), m.get('checksum', 'engine'), m.get('io_bytes', '65536'))
                 if key not in data_best or float(m['GiB_s']) > float(data_best[key][1]['GiB_s']):
                     data_best[key] = (r['name'], m)
     for key, (name, m) in hash_best.items():
         text.append(f"- BLAKE3 {key[0]}, {key[1]} bytes: best observed {m['GiB_s']} GiB/s at {m.get('threads')} thread(s), `{name}`.")
     for key, (name, m) in data_best.items():
-        text.append(f"- {key[0]} {key[1]}, {key[2]} path(s): best observed {m['GiB_s']} GiB/s, p99 {m.get('p99_us', '?')} us, `{name}`.")
+        latency = f"p99 {m['p99_us']} us" if 'p99_us' in m else f"avg/max {m.get('avg_us', '?')}/{m.get('max_us', '?')} us"
+        text.append(f"- {key[0]} {key[1]}, {key[2]} path(s), {key[3]} checksum, {key[4]} bytes: best observed {m['GiB_s']} GiB/s, {latency}, `{name}`.")
     text += ['', 'These are best observations within this run, not production configuration recommendations.', '', '## CPU hot paths', '']
     text += details
     missing = [c['name'] for c in manifest['cases'] if c['name'] not in done]
@@ -344,7 +362,7 @@ def main(argv=None):
     binary = a.binary.resolve()
     if a.dry_run:
         for c in cases:
-            print(c['name'] + ': ' + shlex.join([str(binary)] + c['args']) + (' <fresh scratch roots>' if c['mode'] in ['data', 'meta'] else ''))
+            print(c['name'] + ': ' + shlex.join([str(binary)] + c['args']) + (' <fresh scratch roots>' if c['mode'] in ['io', 'io-blake3', 'data', 'meta'] else ''))
         print(f'{len(cases)} cases: baseline + ' + ('no perf' if a.no_perf else 'perf') + (' + separate strace' if a.strace else ''))
         return 0
     if sys.platform != 'linux':
@@ -412,32 +430,43 @@ def main(argv=None):
             for stage in ['baseline'] + ([] if a.no_perf else ['perf']) + (['strace'] if a.strace else []):
                 scratch = []
                 cmd = [profiled_binary] + case['args']
-                if case['mode'] in ['data', 'meta']:
+                if case['mode'] in ['io', 'io-blake3', 'data', 'meta']:
                     parents = roots or [output / 'scratch']
                     for parent in parents:
                         parent.mkdir(exist_ok=True)
                         scratch.append(Path(tempfile.mkdtemp(prefix='efs-bench-', dir=parent)))
-                    if case['mode'] == 'data':
+                    if case['mode'] in ['io', 'io-blake3', 'data']:
                         for root in scratch:
                             cmd += ['--storage', str(root)]
                     else:
                         cmd += ['--meta-storage', str(scratch[0])]
                     # One unprofiled same-host ceiling probe only; no fio cost
                     # or samples mixed into engine CPU profiles.
-                    if a.skip_ceiling or ceiling_done or stage != 'baseline':
+                    if case['mode'] in ['io', 'io-blake3']:
+                        pass
+                    elif a.skip_ceiling or ceiling_done or stage != 'baseline':
                         cmd += ['--skip-ceiling']
                     else:
                         ceiling_done = True
                 stage_dir = directory if stage == 'baseline' else directory / stage
                 workload_cmd = cmd[:]
+                control_dir = None
+                control = ack = None
+                if stage == 'perf' and case['mode'] in ['io', 'io-blake3']:
+                    control_dir = tempfile.TemporaryDirectory(prefix='efs-bench-perf-control-')
+                    control, ack = str(Path(control_dir.name) / 'control'), str(Path(control_dir.name) / 'ack')
+                    os.mkfifo(control); os.mkfifo(ack)
                 if stage == 'perf':
                     cmd = [perf, 'record', '-e', a.event, '-F', str(a.frequency), '-g', '--call-graph', a.call_graph,
-                           '-o', str(stage_dir / 'perf.data'), '--'] + cmd
+                           '-o', str(stage_dir / 'perf.data')] + (['--delay=-1', '--control', f'fifo:{control},{ack}'] if control else []) + ['--'] + cmd
                 elif stage == 'strace':
                     cmd = [strace, '-f', '-c', '-o', str(stage_dir / 'summary.txt')] + (['-e', a.strace_expr] if a.strace_expr else []) + cmd
                 # Prevent inherited EFS_PERF_PATH from causing nested profiling.
                 env = os.environ.copy()
                 env.pop('EFS_PERF_PATH', None)
+                env.pop('EFS_BENCH_PERF_CONTROL', None); env.pop('EFS_BENCH_PERF_ACK', None)
+                if control:
+                    env['EFS_BENCH_PERF_CONTROL'] = control; env['EFS_BENCH_PERF_ACK'] = ack
                 try:
                     run = execute(cmd, stage_dir, stage, a.timeout, env)
                     rows = metric_rows(stage_dir / f'{stage}.stdout')
@@ -456,6 +485,8 @@ def main(argv=None):
                     # Caller-provided storage roots are never cleared.
                     for root in scratch:
                         shutil.rmtree(root)
+                    if control_dir is not None:
+                        control_dir.cleanup()
             if result['status'] == 'RUNNING':
                 result['status'] = 'PASS'
             if case.get('prerequisite'):

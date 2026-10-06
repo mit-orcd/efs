@@ -175,7 +175,7 @@ unprofiled success. The script does not install packages or change kernel policy
 ./efs-bench.sh --dry-run
 ```
 
-Defaults: BLAKE3 one-shot and streaming at 4 KiB, 64 KiB, 128 KiB and 1 MiB,
+Defaults now also include the raw I/O groups described below. BLAKE3 one-shot and streaming at 4 KiB, 64 KiB, 128 KiB and 1 MiB,
 with 1/2/4/affinity-CPU-count workers (deduplicated and capped by affinity);
 data buffered/direct I/O, inline/two-thread/automatic writer pools and QD
 1/16/64/256; local KV and Raft workloads including individual and batch32
@@ -241,3 +241,47 @@ hashes/bytes and throughput. One-shot includes init/finalize per buffer;
 streaming reuses a hasher. Both reuse warm per-worker buffers and measure CPU
 throughput, not end-to-end storage or cold-memory bandwidth. Worker timing uses
 atomic coordination after warm-up and includes completion of the final batch.
+
+## Separating I/O from checksum cost
+
+The default harness now compares three independent workloads:
+
+- `--bench io`: raw parallel `pread`/`pwrite`, no timed BLAKE3.
+- `--bench io-blake3`: identical files, sizes, worker counts and access pattern;
+  hash each write before I/O, hash/verify each read after I/O, inside timing.
+- `--bench blake3`: CPU-only one-shot/streaming hashing, no I/O.
+
+```sh
+./efs-bench.sh --modes io,io-blake3,blake3 --storage-root /data1/bench-scratch
+./efs-bench --bench io --storage /scratch/io --rw write --io-size 64K --qd 16 --window 64 --time 3
+./efs-bench --bench io-blake3 --storage /scratch/io --rw read --io-size 64K --qd 16 --window 64 --time 3
+```
+
+Raw I/O defaults sweep 4 KiB/64 KiB/1 MiB (`--io-sizes`), buffered/direct I/O,
+read-only/write-only rounds, and the QD ladder. QD is the number of concurrent
+synchronous workers, one file per worker. Roots distribute workers round-robin
+across devices. The bounded per-worker window cycles offsets; no production
+fragment format, metadata engine, writer pool or checksum-policy changes are
+involved. Actual storage-engine `data` and `meta` modes remain in the default
+matrix as separate measurements.
+
+Buffers and read files are prepared before timing. Successful writes/reads
+are validated byte-for-byte outside timing, including pure-I/O runs. Read-only
+cases therefore have initialization writes but report only parallel read work.
+For these raw drivers perf starts disabled and acknowledges enable/disable
+commands around the timed loop; setup, read-file population and final integrity
+checks do not contaminate CPU profiles or source annotations. Strace summaries
+still describe the full process, including initialization and verification.
+
+Buffered writes measure page-cache acceptance by default. Raw writes can include
+`fdatasync` per operation through `--sync` (direct CLI) or `--io-sync` (harness).
+End-of-run flush/verification is outside the reported default write rate.
+Direct I/O bypasses the page cache on supporting filesystems; tmpfs does not
+establish a physical disk ceiling. No global drop-caches operation is performed.
+
+`efsd` has no local benchmark CLI or benchmark runner objects. Its discard-only
+BENCH_PUT handler remains for the remote network benchmark. Cluster deployment
+and client refresh now ship the profiling wrapper, Python helper and matching
+C/header/assembly sources to gateways/test clients, excluding object files.
+The NUC deploy already transfers the complete source tree. Existing cluster
+`bench.sh` uses the still-supported remote metadata mode and needs no CLI change.

@@ -20,12 +20,23 @@ spec.loader.exec_module(bench)
 class ProfileTests(unittest.TestCase):
     def test_remote_prime_and_matrix(self):
         a = bench.parser().parse_args(['--modes', 'all', '--seed', 'seed:123', '--threads', '1',
-                                      '--hash-sizes', '64K', '--qds', '1', '--writers', '0'])
+                                      '--hash-sizes', '64K', '--io-sizes', '64K', '--qds', '1', '--writers', '0'])
         cases = bench.cases_for(a, 4)
         self.assertLess([c['name'] for c in cases].index('store-prime'), [c['name'] for c in cases].index('read'))
-        self.assertEqual(len(cases), 10)
+        self.assertEqual(len(cases), 18)
         a.seed = None
         with self.assertRaises(ValueError):
+            bench.cases_for(a, 4)
+
+    def test_raw_io_pairs_use_identical_geometry(self):
+        a = bench.parser().parse_args(['--modes', 'io,io-blake3', '--io-sizes', '64K', '--qds', '2', '--data-size', '1M'])
+        cases = bench.cases_for(a, 4)
+        self.assertEqual(len(cases), 8)
+        for c in cases[:4]:
+            partner = next(p for p in cases if p['name'] == c['name'].replace('io-', 'io-blake3-', 1))
+            self.assertEqual(c['args'][2:], partner['args'][2:])
+        with self.assertRaises(ValueError):
+            a.data_size = [4096]
             bench.cases_for(a, 4)
 
     def test_timeout_stops_descendant_work(self):
