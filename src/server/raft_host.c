@@ -8572,6 +8572,70 @@ done:
     return rc;
 }
 
+int server_raft_host_lane_bootstrap(efs_ino_t ino, uint64_t gen,
+                                     uint32_t ci, uint32_t cs, int *leader_hint)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_lane_bootstrap q;
+    struct efs_meta_writer_view ready;
+    struct efs_txn_parts parts = {0};
+    struct efs_txid t;
+    int hint = -1, rc = EFS_ERR_INVAL;
+    struct host_resize_ctx ctx = {h, &hint};
+    uint8_t groups[2] = {efs_raft_shard_group(efs_kv_inode_shard(ino)),
+                         efs_raft_shard_group(efs_kv_lane_shard(ino, ci % EFS_META_LANES))};
+    int ng = groups[0] == groups[1] ? 1 : 2;
+    if (leader_hint)
+        *leader_hint = -1;
+    if (!h || !h->running || !ino || !gen || !efs_chunk_size_valid(cs))
+        return rc;
+    if (!host_hosts(h, groups[0]) || !host_hosts(h, groups[ng - 1])) {
+        hint = host_pick_peer(h, groups, ng, -1);
+        rc = EFS_ERR_NOT_PRIMARY;
+        goto done;
+    }
+    for (int i = 0; i < ng; ++i) {
+        rc = host_read_index(h, groups[i], &hint);
+        if (rc != EFS_OK)
+            goto done;
+    }
+    rc = efs_meta_get_lane_writer_view(h->kv, ino, gen, ci, cs, &ready);
+    if (rc != EFS_ERR_NOT_FOUND)
+        goto done;
+    rc = efs_meta_capture_lane_bootstrap(h->kv, ino, gen, ci, cs, host_txn_coord, h, &q);
+    if (rc != EFS_OK)
+        goto done;
+    parts.shard[parts.n++] = efs_kv_inode_shard(ino);
+    uint32_t lsh = efs_kv_lane_shard(ino, q.lane);
+    if (lsh != parts.shard[0])
+        parts.shard[parts.n++] = lsh;
+    fill_txid(h, &t);
+    for (int i = 0; i < 2; ++i) {
+        uint8_t key[EFS_KV_KEY_MAX], pay[EFS_META_LANE_BOOTSTRAP_BYTES];
+        uint32_t kl;
+        rc = efs_meta_encode_lane_bootstrap(&q, i ? q.lane : EFS_META_FENCE_INODE, key, &kl, pay);
+        if (rc == EFS_OK)
+            rc = host_prep_raw(h, ((uint32_t)key[0] << 8) | key[1], EFS_TXN_LANE_BOOTSTRAP,
+                                &t, &parts, key, kl, pay, sizeof(pay), NULL, &hint);
+        if (rc != EFS_OK) {
+            int abort_rc = host_resize_decide(&ctx, &t, &parts, EFS_TXN_ABORT);
+            if (abort_rc != EFS_OK)
+                rc = abort_rc;
+            else
+                (void)host_resize_resolve(&ctx, &t, &parts, EFS_TXN_ABORT);
+            goto done;
+        }
+    }
+    rc = host_resize_decide(&ctx, &t, &parts, EFS_TXN_COMMIT);
+    if (rc == EFS_OK)
+        rc = host_resize_resolve(&ctx, &t, &parts, EFS_TXN_COMMIT);
+    /* Ambiguous COMMIT retains intents for recovery; never abort it. */
+done:
+    if (leader_hint)
+        *leader_hint = hint;
+    return rc;
+}
+
 /* Cross-group leftover migrate: hashed PUT + local DEL + used_shards
  * as a txn so group-2-only replicas see the hashed dentry. Same-group
  * leftovers (or hashed already present) stay a single DIR_MIGRATE apply.
@@ -12166,6 +12230,52 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         }
     }
     set_inode_rc(out, rc, hint);
+}
+
+void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *req,
+                                        struct efs_msg_lane_writer_view_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_writer_view view;
+    int hint = -1;
+    memset(out, 0, sizeof(*out));
+    out->view.status = EFS_INODE_RPC_INVAL;
+    if (!h || !h->running || !req->ino || !req->generation ||
+        !efs_chunk_size_valid(req->chunk_size))
+        return;
+    uint8_t group = efs_raft_shard_group(efs_kv_lane_shard(req->ino,
+                                       req->chunk_index % EFS_META_LANES));
+    /* A topology with no dual-host replicas still has a valid ordinary path. */
+    if (!host_hosts(h, group)) {
+        int skip = -1;
+        out->view.status = EFS_INODE_RPC_NOT_PRIMARY;
+        for (int tries = 0; tries < h->n; ++tries) {
+            int rid = host_pick_peer(h, &group, 1, skip);
+            if (rid < 0)
+                return;
+            if (host_inode_rpc_peer(h, rid, EFS_MSG_LANE_WRITER_VIEW, req, sizeof(*req),
+                  EFS_MSG_LANE_WRITER_VIEW_REPLY, out, sizeof(*out)) == 0 &&
+                out->view.status != EFS_INODE_RPC_NOT_PRIMARY)
+                return;
+            memset(out, 0, sizeof(*out));
+            out->view.status = EFS_INODE_RPC_NOT_PRIMARY;
+            skip = rid;
+        }
+        return;
+    }
+    int rc = host_read_index(h, group, &hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_get_lane_writer_view(h->kv, req->ino, req->generation,
+                                            req->chunk_index, req->chunk_size, &view);
+    out->view.status = rc_to_inode_status(rc);
+    out->view.primary_id = hint >= 0 ? (efs_node_id_t)(hint + 1) : 0;
+    if (rc == EFS_OK) {
+        out->view.ino = view.ino; out->view.generation = view.generation;
+        out->view.chunk_index = req->chunk_index;
+        out->view.authority_epoch = view.authority_epoch;
+        out->view.oldest_complete_epoch = view.oldest_complete_epoch;
+        out->view.history = view.history; out->chunk_size = req->chunk_size;
+    }
 }
 
 void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,

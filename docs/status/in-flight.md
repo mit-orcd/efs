@@ -14,9 +14,10 @@ and D27 recovery/stop, and `3d9bb6b2` POSIX acceptance gates. The current
 partial-writer change (`8727f682`) validates published merge bases under fresh lane
 authority in both flush paths; it does not activate logical truncation.
 
-Before admission activation, resolve the [routing choice](d25-admission-routing.md).
-Recommendation: lane-local authority first; the existing staged writer RPC
-still consults the inode group. The latest token checks are recorded in the
+The user accepted [lane-local authority first](d25-admission-routing.md).
+Durable lane authority/bootstrap primitives and the lane-only read RPC are now
+staged; the older inode writer RPC remains for cold discovery and tests.
+Next expose cold bootstrap to FUSE admission before connecting epoch-owned writes. The latest token checks are recorded in the
 [checkpoint](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
 
 Next, in order:

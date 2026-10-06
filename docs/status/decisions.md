@@ -152,3 +152,11 @@ same two asks as their performance-plan rows, verbatim.
 **Gate / done when.** —
 
 **Forbidden.** code before the decision
+
+
+**D25 writer admission routing — ACCEPTED Oct 6 2026.** The user selected
+lane-local authoritative views before activation. Ordinary write admission must
+read only its publication lane under ReadIndex; inode/lane coordination is
+reserved for cold lane bootstrap and rare resize/fence operations. Do not
+activate the staged inode-plus-lane RPC per application write. See the
+[implementation checkpoint and remaining gates](d25-admission-routing.md).

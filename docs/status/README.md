@@ -798,8 +798,30 @@ accepted ownership (`dccd8a57`), retain tokens on invalid REPORT completion
 Linux build/tests, normal/ASan/UBSan regressions and the documentation gate pass.
 [Evidence](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
 
-Activation now needs the [admission-routing choice](d25-admission-routing.md):
+The user accepted the [lane-local admission route](d25-admission-routing.md):
 the existing writer RPC consults both inode and lane authorities, whereas §7.3
-keeps ordinary writes on lane authority. Recommend lane-local authoritative
-views first; the alternative is a temporary per-write inode RPC with extra
-metadata traffic. No authoritative FUSE admission has been enabled.
+keeps ordinary writes on lane authority. Implement lane-local authoritative
+views before activation; do not enable the temporary per-write inode RPC. No authoritative FUSE admission has been enabled.
+
+
+## D25 lane-local authority checkpoint — Oct 6 2026
+
+The user accepted lane-local authority before D25 activation. FileID/lane records
+now persist geometry, epoch and history completeness. Cold bootstrap atomically
+prepares inode/bitmap/history guards and the lane stamp/history/authority triple,
+then uses durable COMMIT and normal transaction resolution. Shrink updates
+installed lane authority together with its fence. Missing authority cannot grant
+an epoch, and a retired history cannot keep a stale complete floor.
+
+`LANE_WRITER_VIEW` (109/110) establishes one lane-group ReadIndex and reads no
+inode or remote decision. Its client routes by the actual publication lane.
+Tests exercise holes, FileID/geometry mismatch, partial resolution, aborted
+fences, failed storage, bounded fence races and single-group host routing.
+
+This stages the recommended foundation. FUSE admission and public logical
+truncate remain disabled. Next wire cold bootstrap into admission, connect
+immutable epoch-owned flush plans, then finish coherent retirement, live sweep
+and restart/distribution acceptance gates. See the
+[accepted route and remaining work](d25-admission-routing.md).
+
+[Lane-authority verification evidence](../../results/measure/20261006-lane-authority/SUMMARY.md).

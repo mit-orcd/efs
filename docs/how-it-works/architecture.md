@@ -759,6 +759,20 @@ inode interactions per file *lifetime* — and `stat()` collects only active
 lanes, as a **double collect** over per-lane sequence numbers (bounded
 retries, read-only transaction fallback).
 
+**Writer admission authority (D25, Oct 6 2026).** Each active lane retains a
+FileID-scoped authority record with content epoch, complete-history floor and
+chunk/lane geometry, alongside its durable fence history. Cold lane bootstrap
+freezes the inode's FileID, epoch, history and participant bitmap, then installs
+the lane stamp/history/authority and activates its bitmap bit through one
+transaction. Missing chunks or lane records never authorize epoch zero. An
+ordinary admission view establishes ReadIndex only on the publication lane;
+it reads no inode or remote transaction decision. Unresolved local intents
+return bounded BUSY until resolution, including after durable COMMIT. A fence
+or history retirement changes matching stamp/history/floor atomically; a
+missing history or incomplete floor fails closed and cannot re-age accepted
+bytes. Open-unlinked access remains subject to I19 and session/open authority;
+FileID lane records must not outlive safe retirement of that incarnation.
+
 An extending write is **one Raft entry on the lane shard**:
 `{publish chunk (CAS); MAX(lane.max_end); MAX(lane.max_mtime);
 MAX(lane.max_ctime)}` (I21).

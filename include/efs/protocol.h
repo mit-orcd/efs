@@ -160,6 +160,8 @@ enum efs_msg_type {
     EFS_MSG_VERSION_REPLY = 106,
     EFS_MSG_INODE_WRITER_VIEW = 107,
     EFS_MSG_INODE_WRITER_VIEW_REPLY = 108,
+    EFS_MSG_LANE_WRITER_VIEW = 109,
+    EFS_MSG_LANE_WRITER_VIEW_REPLY = 110,
 };
 
 /* D25 read authority for write admission, including holes and new lanes.
@@ -202,6 +204,30 @@ static inline int efs_writer_view_reply_valid(
         --floor;
     }
     return reply->oldest_complete_epoch >= floor ? EFS_OK : EFS_ERR_PROTO;
+}
+
+/* Exact FileID is mandatory: generation discovery belongs to cold bootstrap.
+ * Geometry is echoed and validated, never inferred from absent chunk rows. */
+struct efs_msg_lane_writer_view {
+    efs_ino_t ino;
+    uint64_t generation;
+    uint32_t chunk_index;
+    uint32_t chunk_size;
+};
+struct efs_msg_lane_writer_view_reply {
+    struct efs_msg_inode_writer_view_reply view;
+    uint32_t chunk_size;
+    uint32_t reserved;
+};
+static inline int efs_lane_writer_view_reply_valid(
+    const struct efs_msg_lane_writer_view *req,
+    const struct efs_msg_lane_writer_view_reply *reply)
+{
+    if (!req || !reply || !req->generation || !efs_chunk_size_valid(req->chunk_size) ||
+        reply->chunk_size != req->chunk_size || reply->reserved)
+        return EFS_ERR_PROTO;
+    struct efs_msg_inode_writer_view legacy = {req->ino, req->generation, req->chunk_index, 0};
+    return efs_writer_view_reply_valid(&legacy, &reply->view);
 }
 
 /* GC_FRAGMENT request: delete fragment `fragment_index` of chunk

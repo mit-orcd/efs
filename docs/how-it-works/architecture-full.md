@@ -789,6 +789,20 @@ inode interactions per file *lifetime* — and `stat()` collects only active
 lanes, as a **double collect** over per-lane sequence numbers (bounded
 retries, read-only transaction fallback).
 
+**Writer admission authority (D25, Oct 6 2026).** Each active lane retains a
+FileID-scoped authority record with content epoch, complete-history floor and
+chunk/lane geometry, alongside its durable fence history. Cold lane bootstrap
+freezes the inode's FileID, epoch, history and participant bitmap, then installs
+the lane stamp/history/authority and activates its bitmap bit through one
+transaction. Missing chunks or lane records never authorize epoch zero. An
+ordinary admission view establishes ReadIndex only on the publication lane;
+it reads no inode or remote transaction decision. Unresolved local intents
+return bounded BUSY until resolution, including after durable COMMIT. A fence
+or history retirement changes matching stamp/history/floor atomically; a
+missing history or incomplete floor fails closed and cannot re-age accepted
+bytes. Open-unlinked access remains subject to I19 and session/open authority;
+FileID lane records must not outlive safe retirement of that incarnation.
+
 An extending write is **one Raft entry on the lane shard**:
 `{publish chunk (CAS); MAX(lane.max_end); MAX(lane.max_mtime);
 MAX(lane.max_ctime)}` (I21).
@@ -2206,11 +2220,33 @@ accepted ownership (`dccd8a57`), retain tokens on invalid REPORT completion
 Linux build/tests, normal/ASan/UBSan regressions and the documentation gate pass.
 [Evidence](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
 
-Activation now needs the [admission-routing choice](../status/d25-admission-routing.md):
+The user accepted the [lane-local admission route](../status/d25-admission-routing.md):
 the existing writer RPC consults both inode and lane authorities, whereas §7.3
-keeps ordinary writes on lane authority. Recommend lane-local authoritative
-views first; the alternative is a temporary per-write inode RPC with extra
-metadata traffic. No authoritative FUSE admission has been enabled.
+keeps ordinary writes on lane authority. Implement lane-local authoritative
+views before activation; do not enable the temporary per-write inode RPC. No authoritative FUSE admission has been enabled.
+
+
+### D25 lane-local authority checkpoint — Oct 6 2026
+
+The user accepted lane-local authority before D25 activation. FileID/lane records
+now persist geometry, epoch and history completeness. Cold bootstrap atomically
+prepares inode/bitmap/history guards and the lane stamp/history/authority triple,
+then uses durable COMMIT and normal transaction resolution. Shrink updates
+installed lane authority together with its fence. Missing authority cannot grant
+an epoch, and a retired history cannot keep a stale complete floor.
+
+`LANE_WRITER_VIEW` (109/110) establishes one lane-group ReadIndex and reads no
+inode or remote decision. Its client routes by the actual publication lane.
+Tests exercise holes, FileID/geometry mismatch, partial resolution, aborted
+fences, failed storage, bounded fence races and single-group host routing.
+
+This stages the recommended foundation. FUSE admission and public logical
+truncate remain disabled. Next wire cold bootstrap into admission, connect
+immutable epoch-owned flush plans, then finish coherent retirement, live sweep
+and restart/distribution acceptance gates. See the
+[accepted route and remaining work](../status/d25-admission-routing.md).
+
+[Lane-authority verification evidence](../../results/measure/20261006-lane-authority/SUMMARY.md).
 
 
 ## Appendix 2 — In flight — the current handoff block
@@ -2228,9 +2264,10 @@ and D27 recovery/stop, and `3d9bb6b2` POSIX acceptance gates. The current
 partial-writer change (`8727f682`) validates published merge bases under fresh lane
 authority in both flush paths; it does not activate logical truncation.
 
-Before admission activation, resolve the [routing choice](../status/d25-admission-routing.md).
-Recommendation: lane-local authority first; the existing staged writer RPC
-still consults the inode group. The latest token checks are recorded in the
+The user accepted [lane-local authority first](../status/d25-admission-routing.md).
+Durable lane authority/bootstrap primitives and the lane-only read RPC are now
+staged; the older inode writer RPC remains for cold discovery and tests.
+Next expose cold bootstrap to FUSE admission before connecting epoch-owned writes. The latest token checks are recorded in the
 [checkpoint](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
 
 Next, in order:
@@ -2423,6 +2460,14 @@ same two asks as their performance-plan rows, verbatim.
 **Gate / done when.** —
 
 **Forbidden.** code before the decision
+
+
+**D25 writer admission routing — ACCEPTED Oct 6 2026.** The user selected
+lane-local authoritative views before activation. Ordinary write admission must
+read only its publication lane under ReadIndex; inode/lane coordination is
+reserved for cold lane bootstrap and rare resize/fence operations. Do not
+activate the staged inode-plus-lane RPC per application write. See the
+[implementation checkpoint and remaining gates](../status/d25-admission-routing.md).
 
 
 ## Appendix 4 — Work items — long-form text for the open W items and the queue rows

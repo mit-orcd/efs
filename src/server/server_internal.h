@@ -369,6 +369,11 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
 void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              const struct efs_ino_size_rec *irecs,
                              uint32_t ino_count, struct efs_msg_inode_reply *out);
+void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *,
+                                        struct efs_msg_lane_writer_view_reply *);
+/* Internal cold coordinator; not enabled in application write admission yet. */
+int server_raft_host_lane_bootstrap(efs_ino_t ino, uint64_t generation,
+                                     uint32_t ci, uint32_t chunk_size, int *hint);
 void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
                                    struct efs_msg_inode_writer_view_reply *out);
 void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max, uint64_t generation,
