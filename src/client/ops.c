@@ -677,6 +677,10 @@ static void adopt_rpc_inode(const struct efs_inode *rpc)
                 drop_dcache = shrink;
             }
         }
+    } else if (efs_mode_is_dir(rpc->mode)) {
+        /* Namespace mutations do not own unpublished directory attrs.
+         * The local directory LOOKUP shortcut needs the committed times. */
+        (void)efs_export_upsert_inode(&g_client.export, rpc);
     }
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(lock);
@@ -718,11 +722,9 @@ int efs_client_stat_open(efs_ino_t ino, struct efs_inode *out)
             *out = rpc;
         return EFS_OK;
     }
-    /* An open() of an existing file holds a lease, so the last unlink
-     * stores nlink 0 and this getattr sees it. CREATE does not hold
-     * (a propose per new file), so a create'd fd can still see
-     * NOT_FOUND here and keeps the local ghost. A transport error is
-     * not that: keep the local count. */
+    /* Both OPEN and CREATE hold a lease, so the last unlink stores nlink
+     * zero until last close. A missing row on an older server still leaves
+     * the local ghost available; transport errors keep the local count. */
     if (rpc_ok == EFS_ERR_NOT_FOUND)
         rpc.nlink = 0;
     else if (rpc_ok != EFS_OK) {
@@ -834,6 +836,10 @@ int efs_client_lookup_local(efs_ino_t parent, const char *name,
  * intermediate (directories; no size overlay). */
 static void overlay_local_size(struct efs_inode *child, int more)
 {
+    /* Directory attrs are authoritative: local namespace dirtiness does
+     * not grant ownership of parent times after a committed rename. */
+    if (efs_mode_is_dir(child->mode))
+        return;
     int dirty = efs_client_ino_is_dirty(child->ino);
     int want_local = dirty ||
                      (!more && !efs_mode_is_dir(child->mode));
@@ -1402,6 +1408,9 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
         /* mode 0 is a committed rename whose inode was unlinked before
          * the reply (zero stat). Do not plant that over a real row. */
         efs_export_upsert_inode(&g_client.export, &out);
+    if (efs_mode_is_dir(out.mode) &&
+        (old_parent != new_parent || strcmp(old_name, new_name) != 0))
+        efs_export_forget_name(&g_client.export, old_parent, old_name, ino);
     efs_client_stage_touch(ino);
     /* Before the unlock: the evictor takes every stripe, then the dirty
      * lock. A mark after the unlock let it forget the row, and the
@@ -1409,6 +1418,13 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
     efs_client_mark_ino_dirty(ino);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dirs2(ino, new_parent);
+    /* Both parent times changed on the server. Refresh their cached attrs
+     * before the directory LOOKUP shortcut can return the pre-rename row.
+     * Failure cannot undo the committed rename or turn it into a failure. */
+    struct efs_inode parent_view;
+    (void)efs_client_stat_refresh(old_parent, &parent_view);
+    if (new_parent != old_parent)
+        (void)efs_client_stat_refresh(new_parent, &parent_view);
     efs_client_stage_unpin(new_parent);
     efs_client_stage_unpin(old_parent);
     efs_client_stage_unpin(ino);

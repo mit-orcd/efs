@@ -369,6 +369,10 @@ int efs_export_ino_has_chunks(const struct efs_export *ex, efs_ino_t ino);
  * re-fetchable from the server (getattr/GETCHUNKS/LOOKUP). Caller holds the
  * table locks. */
 void efs_export_forget_ino(struct efs_export *ex, efs_ino_t ino);
+/* Drop matching cached dentry copies only; preserve chunks/other names and
+ * leave a concurrently replaced name alone. Caller holds table locks. */
+void efs_export_forget_name(struct efs_export *ex, efs_ino_t parent,
+                            const char *name, efs_ino_t expected);
 /* Client staging-cache eviction of one ino, visiting only the tabs its
  * row names (falls back to every loaded tab for a missing row, a
  * hard link, or a file whose chunk groups reach most shards). Returns

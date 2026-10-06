@@ -69,8 +69,52 @@ static int stop_cb(efs_ino_t ino, void *arg)
     return 7;
 }
 
+static void test_forget_name(void)
+{
+    struct efs_export ex;
+    struct efs_inode row;
+    efs_export_init(&ex, 1, "names");
+    ex.root.shard_bits = 3;
+    ex.root.shard_count = 8;
+    char old[32];
+    uint32_t psh = efs_export_shard_of(TROOT, 3), dsh;
+    unsigned n = 0;
+    do {
+        snprintf(old, sizeof(old), "old-%u", n++);
+        dsh = efs_export_dentry_shard_of(TROOT, old, 3);
+    } while (dsh == psh);
+    uint32_t csh = 0;
+    while (csh == psh || csh == dsh)
+        ++csh;
+    efs_ino_t ino = 16 + csh;
+    struct efs_export *ctab = efs_export_table(&ex, csh);
+    struct efs_export *ptab = efs_export_table(&ex, psh);
+    struct efs_export *dtab = efs_export_table(&ex, dsh);
+    assert(efs_export_create_with_ino(ctab, ino, TROOT, S_IFREG | 0644, 0, 0, "new") == ino);
+    assert(efs_export_create_with_ino(ptab, ino, TROOT, S_IFREG | 0644, 0, 0, old) == ino);
+    assert(efs_export_create_with_ino(dtab, ino, TROOT, S_IFREG | 0644, 0, 0, old) == ino);
+    assert(efs_export_create_with_ino(ctab, TROOT, TROOT, S_IFDIR | 0755, 0, 0, "/") == TROOT);
+    assert(efs_export_link(ctab, ino, TROOT, "alias") == EFS_OK);
+    efs_node_id_t nodes[EFS_NUM_FRAGMENTS] = {1, 2, 3};
+    uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE] = {{0}};
+    assert(efs_export_set_chunk(&ex, ino, 0, nodes, sums) == EFS_OK);
+    assert(efs_export_lookup(&ex, TROOT, old, &row) == EFS_OK);
+    efs_export_forget_name(&ex, TROOT, old, ino + 1);
+    assert(efs_export_lookup(&ex, TROOT, old, &row) == EFS_OK);
+    efs_export_forget_name(&ex, TROOT, old, ino);
+    assert(efs_export_lookup(&ex, TROOT, old, &row) == EFS_ERR_NOT_FOUND);
+    assert(efs_export_lookup(ctab, TROOT, "new", &row) == EFS_OK && row.nlink == 2);
+    assert(efs_export_lookup(ctab, TROOT, "alias", &row) == EFS_OK && row.nlink == 2);
+    assert(chunk_present(&ex, ino, 0));
+    efs_export_compact(&ex);
+    assert(efs_export_lookup(&ex, TROOT, old, &row) == EFS_ERR_NOT_FOUND);
+    assert(chunk_present(&ex, ino, 0));
+    efs_export_free(&ex);
+}
+
 int main(void)
 {
+    test_forget_name();
     struct efs_export ex;
     efs_export_init(&ex, 1, "t");
     /* Sharded like the live client, but small: 3 bits exercises the

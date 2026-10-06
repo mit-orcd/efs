@@ -1856,6 +1856,34 @@ static void forget_ino_on_tab(struct efs_export *ex, efs_ino_t ino)
     }
 }
 
+/* Forget just a cached name after an authoritative directory rename. */
+void efs_export_forget_name(struct efs_export *ex, efs_ino_t parent,
+                            const char *name, efs_ino_t expected)
+{
+    if (!ex || !name || !expected)
+        return;
+    uint32_t shards[2] = {0, 0};
+    unsigned n = 1;
+    if (export_is_sharded_root(ex)) {
+        shards[0] = efs_export_shard_of(parent, ex->root.shard_bits);
+        if (parent == EFS_ROOT_INO || efs_export_dir_is_spread(ex, parent)) {
+            shards[1] = efs_export_dentry_shard_of(parent, name, ex->root.shard_bits);
+            if (shards[1] != shards[0])
+                n = 2;
+        }
+    }
+    for (unsigned i = 0; i < n; ++i) {
+        struct efs_export *tab = efs_export_shard_tab(ex, shards[i]);
+        uint64_t pos;
+        if (tab && name_idx_get(tab, parent, name, &pos) == 0 &&
+            inode_at(tab, pos)->ino == expected) {
+            child_idx_del(tab, parent, pos);
+            /* Cache eviction preserves chunk maps, nlink and other aliases. */
+            remove_inode_slot(tab, pos, 1);
+        }
+    }
+}
+
 int efs_export_ino_has_chunks(const struct efs_export *ex, efs_ino_t ino)
 {
     if (!ex || !ino)
