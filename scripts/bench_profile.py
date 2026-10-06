@@ -2,6 +2,7 @@
 """Run isolated benchmark cases and retain evidence for CPU hot-path analysis."""
 import argparse
 import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import itertools
 import json
@@ -84,6 +85,8 @@ def parser():
     p.add_argument('--frequency', type=int, default=499)
     p.add_argument('--event', default='cycles', help='perf sampling event; use cpu-clock on VMs without PMU')
     p.add_argument('--call-graph', choices=['fp', 'dwarf'], default='fp')
+    p.add_argument('--report-jobs', type=int, default=4, help='parallel case report jobs after workloads finish (each runs one perf process at a time)')
+    p.add_argument('--reports-only', type=Path, help='regenerate reports/analysis in an existing run; never execute workloads')
     p.add_argument('--no-perf', action='store_true', help='explicit unprofiled run; analysis marks profiles absent')
     p.add_argument('--skip-ceiling', action='store_true', help='omit fio/raw ceiling probe; engine tests still run')
     p.add_argument('--timeout', type=float, default=600, help='timeout per subprocess (including each workload)')
@@ -239,6 +242,8 @@ def reports(perf, directory, a):
     for name, options in report_options.items():
         result = execute(base + options, directory, name, a.timeout)
         good &= result['returncode'] == 0
+        if name in ['flat', 'by-thread', 'callers']:
+            shutil.copyfile(directory / f'{name}.stdout', directory / {'flat': 'flat.txt', 'by-thread': 'by_thread.txt', 'callers': 'callers.txt'}[name])
     symbols = profile_rows(directory / 'symbols.stdout')
     good &= bool(symbols)
     # Annotate up to three hottest benchmark symbols with C source + assembly.
@@ -258,6 +263,45 @@ def reports(perf, directory, a):
     return good, symbols
 
 
+def report_all(perf, output, results, a):
+    candidates = [(r, output / r['name'] / 'perf') for r in results if 'perf' in r.get('runs', {})]
+    if not candidates:
+        raise ValueError('no perf runs found for report generation')
+    targets = []
+    missing = False
+    for r, directory in candidates:
+        if (directory / 'perf.data').is_file():
+            targets.append((r, directory))
+            continue
+        missing = True
+        r['runs']['perf'].update(reports_valid=False, reports_state='FAILED', reports_error='perf.data missing')
+        if r['status'] in ['PASS', 'REPORTS_PENDING']:
+            r['status'] = 'FAIL (reports)'
+        print(f"Reports unavailable: {r['name']}: perf.data missing", flush=True)
+    save_results(output, results)
+    print(f"Generating reports for {len(targets)} profiles, up to {a.report_jobs} parallel jobs", flush=True)
+    with ThreadPoolExecutor(max_workers=a.report_jobs) as pool:
+        pending = {pool.submit(reports, perf, directory, a): r for r, directory in targets}
+        for completed, future in enumerate(as_completed(pending), 1):
+            r = pending[future]
+            try:
+                good, _ = future.result()
+            except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+                good = False
+                r['runs']['perf']['reports_error'] = str(exc)
+            else:
+                r['runs']['perf'].pop('reports_error', None)
+            r['runs']['perf']['reports_valid'] = good
+            r['runs']['perf']['reports_state'] = 'COMPLETE' if good else 'FAILED'
+            if not good and r['status'] in ['PASS', 'REPORTS_PENDING']:
+                r['status'] = 'FAIL (reports)'
+            elif good and r['status'] in ['FAIL (reports)', 'REPORTS_PENDING']:
+                r['status'] = 'PASS'
+            print(f"[reports {completed}/{len(targets)}] {r['name']}: {'OK' if good else 'FAIL'}", flush=True)
+            save_results(output, results)
+    return not missing and all(r['runs']['perf']['reports_valid'] for r, _ in targets)
+
+
 def category(row):
     s = row['symbol'].lower()
     if row['dso'] == '[vdso]' or 'clock_gettime' in s:
@@ -266,9 +310,11 @@ def category(row):
         return 'unresolved samples'
     if 'blake3' in s or 'efs_hash' in s:
         return 'BLAKE3'
-    if 'memcpy' in s or 'memmove' in s or 'memset' in s:
+    if any(k in s for k in ['memcpy', 'memmove', 'memset', '_copy_to_iter', 'copy_page_to_iter', 'copy_page_from_iter', 'copy_user']):
         return 'memory copies/fills'
-    if any(k in s for k in ['futex', 'pthread', 'sched_', 'mutex']):
+    if any(k in s for k in ['iommu_', 'gup_', 'try_grab_folio', 'try_get_folio', 'bio_set_pages_dirty']):
+        return 'page pinning/IOMMU'
+    if any(k in s for k in ['futex', 'pthread', 'sched_', 'mutex', '_raw_spin_', 'update_load_avg', 'dequeue_entity', 'enqueue_entity', 'update_curr']):
         return 'synchronization/scheduling'
     if any(k in s for k in ['tcp_', 'recv', 'send', 'efs_conn', 'rdma', 'ibv_']):
         return 'network'
@@ -295,7 +341,7 @@ def analyze(output):
             'Raw I/O profiles capture only the parallel timed loop; setup, read population and post-run validation are excluded by perf-control acknowledgement.',
             'Data profiles combine write and read phases (and path-count ladder when multiple roots are supplied).', '',
             '| Case | Result | Baseline measurements | Hottest sampled symbols |', '|---|---|---|---|']
-    failures = [r for r in results if r['status'] != 'PASS']
+    failures = [r for r in results if r['status'] not in ['PASS', 'REPORTS_PENDING']]
     if failures:
         text[4:4] = ['', f"**{len(failures)}/{len(results)} cases failed. Invalid baselines are excluded from comparisons; raw failed output is retained.**", '']
     effective_events = set()
@@ -315,6 +361,11 @@ def analyze(output):
         symbols = profile_rows(symbols_path)
         if symbols_path.exists():
             effective_events.update(re.findall(r"event '([^']+)'", symbols_path.read_text(errors='replace')))
+        report_state = r.get('runs', {}).get('perf', {}).get('reports_state')
+        if report_state == 'PENDING':
+            details.append(f"{r['name']}: reports pending; generated after workloads finish.")
+        if r.get('runs', {}).get('perf', {}).get('metrics_valid') is False and symbols:
+            details.append(f"**{r['name']}: profile is from an invalid workload rerun; use for diagnosis, not representative hot-path comparisons.**")
         hot = ', '.join(f"{s['symbol']} ({s['percent']:.1f}%)" for s in symbols[:3]) or 'no CPU profile'
         text.append(f"| [{r['name']}]({r['name']}/baseline.stdout) | {r['status']} | {'; '.join(measurements)} | {hot.replace('|', '/')} |")
         if 'strace' in r.get('runs', {}):
@@ -333,7 +384,7 @@ def analyze(output):
             if unresolved >= 20:
                 details.append(f"**{r['name']}: {unresolved:.1f}% of reported samples have unresolved symbols.** Do not assign those addresses to a storage or algorithm hot path.")
             details += ['', f"**{r['name']} sampled CPU:** " + ', '.join(f'{k} {v:.1f}%' for k, v in sorted(totals.items(), key=lambda x: -x[1])),
-                     f"[Flat]({r['name']}/perf/flat.stdout), [threads]({r['name']}/perf/by-thread.stdout), [call chains]({r['name']}/perf/callers.stdout), source annotations under `{r['name']}/perf/annotate-*.stdout`.", '']
+                     f"[Flat]({r['name']}/perf/{'flat.txt' if (output / r['name'] / 'perf' / 'flat.txt').exists() else 'flat.stdout'}), [threads]({r['name']}/perf/{'by_thread.txt' if (output / r['name'] / 'perf' / 'by_thread.txt').exists() else 'by-thread.stdout'}), [call chains]({r['name']}/perf/{'callers.txt' if (output / r['name'] / 'perf' / 'callers.txt').exists() else 'callers.stdout'}), source annotations under `{r['name']}/perf/annotate-*.stdout`.", '']
     text += ['', '## Baseline comparisons', '']
     hash_best = {}
     data_best = {}
@@ -382,6 +433,28 @@ def save_results(output, results):
 
 def main(argv=None):
     a = parser().parse_args(argv)
+    if a.report_jobs < 1 or not math.isfinite(a.timeout) or a.timeout <= 0:
+        raise ValueError('--report-jobs and --timeout must be positive')
+    if a.reports_only:
+        if sys.platform != 'linux':
+            raise ValueError('regenerate perf reports on the Linux recording host')
+        perf = shutil.which('perf')
+        if not perf:
+            raise ValueError('perf is missing')
+        output = a.reports_only.resolve()
+        # Fail before launching workers when the recording user's files are
+        # inaccessible. Do not partially overwrite another user's reports.
+        results_path = output / 'results.json'
+        if not os.access(output, os.W_OK) or not os.access(results_path, os.W_OK):
+            raise ValueError('run --reports-only as the recording user; result directory is not writable')
+        results = json.loads(results_path.read_text())
+        for r in results:
+            d = output / r['name'] / 'perf'
+            if 'perf' in r.get('runs', {}) and d.exists() and (not os.access(d, os.W_OK) or not os.access(d / 'perf.data', os.R_OK)):
+                raise ValueError(f"run --reports-only as the recording user; profile is inaccessible: {d}")
+        good = report_all(perf, output, results, a)
+        print(f'Results and analysis: {analyze(output)}')
+        return 0 if good else 1
     if a.analyze:
         print(analyze(a.analyze.resolve()))
         return 0
@@ -514,8 +587,8 @@ def main(argv=None):
                     result['runs'][stage] = run
                     if stage == 'baseline':
                         result['metrics'] = rows
-                    if stage == 'perf' and run['returncode'] == 0:
-                        run['reports_valid'], _ = reports(perf, stage_dir, a)
+                    if stage == 'perf':
+                        run['reports_state'] = 'PENDING'
                     if run['returncode'] != 0 or not run['metrics_valid'] or run.get('reports_valid') is False:
                         result['status'] = f'FAIL ({stage})'
                         break
@@ -527,11 +600,13 @@ def main(argv=None):
                     if control_dir is not None:
                         control_dir.cleanup()
             if result['status'] == 'RUNNING':
-                result['status'] = 'PASS'
+                result['status'] = 'REPORTS_PENDING' if not a.no_perf else 'PASS'
             if case.get('prerequisite'):
-                prime_ok = result['status'] == 'PASS'
+                prime_ok = result['status'] in ['PASS', 'REPORTS_PENDING']
             save_results(output, results)
             analyze(output)
+        if not a.no_perf:
+            report_all(perf, output, results, a)
         print(f"Results and analysis: {analyze(output)}")
         return 0 if all(r['status'] == 'PASS' for r in results) else 1
     except BaseException as exc:

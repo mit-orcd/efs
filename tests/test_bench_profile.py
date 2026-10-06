@@ -8,6 +8,7 @@ import sys
 import tempfile
 import subprocess
 import time
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -65,6 +66,8 @@ class ProfileTests(unittest.TestCase):
             p.write_text('BENCH_FAIL kind=io ops=10 errors=0 GiB_s=999999\n')
             self.assertFalse(bench.valid_metrics(bench.metric_rows(p)))
         self.assertFalse(bench.valid_metrics([{'ops': '10', 'idle_workers': '1'}]))
+        self.assertEqual(bench.category({'symbol': 'copy_page_from_iter_atomic', 'dso': '[kernel.kallsyms]'}), 'memory copies/fills')
+        self.assertEqual(bench.category({'symbol': 'iommu_v1_map_pages', 'dso': '[kernel.kallsyms]'}), 'page pinning/IOMMU')
         self.assertEqual(bench.category({'symbol': '0x123', 'dso': '[vdso]'}), 'time/vDSO')
         self.assertEqual(bench.category({'symbol': '0x123', 'dso': '[kernel.kallsyms]'}), 'unresolved samples')
 
@@ -87,6 +90,52 @@ class ProfileTests(unittest.TestCase):
             self.assertIn('best observed 1.234', analysis)
             self.assertIn('unresolved symbols', analysis)
             self.assertIn('`cycles:u`', analysis)
+
+    def test_bounded_parallel_reports_include_failed_workloads(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root)
+            results = []
+            for i in range(5):
+                d = output / str(i) / 'perf'; d.mkdir(parents=True)
+                (d / 'perf.data').write_bytes(b'profile')
+                results.append(dict(name=str(i), status='FAIL (perf)' if i == 4 else 'REPORTS_PENDING',
+                                    runs={'perf': {'returncode': 1 if i == 4 else 0}}))
+            lock = threading.Lock()
+            active = peak = 0
+            def fake_report(perf, directory, args):
+                nonlocal active, peak
+                with lock:
+                    active += 1; peak = max(peak, active)
+                time.sleep(.03)
+                with lock:
+                    active -= 1
+                return True, []
+            a = bench.parser().parse_args(['--report-jobs', '2'])
+            with patch.object(bench, 'reports', fake_report):
+                self.assertTrue(bench.report_all('perf', output, results, a))
+            self.assertEqual(peak, 2)
+            self.assertTrue(all(r['runs']['perf']['reports_state'] == 'COMPLETE' for r in results))
+            self.assertEqual(results[-1]['status'], 'FAIL (perf)')
+            self.assertTrue(all(r['status'] == 'PASS' for r in results[:-1]))
+
+    def test_missing_profile_is_a_report_failure(self):
+        with tempfile.TemporaryDirectory() as root:
+            results = [dict(name='missing', status='PASS', runs={'perf': {'returncode': 0}})]
+            a = bench.parser().parse_args([])
+            self.assertFalse(bench.report_all('perf', Path(root), results, a))
+            self.assertEqual(results[0]['status'], 'FAIL (reports)')
+            self.assertEqual(results[0]['runs']['perf']['reports_error'], 'perf.data missing')
+
+    def test_reports_only_never_plans_or_executes_workloads(self):
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root)
+            (output / 'manifest.json').write_text(json.dumps(dict(host='test', event='cycles', binary_sha256='test', commit='test', cases=[], seed=None)))
+            (output / 'results.json').write_text('[]')
+            with patch.object(bench.sys, 'platform', 'linux'), patch.object(bench.shutil, 'which', return_value='perf'), \
+                 patch.object(bench, 'report_all', return_value=True) as report, \
+                 patch.object(bench, 'cases_for', side_effect=AssertionError('workload planning')):
+                self.assertEqual(bench.main(['--reports-only', str(output)]), 0)
+            report.assert_called_once()
 
     def run_harness(self, fail=False, empty=False):
         with tempfile.TemporaryDirectory(prefix='profile test ') as tmp:
@@ -149,6 +198,8 @@ sys.exit(subprocess.call(args[i+2:]))
             self.assertNotEqual(basecmd, perfcmd)  # fresh scratch for each stage
             analysis = (output / 'ANALYSIS.md').read_text()
             self.assertIn('FAIL' if fail or empty else 'efs_hash', analysis)
+            for name in ['flat.txt', 'by_thread.txt', 'callers.txt']:
+                self.assertTrue((output / result['name'] / 'perf' / name).is_file())
             if not fail and not empty:
                 self.assertTrue((output / result['name'] / 'strace' / 'summary.txt').is_file())
                 self.assertIn('source.c:10', (output / result['name'] / 'perf' / 'annotate-1.stdout').read_text())
