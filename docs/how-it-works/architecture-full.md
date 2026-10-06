@@ -1920,6 +1920,46 @@ inode/chunk epochs or assume a retired history is complete from epoch zero.
 Logical truncation remains disabled.
 
 
+### NUC deployment gate — Oct 6 2026, 16:26Z
+
+The user authorized the driver workflow
+`/Users/mike/git/devops/nuc-efs/deploy-and-restart.sh` for future code changes.
+It stops, rsyncs the working tree, rebuilds server/client binaries on `nuc_efs`,
+starts three loopback servers and runs POSIX smoke. `--full` adds two-client
+visibility and prepare/clean-remount/verify durability gates. Results are under
+`/data1/efs/logs`. These are three processes on one host, not three independent
+failure domains. Its deployment builds binaries only; isolated `make test`
+remains a separate prerequisite.
+
+**This attempt did not deploy or rerun suites.** Clean-stop preflight on
+`/data1/efs/mnt` refused after its drain: `stop-refused: unresolved writes
+remain; mount retained` at 16:26:27.154Z. All three original server PIDs and
+both original client PIDs remained running. Running binaries identify as
+`v0.1.0-pre-alpha-22-g1b7ed050`, built 16:14:15Z. The wrapper's `stop.sh`
+automatically force-discards after clean-stop refusal; that fallback was not
+executed. Investigate retained writes before requesting explicit discard.
+
+Existing results collected read-only, from earlier runs (not this attempt):
+
+- `/data1/efs/logs/posix-20261006-122007.tsv`: 207 PASS, 9 FAIL, 1 SKIP.
+  Failures: both large honest-truncate tests (EIO), root directory rename old
+  name remains, rename destination directory mtime, unlink-open, disjoint
+  concurrent writes, nlink-after-unlink-open, unlink/recreate with an open old
+  file, and unlink/recreate new inode. Most report EIO; this does not establish
+  a common root cause.
+- `/data1/efs/logs/posix2c-20261006-121440.tsv`: 62 PASS, 2 FAIL.
+  `peer_overlap_pwrite_chunk_straddle`: exclusive above-chunk range was not B.
+  `peer_rename_vs_unlink_src`: rename and unlink both succeeded. W36's live
+  gate therefore remains failed/open; no 20/20 claim is justified.
+- `/data1/efs/logs/persist-prepare-20261006-121623.tsv`: 26 PASS. No matching
+  verify result was found; prepare alone does not prove cold durability.
+
+These results include the preceding partial-merge change but predate the
+dirty-range primitive commits. That primitive is not connected to FUSE and
+cannot explain or resolve this live failure. Do not claim the NUC acceptance
+gate passed. Preserve current pending writes and test artifacts for diagnosis.
+
+
 ## Appendix 2 — In flight — the current handoff block
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
