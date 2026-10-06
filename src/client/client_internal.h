@@ -2,6 +2,7 @@
 #define EFS_CLIENT_INTERNAL_H
 
 #include "efs/common.h"
+#include "efs/wb_recovery.h"
 #include "efs/metadata.h"
 #include "efs/network.h"
 #include "efs/protocol.h"
@@ -14,6 +15,21 @@
  * of RSS across 200+ threads). Free with the SAME len passed at alloc. */
 void *efs_buf_alloc(uint32_t len);
 void efs_buf_free(void *p, uint32_t len);
+#define EFS_DCACHE_ENTRY_BUDGET 1024u
+/* Local capacity contention returns BUSY; QUOTA is reserved for backend verdicts. */
+int efs_buf_reserve(uint64_t bytes);
+int efs_buf_reserve_request(uint64_t bytes, uint64_t metadata);
+void efs_buf_unreserve(void);
+void efs_buf_drain_enter(void);
+void efs_buf_drain_leave(void);
+void efs_buf_budget_stats(uint64_t *live, uint64_t *reserved,
+                           uint64_t *backing, uint64_t *limit);
+void *efs_buf_metadata_alloc(size_t size);
+void efs_buf_metadata_free(void *p, size_t size);
+void efs_rdcache_trim(void);
+void efs_dcache_trim_metadata(void);
+void efs_buf_metadata_stats(uint64_t *live, uint64_t *reserved, uint64_t *limit);
+efs_ino_t efs_dcache_pressure_ino(efs_ino_t after);
 
 struct efs_client {
     struct efs_node nodes[EFS_MAX_NODES];
@@ -121,6 +137,16 @@ struct efs_client {
      * from the crash-safe rebase); report_dirty clears it on success. */
     int report_flush_failed;
 };
+
+struct efs_report_pressure {
+    uint64_t pending_records, inflight_records, reserved_records;
+    uint64_t pending_bytes, oldest_ms, admission_waits, admission_timeouts;
+};
+/* Before mutation, without table/directory/append locks. Reservation lasts
+ * through synchronous writeback completion and conversion to dirty marks. */
+int efs_client_report_admit(uint64_t records);
+void efs_client_report_unreserve(void);
+void efs_client_report_pressure_stats(struct efs_report_pressure *out);
 
 /* Mark inode/chunk dirty for the next batched metadata delta flush.
  * No-ops when meta_batch is disabled. Takes dirty_mu internally. */
@@ -401,6 +427,14 @@ void efs_rdcache_unpin(void *handle);
 void efs_client_read_pools_stop(void);
 
 /* Write bytes to a file and replicate metadata. Returns 0 on success. */
+/* D27 open-description error cursor; registry is retained while unresolved. */
+struct efs_wb_description;
+struct efs_wb_description *efs_wb_description_open(efs_ino_t ino);
+void efs_wb_description_close(struct efs_wb_description *d);
+int efs_wb_description_sync(struct efs_wb_description *d, int recovered_here);
+int efs_wb_inode_stalled(efs_ino_t ino);
+uint64_t efs_dcache_pending_records(const char *discard_cause);
+
 int efs_client_write(efs_ino_t ino, uint64_t offset, size_t size, const char *buf);
 
 /* Write bytes without replicating metadata. The caller must replicate later
@@ -414,6 +448,11 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
                             uid_t uid, gid_t gid);
 efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
                                uid_t uid, gid_t gid, uint32_t flags);
+
+/* Request-local result: returns EFS_ERR_* directly, clears *ino on failure.
+ * Concurrent mutations cannot overwrite the caller's error. */
+int efs_client_create_result(efs_ino_t parent, const char *name, uint32_t mode,
+                              uid_t uid, gid_t gid, uint32_t flags, efs_ino_t *ino);
 
 /* Remove a file or directory. */
 int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir);

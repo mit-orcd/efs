@@ -14,7 +14,7 @@ serialization point — the normative spec is
 ## What you need
 
 - `gcc`, `make`, `pthread`; Blake3 is vendored (`deps/blake3/`).
-- FUSE client: OS **fuse3** (`fuse3-devel` ≥ 3.3.0, `fusermount3`, kernel
+- FUSE client: OS **fuse3** (`fuse3-devel` ≥ 3.12, `fusermount3`, kernel
   `fuse` module).
 - RDMA (optional): `libibverbs`/`librdmacm`; `EFS_TRANSPORT=tcp` works
   without.
@@ -59,6 +59,24 @@ The quick start moved to
 environment variables, quotas, `efs-mgmt`, `df`/`du`) are in
 [docs/using/power-user.md](docs/using/power-user.md); the full
 documentation index is [docs/README.md](docs/README.md).
+
+## Controlled client stop
+
+Use `scripts/client.sh stop /mnt/efs` with the absolute canonical mount
+pathname (symlink aliases have a different control-channel identity). It quiesces mutations and attempts a
+60-second drain before unmount; unresolved writes leave the daemon and mount
+serving. Failed ordinary unmount resumes mutations. `stop --force-discard
+/mnt/efs` explicitly permits loss and lazy detach, with per-record diagnostics
+from current clients. Normal stop refuses an old client without the control
+channel; deploy the matching binaries and handle that old mount explicitly.
+External unmount, signals and client death bypass this controlled-stop contract.
+
+D27 local gates: `make test-wb-recovery test-wb-runtime test-stop-control`.
+For isolated fault testing only, rebuild cleanly with `EFS_FAULTS=1`. Set
+`EFS_FAULT_WITHHOLD=ino:ci`, or write `WITHHOLD ino:ci` to `/tmp/efs/fault`,
+to omit that record before REPORT transmission. An `OFF` file overrides the
+startup environment and permits recovery without restarting. Normal builds
+exclude the hook. Live recovery and contention gates remain pending.
 
 ## The fcstor test cluster
 

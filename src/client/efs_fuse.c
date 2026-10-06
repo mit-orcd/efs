@@ -1,6 +1,8 @@
-#define FUSE_USE_VERSION 32
+#define FUSE_USE_VERSION 312
 
 #include "client_internal.h"
+#include "reply_buffers.h"
+#include "stop_control.h"
 #include "efs/common.h"
 #include "efs/network.h"
 #include "efs/protocol.h"
@@ -514,6 +516,59 @@ static struct {
 #ifndef EFS_FIND_WALK_DEPTH
 #define EFS_FIND_WALK_DEPTH 128
 #endif
+
+/* Files carry an open-description error cursor. Directories retain their
+ * separate dirh representation. Untagged fh remains supported for virtual
+ * files and internal calls that have no kernel open description. */
+#define EFS_FILE_FH_TAG (1ULL << 63)
+struct efs_file_handle {
+    efs_ino_t ino;
+    struct efs_wb_description *errors;
+};
+static struct efs_file_handle *efs_file_handle(const struct fuse_file_info *fi)
+{
+    return fi && (fi->fh & EFS_FILE_FH_TAG) ?
+        (struct efs_file_handle *)(uintptr_t)(fi->fh & ~EFS_FILE_FH_TAG) : NULL;
+}
+static efs_ino_t efs_file_ino(const struct fuse_file_info *fi, efs_ino_t fallback)
+{
+    struct efs_file_handle *h = efs_file_handle(fi);
+    return h ? h->ino : fi && fi->fh ? (efs_ino_t)fi->fh : fallback;
+}
+static int efs_file_open(struct fuse_file_info *fi, efs_ino_t ino)
+{
+    if (!fi)
+        return 0;
+    struct efs_file_handle *h = calloc(1, sizeof(*h));
+    if (!h)
+        return -ENOMEM;
+    h->ino = ino;
+    h->errors = efs_wb_description_open(ino);
+    if (!h->errors) {
+        free(h);
+        return -ENOMEM;
+    }
+    fi->fh = EFS_FILE_FH_TAG | (uint64_t)(uintptr_t)h;
+    return 0;
+}
+static void efs_file_close(struct fuse_file_info *fi)
+{
+    struct efs_file_handle *h = efs_file_handle(fi);
+    if (h) {
+        efs_wb_description_close(h->errors);
+        free(h);
+        fi->fh = 0;
+    }
+}
+static int efs_file_sync_error(struct fuse_file_info *fi, efs_ino_t ino,
+                                int was_stalled, int rc)
+{
+    struct efs_file_handle *h = efs_file_handle(fi);
+    int remains = efs_wb_inode_stalled(ino);
+    int error = h && efs_wb_description_sync(h->errors,
+                        rc == EFS_OK && was_stalled && !remains);
+    return error || remains ? EFS_ERR_IO : rc;
+}
 
 static int virt_kind(fuse_ino_t ino)
 {
@@ -1367,7 +1422,10 @@ static int fuse_stat_errno(int rc)
 
 /* LOOKUP already returns a full row; with attr_timeout=0 the kernel
  * GETATTRs the same ino on another FUSE worker immediately after.
- * One-shot, 50 ms: consume the row, then the next getattr RPCs. */
+ * One-shot, 50 ms: consume the row, then the next getattr RPCs. Local
+ * mutations invalidate the small cache and suppress it while in flight.
+ * A LOOKUP captures the mutation serial before fetching its row, so an
+ * older RPC reply cannot reinsert a pre-mutation row afterwards (0j). */
 #define LOOKUP_MEMO_N 32
 #define LOOKUP_MEMO_US 50000ull
 
@@ -1380,6 +1438,9 @@ struct lookup_memo {
 static pthread_mutex_t g_lookup_memo_mu = PTHREAD_MUTEX_INITIALIZER;
 static struct lookup_memo g_lookup_memo[LOOKUP_MEMO_N];
 static unsigned g_lookup_memo_i;
+static uint64_t g_lookup_memo_serial = 1;
+static unsigned g_lookup_memo_active;
+static __thread uint64_t t_lookup_memo_serial;
 static __thread struct efs_inode t_getattr_row;
 static __thread efs_ino_t t_getattr_ino;
 
@@ -1390,6 +1451,39 @@ static uint64_t fuse_now_us(void)
     return (uint64_t)ts.tv_sec * 1000000ull + (uint64_t)ts.tv_nsec / 1000ull;
 }
 
+static uint64_t lookup_memo_start(void)
+{
+    uint64_t serial;
+    pthread_mutex_lock(&g_lookup_memo_mu);
+    serial = g_lookup_memo_active ? 0 : g_lookup_memo_serial;
+    pthread_mutex_unlock(&g_lookup_memo_mu);
+    return serial;
+}
+
+/* Clear all 32 slots: namespace operations can mutate a replaced inode and
+ * both parents, whose identities are not all available at request entry.
+ * Do not hold this mutex across I/O. Overlapping/failed mutations are safe:
+ * each request balances begin/end, and neither edge permits an old reply. */
+static void lookup_memo_mutation_begin(void)
+{
+    pthread_mutex_lock(&g_lookup_memo_mu);
+    ++g_lookup_memo_serial;
+    ++g_lookup_memo_active;
+    for (unsigned i = 0; i < LOOKUP_MEMO_N; ++i)
+        g_lookup_memo[i].ino = 0;
+    pthread_mutex_unlock(&g_lookup_memo_mu);
+}
+
+static void lookup_memo_mutation_end(void)
+{
+    pthread_mutex_lock(&g_lookup_memo_mu);
+    ++g_lookup_memo_serial;
+    --g_lookup_memo_active;
+    for (unsigned i = 0; i < LOOKUP_MEMO_N; ++i)
+        g_lookup_memo[i].ino = 0;
+    pthread_mutex_unlock(&g_lookup_memo_mu);
+}
+
 static void lookup_memo_put(const struct efs_inode *row)
 {
     unsigned i;
@@ -1397,6 +1491,11 @@ static void lookup_memo_put(const struct efs_inode *row)
     if (!row || !row->ino)
         return;
     pthread_mutex_lock(&g_lookup_memo_mu);
+    if (!t_lookup_memo_serial || g_lookup_memo_active ||
+        t_lookup_memo_serial != g_lookup_memo_serial) {
+        pthread_mutex_unlock(&g_lookup_memo_mu);
+        return;
+    }
     i = g_lookup_memo_i++ % LOOKUP_MEMO_N;
     g_lookup_memo[i].ino = row->ino;
     g_lookup_memo[i].row = *row;
@@ -1413,6 +1512,10 @@ static int lookup_memo_take(efs_ino_t ino, struct efs_inode *out)
         return 0;
     now = fuse_now_us();
     pthread_mutex_lock(&g_lookup_memo_mu);
+    if (g_lookup_memo_active) {
+        pthread_mutex_unlock(&g_lookup_memo_mu);
+        return 0;
+    }
     for (i = 0; i < LOOKUP_MEMO_N; i++) {
         if (g_lookup_memo[i].ino == ino &&
             now - g_lookup_memo[i].us < LOOKUP_MEMO_US) {
@@ -1491,12 +1594,12 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
      * unflushed bytes (posix2 overlap pwrite) and a missing ghost is
      * ENOENT (nlink_after_unlink_open). nlink is not local — the peer
      * that unlinks the last name is the one that commits 0.
-     * fi->fh is the ino for files; opendir stores a dirh pointer, so
+     * fi->fh resolves to the ino for files; opendir stores a dirh pointer, so
      * only trust fh when it names an open file. */
     {
         efs_ino_t id = (efs_ino_t)ino;
-        if (fi && fi->fh && efs_client_ino_is_open((efs_ino_t)fi->fh))
-            id = (efs_ino_t)fi->fh;
+        if (fi && fi->fh && efs_client_ino_is_open(efs_file_ino(fi, 0)))
+            id = efs_file_ino(fi, 0);
         if (id && efs_client_ino_is_open(id)) {
             struct efs_inode row;
             if (efs_client_stat_open(id, &row) == EFS_OK) {
@@ -1538,7 +1641,7 @@ struct readdir_collect_arg {
     size_t cap;
 };
 
-/* Per-opendir listing. fi->fh is this pointer (files still store ino).
+/* Per-opendir listing. fi->fh is this pointer (files carry an open-description handle).
  * First READDIR fills it; later READDIR / EOF getdents reuse it. */
 struct efs_dirh {
     efs_ino_t ino;
@@ -1959,6 +2062,11 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         if (trc != 0)
             return trc;
     }
+    if (fi && !efs_mode_is_dir(row.mode)) {
+        int frc = efs_file_open(fi, row.ino);
+        if (frc)
+            return frc;
+    }
     /* First open of an existing file takes the server hold so a peer
      * unlink keeps the row (nlink 0) until this fd's last close.
      * CREATE does not: a hold per new file is the names_crazy wall.
@@ -1973,6 +2081,7 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
 
             if (hrc != EFS_OK) {
                 (void)efs_close_note(row.ino, NULL);
+                efs_file_close(fi);
                 return fuse_stat_errno(hrc);
             }
             efs_open_set_leased(row.ino);
@@ -2025,7 +2134,7 @@ static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offse
     if (vk == 2)
         return -EISDIR;
 
-    efs_ino_t file = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+    efs_ino_t file = efs_file_ino(fi, (efs_ino_t)ino);
     if (fuse_odirect_unaligned(fi, offset, size))
         return -EINVAL;
 
@@ -2056,6 +2165,7 @@ struct efs_wb_job {
     char *free_base;
     /* Non-zero: buf/free_base came from the bounce pool (see bounce_release). */
     size_t buf_cap;
+    uint64_t queued_ms;
     /* Caller waits for PUT quorum. Worker writes rc and signals done_cv
      * while holding g_wb.mu. */
     int *done;
@@ -2093,6 +2203,7 @@ static struct {
     pthread_cond_t idle;
     struct efs_wb_job q[EFS_WB_DEPTH];
     int head, tail, count, inflight;
+    uint64_t queued_bytes, inflight_bytes, admission_waits, admission_timeouts;
     int err;
     efs_ino_t err_ino; /* inode that set err; 0 = none / global */
     int ready;
@@ -2262,6 +2373,8 @@ static void *efs_wb_thread(void *arg)
         struct efs_wb_job job = g_wb.q[g_wb.head];
         g_wb.head = (g_wb.head + 1) % EFS_WB_DEPTH;
         g_wb.count--;
+        g_wb.queued_bytes -= job.size;
+        g_wb.inflight_bytes += job.size;
         g_wb.inflight++;
         pthread_cond_signal(&g_wb.not_full);
         /* Own the inode from the pop on. A job that was waiting below
@@ -2305,8 +2418,10 @@ static void *efs_wb_thread(void *arg)
             ilock = efs_wb_ino_lock(job.ino);
             pthread_mutex_lock(ilock);
         }
+        lookup_memo_mutation_begin();
         int rc = efs_client_write_no_replicate(job.ino, job.offset, job.size,
                                                job.buf);
+        lookup_memo_mutation_end();
         if (ilock)
             pthread_mutex_unlock(ilock);
         wb_job_release_buf(job.buf, job.free_base, job.buf_cap);
@@ -2337,6 +2452,7 @@ static void *efs_wb_thread(void *arg)
             }
         }
         g_wb.inflight--;
+        g_wb.inflight_bytes -= job.size;
         g_wb.busy_ino[wid] = 0;
         g_wb.busy_off[wid] = 0;
         g_wb.busy_len[wid] = 0;
@@ -2404,8 +2520,40 @@ static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
     /* Do not refuse new files because an earlier inode's PUT failed.
      * That sticky g_wb.err used to make every later write/close EIO
      * (including empty touch) after one quorum blip. */
-    while (g_wb.count == EFS_WB_DEPTH && !g_wb.shutdown)
-        pthread_cond_wait(&g_wb.not_full, &g_wb.mu);
+    uint64_t wait_end = stats_now_ms() + 8000;
+    uint64_t outer = efs_client_rpc_deadline_ms();
+    if (outer && outer < wait_end)
+        wait_end = outer;
+    int waited = 0;
+    while (g_wb.count == EFS_WB_DEPTH && !g_wb.shutdown) {
+        uint64_t now = stats_now_ms();
+        if (!waited) {
+            waited = 1;
+            ++g_wb.admission_waits;
+            fprintf(stderr, "write-queue pressure jobs=%d queued_bytes=%llu "
+                    "inflight_bytes=%llu oldest_ms=%llu waits=%llu timeouts=%llu\n",
+                    g_wb.count, (unsigned long long)g_wb.queued_bytes,
+                    (unsigned long long)g_wb.inflight_bytes,
+                    (unsigned long long)(now - g_wb.q[g_wb.head].queued_ms),
+                    (unsigned long long)g_wb.admission_waits,
+                    (unsigned long long)g_wb.admission_timeouts);
+        }
+        if (now >= wait_end) {
+            ++g_wb.admission_timeouts;
+            pthread_mutex_unlock(&g_wb.mu);
+            pthread_cond_destroy(&done_cv);
+            wb_job_release_buf(copy, free_base, buf_cap);
+            return EFS_ERR_BUSY; /* not enqueued; no worker owns caller state */
+        }
+        struct timespec until;
+        clock_gettime(CLOCK_REALTIME, &until);
+        uint64_t wait = wait_end - now;
+        if (wait > 50) wait = 50;
+        until.tv_nsec += (long)wait * 1000000;
+        until.tv_sec += until.tv_nsec / 1000000000;
+        until.tv_nsec %= 1000000000;
+        pthread_cond_timedwait(&g_wb.not_full, &g_wb.mu, &until);
+    }
     if (g_wb.shutdown) {
         pthread_mutex_unlock(&g_wb.mu);
         pthread_cond_destroy(&done_cv);
@@ -2418,6 +2566,8 @@ static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
     g_wb.q[g_wb.tail].buf = copy;
     g_wb.q[g_wb.tail].free_base = free_base;
     g_wb.q[g_wb.tail].buf_cap = buf_cap;
+    g_wb.q[g_wb.tail].queued_ms = stats_now_ms();
+    g_wb.queued_bytes += size;
     g_wb.q[g_wb.tail].done = &done;
     g_wb.q[g_wb.tail].done_rc = &job_rc;
     g_wb.q[g_wb.tail].done_cv = &done_cv;
@@ -2466,8 +2616,20 @@ static int efs_wb_sync_ino(efs_ino_t ino)
     if (!g_wb.ready)
         return EFS_OK;
     pthread_mutex_lock(&g_wb.mu);
-    while (efs_wb_ino_pending_locked(ino))
-        pthread_cond_wait(&g_wb.idle, &g_wb.mu);
+    while (efs_wb_ino_pending_locked(ino)) {
+        if (efs_client_rpc_past_deadline()) {
+            pthread_mutex_unlock(&g_wb.mu);
+            return EFS_ERR_BUSY;
+        }
+        struct timespec until;
+        clock_gettime(CLOCK_REALTIME, &until);
+        until.tv_nsec += 100000000L;
+        if (until.tv_nsec >= 1000000000L) {
+            ++until.tv_sec;
+            until.tv_nsec -= 1000000000L;
+        }
+        (void)pthread_cond_timedwait(&g_wb.idle, &g_wb.mu, &until);
+    }
     int err = EFS_OK;
     if (g_wb.err != EFS_OK && g_wb.err_ino == ino) {
         err = g_wb.err;
@@ -2528,7 +2690,7 @@ static int efs_ino_has_unpublished(efs_ino_t ino)
            efs_dcache_ino_pinned(ino);
 }
 
-static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
+static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
 {
     pthread_mutex_t *amu;
     int rc;
@@ -2549,11 +2711,29 @@ static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
     if (rc != EFS_OK)
         return rc;
     amu = append_mu(ino);
-    pthread_mutex_lock(amu);
+    while (pthread_mutex_trylock(amu) != 0) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
+        usleep(1000);
+    }
     rc = efs_dcache_flush_ino(ino);
     if (rc == EFS_OK)
         rc = efs_client_report_dirty_ino(ino, 1);
     pthread_mutex_unlock(amu);
+    return rc;
+}
+
+/* One deadline begins before queued writes and append serialization.
+ * Worker RPCs inherit it; accepted jobs retain their completion ownership. */
+static int efs_append_flush_report(struct fuse_file_info *fi, efs_ino_t ino)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = stats_now_ms() + 30000;
+    if (previous && previous < deadline)
+        deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc = efs_append_flush_report_run(fi, ino);
+    efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
 
@@ -2674,11 +2854,95 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
     return 0;
 }
 
-static int efs_fuse_write(const char *path, const char *buf, size_t size,
+/* Reserve worst-case chunk capacity before any append range is accepted.
+ * Under pressure, use exactly the fsync ordering (queued writes, append
+ * stripe, data PUTs, REPORT). A failed drain retains previously owned bytes
+ * and rejects this request before touching its data or append reservation. */
+static int fuse_write_admit(size_t size)
+{
+    uint64_t cs = fuse_chunk_size();
+    uint64_t unit = cs < EFS_CHUNK_SIZE ? EFS_CHUNK_SIZE : cs;
+    uint64_t chunks, bytes;
+    efs_ino_t after = 0;
+    int admission;
+    if (!size)
+        return 0;
+    if (!cs || size > UINT32_MAX)
+        return -EFBIG;
+    chunks = (size + cs - 1) / cs + 2;
+    if (chunks > UINT64_MAX / (4 * unit))
+        return -EFBIG;
+    bytes = chunks * 4 * unit;
+    admission = efs_buf_reserve_request(bytes, chunks * EFS_DCACHE_ENTRY_BUDGET);
+    if (admission == 0)
+        return 0;
+    if (admission != EFS_ERR_BUSY)
+        return -ENOMEM;
+    uint64_t live, reserved, backing, limit, meta, meta_reserved, meta_limit;
+    efs_buf_budget_stats(&live, &reserved, &backing, &limit);
+    efs_buf_metadata_stats(&meta, &meta_reserved, &meta_limit);
+    fprintf(stderr, "dcache-pressure live=%llu reserved=%llu backing=%llu "
+            "limit=%llu request=%llu metadata=%llu metadata_reserved=%llu "
+            "metadata_limit=%llu metadata_request=%llu failed=%s\n", (unsigned long long)live,
+            (unsigned long long)reserved, (unsigned long long)backing,
+            (unsigned long long)limit, (unsigned long long)bytes,
+            (unsigned long long)meta, (unsigned long long)meta_reserved,
+            (unsigned long long)meta_limit,
+            (unsigned long long)(chunks * EFS_DCACHE_ENTRY_BUDGET),
+            meta + meta_reserved + chunks * EFS_DCACHE_ENTRY_BUDGET > meta_limit
+                ? "metadata" : "body");
+    efs_rdcache_trim();
+    efs_dcache_trim_metadata();
+    admission = efs_buf_reserve_request(bytes, chunks * EFS_DCACHE_ENTRY_BUDGET);
+    if (admission == 0)
+        return 0;
+    if (admission != EFS_ERR_BUSY)
+        return -ENOMEM;
+    /* Finite drain work, no cache/append mutex held here.
+     * This is a pressure drain, not D27's whole-call recovery protocol. */
+    for (int i = 0; i < 16; i++) {
+        efs_ino_t ino = efs_dcache_pressure_ino(after);
+        int rc;
+        if (!ino)
+            break;
+        after = ino;
+        efs_buf_drain_enter();
+        rc = efs_append_flush_report(NULL, ino);
+        efs_buf_drain_leave();
+        if (rc != EFS_OK)
+            return rc == EFS_ERR_QUOTA ? -ENOSPC :
+                   rc == EFS_ERR_NOMEM ? -ENOMEM :
+                   rc == EFS_ERR_BUSY ? -EAGAIN : -EIO;
+        efs_rdcache_trim();
+        efs_dcache_trim_metadata();
+        admission = efs_buf_reserve_request(bytes,
+                                            chunks * EFS_DCACHE_ENTRY_BUDGET);
+        if (admission == 0)
+            return 0;
+        if (admission != EFS_ERR_BUSY)
+            return -ENOMEM;
+    }
+    /* A concurrent reservation or REPORT may release capacity without a
+     * dirty inode left to drain. Wait briefly outside all cache locks. */
+    for (int i = 0; i < 8; ++i) {
+        usleep(100000);
+        efs_rdcache_trim();
+        efs_dcache_trim_metadata();
+        admission = efs_buf_reserve_request(bytes,
+                                            chunks * EFS_DCACHE_ENTRY_BUDGET);
+        if (!admission)
+            return 0;
+        if (admission != EFS_ERR_BUSY)
+            return -ENOMEM;
+    }
+    return -EAGAIN;
+}
+
+static int efs_fuse_write_admitted(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
     (void)path;
-    efs_ino_t ino = (fi && fi->fh) ? (efs_ino_t)fi->fh : 0;
+    efs_ino_t ino = efs_file_ino(fi, 0);
     if (!ino)
         return -ENOENT;
     if (virt_kind(ino) == 2)
@@ -2740,18 +3004,41 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     }
     if (rc != 0) {
         efs_fuse_log_err("write", rc, ino, (uint64_t)offset, size, path);
-        return -EIO;
+        return fuse_stat_errno(rc);
     }
     return (int)size;
 }
 
+static int efs_fuse_write(const char *path, const char *buf, size_t size,
+                          off_t offset, struct fuse_file_info *fi)
+{
+    if (!fi || !fi->fh || virt_kind(efs_file_ino(fi, 0)) || !size ||
+        fuse_odirect_unaligned(fi, offset, size))
+        return efs_fuse_write_admitted(path, buf, size, offset, fi);
+    if (efs_wb_inode_stalled(efs_file_ino(fi, 0)))
+        return -EIO;
+    uint64_t cs = fuse_chunk_size();
+    int admission = efs_client_report_admit(2 * (size / cs + 2) + 1);
+    if (admission != EFS_OK)
+        return fuse_stat_errno(admission);
+    int rc = fuse_write_admit(size);
+    if (rc) {
+        efs_client_report_unreserve();
+        return rc;
+    }
+    rc = efs_fuse_write_admitted(path, buf, size, offset, fi);
+    efs_buf_unreserve();
+    efs_client_report_unreserve();
+    return rc;
+}
+
 /* write_buf: copy the FUSE receive buffer. Small writes still try an
  * in-place dcache patch; large writes go to the writeback pool. */
-static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
+static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf,
                               off_t offset, struct fuse_file_info *fi)
 {
     (void)path;
-    efs_ino_t ino = (fi && fi->fh) ? (efs_ino_t)fi->fh : 0;
+    efs_ino_t ino = efs_file_ino(fi, 0);
     if (!ino)
         return -ENOENT;
     if (virt_kind(ino) == 2)
@@ -2865,7 +3152,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
                             if (rc == EFS_ERR_QUOTA)
                                 rc = -ENOSPC;
                             else
-                                rc = -EIO;
+                                rc = fuse_stat_errno(rc);
                         }
                     }
                     left = 0;
@@ -2901,7 +3188,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
                         if (rc == EFS_ERR_QUOTA)
                             rc = -ENOSPC;
                         else
-                            rc = -EIO;
+                            rc = fuse_stat_errno(rc);
                         break;
                     }
                 }
@@ -2914,7 +3201,10 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
                 efs_client_stage_unpin(ino);
                 pthread_mutex_unlock(append_mu(ino));
             }
-            efs_fuse_log_err("write_buf", rc, ino, (uint64_t)offset, size, path);
+            /* rc here is a negative POSIX errno, not an EFS verdict. */
+            fprintf(stderr, "efs-fuse write_buf: %s (errno=%d) "
+                    "ino=%llu off=%llu len=%zu\n", strerror(-rc), -rc,
+                    (unsigned long long)ino, (unsigned long long)offset, size);
             return rc;
         }
         efs_dcache_maybe_reclaim();
@@ -2926,6 +3216,30 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     }
 }
 
+static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
+                              off_t offset, struct fuse_file_info *fi)
+{
+    size_t size = fuse_buf_size(buf);
+    if (!fi || !fi->fh || virt_kind(efs_file_ino(fi, 0)) || !size ||
+        fuse_odirect_unaligned(fi, offset, size))
+        return efs_fuse_write_buf_admitted(path, buf, offset, fi);
+    if (efs_wb_inode_stalled(efs_file_ino(fi, 0)))
+        return -EIO;
+    uint64_t cs = fuse_chunk_size();
+    int admission = efs_client_report_admit(2 * (size / cs + 2) + 1);
+    if (admission != EFS_OK)
+        return fuse_stat_errno(admission);
+    int rc = fuse_write_admit(size);
+    if (rc) {
+        efs_client_report_unreserve();
+        return rc;
+    }
+    rc = efs_fuse_write_buf_admitted(path, buf, offset, fi);
+    efs_buf_unreserve();
+    efs_client_report_unreserve();
+    return rc;
+}
+
 static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
                               struct fuse_file_info *fi)
 {
@@ -2934,7 +3248,10 @@ static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
 
     (void)isdatasync;
     t0 = stats_now_ms();
-    rc = efs_append_flush_report(fi, (efs_ino_t)ino);
+    efs_ino_t file = efs_file_ino(fi, (efs_ino_t)ino);
+    int was_stalled = efs_wb_inode_stalled(file);
+    rc = efs_append_flush_report(fi, file);
+    rc = efs_file_sync_error(fi, file, was_stalled, rc);
     t1 = stats_now_ms();
     if (rc == EFS_ERR_QUOTA) {
         efs_fuse_log_err("fsync", rc, ino, 0, 0, NULL);
@@ -2973,7 +3290,10 @@ static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
      * The inode's append stripe covers the report too; see
      * efs_append_flush_report.
      * fi->flags is not O_APPEND on this path. */
-    int rc = efs_append_flush_report(fi, (efs_ino_t)ino);
+    efs_ino_t file = efs_file_ino(fi, (efs_ino_t)ino);
+    int was_stalled = efs_wb_inode_stalled(file);
+    int rc = efs_append_flush_report(fi, file);
+    rc = efs_file_sync_error(fi, file, was_stalled, rc);
     if (rc != EFS_OK) {
         efs_fuse_log_err("flush-meta", rc, ino, 0, 0, NULL);
         return rc == EFS_ERR_QUOTA ? -ENOSPC : -EIO;
@@ -2981,7 +3301,7 @@ static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
     /* close() flushes before the syscall returns. Drop a lock this fd
      * took here; release can run after the next open already locked. */
     {
-        efs_ino_t fh = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+        efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
         uint64_t locked_owner = 0;
         int hit = flock_armed_take(fh, &locked_owner);
 
@@ -3014,20 +3334,18 @@ static int fuse_unlink_errno(int urc)
     return -EIO;
 }
 
-static int fuse_create_errno(efs_ino_t parent, const char *name)
+static int fuse_create_errno(int create_rc, efs_ino_t parent, const char *name)
 {
-    if (g_client.last_err == EFS_ERR_QUOTA)
+    if (create_rc == EFS_ERR_QUOTA)
         return -ENOSPC;
-    if (g_client.last_err == EFS_ERR_BUSY)
-        return -EBUSY;
-    /* EXIST with no visible inode is not EEXIST: makedirs then treats
-     * the path as a non-directory (trunc_grow_sparse FileExistsError).
-     * A lookup that finds the name still reports EEXIST below. */
-    /* Peer create of a name this client never dual-applied: the primary
-     * already has the row (EEXIST) but a local lookup would miss and we
-     * used to return EIO (IOR-hard). Ask the primary. */
+    if (create_rc != EFS_ERR_EXIST)
+        return fuse_stat_errno(create_rc == EFS_OK ? EFS_ERR_IO : create_rc);
+    /* An EXIST reply is EEXIST only when the existing name is visible.
+     * Preserve lookup failures, including BUSY, rather than flattening to EIO. */
     int found = efs_client_rpc_lookup(g_client.export_id, parent, name, NULL);
-    return found == EFS_OK ? -EEXIST : -EIO;
+    if (found == EFS_OK)
+        return -EEXIST;
+    return fuse_stat_errno(found == EFS_ERR_NOT_FOUND ? EFS_ERR_IO : found);
 }
 
 static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
@@ -3053,14 +3371,11 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     uid_t uid = ctx ? ctx->uid : 0;
     gid_t gid = ctx ? ctx->gid : 0;
     int noted = 0;
-    efs_ino_t ino = efs_client_create_ex(parent.ino, name, S_IFREG | mode,
-                                         uid, gid,
-                                         0);
-    if (ino == 0) {
-        /* fuse_create_errno's lookup overwrites last_err. Keep the
-         * create's rc: the 20:21Z EIO line did not say which. */
-        int create_rc = g_client.last_err;
-        int e = fuse_create_errno(parent.ino, name);
+    efs_ino_t ino = 0;
+    int create_rc = efs_client_create_result(parent.ino, name, S_IFREG | mode,
+                                              uid, gid, 0, &ino);
+    if (create_rc != EFS_OK) {
+        int e = fuse_create_errno(create_rc, parent.ino, name);
         if (e == -EEXIST && fi && !(fi->flags & O_EXCL)) {
             struct efs_inode exist;
             int found = 0;
@@ -3091,7 +3406,12 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
         }
     }
     if (fi) {
-        fi->fh = ino;
+        int frc = efs_file_open(fi, ino);
+        if (frc) {
+            if (noted)
+                (void)efs_close_note(ino, NULL);
+            return frc;
+        }
         fuse_fi_direct_io(fi);
         /* Count the open so last close can drop a lock this fd took.
          * CREATE does not take a server lease: an open-fd getattr is
@@ -3124,8 +3444,10 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
     const struct fuse_ctx *ctx = ll_ctx();
     uid_t uid = ctx ? ctx->uid : 0;
     gid_t gid = ctx ? ctx->gid : 0;
-    efs_ino_t ino = efs_client_create(parent.ino, name, S_IFDIR | mode, uid, gid);
-    if (ino == 0) {
+    efs_ino_t ino = 0;
+    int mk = efs_client_create_result(parent.ino, name, S_IFDIR | mode,
+                                      uid, gid, 0, &ino);
+    if (mk != EFS_OK) {
         /* Kernel LOOKUP was negative, then MKDIR. The server can answer
          * EEXIST for a dentry this client's lookup has not seen yet
          * (posix makedirs FileExistsError on a unique testdir name:
@@ -3133,14 +3455,11 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
          * existing dir is caught by the kernel lookup before MKDIR, so
          * finding it here means the create landed — reply success.
          * A few short lookups, not the 16-attempt RPC budget. */
-        int mk = g_client.last_err;
         struct efs_inode row;
         int tries;
 
-        /* Lookup does not update last_err, so the old loop's
-         * last_err==EXIST test stayed true and we returned EEXIST
-         * without ever seeing a directory. BUSY after the RPC budget
-         * can be the same committed mkdir (names_dash EBUSY). */
+        /* BUSY after the RPC budget may be a committed mkdir. Keep the
+         * original request error throughout the visibility check. */
         if (mk == EFS_ERR_EXIST || mk == EFS_ERR_BUSY) {
             for (tries = 0; tries < 8; tries++) {
                 int lrc = efs_client_rpc_lookup(g_client.export_id,
@@ -3153,12 +3472,12 @@ static int efs_fuse_mkdir_at(fuse_ino_t parent_ino, const char *name, mode_t mod
                     return 0;
                 }
                 if (lrc != EFS_ERR_NOT_FOUND)
-                    break;
+                    return fuse_stat_errno(lrc);
                 if (tries + 1 < 8)
                     usleep(20000u * (unsigned)(tries + 1));
             }
         }
-        return fuse_create_errno(parent.ino, name);
+        return fuse_create_errno(mk, parent.ino, name);
     }
     if (out_ino)
         *out_ino = ino;
@@ -3382,9 +3701,11 @@ static int efs_fuse_symlink_at(const char *link, fuse_ino_t parent_ino,
     const struct fuse_ctx *ctx = ll_ctx();
     uid_t uid = ctx ? ctx->uid : 0;
     gid_t gid = ctx ? ctx->gid : 0;
-    efs_ino_t ino = efs_client_create(parent.ino, name, S_IFLNK | 0777, uid, gid);
-    if (ino == 0)
-        return fuse_create_errno(parent.ino, name);
+    efs_ino_t ino = 0;
+    int create_rc = efs_client_create_result(parent.ino, name, S_IFLNK | 0777,
+                                              uid, gid, 0, &ino);
+    if (create_rc != EFS_OK)
+        return fuse_create_errno(create_rc, parent.ino, name);
     size_t len = strlen(link);
     if (len > 0) {
         rc = efs_client_write(ino, 0, len, link);
@@ -3569,9 +3890,10 @@ static int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
 
 static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
 {
-    efs_ino_t fh = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+    efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
     int leased = 0;
     efs_client_note_meta_change(0);
+    efs_file_close(fi);
     if (!(fh && efs_close_note(fh, &leased)))
         return 0;
     {
@@ -3601,6 +3923,55 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         efs_client_stage_evict_ino(fh);
     }
     return 0;
+}
+
+/* Runs before unmount with mutations quiesced. Timeout of the control
+ * request does not cancel or free an accepted background job. */
+static int efs_control_drain(uint64_t deadline, int force)
+{
+    if (force) {
+        (void)efs_dcache_pending_records("explicit-stop-force-discard");
+        struct efs_report_pressure pressure;
+        efs_client_report_pressure_stats(&pressure);
+        fprintf(stderr, "force-discard REPORT pending=%llu inflight=%llu cause=explicit-stop-force-discard\n",
+                (unsigned long long)pressure.pending_records,
+                (unsigned long long)pressure.inflight_records);
+        fflush(stderr);
+        return 0;
+    }
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    efs_client_rpc_set_deadline_ms(deadline);
+    int result = -1;
+    while (stats_now_ms() < deadline) {
+        int pending;
+        if (g_wb.ready) {
+            pthread_mutex_lock(&g_wb.mu);
+            pending = g_wb.count || g_wb.inflight;
+            pthread_mutex_unlock(&g_wb.mu);
+        } else
+            pending = 0;
+        if (pending) {
+            usleep(10000);
+            continue;
+        }
+        efs_buf_drain_enter();
+        int data_rc = efs_dcache_flush_all();
+        int report_rc = efs_client_report_dirty(1);
+        efs_buf_drain_leave();
+        struct efs_report_pressure pressure;
+        efs_client_report_pressure_stats(&pressure);
+        if (data_rc == EFS_OK && report_rc == EFS_OK &&
+            !pressure.pending_records && !pressure.reserved_records &&
+            !efs_dcache_pending_records(NULL)) {
+            result = 0;
+            break;
+        }
+        usleep(10000);
+    }
+    if (result)
+        fprintf(stderr, "stop-refused: unresolved writes remain; mount retained\n");
+    efs_client_rpc_set_deadline_ms(previous);
+    return result;
 }
 
 static void efs_fuse_destroy(void *userdata)
@@ -3766,7 +4137,7 @@ static off_t inode_seek_data_hole(const struct efs_inode *ino, off_t off, int wh
 static off_t efs_fuse_lseek_ino(fuse_ino_t ino, off_t off, int whence,
                                 struct fuse_file_info *fi)
 {
-    efs_ino_t inum = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+    efs_ino_t inum = efs_file_ino(fi, (efs_ino_t)ino);
     struct efs_inode row;
     int rc;
     efs_client_lock_dir(inum);
@@ -3872,7 +4243,7 @@ static uint64_t plock_rpc_owner(struct fuse_file_info *fi)
 static int efs_fuse_getlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
                               struct flock *lock)
 {
-    efs_ino_t inum = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+    efs_ino_t inum = efs_file_ino(fi, (efs_ino_t)ino);
     off_t start = lock->l_start;
     off_t end = plock_end(lock);
     struct efs_msg_inode_reply r;
@@ -3918,7 +4289,7 @@ static int efs_fuse_getlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
 static int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
                               struct flock *lock, int sleep)
 {
-    efs_ino_t inum = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+    efs_ino_t inum = efs_file_ino(fi, (efs_ino_t)ino);
     uint64_t owner = fi ? fi->lock_owner : 0;
     uint64_t rs, re;
     off_t start, end;
@@ -4015,7 +4386,7 @@ static int efs_fuse_setlk_ino(fuse_ino_t ino, struct fuse_file_info *fi,
 
 static int efs_fuse_flock_ino(fuse_ino_t ino, struct fuse_file_info *fi, int op)
 {
-    efs_ino_t fh = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+    efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
     uint64_t lk = fi ? fi->lock_owner : 0;
     uint64_t owner = g_client.flock_token ^
                      (lk ? lk : ((uint64_t)(uintptr_t)fi << 8));
@@ -4393,8 +4764,10 @@ static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     struct fuse_entry_param e;
     int rc;
+    t_lookup_memo_serial = lookup_memo_start();
     t_req = req;
     rc = efs_fuse_lookup_at(parent, name, &e);
+    t_lookup_memo_serial = 0;
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -4433,12 +4806,13 @@ static void ll_getattr(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
         fuse_reply_attr(req, &st, 0.0);
 }
 
-static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
+static void ll_setattr_run(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
                        int to_set, struct fuse_file_info *fi)
 {
     struct stat st;
     off_t old_size = -1;
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     if (to_set & FUSE_SET_ATTR_SIZE) {
         struct efs_inode row;
@@ -4449,6 +4823,7 @@ static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
     rc = efs_fuse_setattr_ino(ino, attr, to_set, fi);
     if (rc == 0)
         rc = efs_fuse_getattr_ino(ino, &st, fi);
+    lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -4483,17 +4858,19 @@ static void ll_readlink(fuse_req_t req, fuse_ino_t ino)
         fuse_reply_readlink(req, buf);
 }
 
-static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
+static void ll_mkdir_run(fuse_req_t req, fuse_ino_t parent, const char *name,
                      mode_t mode)
 {
     efs_ino_t new_ino = 0;
     struct fuse_entry_param e;
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_mkdir_at(parent, name, mode, &new_ino);
     if (rc == 0)
         rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "mkdir",
                                    parent, name);
+    lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -4501,35 +4878,41 @@ static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
         fuse_reply_entry(req, &e);
 }
 
-static void ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+static void ll_unlink_run(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_unlink_at(parent, name);
+    lookup_memo_mutation_end();
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
-static void ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+static void ll_rmdir_run(fuse_req_t req, fuse_ino_t parent, const char *name)
 {
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_rmdir_at(parent, name);
+    lookup_memo_mutation_end();
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
-static void ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
+static void ll_symlink_run(fuse_req_t req, const char *link, fuse_ino_t parent,
                        const char *name)
 {
     efs_ino_t new_ino = 0;
     struct fuse_entry_param e;
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_symlink_at(link, parent, name, &new_ino);
     if (rc == 0)
         rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "symlink",
                                    parent, name);
+    lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -4537,28 +4920,32 @@ static void ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
         fuse_reply_entry(req, &e);
 }
 
-static void ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
+static void ll_rename_run(fuse_req_t req, fuse_ino_t parent, const char *name,
                       fuse_ino_t newparent, const char *newname,
                       unsigned int flags)
 {
     int rc;
     efs_ino_t src_ino = 0;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_rename_at(parent, name, newparent, newname, flags, &src_ino);
+    lookup_memo_mutation_end();
     t_req = NULL;
     (void)src_ino;
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
-static void ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
+static void ll_link_run(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
                     const char *newname)
 {
     struct fuse_entry_param e;
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_link_at(ino, newparent, newname);
     if (rc == 0)
         rc = lookup_fill_committed(ino, &e, "link", newparent, newname);
+    lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -4566,11 +4953,16 @@ static void ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
         fuse_reply_entry(req, &e);
 }
 
-static void ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void ll_open_run(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     int rc;
+    int mutating = fi && (fi->flags & O_TRUNC);
+    if (mutating)
+        lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_open_ino(ino, fi);
+    if (mutating)
+        lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -4583,8 +4975,6 @@ static void ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
  * and rmqueue in the read profile of a 20 GiB dd, Oct 1 2026); the
  * worker keeps one buffer sized to the largest request it has seen. */
 #define LL_READ_BUF_MAX (16u << 20)
-static __thread char *t_rd_buf;
-static __thread size_t t_rd_cap;
 
 #define LL_READ_REFS_MAX 32
 static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
@@ -4601,7 +4991,7 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
      * path below. */
     if (virt_kind(ino) == 0 && size <= LL_READ_BUF_MAX &&
         !fuse_odirect_unaligned(fi, off, size)) {
-        efs_ino_t file = (fi && fi->fh) ? (efs_ino_t)fi->fh : (efs_ino_t)ino;
+        efs_ino_t file = efs_file_ino(fi, (efs_ino_t)ino);
         struct efs_read_ref refs[LL_READ_REFS_MAX];
         int nr = efs_client_read_refs(file, (uint64_t)off, size, refs,
                                       LL_READ_REFS_MAX);
@@ -4625,20 +5015,8 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
             return;
         }
     }
-    if (size <= LL_READ_BUF_MAX) {
-        if (size > t_rd_cap) {
-            size_t cap = size < 4096 ? 4096 : size;
-            char *nb = realloc(t_rd_buf, cap);
-
-            if (nb) {
-                t_rd_buf = nb;
-                t_rd_cap = cap;
-            }
-        }
-        buf = t_rd_cap >= size ? t_rd_buf : NULL;
-    } else {
-        buf = NULL;
-    }
+    buf = size <= LL_READ_BUF_MAX
+              ? reply_buffer_get(0, size < 4096 ? 4096 : size) : NULL;
     if (!buf) {
         buf = malloc(size ? size : 1);
         owned = 1;
@@ -4658,13 +5036,15 @@ static void ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
         free(buf);
 }
 
-static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
+static void ll_write_run(fuse_req_t req, fuse_ino_t ino, const char *buf,
                      size_t size, off_t off, struct fuse_file_info *fi)
 {
     int n;
     (void)ino;
+    lookup_memo_mutation_begin();
     t_req = req;
     n = efs_fuse_write(NULL, buf, size, off, fi);
+    lookup_memo_mutation_end();
     t_req = NULL;
     if (n < 0)
         fuse_reply_err(req, -n);
@@ -4672,13 +5052,15 @@ static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
         fuse_reply_write(req, (size_t)n);
 }
 
-static void ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
+static void ll_write_buf_run(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
                          off_t off, struct fuse_file_info *fi)
 {
     int n;
     (void)ino;
+    lookup_memo_mutation_begin();
     t_req = req;
     n = efs_fuse_write_buf(NULL, bufv, off, fi);
+    lookup_memo_mutation_end();
     t_req = NULL;
     if (n < 0)
         fuse_reply_err(req, -n);
@@ -4686,11 +5068,13 @@ static void ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *buf
         fuse_reply_write(req, (size_t)n);
 }
 
-static void ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+static void ll_flush_run(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_flush_ino(ino, fi);
+    lookup_memo_mutation_end();
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }
@@ -4698,22 +5082,26 @@ static void ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 static void ll_release(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
 {
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     if (efs_dcache_trace_on())
         fprintf(stderr, "release ino=%llu begin\n", (unsigned long long)ino);
     rc = efs_fuse_release_ino(ino, fi);
     if (efs_dcache_trace_on())
         fprintf(stderr, "release ino=%llu rc=%d\n", (unsigned long long)ino, rc);
+    lookup_memo_mutation_end();
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
-static void ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
+static void ll_fsync_run(fuse_req_t req, fuse_ino_t ino, int datasync,
                      struct fuse_file_info *fi)
 {
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_fsync_ino(ino, datasync, fi);
+    lookup_memo_mutation_end();
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }
@@ -4733,26 +5121,30 @@ static void ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
  * fallocate() returned EOPNOTSUPP for every call including the extend.
  * The buffered writes are published before the size is read so an
  * extend to `end` never truncates bytes this client wrote past it. */
-static void ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode, off_t offset,
+static void ll_fallocate_run(fuse_req_t req, fuse_ino_t ino, int mode, off_t offset,
                          off_t length, struct fuse_file_info *fi)
 {
     struct efs_inode row;
     uint64_t end;
     int rc, vk = virt_kind(ino);
 
+    lookup_memo_mutation_begin();
     t_req = req;
     if (vk) {
+        lookup_memo_mutation_end();
         t_req = NULL;
         fuse_reply_err(req, vk == 2 ? EISDIR : EACCES);
         return;
     }
     if (offset < 0 || length <= 0 ||
         (uint64_t)offset > UINT64_MAX - (uint64_t)length) {
+        lookup_memo_mutation_end();
         t_req = NULL;
         fuse_reply_err(req, EINVAL);
         return;
     }
     if (mode & ~FALLOC_FL_KEEP_SIZE) {
+        lookup_memo_mutation_end();
         t_req = NULL;
         fuse_reply_err(req, EOPNOTSUPP);
         return;
@@ -4760,31 +5152,37 @@ static void ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode, off_t offset,
     end = (uint64_t)offset + (uint64_t)length;
     rc = efs_append_flush_report(fi, (efs_ino_t)ino);
     if (rc != EFS_OK) {
+        lookup_memo_mutation_end();
         t_req = NULL;
         fuse_reply_err(req, efs_rc_to_errno(rc));
         return;
     }
     if (efs_client_stat_ino((efs_ino_t)ino, &row) != EFS_OK) {
+        lookup_memo_mutation_end();
         t_req = NULL;
         fuse_reply_err(req, ENOENT);
         return;
     }
     if (efs_mode_is_dir(row.mode)) {
+        lookup_memo_mutation_end();
         t_req = NULL;
         fuse_reply_err(req, EISDIR);
         return;
     }
     if (end <= row.size) {
+        lookup_memo_mutation_end();
         t_req = NULL;
         fuse_reply_err(req, 0);
         return;
     }
     if (mode & FALLOC_FL_KEEP_SIZE) {
+        lookup_memo_mutation_end();
         t_req = NULL;
         fuse_reply_err(req, EOPNOTSUPP);
         return;
     }
     rc = efs_fuse_truncate_ino(ino, (off_t)end, fi);
+    lookup_memo_mutation_end();
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }
@@ -4844,9 +5242,6 @@ static void ll_opendir(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi
     }
 }
 
-static __thread char *t_rdd_buf;
-static __thread size_t t_rdd_cap;
-
 static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
                        struct fuse_file_info *fi)
 {
@@ -4886,18 +5281,14 @@ static void ll_readdir(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     /* One reply buffer per FUSE worker; a du does ~2 READDIRs per
      * directory and malloc/free of the 128 KiB were visible (cfree 3.8 %
      * of client cycles on the Spark profile). */
-    if (t_rdd_cap < (size ? size : 1)) {
-        size_t want = size ? size : 1;
-        char *nb = realloc(t_rdd_buf, want);
-        if (!nb) {
-            t_req = NULL;
-            fuse_reply_err(req, ENOMEM);
-            return;
-        }
-        t_rdd_buf = nb;
-        t_rdd_cap = want;
+    buf = reply_buffer_get(1, size ? size : 1);
+    if (!buf) {
+        t_req = NULL;
+        if (dh == &local)
+            free(local.ents);
+        fuse_reply_err(req, ENOMEM);
+        return;
     }
-    buf = t_rdd_buf;
     if (off < cookie) {
         if (dirbuf_add(req, buf, size, &used, ".", ino, dh->self_mode, cookie))
             goto send;
@@ -4967,13 +5358,14 @@ static void ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
  * create). With no .mknod handler libfuse replied ENOSYS and the NFS
  * client saw EIO for every create. Regular files reuse the create path;
  * there is no open here, so no fh/open-note bookkeeping. */
-static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
+static void ll_mknod_run(fuse_req_t req, fuse_ino_t parent, const char *name,
                      mode_t mode, dev_t rdev)
 {
     efs_ino_t new_ino = 0;
     struct fuse_entry_param e;
     int rc;
     (void)rdev;
+    lookup_memo_mutation_begin();
     t_req = req;
     if (!S_ISREG(mode))
         rc = -EPERM;
@@ -4983,6 +5375,7 @@ static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
             rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "mknod",
                                        parent, name);
     }
+    lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -4990,15 +5383,17 @@ static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
         fuse_reply_entry(req, &e);
 }
 
-static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
+static void ll_create_run(fuse_req_t req, fuse_ino_t parent, const char *name,
                       mode_t mode, struct fuse_file_info *fi)
 {
     struct fuse_entry_param e;
     int rc;
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = efs_fuse_create_at(parent, name, mode, fi, NULL);
     if (rc == 0)
-        rc = lookup_fill(fi ? (fuse_ino_t)fi->fh : 0, &e, fi);
+        rc = lookup_fill((fuse_ino_t)efs_file_ino(fi, 0), &e, fi);
+    lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
@@ -5068,11 +5463,12 @@ static int xattr_user_name(const char *name)
     return 0;
 }
 
-static void ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+static void ll_setxattr_run(fuse_req_t req, fuse_ino_t ino, const char *name,
                         const char *value, size_t size, int flags)
 {
     int rc;
 
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = xattr_user_name(name);
     if (rc == 0 && virt_kind(ino))
@@ -5094,6 +5490,7 @@ static void ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
         if (rc)
             rc = efs_rc_to_errno(rc);
     }
+    lookup_memo_mutation_end();
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }
@@ -5153,10 +5550,11 @@ static void ll_listxattr(fuse_req_t req, fuse_ino_t ino, size_t size)
         fuse_reply_buf(req, (const char *)buf, n);
 }
 
-static void ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
+static void ll_removexattr_run(fuse_req_t req, fuse_ino_t ino, const char *name)
 {
     int rc;
 
+    lookup_memo_mutation_begin();
     t_req = req;
     rc = xattr_user_name(name);
     if (rc == 0 && virt_kind(ino))
@@ -5168,11 +5566,195 @@ static void ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
         if (rc)
             rc = efs_rc_to_errno(rc);
     }
+    lookup_memo_mutation_end();
     t_req = NULL;
     fuse_reply_err(req, rc ? -rc : 0);
 }
 
 /* Low-level (inode-based) FUSE ops. Timeouts stay 0 (Part C later). */
+static void ll_setattr(fuse_req_t req, fuse_ino_t ino, struct stat *attr,
+                       int to_set, struct fuse_file_info *fi)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_setattr_run(req, ino, attr, to_set, fi);
+    efs_stop_mutation_leave();
+}
+
+static void ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
+                     mode_t mode)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_mkdir_run(req, parent, name, mode);
+    efs_stop_mutation_leave();
+}
+
+static void ll_unlink(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_unlink_run(req, parent, name);
+    efs_stop_mutation_leave();
+}
+
+static void ll_rmdir(fuse_req_t req, fuse_ino_t parent, const char *name)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_rmdir_run(req, parent, name);
+    efs_stop_mutation_leave();
+}
+
+static void ll_symlink(fuse_req_t req, const char *link, fuse_ino_t parent,
+                       const char *name)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_symlink_run(req, link, parent, name);
+    efs_stop_mutation_leave();
+}
+
+static void ll_rename(fuse_req_t req, fuse_ino_t parent, const char *name,
+                      fuse_ino_t newparent, const char *newname,
+                      unsigned int flags)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_rename_run(req, parent, name, newparent, newname, flags);
+    efs_stop_mutation_leave();
+}
+
+static void ll_link(fuse_req_t req, fuse_ino_t ino, fuse_ino_t newparent,
+                    const char *newname)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_link_run(req, ino, newparent, newname);
+    efs_stop_mutation_leave();
+}
+
+static void ll_open(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_open_run(req, ino, fi);
+    efs_stop_mutation_leave();
+}
+
+static void ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
+                     size_t size, off_t off, struct fuse_file_info *fi)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_write_run(req, ino, buf, size, off, fi);
+    efs_stop_mutation_leave();
+}
+
+static void ll_write_buf(fuse_req_t req, fuse_ino_t ino, struct fuse_bufvec *bufv,
+                         off_t off, struct fuse_file_info *fi)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_write_buf_run(req, ino, bufv, off, fi);
+    efs_stop_mutation_leave();
+}
+
+static void ll_flush(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_flush_run(req, ino, fi);
+    efs_stop_mutation_leave();
+}
+
+static void ll_fsync(fuse_req_t req, fuse_ino_t ino, int datasync,
+                     struct fuse_file_info *fi)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_fsync_run(req, ino, datasync, fi);
+    efs_stop_mutation_leave();
+}
+
+static void ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode, off_t offset,
+                         off_t length, struct fuse_file_info *fi)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_fallocate_run(req, ino, mode, offset, length, fi);
+    efs_stop_mutation_leave();
+}
+
+static void ll_mknod(fuse_req_t req, fuse_ino_t parent, const char *name,
+                     mode_t mode, dev_t rdev)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_mknod_run(req, parent, name, mode, rdev);
+    efs_stop_mutation_leave();
+}
+
+static void ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
+                      mode_t mode, struct fuse_file_info *fi)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_create_run(req, parent, name, mode, fi);
+    efs_stop_mutation_leave();
+}
+
+static void ll_setxattr(fuse_req_t req, fuse_ino_t ino, const char *name,
+                        const char *value, size_t size, int flags)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_setxattr_run(req, ino, name, value, size, flags);
+    efs_stop_mutation_leave();
+}
+
+static void ll_removexattr(fuse_req_t req, fuse_ino_t ino, const char *name)
+{
+    if (!efs_stop_mutation_enter()) {
+        fuse_reply_err(req, EBUSY);
+        return;
+    }
+    ll_removexattr_run(req, ino, name);
+    efs_stop_mutation_leave();
+}
+
 static const struct fuse_lowlevel_ops efs_ll_ops = {
     .init = efs_fuse_init,
     .destroy = efs_fuse_destroy,
@@ -5415,8 +5997,27 @@ static void stop_perf_recorder(void)
     stop_recorder(&g_perf_pid);
 }
 
-/* Custom fuse_main replacement that uses fuse_loop_mt with max_idle_threads
- * to avoid the default 10-thread limit that caps throughput. */
+/* Custom fuse_main replacement with explicit active and idle worker limits. */
+/* libfuse >= 3.12 exposes an active-worker limit; the old API only
+ * bounded idle workers and could create more while callbacks blocked. */
+static struct fuse_loop_config *efs_fuse_worker_config(const struct fuse_cmdline_opts *opts)
+{
+    struct fuse_loop_config *config = fuse_loop_cfg_create();
+    if (!config)
+        return NULL;
+    unsigned max_threads = opts->max_threads ? opts->max_threads : 32;
+    unsigned idle_threads = opts->max_idle_threads ? opts->max_idle_threads : 8;
+    if (idle_threads > max_threads)
+        idle_threads = max_threads;
+    fuse_loop_cfg_set_clone_fd(config, opts->clone_fd);
+    fuse_loop_cfg_set_max_threads(config, max_threads);
+    fuse_loop_cfg_set_idle_threads(config, idle_threads);
+    fprintf(stderr, "efs-fuse: workers max=%u idle=%u\n",
+            max_threads, idle_threads);
+
+    return config;
+}
+
 static int efs_fuse_main_mt(int argc, char *argv[]);
 
 /* Mount bootstrap. The Raft+KV host does not serve GET_META (there is no
@@ -5945,6 +6546,18 @@ static int efs_fuse_bench_run(const char *kind, double time_sec)
 
 int main(int argc, char **argv)
 {
+    if (argc >= 3 && (strcmp(argv[1], "--stop") == 0 ||
+                      strcmp(argv[1], "--resume") == 0)) {
+        int force = argc == 4 && strcmp(argv[3], "--force-discard") == 0;
+        if (argc != 3 && !force)
+            return 2;
+        const char *command = strcmp(argv[1], "--resume") == 0 ? "RESUME\n" :
+                              force ? "FORCE\n" : "DRAIN\n";
+        int rc = efs_stop_client(argv[2], command);
+        if (rc)
+            fprintf(stderr, "efs-fuse: stop control refused or unavailable (%d); mount retained\n", rc);
+        return rc;
+    }
     efs_version_check_argv("efs-fuse", argc, argv);
 
     /* Line-buffer logs even when stdout is a pipe (client.sh | tee). */
@@ -6186,7 +6799,7 @@ static int efs_fuse_main_mt(int argc, char *argv[])
 {
     struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
     struct fuse_cmdline_opts opts;
-    struct fuse_loop_config config;
+    struct fuse_loop_config *config = NULL;
     int ret = -1;
 
     if (fuse_parse_cmdline(&args, &opts) != 0)
@@ -6292,17 +6905,32 @@ static int efs_fuse_main_mt(int argc, char *argv[])
         goto out;
     }
 
-    memset(&config, 0, sizeof(config));
-    /* Default clone_fd (0). Forcing 1 was for inval_entry-on-every-unlink
-     * starving /dev/fuse reads; shrink-only inode inval after reply does
-     * not need it. Pass -o clone_fd if notify starts blocking again. */
-    config.clone_fd = opts.clone_fd;
-    config.max_idle_threads = opts.max_idle_threads;
-    if (config.max_idle_threads == 0)
-        config.max_idle_threads = 64;
+    /* Idle limits do not bound active request workers. Each worker owns
+     * a FUSE receive buffer, stack and TLS scratch outside the cache cap. */
+    config = efs_fuse_worker_config(&opts);
+    if (!config) {
+        fuse_remove_signal_handlers(g_fuse_se);
+        fuse_session_unmount(g_fuse_se);
+        fuse_session_destroy(g_fuse_se);
+        g_fuse_se = NULL;
+        ret = 1;
+        goto out;
+    }
 
+    if (efs_stop_start(opts.mountpoint, efs_control_drain) != 0) {
+        fprintf(stderr, "efs-fuse: cannot establish safe-stop control channel\n");
+        fuse_loop_cfg_destroy(config);
+        fuse_remove_signal_handlers(g_fuse_se);
+        fuse_session_unmount(g_fuse_se);
+        fuse_session_destroy(g_fuse_se);
+        g_fuse_se = NULL;
+        ret = 1;
+        goto out;
+    }
     (void)ll_inval_start();
-    ret = fuse_session_loop_mt(g_fuse_se, &config);
+    ret = fuse_session_loop_mt(g_fuse_se, config);
+    fuse_loop_cfg_destroy(config);
+    efs_stop_finish();
     ll_inval_stop();
 
     fuse_remove_signal_handlers(g_fuse_se);

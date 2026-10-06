@@ -31,8 +31,7 @@ static void frag_ptrs(uint8_t *buf, uint32_t frag_len, uint8_t *frags[EFS_NUM_FR
         frags[i] = buf + (size_t)i * frag_len;
 }
 
-static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
-                                uint32_t chunk_len);
+
 static int overlay_chunk_deltas_ce(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                                    uint32_t chunk_len,
                                    const struct efs_chunk_entry *cep);
@@ -70,28 +69,10 @@ static void *frag_get_thread(void *arg)
  * (~3 fragments per decoding thread) when the thread exits. A pthread
  * key frees it at thread exit for pool workers and libfuse threads
  * alike; pool workers only exit via efs_client_read_pools_stop(). */
-static pthread_key_t decode_scratch_key;
-static pthread_once_t decode_scratch_once = PTHREAD_ONCE_INIT;
-static void decode_scratch_free(void *p) { free(p); }
-static void decode_scratch_key_make(void)
-{
-    (void)pthread_key_create(&decode_scratch_key, decode_scratch_free);
-}
-
+#include "reply_buffers.h"
 static uint8_t *decode_frag_scratch(uint32_t need)
 {
-    static __thread uint8_t *buf;
-    static __thread uint32_t cap;
-    if (cap < need) {
-        uint8_t *nbuf = realloc(buf, need);
-        if (!nbuf)
-            return NULL;
-        buf = nbuf;
-        cap = need;
-        pthread_once(&decode_scratch_once, decode_scratch_key_make);
-        (void)pthread_setspecific(decode_scratch_key, buf);
-    }
-    return buf;
+    return (uint8_t *)reply_buffer_get(0, need);
 }
 
 /* Issue two fragment GETs and wait for both on this thread. */
@@ -450,6 +431,8 @@ int efs_client_fetch_published_chunk_obs(efs_ino_t ino, uint32_t ci,
         hb = (efs_export_get_chunk(&g_client.export, ino, ci, &b) == 0);
         pthread_mutex_unlock(&g_client.idx_mu);
         prc = efs_client_pull_chunks_range(ino, ci, ci + 1);
+        if (prc != EFS_OK)
+            return prc;
         rc2 = fetch_published_once(ino, ci, buf, len, obs, have_obs);
         if (rc2 == EFS_OK)
             return EFS_OK;
@@ -536,7 +519,8 @@ static int fetch_published_once(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                     (unsigned long long)ino, ci, (unsigned long long)n);
         }
     }
-    if (stub || !published)
+    if (stub || !published ||
+        (ce.read_view.count && ce.read_view.parts[0].len == 0))
         memset(buf, 0, len);
     else {
         int rc = efs_client_decode_placed_chunk_attempts(ino, ci, buf, cs,
@@ -546,6 +530,14 @@ static int fetch_published_once(efs_ino_t ino, uint32_t ci, uint8_t *buf,
     }
     if (!published)
         return EFS_OK;
+    if (ce.read_view.count) {
+        if (ce.read_view.chunk_size != len ||
+            ce.read_view.count != ce.ndelta + 1 ||
+            ce.read_view.parts[0].off || ce.read_view.parts[0].len > len)
+            return EFS_ERR_PROTO;
+        memset(buf + ce.read_view.parts[0].len, 0,
+               len - ce.read_view.parts[0].len);
+    }
     return overlay_chunk_deltas_ce(ino, ci, buf, len, &ce);
 }
 
@@ -721,6 +713,25 @@ static pthread_mutex_t *rdcache_mu(uint32_t slot)
     return &g_rdcache.mu[slot & (RDCACHE_STRIPES - 1)];
 }
 
+/* Pressure can discard only reproducible, unpinned clean read bodies.
+ * Pending fetches and zero-copy reply pins retain their owner. */
+void efs_rdcache_trim(void)
+{
+    rdcache_ensure();
+    for (uint32_t sh = 0; sh < RDCACHE_STRIPES; sh++) {
+        pthread_mutex_lock(&g_rdcache.mu[sh]);
+        for (uint32_t s = sh; s < RDCACHE_SLOTS; s += RDCACHE_STRIPES)
+            for (uint32_t w = 0; w < RDCACHE_WAYS; w++) {
+                struct rdcache_ent *e = &g_rdcache.e[s][w];
+                if (e->data && !e->pending && !e->pins) {
+                    efs_buf_free(e->data, e->len);
+                    memset(e, 0, sizeof(*e));
+                }
+            }
+        pthread_mutex_unlock(&g_rdcache.mu[sh]);
+    }
+}
+
 static struct rdcache_ent *rdcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
 {
     for (int w = 0; w < RDCACHE_WAYS; w++) {
@@ -744,19 +755,7 @@ static uint64_t rdcache_map_gen(efs_ino_t ino, uint32_t ci)
     pthread_mutex_unlock(&g_client.idx_mu);
     if (!ok)
         return 0;
-    g = ce.generation;
-    /* A span list changes the bytes without moving the base generation.
-     * Mix the list into the cache key so a later span misses this entry.
-     * delta_seq can stay 0 when the list was appended locally; the count
-     * and the newest span generation still change. */
-    if (ce.ndelta) {
-        g ^= (uint64_t)ce.ndelta * 0x9E3779B97F4A7C15ULL;
-        g ^= ce.deltas[ce.ndelta - 1].generation;
-        if (ce.delta_seq)
-            g ^= ce.delta_seq * 0xBF58476D1CE4E5B9ULL;
-        if (g == 0)
-            g = 1;
-    }
+    g = efs_chunk_read_key(&ce);
     return g;
 }
 
@@ -839,23 +838,25 @@ static int overlay_chunk_deltas_ce(efs_ino_t ino, uint32_t ci, uint8_t *buf,
          * with EIO (posix basic_overwrite_middle, Sep 29). */
         if (ce.deltas[i].len == 0)
             continue;
-        rc = overlay_one_delta(ino, ci, buf, chunk_len, &ce.deltas[i]);
+        struct efs_chunk_delta d = ce.deltas[i];
+        if (ce.read_view.count) {
+            const struct efs_fence_part *p;
+            if (ce.read_view.chunk_size != chunk_len ||
+                ce.read_view.count != ce.ndelta + 1)
+                return EFS_ERR_PROTO;
+            p = &ce.read_view.parts[i + 1];
+            if (p->off != d.off || p->len > d.len)
+                return EFS_ERR_PROTO;
+            d.len = p->len;
+            if (!d.len)
+                continue;
+        }
+        rc = overlay_one_delta(ino, ci, buf, chunk_len, &d);
     }
     return rc;
 }
 
-static int overlay_chunk_deltas(efs_ino_t ino, uint32_t ci, uint8_t *buf,
-                                uint32_t chunk_len)
-{
-    struct efs_chunk_entry ce;
 
-    memset(&ce, 0, sizeof(ce));
-    pthread_mutex_lock(&g_client.idx_mu);
-    if (efs_export_get_chunk(&g_client.export, ino, ci, &ce) != 0)
-        ce.ndelta = 0;
-    pthread_mutex_unlock(&g_client.idx_mu);
-    return overlay_chunk_deltas_ce(ino, ci, buf, chunk_len, &ce);
-}
 
 int efs_rdcache_get(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
 {
@@ -912,13 +913,15 @@ int efs_rdcache_copy(efs_ino_t ino, uint32_t ci, uint32_t off,
  * 1 when ownership was taken, 0 when the caller still owns src (a copy
  * was made, or nothing was stored). */
 static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
-                             uint32_t len, int owned)
+                             uint32_t len, int owned, uint64_t observed)
 {
     uint64_t tg;
 
     if (!src || !len)
         return 0;
     tg = rdcache_map_gen(ino, ci);
+    if (observed)
+        tg = observed; /* never label captured bytes with a later map */
     uint32_t s = rdcache_slot(ino, ci);
     pthread_mutex_t *mu = rdcache_mu(s);
     pthread_mutex_lock(mu);
@@ -1007,7 +1010,7 @@ static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
 
 void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t len)
 {
-    (void)rdcache_put_inner(ino, ci, src, len, 0);
+    (void)rdcache_put_inner(ino, ci, src, len, 0, 0);
 }
 
 /* Store a pool buffer by ownership transfer. 1 = the cache owns buf now;
@@ -1015,7 +1018,7 @@ void efs_rdcache_put(efs_ino_t ino, uint32_t ci, const uint8_t *src, uint32_t le
 int efs_rdcache_put_owned(efs_ino_t ino, uint32_t ci, uint8_t *buf,
                           uint32_t len)
 {
-    return rdcache_put_inner(ino, ci, buf, len, 1);
+    return rdcache_put_inner(ino, ci, buf, len, 1, 0);
 }
 
 /* Pin the current image of (ino, ci) for a zero-copy reply. Returns the
@@ -1098,14 +1101,22 @@ static void *chunk_get_worker(void *arg)
         job->rc = EFS_OK;
         return NULL;
     }
+    struct efs_chunk_entry cached_view = {0};
+    pthread_mutex_lock(&g_client.idx_mu);
+    int have_cached_view = efs_export_get_chunk(&g_client.export, job->ino,
+                                               job->ci, &cached_view) == EFS_OK;
+    pthread_mutex_unlock(&g_client.idx_mu);
+    uint64_t cached_key = have_cached_view ? efs_chunk_read_key(&cached_view) : 0;
     acq = rdcache_acquire(job->ino, job->ci, job->chunk, chunk_size);
     if (acq == 0) {
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         /* The cached image is the base. Spans published after it was
          * stored are not in it; paint them or the read hides a peer
          * (peer_overlap_pwrite_chunk_straddle). */
-        job->rc = overlay_chunk_deltas(job->ino, job->ci, job->chunk,
-                                       chunk_size);
+        job->rc = cached_key && cached_key == rdcache_map_gen(job->ino, job->ci)
+            ? overlay_chunk_deltas_ce(job->ino, job->ci, job->chunk,
+                                       chunk_size, &cached_view)
+            : EFS_ERR_STALE;
         if (job->rc == EFS_OK)
             return NULL;
         /* A span this map names is gone (folded and reaped): the cached
@@ -1154,23 +1165,29 @@ static void *chunk_get_worker(void *arg)
     /* fetch covers a generation-0 base (first spans hang off an empty
      * row) and paints every span. decode_placed_chunk would fail that
      * row: its nodes are zero. */
-    job->rc = efs_client_fetch_published_chunk(job->ino, job->ci, job->chunk,
-                                               chunk_size);
+    struct efs_chunk_entry observed;
+    int have_observed = 0;
+    job->rc = efs_client_fetch_published_chunk_obs(
+        job->ino, job->ci, job->chunk, chunk_size, &observed, &have_observed);
+    uint64_t observed_key = have_observed ? efs_chunk_read_key(&observed) : 0;
     if (job->rc == EFS_OK) {
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
-        if (job->cacheable && job->owned) {
+        if (job->cacheable && have_observed && job->owned) {
             /* Prefetch: the buffer becomes the cache way, no copy. */
-            if (efs_rdcache_put_owned(job->ino, job->ci, job->chunk,
-                                      chunk_size))
+            if (rdcache_put_inner(job->ino, job->ci, job->chunk,
+                                      chunk_size, 1, observed_key))
                 job->chunk = NULL;
-        } else if (job->cacheable) {
-            efs_rdcache_put(job->ino, job->ci, job->chunk, chunk_size);
+        } else if (job->cacheable && have_observed) {
+            (void)rdcache_put_inner(job->ino, job->ci, job->chunk, chunk_size,
+                                    0, observed_key);
         } else if (acq == 1) {
             rdcache_cancel(job->ino, job->ci);
         }
     } else if (acq == 1) {
         rdcache_cancel(job->ino, job->ci);
     }
+    if (acq == 1)
+        rdcache_cancel(job->ino, job->ci);
     return NULL;
 }
 
@@ -1594,6 +1611,9 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
     pthread_mutex_unlock(&g_client.idx_mu);
     if (!have_row || offset + size > inode.size)
         return 0;
+    if (efs_client_pull_chunks_range(ino, (uint32_t)(offset / cs),
+            (uint32_t)((offset + size - 1) / cs) + 1) != EFS_OK)
+        return 0;
     (void)efs_dcache_put_win_wait(ino);
     int n = (int)(size / cs);
     uint32_t ci0 = (uint32_t)(offset / cs);
@@ -1723,7 +1743,9 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
          * from our own fold stays "current" and hides them. The batch
          * path paints spans onto a decoded-cache hit; this 2 KiB path
          * must not return that hit raw (peer_overlap_pwrite_chunk_straddle). */
-        (void)efs_client_pull_chunks_range(ino, ci, ci + 1);
+        int prc = efs_client_pull_chunks_range(ino, ci, ci + 1);
+        if (prc != EFS_OK && prc != EFS_ERR_NOT_FOUND)
+            return prc;
         if (efs_dcache_copy(ino, ci, off, (uint8_t *)buf, (uint32_t)size) == 0) {
             *out_len = size;
             maybe_prefetch(want_pf, ino, end, file_size);
@@ -1820,7 +1842,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                 }
             }
             if (miss0 != UINT32_MAX) {
-                int prc = efs_client_pull_layout_miss(ino, miss0, miss1 + 1);
+                int prc = efs_client_pull_chunks_range(ino, miss0, miss1 + 1);
                 pthread_mutex_lock(&g_client.idx_mu);
                 if (prc != EFS_OK) {
                     int cached = 1;

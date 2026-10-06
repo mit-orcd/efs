@@ -217,6 +217,9 @@ static void apply_chunk_recs(efs_ino_t lock_ino, const struct efs_chunk_rec *rec
                                           recs[i].chunk_index,
                                           recs[i].deltas, recs[i].delta_base_n,
                                           recs[i].delta_base_seq);
+        (void)efs_export_set_chunk_view(&g_client.export, recs[i].ino,
+                                        recs[i].chunk_index, &recs[i].read_view);
+        efs_rdcache_invalidate(recs[i].ino, recs[i].chunk_index);
         efs_client_stage_touch(recs[i].ino);
     }
     pthread_mutex_unlock(&g_client.idx_mu);
@@ -290,6 +293,9 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
                     at = recs[i].chunk_index + 1;
                 }
             }
+            for (uint32_t i = 0; i < n; ++i)
+                if (efs_chunk_rec_view_valid(&recs[i]) != EFS_OK)
+                    return EFS_ERR_PROTO;
             apply_chunk_recs(ino, recs, n);
             uint32_t next = recs[n - 1].chunk_index + 1;
             if (next <= cur)
@@ -319,6 +325,7 @@ struct pull_fan {
     uint32_t next;
     uint32_t end;
     int rc;
+    uint64_t deadline;
     pthread_mutex_t mu;
     struct pull_absent *ab;
 };
@@ -326,6 +333,8 @@ struct pull_fan {
 static void *pull_fan_thread(void *arg)
 {
     struct pull_fan *f = arg;
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    efs_client_rpc_set_deadline_ms(f->deadline);
 
     for (;;) {
         uint32_t s, ge;
@@ -350,6 +359,7 @@ static void *pull_fan_thread(void *arg)
             pthread_mutex_unlock(&f->mu);
         }
     }
+    efs_client_rpc_set_deadline_ms(previous);
     return NULL;
 }
 
@@ -373,6 +383,7 @@ static int pull_groups_parallel(efs_ino_t ino, uint32_t start_ci,
     f.end = end_ci;
     f.rc = EFS_OK;
     f.ab = ab;
+    f.deadline = efs_client_rpc_deadline_ms();
     pthread_mutex_init(&f.mu, NULL);
     nth = ngroups < PULL_FAN ? (int)ngroups : PULL_FAN;
     for (i = 1; i < nth; i++)
@@ -1058,20 +1069,17 @@ efs_ino_t efs_client_create(efs_ino_t parent, const char *name, uint32_t mode,
 efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode,
                                uid_t uid, gid_t gid, uint32_t flags)
 {
-    g_client.last_err = EFS_OK;
-    /* Phase 2b: the mutation runs on the metadata primary (which allocates the
-     * ino and persists via the server flush thread). Dual-apply the returned
-     * inode to the local snapshot so the data path sees it immediately. */
-    struct efs_inode out;
-    int rc = efs_client_rpc_create(g_client.export_id, parent, name, mode,
-                                   uid, gid, flags, NULL, &out);
-    if (rc != EFS_OK) {
-        g_client.last_err = rc;
-        return 0;
-    }
+    efs_ino_t ino = 0;
+    (void)efs_client_create_result(parent, name, mode, uid, gid, flags, &ino);
+    return ino;
+}
+
+static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode,
+                                uid_t uid, gid_t gid, const struct efs_inode *out)
+{
     /* Pin across the local insert. The dirty mark below is what keeps
      * the row after we unpin; the pin covers the insert itself. */
-    efs_client_stage_pin(out.ino);
+    efs_client_stage_pin(out->ino);
     efs_client_stage_pin(parent);
     efs_client_lock_dir(parent);
     pthread_mutex_lock(&g_client.idx_mu);
@@ -1083,33 +1091,55 @@ efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode
      * plus a dentry row on the parent's shard when the two differ.
      * bits==0: both are the main table — identical to the old path. */
     struct efs_export *ctab = efs_export_table_for_ino(&g_client.export,
-                                                       out.ino);
+                                                       out->ino);
     struct efs_export *ptab = efs_export_table_for_ino(&g_client.export,
                                                        parent);
     if (!ctab)
         ctab = &g_client.export;
-    if (efs_export_create_with_ino(ctab, out.ino, parent, mode,
+    if (efs_export_create_with_ino(ctab, out->ino, parent, mode,
                                    uid, gid, name) == 0)
-        efs_export_upsert_inode(ctab, &out);
+        efs_export_upsert_inode(ctab, out);
     if (ptab && ptab != ctab) {
-        if (efs_export_create_with_ino(ptab, out.ino, parent, mode,
+        if (efs_export_create_with_ino(ptab, out->ino, parent, mode,
                                        uid, gid, name) == 0)
-            efs_export_upsert_inode(ptab, &out);
+            efs_export_upsert_inode(ptab, out);
     }
     efs_export_set_mtime(&g_client.export, parent, now());
-    efs_client_stage_touch(out.ino);
+    efs_client_stage_touch(out->ino);
     /* Mark dirty BEFORE dropping the locks: the staging-table evictor runs
      * under the same table lock, so staging + dirty-mark must be one atomic
      * hold — otherwise the row could be evicted in the gap and the later
      * REPORT would skip the missing row (its size/chunk recs never reach
      * the server). Peers never mark this ino dirty. */
-    efs_client_mark_ino_dirty(out.ino);
+    efs_client_mark_ino_dirty(out->ino);
     efs_client_mark_ino_dirty(parent);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(parent);
     efs_client_stage_unpin(parent);
-    efs_client_stage_unpin(out.ino);
-    return out.ino;
+    efs_client_stage_unpin(out->ino);
+}
+
+int efs_client_create_result(efs_ino_t parent, const char *name, uint32_t mode,
+                               uid_t uid, gid_t gid, uint32_t flags, efs_ino_t *ino)
+{
+    if (!ino)
+        return EFS_ERR_INVAL;
+    *ino = 0;
+    int admission = efs_client_report_admit(2); /* child and parent rows */
+    if (admission != EFS_OK)
+        return admission;
+    /* Phase 2b: the mutation runs on the metadata primary (which allocates the
+     * ino and persists via the server flush thread). Dual-apply the returned
+     * inode to the local snapshot so the data path sees it immediately. */
+    struct efs_inode out;
+    int rc = efs_client_rpc_create(g_client.export_id, parent, name, mode,
+                                   uid, gid, flags, NULL, &out);
+    if (rc == EFS_OK) {
+        create_stage_inode(parent, name, mode, uid, gid, &out);
+        *ino = out.ino;
+    }
+    efs_client_report_unreserve();
+    return rc;
 }
 
 /* Phase 2b: setattr via the primary; dual-apply the returned inode. */

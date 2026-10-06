@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := all
+
 CC = gcc
 # -g keeps symbols for `perf report`; -fno-omit-frame-pointer improves stack
 # unwinding under --perf. Both are cheap at -O3.
@@ -19,6 +21,9 @@ CFLAGS = -O3 -g -fno-omit-frame-pointer -march=native -mtune=native \
          -DEFS_VERSION='"$(EFS_GIT_DESCRIBE)"' \
          -DEFS_GIT_BRANCH='"$(EFS_GIT_BRANCH)"' \
          -DEFS_BUILD_TIME='"$(EFS_BUILD_TIME)"' $(EXTRA_DEFS)
+ifeq ($(EFS_FAULTS),1)
+CFLAGS += -DEFS_FAULTS=1
+endif
 INCLUDES = -Iinclude -Isrc/common -Ideps/blake3
 
 LDFLAGS = -lpthread -lm -ldl -libverbs
@@ -90,8 +95,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c
-TEST_BINS = tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd
+TEST_SRCS = tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c
+TEST_BINS = tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/store_nvme.c \
               src/server/handler.c \
@@ -113,7 +118,7 @@ MGMT_OBJ = $(MGMT_SRC:.c=.o)
 QUERY_SRC = src/query/efs_query.c
 QUERY_OBJ = $(QUERY_SRC:.c=.o)
 
-# System fuse3 (>= 3.3.0-19.el8). pkg-config supplies -I and -lfuse3.
+# System fuse3 (>= 3.12, bounded active-worker API). pkg-config supplies -I and -lfuse3.
 FUSE_CFLAGS := $(shell pkg-config --cflags fuse3 2>/dev/null)
 FUSE_LIBS := $(shell pkg-config --libs fuse3 2>/dev/null)
 
@@ -122,7 +127,51 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
               $(BLAKE3_DIR)/blake3_dispatch.o \
               $(BLAKE3_ARCH_SRCS:.c=.o)
 
-.PHONY: all clean tests test docs-check blake3-bench FORCE
+.PHONY: all clean tests test test-client-memory docs-check blake3-bench FORCE
+
+.PHONY: test-fence-read test-fence-view test-lookup-memo test-fold-observation test-create-errors test-report-pressure
+test-report-pressure:
+	python3 tests/test_report_pressure.py
+	python3 tests/test_write_queue.py
+
+test-create-errors:
+	python3 tests/test_create_errors.py
+
+test-fold-observation:
+	python3 tests/test_fold_observation.py
+
+test-lookup-memo:
+	python3 tests/test_lookup_memo.py
+
+tests/test_fence_view: tests/test_fence_view.c include/efs/fence_view.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $<
+
+test-fence-read:
+	python3 tests/test_fence_read.py
+
+test-fence-view: tests/test_fence_view
+	./tests/test_fence_view
+
+.PHONY: test-wb-recovery test-wb-runtime test-stop-control
+test-stop-control:
+	@set -e; stop_test=$$(mktemp /tmp/efs-test-stop-control.XXXXXX); \
+	trap 'rm -f "$$stop_test"' EXIT; \
+	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/client -pthread -o "$$stop_test" tests/test_stop_control.c; \
+	"$$stop_test"
+	python3 tests/test_client_stop.py
+	python3 tests/test_client_processes.py
+
+test-wb-runtime:
+	python3 tests/test_wb_runtime.py
+	python3 tests/test_wb_fault.py
+	python3 tests/test_stale_recovery.py
+	python3 tests/test_pull_deadline.py
+
+test-wb-recovery:
+	@set -e; wb_test=$$(mktemp /tmp/efs-test-wb-recovery.XXXXXX); \
+	trap 'rm -f "$$wb_test"' EXIT; \
+	$(CC) $(CFLAGS) $(INCLUDES) -o "$$wb_test" tests/test_wb_recovery.c; \
+	"$$wb_test"
 
 .PHONY: test-client-stop
 test-client-stop:
@@ -141,6 +190,19 @@ docs-check:
 
 test: all
 	python3 docs/check-architecture.py
+	$(MAKE) test-fence-read
+	$(MAKE) test-fence-view
+	$(MAKE) test-wb-recovery
+	$(MAKE) test-wb-runtime
+	$(MAKE) test-stop-control
+	$(MAKE) test-lookup-memo
+	$(MAKE) test-fold-observation
+	$(MAKE) test-create-errors
+	$(MAKE) test-report-pressure
+	./tests/test_reply_buffers
+	./tests/test_reply_buffers key-failure
+	./tests/test_bufpool
+	python3 tests/test_client_memory.py
 	./tests/test_wire
 	./tests/test_data
 	./tests/test_kv
@@ -167,7 +229,7 @@ test: all
 $(COMMON_OBJS) $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(MGMT_OBJ) $(QUERY_OBJ): \
 	include/efs/common.h include/efs/metadata.h include/efs/protocol.h \
 	include/efs/wire.h include/efs/store.h include/efs/transport.h \
-	include/efs/kv.h \
+	include/efs/kv.h include/efs/fence_view.h \
 	.build_id.stamp
 
 src/wire/wire.o: include/efs/raft.h
@@ -179,8 +241,8 @@ efsd: $(SERVER_OBJS) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(SERVER_OBJS) $(LIB) $(LDFLAGS)
 
 efs-fuse: $(CLIENT_OBJS) $(LIB)
-	@pkg-config --exists fuse3 || { \
-	  echo "efs-fuse needs fuse3-devel >= 3.3.0 (pkg-config fuse3)" >&2; \
+	@pkg-config --atleast-version=3.12 fuse3 || { \
+	  echo "efs-fuse needs fuse3-devel >= 3.12 (pkg-config fuse3)" >&2; \
 	  exit 1; }
 	$(CC) $(CFLAGS) $(INCLUDES) $(FUSE_CFLAGS) -o $@ $(CLIENT_OBJS) $(LIB) $(LDFLAGS) $(FUSE_LIBS)
 
@@ -194,6 +256,23 @@ efs-mgmt: $(MGMT_OBJ) $(LIB)
 
 efs-query: $(QUERY_OBJ) $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $(QUERY_OBJ) $(LIB) $(LDFLAGS)
+
+# These exercise production ownership/budget helpers with allocator/RDMA stubs.
+tests/test_reply_buffers: tests/test_reply_buffers.c src/client/reply_buffers.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
+
+tests/test_bufpool: tests/test_bufpool.c src/client/bufpool.c src/client/client_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
+
+test-client-memory: tests/test_reply_buffers tests/test_bufpool
+	python3 tests/test_fuse_workers.py
+	./tests/test_reply_buffers
+	./tests/test_reply_buffers key-failure
+	./tests/test_bufpool
+	python3 tests/test_client_memory.py
+
+$(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
+src/client/efs_fuse.o: src/client/reply_buffers.h src/client/stop_control.h
 
 tests: $(TEST_BINS)
 
