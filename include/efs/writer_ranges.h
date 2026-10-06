@@ -153,4 +153,43 @@ static inline int efs_writer_ranges_ack(struct efs_writer_ranges *writer,
     return efs_dirty_ranges_ack(&writer->bytes, &plan->original);
 }
 
+/* A successful PUT alone cannot release bytes. Keep its object and snapshot
+ * sequence attached to the immutable original ownership until REPORT commits. */
+struct efs_writer_publication {
+    struct efs_writer_plan plan;
+    uint64_t object_generation;
+    uint64_t snapshot_sequence;
+};
+static inline int efs_writer_publication_bind(
+    const struct efs_writer_plan *plan, uint64_t object_generation,
+    uint64_t snapshot_sequence, struct efs_writer_publication *out)
+{
+    if (!plan || !out || !plan->ino || !plan->generation || !object_generation ||
+        !snapshot_sequence || efs_dirty_ranges_valid(&plan->original) != EFS_OK ||
+        efs_dirty_ranges_valid(&plan->surviving) != EFS_OK ||
+        plan->original.chunk_size != plan->surviving.chunk_size ||
+        plan->original.mutation != plan->surviving.mutation)
+        return EFS_ERR_INVAL;
+    struct efs_writer_publication publication = {0};
+    publication.plan = *plan;
+    publication.object_generation = object_generation;
+    publication.snapshot_sequence = snapshot_sequence;
+    *out = publication;
+    return EFS_OK;
+}
+static inline int efs_writer_publication_complete(
+    struct efs_writer_ranges *writer, const struct efs_writer_publication *publication,
+    uint64_t committed_object, uint64_t committed_sequence, int verdict)
+{
+    if (!writer || !publication || !publication->object_generation ||
+        !publication->snapshot_sequence)
+        return EFS_ERR_INVAL;
+    if (verdict != EFS_OK)
+        return verdict;
+    if (committed_object != publication->object_generation ||
+        committed_sequence != publication->snapshot_sequence)
+        return EFS_ERR_STALE;
+    return efs_writer_ranges_ack(writer, &publication->plan);
+}
+
 #endif

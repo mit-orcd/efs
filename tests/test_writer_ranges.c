@@ -42,9 +42,37 @@ static void test_base_identity(void)
     free(base);
 }
 
+static void test_publication_identity(void)
+{
+    struct efs_writer_ranges writer = {0}, saved;
+    struct efs_writer_plan plan;
+    struct efs_writer_publication publication, sentinel;
+    struct efs_msg_inode_writer_view_reply view = authority(0);
+    writer.bytes.chunk_size = 1024;
+    assert(efs_writer_ranges_admit(&writer, &view, 0, 100) == EFS_OK);
+    assert(efs_writer_ranges_plan(&writer, &view, 0, &plan) == EFS_OK);
+    memset(&sentinel, 0xa5, sizeof(sentinel)); publication = sentinel;
+    assert(efs_writer_publication_bind(&plan, 0, 10, &publication) == EFS_ERR_INVAL);
+    assert(!memcmp(&publication, &sentinel, sizeof(publication)));
+    assert(efs_writer_publication_bind(&plan, 1000, 10, &publication) == EFS_OK);
+    saved = writer;
+    assert(efs_writer_publication_complete(&writer, &publication, 1000, 10, EFS_ERR_IO) == EFS_ERR_IO);
+    assert(efs_writer_publication_complete(&writer, &publication, 1001, 10, EFS_OK) == EFS_ERR_STALE);
+    assert(efs_writer_publication_complete(&writer, &publication, 1000, 11, EFS_OK) == EFS_ERR_STALE);
+    assert(!memcmp(&writer, &saved, sizeof(writer)));
+    assert(efs_writer_ranges_admit(&writer, &view, 0, 1) == EFS_OK);
+    assert(efs_writer_publication_complete(&writer, &publication, 1000, 10, EFS_OK) == EFS_ERR_STALE);
+    assert(writer.bytes.count);
+    assert(efs_writer_ranges_plan(&writer, &view, 0, &plan) == EFS_OK);
+    assert(efs_writer_publication_bind(&plan, 1002, 12, &publication) == EFS_OK);
+    assert(efs_writer_publication_complete(&writer, &publication, 1002, 12, EFS_OK) == EFS_OK);
+    assert(!writer.bytes.count);
+}
+
 int main(void)
 {
     test_base_identity();
+    test_publication_identity();
     struct efs_writer_ranges writer = {0}, saved;
     struct efs_writer_plan plan, sentinel;
     struct efs_msg_inode_writer_view_reply v = authority(0);
