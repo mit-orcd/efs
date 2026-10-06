@@ -153,6 +153,13 @@ test-fence-read:
 test-fence-view: tests/test_fence_view
 	./tests/test_fence_view
 
+.PHONY: test-dirty-ranges
+test-dirty-ranges:
+	@set -e; ranges_test=$$(mktemp /tmp/efs-test-dirty-ranges.XXXXXX); \
+	trap 'rm -f "$$ranges_test"' EXIT; \
+	$(CC) $(CFLAGS) $(INCLUDES) -o "$$ranges_test" tests/test_dirty_ranges.c; \
+	"$$ranges_test"
+
 .PHONY: test-wb-recovery test-wb-runtime test-stop-control
 test-stop-control:
 	@set -e; stop_test=$$(mktemp /tmp/efs-test-stop-control.XXXXXX); \
@@ -193,6 +200,7 @@ test: all
 	python3 docs/check-architecture.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view
+	$(MAKE) test-dirty-ranges
 	$(MAKE) test-wb-recovery
 	$(MAKE) test-wb-runtime
 	$(MAKE) test-stop-control
