@@ -4734,7 +4734,12 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
     pthread_mutex_t *mu = dcache_mu(s);
     pthread_mutex_lock(mu);
     struct dcache_ent *e = dcache_find(s, ino, ci);
-    if (e && e->dirty && e->len >= cs && off + len <= e->len) {
+    if (e && dcache_keep_on_drop(e) && e->len >= cs && off + len <= e->len) {
+        if (!e->dirty) {
+            dcache_set_dirty(e, s);
+            dcache_pin_add(e);
+            dcache_note_dirty_bytes((int64_t)e->len);
+        }
         memcpy(e->data + off, src, len);
         dcache_add_range(e, off, len);
         DTRACE(e, "merge-fold off=%u len=%u", off, len);

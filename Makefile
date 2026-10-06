@@ -142,6 +142,7 @@ test-create-errors:
 
 test-fold-observation:
 	python3 tests/test_fold_observation.py
+	python3 tests/test_load_merge_race.py
 	python3 tests/test_writer_fence_merge.py
 	python3 tests/test_writer_view_rpc.py
 	python3 tests/test_span_selection.py
