@@ -20,6 +20,7 @@ struct efs_writer_plan {
     uint64_t generation;
     uint64_t publish_epoch;
     uint32_t chunk_index;
+    int base_absent; /* zero image + expected object generation zero */
     struct efs_dirty_ranges original;
     struct efs_dirty_ranges surviving;
 };
@@ -116,7 +117,7 @@ static inline int efs_writer_ranges_plan_base(
     int rc = efs_writer_ranges_authority(writer, view);
     if (rc != EFS_OK)
         return rc;
-    if (!base || base->status != EFS_INODE_RPC_OK)
+    if (!out || !base || base->status != EFS_INODE_RPC_OK)
         return EFS_ERR_INVAL;
     if (base->ino != writer->ino || base->generation != writer->generation ||
         base->authority_epoch != view->authority_epoch)
@@ -129,14 +130,19 @@ static inline int efs_writer_ranges_plan_base(
     rc = efs_getchunks_reply_valid(&req, base);
     if (rc != EFS_OK)
         return rc;
-    /* max=1 alone can skip a hole and return a later chunk in the group.
-     * Such a row is not a base for the requested chunk. */
-    if (base->count && base->recs[0].chunk_index != writer->chunk_index)
-        return EFS_ERR_STALE;
-    if (base->count && (base->recs[0].read_view.chunk_size != writer->bytes.chunk_size ||
+    /* A later first row proves the requested chunk is a hole. Never use
+     * that later row's bytes/identity as this chunk's CAS base. */
+    int absent = !base->count || base->recs[0].chunk_index > writer->chunk_index;
+    if (!absent && (base->recs[0].read_view.chunk_size != writer->bytes.chunk_size ||
         base->recs[0].read_view.fence_epoch != view->authority_epoch))
         return EFS_ERR_STALE;
-    return efs_writer_ranges_plan(writer, view, base->authority_epoch, out);
+    struct efs_writer_plan plan;
+    rc = efs_writer_ranges_plan(writer, view, base->authority_epoch, &plan);
+    if (rc == EFS_OK) {
+        plan.base_absent = absent;
+        *out = plan;
+    }
+    return rc;
 }
 
 /* Caller first matches the committed PUT/REPORT object and snapshot sequence.
@@ -189,7 +195,13 @@ static inline int efs_writer_publication_complete(
     if (committed_object != publication->object_generation ||
         committed_sequence != publication->snapshot_sequence)
         return EFS_ERR_STALE;
-    return efs_writer_ranges_ack(writer, &publication->plan);
+    int rc = efs_writer_ranges_ack(writer, &publication->plan);
+    if (writer->ino == publication->plan.ino &&
+        writer->generation == publication->plan.generation &&
+        writer->chunk_index == publication->plan.chunk_index &&
+        writer->observed_epoch < publication->plan.publish_epoch)
+        writer->observed_epoch = publication->plan.publish_epoch;
+    return rc;
 }
 
 #endif

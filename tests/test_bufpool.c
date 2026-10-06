@@ -4,12 +4,16 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <pthread.h>
-static int fail_malloc;
+static int fail_malloc, fail_calloc;
+static void *test_calloc(size_t n, size_t size) { return fail_calloc ? NULL : calloc(n, size); }
 static void *test_malloc(size_t n) { return fail_malloc ? NULL : malloc(n); }
 int efs_rdma_zc_region_add(void *p, size_t n) { (void)p; (void)n; return 0; }
 #define malloc test_malloc
+#define calloc test_calloc
 #include "../src/client/bufpool.c"
+#include "../src/client/writer_state.c"
 #undef malloc
+#undef calloc
 
 static void check(uint64_t expected)
 {
@@ -38,6 +42,38 @@ static void *abandon_credit(void *unused)
     assert(!efs_buf_reserve_request(1u << 20, 4096));
     return NULL; /* pthread-key destructor must release both reservations */
 }
+static void writer_state_lifetime(void)
+{
+    uint64_t before = g_metadata;
+    fail_calloc = 1;
+    assert(!efs_writer_state_alloc(EFS_CHUNK_SIZE) && g_metadata == before);
+    fail_calloc = 0;
+    assert(!efs_buf_reserve_request(0, sizeof(struct efs_writer_state)));
+    struct efs_writer_state *state = efs_writer_state_alloc(EFS_CHUNK_SIZE);
+    assert(state && g_metadata == before + sizeof(*state));
+    efs_buf_unreserve();
+    struct efs_msg_inode_writer_view_reply view = {0};
+    view.ino = 100; view.generation = 1;
+    assert(efs_writer_ranges_admit(&state->ranges, &view, 0, 100) == EFS_OK);
+    struct efs_writer_plan plan;
+    assert(efs_writer_ranges_plan(&state->ranges, &view, 0, &plan) == EFS_OK);
+    assert(efs_writer_state_free(state) == EFS_ERR_BUSY);
+    assert(efs_writer_state_put(state, &plan, 1000, 1) == EFS_OK);
+    assert(efs_writer_state_put(state, &plan, 1001, 2) == EFS_ERR_BUSY);
+    assert(efs_writer_state_report(state, 1000, 1, EFS_ERR_IO) == EFS_ERR_IO);
+    assert(state->has_publication && state->ranges.bytes.count);
+    assert(efs_writer_state_report(state, 1001, 1, EFS_OK) == EFS_ERR_STALE);
+    assert(state->has_publication);
+    assert(efs_writer_ranges_admit(&state->ranges, &view, 0, 1) == EFS_OK);
+    assert(efs_writer_state_report(state, 1000, 1, EFS_OK) == EFS_ERR_STALE);
+    assert(!state->has_publication && state->ranges.bytes.count);
+    assert(efs_writer_state_free(state) == EFS_ERR_BUSY);
+    assert(efs_writer_ranges_plan(&state->ranges, &view, 0, &plan) == EFS_OK);
+    assert(efs_writer_state_put(state, &plan, 1001, 2) == EFS_OK);
+    assert(efs_writer_state_report(state, 1001, 2, EFS_OK) == EFS_OK);
+    assert(efs_writer_state_free(state) == EFS_OK && g_metadata == before);
+}
+
 int main(void)
 {
     setenv("EFS_DCACHE_HARD_BYTES", "33554432", 1);
@@ -120,6 +156,7 @@ int main(void)
     assert(!efs_buf_metadata_alloc(1));
     for (int i = 0; i < 32; i++) efs_buf_metadata_free(m[i], 256u << 10);
     assert(g_metadata == 0);
+    writer_state_lifetime();
     puts("test_bufpool: OK (hard bound, reserve, failures, concurrency, metadata)");
     return 0;
 }

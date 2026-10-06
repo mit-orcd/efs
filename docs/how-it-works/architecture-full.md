@@ -2113,6 +2113,50 @@ public logical truncate can be enabled. This checkpoint adds no runtime RPCs,
 changes no mounts and does not claim the live D25 acceptance gates are complete.
 
 
+### D25 five-round transport/ownership checkpoint — Oct 6 2026
+
+Five implementation rounds follow the FileID-bound planner:
+
+1. `7072d97b`: GETCHUNKS validates the entire fixed reply before exposing cache
+   records: count/request bounds, inode identity, ordered distinct chunk indices,
+   group bounds and per-part views. Wrong lengths and malformed replies fail closed.
+2. `b6ca5f86`: GETCHUNKS requests may require an exact FileID generation;
+   forwarded requests retain it. Replies carry FileID and inode authority epoch
+   even for holes. `efs_client_rpc_getchunks_fileid` leaves outputs unchanged on
+   error; the existing getter remains its discovery-mode wrapper.
+3. `c093b021`: the planner checks the actual base reply's FileID, chunk geometry
+   and both inode/lane epochs. A `max=1` result that skips a hole and returns a
+   later chunk is never used as the requested base. The fifth round turns
+   this proof of a hole into an explicit zero-image/zero-CAS plan instead of
+   repeatedly retrying the same later row.
+4. `972bbca9`: immutable publication tokens bind original ownership to PUT object
+   generation and snapshot sequence. Failed/mismatched REPORT cannot acknowledge
+   ownership; concurrent rewrites prevent an older snapshot clearing their bytes.
+5. Budgeted writer sidecars allocate through the metadata hard bound. Pending
+   ownership/publication prevents destruction. A matching committed older PUT
+   retires its token while keeping concurrently rewritten ranges for another PUT.
+   Committed publication also advances observed authority, preventing later
+   admission from regressing to a pre-fence snapshot.
+
+Linux full `make test` and all five documentation checks pass. Planner and
+allocator/lifetime regressions pass under ASan/UBSan. An isolated NUC native
+wire probe passes **432 checks** across all three nodes, including GETCHUNKS
+holes, FileID mismatches and published rows. Single-client POSIX is **216 PASS,
+0 FAIL, 1 mmap SKIP**; two-client POSIX is **64/64 PASS**. Both new clients
+cleanly stop without discard. [Saved results](../../results/measure/20261006-writer-five-rounds/SUMMARY.md).
+GETCHUNKS wire shapes changed; deploy matched server/client binaries together.
+The original mounts and older retained diagnostic clients were unchanged.
+
+**Still outstanding:** attach the budgeted ownership sidecar to dcache entries,
+reserve its full metadata charge before copying writes, replace the range union,
+and carry immutable plans/tokens through both flush paths and REPORT/retry.
+One sidecar currently owns one pending publication; runtime integration must
+serialize it or explicitly bound multiple in-flight plans. Incomplete history
+must retain accepted bytes, never re-age or discard them. Public logical truncate
+and history retirement remain disabled/pending; these five rounds do not
+activate epoch-based FUSE writes or complete D25.
+
+
 ## Appendix 2 — In flight — the current handoff block
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**

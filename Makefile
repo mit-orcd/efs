@@ -87,7 +87,7 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
               src/client/ops.c \
               src/client/read.c \
               src/client/write.c \
-              src/client/bufpool.c \
+              src/client/bufpool.c src/client/writer_state.c \
               src/client/inode_rpc.c \
               src/client/stage_evict.c \
               src/client/node_cache.c
@@ -283,8 +283,8 @@ efs-query: $(QUERY_OBJ) $(LIB)
 tests/test_reply_buffers: tests/test_reply_buffers.c src/client/reply_buffers.h
 	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
 
-tests/test_bufpool: tests/test_bufpool.c src/client/bufpool.c src/client/client_internal.h
-	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< -lpthread
+tests/test_bufpool: tests/test_bufpool.c src/common/common.c src/client/bufpool.c src/client/writer_state.c include/efs/writer_state.h include/efs/writer_ranges.h src/client/client_internal.h
+	$(CC) $(CFLAGS) $(INCLUDES) -o $@ $< src/common/common.c -lpthread
 
 test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py

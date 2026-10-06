@@ -23,7 +23,7 @@ static void test_base_identity(void)
     view.history.entries[0] = (struct efs_content_fence){1, 100};
     base->ino = writer.ino; base->generation = writer.generation; base->authority_epoch = 1;
     assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_OK);
-    assert(plan.surviving.ranges[0].len == 100);
+    assert(plan.base_absent && plan.surviving.ranges[0].len == 100);
     saved = plan;
     base->authority_epoch = 0;
     assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_ERR_STALE);
@@ -35,10 +35,10 @@ static void test_base_identity(void)
     assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_ERR_STALE);
     base->recs[0].read_view.fence_epoch = base->recs[0].read_view.revision = 1;
     ++base->recs[0].chunk_index;
-    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_ERR_STALE);
+    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_OK && plan.base_absent);
     --base->recs[0].chunk_index;
     assert(!memcmp(&plan, &saved, sizeof(plan)));
-    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_OK);
+    assert(efs_writer_ranges_plan_base(&writer, &view, base, &plan) == EFS_OK && !plan.base_absent);
     free(base);
 }
 
@@ -67,6 +67,16 @@ static void test_publication_identity(void)
     assert(efs_writer_publication_bind(&plan, 1002, 12, &publication) == EFS_OK);
     assert(efs_writer_publication_complete(&writer, &publication, 1002, 12, EFS_OK) == EFS_OK);
     assert(!writer.bytes.count);
+    assert(efs_writer_ranges_admit(&writer, &view, 0, 100) == EFS_OK);
+    view.authority_epoch = 1; view.history.count = 1;
+    view.history.entries[0] = (struct efs_content_fence){1, 100};
+    assert(efs_writer_ranges_plan(&writer, &view, 1, &plan) == EFS_OK);
+    assert(efs_writer_publication_bind(&plan, 1003, 13, &publication) == EFS_OK);
+    assert(efs_writer_publication_complete(&writer, &publication, 1003, 13, EFS_OK) == EFS_OK);
+    assert(writer.observed_epoch == 1);
+    view = authority(0);
+    assert(efs_writer_ranges_admit(&writer, &view, 0, 1) == EFS_ERR_STALE);
+
 }
 
 int main(void)
