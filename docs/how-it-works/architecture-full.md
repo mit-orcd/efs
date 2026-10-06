@@ -7394,6 +7394,22 @@ C/header/assembly sources to gateways/test clients, excluding object files.
 The NUC deploy already transfers the complete source tree. Existing cluster
 `bench.sh` uses the still-supported remote metadata mode and needs no CLI change.
 
+Raw I/O workers sleep at a condition-variable start gate until all are ready.
+The timed loop uses integer deadlines, one clock read per completed operation,
+and an increment/wrap offset rather than division. `avg_us`/`max_us` report the
+complete operation cycle, including loop bookkeeping and scheduling. This
+latency definition differs from older syscall-region measurements.
+`idle_workers`, `min_worker_ops` and `max_worker_ops` expose participation;
+any idle worker or I/O/verification error produces `BENCH_FAIL` and a nonzero
+exit. Diagnostics retain the actual failing phase/error instead of stale errno.
+
+Analysis excludes invalid baselines even if they contain rates. A valid baseline
+remains usable when its separate perf rerun fails. Time/vDSO and unresolved
+addresses are shown separately, with warnings for substantial unresolved sample
+coverage. The manifest records CPU affinity and perf permission settings; reports
+show the recorded event (which may differ from the requested event). No kernel
+address is assigned to a guessed function.
+
 
 ## Appendix 13 — Development — modularity constraint
 
