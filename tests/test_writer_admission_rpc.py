@@ -10,6 +10,7 @@ source=r'''
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+int efs_client_rpc_past_deadline(void) { return 0; }
 static unsigned reads,boots; static int read_rc,boot_rc,bad;
 int efs_chunk_size_valid(uint32_t cs) { return cs==EFS_MIN_CHUNK_SIZE; }
 int efs_client_rpc_lane_writer_view(efs_ino_t ino,uint64_t gen,uint32_t ci,uint32_t cs,

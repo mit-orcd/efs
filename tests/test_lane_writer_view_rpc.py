@@ -6,12 +6,17 @@ root = Path(__file__).resolve().parents[1]
 text = (root / 'src/client/inode_rpc.c').read_text()
 start = text.index('int efs_client_rpc_lane_writer_view(')
 function = text[start:text.index('\n}', start) + 2]
+helper_start = text.index('static int rpc_writer_retry_pause(')
+helper = text[helper_start:text.index('\n}', helper_start) + 2]
 source = r'''
 #include "efs/protocol.h"
 #include "efs/kv_key.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
+uint64_t efs_client_rpc_deadline_ms(void) { return 0; }
+int efs_client_rpc_past_deadline(void) { return 0; }
 struct efs_conn { int unused; };
 int efs_chunk_size_valid(uint32_t cs) { return cs == EFS_MIN_CHUNK_SIZE || cs == EFS_MIN_CHUNK_SIZE * 2; }
 static struct efs_conn connection;
@@ -56,7 +61,7 @@ static int rpc_status_to_efs(uint8_t status) {
     default: return EFS_ERR_NOT_PRIMARY;
     }
 }
-''' + function + r'''
+''' + helper + '\n' + function + r'''
 static void reset(void) {
     calls = releases = drops = sleeps = 0;
     fail_send = fail_recv = bad_type = bad_length = 0; last_target = 0;

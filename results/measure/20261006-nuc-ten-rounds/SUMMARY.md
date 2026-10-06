@@ -24,4 +24,9 @@ NUC private `/data1/efs/review/ten-rounds` full build and full `make test` passe
 for the first cold-wire round. New export/geometry host and client admission
 regressions pass locally. Live rollout/acceptance follows the implementation batch.
 
+3. Lane/cold admission respects the inherited deadline before connection
+   checkout, after receive and before committing output; BUSY backoff is clamped
+   to remaining time. Fake-clock regressions verify short/expired budgets.
+   Full socket/checkout whole-call bounds remain part of D27's remaining gate.
+
 Further rounds and NUC acceptance results will be appended as completed.

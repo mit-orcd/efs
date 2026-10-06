@@ -871,6 +871,26 @@ int efs_client_rpc_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci,
     return EFS_ERR_BUSY;
 }
 
+static int rpc_writer_retry_pause(unsigned attempt)
+{
+    unsigned delay = 50000u << (attempt < 4 ? attempt : 4);
+    uint64_t deadline = efs_client_rpc_deadline_ms();
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
+    if (deadline) {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        uint64_t now = (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
+        if (now >= deadline)
+            return EFS_ERR_BUSY;
+        uint64_t remaining = deadline - now;
+        if (remaining < (delay + 999u) / 1000u)
+            delay = (unsigned)(remaining * 1000u);
+    }
+    usleep(delay);
+    return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
+}
+
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci, uint32_t cs,
                                 struct efs_msg_lane_writer_view_reply *out)
 {
@@ -880,6 +900,8 @@ int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci, ui
     uint32_t shard = efs_kv_lane_shard(ino, ci % 64u);
     efs_node_id_t target = 0;
     for (unsigned attempt = 0; attempt < 8; ++attempt) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
         efs_node_id_t nid = target;
         struct efs_conn *conn = target ? efs_client_conn_get(target) :
                                          rpc_owner_conn_shard(shard, &nid);
@@ -898,6 +920,10 @@ int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci, ui
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
+        if (efs_client_rpc_past_deadline()) {
+            free(payload);
+            return EFS_ERR_BUSY;
+        }
         if (type != EFS_MSG_LANE_WRITER_VIEW_REPLY || len != sizeof(*out)) {
             free(payload);
             return EFS_ERR_PROTO;
@@ -911,7 +937,8 @@ int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci, ui
             continue;
         }
         if (reply.view.status == EFS_INODE_RPC_BUSY) {
-            usleep(50000u << (attempt < 4 ? attempt : 4));
+            if (rpc_writer_retry_pause(attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
             continue;
         }
         int rc = rpc_status_to_efs(reply.view.status);
@@ -934,6 +961,8 @@ int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino, uint
     uint32_t shard = efs_kv_inode_shard(ino);
     efs_node_id_t target = 0;
     for (unsigned attempt = 0; attempt < 8; ++attempt) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
         efs_node_id_t nid = target;
         struct efs_conn *conn = target ? efs_client_conn_get(target) :
                                          rpc_owner_conn_shard(shard, &nid);
@@ -952,6 +981,10 @@ int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino, uint
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
+        if (efs_client_rpc_past_deadline()) {
+            free(payload);
+            return EFS_ERR_BUSY;
+        }
         if (type != EFS_MSG_LANE_BOOTSTRAP_REPLY || len != sizeof(*out)) {
             free(payload);
             return EFS_ERR_PROTO;
@@ -965,7 +998,8 @@ int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino, uint
             continue;
         }
         if (reply.view.status == EFS_INODE_RPC_BUSY) {
-            usleep(50000u << (attempt < 4 ? attempt : 4));
+            if (rpc_writer_retry_pause(attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
             continue;
         }
         int rc = rpc_status_to_efs(reply.view.status);
@@ -986,12 +1020,16 @@ int efs_client_rpc_writer_admission_view(efs_export_id_t export_id, efs_ino_t in
 {
     if (!ino || !gen || !out || !efs_chunk_size_valid(cs))
         return EFS_ERR_INVAL;
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
     struct efs_msg_lane_writer_view_reply view;
     int rc = efs_client_rpc_lane_writer_view(ino, gen, ci, cs, &view);
     /* Only authoritative absence is a bootstrap request. BUSY/STALE/I/O errors
      * never fall back to an inode lookup or mutate authority implicitly. */
-    if (rc == EFS_ERR_NOT_FOUND)
+    if (rc == EFS_ERR_NOT_FOUND && !efs_client_rpc_past_deadline())
         rc = efs_client_rpc_lane_bootstrap(export_id, ino, gen, ci, cs, &view);
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
     if (rc != EFS_OK)
         return rc;
     struct efs_msg_lane_writer_view req = {ino, gen, ci, cs};
