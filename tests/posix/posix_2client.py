@@ -465,6 +465,34 @@ def peer_utimens_visible():
 
 
 @test
+def peer_dir_mtime_bump_visible():
+    """A creates an entry in the shared dir; B must see the directory's
+    mtime AND ctime advance (§7.4 — for a spread dir the bump lives in the
+    dentry shard's dir lane and is reduced at stat)."""
+    before = {}
+
+    def b_before(d):
+        st = os.stat(d)
+        before["m"] = st.st_mtime_ns
+        before["c"] = st.st_ctime_ns
+        time.sleep(0.06)   # outside the 50 ms lookup-memo window (0j)
+
+    def a(d):
+        wr(os.path.join(d, "f"), b"x")
+
+    def b_after(d):
+        st = os.stat(d)
+        if st.st_mtime_ns <= before["m"]:
+            raise Fail("B: dir mtime did not advance after A's create "
+                       "(%d -> %d)" % (before["m"], st.st_mtime_ns))
+        if st.st_ctime_ns <= before["c"]:
+            raise Fail("B: dir ctime did not advance after A's create "
+                       "(%d -> %d)" % (before["c"], st.st_ctime_ns))
+
+    return [("b", b_before), ("a", a), ("b", b_after)]
+
+
+@test
 def peer_truncate_visible():
     """A truncate; B must see the new size and prefix."""
     def a(d):

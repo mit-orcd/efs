@@ -4,6 +4,10 @@
 Reusable + extensible: each test is a function decorated with @test that
 receives a fresh empty directory inside the mount. Add a new test by writing
 a function and decorating it — the runner picks it up automatically.
+A test decorated with @root instead receives the mount root itself (the
+export root is a sharded directory whose metadata placement differs from
+nested dirs — W56); it must use unique entry names and clean up after
+itself.
 
 Covers both "possible" operations (must succeed) and "impossible" ones
 (must fail with a specific errno), using a mix of direct syscalls and real
@@ -57,6 +61,16 @@ def budget(sec):
         fn._posix_timeout = int(sec)
         return fn
     return deco
+
+
+def root(fn):
+    """Test receives the MOUNT ROOT instead of a fresh scratch testdir, for
+    behavior that differs between the export root and nested directories
+    (the sharded export places root dentries on different metadata shards —
+    W56's root-level rename ghost). Entries must have unique names (the
+    mount may be shared with other runs) and be cleaned up by the test."""
+    fn._posix_root = True
+    return fn
 
 
 class Fail(Exception):
@@ -386,6 +400,93 @@ def basic_ftruncate_vs_truncate(d):
     eq(os.path.getsize(p), 500, "path truncate size")
 
 
+# W43: a truncate that spans > 32 chunks in a metadata lane must either
+# happen completely or fail honestly (EIO/EBUSY) with the file left
+# byte-identical — the old bug answered OK and silently kept the old size.
+# With 64 lanes x 32 chunks x 128 KiB (EFS_CHUNK_SIZE) the threshold is
+# 256 MiB, so the test file is 300 MiB, same as W43's stress gate. Both
+# outcomes PASS here; only the lie FAILs (the ext4 baseline always takes
+# the success path). @serial: two lane-spanning truncates in flight at once
+# can leave the refused file's reads transiently failing (EIO, ~1 s while
+# the lane settles) — observed on a fast loopback cluster; _verify_big_
+# unchanged retries through that window.
+TRUNC_BIG_TOTAL = 300 * 1024 * 1024
+TRUNC_BIG_KEEP = 10 * 1024 * 1024
+_TRUNC_BLK = bytes(bytearray(range(256))) * 4096   # 1 MiB non-zero pattern
+
+
+def _write_big(path, total):
+    with open(path, "wb") as f:
+        for _ in range(total // len(_TRUNC_BLK)):
+            f.write(_TRUNC_BLK)
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def _verify_big_unchanged(path, total):
+    """Refused truncate: the file must be byte-identical (a partial apply
+    behind an EIO is still a lie). A big truncate refused while ANOTHER big
+    truncate is in flight can leave the file's reads failing with EIO for
+    ~1 s while the lane settles — retry through that window, but never
+    tolerate a changed size or byte."""
+    deadline = time.time() + 10
+    while True:
+        try:
+            eq(os.path.getsize(path), total, "size after refused truncate")
+            with open(path, "rb") as f:
+                while True:
+                    b = f.read(len(_TRUNC_BLK))
+                    if not b:
+                        break
+                    eq(b, _TRUNC_BLK[:len(b)], "content after refused truncate")
+            return
+        except OSError as e:
+            if e.errno != errno.EIO or time.time() >= deadline:
+                raise
+            time.sleep(0.3)
+
+
+@test
+@budget(180)
+@serial
+def truncate_big_ftruncate_honest(d):
+    p = os.path.join(d, "big")
+    _write_big(p, TRUNC_BIG_TOTAL)
+    with open(p, "rb") as f:
+        head = f.read(TRUNC_BIG_KEEP)
+    try:
+        os.truncate(p, TRUNC_BIG_KEEP)
+    except OSError as e:
+        if e.errno not in (errno.EIO, errno.EBUSY):
+            raise
+        _verify_big_unchanged(p, TRUNC_BIG_TOTAL)
+    else:
+        eq(os.path.getsize(p), TRUNC_BIG_KEEP, "size after truncate")
+        eq(rd(p), head, "prefix content after truncate")
+
+
+@test
+@budget(180)
+@serial
+def truncate_big_o_trunc_honest(d):
+    p = os.path.join(d, "big")
+    _write_big(p, TRUNC_BIG_TOTAL)
+    try:
+        fd = os.open(p, os.O_WRONLY | os.O_TRUNC)
+    except OSError as e:
+        if e.errno not in (errno.EIO, errno.EBUSY):
+            raise
+        _verify_big_unchanged(p, TRUNC_BIG_TOTAL)
+        return
+    new = _TRUNC_BLK * (TRUNC_BIG_KEEP // len(_TRUNC_BLK))
+    with os.fdopen(fd, "wb") as f:
+        f.write(new)
+        f.flush()
+        os.fsync(f.fileno())
+    eq(os.path.getsize(p), TRUNC_BIG_KEEP, "size after O_TRUNC rewrite")
+    eq(rd(p), new, "content after O_TRUNC rewrite")
+
+
 @test
 def basic_seek_end_then_write(d):
     p = os.path.join(d, "f")
@@ -604,6 +705,126 @@ def dir_rename_symlink(d):
     eq(rd(os.path.join(d, "t")), b"data", "target intact")
 
 
+# --------------------------------------------------------------------------
+# Mount-root operations (@root: the test gets the mount root, not a scratch
+# dir). The export root is a sharded directory — its dentries live on
+# different metadata shards than a nested dir's — and every test above runs
+# in a scratch subdir, so this path otherwise goes unexercised. W56: a
+# rename whose parent was the export root left the OLD name resolvable on
+# the renaming client until remount, while every other view was correct.
+# --------------------------------------------------------------------------
+
+def _root_pair(mnt, tag):
+    """Unique (pid-tagged) entry names in the mount root: the mount may be
+    shared with sibling suite runs (POSIX_PER_HOST)."""
+    a = os.path.join(mnt, "posixroot-%s-%d-a" % (tag, os.getpid()))
+    b = os.path.join(mnt, "posixroot-%s-%d-b" % (tag, os.getpid()))
+    return a, b
+
+
+def _root_cleanup(*paths):
+    for p in paths:
+        try:
+            if os.path.isdir(p) and not os.path.islink(p):
+                shutil.rmtree(p, ignore_errors=True)
+            else:
+                os.unlink(p)
+        except OSError:
+            pass  # already gone, or a W56 ghost that only resolves locally
+
+
+@test
+@root
+def root_rename_dir_old_name_gone(mnt):
+    a, b = _root_pair(mnt, "rendir")
+    try:
+        os.mkdir(a)
+        os.rename(a, b)
+        expect_err(errno.ENOENT, os.stat, a)   # the W56 ghost
+        eq(os.path.isdir(b), True, "renamed dir resolves at the new name")
+        # ...while the parent readdir was correct all along — pin both views
+        listed = os.listdir(mnt)
+        if os.path.basename(a) in listed:
+            raise Fail("old name still in root readdir after rename")
+        if os.path.basename(b) not in listed:
+            raise Fail("new name missing from root readdir after rename")
+    finally:
+        _root_cleanup(a, b)
+
+
+@test
+@root
+def root_rename_file_old_name_gone(mnt):
+    a, b = _root_pair(mnt, "renfile")
+    try:
+        wr(a, b"data")
+        os.rename(a, b)
+        expect_err(errno.ENOENT, os.stat, a)
+        eq(rd(b), b"data", "content at the new name")
+    finally:
+        _root_cleanup(a, b)
+
+
+@test
+@root
+def root_rename_from_subdir(mnt):
+    """nested -> root: the clean-shard direction; the new root dentry must
+    resolve immediately on the renaming client."""
+    a, b = _root_pair(mnt, "renup")
+    try:
+        os.mkdir(a)
+        f = os.path.join(a, "f")
+        wr(f, b"x")
+        os.rename(f, b)
+        expect_err(errno.ENOENT, os.stat, f)
+        eq(rd(b), b"x", "content at the root name")
+    finally:
+        _root_cleanup(a, b)
+
+
+@test
+@root
+def root_rename_into_subdir(mnt):
+    """root -> nested: the source parent is the sharded root — the same W56
+    ghost path as a root -> root rename."""
+    a, b = _root_pair(mnt, "rendown")
+    try:
+        wr(a, b"x")
+        os.mkdir(b)
+        dst = os.path.join(b, "f")
+        os.rename(a, dst)
+        expect_err(errno.ENOENT, os.stat, a)
+        eq(rd(dst), b"x", "content at the nested name")
+    finally:
+        _root_cleanup(a, b)
+
+
+@test
+@root
+def root_create_unlink_immediate(mnt):
+    a, _b = _root_pair(mnt, "cre")
+    try:
+        wr(a, b"x")
+        eq(rd(a), b"x", "created at the root")
+        os.unlink(a)
+        expect_err(errno.ENOENT, os.stat, a)
+    finally:
+        _root_cleanup(a)
+
+
+@test
+@root
+def root_mkdir_rmdir_immediate(mnt):
+    a, _b = _root_pair(mnt, "mkd")
+    try:
+        os.mkdir(a)
+        eq(os.path.isdir(a), True, "mkdir at the root")
+        os.rmdir(a)
+        expect_err(errno.ENOENT, os.stat, a)
+    finally:
+        _root_cleanup(a)
+
+
 @test
 def dir_deep_nesting(d):
     depth = 60
@@ -627,6 +848,129 @@ def dir_many_files(d):
     for i in range(n):
         os.unlink(os.path.join(d, "f%04d" % i))
     eq(len(os.listdir(d)), 0, "many files removed")
+
+
+# ==========================================================================
+# Directory timestamps: entry changes bump the parent's mtime+ctime (§7.4).
+# The bumps observed through a long-lived mount do not always advance
+# sub-second (creation rows were seen at whole-second granularity), so the
+# old 0.06 s re-stat wait could not see a legitimate bump and failed
+# spuriously on fast clusters. Sleep a full second instead: any client/
+# server clock offset still crosses a second boundary within 1 s, and the
+# wait also clears the 50 ms lookup-memo window (0j).
+# ==========================================================================
+def _dir_times(p):
+    st = os.stat(p)
+    return st.st_mtime_ns, st.st_ctime_ns
+
+
+def _wait_dir_tick():
+    time.sleep(1.06)
+
+
+def _expect_dir_bump(p, before, what):
+    m, c = _dir_times(p)
+    if m <= before[0]:
+        raise Fail("%s: directory mtime did not advance (%d -> %d)" %
+                   (what, before[0], m))
+    if c <= before[1]:
+        raise Fail("%s: directory ctime did not advance (%d -> %d)" %
+                   (what, before[1], c))
+
+
+@test
+def dir_times_create(d):
+    before = _dir_times(d)
+    _wait_dir_tick()
+    wr(os.path.join(d, "f"), b"x")
+    _expect_dir_bump(d, before, "create")
+
+
+@test
+def dir_times_unlink(d):
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    before = _dir_times(d)
+    _wait_dir_tick()
+    os.unlink(p)
+    _expect_dir_bump(d, before, "unlink")
+
+
+@test
+def dir_times_mkdir_rmdir(d):
+    sub = os.path.join(d, "sub")
+    before = _dir_times(d)
+    _wait_dir_tick()
+    os.mkdir(sub)
+    _expect_dir_bump(d, before, "mkdir")
+    before = _dir_times(d)
+    _wait_dir_tick()
+    os.rmdir(sub)
+    _expect_dir_bump(d, before, "rmdir")
+
+
+@test
+def dir_times_rename(d):
+    a = os.path.join(d, "a")
+    wr(a, b"x")
+    before = _dir_times(d)
+    _wait_dir_tick()
+    os.rename(a, os.path.join(d, "b"))
+    _expect_dir_bump(d, before, "rename same dir")
+    # Cross-directory rename bumps BOTH parents. The 0.1 s post-rename wait
+    # lands the stats outside the 50 ms rename-reply memo, so they measure
+    # the client's settled view. Known bug: on the RENAMING client the dst
+    # parent's attrs are never invalidated by the rename — it keeps serving
+    # the pre-rename times indefinitely (>= 25 s, readdir does not refresh)
+    # while other mounts see the bump immediately. Parent->child layout: the
+    # src parent survives (it is an ancestor of the dst path and gets
+    # refreshed along the way).
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    before_d = _dir_times(d)
+    before_sub = _dir_times(sub)
+    _wait_dir_tick()
+    os.rename(os.path.join(d, "b"), os.path.join(sub, "b"))
+    time.sleep(0.1)
+    _expect_dir_bump(d, before_d, "rename src dir")
+    _expect_dir_bump(sub, before_sub, "rename dst dir")
+    # Sibling layout: neither parent is an ancestor of the dst path, so the
+    # renaming client goes stale on BOTH.
+    sa = os.path.join(d, "sa")
+    sb = os.path.join(d, "sb")
+    os.mkdir(sa)
+    os.mkdir(sb)
+    wr(os.path.join(sa, "f"), b"x")
+    before_sa = _dir_times(sa)
+    before_sb = _dir_times(sb)
+    _wait_dir_tick()
+    os.rename(os.path.join(sa, "f"), os.path.join(sb, "f"))
+    time.sleep(0.1)
+    _expect_dir_bump(sa, before_sa, "rename sibling src dir")
+    _expect_dir_bump(sb, before_sb, "rename sibling dst dir")
+
+
+@test
+def dir_times_link(d):
+    wr(os.path.join(d, "f"), b"x")
+    sub = os.path.join(d, "sub")
+    os.mkdir(sub)
+    before = _dir_times(sub)
+    _wait_dir_tick()
+    os.link(os.path.join(d, "f"), os.path.join(sub, "g"))
+    _expect_dir_bump(sub, before, "link into dir")
+
+
+@test
+def dir_times_write_no_bump(d):
+    """File content writes do NOT touch the containing directory (POSIX;
+    §7.4 puts write times in the file's lanes, not on the parent)."""
+    p = os.path.join(d, "f")
+    wr(p, b"x")
+    before = _dir_times(d)
+    time.sleep(0.06)
+    wr(p, b"yz")
+    eq(_dir_times(d), before, "write leaves dir mtime/ctime alone")
 
 
 @test
@@ -3170,6 +3514,64 @@ def mtime_bumps_on_write(d):
 
 
 @test
+def dir_times_bump_on_child_mutation(d):
+    """A child create/rename/unlink must move the PARENT dir's mtime+ctime on
+    the same client — a stale parent stat is the classic FUSE attr-cache bug
+    (the 0j lookup memo must be invalidated by local mutations)."""
+    sub = os.path.join(d, "watched")
+    os.mkdir(sub)
+
+    def times():
+        st = os.stat(sub)
+        return (st.st_mtime_ns, st.st_ctime_ns)
+
+    t0 = times()
+    _wait_dir_tick()
+    wr(os.path.join(sub, "f"), b"x")
+    t1 = times()
+    if t1 == t0:
+        raise Fail("dir times did not move on create")
+    _wait_dir_tick()
+    os.rename(os.path.join(sub, "f"), os.path.join(sub, "g"))
+    t2 = times()
+    if t2 == t1:
+        raise Fail("dir times did not move on rename")
+    _wait_dir_tick()
+    os.unlink(os.path.join(sub, "g"))
+    t3 = times()
+    if t3 == t2:
+        raise Fail("dir times did not move on unlink")
+
+
+@test
+def rename_readdir_lookup_consistent(d):
+    """After a rename the same client's two views must agree: the old name is
+    gone from BOTH lookup (stat) and readdir (listdir), the new name is in
+    both. W56: on the export root the views diverged (lookup ghosted while
+    readdir was already correct) — pin the nested case here."""
+    # file
+    wr(os.path.join(d, "fa"), b"x")
+    os.rename(os.path.join(d, "fa"), os.path.join(d, "fb"))
+    listed = os.listdir(d)
+    if "fa" in listed:
+        raise Fail("old file name still in readdir after rename")
+    if "fb" not in listed:
+        raise Fail("new file name missing from readdir after rename")
+    expect_err(errno.ENOENT, os.stat, os.path.join(d, "fa"))
+    eq(rd(os.path.join(d, "fb")), b"x", "file content at the new name")
+    # directory (the W56 shape, but nested — root is @root territory)
+    os.mkdir(os.path.join(d, "da"))
+    os.rename(os.path.join(d, "da"), os.path.join(d, "db"))
+    listed = os.listdir(d)
+    if "da" in listed:
+        raise Fail("old dir name still in readdir after rename")
+    if "db" not in listed:
+        raise Fail("new dir name missing from readdir after rename")
+    expect_err(errno.ENOENT, os.stat, os.path.join(d, "da"))
+    eq(os.path.isdir(os.path.join(d, "db")), True, "dir at the new name")
+
+
+@test
 def rename_dir_same_parent(d):
     os.mkdir(os.path.join(d, "old"))
     wr(os.path.join(d, "old", "f"), b"keep")
@@ -4509,7 +4911,8 @@ def main(argv=None):
     t0 = time.time()
     selected = []
     for name, fn in matched:
-        tdir = os.path.join(base, name)
+        tdir = (mnt if getattr(fn, "_posix_root", False)
+                else os.path.join(base, name))
         selected.append((name, fn, tdir))
 
     tsv_mu = threading.Lock()
