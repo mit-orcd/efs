@@ -473,6 +473,60 @@ int efs_meta_apply_get_inode_tx(struct efs_kv *kv, efs_ino_t ino,
     return inode_read_tx(kv, ino, coord, ctx, NULL, out);
 }
 
+int efs_meta_get_writer_view_tx(struct efs_kv *kv, efs_ino_t ino,
+                                uint64_t gen, efs_txn_coord_fn coord,
+                                void *ctx, struct efs_meta_writer_view *out)
+{
+    if (!kv || !ino || !gen || !out)
+        return EFS_ERR_INVAL;
+    for (unsigned attempt = 0; attempt < 4; ++attempt) {
+        struct efs_meta_row before, after;
+        struct efs_meta_writer_view view = {0};
+        struct efs_fence_history again;
+        struct efs_txn_pending pend = {0};
+        int moved = 0;
+        int rc = inode_read_tx(kv, ino, coord, ctx, &pend, &before);
+        if (rc != EFS_OK)
+            return rc;
+        if (before.generation != gen)
+            return EFS_ERR_STALE;
+        if (!S_ISREG(before.mode))
+            return EFS_ERR_INVAL;
+        rc = fence_history_read(kv, ino, gen, EFS_META_FENCE_INODE,
+                                  coord, ctx, &pend, &view.history);
+        if (rc == EFS_OK)
+            rc = fence_history_read(kv, ino, gen, EFS_META_FENCE_INODE,
+                                      coord, ctx, &pend, &again);
+        if (rc == EFS_OK)
+            rc = inode_read_tx(kv, ino, coord, ctx, &pend, &after);
+        if (rc == EFS_OK && coord)
+            rc = efs_txn_pending_recheck(&pend, coord, ctx, &moved);
+        if (rc != EFS_OK)
+            return rc;
+        if (moved || memcmp(&before, &after, sizeof(before)) ||
+            memcmp(&view.history, &again, sizeof(again)))
+            continue;
+        view.ino = ino;
+        view.generation = gen;
+        view.authority_epoch = before.content_epoch;
+        view.oldest_complete_epoch = before.content_epoch;
+        /* Epochs advance by one per shrink. A gap may be a retired fence or
+         * legacy physical truncate; neither supplies complete old history.
+         * Only a contiguous suffix ending at the current stamp proves it. */
+        for (uint32_t i = view.history.count; i > 0; --i) {
+            uint64_t epoch = view.history.entries[i - 1].epoch;
+            if (epoch > view.authority_epoch)
+                return EFS_ERR_PROTO;
+            if (epoch != view.oldest_complete_epoch)
+                break;
+            --view.oldest_complete_epoch;
+        }
+        *out = view;
+        return EFS_OK;
+    }
+    return EFS_ERR_BUSY;
+}
+
 static int dent_get(struct efs_kv *kv, uint32_t shard, efs_ino_t parent,
                     const char *name, struct efs_meta_dentry *out)
 {

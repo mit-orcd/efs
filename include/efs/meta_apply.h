@@ -32,6 +32,22 @@ int efs_meta_pack_fence_history(const struct efs_fence_history *h,
                                 uint8_t *out, uint32_t cap, uint32_t *len);
 int efs_meta_unpack_fence_history(const uint8_t *value, uint32_t len,
                                   struct efs_fence_history *out);
+/* Inode-authority writer snapshot, independent of chunk/lane existence.
+ * Establish inode-group read authority before calling. This is not a lane
+ * publication permit: the caller must separately validate/adopt that epoch on
+ * its publication authority. The floor covers only the contiguous retained
+ * history suffix; older writers must fail closed rather than revive bytes. */
+struct efs_meta_writer_view {
+    efs_ino_t ino;
+    uint64_t generation;
+    uint64_t authority_epoch;
+    uint64_t oldest_complete_epoch;
+    struct efs_fence_history history;
+};
+int efs_meta_get_writer_view_tx(struct efs_kv *kv, efs_ino_t ino,
+                                uint64_t generation, efs_txn_coord_fn coord,
+                                void *ctx, struct efs_meta_writer_view *out);
+
 /* Atomic single-authority fence, for the future serialized TRUNCATE path.
  * Caller owns Raft apply serialization and cross-authority coordination.
  * This does not replace the current public truncate command by itself. */

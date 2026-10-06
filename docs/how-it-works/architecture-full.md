@@ -2015,6 +2015,34 @@ operation is needed to close the remote-unlink window between those RPCs.
 The NUC gates do not replace the xorinox roll, IOR-hard, or fault/RSS gates.
 
 
+### D25 inode writer-authority snapshot checkpoint — Oct 6 2026
+
+`efs_meta_get_writer_view_tx` now captures FileID, inode authority epoch,
+retained fence history and its completeness floor without requiring a chunk
+row or an active lane. Inode/history double collection and transaction-decision
+revalidation reject mixed applies; four unsuccessful collections return BUSY
+without changing the caller's output. Committed, unresolved fence transactions
+are visible; undecided ones retain the previous authority.
+
+The completeness floor is derived conservatively from the contiguous retained
+history suffix ending at the current authority epoch. A gap, missing newest
+fence or entirely retired history cannot silently authorize epoch-zero dirty
+bytes. Legacy physical truncation without history also raises the floor.
+Snapshots carry their history by value, independent of later retirement.
+
+Linux metadata regressions cover empty files, retired interior gaps, empty
+history at a nonzero stamp, FileID mismatch, future history, concurrent fence
+retry, bounded repeated races and committed/undecided transaction visibility.
+The full Linux `make test` passes. This internal API changes no public FUSE
+behavior and needs no cluster rollout yet.
+
+**Next:** expose this inode snapshot through an authoritative wire operation,
+validate/adopt its epoch on the publication lane (including absent lanes), then
+connect bounded dirty ranges to FUSE admission and exact flush acknowledgements.
+The inode snapshot alone is not a lane publication permit. Public logical
+truncate, live sweep scheduling and history retirement remain outstanding.
+
+
 ## Appendix 2 — In flight — the current handoff block
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**

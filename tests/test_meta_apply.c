@@ -2537,6 +2537,52 @@ static void test_utimens_fence(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_writer_authority_view(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row row;
+    struct efs_meta_writer_view v, sentinel;
+    struct efs_fence_history h = {0};
+    uint8_t key[EFS_KV_KEY_MAX], value[EFS_META_FENCE_BYTES];
+    uint32_t kl = 0, vl = 0;
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+          efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                    "writer-view", &ino) == EFS_OK &&
+          efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "writer view fixture");
+    CHECK(efs_meta_get_writer_view_tx(kv, ino, row.generation, NULL, NULL, &v) == EFS_OK &&
+          v.ino == ino && v.generation == row.generation && !v.authority_epoch &&
+          !v.oldest_complete_epoch && !v.history.count && !row.active_lanes,
+          "writer authority covers a new file without lanes or chunks");
+    for (uint64_t epoch = 1; epoch <= 3; ++epoch)
+        CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+              EFS_META_FENCE_INODE, epoch - 1, epoch, 100 / epoch, T0 + epoch) == EFS_OK,
+              "writer view append fences");
+    CHECK(efs_meta_get_writer_view_tx(kv, ino, row.generation, NULL, NULL, &v) == EFS_OK &&
+          v.authority_epoch == 3 && !v.oldest_complete_epoch && v.history.count == 3,
+          "writer complete history reaches epoch zero");
+    CHECK(efs_kv_key_lane(efs_kv_inode_shard(ino), ino, row.generation,
+                          EFS_META_FENCE_INODE, key, &kl) == EFS_OK, "writer history key");
+    key[2] = EFS_KV_KIND_CONTENT_FENCE;
+    h.count = 2; h.entries[0] = v.history.entries[0]; h.entries[1] = v.history.entries[2];
+    CHECK(efs_meta_pack_fence_history(&h, value, sizeof(value), &vl) == EFS_OK &&
+          efs_kv_put(kv, key, kl, value, vl) == EFS_OK &&
+          efs_meta_get_writer_view_tx(kv, ino, row.generation, NULL, NULL, &v) == EFS_OK &&
+          v.oldest_complete_epoch == 2, "retired interior fence raises completeness floor");
+    CHECK(efs_kv_del(kv, key, kl) == EFS_OK &&
+          efs_meta_get_writer_view_tx(kv, ino, row.generation, NULL, NULL, &v) == EFS_OK &&
+          v.oldest_complete_epoch == 3, "empty retired history is not complete from zero");
+    memset(&sentinel, 0xa5, sizeof(sentinel)); v = sentinel;
+    CHECK(efs_meta_get_writer_view_tx(kv, ino, row.generation + 1, NULL, NULL, &v) == EFS_ERR_STALE &&
+          !memcmp(&v, &sentinel, sizeof(v)), "writer wrong FileID leaves output unchanged");
+    h.count = 1; h.entries[0] = (struct efs_content_fence){4, 1};
+    CHECK(efs_meta_pack_fence_history(&h, value, sizeof(value), &vl) == EFS_OK &&
+          efs_kv_put(kv, key, kl, value, vl) == EFS_OK &&
+          efs_meta_get_writer_view_tx(kv, ino, row.generation, NULL, NULL, &v) == EFS_ERR_PROTO &&
+          !memcmp(&v, &sentinel, sizeof(v)), "writer rejects history newer than authority");
+    efs_kv_mem_free(kv);
+}
+
 static void test_sparse_grow_tail_epoch(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -3532,6 +3578,13 @@ static void test_content_fence_prepared_writers(void)
               EFS_MIN_CHUNK_SIZE, coord_fn, &ctx, &view) == EFS_OK &&
               view.fence_epoch == 0 && view.bytes.parts[0].len == EFS_MIN_CHUNK_SIZE,
           "D25 undecided fence preserves old captured byte view");
+    {
+        struct efs_meta_writer_view writer;
+        CHECK(efs_meta_get_writer_view_tx(kv, ino, row.generation, coord_fn, &ctx,
+                                          &writer) == EFS_OK && !writer.authority_epoch &&
+              !writer.history.count && !writer.oldest_complete_epoch,
+              "D25 undecided writer snapshot retains old authority");
+    }
     n = sizeof(raw);
     CHECK(efs_txn_read(kv, ik, il, coord_fn, &ctx, raw, &n) == EFS_OK &&
               efs_meta_unpack_inode(raw, n, &decoded) == EFS_OK && !decoded.content_epoch,
@@ -3549,6 +3602,13 @@ static void test_content_fence_prepared_writers(void)
     CHECK(efs_meta_apply_get_inode_tx(kv, ino, coord_fn, &ctx, &decoded) == EFS_OK &&
               decoded.content_epoch == 1 && decoded.base_size == 100,
           "D25 handler sees committed replacement of existing inode before resolve");
+    {
+        struct efs_meta_writer_view writer;
+        CHECK(efs_meta_get_writer_view_tx(kv, ino, row.generation, coord_fn, &ctx,
+                                          &writer) == EFS_OK && writer.authority_epoch == 1 &&
+              writer.history.count == 1 && !writer.oldest_complete_epoch,
+              "D25 writer snapshot sees committed inode and history before resolve");
+    }
     CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0,
               EFS_MIN_CHUNK_SIZE, coord_fn, &ctx, &view) == EFS_OK &&
               view.fence_epoch == 1 && view.bytes.parts[0].len == 100 &&
@@ -4463,6 +4523,7 @@ static struct {
     efs_ino_t ino;
     uint64_t generation, epoch;
     unsigned history_reads, injected;
+    uint8_t authority;
     int continuous;
 } fence_read_race;
 
@@ -4470,7 +4531,7 @@ static int content_fence_racing_get(void *ctx, const uint8_t *key,
                                     uint32_t klen, uint8_t *value, uint32_t *len)
 {
     int rc = fence_read_race.ops->get(ctx, key, klen, value, len);
-    if (klen == 20 && key[2] == EFS_KV_KIND_CONTENT_FENCE && key[19] == 0 &&
+    if (klen == 20 && key[2] == EFS_KV_KIND_CONTENT_FENCE && key[19] == fence_read_race.authority &&
         (++fence_read_race.history_reads % 2) == 0 &&
         (fence_read_race.continuous || !fence_read_race.injected)) {
         const struct efs_kv_ops *wrapped = fence_read_race.kv->ops;
@@ -4487,6 +4548,36 @@ static int content_fence_racing_get(void *ctx, const uint8_t *key,
         ++fence_read_race.injected;
     }
     return rc;
+}
+
+static void test_writer_authority_race(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_kv_ops wrapped;
+    struct efs_meta_row row;
+    struct efs_meta_writer_view view, saved;
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+          efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                    "writer-race", &ino) == EFS_OK &&
+          efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "writer race fixture");
+    memset(&fence_read_race, 0, sizeof(fence_read_race));
+    fence_read_race.kv = kv; fence_read_race.ops = kv->ops;
+    fence_read_race.ino = ino; fence_read_race.generation = row.generation;
+    fence_read_race.authority = EFS_META_FENCE_INODE;
+    wrapped = *kv->ops; wrapped.get = content_fence_racing_get; kv->ops = &wrapped;
+    CHECK(efs_meta_get_writer_view_tx(kv, ino, row.generation, NULL, NULL, &view) == EFS_OK &&
+          view.authority_epoch == 1 && view.history.count == 1 &&
+          !view.oldest_complete_epoch && fence_read_race.injected == 1,
+          "writer snapshot retries a concurrent fence");
+    saved = view;
+    fence_read_race.history_reads = fence_read_race.injected = 0;
+    fence_read_race.continuous = 1;
+    CHECK(efs_meta_get_writer_view_tx(kv, ino, row.generation, NULL, NULL, &view) == EFS_ERR_BUSY &&
+          fence_read_race.injected == 4 && !memcmp(&view, &saved, sizeof(view)),
+          "writer races are bounded and preserve previous snapshot");
+    kv->ops = fence_read_race.ops;
+    efs_kv_mem_free(kv);
 }
 
 static void test_content_fence_view_race(void)
@@ -5037,6 +5128,7 @@ int main(void)
     test_stat_fence_and_gen();
     test_stat_dir_hashed();
     test_utimens_fence();
+    test_writer_authority_view();
     test_sparse_grow_tail_epoch();
     test_truncate_range_del();
     test_cross_group_lane();
@@ -5067,6 +5159,7 @@ int main(void)
     test_content_fence_reductions_commute();
     test_content_fence_history();
     test_content_fence_sweep_cas();
+    test_writer_authority_race();
     test_content_fence_view_race();
     test_gc_tail_alias();
     test_gc_watermark();
