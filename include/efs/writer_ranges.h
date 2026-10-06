@@ -166,15 +166,43 @@ struct efs_writer_publication {
     uint64_t object_generation;
     uint64_t snapshot_sequence;
 };
+/* Clipping can only remove owned bytes. A token must never manufacture
+ * ranges in holes, change their admission ages, or name a future epoch. */
+static inline int efs_writer_plan_valid(const struct efs_writer_plan *plan)
+{
+    if (!plan || !plan->ino || !plan->generation ||
+        (plan->base_absent != 0 && plan->base_absent != 1) ||
+        efs_dirty_ranges_valid(&plan->original) != EFS_OK ||
+        efs_dirty_ranges_valid(&plan->surviving) != EFS_OK ||
+        plan->original.chunk_size != plan->surviving.chunk_size ||
+        plan->original.mutation != plan->surviving.mutation)
+        return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < plan->original.count; ++i)
+        if (plan->original.ranges[i].epoch > plan->publish_epoch)
+            return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < plan->surviving.count; ++i) {
+        const struct efs_fence_part *part = &plan->surviving.ranges[i];
+        int owned = 0;
+        for (uint32_t j = 0; j < plan->original.count; ++j) {
+            const struct efs_fence_part *source = &plan->original.ranges[j];
+            if (part->epoch == source->epoch && part->off >= source->off &&
+                part->off + part->len <= source->off + source->len) {
+                owned = 1;
+                break;
+            }
+        }
+        if (!owned)
+            return EFS_ERR_INVAL;
+    }
+    return EFS_OK;
+}
+
 static inline int efs_writer_publication_bind(
     const struct efs_writer_plan *plan, uint64_t object_generation,
     uint64_t snapshot_sequence, struct efs_writer_publication *out)
 {
-    if (!plan || !out || !plan->ino || !plan->generation || !object_generation ||
-        !snapshot_sequence || efs_dirty_ranges_valid(&plan->original) != EFS_OK ||
-        efs_dirty_ranges_valid(&plan->surviving) != EFS_OK ||
-        plan->original.chunk_size != plan->surviving.chunk_size ||
-        plan->original.mutation != plan->surviving.mutation)
+    if (!out || !object_generation || !snapshot_sequence ||
+        efs_writer_plan_valid(plan) != EFS_OK)
         return EFS_ERR_INVAL;
     struct efs_writer_publication publication = {0};
     publication.plan = *plan;

@@ -52,6 +52,16 @@ static void test_publication_identity(void)
     assert(efs_writer_ranges_admit(&writer, &view, 0, 100) == EFS_OK);
     assert(efs_writer_ranges_plan(&writer, &view, 0, &plan) == EFS_OK);
     memset(&sentinel, 0xa5, sizeof(sentinel)); publication = sentinel;
+    struct efs_writer_plan bad = plan;
+    bad.surviving.ranges[0].off=100;
+    assert(efs_writer_publication_bind(&bad,100,10,&publication)==EFS_ERR_INVAL);
+    assert(!memcmp(&publication,&sentinel,sizeof(publication)));
+    bad=plan;bad.surviving.ranges[0].epoch=1;
+    assert(efs_writer_publication_bind(&bad,100,10,&publication)==EFS_ERR_INVAL);
+    bad=plan;bad.original.ranges[0].epoch=bad.surviving.ranges[0].epoch=1;
+    assert(efs_writer_publication_bind(&bad,100,10,&publication)==EFS_ERR_INVAL);
+    bad=plan;bad.base_absent=2;
+    assert(efs_writer_publication_bind(&bad,100,10,&publication)==EFS_ERR_INVAL);
     assert(efs_writer_publication_bind(&plan, 0, 10, &publication) == EFS_ERR_INVAL);
     assert(!memcmp(&publication, &sentinel, sizeof(publication)));
     assert(efs_writer_publication_bind(&plan, 1000, 10, &publication) == EFS_OK);
