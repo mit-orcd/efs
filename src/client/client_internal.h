@@ -222,6 +222,13 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
                                uint32_t *done_out);
 struct efs_msg_inode_writer_view_reply;
 struct efs_msg_lane_writer_view_reply;
+int efs_client_rpc_writer_admission_view(efs_export_id_t export_id, efs_ino_t ino,
+                                          uint64_t generation, uint32_t ci,
+                                          uint32_t chunk_size,
+                                          struct efs_msg_lane_writer_view_reply *out);
+int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino,
+                                   uint64_t generation, uint32_t ci, uint32_t chunk_size,
+                                   struct efs_msg_lane_writer_view_reply *out);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,
                                      uint32_t ci, uint32_t chunk_size,
                                      struct efs_msg_lane_writer_view_reply *out);

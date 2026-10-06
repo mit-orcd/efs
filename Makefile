@@ -147,6 +147,9 @@ test-fold-observation:
 	python3 tests/test_writer_view_rpc.py
 	python3 tests/test_lane_writer_view_rpc.py
 	python3 tests/test_lane_writer_host.py
+	python3 tests/test_lane_bootstrap_rpc.py
+	python3 tests/test_lane_bootstrap_host.py
+	python3 tests/test_writer_admission_rpc.py
 	python3 tests/test_span_selection.py
 
 test-lookup-memo:

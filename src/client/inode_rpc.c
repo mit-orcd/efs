@@ -925,6 +925,82 @@ int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci, ui
     return EFS_ERR_BUSY;
 }
 
+int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino, uint64_t gen, uint32_t ci, uint32_t cs,
+                                struct efs_msg_lane_writer_view_reply *out)
+{
+    if (!ino || !gen || !out || !efs_chunk_size_valid(cs))
+        return EFS_ERR_INVAL;
+    struct efs_msg_lane_bootstrap req = {export_id, ino, gen, ci, cs};
+    uint32_t shard = efs_kv_inode_shard(ino);
+    efs_node_id_t target = 0;
+    for (unsigned attempt = 0; attempt < 8; ++attempt) {
+        efs_node_id_t nid = target;
+        struct efs_conn *conn = target ? efs_client_conn_get(target) :
+                                         rpc_owner_conn_shard(shard, &nid);
+        if (!conn)
+            return EFS_ERR_NET;
+        if (efs_conn_send_msg(conn, EFS_MSG_LANE_BOOTSTRAP, &req, sizeof(req))) {
+            efs_client_conn_drop(nid, conn);
+            return EFS_ERR_NET;
+        }
+        uint8_t type = 0;
+        uint32_t len = 0;
+        void *payload = NULL;
+        if (efs_conn_recv_msg(conn, &type, &payload, &len)) {
+            free(payload);
+            efs_client_conn_drop(nid, conn);
+            return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid, conn);
+        if (type != EFS_MSG_LANE_BOOTSTRAP_REPLY || len != sizeof(*out)) {
+            free(payload);
+            return EFS_ERR_PROTO;
+        }
+        struct efs_msg_lane_writer_view_reply reply;
+        memcpy(&reply, payload, sizeof(reply));
+        free(payload);
+        if (reply.view.status == EFS_INODE_RPC_NOT_PRIMARY && reply.view.primary_id &&
+            reply.view.primary_id != nid) {
+            target = reply.view.primary_id;
+            continue;
+        }
+        if (reply.view.status == EFS_INODE_RPC_BUSY) {
+            usleep(50000u << (attempt < 4 ? attempt : 4));
+            continue;
+        }
+        int rc = rpc_status_to_efs(reply.view.status);
+        if (rc != EFS_OK)
+            return rc;
+        struct efs_msg_lane_writer_view validation = {ino, gen, ci, cs};
+        rc = efs_lane_writer_view_reply_valid(&validation, &reply);
+        if (rc == EFS_OK)
+            *out = reply;
+        return rc;
+    }
+    return EFS_ERR_BUSY;
+}
+
+int efs_client_rpc_writer_admission_view(efs_export_id_t export_id, efs_ino_t ino,
+                                          uint64_t gen, uint32_t ci, uint32_t cs,
+                                          struct efs_msg_lane_writer_view_reply *out)
+{
+    if (!ino || !gen || !out || !efs_chunk_size_valid(cs))
+        return EFS_ERR_INVAL;
+    struct efs_msg_lane_writer_view_reply view;
+    int rc = efs_client_rpc_lane_writer_view(ino, gen, ci, cs, &view);
+    /* Only authoritative absence is a bootstrap request. BUSY/STALE/I/O errors
+     * never fall back to an inode lookup or mutate authority implicitly. */
+    if (rc == EFS_ERR_NOT_FOUND)
+        rc = efs_client_rpc_lane_bootstrap(export_id, ino, gen, ci, cs, &view);
+    if (rc != EFS_OK)
+        return rc;
+    struct efs_msg_lane_writer_view req = {ino, gen, ci, cs};
+    rc = efs_lane_writer_view_reply_valid(&req, &view);
+    if (rc == EFS_OK)
+        *out = view;
+    return rc;
+}
+
 int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
                                     uint64_t generation,
                              uint32_t start, struct efs_chunk_rec *recs,

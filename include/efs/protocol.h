@@ -162,6 +162,8 @@ enum efs_msg_type {
     EFS_MSG_INODE_WRITER_VIEW_REPLY = 108,
     EFS_MSG_LANE_WRITER_VIEW = 109,
     EFS_MSG_LANE_WRITER_VIEW_REPLY = 110,
+    EFS_MSG_LANE_BOOTSTRAP = 111,
+    EFS_MSG_LANE_BOOTSTRAP_REPLY = 112,
 };
 
 /* D25 read authority for write admission, including holes and new lanes.
@@ -229,6 +231,16 @@ static inline int efs_lane_writer_view_reply_valid(
     struct efs_msg_inode_writer_view legacy = {req->ino, req->generation, req->chunk_index, 0};
     return efs_writer_view_reply_valid(&legacy, &reply->view);
 }
+
+/* Cold-only: the server validates requested geometry against this export.
+ * The reply is efs_msg_lane_writer_view_reply; an exact FileID is mandatory. */
+struct efs_msg_lane_bootstrap {
+    efs_export_id_t export_id;
+    efs_ino_t ino;
+    uint64_t generation;
+    uint32_t chunk_index;
+    uint32_t chunk_size;
+};
 
 /* GC_FRAGMENT request: delete fragment `fragment_index` of chunk
  * `chunk_index` of `ino` iff its stored checksum sidecar equals

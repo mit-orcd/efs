@@ -12232,6 +12232,58 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     set_inode_rc(out, rc, hint);
 }
 
+void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *req,
+                                          struct efs_msg_lane_writer_view_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    memset(out, 0, sizeof(*out));
+    out->view.status = EFS_INODE_RPC_INVAL;
+    if (!h || !h->running || !req->ino || !req->generation ||
+        !efs_chunk_size_valid(req->chunk_size))
+        return;
+    uint8_t groups[2] = {efs_raft_shard_group(efs_kv_inode_shard(req->ino)),
+        efs_raft_shard_group(efs_kv_lane_shard(req->ino, req->chunk_index % EFS_META_LANES))};
+    int ng = groups[0] == groups[1] ? 1 : 2;
+    if (!host_hosts(h, groups[0]) || !host_hosts(h, groups[ng - 1])) {
+        int skip = -1;
+        out->view.status = EFS_INODE_RPC_NOT_PRIMARY;
+        for (int i = 0; i < h->n; ++i) {
+            int rid = host_pick_peer(h, groups, ng, skip);
+            if (rid < 0)
+                return;
+            if (!host_inode_rpc_peer(h, rid, EFS_MSG_LANE_BOOTSTRAP, req, sizeof(*req),
+                  EFS_MSG_LANE_BOOTSTRAP_REPLY, out, sizeof(*out)) &&
+                out->view.status != EFS_INODE_RPC_NOT_PRIMARY)
+                return;
+            memset(out, 0, sizeof(*out));
+            out->view.status = EFS_INODE_RPC_NOT_PRIMARY;
+            skip = rid;
+        }
+        return;
+    }
+    pthread_mutex_lock(&h->s->lock);
+    struct efs_export *ex = server_export_acquire_locked(h->s, req->export_id);
+    uint32_t cs = ex ? server_data_chunk_size(ex) : 0;
+    pthread_mutex_unlock(&h->s->lock);
+    if (!ex)
+        return;
+    server_export_put(h->s, ex);
+    if (cs != req->chunk_size) {
+        out->view.status = EFS_INODE_RPC_STALE;
+        return;
+    }
+    int hint = -1;
+    int rc = server_raft_host_lane_bootstrap(req->ino, req->generation,
+                                              req->chunk_index, cs, &hint);
+    if (rc != EFS_OK) {
+        out->view.status = rc_to_inode_status(rc);
+        out->view.primary_id = hint >= 0 ? (efs_node_id_t)(hint + 1) : 0;
+        return;
+    }
+    struct efs_msg_lane_writer_view q = {req->ino, req->generation, req->chunk_index, cs};
+    server_raft_host_lane_writer_view(&q, out);
+}
+
 void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *req,
                                         struct efs_msg_lane_writer_view_reply *out)
 {

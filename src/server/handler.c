@@ -908,6 +908,14 @@ send_reply:
                               sizeof(r));
             break;
         }
+        case EFS_MSG_LANE_BOOTSTRAP: {
+            struct efs_msg_lane_writer_view_reply r = {0};
+            r.view.status = EFS_INODE_RPC_INVAL;
+            if (server_raft_host_active() && payload_len == sizeof(struct efs_msg_lane_bootstrap))
+                server_raft_host_lane_bootstrap_rpc(payload, &r);
+            efs_conn_send_msg(conn, EFS_MSG_LANE_BOOTSTRAP_REPLY, &r, sizeof(r));
+            break;
+        }
         case EFS_MSG_LANE_WRITER_VIEW: {
             struct efs_msg_lane_writer_view_reply r = {0};
             r.view.status = EFS_INODE_RPC_INVAL;
