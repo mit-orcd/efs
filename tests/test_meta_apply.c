@@ -2537,6 +2537,41 @@ static void test_utimens_fence(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_sparse_grow_tail_epoch(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row row;
+    struct efs_meta_chunk_view view;
+    struct efs_meta_pub tail = {0}, write = {0};
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "sparse epoch init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "sparse-epoch", &ino) == EFS_OK, "sparse epoch create");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK && !row.active_lanes,
+          "sparse epoch begins with no active lane");
+    tail.ino = ino; tail.candidate_gen = 0x5901; tail.new_size = 8192;
+    tail.coding_profile_id = EFS_META_PROFILE_K2F1;
+    fill_ch(&tail.ch);
+    struct efs_meta_truncate tr = {.expect_gen = row.generation, .size = 8192,
+                                   .tail = &tail, .lane_mask = ~0ULL};
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 1, &tr) == EFS_OK,
+          "sparse epoch grow creates inactive tail lane");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK &&
+              view.fence_epoch == 1 && view.bytes.fence_epoch == 1 &&
+              view.base.content_epoch == 1, "sparse tail and captured authority agree");
+    write.ino = ino; write.expected_gen = 0x5901; write.candidate_gen = 0x5902;
+    write.new_size = 8192; write.content_epoch = view.bytes.fence_epoch;
+    write.now = T0 + 2; write.coding_profile_id = EFS_META_PROFILE_K2F1;
+    fill_ch(&write.ch);
+    CHECK(efs_meta_apply_publish(kv, &write) == EFS_OK,
+          "sparse epoch first writer publishes with captured epoch");
+    write.expected_gen = 0x5902; write.candidate_gen = 0x5903; write.content_epoch = 0;
+    CHECK(efs_meta_apply_publish(kv, &write) == EFS_ERR_STALE,
+          "sparse epoch rejects pre-truncate writer");
+    efs_kv_mem_free(kv);
+}
+
 static void test_truncate_range_del(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -5002,6 +5037,7 @@ int main(void)
     test_stat_fence_and_gen();
     test_stat_dir_hashed();
     test_utimens_fence();
+    test_sparse_grow_tail_epoch();
     test_truncate_range_del();
     test_cross_group_lane();
     test_append_reserve();

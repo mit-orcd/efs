@@ -5493,6 +5493,10 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
         memset(&ln, 0, sizeof(ln));
     if (p.content_epoch < ln.fenced_epoch)
         return EFS_ERR_STALE;
+    /* A sparse grow can create this lane after the active-lane fence walk.
+     * Its new tail and stamp must carry the same truncate epoch; otherwise
+     * GETCHUNKS captures epoch zero and every subsequent writer is STALE. */
+    ln.fenced_epoch = max_u64(ln.fenced_epoch, p.content_epoch);
     ln.max_end = max_u64(ln.max_end, p.new_size);
     if (!had_row)
         ln.present++;
