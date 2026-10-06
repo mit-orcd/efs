@@ -14,6 +14,11 @@ and D27 recovery/stop, and `3d9bb6b2` POSIX acceptance gates. The current
 partial-writer change (`8727f682`) validates published merge bases under fresh lane
 authority in both flush paths; it does not activate logical truncation.
 
+Before admission activation, resolve the [routing choice](d25-admission-routing.md).
+Recommendation: lane-local authority first; the existing staged writer RPC
+still consults the inode group. The latest token checks are recorded in the
+[checkpoint](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
+
 Next, in order:
 
 1. Writer authority, FileID-tagged GETCHUNKS, typed base/publication planning,

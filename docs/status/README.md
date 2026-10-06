@@ -789,3 +789,17 @@ The full-overwrite regression fails against the previous production function.
 The cache binding API is staged; authoritative FUSE admission and both flush paths still
 need wiring before activation. The active legacy union's sparse-overflow risk,
 logical truncate/history retirement and D27 fault/timing/RSS gates remain open.
+
+## D25 token checks and admission-routing decision — Oct 6 2026
+
+Three further rounds validate that publication ranges/ages remain subsets of
+accepted ownership (`dccd8a57`), retain tokens on invalid REPORT completion
+(`a5dfacd8`), and reject cache/publication geometry or future-mutation mismatches.
+Linux build/tests, normal/ASan/UBSan regressions and the documentation gate pass.
+[Evidence](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
+
+Activation now needs the [admission-routing choice](d25-admission-routing.md):
+the existing writer RPC consults both inode and lane authorities, whereas §7.3
+keeps ordinary writes on lane authority. Recommend lane-local authoritative
+views first; the alternative is a temporary per-write inode RPC with extra
+metadata traffic. No authoritative FUSE admission has been enabled.

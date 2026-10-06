@@ -208,6 +208,11 @@ int main(void) {
     assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_OK);
     assert(owned->writer->ranges.ino==1 && owned->writer->ranges.generation==7);
     assert(owned->data[0]==77 && !owned->dirty);
+    owned->writer->ranges.bytes.chunk_size*=2;
+    struct efs_writer_state bad_geometry=*owned->writer;
+    assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_ERR_INVAL);
+    assert(!memcmp(owned->writer,&bad_geometry,sizeof(bad_geometry)) && owned->data[0]==77);
+    owned->writer->ranges.bytes.chunk_size/=2;
     uint64_t charged_metadata=g_metadata;
     assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_OK && g_metadata==charged_metadata);
     view.authority_epoch=1;view.history.count=1;

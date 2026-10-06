@@ -86,7 +86,9 @@ int efs_writer_state_put(struct efs_writer_state *state,
     if (state->has_publication)
         return EFS_ERR_BUSY;
     if (state->ranges.ino != plan->ino || state->ranges.generation != plan->generation ||
-        state->ranges.chunk_index != plan->chunk_index)
+        state->ranges.chunk_index != plan->chunk_index ||
+        state->ranges.bytes.chunk_size != plan->original.chunk_size ||
+        plan->original.mutation > state->ranges.bytes.mutation)
         return EFS_ERR_STALE;
     int rc = efs_writer_publication_bind(plan, object_generation, snapshot_sequence,
                                          &state->publication);

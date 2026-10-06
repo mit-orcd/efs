@@ -58,6 +58,16 @@ static void writer_state_lifetime(void)
     struct efs_writer_plan plan;
     assert(efs_writer_ranges_plan(&state->ranges, &view, 0, &plan) == EFS_OK);
     assert(efs_writer_state_free(state) == EFS_ERR_BUSY);
+    struct efs_writer_plan invalid_geometry=plan;
+    invalid_geometry.original.chunk_size*=2;
+    invalid_geometry.surviving.chunk_size*=2;
+    assert(efs_writer_state_put(state,&invalid_geometry,1000,1)==EFS_ERR_STALE);
+    assert(!state->has_publication);
+    invalid_geometry=plan;
+    invalid_geometry.original.mutation++;
+    invalid_geometry.surviving.mutation++;
+    assert(efs_writer_state_put(state,&invalid_geometry,1000,1)==EFS_ERR_STALE);
+    assert(!state->has_publication);
     assert(efs_writer_state_put(state, &plan, 1000, 1) == EFS_OK);
     assert(efs_writer_state_put(state, &plan, 1001, 2) == EFS_ERR_BUSY);
     assert(efs_writer_state_report(state, 1000, 1, EFS_ERR_IO) == EFS_ERR_IO);

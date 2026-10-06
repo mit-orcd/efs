@@ -3983,6 +3983,10 @@ int efs_dcache_bind_writer(efs_ino_t ino, uint64_t generation, uint32_t ci,
         pthread_mutex_unlock(mu);
         return EFS_ERR_BUSY;
     }
+    if (e->writer && e->writer->ranges.bytes.chunk_size != e->len) {
+        pthread_mutex_unlock(mu);
+        return EFS_ERR_INVAL;
+    }
     struct efs_writer_ranges next = e->writer ? e->writer->ranges :
         (struct efs_writer_ranges){.bytes.chunk_size = e->len};
     rc = efs_writer_ranges_authority(&next, view);
