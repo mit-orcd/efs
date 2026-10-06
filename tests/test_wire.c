@@ -4,6 +4,7 @@
 #include "efs/common.h"
 #include "efs/raft.h"
 #include <arpa/inet.h>
+#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -304,6 +305,35 @@ static void test_raft_codec(void)
           "short decode");
 }
 
+static void test_getchunks_reply_validation(void)
+{
+    struct efs_msg_inode_getchunks req = {0};
+    struct efs_msg_inode_getchunks_reply *r = calloc(1, sizeof(*r));
+    assert(r);
+    req.ino = 123; req.start = 5; req.max = 2;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_OK, "empty GETCHUNKS reply");
+    r->count = 1; r->recs[0].ino = 123; r->recs[0].chunk_index = 5;
+    r->recs[0].read_view.chunk_size = EFS_MIN_CHUNK_SIZE; r->recs[0].read_view.count = 1;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_OK, "valid GETCHUNKS reply");
+    r->count = EFS_GETCHUNKS_MAX + 1;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS count bound");
+    r->count = 3;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS requested count bound");
+    r->count = 1; ++r->recs[0].ino;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS inode identity");
+    --r->recs[0].ino; r->recs[0].chunk_index = 4;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS lower chunk bound");
+    r->recs[0].chunk_index = EFS_CHUNK_GROUP_SIZE;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS group bound");
+    r->recs[0].chunk_index = 5; r->count = 2; r->recs[1] = r->recs[0];
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS duplicate rows");
+    r->recs[1].chunk_index = 6;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_OK, "GETCHUNKS ordered rows");
+    r->recs[1].read_view.count = 0;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS malformed part view");
+    free(r);
+}
+
 static void test_writer_view_reply(void)
 {
     struct efs_msg_inode_writer_view req = {123, 456, 17, 0};
@@ -342,6 +372,7 @@ static void test_writer_view_reply(void)
 int main(void)
 {
     test_writer_view_reply();
+    test_getchunks_reply_validation();
     test_frame_roundtrip();
     test_frame_reject();
     test_status_offset();

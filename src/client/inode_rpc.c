@@ -916,7 +916,7 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
         efs_client_conn_release(nid, conn);
         rpc_prof_add(EFS_MSG_INODE_GETCHUNKS, t1 - t0, t2 - t1, t3 - t2, 0);
         if (rtype != EFS_MSG_INODE_GETCHUNKS_REPLY ||
-            plen < sizeof(struct efs_msg_inode_getchunks_reply)) {
+            plen != sizeof(struct efs_msg_inode_getchunks_reply)) {
             free(payload);
             return EFS_ERR_PROTO;
         }
@@ -945,6 +945,10 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
         int st = rpc_status_to_efs(r->status);
         free(payload);
         return st;
+    }
+    if (efs_getchunks_reply_valid(&req, r) != EFS_OK) {
+        free(payload);
+        return EFS_ERR_PROTO;
     }
     uint32_t n = r->count;
     if (inout_count && n > *inout_count)

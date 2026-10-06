@@ -893,6 +893,28 @@ struct efs_msg_inode_getchunks_reply {
     struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
 };
 
+/* Validate the whole fixed reply before exposing any records to the cache. */
+static inline int efs_getchunks_reply_valid(
+    const struct efs_msg_inode_getchunks *req,
+    const struct efs_msg_inode_getchunks_reply *reply)
+{
+    if (!req || !reply || !req->ino || reply->count > EFS_GETCHUNKS_MAX)
+        return EFS_ERR_PROTO;
+    uint32_t max = req->max && req->max < EFS_GETCHUNKS_MAX ? req->max : EFS_GETCHUNKS_MAX;
+    uint64_t end = ((uint64_t)req->start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1;
+    if (reply->count > max)
+        return EFS_ERR_PROTO;
+    for (uint32_t i = 0; i < reply->count; ++i) {
+        const struct efs_chunk_rec *r = &reply->recs[i];
+        if (r->ino != req->ino || r->chunk_index < req->start ||
+            r->chunk_index >= end ||
+            (i && r->chunk_index <= reply->recs[i - 1].chunk_index) ||
+            efs_chunk_rec_view_valid(r) != EFS_OK)
+            return EFS_ERR_PROTO;
+    }
+    return EFS_OK;
+}
+
 /* Phase 3b: drop mappings with chunk_index >= first_chunk. Reply is
  * struct efs_msg_inode_reply. */
 
