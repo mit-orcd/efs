@@ -9859,8 +9859,8 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
                              struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
-    struct efs_meta_row prow, row;
-    struct efs_meta_dentry dent;
+    struct efs_meta_row prow = {0}, row;
+    struct efs_meta_dentry dent = {0};
     uint8_t cmd[HOST_CMD_MAX];
     uint32_t clen = 0;
     uint64_t idx = 0, term = 0;
@@ -9982,6 +9982,17 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
                 return;
             }
         }
+    }
+    /* Legacy W36 names can outlive their inode. Let the single-shard apply
+     * validate absence/intents and atomically remove only that dangling name.
+     * Cross-shard and directory repairs require a separate recovery design. */
+    if ((rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_IO) &&
+        prow.layout == EFS_META_LAYOUT_LOCAL &&
+        dent.ino && (dent.type & S_IFMT) == S_IFREG &&
+        efs_kv_inode_shard(dent.ino) == efs_kv_inode_shard(parent)) {
+        memset(&row, 0, sizeof(row));
+        row.ino = dent.ino; row.mode = dent.type;
+        rc = EFS_OK;
     }
     if (rc == EFS_OK)
         rc = pack_unlink_cmd(cmd, &clen, parent, now_ns(), name, q);

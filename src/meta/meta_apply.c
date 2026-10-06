@@ -2080,6 +2080,62 @@ int efs_meta_apply_unlink(struct efs_kv *kv, efs_ino_t parent, const char *name,
     return efs_meta_apply_unlink_op(kv, parent, name, now, NULL);
 }
 
+/* Recover a legacy dangling regular-file name only inside one authoritative
+ * LOCAL shard. Never synthesize an inode, touch object/reap state, or infer
+ * absence from another shard. Apply serialization plus intent guards make
+ * absence and the name removal one atomic state-machine operation. */
+static int apply_orphan_unlink(struct efs_kv *kv, efs_ino_t parent,
+                               const char *name, uint64_t now,
+                               const struct efs_opid_req *q)
+{
+    struct efs_meta_row prow, row;
+    struct efs_meta_dentry dent;
+    uint8_t kd[EFS_KV_KEY_MAX], ki[EFS_KV_KEY_MAX], kp[EFS_KV_KEY_MAX];
+    uint8_t ks[EFS_KV_KEY_MAX], ko[EFS_KV_KEY_MAX];
+    uint8_t vp[INO_VAL], vs[8], vo[EFS_OPID_VAL_MAX];
+    uint32_t nd, ni, np, ns, sh;
+    int rc = efs_meta_apply_get_inode(kv, parent, &prow);
+    if (rc != EFS_OK) return rc;
+    if (!S_ISDIR(prow.mode) || prow.layout != EFS_META_LAYOUT_LOCAL)
+        return EFS_ERR_NOT_FOUND;
+    rc = efs_meta_apply_lookup(kv, parent, name, &dent);
+    if (rc != EFS_OK) return rc;
+    sh = efs_kv_inode_shard(parent);
+    if ((dent.type & S_IFMT) != S_IFREG || !dent.ino ||
+        efs_kv_inode_shard(dent.ino) != sh)
+        return EFS_ERR_NOT_FOUND;
+    rc = efs_kv_key_dentry(sh,parent,name,kd,&nd);
+    if (rc == EFS_OK) rc = efs_kv_key_inode(sh,dent.ino,ki,&ni);
+    if (rc == EFS_OK) rc = efs_kv_key_inode(sh,parent,kp,&np);
+    if (rc == EFS_OK) rc = efs_txn_key_busy(kv,kd,nd);
+    if (rc == EFS_OK) rc = efs_txn_key_busy(kv,ki,ni);
+    if (rc == EFS_OK) rc = efs_txn_key_busy(kv,kp,np);
+    if (rc != EFS_OK) return rc;
+    rc = efs_meta_apply_get_inode(kv,dent.ino,&row);
+    if (rc != EFS_ERR_NOT_FOUND)
+        return rc == EFS_OK ? EFS_ERR_STALE : rc;
+    rc = efs_kv_key_dseq(sh,parent,0,ks,&ns);
+    if (rc == EFS_OK) rc = efs_txn_key_busy(kv,ks,ns);
+    if (rc == EFS_OK) rc = dseq_bump(kv,sh,parent,0,ks,&ns,vs);
+    if (rc != EFS_OK) return rc;
+    prow.base_mtime = max_u64(prow.base_mtime,now);
+    prow.base_ctime = max_u64(prow.base_ctime,now);
+    efs_meta_dir_note_entry(&prow,-1);
+    pack_inode(vp,&prow);
+    struct efs_kv_item it[4]; memset(it,0,sizeof(it));
+    it[0]=(struct efs_kv_item){.op=EFS_KV_DEL,.key=kd,.klen=nd};
+    it[1]=(struct efs_kv_item){.op=EFS_KV_PUT,.key=kp,.klen=np,.val=vp,.vlen=sizeof(vp)};
+    it[2]=(struct efs_kv_item){.op=EFS_KV_PUT,.key=ks,.klen=ns,.val=vs,.vlen=sizeof(vs)};
+    uint32_t n=3;
+    if (q) {
+        struct efs_opid_reply rep={0};rep.rc=EFS_OK;rep.ino=dent.ino;
+        rc=opid_item(kv,sh,q,&rep,ko,vo,&it[n]);
+        if (rc<0) return rc;
+        n+=(uint32_t)rc;
+    }
+    return meta_write_batch(kv,it,n);
+}
+
 int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *name,
                              uint64_t now, const struct efs_opid_req *q)
 {
@@ -2118,6 +2174,10 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
             return rep.rc;
     }
     rc = efs_meta_apply_resolve(kv, parent, name, &dent, &row);
+    if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_IO) {
+        int repaired = apply_orphan_unlink(kv,parent,name,now,q);
+        return repaired == EFS_ERR_NOT_FOUND ? rc : repaired;
+    }
     if (rc != EFS_OK)
         return rc;
     if (S_ISDIR(row.mode))

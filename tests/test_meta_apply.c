@@ -5332,8 +5332,54 @@ static void test_lane_local_writer_views(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_orphan_unlink(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();efs_ino_t ino=0;
+    struct efs_meta_dentry dent;struct efs_meta_row parent;
+    uint8_t keys[4][EFS_KV_KEY_MAX];uint32_t lens[4];
+    CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"orphan init");
+    CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0644,"orphan",&ino)==EFS_OK,"orphan create");
+    uint32_t sh=efs_kv_inode_shard(ino);
+    CHECK(efs_kv_key_inode(sh,ino,keys[0],&lens[0])==EFS_OK,"inode key");
+    CHECK(efs_kv_key_inode(sh,EFS_ROOT_INO,keys[1],&lens[1])==EFS_OK,"parent key");
+    CHECK(efs_kv_key_dentry(sh,EFS_ROOT_INO,"orphan",keys[2],&lens[2])==EFS_OK,"name key");
+    CHECK(efs_kv_key_dseq(sh,EFS_ROOT_INO,0,keys[3],&lens[3])==EFS_OK,"sequence key");
+    CHECK(efs_kv_del(kv,keys[0],lens[0])==EFS_OK,"inject legacy missing inode");
+    struct efs_txn_parts parts={.n=1};parts.shard[0]=sh;
+    for(unsigned i=0;i<4;i++) {
+        struct efs_txid t={{0xd1}};t.bytes[1]=i;
+        uint64_t version;
+        CHECK(efs_txn_ver_get(kv,keys[i],lens[i],&version)==EFS_OK,"version");
+        CHECK(efs_txn_prepare_excl(kv,&t,&parts,keys[i],lens[i],version,EFS_TXN_DEL,NULL,0)==EFS_OK,"pending repair guard");
+        CHECK(efs_meta_apply_unlink(kv,EFS_ROOT_INO,"orphan",T0+1)==EFS_ERR_BUSY,"repair retains pending intent");
+        CHECK(efs_txn_resolve(kv,&t,sh,EFS_TXN_ABORT)==EFS_OK,"abort pending intent");
+        CHECK(efs_meta_apply_lookup(kv,EFS_ROOT_INO,"orphan",&dent)==EFS_OK,"name retained");
+    }
+    uint8_t value[EFS_META_DENT_BYTES];
+    CHECK(efs_meta_apply_lookup(kv,EFS_ROOT_INO,"orphan",&dent)==EFS_OK,"capture original orphan");
+    struct efs_meta_dentry changed=dent;changed.type=S_IFDIR;
+    CHECK(efs_meta_pack_dentry(&changed,value,sizeof(value))==EFS_OK &&
+          efs_kv_put(kv,keys[2],lens[2],value,sizeof(value))==EFS_OK,"directory orphan fixture");
+    CHECK(efs_meta_apply_unlink(kv,EFS_ROOT_INO,"orphan",T0+1)==EFS_ERR_IO,"directory corruption remains visible");
+    changed=dent;changed.ino^=1;
+    CHECK(efs_meta_pack_dentry(&changed,value,sizeof(value))==EFS_OK &&
+          efs_kv_put(kv,keys[2],lens[2],value,sizeof(value))==EFS_OK,"foreign shard orphan fixture");
+    CHECK(efs_meta_apply_unlink(kv,EFS_ROOT_INO,"orphan",T0+1)==EFS_ERR_IO,"foreign shard absence cannot authorize repair");
+    CHECK(efs_meta_pack_dentry(&dent,value,sizeof(value))==EFS_OK &&
+          efs_kv_put(kv,keys[2],lens[2],value,sizeof(value))==EFS_OK,"restore orphan fixture");
+    struct efs_opid_req q={0};q.id.client_uuid[0]=1;q.id.session_epoch=1;q.id.seq=1;
+    CHECK(efs_meta_apply_unlink_op(kv,EFS_ROOT_INO,"orphan",T0+2,&q)==EFS_OK,"repair orphan");
+    CHECK(efs_meta_apply_lookup(kv,EFS_ROOT_INO,"orphan",&dent)==EFS_ERR_NOT_FOUND,"no dangling name");
+    CHECK(efs_meta_apply_unlink_op(kv,EFS_ROOT_INO,"orphan",T0+3,&q)==EFS_OK,"repair opid replay");
+    CHECK(efs_meta_apply_get_inode(kv,EFS_ROOT_INO,&parent)==EFS_OK && parent.base_mtime==T0+2 && parent.nents==0,"parent updates once");
+    CHECK(efs_meta_apply_unlink(kv,EFS_ROOT_INO,"orphan",T0+4)==EFS_ERR_NOT_FOUND,"missing name stays missing");
+    CHECK(efs_meta_apply_check(kv)==EFS_OK,"repaired metadata consistent");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_orphan_unlink();
     test_create_lookup_unlink();
     test_xattr();
     test_mkdir();
