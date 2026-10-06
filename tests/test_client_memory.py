@@ -56,7 +56,7 @@ static void dcache_account_extra(efs_ino_t ino, uint32_t ci) { (void)ino;(void)c
 static void dcache_add_range(struct dcache_ent *e,uint32_t off,uint32_t len) { e->nrange=1;e->roff[0]=off;e->rlen[0]=len; }
 void efs_export_present_add(struct efs_export *ex,efs_ino_t ino,int which,int delta) { (void)ex;(void)ino;(void)which;(void)delta; }
 '''
-for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','dcache_take']:
+for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','efs_dcache_snapshot_lane','dcache_take']:
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
@@ -220,6 +220,26 @@ int main(void) {
     assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_OK);
     view.authority_epoch=0;view.history.count=0;
     assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_ERR_STALE);
+    view.authority_epoch=1;view.history.count=1;
+    view.history.entries[0]=(struct efs_content_fence){1,100};
+    struct efs_msg_lane_writer_view_reply cached_view={.view=view,.chunk_size=owned->len};
+    uint8_t patch[4]={1,2,3,4};
+    uint8_t original_byte=owned->data[10];
+    assert(efs_dcache_write_lane(1,8,0,&cached_view,10,patch,4)!=EFS_OK);
+    assert(!owned->dirty && owned->data[10]==original_byte);
+    assert(efs_dcache_write_lane(1,7,0,&cached_view,10,patch,4)==EFS_OK);
+    assert(owned->dirty && owned->pin_held && !memcmp(owned->data+10,patch,4));
+    uint8_t *cached_copy=malloc(owned->len);assert(cached_copy);
+    struct efs_writer_plan cached_plan;
+    struct efs_msg_inode_getchunks_reply *cached_base=calloc(1,sizeof(*cached_base));assert(cached_base);
+    cached_base->ino=1;cached_base->generation=7;cached_base->authority_epoch=1;
+    assert(efs_dcache_snapshot_lane(1,7,0,&cached_view,cached_base,&cached_plan,cached_copy,owned->len)==EFS_OK);
+    assert(cached_copy[0]==0 && !memcmp(cached_copy+10,patch,4));
+    assert(efs_writer_state_put(owned->writer,&cached_plan,10,3)==EFS_OK);
+    assert(efs_dcache_snapshot_lane(1,7,0,&cached_view,cached_base,&cached_plan,cached_copy,owned->len)==EFS_ERR_BUSY);
+    assert(efs_writer_state_report(owned->writer,10,3,EFS_OK)==EFS_OK);
+    free(cached_base);free(cached_copy);
+    owned->dirty=0;dcache_pin_release(owned);dirty_bytes-=owned->len;
     dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata && !g_live);
     /* Snapshot outputs must never overwrite body/state through partial aliases. */
     uint32_t cs=EFS_MIN_CHUNK_SIZE;
@@ -227,7 +247,13 @@ int main(void) {
     memset(body,77,cs+1);
     struct efs_writer_state *writer=NULL;
     view=(struct efs_msg_inode_writer_view_reply){.ino=1,.generation=7};
-    assert(efs_writer_state_write(&writer,&view,body,cs,0,body,8)==EFS_OK);
+    struct efs_msg_lane_writer_view_reply lane_view={.view=view,.chunk_size=cs*2};
+    assert(efs_writer_state_write_lane(&writer,&lane_view,body,cs,0,body,8)==EFS_ERR_PROTO);
+    assert(!writer && body[0]==77);
+    lane_view.chunk_size=cs;lane_view.reserved=1;
+    assert(efs_writer_state_write_lane(&writer,&lane_view,body,cs,0,body,8)!=EFS_OK);
+    assert(!writer);lane_view.reserved=0;
+    assert(efs_writer_state_write_lane(&writer,&lane_view,body,cs,0,body,8)==EFS_OK);
     struct efs_msg_inode_getchunks_reply *base=calloc(1,sizeof(*base));assert(base);
     base->ino=1;base->generation=7;
     struct efs_writer_plan plan, saved_plan;memset(&plan,0x5a,sizeof(plan));saved_plan=plan;
@@ -237,6 +263,14 @@ int main(void) {
     assert(efs_writer_state_snapshot(writer,&view,base,body,cs,&plan,(void *)writer)==EFS_ERR_INVAL);
     assert(efs_writer_state_snapshot(writer,&view,base,body,cs,&plan,copy)==EFS_OK);
     assert(copy[0]==77 && copy[8]==0);
+    saved_plan=plan;lane_view.chunk_size=cs*2;
+    assert(efs_writer_state_snapshot_lane(writer,&lane_view,base,body,cs,&plan,copy)==EFS_ERR_PROTO);
+    assert(!memcmp(&plan,&saved_plan,sizeof(plan)) && copy[0]==77);
+    lane_view.chunk_size=cs;
+    assert(efs_writer_state_snapshot_lane(writer,&lane_view,base,body,cs,&plan,copy)==EFS_OK);
+    ++base->generation;
+    assert(efs_writer_state_snapshot_lane(writer,&lane_view,base,body,cs,&plan,copy)==EFS_ERR_STALE);
+    --base->generation;
     struct efs_writer_plan forged=plan;
     forged.original.ranges[0].len=forged.surviving.ranges[0].len=4;
     assert(efs_writer_state_put(writer,&forged,19,2)==EFS_ERR_STALE);

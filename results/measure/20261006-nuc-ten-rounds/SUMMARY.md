@@ -41,4 +41,25 @@ regressions pass locally. Live rollout/acceptance follows the implementation bat
    from accepted ranges, retaining bytes and leaving the publication unset.
    Older immutable snapshots remain allowed after concurrent admission.
 
-Further rounds and NUC acceptance results will be appended as completed.
+7. Geometry-checked lane write boundary validates FileID and configured chunk
+   size before allocation, ownership or copying. Invalid geometry/reserved fields
+   preserve the body and sidecar.
+
+8. Geometry-checked lane snapshot boundary combines lane authority with exact
+   GETCHUNKS FileID/epoch. Mismatched base/geometry leaves snapshot outputs intact.
+
+9. Caller-locked cache lane admission atomically records typed ownership and
+   copies bytes, charging metadata before success, tracking dirty bytes and pins.
+   Legacy accepted bytes cannot be adopted; both legacy flush paths return BUSY
+   for typed ownership before GET/PUT. No FUSE caller activates this API yet.
+
+10. Caller-locked cache lane snapshot captures byte ranges and body together,
+    validating expected FileID and geometry. Pending publication blocks another
+    snapshot. Real cache regressions cover rejection, retained ownership and
+    successful immutable capture; ASan/UBSan passes.
+
+NUC final build/test and live acceptance results follow below.
+
+Final NUC private build `make -j8 -B all` and full `make test`: PASS.
+Local real cache/state ASan/UBSan and legacy flush fence regressions: PASS.
+Architecture documentation gate: 5/5. Live rollout results are recorded below.

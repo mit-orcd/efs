@@ -408,6 +408,14 @@ int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
  * BUSY requires legacy bytes to drain first; no FUSE caller is enabled yet. */
 int efs_dcache_bind_writer(efs_ino_t ino, uint64_t generation, uint32_t ci,
                            const struct efs_msg_inode_writer_view_reply *view);
+struct efs_writer_plan;
+int efs_dcache_write_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    uint32_t off, const uint8_t *src, uint32_t len);
+int efs_dcache_snapshot_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base,
+    struct efs_writer_plan *plan, uint8_t *body, uint32_t len);
 /* Whole 128 KiB chunk. `chunk` is efs_buf_alloc'd; stolen on success. */
 int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
                                 uint32_t cs);

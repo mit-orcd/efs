@@ -20,6 +20,7 @@ a = write.index('struct dcache_ent {')
 entry = write[a:write.index('\n};', a) + 3]
 source = r'''
 #include "client_internal.h"
+#include "efs/writer_state.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,6 +151,12 @@ int main(void) {
         else {assert(steal(&copy,&bg,&obs,&have)==1&&!have);free(copy);put_win_close(1);}
         assert(!pulls&&!fetches&&!windows);
     }
+    reset();
+    struct efs_writer_state typed={0};typed.ranges.bytes.count=1;
+    g_dcache.e[0].writer=&typed;
+    assert(steal(&copy,&bg,&obs,&have)==EFS_ERR_BUSY && !pulls && !uploads);
+    assert(dcache_flush_slot_inner_budgeted(0,1,1)==EFS_ERR_BUSY && !pulls && !uploads);
+    assert(g_dcache.e[0].dirty && g_dcache.e[0].pin_held && dirty_bytes==CS);
     free(g_dcache.e[0].data);
     puts("writer fence merge: pipeline/direct masks, absent CAS, failure retention and full overwrite PASS");
 }

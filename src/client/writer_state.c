@@ -136,3 +136,31 @@ int efs_writer_state_report(struct efs_writer_state *state,
     }
     return rc;
 }
+
+static int writer_lane_geometry(const struct efs_msg_lane_writer_view_reply *view,
+                                uint32_t body_len)
+{
+    if (!view || !view->view.generation || !efs_chunk_size_valid(body_len))
+        return EFS_ERR_INVAL;
+    struct efs_msg_lane_writer_view req = {
+        view->view.ino, view->view.generation, view->view.chunk_index, body_len};
+    return efs_lane_writer_view_reply_valid(&req, view);
+}
+int efs_writer_state_write_lane(struct efs_writer_state **state,
+    const struct efs_msg_lane_writer_view_reply *view, uint8_t *body,
+    uint32_t body_len, uint32_t off, const uint8_t *src, uint32_t len)
+{
+    int rc = writer_lane_geometry(view, body_len);
+    return rc == EFS_OK ? efs_writer_state_write(state, &view->view, body,
+                                               body_len, off, src, len) : rc;
+}
+int efs_writer_state_snapshot_lane(const struct efs_writer_state *state,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base,
+    const uint8_t *body, uint32_t body_len,
+    struct efs_writer_plan *out_plan, uint8_t *out_body)
+{
+    int rc = writer_lane_geometry(view, body_len);
+    return rc == EFS_OK ? efs_writer_state_snapshot(state, &view->view, base,
+                                    body, body_len, out_plan, out_body) : rc;
+}

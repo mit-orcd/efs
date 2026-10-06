@@ -4006,6 +4006,68 @@ int efs_dcache_bind_writer(efs_ino_t ino, uint64_t generation, uint32_t ci,
     return rc;
 }
 
+/* Staged typed admission: no RPC under the slot lock and no adoption of
+ * previously accepted legacy bytes. Caller obtains lane authority first. */
+int efs_dcache_write_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    uint32_t off, const uint8_t *src, uint32_t len)
+{
+    if (!ino || !generation || !view || !src)
+        return EFS_ERR_INVAL;
+    struct efs_msg_lane_writer_view req = {ino, generation, ci, view->chunk_size};
+    int rc = efs_lane_writer_view_reply_valid(&req, view);
+    if (rc != EFS_OK)
+        return rc;
+    dcache_ensure();
+    uint32_t slot = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(slot);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(slot, ino, ci);
+    if (!e || !e->data || e->stalled ||
+        (!efs_writer_state_owned(e->writer) && dcache_keep_on_drop(e))) {
+        pthread_mutex_unlock(mu);
+        return EFS_ERR_BUSY;
+    }
+    int was_dirty = e->dirty;
+    rc = efs_writer_state_write_lane(&e->writer, view, e->data, e->len, off, src, len);
+    if (rc == EFS_OK) {
+        ++e->mutation;
+        dcache_set_dirty(e, slot);
+        dcache_pin_add(e);
+        if (!was_dirty)
+            dcache_note_dirty_bytes((int64_t)e->len);
+    }
+    pthread_mutex_unlock(mu);
+    return rc;
+}
+
+/* Capture ownership and its bytes together; caller reserves output memory
+ * before acquiring this lock. Typed publication is still separately gated. */
+int efs_dcache_snapshot_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base,
+    struct efs_writer_plan *plan, uint8_t *body, uint32_t len)
+{
+    if (!ino || !generation || !view || !plan || !body)
+        return EFS_ERR_INVAL;
+    struct efs_msg_lane_writer_view req = {ino, generation, ci, len};
+    int rc = efs_lane_writer_view_reply_valid(&req, view);
+    if (rc != EFS_OK)
+        return rc;
+    dcache_ensure();
+    uint32_t slot = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(slot);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(slot, ino, ci);
+    if (!e || !e->data || !e->writer || e->len != len || e->stalled)
+        rc = EFS_ERR_BUSY;
+    else
+        rc = efs_writer_state_snapshot_lane(e->writer, view, base, e->data,
+                                            len, plan, body);
+    pthread_mutex_unlock(mu);
+    return rc;
+}
+
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci)
 {
     int pending;
@@ -5018,6 +5080,11 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
         pthread_mutex_unlock(io);
         return 0;
     }
+    if (efs_writer_state_owned(e->writer)) {
+        pthread_mutex_unlock(mu);
+        pthread_mutex_unlock(io);
+        return EFS_ERR_BUSY;
+    }
     len = e->len;
     have_base = e->have_base;
     nrange = e->nrange;
@@ -5329,6 +5396,11 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
         if (!e->dirty || !e->data || (have_only && e->ino != only_ino)) {
             e = e->next;
             continue;
+        }
+        /* Legacy flush cannot publish an epoch-owned snapshot. */
+        if (efs_writer_state_owned(e->writer)) {
+            rc = EFS_ERR_BUSY;
+            break;
         }
         /* Reclaim (have_only=0) must not GET+PUT an unpublished sparse
          * append chunk. Two such flushes read the same zero base and the
