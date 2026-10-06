@@ -4140,6 +4140,35 @@ static void dcache_add_range(struct dcache_ent *e, uint32_t off, uint32_t len)
     }
 }
 
+/* Atomic full overwrite fast path: preserve the admission budget by using
+ * the existing body instead of allocating another chunk on a cache hit. */
+static int dcache_patch_full(efs_ino_t ino, uint32_t ci, const uint8_t *src,
+                              uint32_t cs)
+{
+    uint32_t slot = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(slot);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(slot, ino, ci);
+    if (!e || !e->data || e->len != cs || e->writer) {
+        pthread_mutex_unlock(mu);
+        return -1;
+    }
+    if (!e->dirty) {
+        dcache_set_dirty(e, slot);
+        dcache_pin_add(e);
+        dcache_note_dirty_bytes((int64_t)cs);
+    }
+    memcpy(e->data, src, cs);
+    dcache_add_range(e, 0, cs);
+    e->have_base = 1;
+    e->nrange = 0;
+    e->base_gen = EFS_CHUNK_BASE_UNCOND;
+    e->img_seq = dcache_seq_now();
+    pthread_mutex_unlock(mu);
+    efs_rdcache_invalidate(ino, ci);
+    return 0;
+}
+
 static int dcache_patch(efs_ino_t ino, uint32_t ci, uint32_t off, const uint8_t *src,
                         uint32_t len)
 {
@@ -4277,7 +4306,7 @@ static void dcache_kick_complete(void);
 static int dcache_store_full_chunk(efs_ino_t ino, uint32_t ci,
                                    const uint8_t *src, uint32_t cs)
 {
-    {
+    if (dcache_patch_full(ino, ci, src, cs) != 0) {
         uint8_t *chunk = efs_buf_alloc(cs);
         if (!chunk)
             return -1;
@@ -4300,7 +4329,9 @@ int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
 {
     if (!chunk || !cs)
         return -1;
-    {
+    if (dcache_patch_full(ino, ci, chunk, cs) == 0) {
+        efs_buf_free(chunk, cs);
+    } else {
         struct dcache_init in = { 1, 0, 1, 0, 0 };
 
         if (dcache_merge_owned(ino, ci, 0, chunk, cs, chunk, cs, &in) < 0)
