@@ -471,3 +471,42 @@ performance is unmeasured. This is the published-base portion of writer
 integration: local dirty-range epoch capture, clipping pre-fence unpublished
 bytes, unconditional publication epochs, and live-file sweep scheduling and
 history retirement remain open. Public logical truncation stays disabled.
+
+
+## D25 dirty-range foundation checkpoint — Oct 6 2026
+
+Committed in `6221d22f`: `include/efs/dirty_ranges.h` implements bounded
+epoch-labelled ownership for
+application bytes. Overlapping writes replace only their covered bytes and
+split older ranges; adjacent ranges coalesce only at the same epoch. At most
+32 ranges are owned. Overflow returns BUSY without changing the state; the
+caller must drain before accepting/copying that write. There is no collapse
+to an unconditional whole-chunk overwrite. Snapshot copies retain original
+ages and a mutation identity. Acknowledgement clears only the exact original
+snapshot; concurrent rewrites remain owned. The caller must also validate the
+PUT/REPORT identity before acknowledging.
+
+Clipping uses the shared fence validity rule and an authoritative history
+completeness floor. Snapshots older than the retained complete history return
+STALE; an empty/retired history never silently revives old bytes. Surviving
+local ranges overlay an already-masked published image, preserving peer bytes
+under discarded dirty suffixes. Failed validation leaves outputs untouched.
+
+`make test-dirty-ranges` passes normally and under ASan/UBSan. The independent
+50,000-step byte model checks ownership ages, overlapping writes, repeated
+shrinks/extensions and clipped overlay. Deterministic cases cover full
+ownership splits, range exhaustion, mutation overflow, stale acknowledgements
+and incomplete-history rejection. The target is included in `make test`; the full isolated Linux build/test
+suite and all five documentation checks pass.
+
+**This is a tested writer primitive, not activated FUSE epoch tracking.** The
+current GETCHUNKS view exposes masks for published parts, not a complete
+history for arbitrary local writer epochs; absent rows expose no authority
+stamp. The next step must add an authoritative writer snapshot, including
+FileID, authority epoch, complete history and its retirement floor, before
+write admission can assign epochs. It must cover holes/new lanes and reject
+retirement races. Then replace the existing dcache range union under its lock,
+reserve any increased metadata budget, capture matching bytes/ranges for
+flush/retry, and acknowledge only matching snapshots. Never use cached
+inode/chunk epochs or assume a retired history is complete from epoch zero.
+Logical truncation remains disabled.
