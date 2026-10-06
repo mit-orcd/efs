@@ -838,3 +838,13 @@ Raft, server readdir is empty, and full-export du now completes without errors.
 The current xorinox build passed the rename-vs-unlink gate 20/20 after repair.
 Directory/foreign-shard orphan recovery remains outside this narrow fix.
 [Evidence and scope](../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md).
+
+## D25 durable publication recovery checkpoint — Oct 6 2026
+
+The accepted next step adds canonical per-publication identity, atomic durable
+outcomes, lane-routed submission/status RPCs and staged cache result handling.
+Retries recover the same intent after lost replies or superseding writes;
+UNKNOWN retains ownership, exact rejection retains bytes but releases its token,
+and exact success acknowledges only its snapshot. Legacy REPORT and active FUSE
+flush paths are unchanged. [Validation evidence](../../results/measure/20261006-durable-publication/SUMMARY.md).
+See [implementation and remaining activation gates](d25-admission-routing.md#durable-publication-results--implemented-staged).

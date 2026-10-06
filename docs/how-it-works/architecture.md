@@ -761,7 +761,24 @@ retries, read-only transaction fallback).
 
 **Writer admission authority (D25, Oct 6 2026).** Each active lane retains a
 FileID-scoped authority record with content epoch, complete-history floor and
-chunk/lane geometry, alongside its durable fence history. Cold lane bootstrap
+chunk/lane geometry, alongside its durable fence history.
+The staged publication endpoint stores a versioned per-operation result in the
+lane's applied KV (`PUBLICATION`, kind 26), keyed by FileID, chunk and unique
+client UUID/session/sequence, with the BLAKE3 digest of canonical immutable
+request fields bound in its value. A success is atomic with
+its mapping, lane/inode and GC changes; terminal rejection is replicated too.
+Lane ReadIndex status queries recover the result after lost replies, restart
+or eviction of the transient apply ring (restart means server recovery, not a
+client dirty-byte journal). Missing results mean unknown, never
+permission to rebase. Pending cache tokens bind the intended size and digest
+before sending. Identical writes have distinct operation IDs; changing an
+existing ID’s request fields fails closed. A matching rejection retains
+accepted bytes; a matching
+success acknowledges only the captured ownership. This path remains staged:
+receipt retirement with replay protection and runtime integration precede
+activation. The legacy aggregate REPORT verdict does not provide these proofs.
+
+Cold lane bootstrap
 freezes the inode's FileID, epoch, history and participant bitmap, then installs
 the lane stamp/history/authority and activates its bitmap bit through one
 transaction. Missing chunks or lane records never authorize epoch zero. An

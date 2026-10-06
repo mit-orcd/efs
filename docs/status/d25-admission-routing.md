@@ -95,3 +95,43 @@ because the current aggregate reply cannot distinguish partial commit from a CAS
 loser or an evicted apply verdict. Recommend per-record results plus durable
 retry/status identity before wiring typed flush paths. No new client-scaling or
 live activation result is claimed.
+
+## Durable publication results — implemented, staged
+
+The user accepted durable per-publication recovery before activation on Oct 6.
+`PUBLICATION` (113/114) submits one immutable intent; `PUBLICATION_STATUS`
+(115/116) recovers its exact outcome under the lane group's ReadIndex. Both
+route to a host of that lane alone. Legacy aggregate REPORT is unchanged and
+is never evidence for typed rebasing. These endpoints have no active FUSE caller.
+
+Identity includes a mount UUID/session and unique snapshot sequence as well as
+FileID, chunk, captured epoch, expected base, candidate object,
+observed delta list, range, intended size, placement and checksums. Canonical
+big-endian encoding is hashed with BLAKE3; padding, host time and routing are
+excluded. Distinct writes of identical bytes have distinct operation identities;
+reusing one identity with changed request fields fails closed. The cache binds size and digest before first send and reconstructs
+that same request on retries, even when the inode size subsequently changes.
+
+Apply records a successful outcome in the same atomic KV batch as mapping,
+lane/inode updates and GC records. Terminal STALE/INVAL with no mutation is
+also recorded through Raft apply. BUSY and storage errors are not terminal
+results. The status RPC ignores the transient apply-result ring and queries
+the exact durable record. A prior result is returned before consulting newer
+fences or mappings; an old committed request is acknowledged without applying
+its bytes again. A current mapping with no result cannot manufacture success.
+Cold cross-group publication still requires lane bootstrap authority; unresolved
+transactions remain BUSY.
+
+Matching durable success releases only the captured ownership. Matching durable
+rejection clears the pending identity but retains all accepted bytes and pins;
+replanning then requires a fresh authoritative view. UNKNOWN, missing results,
+transport failures and mismatched identities retain the token and bytes.
+
+Activation remains gated on integrating authoritative admission and both flush
+paths, live lane/leader-change and shrink/recovery gates, and bounded receipt
+lifecycle. Results currently have no expiry or deletion: automatic eviction
+would lose the evidence. Implement explicit acknowledgement/retirement with
+replay protection before admitting production receipt growth. Cross-group
+publication timestamps also need coherent lane-local mtime invalidation during
+activation; the staged adapter preserves the existing lane stamp, rather than
+consulting the inode on every publish. No production activation is claimed.

@@ -791,7 +791,24 @@ retries, read-only transaction fallback).
 
 **Writer admission authority (D25, Oct 6 2026).** Each active lane retains a
 FileID-scoped authority record with content epoch, complete-history floor and
-chunk/lane geometry, alongside its durable fence history. Cold lane bootstrap
+chunk/lane geometry, alongside its durable fence history.
+The staged publication endpoint stores a versioned per-operation result in the
+lane's applied KV (`PUBLICATION`, kind 26), keyed by FileID, chunk and unique
+client UUID/session/sequence, with the BLAKE3 digest of canonical immutable
+request fields bound in its value. A success is atomic with
+its mapping, lane/inode and GC changes; terminal rejection is replicated too.
+Lane ReadIndex status queries recover the result after lost replies, restart
+or eviction of the transient apply ring (restart means server recovery, not a
+client dirty-byte journal). Missing results mean unknown, never
+permission to rebase. Pending cache tokens bind the intended size and digest
+before sending. Identical writes have distinct operation IDs; changing an
+existing ID’s request fields fails closed. A matching rejection retains
+accepted bytes; a matching
+success acknowledges only the captured ownership. This path remains staged:
+receipt retirement with replay protection and runtime integration precede
+activation. The legacy aggregate REPORT verdict does not provide these proofs.
+
+Cold lane bootstrap
 freezes the inode's FileID, epoch, history and participant bitmap, then installs
 the lane stamp/history/authority and activates its bitmap bit through one
 transaction. Missing chunks or lane records never authorize epoch zero. An
@@ -2261,6 +2278,16 @@ The current xorinox build passed the rename-vs-unlink gate 20/20 after repair.
 Directory/foreign-shard orphan recovery remains outside this narrow fix.
 [Evidence and scope](../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md).
 
+### D25 durable publication recovery checkpoint — Oct 6 2026
+
+The accepted next step adds canonical per-publication identity, atomic durable
+outcomes, lane-routed submission/status RPCs and staged cache result handling.
+Retries recover the same intent after lost replies or superseding writes;
+UNKNOWN retains ownership, exact rejection retains bytes but releases its token,
+and exact success acknowledges only its snapshot. Legacy REPORT and active FUSE
+flush paths are unchanged. [Validation evidence](../../results/measure/20261006-durable-publication/SUMMARY.md).
+See [implementation and remaining activation gates](../status/d25-admission-routing.md#durable-publication-results--implemented-staged).
+
 
 ## Appendix 2 — In flight — the current handoff block
 
@@ -2303,8 +2330,11 @@ Next, in order:
    The [publication ten-round checkpoint](../../results/measure/20261006-publication-ten-rounds/SUMMARY.md)
    binds captured FileID and exact CAS bases, reserves identity before PUT, and
    supplies typed cache completion APIs. They remain staged. Before activation,
-   resolve durable per-publication REPORT outcomes: aggregate STALE can follow
-   partial commit, so it cannot authorize dropping or rebasing ownership.
+   [durable publication submission/status and cache result handling](../status/d25-admission-routing.md#durable-publication-results--implemented-staged)
+   now distinguish exact commit from terminal rejection and unknown. Legacy
+   aggregate STALE still cannot authorize dropping or rebasing ownership.
+   Before activation, bound receipt lifetime with acknowledged retirement and
+   replay protection; finish coherent lane-local mtime invalidation.
    Next connect every FUSE write entry point and both flush paths to these APIs;
    replace the unlabelled union, serialize pending publications and drain range
    exhaustion before copying bytes. No epoch-aware FUSE admission is active.

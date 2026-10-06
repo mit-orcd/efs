@@ -40,8 +40,11 @@ Next, in order:
    The [publication ten-round checkpoint](../../results/measure/20261006-publication-ten-rounds/SUMMARY.md)
    binds captured FileID and exact CAS bases, reserves identity before PUT, and
    supplies typed cache completion APIs. They remain staged. Before activation,
-   resolve durable per-publication REPORT outcomes: aggregate STALE can follow
-   partial commit, so it cannot authorize dropping or rebasing ownership.
+   [durable publication submission/status and cache result handling](d25-admission-routing.md#durable-publication-results--implemented-staged)
+   now distinguish exact commit from terminal rejection and unknown. Legacy
+   aggregate STALE still cannot authorize dropping or rebasing ownership.
+   Before activation, bound receipt lifetime with acknowledged retirement and
+   replay protection; finish coherent lane-local mtime invalidation.
    Next connect every FUSE write entry point and both flush paths to these APIs;
    replace the unlabelled union, serialize pending publications and drain range
    exhaustion before copying bytes. No epoch-aware FUSE admission is active.
