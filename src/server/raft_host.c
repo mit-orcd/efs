@@ -9260,7 +9260,6 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
 
     memset(out, 0, sizeof(*out));
     memset(&drop, 0, sizeof(drop));
-    memset(&drop, 0, sizeof(drop));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
@@ -9611,7 +9610,6 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
 
     memset(out, 0, sizeof(*out));
     memset(&drop, 0, sizeof(drop));
-    memset(&drop, 0, sizeof(drop));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || !name || parent == 0 || name[0] == '\0') {
         out->status = EFS_INODE_RPC_INVAL;
@@ -9925,7 +9923,7 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
     if (rc == EFS_OK)
         rc = host_propose(h, dg, cmd, clen, &idx, &term, &hint);
     if (rc == EFS_OK)
-        rc = host_wait_settled(h, dg, idx, term, &hint);
+        rc = host_wait_verdict(h, dg, idx, term, &hint);
     if (dirop_fail_on(rc))
         fprintf(stderr,
                 "raft-host: unlink-simple parent=%llu name=%s rc=%d hint=%d "

@@ -137,6 +137,7 @@ test-report-pressure:
 test-create-errors:
 	python3 tests/test_create_errors.py
 	python3 tests/test_open_lease.py
+	python3 tests/test_unlink_verdict.py
 
 test-fold-observation:
 	python3 tests/test_fold_observation.py
