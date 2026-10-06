@@ -5,7 +5,7 @@ usage() {
     cat <<EOF
 Usage:
   $0 [--perf] [--strace] <server-addr:port> <mount-path> [extra-efs-fuse-args...]
-  $0 stop <mount-path>
+  $0 stop [--force-discard] <mount-path>
 
   start:  mount at mount-path.
           Returns only after the mount is serving (stat works).
@@ -20,7 +20,8 @@ Usage:
           'trace=fsync,writev,recvfrom,futex'); a full trace of a busy
           client is ~1 GB per 10 min. Needs kernel.yama.ptrace_scope=0.
           With --perf too, the perf shares include the ptrace stops.
-  stop:   unmount mount-path (fusermount3 -u, then umount)
+  stop:   quiesce and drain while mounted; refuse if unresolved after 60 s.
+          --force-discard explicitly permits loss and lazy detach.
   env:    EFS_TRANSPORT=auto|tcp|rdma (default auto: RDMA if IB is up, else TCP)
           rdma is strict (no TCP fallback). Optional EFS_RDMA_DEV=<ibdev>.
 EOF
@@ -210,8 +211,13 @@ is_listed_mount() {
 }
 
 cmd_stop() {
-    if [ $# -lt 1 ]; then
-        echo "Usage: $0 stop <mount-path>" >&2
+    local force=0
+    if [ "${1:-}" = "--force-discard" ]; then
+        force=1
+        shift
+    fi
+    if [ $# -ne 1 ]; then
+        echo "Usage: $0 stop [--force-discard] <mount-path>" >&2
         exit 1
     fi
     local mnt=$1
@@ -223,16 +229,47 @@ cmd_stop() {
         listed=1
     fi
 
+    local process_rc=0
+    python3 ./scripts/client_processes.py has "$mnt" || process_rc=$?
+    if [ "$process_rc" -gt 1 ]; then
+        echo "ERROR: cannot discover client processes; stop refused" >&2
+        return 1
+    fi
+    if [ "$listed" -eq 1 ] || [ "$process_rc" -eq 0 ]; then
+        local control_rc=0
+        if [ "$force" -eq 1 ]; then
+            ./efs-fuse --stop "$mnt" --force-discard || control_rc=$?
+        else
+            ./efs-fuse --stop "$mnt" || control_rc=$?
+        fi
+        if [ "$control_rc" -ne 0 ]; then
+            if [ "$force" -eq 1 ] && [ "$control_rc" -eq 3 ]; then
+                echo "WARNING: explicit discard of an old/dead client; per-record diagnostics unavailable" >&2
+            else
+                ./efs-fuse --resume "$mnt" || true
+                echo "Stop refused; mount and daemon retained. Resolve pending writes or use --force-discard explicitly." >&2
+                return 1
+            fi
+        fi
+    fi
     echo "Unmounting $mnt"
-    fusermount3 -u "$mnt" 2>/dev/null || fusermount3 -uz "$mnt" 2>/dev/null || true
-    umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    if [ "$force" -eq 1 ]; then
+        fusermount3 -u "$mnt" 2>/dev/null || fusermount3 -uz "$mnt" 2>/dev/null || true
+        umount "$mnt" 2>/dev/null || umount -l "$mnt" 2>/dev/null || true
+    else
+        fusermount3 -u "$mnt" 2>/dev/null || umount "$mnt" 2>/dev/null || true
+    fi
 
     if is_listed_mount "$mnt" || mountpoint -q "$mnt" 2>/dev/null; then
+        ./efs-fuse --resume "$mnt" || true
         echo "ERROR: still mounted: $mnt" >&2
-        echo "Try: fusermount3 -uz $mnt   or   umount -l $mnt" >&2
+        echo "Stop did not detach; mutation admission resumed. Use stop --force-discard only to accept loss." >&2
         exit 1
     fi
 
+    if [ "$process_rc" -eq 0 ]; then
+        python3 ./scripts/client_processes.py retire "$mnt" || return 1
+    fi
     if [ "$listed" -eq 1 ]; then
         echo "Unmounted $mnt"
     else
@@ -248,7 +285,7 @@ fi
 if [ "$1" = "stop" ]; then
     shift
     cmd_stop "$@"
-    exit 0
+    exit $?
 fi
 
 PERF=0

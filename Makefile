@@ -124,6 +124,11 @@ BLAKE3_OBJS = $(BLAKE3_DIR)/blake3.o \
 
 .PHONY: all clean tests test docs-check blake3-bench FORCE
 
+.PHONY: test-client-stop
+test-client-stop:
+	python3 tests/test_client_stop.py
+	python3 tests/test_client_processes.py
+
 all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests
 
 # blake3-bench always relinks so a stale binary cannot linger after CPU changes.
