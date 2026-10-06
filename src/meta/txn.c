@@ -5,9 +5,9 @@
 #include "efs/meta_apply.h"
 #include <string.h>
 
-/* Values this file reads or writes whole: txn records (≤ 128), inode rows,
- * lanes, and the op-id window (EFS_OPID_VAL_MAX = 512, the largest). */
-#define VAL_MAX EFS_OPID_VAL_MAX
+/* Full histories plus a 64-participant EXCL envelope, with fixed bounds.
+ * Data values and durable intent envelopes have separate limits. */
+#define VAL_MAX EFS_TXN_RECORD_MAX
 #define KEY_MAX EFS_KV_KEY_MAX
 
 static void be32(uint8_t *p, uint32_t v)
@@ -52,14 +52,23 @@ uint32_t efs_txn_hash(const struct efs_txid *t)
 uint32_t efs_txn_coordinator(const struct efs_txid *t,
                              const struct efs_txn_parts *p)
 {
-    if (!t || !p || p->n == 0)
+    if (!t || !p || p->n == 0 || p->n > EFS_TXN_MAX_PART)
         return 0;
     return p->shard[efs_txn_hash(t) % p->n];
 }
 
 static int parts_ok(const struct efs_txn_parts *p)
 {
-    return p && p->n > 0 && p->n <= EFS_TXN_MAX_PART;
+    if (!p || !p->n || p->n > EFS_TXN_MAX_PART)
+        return 0;
+    for (uint32_t i = 0; i < p->n; ++i) {
+        if (p->shard[i] > EFS_KV_SHARD_MASK)
+            return 0;
+        for (uint32_t j = 0; j < i; ++j)
+            if (p->shard[i] == p->shard[j])
+                return 0;
+    }
+    return 1;
 }
 
 static int pack_parts(uint8_t *out, const struct efs_txn_parts *p)
@@ -223,6 +232,22 @@ int efs_txn_dseq_observe(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
     return EFS_OK;
 }
 
+int efs_txn_key_exclusive(struct efs_kv *kv, const uint8_t *key, uint32_t klen)
+{
+    uint8_t ik[KEY_MAX], byte;
+    uint32_t il = 0, n = 1;
+    int rc;
+    if (!kv || !key || klen < 3)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_intent(key, klen, ik, &il);
+    if (rc != EFS_OK)
+        return rc;
+    rc = efs_kv_get(kv, ik, il, &byte, &n);
+    if (rc == EFS_OK || rc == EFS_ERR_INVAL)
+        return EFS_ERR_BUSY;
+    return rc == EFS_ERR_NOT_FOUND ? EFS_OK : rc;
+}
+
 int efs_txn_key_busy(struct efs_kv *kv, const uint8_t *key, uint32_t klen)
 {
     uint8_t ik[KEY_MAX], buf[VAL_MAX];
@@ -249,14 +274,16 @@ static int pack_excl(uint8_t *out, uint32_t cap, uint32_t *n,
     uint32_t off;
     int pn;
 
-    if (!parts_ok(p) || (op == EFS_TXN_PUT && vlen && !val))
+    if (!parts_ok(p) || (op != EFS_TXN_PUT && op != EFS_TXN_DEL) ||
+        vlen > EFS_TXN_VALUE_MAX || (op == EFS_TXN_PUT && vlen && !val))
         return EFS_ERR_INVAL;
     if (op == EFS_TXN_DEL)
         vlen = 0;
-    pn = pack_parts(out + 16, p);
+    pn = 1 + (int)p->n * 4;
     off = 16u + (uint32_t)pn + 1u + 8u + 1u + 4u + vlen;
     if (off > cap)
         return EFS_ERR_INVAL;
+    pack_parts(out + 16, p);
     memcpy(out, t->bytes, 16);
     out[16 + (uint32_t)pn] = EFS_TXN_EXCL;
     be64(out + 16 + (uint32_t)pn + 1, expected);
@@ -287,7 +314,9 @@ static int parse_excl(const uint8_t *in, uint32_t n, struct efs_txid *t,
     if (op)
         *op = in[off + 1 + 8];
     vl = rd32(in + off + 1 + 8 + 1);
-    if (off + 1 + 8 + 1 + 4 + vl > n)
+    if (vl > EFS_TXN_VALUE_MAX || vl > n - (off + 1 + 8 + 1 + 4) ||
+        (in[off + 1 + 8] != EFS_TXN_PUT && in[off + 1 + 8] != EFS_TXN_DEL) ||
+        (in[off + 1 + 8] == EFS_TXN_DEL && vl))
         return EFS_ERR_PROTO;
     if (vlen)
         *vlen = vl;
@@ -316,7 +345,9 @@ int efs_txn_prepare_excl(struct efs_kv *kv, const struct efs_txid *t,
     struct efs_txid have;
     int rc;
 
-    if (!kv || !t || !key || klen < 3)
+    if (!kv || !t || !key || klen < 3 || !parts_ok(p) ||
+        (op != EFS_TXN_PUT && op != EFS_TXN_DEL) || nlen > EFS_TXN_VALUE_MAX ||
+        (op == EFS_TXN_PUT && nlen && !new_val))
         return EFS_ERR_INVAL;
     rc = efs_txn_ver_get(kv, key, klen, &ver);
     if (rc != EFS_OK)
@@ -352,11 +383,164 @@ int efs_txn_prepare_excl(struct efs_kv *kv, const struct efs_txid *t,
     return efs_kv_put(kv, ik, il, packed, pn);
 }
 
+int efs_txn_encode_excl_value(uint8_t *out, uint32_t cap, uint32_t *len,
+                              const uint8_t *expected, uint32_t en, int op,
+                              const uint8_t *value, uint32_t vn)
+{
+    uint32_t bytes = en == EFS_TXN_ABSENT ? 0 : en;
+    if (!out || !len || (op != EFS_TXN_PUT && op != EFS_TXN_DEL) ||
+        bytes > EFS_TXN_VALUE_MAX || vn > EFS_TXN_VALUE_MAX ||
+        (bytes && !expected) || (vn && !value) ||
+        (op == EFS_TXN_DEL && vn) || cap < 9u + bytes + vn)
+        return EFS_ERR_INVAL;
+    out[0] = (uint8_t)op;
+    be32(out + 1, en); be32(out + 5, vn);
+    if (bytes) memcpy(out + 9, expected, bytes);
+    if (vn) memcpy(out + 9 + bytes, value, vn);
+    *len = 9u + bytes + vn;
+    return EFS_OK;
+}
+
+int efs_txn_prepare_excl_value(struct efs_kv *kv, const struct efs_txid *t,
+                               const struct efs_txn_parts *p, const uint8_t *key,
+                               uint32_t klen, const uint8_t *expected,
+                               uint32_t en, int op, const uint8_t *value,
+                               uint32_t vn)
+{
+    uint8_t ik[KEY_MAX], buf[VAL_MAX];
+    uint32_t il = 0, bn = sizeof(buf), have_len = 0;
+    uint64_t ver;
+    struct efs_txid have;
+    struct efs_txn_parts have_parts;
+    const uint8_t *have_value;
+    int have_op, rc, member = 0;
+    if (!kv || !t || !key || klen < 3 || !parts_ok(p) ||
+        (op != EFS_TXN_PUT && op != EFS_TXN_DEL) ||
+        (en != EFS_TXN_ABSENT && en > EFS_TXN_VALUE_MAX) ||
+        (en != EFS_TXN_ABSENT && en && !expected) ||
+        vn > EFS_TXN_VALUE_MAX || (vn && !value) ||
+        (op == EFS_TXN_DEL && vn))
+        return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < p->n; ++i)
+        member |= p->shard[i] == key_shard(key);
+    if (!member) return EFS_ERR_INVAL;
+    rc = efs_kv_key_intent(key, klen, ik, &il);
+    if (rc != EFS_OK) return rc;
+    rc = efs_kv_get(kv, ik, il, buf, &bn);
+    if (rc == EFS_OK) {
+        rc = parse_excl(buf, bn, &have, &have_parts, &have_op,
+                         &have_value, &have_len);
+        if (rc != EFS_OK) return rc;
+        if (!same_txid(have.bytes, t)) return EFS_ERR_BUSY;
+        if (have_parts.n != p->n ||
+            memcmp(have_parts.shard, p->shard, p->n * sizeof(p->shard[0])) ||
+            have_op != op || have_len != vn ||
+            (vn && memcmp(have_value, value, vn)))
+            return EFS_ERR_STALE;
+        return EFS_OK;
+    }
+    if (rc != EFS_ERR_NOT_FOUND) return rc;
+    bn = sizeof(buf);
+    rc = efs_kv_get(kv, key, klen, buf, &bn);
+    if (rc == EFS_ERR_NOT_FOUND) {
+        if (en != EFS_TXN_ABSENT) return EFS_ERR_STALE;
+    } else if (rc == EFS_OK) {
+        if (en == EFS_TXN_ABSENT || bn != en || (en && memcmp(buf, expected, en)))
+            return EFS_ERR_STALE;
+    } else {
+        return rc;
+    }
+    rc = efs_txn_ver_get(kv, key, klen, &ver);
+    if (rc != EFS_OK) return rc;
+    return efs_txn_prepare_excl(kv, t, p, key, klen, ver, op, value, vn);
+}
+
+/* Stage the existing exact-value PREPARE implementation's intent PUTs.
+ * No write reaches the real KV until every request passes. The participant
+ * log serializes the read/validate/batch sequence, as for single PREPARE. */
+struct pair_plan {
+    struct efs_kv *base;
+    struct efs_kv_item items[3];
+    uint8_t keys[3][KEY_MAX], values[3][VAL_MAX];
+    uint32_t count;
+};
+
+static int pair_get(void *ctx, const uint8_t *key, uint32_t kl,
+                     uint8_t *value, uint32_t *vl)
+{
+    struct pair_plan *plan = ctx;
+    return efs_kv_get(plan->base, key, kl, value, vl);
+}
+
+static int pair_scan(void *ctx, const uint8_t *prefix, uint32_t plen,
+                      int (*cb)(void *, const uint8_t *, uint32_t,
+                                const uint8_t *, uint32_t), void *user)
+{
+    struct pair_plan *plan = ctx;
+    return efs_kv_scan_prefix(plan->base, prefix, plen, cb, user);
+}
+
+static int pair_put(void *ctx, const uint8_t *key, uint32_t kl,
+                     const uint8_t *value, uint32_t vl)
+{
+    struct pair_plan *plan = ctx;
+    uint32_t n = plan->count;
+    if (n >= 3 || kl > KEY_MAX || vl > VAL_MAX)
+        return EFS_ERR_INVAL;
+    memcpy(plan->keys[n], key, kl);
+    memcpy(plan->values[n], value, vl);
+    plan->items[n] = (struct efs_kv_item){EFS_KV_PUT, plan->keys[n], kl,
+                                         plan->values[n], vl};
+    ++plan->count;
+    return EFS_OK;
+}
+
+int efs_txn_prepare_excl_batch(struct efs_kv *kv, const struct efs_txid *t,
+                              const struct efs_txn_parts *p,
+                              const struct efs_txn_value_cas *requests,
+                              uint32_t count)
+{
+    struct pair_plan plan = {.base = kv};
+    const struct efs_kv_ops ops = {.get = pair_get, .put = pair_put,
+                                   .scan_prefix = pair_scan};
+    struct efs_kv staged = {.ops = &ops, .ctx = &plan};
+    int rc;
+    if (!kv || !requests || !count || count > 3)
+        return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < count; ++i) {
+        const struct efs_txn_value_cas *q = &requests[i];
+        if (!q->key || q->klen < 3)
+            return EFS_ERR_INVAL;
+        if (key_shard(q->key) != key_shard(requests[0].key))
+            return EFS_ERR_INVAL;
+        for (uint32_t j = 0; j < i; ++j)
+            if (q->klen == requests[j].klen &&
+                !memcmp(q->key, requests[j].key, q->klen))
+                return EFS_ERR_INVAL;
+        rc = efs_txn_prepare_excl_value(&staged, t, p, q->key, q->klen,
+                                        q->expected_value, q->expected_len,
+                                        q->op, q->new_value, q->new_len);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return plan.count ? efs_kv_batch(kv, plan.items, plan.count) : EFS_OK;
+}
+
+int efs_txn_prepare_excl_pair(struct efs_kv *kv, const struct efs_txid *t,
+                              const struct efs_txn_parts *p,
+                              const struct efs_txn_value_cas *requests,
+                              uint32_t count)
+{
+    if (count > 2)
+        return EFS_ERR_INVAL;
+    return efs_txn_prepare_excl_batch(kv, t, p, requests, count);
+}
+
 int efs_txn_prepare_guard(struct efs_kv *kv, const struct efs_txid *t,
                           const struct efs_txn_parts *p, const uint8_t *key,
                           uint32_t klen, uint64_t observed_ver)
 {
-    uint8_t ik[KEY_MAX], gk[KEY_MAX], buf[VAL_MAX], packed[80];
+    uint8_t ik[KEY_MAX], gk[KEY_MAX], buf[VAL_MAX], packed[16u + EFS_TXN_PARTS_BYTES + 8u];
     uint32_t il = 0, gl = 0, bl = VAL_MAX;
     uint64_t ver = 0;
     struct efs_txid have;
@@ -481,7 +665,7 @@ static int prepare_reduce_rec(struct efs_kv *kv, const struct efs_txid *t,
                               const struct efs_txn_parts *p, const uint8_t *key,
                               uint32_t klen, const uint8_t *pay, uint32_t plen)
 {
-    uint8_t ik[KEY_MAX], rk[KEY_MAX], buf[VAL_MAX], packed[128];
+    uint8_t ik[KEY_MAX], rk[KEY_MAX], buf[VAL_MAX], packed[16u + EFS_TXN_PARTS_BYTES + 48u];
     uint32_t il = 0, rl = 0, bl = VAL_MAX;
     struct efs_txid have;
     int pn, rc;
@@ -585,11 +769,28 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
         expected = rd64(pay);
         op = pay[8];
         vlen = rd32(pay + 9);
-        if (plen < 13 + vlen)
+        if (vlen > EFS_TXN_VALUE_MAX || vlen > plen - 13)
             return EFS_ERR_PROTO;
         return efs_txn_prepare_excl(kv, t, p, key, klen, expected, op,
                                     pay + 13, vlen);
     }
+    case EFS_TXN_EXCL_VALUE: {
+        uint32_t en, vn, bytes;
+        int op;
+        if (plen < 9) return EFS_ERR_PROTO;
+        op = pay[0]; en = rd32(pay + 1); vn = rd32(pay + 5);
+        bytes = en == EFS_TXN_ABSENT ? 0 : en;
+        if (bytes > EFS_TXN_VALUE_MAX || vn > EFS_TXN_VALUE_MAX ||
+            plen != 9u + bytes + vn || (op != EFS_TXN_PUT && op != EFS_TXN_DEL) ||
+            (op == EFS_TXN_DEL && vn))
+            return EFS_ERR_PROTO;
+        return efs_txn_prepare_excl_value(kv, t, p, key, klen, pay + 9,
+                                          en, op, pay + 9 + bytes, vn);
+    }
+    case EFS_TXN_CONTENT_FENCE:
+        return efs_meta_apply_fence_prepare(kv, t, p, key, klen, pay, plen);
+    case EFS_TXN_CONTENT_RESIZE:
+        return efs_meta_apply_resize_prepare(kv, t, p, key, klen, pay, plen);
     case EFS_TXN_GUARD:
         if (plen < EFS_TXN_GUARD_WIRE)
             return EFS_ERR_PROTO;
@@ -800,8 +1001,12 @@ static int decide_visible(efs_txn_coord_fn coord, void *ctx,
     return ask_coord(coord, ctx, t, p, dec);
 }
 
-int efs_txn_read(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
-                 efs_txn_coord_fn coord, void *ctx, uint8_t *val, uint32_t *vlen)
+static void pend_add(struct efs_txn_pending *p, const struct efs_txid *t,
+                       const struct efs_txn_parts *parts);
+
+int efs_txn_read_ex(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                    efs_txn_coord_fn coord, void *ctx, uint8_t *val,
+                    uint32_t *vlen, struct efs_txn_pending *pend)
 {
     uint8_t ik[KEY_MAX], buf[VAL_MAX];
     uint32_t il = 0, bl = VAL_MAX, nv = 0;
@@ -826,6 +1031,8 @@ int efs_txn_read(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
     rc = decide_visible(coord, ctx, &t, &p, &dec);
     if (rc != EFS_OK)
         return rc;
+    if (dec == EFS_TXN_UNDECIDED)
+        pend_add(pend, &t, &p);
     if (dec == EFS_TXN_COMMIT) {
         if (op == EFS_TXN_DEL)
             return EFS_ERR_NOT_FOUND;
@@ -839,6 +1046,12 @@ int efs_txn_read(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
         return EFS_OK;
     }
     return efs_kv_get(kv, key, klen, val, vlen);
+}
+
+int efs_txn_read(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                 efs_txn_coord_fn coord, void *ctx, uint8_t *val, uint32_t *vlen)
+{
+    return efs_txn_read_ex(kv, key, klen, coord, ctx, val, vlen, NULL);
 }
 
 struct red_acc {
@@ -958,7 +1171,7 @@ int efs_txn_reduce_read_ex(struct efs_kv *kv, const uint8_t *lane_key,
      * record even so, because a short buffer is a hard error rather than a
      * truncated read — sizing it to the triple would make every materialized
      * lane unreadable. */
-    rc = efs_kv_get(kv, lane_key, klen, buf, &n);
+    rc = efs_txn_read_ex(kv, lane_key, klen, coord, ctx, buf, &n, pend);
     if (rc == EFS_OK && n >= 24) {
         out->max_end = rd64(buf);
         out->max_mtime = rd64(buf + 8);

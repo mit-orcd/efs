@@ -5,6 +5,7 @@
  * goes through efs/kv.h once serialize is wired (step 4). */
 
 #include "efs/common.h"
+#include "efs/fence_view.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -41,8 +42,33 @@ struct efs_chunk_entry {
     uint64_t generation;
     uint32_t ndelta;
     uint64_t delta_seq; /* newest delta seq; 0 if ndelta == 0 */
+    struct efs_fence_view read_view; /* authoritative GETCHUNKS masks; count 0 = local row */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
 };
+
+/* Decoded bytes depend on masks as well as immutable object names. */
+static inline uint64_t efs_chunk_read_key(const struct efs_chunk_entry *ce)
+{
+    uint64_t g = ce->generation;
+    if (ce->ndelta) {
+        g ^= (uint64_t)ce->ndelta * 0x9E3779B97F4A7C15ULL;
+        g ^= ce->deltas[ce->ndelta - 1].generation;
+        g ^= ce->delta_seq;
+    }
+    if (ce->read_view.count) {
+        g = (g ^ ce->read_view.fence_epoch) * 1099511628211ull;
+        g = (g ^ ce->read_view.revision) * 1099511628211ull;
+        g = (g ^ ce->read_view.chunk_size) * 1099511628211ull;
+        g = (g ^ ce->read_view.count) * 1099511628211ull;
+        for (uint32_t i = 0; i < ce->read_view.count; ++i) {
+            const struct efs_fence_part *p = &ce->read_view.parts[i];
+            g = (g ^ p->epoch) * 1099511628211ull;
+            g = (g ^ p->off) * 1099511628211ull;
+            g = (g ^ p->len) * 1099511628211ull;
+        }
+    }
+    return g;
+}
 
 struct efs_inode {
     efs_ino_t ino;
@@ -435,6 +461,8 @@ int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
                              uint32_t chunk_index, uint64_t generation);
 /* Replace the chunk's delta list. n == 0 clears it. Does not touch the
  * base generation or its fragment set. */
+int efs_export_set_chunk_view(struct efs_export *ex, efs_ino_t ino,
+                               uint32_t ci, const struct efs_fence_view *view);
 int efs_export_set_chunk_deltas(struct efs_export *ex, efs_ino_t ino,
                                 uint32_t chunk_index,
                                 const struct efs_chunk_delta *deltas,

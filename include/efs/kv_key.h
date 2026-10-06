@@ -35,6 +35,7 @@
 #define EFS_KV_KIND_GC       21 /* dead fragment set + per-fragment acks (L7) */
 #define EFS_KV_KIND_REAP     22 /* dead inode awaiting lane sweep + frag GC */
 #define EFS_KV_KIND_XATTR    23 /* one extended-attribute blob per inode */
+#define EFS_KV_KIND_CONTENT_FENCE 24 /* FileID + authority: durable D25 history */
 
 /* GC and REAP records for every shard of a group live on that group's one
  * fixed anchor shard, so the background reaper scans ONE prefix per group

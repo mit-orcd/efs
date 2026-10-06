@@ -671,6 +671,7 @@ struct efs_msg_inode_flock {
  * the fragments (recomputing a hash here drifted from the client).
  * GETCHUNKS: both fields are the committed generation of the mapping. */
 #define EFS_CHUNK_BASE_UNCOND UINT64_MAX
+#define EFS_CHUNK_REC_F_CAPTURED_EPOCH 1u
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -678,6 +679,8 @@ struct efs_chunk_rec {
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint64_t base_gen;
     uint64_t chunk_generation;
+    uint64_t publish_epoch; /* byte-backed view used by this PUT */
+    uint32_t publish_flags;
     /* delta_len > 0: this rec is one immutable span [delta_off, +len),
      * not a full-chunk CAS. chunk_generation names a full-chunk object;
      * readers copy only that range. delta_len == 0: full-chunk publish
@@ -690,8 +693,52 @@ struct efs_chunk_rec {
     uint32_t delta_base_n;
     uint32_t delta_pad;
     uint64_t delta_base_seq;
+    struct efs_fence_view read_view; /* GETCHUNKS only; REPORT leaves zero */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
 };
+
+/* Resolve the publication epoch before any registration/proposal side effect.
+ * The apply-side fence check must still cover a race after this snapshot. */
+static inline int efs_chunk_publish_epoch(const struct efs_chunk_rec *r,
+                                          uint64_t current, uint64_t *out)
+{
+    if (r->publish_flags & ~EFS_CHUNK_REC_F_CAPTURED_EPOCH)
+        return EFS_ERR_INVAL;
+    if ((r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) &&
+        r->publish_epoch != current)
+        return EFS_ERR_STALE;
+    *out = (r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) ?
+               r->publish_epoch : current;
+    return EFS_OK;
+}
+
+/* GETCHUNKS masks must describe exactly the captured object list. Reject
+ * malformed ranges before either staging adoption or fragment I/O. */
+static inline int efs_chunk_rec_view_valid(const struct efs_chunk_rec *r)
+{
+    const struct efs_fence_view *v = &r->read_view;
+    if (r->delta_base_n > EFS_CHUNK_DELTA_MAX ||
+        v->count != r->delta_base_n + 1 ||
+        v->fence_epoch > v->revision ||
+        !efs_chunk_size_valid(v->chunk_size))
+        return EFS_ERR_PROTO;
+    for (uint32_t i = 0; i < v->count; ++i) {
+        const struct efs_fence_part *p = &v->parts[i];
+        if (p->epoch > v->revision || p->off > v->chunk_size ||
+            p->len > v->chunk_size - p->off)
+            return EFS_ERR_PROTO;
+        if (!i) {
+            if (p->off || (!r->chunk_generation && p->len))
+                return EFS_ERR_PROTO;
+        } else {
+            const struct efs_chunk_delta *d = &r->deltas[i - 1];
+            if (p->off != d->off || p->len > d->len ||
+                d->len > v->chunk_size - p->off)
+                return EFS_ERR_PROTO;
+        }
+    }
+    return EFS_OK;
+}
 
 /* W35: on the wire a rec is the head (through delta_base_seq) plus
  * delta_base_n span records. A full image sends no delta array, so a

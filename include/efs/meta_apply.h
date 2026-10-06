@@ -3,8 +3,10 @@
 
 #include "efs/common.h"
 #include "efs/kv.h"
+#include "efs/kv_key.h"
 #include "efs/opid.h"
 #include "efs/txn.h" /* stat resolves reduction intents through a coordinator */
+#include "efs/fence_view.h"
 
 /* Applied-state SM over the ordered KV (architecture.md §5 / §10 step 3).
  * CREATE file = one atomic batch {dentry, inode, alloc} on the dentry
@@ -17,6 +19,107 @@
 #define EFS_META_DENT_BYTES  20
 #define EFS_META_ALLOC_BYTES 8
 #define EFS_META_LANE_BYTES  64
+
+/* History sidecars keep the established inode/lane encodings unchanged.
+ * Authority 64 is the inode; 0..63 are its publication lanes. The FileID
+ * generation is in the key, so inode reuse cannot inherit discarded bytes. */
+#define EFS_META_FENCE_INODE 64u
+#define EFS_META_FENCE_BYTES (8u + 16u * EFS_FENCE_HISTORY_MAX)
+int efs_meta_get_fence_history(struct efs_kv *kv, efs_ino_t ino,
+                               uint64_t generation, uint8_t authority,
+                               struct efs_fence_history *out);
+int efs_meta_pack_fence_history(const struct efs_fence_history *h,
+                                uint8_t *out, uint32_t cap, uint32_t *len);
+int efs_meta_unpack_fence_history(const uint8_t *value, uint32_t len,
+                                  struct efs_fence_history *out);
+/* Atomic single-authority fence, for the future serialized TRUNCATE path.
+ * Caller owns Raft apply serialization and cross-authority coordination.
+ * This does not replace the current public truncate command by itself. */
+int efs_meta_apply_content_fence(struct efs_kv *kv, efs_ino_t ino,
+                                 uint64_t generation, uint8_t authority,
+                                 uint64_t expected_epoch, uint64_t epoch,
+                                 uint64_t size, uint64_t now);
+
+/* Prepare one authority's logical shrink as an atomic stamp/history
+ * EXCL pair. expected_active_lanes guards the inode's captured participant
+ * set and expected_base_size guards shrink/extend classification; expected_seq
+ * guards a lane against ordinary publication. Inode ignores expected_seq;
+ * lanes ignore expected_active_lanes and expected_base_size. Full history is BUSY
+ * before any intent is installed. Coordinate/decide/resolve through txn.h;
+ * establish participant authority first and serialize on its apply log.
+ * Committed-decision retries belong to the coordinator, not a fresh PREPARE. */
+int efs_meta_prepare_content_fence(struct efs_kv *kv, const struct efs_txid *t,
+                                   const struct efs_txn_parts *parts,
+                                   efs_ino_t ino, uint64_t generation,
+                                   uint8_t authority, uint64_t expected_epoch,
+                                   uint64_t expected_seq,
+                                   uint64_t expected_active_lanes,
+                                   uint64_t expected_base_size,
+                                   uint64_t epoch, uint64_t size, uint64_t now);
+
+#define EFS_META_FENCE_PREPARE_BYTES 65u
+struct efs_meta_fence_prepare {
+    efs_ino_t ino;
+    uint64_t generation;
+    uint8_t authority;
+    uint64_t expected_epoch;
+    uint64_t expected_seq;
+    uint64_t expected_active_lanes;
+    uint64_t expected_base_size;
+    uint64_t size;
+    uint64_t now;
+};
+/* PREPARE subtype, shared by server/simulator; epoch is expected_epoch+1.
+ * Encodes the authority's stamp key plus a fixed big-endian payload. */
+int efs_meta_encode_fence_prepare(const struct efs_meta_fence_prepare *request,
+                                  uint8_t *key, uint32_t *klen,
+                                  uint8_t payload[EFS_META_FENCE_PREPARE_BYTES]);
+int efs_meta_apply_fence_prepare(struct efs_kv *kv, const struct efs_txid *t,
+                                 const struct efs_txn_parts *parts,
+                                 const uint8_t *key, uint32_t klen,
+                                 const uint8_t *payload, uint32_t plen);
+
+#define EFS_META_RESIZE_SHRINK 1u
+#define EFS_META_RESIZE_EXTEND 2u
+#define EFS_META_RESIZE_PREPARE_BYTES 74u
+struct efs_meta_resize_prepare {
+    struct efs_meta_fence_prepare fence;
+    uint64_t epoch; /* inode's global target; separate from lane's observed epoch */
+    uint8_t action;
+};
+int efs_meta_encode_resize_prepare(const struct efs_meta_resize_prepare *q,
+                                   uint8_t *key, uint32_t *klen,
+                                   uint8_t pay[EFS_META_RESIZE_PREPARE_BYTES]);
+int efs_meta_apply_resize_prepare(struct efs_kv *kv, const struct efs_txid *t,
+                                  const struct efs_txn_parts *parts,
+                                  const uint8_t *key, uint32_t klen,
+                                  const uint8_t *pay, uint32_t plen);
+
+struct efs_meta_resize_plan {
+    struct efs_txn_parts parts;
+    uint32_t count;
+    struct efs_meta_resize_prepare requests[EFS_META_LANES + 1];
+};
+/* Handler-only capture under established authority on every relevant shard.
+ * Committed intents are visible; double collect and decision validation bound
+ * retries. PREPARE revalidates the bitmap/base size and every lane sequence.
+ * Open append reservations return BUSY. Output stays unchanged on failure. */
+int efs_meta_capture_resize(struct efs_kv *kv, efs_ino_t ino, uint64_t size,
+                             uint64_t now, efs_txn_coord_fn coord, void *ctx,
+                             struct efs_meta_resize_plan *out);
+struct efs_meta_resize_ops {
+    int (*prepare)(void *, const struct efs_txid *, const struct efs_txn_parts *,
+                     const struct efs_meta_resize_prepare *);
+    int (*decide)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
+    int (*resolve)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
+};
+/* Fresh txid per capture/attempt. Freeze inode first, then active lanes;
+ * durable COMMIT precedes resolution. A failed/ambiguous PREPARE requires
+ * durable ABORT before resolution. An ambiguous COMMIT is never aborted or
+ * dropped here: retain the intents for the existing transaction recovery. */
+int efs_meta_execute_resize(const struct efs_meta_resize_plan *plan,
+                             const struct efs_txid *t,
+                             const struct efs_meta_resize_ops *ops, void *ctx);
 
 #define EFS_META_PROFILE_K2F1 1u
 
@@ -140,6 +243,36 @@ struct efs_meta_delta {
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
 };
 
+struct efs_meta_chunk_view {
+    struct efs_meta_chunk base;
+    struct efs_meta_delta deltas[EFS_FENCE_PART_MAX - 1];
+    uint32_t ndelta;
+    uint64_t delta_seq;
+    uint64_t fence_epoch; /* exact lane stamp required by sweep/publication CAS */
+    struct efs_fence_view bytes; /* captured masks, independent of history lifetime */
+};
+/* Caller establishes authority on the lane's Raft group first. This bounded
+ * double collect rejects a row/history/stamp mixture from different applies.
+ * It does not pin fragments; an object lost to GC requires fresh-view retry. */
+int efs_meta_get_chunk_view(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            uint32_t chunk_index, uint32_t chunk_size,
+                            struct efs_meta_chunk_view *out);
+/* Handler variant: committed EXCL stamp/history replacements are visible
+ * before RESOLVE. Undecided decisions are validated across the whole collect.
+ * NULL coordinator retains the plain apply-side behavior. */
+int efs_meta_get_chunk_view_tx(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               uint32_t chunk_index, uint32_t chunk_size,
+                               efs_txn_coord_fn coord, void *ctx,
+                               struct efs_meta_chunk_view *out);
+/* Single-row bounded sweep CAS. replacement is a fully materialized/PUT
+ * image from source; NULL requests DEL and is legal only if all parts are
+ * fenced out. Exact row identities/masks and lane epoch are revalidated.
+ * No fragment I/O occurs in apply. Caller serializes on the lane's log. */
+int efs_meta_apply_sweep_chunk(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               uint32_t chunk_index,
+                               const struct efs_meta_chunk_view *source,
+                               const struct efs_meta_chunk *replacement);
+
 /* Creates the root inode if absent. `now` is the leader-stamped time it is
  * born with, for the same reason every other mutation takes one.
  * `init` is mkfs with salt 0. Salt is the per-export value MKDIR scatter
@@ -155,12 +288,31 @@ int efs_meta_apply_salt_record(struct efs_kv *kv, uint32_t anchor,
                                uint64_t salt);
 int efs_meta_apply_get_inode(struct efs_kv *kv, efs_ino_t ino,
                              struct efs_meta_row *out);
-/* Handler-side row read: when the row is absent, a pending EXCL intent
- * whose coordinator has COMMITted is served as the row (visibility at
- * the decision, I17). NULL coord = plain read. Never from the apply. */
+/* Handler-side row read: a committed EXCL replacement is served even when
+ * the old row exists (visibility at the decision, I17).
+ * NULL coord = plain read. Never from the apply. */
 int efs_meta_apply_get_inode_tx(struct efs_kv *kv, efs_ino_t ino,
                                 efs_txn_coord_fn coord, void *ctx,
                                 struct efs_meta_row *out);
+/* Handler-side source snapshot for rename/unlink/rmdir. PREPARE must compare
+ * each captured value (including absence), not only txn version sidecars. */
+struct efs_meta_dentry_drop {
+    uint32_t psh, hsh;
+    uint8_t k_loc[EFS_KV_KEY_MAX];
+    uint8_t k_hash[EFS_KV_KEY_MAX];
+    uint8_t v_tomb[EFS_META_DENT_BYTES];
+    uint32_t kl, kh;
+    uint8_t loc_value[EFS_META_DENT_BYTES], hash_value[EFS_META_DENT_BYTES];
+    uint32_t loc_len, hash_len;
+    int del_loc, put_tomb, del_hash;
+};
+
+int efs_meta_capture_dentry_drop(struct efs_kv *kv,
+                                  const struct efs_meta_row *parent_row,
+                                  efs_ino_t parent, const char *name,
+                                  const struct efs_meta_dentry *expected,
+                                  struct efs_meta_dentry_drop *out);
+
 int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
                           struct efs_meta_dentry *out);
 /* Handler-side lookup: a COMMITted EXCL intent is the dentry. NULL coord

@@ -3320,9 +3320,27 @@ int efs_export_set_chunk_gen(struct efs_export *ex, efs_ino_t ino,
     if (chunk_idx_get(ex, ino, chunk_index, &pos) != 0)
         return EFS_ERR_NOT_FOUND;
     ex->chunks[pos].generation = generation;
+    memset(&ex->chunks[pos].read_view, 0, sizeof(ex->chunks[pos].read_view));
     /* A new base retires deltas patched onto the previous image. */
     ex->chunks[pos].ndelta = 0;
     ex->chunks[pos].delta_seq = 0;
+    return EFS_OK;
+}
+
+int efs_export_set_chunk_view(struct efs_export *ex, efs_ino_t ino,
+                               uint32_t ci, const struct efs_fence_view *view)
+{
+    uint64_t pos;
+    if (!ex || !view || view->count > EFS_FENCE_PART_MAX)
+        return EFS_ERR_INVAL;
+    if (export_is_sharded_root(ex)) {
+        struct efs_export *tab = chunk_tab_peek(ex, ino, ci);
+        if (tab && tab != ex)
+            return efs_export_set_chunk_view(tab, ino, ci, view);
+    }
+    if (chunk_idx_get(ex, ino, ci, &pos) != 0)
+        return EFS_ERR_NOT_FOUND;
+    ex->chunks[pos].read_view = *view;
     return EFS_OK;
 }
 
@@ -3369,6 +3387,7 @@ int efs_export_add_chunk_delta(struct efs_export *ex, efs_ino_t ino,
     ce = &ex->chunks[pos];
     if (ce->ndelta >= EFS_CHUNK_DELTA_MAX)
         return EFS_ERR_NOMEM;
+    memset(&ce->read_view, 0, sizeof(ce->read_view));
     ce->deltas[ce->ndelta] = *delta;
     ce->ndelta++;
     /* delta_seq stays the newest seq a GETCHUNKS reply installed.

@@ -343,6 +343,10 @@ void server_raft_host_setattr(efs_ino_t ino, uint32_t mask, uint32_t mode,
                               uint64_t mtime, uint32_t mtime_nsec,
                               uint64_t atime, uint32_t atime_nsec,
                               struct efs_msg_inode_reply *out);
+/* D25 coordinator, not selected by public SETATTR yet. Requires the client
+ * fence-view/cache and epoch-preserving publication integration first. */
+int server_raft_host_logical_resize(efs_ino_t ino, uint64_t size, uint64_t now,
+                                    int *leader_hint);
 void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
                             const uint8_t *name, uint16_t nlen,
                             const uint8_t *val, uint32_t vlen,
@@ -365,7 +369,7 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
 void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              const struct efs_ino_size_rec *irecs,
                              uint32_t ino_count, struct efs_msg_inode_reply *out);
-void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
+void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max,
                                 struct efs_msg_inode_getchunks_reply *out);
 
 /* Start the background cluster rejoin retry thread. */

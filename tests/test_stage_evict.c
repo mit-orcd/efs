@@ -253,6 +253,23 @@ int main(void)
     assert(efs_export_tabs_by_age(&ex, order, 8) == nt0);
     assert(order[nt0 - 1] == 1); /* the youngest */
 
+    /* Captured masks follow the staged object through compaction and
+     * are cleared when a local replacement changes its generation. */
+    struct efs_fence_view view = {.revision=2, .chunk_size=EFS_DEFAULT_CHUNK_SIZE,
+                                  .count=1};
+    view.parts[0] = (struct efs_fence_part){0, 0, 100};
+    assert(efs_export_set_chunk_view(&ex, 41, 0, &view) == EFS_OK);
+    struct efs_chunk_entry observed;
+    assert(efs_export_get_chunk(&ex, 41, 0, &observed) == EFS_OK);
+    assert(!memcmp(&observed.read_view, &view, sizeof(view)));
+    efs_export_compact(&ex);
+    assert(efs_export_get_chunk(&ex, 41, 0, &observed) == EFS_OK);
+    assert(observed.read_view.parts[0].len == 100);
+    assert(efs_export_set_chunk_gen(&ex, 41, 0, 99) == EFS_OK);
+    assert(efs_export_get_chunk(&ex, 41, 0, &observed) == EFS_OK);
+    assert(!observed.read_view.count);
+    assert(efs_export_set_chunk_view(&ex, 33, 0, &view) == EFS_ERR_NOT_FOUND);
+    assert(efs_export_shard_tab(&ex, 1) != NULL);
     efs_export_free(&ex);
     printf("test_stage_evict: OK\n");
     return 0;

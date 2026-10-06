@@ -761,7 +761,7 @@ int sim_txn_parts_add(struct efs_txn_parts *p, uint32_t shard)
         if (p->shard[i] == shard)
             return EFS_OK;
     }
-    if (p->n >= EFS_TXN_MAX_PART)
+    if (p->n >= EFS_TXN_NAMESPACE_MAX_PART)
         return EFS_ERR_BUSY;
     i = 0;
     while (i < p->n && p->shard[i] < shard)

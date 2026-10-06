@@ -1533,6 +1533,24 @@ static int coord_fn(void *user, const struct efs_txid *t, uint32_t shard,
     return efs_txn_decision_get(c->kv, shard, t, dec);
 }
 
+struct fence_decision_race {
+    struct efs_kv *kv;
+    unsigned calls;
+    unsigned commit_at;
+};
+
+static int fence_racing_coord(void *user, const struct efs_txid *t,
+                               uint32_t shard, int *dec)
+{
+    struct fence_decision_race *race = user;
+    if (++race->calls == race->commit_at) {
+        int rc = efs_txn_decide(race->kv, shard, t, EFS_TXN_COMMIT);
+        if (rc != EFS_OK)
+            return rc;
+    }
+    return efs_txn_decision_get(race->kv, shard, t, dec);
+}
+
 static struct efs_txn_parts one_part(uint32_t s)
 {
     struct efs_txn_parts p;
@@ -3368,6 +3386,1317 @@ static void test_gc_reap(void)
  * reaper's checksum-conditional delete would match and remove the live
  * tail data), and an unlink of the file must still reclaim the fragments
  * through the live row's real checksums. */
+/* W54: a fold can publish the same object as a span, or alias its fragment
+ * set under another generation. Neither live spans nor replay tombstones
+ * may queue a fragment set still named by the replacement base. */
+static void test_content_fence_prepared_writers(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row row, decoded;
+    struct efs_txid t = {{0x26}}, other = {{0x27}};
+    struct efs_txn_parts parts;
+    struct efs_meta_chunk_view view;
+    struct efs_meta_pub publish = {0};
+    struct efs_meta_setattr sa = {.mask = EFS_META_SET_UID, .uid = 42};
+    struct efs_meta_truncate trunc = {.size = 0, .lane_mask = UINT64_MAX};
+    struct efs_fence_history history;
+    struct coord_ctx ctx = {kv, 0};
+    struct gc_probe gc;
+    uint8_t lk[EFS_KV_KEY_MAX], ik[EFS_KV_KEY_MAX], raw[128];
+    uint32_t kl = 0, il = 0, n;
+    uint64_t seq;
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "D25 prepared init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "prepared-fence", &ino) == EFS_OK,
+          "D25 prepared create");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0x2601, 0, T0 + 1, "D25 prepared base");
+    pub(kv, ino, 64, 65ull * EFS_MIN_CHUNK_SIZE, 0x2602, 0, T0 + 2,
+        "D25 prepared distant base");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK && row.active_lanes == 1,
+          "D25 captured participant set");
+    parts = one_part(efs_kv_inode_shard(ino));
+    CHECK(efs_meta_apply_activate_lane(kv, ino, 1) == EFS_OK,
+          "D25 activation races participant capture");
+    CHECK(efs_meta_prepare_content_fence(kv, &t, &parts, ino, row.generation,
+              EFS_META_FENCE_INODE, 0, 0, 1, row.base_size, 1, 100, T0 + 3) == EFS_ERR_STALE,
+          "D25 stale participant bitmap cannot prepare inode");
+    CHECK(efs_kv_key_inode(efs_kv_inode_shard(ino), ino, ik, &il) == EFS_OK &&
+              efs_txn_key_exclusive(kv, ik, il) == EFS_OK,
+          "D25 failed bitmap prepare leaves no intent");
+    CHECK(efs_meta_prepare_content_fence(kv, &t, &parts, ino, row.generation,
+              EFS_META_FENCE_INODE, 0, 0, 3, row.base_size, 1, 100, T0 + 3) == EFS_ERR_INVAL,
+          "D25 participant list must include every active lane shard");
+    CHECK(efs_meta_prepare_content_fence(kv, &t, &parts, ino, row.generation,
+              EFS_META_FENCE_INODE, 0, 0, 3, row.base_size + 1, 1, 100,
+              T0 + 3) == EFS_ERR_STALE &&
+              efs_txn_key_exclusive(kv, ik, il) == EFS_OK,
+          "D25 stale base size cannot misclassify shrink versus extension");
+    parts.n = 2; parts.shard[1] = efs_kv_lane_shard(ino, 1);
+    CHECK(efs_meta_prepare_content_fence(kv, &t, &parts, ino, row.generation,
+              EFS_META_FENCE_INODE, 0, 0, 3, row.base_size, 1, 100, T0 + 3) == EFS_OK,
+          "D25 inode stamp/history prepared atomically");
+    CHECK(efs_meta_prepare_content_fence(kv, &t, &parts, ino, row.generation,
+              EFS_META_FENCE_INODE, 0, 0, 3, row.base_size, 1, 100, T0 + 3) == EFS_OK,
+          "D25 matching inode prepare replays");
+    CHECK(efs_meta_prepare_content_fence(kv, &other, &parts, ino, row.generation,
+              EFS_META_FENCE_INODE, 0, 0, 3, row.base_size, 1, 50, T0 + 3) == EFS_ERR_BUSY,
+          "D25 competing truncate cannot steal inode intent");
+    CHECK(efs_meta_apply_activate_lane(kv, ino, 2) == EFS_ERR_BUSY,
+          "D25 prepared inode excludes new lane activation");
+    CHECK(efs_meta_apply_setattr(kv, ino, T0 + 4, &sa) == EFS_ERR_BUSY,
+          "D25 prepared inode excludes setattr overwrite");
+    CHECK(utimens_at(kv, ino, T0 + 4, EFS_META_SET_MTIME, T0 + 4, 0) == EFS_ERR_BUSY,
+          "D25 prepared inode excludes utimens overwrite");
+    CHECK(efs_meta_apply_truncate(kv, ino, T0 + 4, &trunc) == EFS_ERR_BUSY,
+          "D25 prepared inode excludes legacy truncate");
+    CHECK(efs_kv_key_lane(efs_kv_lane_shard(ino, 0), ino, row.generation, 0,
+                          lk, &kl) == EFS_OK, "D25 lane stamp key");
+    n = sizeof(raw);
+    CHECK(efs_kv_get(kv, lk, kl, raw, &n) == EFS_OK, "D25 observed lane stamp");
+    seq = gc_rd64(raw + 24);
+    CHECK(efs_meta_prepare_content_fence(kv, &t, &parts, ino, row.generation,
+              0, 0, seq - 1, 0, 0, 1, 100, T0 + 3) == EFS_ERR_STALE &&
+              efs_txn_key_exclusive(kv, lk, kl) == EFS_OK,
+          "D25 stale publication sequence leaves lane unlocked");
+    CHECK(efs_meta_prepare_content_fence(kv, &t, &parts, ino, row.generation,
+              0, 0, seq, 0, 0, 1, 100, T0 + 3) == EFS_OK,
+          "D25 lane stamp/history prepared atomically");
+    {
+        struct efs_meta_fence_prepare request = {ino, row.generation, 1, 0, 0, 0, 0,
+                                                  100, T0 + 3};
+        uint8_t pay[EFS_META_FENCE_PREPARE_BYTES], key[EFS_KV_KEY_MAX];
+        uint32_t klen = 0;
+        CHECK(efs_meta_encode_fence_prepare(&request, key, &klen, pay) == EFS_OK,
+              "D25 encode participant fence PREPARE");
+        CHECK(efs_txn_apply_prepare(kv, EFS_TXN_CONTENT_FENCE, &t, &parts,
+                                    key, klen, pay, sizeof(pay) - 1) == EFS_ERR_PROTO,
+              "D25 truncated fence PREPARE rejected");
+        key[0] ^= 1;
+        CHECK(efs_txn_apply_prepare(kv, EFS_TXN_CONTENT_FENCE, &t, &parts,
+                                    key, klen, pay, sizeof(pay)) == EFS_ERR_PROTO,
+              "D25 command key cannot redirect writes to another shard");
+        key[0] ^= 1;
+        CHECK(efs_txn_apply_prepare(kv, EFS_TXN_CONTENT_FENCE, &t, &parts,
+                                    key, klen, pay, sizeof(pay)) == EFS_OK,
+              "D25 empty active lane prepared through common wire decoder");
+    }
+    publish.ino = ino; publish.expected_gen = 0x2601; publish.candidate_gen = 0x2603;
+    publish.new_size = 100; publish.content_epoch = 0; publish.now = T0 + 4;
+    publish.coding_profile_id = EFS_META_PROFILE_K2F1; fill_ch(&publish.ch);
+    CHECK(efs_meta_apply_publish(kv, &publish) == EFS_ERR_BUSY,
+          "D25 prepared lane excludes publication");
+    CHECK(efs_meta_apply_lane_sweep(kv, ino, row.generation, 0) == EFS_ERR_BUSY,
+          "D25 prepared lane excludes chunk-only unlink sweep batches");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK &&
+              view.base.generation == 0x2601 && view.fence_epoch == 0,
+          "D25 rejected writers leave old row unchanged");
+    CHECK(gc_probe(kv, &gc) == 0 && !gc.n, "D25 blocked sweeps queue no live GC");
+    CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0,
+              EFS_MIN_CHUNK_SIZE, coord_fn, &ctx, &view) == EFS_OK &&
+              view.fence_epoch == 0 && view.bytes.parts[0].len == EFS_MIN_CHUNK_SIZE,
+          "D25 undecided fence preserves old captured byte view");
+    n = sizeof(raw);
+    CHECK(efs_txn_read(kv, ik, il, coord_fn, &ctx, raw, &n) == EFS_OK &&
+              efs_meta_unpack_inode(raw, n, &decoded) == EFS_OK && !decoded.content_epoch,
+          "D25 prepared inode invisible before decision");
+    {
+        struct fence_decision_race race = {kv, 0, 9};
+        CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0,
+                  EFS_MIN_CHUNK_SIZE, fence_racing_coord, &race, &view) == EFS_OK &&
+                  race.calls > race.commit_at && view.fence_epoch == 1 &&
+                  view.bytes.parts[0].len == 100,
+              "D25 decision moves after four old reads: whole view retries");
+    }
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&t, &parts), &t, EFS_TXN_COMMIT) == EFS_OK,
+          "D25 durable fence decision");
+    CHECK(efs_meta_apply_get_inode_tx(kv, ino, coord_fn, &ctx, &decoded) == EFS_OK &&
+              decoded.content_epoch == 1 && decoded.base_size == 100,
+          "D25 handler sees committed replacement of existing inode before resolve");
+    CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0,
+              EFS_MIN_CHUNK_SIZE, coord_fn, &ctx, &view) == EFS_OK &&
+              view.fence_epoch == 1 && view.bytes.parts[0].len == 100 &&
+              view.base.content_epoch == 0,
+          "D25 chunk view sees committed stamp and history before resolve");
+    {
+        struct efs_meta_stat stat;
+        CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &ctx, &stat) == EFS_OK &&
+                  stat.size == 100,
+              "D25 stat cannot resurrect old lane max_end before resolve");
+    }
+    {
+        struct efs_meta_chunk_view saved = view;
+        ctx.fail = 1;
+        CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0,
+                  EFS_MIN_CHUNK_SIZE, coord_fn, &ctx, &view) == EFS_ERR_IO &&
+                  !memcmp(&view, &saved, sizeof(view)),
+              "D25 unreachable decision fails closed and preserves output");
+        ctx.fail = 0;
+    }
+    n = sizeof(raw);
+    CHECK(efs_txn_read(kv, ik, il, coord_fn, &ctx, raw, &n) == EFS_OK &&
+              efs_meta_unpack_inode(raw, n, &decoded) == EFS_OK &&
+              decoded.content_epoch == 1 && decoded.base_size == 100 &&
+              decoded.active_lanes == 3,
+          "D25 prepared inode visible at decision");
+    for (uint32_t i = 0; i < parts.n; ++i)
+        CHECK(efs_txn_resolve(kv, &t, parts.shard[i], EFS_TXN_COMMIT) == EFS_OK,
+              "D25 resolves stamp/history pairs");
+    CHECK(efs_meta_get_fence_history(kv, ino, row.generation, 0, &history) == EFS_OK &&
+              history.count == 1 && history.entries[0].size == 100,
+          "D25 resolved lane history durable");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK &&
+              view.fence_epoch == 1 && view.bytes.parts[0].len == 100 &&
+              view.base.content_epoch == 0,
+          "D25 resolved fence masks retained base without restamping it");
+    CHECK(efs_meta_apply_setattr(kv, ino, T0 + 5, &sa) == EFS_OK,
+          "D25 writes resume after resolution");
+    {
+        struct efs_txid aborted = {{0x29}};
+        n = sizeof(raw);
+        CHECK(efs_kv_get(kv, lk, kl, raw, &n) == EFS_OK,
+              "D25 observe lane before aborted shrink");
+        CHECK(efs_meta_prepare_content_fence(kv, &aborted, &parts, ino,
+                  row.generation, 0, 1, gc_rd64(raw + 24), 0, 0, 2, 50,
+                  T0 + 6) == EFS_OK &&
+                  efs_txn_decide(kv, efs_txn_coordinator(&aborted, &parts),
+                                  &aborted, EFS_TXN_ABORT) == EFS_OK,
+              "D25 prepare and abort next lane fence");
+        CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0,
+                  EFS_MIN_CHUNK_SIZE, coord_fn, &ctx, &view) == EFS_OK &&
+                  view.fence_epoch == 1 && view.bytes.parts[0].len == 100,
+              "D25 unresolved aborted replacement cannot mask additional bytes");
+        for (uint32_t i = 0; i < parts.n; ++i)
+            CHECK(efs_txn_resolve(kv, &aborted, parts.shard[i], EFS_TXN_ABORT) == EFS_OK,
+                  "D25 abort releases participant holds");
+    }
+    publish.content_epoch = 0;
+    CHECK(efs_meta_apply_publish(kv, &publish) == EFS_ERR_STALE,
+          "D25 old epoch rejected after fence resolution");
+    {
+        struct efs_txid next = {{0x2a}};
+        struct efs_meta_stat stat;
+        struct fence_decision_race race = {kv, 0, 3};
+        CHECK(efs_meta_apply_get_inode(kv, ino, &decoded) == EFS_OK,
+              "D25 observe inode for next shrink");
+        CHECK(efs_meta_prepare_content_fence(kv, &next, &parts, ino,
+                  row.generation, EFS_META_FENCE_INODE, 1, 0, 3,
+                  decoded.base_size, 2, 50, T0 + 7) == EFS_OK,
+              "D25 prepare replacement of existing inode history");
+        for (uint8_t authority = 0; authority < 2; ++authority) {
+            uint8_t key[EFS_KV_KEY_MAX], value[EFS_META_LANE_BYTES];
+            uint32_t len = 0, vn = sizeof(value);
+            CHECK(efs_kv_key_lane(efs_kv_lane_shard(ino, authority), ino,
+                      row.generation, authority, key, &len) == EFS_OK &&
+                      efs_kv_get(kv, key, len, value, &vn) == EFS_OK &&
+                      efs_meta_prepare_content_fence(kv, &next, &parts, ino,
+                          row.generation, authority, 1, gc_rd64(value + 24),
+                          0, 0, 2, 50, T0 + 7) == EFS_OK,
+                  "D25 prepare replacement of existing lane history");
+        }
+        CHECK(efs_meta_apply_getattr(kv, ino, fence_racing_coord, &race, &stat) == EFS_OK &&
+                  race.calls > race.commit_at && stat.size == 50 && stat.attempts > 1,
+              "D25 stat retries commit between old inode and new lane collections");
+        CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0,
+                  EFS_MIN_CHUNK_SIZE, coord_fn, &ctx, &view) == EFS_OK &&
+                  view.fence_epoch == 2 && view.bytes.parts[0].len == 50,
+              "D25 committed replacement of existing history visible before resolve");
+        CHECK(efs_txn_resolve(kv, &next, parts.shard[0], EFS_TXN_COMMIT) == EFS_OK &&
+                  efs_meta_apply_getattr(kv, ino, coord_fn, &ctx, &stat) == EFS_OK &&
+                  stat.size == 50,
+              "D25 partial resolution does not mix epochs or resurrect size");
+        for (uint32_t i = 0; i < parts.n; ++i)
+            CHECK(efs_txn_resolve(kv, &next, parts.shard[i], EFS_TXN_COMMIT) == EFS_OK,
+                  "D25 complete next shrink resolution");
+    }
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 prepared consistency");
+    efs_kv_mem_free(kv);
+}
+
+static void test_content_fence_reductions_commute(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row row;
+    struct efs_txid t = {{0x28}};
+    struct efs_txn_parts parts;
+    struct efs_txn_ino_delta delta = {.max_ctime = T0 + 10};
+    struct efs_meta_setattr sa = {.mask = EFS_META_SET_UID, .uid = 42};
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t kl = 0;
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "D25 reduce init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "reduce-commute", &ino) == EFS_OK,
+          "D25 reduce create");
+    parts = one_part(efs_kv_inode_shard(ino));
+    CHECK(efs_kv_key_inode(parts.shard[0], ino, key, &kl) == EFS_OK,
+          "D25 reduce inode key");
+    CHECK(efs_txn_prepare_ino_delta(kv, &t, &parts, key, kl, &delta) == EFS_OK,
+          "D25 prepare commutative inode reduction");
+    CHECK(efs_txn_key_exclusive(kv, key, kl) == EFS_OK,
+          "D25 reductions do not take exclusive writer guard");
+    CHECK(efs_meta_apply_setattr(kv, ino, T0 + 2, &sa) == EFS_OK,
+          "D25 ordinary setattr allowed with pending reduction");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&t, &parts), &t, EFS_TXN_COMMIT) == EFS_OK &&
+              efs_txn_resolve(kv, &t, parts.shard[0], EFS_TXN_COMMIT) == EFS_OK,
+          "D25 fold pending reduction");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK && row.uid == 42 &&
+              row.base_ctime == T0 + 10,
+          "D25 reduction preserves ordinary mutation and its own timestamp");
+    efs_kv_mem_free(kv);
+}
+
+/* Drive the exact shared coordinator through the production PREPARE decoder.
+ * Faults represent applied PREPARE/DECIDE commands whose replies were lost. */
+struct resize_test_ctx {
+    struct efs_kv *kv;
+    unsigned prepares, commits, aborts, resolutions;
+    unsigned fail_prepare_at, stop_resolve_after;
+    int fail_abort, lose_commit_reply, defer_resolve;
+};
+
+static int resize_test_prepare(void *user, const struct efs_txid *t,
+                                const struct efs_txn_parts *parts,
+                                const struct efs_meta_resize_prepare *q)
+{
+    struct resize_test_ctx *ctx = user;
+    uint8_t key[EFS_KV_KEY_MAX], pay[EFS_META_RESIZE_PREPARE_BYTES];
+    uint32_t kl = 0;
+    ++ctx->prepares;
+    int rc = efs_meta_encode_resize_prepare(q, key, &kl, pay);
+    if (rc == EFS_OK)
+        rc = efs_txn_apply_prepare(ctx->kv, EFS_TXN_CONTENT_RESIZE, t, parts,
+                                    key, kl, pay, sizeof(pay));
+    if (rc == EFS_OK && ctx->fail_prepare_at == ctx->prepares)
+        return EFS_ERR_BUSY;
+    return rc;
+}
+
+static int resize_test_decide(void *user, const struct efs_txid *t,
+                               const struct efs_txn_parts *parts, int decision)
+{
+    struct resize_test_ctx *ctx = user;
+    if (decision == EFS_TXN_ABORT) {
+        ++ctx->aborts;
+        if (ctx->fail_abort)
+            return EFS_ERR_IO;
+    } else {
+        ++ctx->commits;
+    }
+    int rc = efs_txn_decide(ctx->kv, efs_txn_coordinator(t, parts), t, decision);
+    if (rc == EFS_OK && decision == EFS_TXN_COMMIT && ctx->lose_commit_reply)
+        return EFS_ERR_BUSY;
+    return rc;
+}
+
+static int resize_test_resolve(void *user, const struct efs_txid *t,
+                                const struct efs_txn_parts *parts, int decision)
+{
+    struct resize_test_ctx *ctx = user;
+    int durable = 0;
+    ++ctx->resolutions;
+    CHECK(efs_txn_decision_get(ctx->kv, efs_txn_coordinator(t, parts), t,
+                               &durable) == EFS_OK && durable == decision,
+          "D25 coordinator never resolves before its durable decision");
+    if (ctx->defer_resolve)
+        return EFS_ERR_BUSY;
+    for (uint32_t i = 0; i < parts->n; ++i) {
+        int rc = efs_txn_resolve(ctx->kv, t, parts->shard[i], decision);
+        if (rc != EFS_OK)
+            return rc;
+        if (ctx->stop_resolve_after == i + 1)
+            return EFS_ERR_IO;
+    }
+    return EFS_OK;
+}
+
+static const struct efs_meta_resize_ops resize_test_ops = {
+    resize_test_prepare, resize_test_decide, resize_test_resolve};
+
+static int resize_copy_record(void *user, const uint8_t *key, uint32_t kl,
+                               const uint8_t *value, uint32_t vl)
+{
+    return efs_kv_put(user, key, kl, value, vl) != EFS_OK;
+}
+
+/* W36: force unlink on each side of source PREPARE, including name reuse.
+ * Drive the encoded exact-value subtype used by the server drop helper. */
+static void test_w36_split_source_snapshots(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row parent;
+    struct efs_meta_dentry dent, tomb = {0};
+    struct efs_meta_dentry_drop drop;
+    uint8_t value[EFS_META_DENT_BYTES], tv[EFS_META_DENT_BYTES];
+    uint8_t lk[EFS_KV_KEY_MAX], hk[EFS_KV_KEY_MAX];
+    uint32_t ll = 0, hl = 0;
+    efs_ino_t ino = 0;
+    const char *name = spread_name(EFS_ROOT_INO);
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+              efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                          name, &ino) == EFS_OK &&
+              efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &parent) == EFS_OK &&
+              efs_meta_apply_lookup(kv, EFS_ROOT_INO, name, &dent) == EFS_OK &&
+              efs_meta_pack_dentry(&dent, value, sizeof(value)) == EFS_OK &&
+              efs_kv_key_dentry(efs_kv_inode_shard(EFS_ROOT_INO), EFS_ROOT_INO,
+                                 name, lk, &ll) == EFS_OK &&
+              efs_kv_key_dentry(efs_kv_dentry_shard(EFS_ROOT_INO, name,
+                                 EFS_META_LAYOUT_HASHED), EFS_ROOT_INO,
+                                 name, hk, &hl) == EFS_OK && memcmp(lk, hk, ll),
+          "W36 split source fixture with distinct keys");
+    parent.layout = EFS_META_LAYOUT_SPLITTING;
+    CHECK(efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, name,
+              &dent, &drop) == EFS_OK && drop.del_loc && drop.put_tomb &&
+              drop.hash_len == EFS_TXN_ABSENT,
+          "W36 unmigrated split source captures absent hashed destination");
+    CHECK(efs_kv_put(kv, hk, hl, value, sizeof(value)) == EFS_OK &&
+              efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, name,
+                                             &dent, &drop) == EFS_OK &&
+              drop.loc_len == sizeof(value) && drop.hash_len == sizeof(value),
+          "W36 duplicate migration copies capture both exact images");
+    CHECK(efs_kv_del(kv, lk, ll) == EFS_OK &&
+              efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, name,
+                                             &dent, &drop) == EFS_OK &&
+              drop.loc_len == EFS_TXN_ABSENT,
+          "W36 migrated split source permits absent local copy");
+    parent.layout = EFS_META_LAYOUT_HASHED;
+    CHECK(efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, name,
+              &dent, &drop) == EFS_OK && drop.del_hash && !drop.del_loc,
+          "W36 hashed source compares live hashed dentry");
+    parent.layout = EFS_META_LAYOUT_SPLITTING;
+    tomb.generation = parent.layout_epoch; tomb.type = EFS_META_DENT_TOMBSTONE;
+    CHECK(efs_meta_pack_dentry(&tomb, tv, sizeof(tv)) == EFS_OK &&
+              efs_kv_put(kv, hk, hl, tv, sizeof(tv)) == EFS_OK &&
+              efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, name,
+                                             &dent, &drop) == EFS_ERR_STALE,
+          "W36 split tombstone alone cannot satisfy live source");
+    CHECK(efs_kv_put(kv, lk, ll, value, sizeof(value)) == EFS_OK &&
+              efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, name,
+                                             &dent, &drop) == EFS_ERR_STALE,
+          "W36 hashed tombstone masks a lingering local source");
+    efs_kv_destroy(kv);
+}
+
+static void test_w36_unlink_before_rename_prepare(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_dentry dent;
+    struct efs_meta_row row, parent;
+    struct efs_meta_dentry_drop drop;
+    struct efs_txn_parts parts = {.n = 1};
+    struct efs_txid t = {{0xb6}};
+    uint8_t key[EFS_KV_KEY_MAX], dst[EFS_KV_KEY_MAX];
+    uint8_t expected[EFS_META_DENT_BYTES], pay[9 + EFS_META_DENT_BYTES];
+    uint32_t kl = 0, dl = 0, pn = 0;
+    uint64_t ver = 0, after = 0;
+    efs_ino_t ino = 0, replacement = 0;
+    parts.shard[0] = efs_kv_inode_shard(EFS_ROOT_INO);
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+              efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO,
+                                          S_IFREG | 0644, "w36-a", &ino) == EFS_OK &&
+              efs_meta_apply_lookup(kv, EFS_ROOT_INO, "w36-a", &dent) == EFS_OK &&
+              efs_meta_pack_dentry(&dent, expected, sizeof(expected)) == EFS_OK &&
+              efs_kv_key_dentry(parts.shard[0], EFS_ROOT_INO, "w36-a", key, &kl) == EFS_OK &&
+              efs_kv_key_dentry(parts.shard[0], EFS_ROOT_INO, "w36-b", dst, &dl) == EFS_OK &&
+              efs_txn_ver_get(kv, key, kl, &ver) == EFS_OK,
+          "W36 captured rename source");
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &parent) == EFS_OK &&
+              efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, "w36-a",
+                                             &dent, &drop) == EFS_OK &&
+              drop.del_loc && drop.loc_len == sizeof(expected) &&
+              !memcmp(drop.loc_value, expected, sizeof(expected)),
+          "W36 server uses captured source bytes");
+    CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "w36-a", T0 + 1) == EFS_OK &&
+              efs_meta_apply_get_inode(kv, ino, &row) == EFS_ERR_NOT_FOUND &&
+              efs_txn_ver_get(kv, key, kl, &after) == EFS_OK && after == ver,
+          "W36 unlink before PREPARE removes inode without changing sidecar");
+    CHECK(efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, "w36-a",
+                                         &dent, &drop) == EFS_ERR_STALE,
+          "W36 source removed before capture rejects stale lookup");
+    CHECK(efs_txn_prepare_excl(kv, &t, &parts, key, kl, ver,
+                                EFS_TXN_DEL, NULL, 0) == EFS_OK,
+          "W36 reproduces old version-only source acceptance");
+    CHECK(efs_txn_decide(kv, parts.shard[0], &t, EFS_TXN_ABORT) == EFS_OK &&
+              efs_txn_resolve(kv, &t, parts.shard[0], EFS_TXN_ABORT) == EFS_OK,
+          "W36 abort old unsafe preparation");
+    ++t.bytes[0];
+    CHECK(efs_txn_encode_excl_value(pay, sizeof(pay), &pn, expected, sizeof(expected),
+                                    EFS_TXN_DEL, NULL, 0) == EFS_OK &&
+              efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &t, &parts,
+                                     key, kl, pay, pn) == EFS_ERR_STALE &&
+              efs_txn_key_busy(kv, key, kl) == EFS_OK &&
+              efs_meta_apply_lookup(kv, EFS_ROOT_INO, "w36-b", &dent) == EFS_ERR_NOT_FOUND,
+          "W36 exact source rejects absent key without destination or holds");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                      "w36-a", &replacement) == EFS_OK && replacement != ino &&
+              efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &t, &parts,
+                                     key, kl, pay, pn) == EFS_ERR_STALE &&
+              efs_meta_apply_lookup(kv, EFS_ROOT_INO, "w36-a", &dent) == EFS_OK &&
+              dent.ino == replacement,
+          "W36 exact source rejects unlink/recreate ABA and preserves new name");
+    {
+        struct efs_meta_dentry old = {.ino = ino, .generation = 1, .type = S_IFREG};
+        CHECK(efs_meta_capture_dentry_drop(kv, &parent, EFS_ROOT_INO, "w36-a",
+                                             &old, &drop) == EFS_ERR_STALE,
+              "W36 source recreated before capture rejects original inode");
+    }
+    CHECK(efs_meta_pack_dentry(&dent, expected, sizeof(expected)) == EFS_OK &&
+              efs_txn_encode_excl_value(pay, sizeof(pay), &pn, expected, sizeof(expected),
+                                         EFS_TXN_DEL, NULL, 0) == EFS_OK &&
+              efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &t, &parts,
+                                     key, kl, pay, pn) == EFS_OK &&
+              efs_meta_apply_unlink(kv, EFS_ROOT_INO, "w36-a", T0 + 2) == EFS_ERR_BUSY,
+          "W36 source PREPARE before unlink still blocks log deletion");
+    CHECK(efs_txn_prepare_excl_value(kv, &t, &parts, dst, dl, NULL,
+              EFS_TXN_ABSENT, EFS_TXN_PUT, expected, sizeof(expected)) == EFS_OK &&
+              efs_txn_decide(kv, parts.shard[0], &t, EFS_TXN_COMMIT) == EFS_OK &&
+              efs_txn_resolve(kv, &t, parts.shard[0], EFS_TXN_COMMIT) == EFS_OK &&
+              efs_meta_apply_unlink(kv, EFS_ROOT_INO, "w36-a", T0 + 3) == EFS_ERR_NOT_FOUND &&
+              efs_meta_apply_resolve(kv, EFS_ROOT_INO, "w36-b", &dent, &row) == EFS_OK &&
+              row.ino == replacement && row.nlink == 1,
+          "W36 winning rename resolves to a live destination inode");
+    efs_kv_destroy(kv);
+}
+
+static void test_resize_coordinator(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row row = {0}, visible;
+    struct efs_meta_stat stat;
+    struct efs_meta_resize_plan plan = {0};
+    struct efs_meta_chunk_view view;
+    struct efs_fence_history history;
+    struct efs_txid t = {{0x61}};
+    struct coord_ctx coord = {kv, 0};
+    struct resize_test_ctx ctx = {.kv = kv, .defer_resolve = 1};
+    uint8_t cursor_key[EFS_KV_KEY_MAX], cursor[24] = {0};
+    uint32_t ckl = 0, cn = sizeof(cursor);
+    efs_ino_t ino = 0;
+    const uint64_t cs = EFS_MIN_CHUNK_SIZE;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+              efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                          "resize-all", &ino) == EFS_OK,
+          "D25 coordinator creates file");
+    pub(kv, ino, 0, cs, 0x6101, 0, T0 + 1, "D25 coordinator base");
+    pub(kv, ino, 64, 65 * cs, 0x6102, 0, T0 + 2, "D25 coordinator far row");
+    CHECK(efs_meta_apply_activate_lanes(kv, ino, UINT64_MAX) == EFS_OK &&
+              efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK,
+          "D25 coordinator activates all 64 lanes");
+    /* A closed cursor left by an older path must not retain the old EOF. */
+    CHECK(efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, row.generation,
+                                 cursor_key, &ckl) == EFS_OK,
+          "D25 closed cursor key");
+    wr64_test(cursor, 65 * cs); wr64_test(cursor + 8, 65 * cs);
+    CHECK(efs_kv_put(kv, cursor_key, ckl, cursor, sizeof(cursor)) == EFS_OK,
+          "D25 closed cursor fixture");
+    CHECK(efs_meta_capture_resize(kv, ino, 100, T0 + 3, coord_fn, &coord, &plan) == EFS_OK &&
+              plan.count == 65 && plan.parts.n == 64 &&
+              plan.requests[0].epoch == 1 &&
+              plan.requests[0].action == EFS_META_RESIZE_SHRINK,
+          "D25 captures 65 authorities on 64 distinct shards");
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_BUSY &&
+              ctx.prepares == 65 && ctx.commits == 1 && !ctx.aborts,
+          "D25 durable commit with deferred resolution retains all authorities");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &coord, &stat) == EFS_OK &&
+              stat.size == 100 &&
+              efs_meta_apply_get_inode_tx(kv, ino, coord_fn, &coord, &visible) == EFS_OK &&
+              visible.content_epoch == 1,
+          "D25 whole committed resize visible before resolution");
+    CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0, cs,
+              coord_fn, &coord, &view) == EFS_OK && view.bytes.parts[0].len == 100 &&
+              efs_meta_get_chunk_view_tx(kv, ino, row.generation, 64, cs,
+                  coord_fn, &coord, &view) == EFS_OK && !view.bytes.parts[0].len,
+          "D25 coordinator masks boundary and distant rows without deletion");
+    for (uint32_t i = 0; i < plan.parts.n / 2; ++i)
+        CHECK(efs_txn_resolve(kv, &t, plan.parts.shard[i], EFS_TXN_COMMIT) == EFS_OK,
+              "D25 partial coordinator resolution");
+    struct efs_kv *reopened = efs_kv_mem_create();
+    CHECK(efs_kv_scan(kv, resize_copy_record, reopened) == EFS_OK,
+          "D25 reopen applied-state snapshot with unresolved participants");
+    efs_kv_mem_free(kv); kv = reopened; coord.kv = ctx.kv = kv;
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &coord, &stat) == EFS_OK &&
+              stat.size == 100, "D25 reopened partially resolved shrink visible");
+    ctx.defer_resolve = 0;
+    CHECK(resize_test_resolve(&ctx, &t, &plan.parts, EFS_TXN_COMMIT) == EFS_OK,
+          "D25 recover every remaining participant");
+    CHECK(efs_kv_get(kv, cursor_key, ckl, cursor, &cn) == EFS_ERR_NOT_FOUND,
+          "D25 closed append cursor retired with inode authority");
+    CHECK(efs_meta_capture_resize(kv, ino, 2 * cs, T0 + 4, coord_fn, &coord, &plan) == EFS_OK &&
+              plan.requests[0].action == EFS_META_RESIZE_EXTEND &&
+              plan.requests[0].epoch == 1, "D25 extension keeps content epoch");
+    t.bytes[0] = 0x62; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_OK &&
+              efs_meta_apply_get_inode(kv, ino, &visible) == EFS_OK &&
+              visible.content_epoch == 1 && visible.base_size == 2 * cs,
+          "D25 coordinated extension commits size without a new epoch");
+    CHECK(efs_meta_get_fence_history(kv, ino, row.generation, 0, &history) == EFS_OK &&
+              history.count == 1 && history.entries[0].size == 100 &&
+              efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0, cs,
+                  coord_fn, &coord, &view) == EFS_OK && view.bytes.parts[0].len == 100,
+          "D25 extension retains shrink history and does not resurrect bytes");
+    CHECK(efs_meta_capture_resize(kv, ino, 50, T0 + 5, coord_fn, &coord, &plan) == EFS_OK,
+          "D25 capture failure-path shrink");
+    t.bytes[0] = 0x63;
+    ctx = (struct resize_test_ctx){.kv = kv, .fail_prepare_at = 3};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_BUSY &&
+              ctx.aborts == 1 && !ctx.commits && ctx.resolutions == 1 &&
+              efs_meta_apply_get_inode(kv, ino, &visible) == EFS_OK &&
+              visible.content_epoch == 1,
+          "D25 lost PREPARE reply causes durable ABORT before releasing holds");
+    /* A delayed PREPARE after ABORT cleanup cannot become visible. Recovery
+     * finds its durable ABORT rather than interpreting it as a new operation. */
+    ctx.fail_prepare_at = 0;
+    CHECK(resize_test_prepare(&ctx, &t, &plan.parts, &plan.requests[2]) == EFS_OK &&
+              efs_meta_apply_getattr(kv, ino, coord_fn, &coord, &stat) == EFS_OK &&
+              stat.size == 2 * cs &&
+              resize_test_resolve(&ctx, &t, &plan.parts, EFS_TXN_ABORT) == EFS_OK,
+          "D25 late aborted PREPARE remains invisible and recoverable");
+    t.bytes[0] = 0x64;
+    ctx = (struct resize_test_ctx){.kv = kv, .fail_prepare_at = 2, .fail_abort = 1};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_IO &&
+              !ctx.resolutions, "D25 unreachable ABORT retains prepared intents");
+    ctx.fail_abort = ctx.fail_prepare_at = 0;
+    CHECK(resize_test_decide(&ctx, &t, &plan.parts, EFS_TXN_ABORT) == EFS_OK &&
+              resize_test_resolve(&ctx, &t, &plan.parts, EFS_TXN_ABORT) == EFS_OK,
+          "D25 orphan preparations recover through durable ABORT");
+    t.bytes[0] = 0x65; ctx = (struct resize_test_ctx){.kv = kv, .lose_commit_reply = 1};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_BUSY &&
+              !ctx.aborts && !ctx.resolutions &&
+              efs_meta_apply_getattr(kv, ino, coord_fn, &coord, &stat) == EFS_OK &&
+              stat.size == 50,
+          "D25 lost COMMIT reply never changes committed decision to ABORT");
+    CHECK(resize_test_resolve(&ctx, &t, &plan.parts, EFS_TXN_COMMIT) == EFS_OK,
+          "D25 recover ambiguous committed shrink");
+    CHECK(efs_meta_capture_resize(kv, ino, 25, T0 + 6, coord_fn, &coord, &plan) == EFS_OK,
+          "D25 capture resolution failure");
+    t.bytes[0] = 0x66; ctx = (struct resize_test_ctx){.kv = kv, .stop_resolve_after = 1};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_IO &&
+              !ctx.aborts && efs_meta_apply_getattr(kv, ino, coord_fn, &coord, &stat) == EFS_OK &&
+              stat.size == 25,
+          "D25 partial resolution failure preserves committed visibility");
+    ctx.stop_resolve_after = 0;
+    CHECK(resize_test_resolve(&ctx, &t, &plan.parts, EFS_TXN_COMMIT) == EFS_OK,
+          "D25 retry resolution converges");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 coordinator KV consistency");
+    efs_kv_mem_free(kv);
+}
+
+static void test_resize_races_and_lane_initialization(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_resize_plan plan = {0}, saved;
+    struct efs_meta_row row = {0};
+    struct efs_meta_stat stat;
+    struct efs_meta_pub publish = {0};
+    struct efs_meta_chunk_view view;
+    struct efs_txid t = {{0x70}};
+    struct coord_ctx coord = {kv, 0};
+    struct resize_test_ctx ctx = {.kv = kv};
+    struct efs_opid op;
+    uint8_t ik[EFS_KV_KEY_MAX], cursor_key[EFS_KV_KEY_MAX], cursor[24] = {0};
+    uint32_t il = 0, ckl = 0;
+    efs_ino_t ino = 0;
+    const uint64_t cs = EFS_MIN_CHUNK_SIZE;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+              efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                          "resize-races", &ino) == EFS_OK,
+          "D25 race fixture");
+    pub(kv, ino, 0, cs, 0x7001, 0, T0 + 1, "D25 first lane");
+    CHECK(efs_meta_capture_resize(kv, ino, 100, T0 + 2, coord_fn, &coord, &plan) == EFS_OK &&
+              efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_OK &&
+              efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK,
+          "D25 initial shrink");
+    /* An old populated lane cannot skip a missing fence by being treated as
+     * newly activated. Exercise both shrink and extension, then restore it. */
+    {
+        uint8_t lk[EFS_KV_KEY_MAX], lv[64], original[64];
+        uint32_t lkl = 0, lvl = sizeof(lv);
+        CHECK(efs_kv_key_lane(efs_kv_lane_shard(ino, 0), ino, row.generation,
+                              0, lk, &lkl) == EFS_OK &&
+                  efs_kv_get(kv, lk, lkl, lv, &lvl) == EFS_OK,
+              "D25 lagging populated lane fixture");
+        memcpy(original, lv, lvl); memset(lv + 32, 0, 8);
+        CHECK(efs_kv_put(kv, lk, lkl, lv, lvl) == EFS_OK,
+              "D25 inject lagging stamp");
+        for (unsigned int pass = 0; pass < 2; ++pass) {
+            CHECK(efs_meta_capture_resize(kv, ino, pass ? 2 * cs : 50,
+                      T0 + 2, coord_fn, &coord, &plan) == EFS_OK,
+                  "D25 capture lagging lane");
+            t.bytes[0] = (uint8_t)(0x90 + pass);
+            ctx = (struct resize_test_ctx){.kv = kv};
+            CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) ==
+                      EFS_ERR_PROTO &&
+                      efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK &&
+                      row.content_epoch == 1 && row.base_size == 100,
+                  "D25 rejects epoch leap with old chunk rows and aborts inode");
+        }
+        CHECK(efs_kv_put(kv, lk, lkl, original, lvl) == EFS_OK,
+              "D25 restore populated lane stamp");
+    }
+    publish.ino = ino; publish.chunk_index = 1; publish.candidate_gen = 0x7002;
+    publish.new_size = 2 * cs; publish.now = T0 + 3; publish.content_epoch = 1;
+    publish.coding_profile_id = EFS_META_PROFILE_K2F1; fill_ch(&publish.ch);
+    CHECK(efs_meta_apply_publish(kv, &publish) == EFS_OK,
+          "D25 first publication activates lane after an earlier fence");
+    CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 1, cs,
+              coord_fn, &coord, &view) == EFS_OK && view.fence_epoch == 1 &&
+              view.base.content_epoch == 1,
+          "D25 new lane starts at publication's captured epoch");
+    /* The bitmap can be registered before the first publication. The global
+     * target is still e2 even though this empty lane has no e1 stamp. */
+    CHECK(efs_meta_apply_activate_lane(kv, ino, 2) == EFS_OK &&
+              efs_meta_capture_resize(kv, ino, 50, T0 + 4, coord_fn, &coord, &plan) == EFS_OK &&
+              plan.count == 4 && plan.requests[3].fence.expected_epoch == 0 &&
+              plan.requests[3].epoch == 2,
+          "D25 empty newly registered lane uses the global target epoch");
+    t.bytes[0] = 0x71; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_OK &&
+              efs_meta_apply_getattr(kv, ino, coord_fn, &coord, &stat) == EFS_OK &&
+              stat.size == 50, "D25 next shrink fences old and new lanes together");
+    CHECK(efs_meta_capture_resize(kv, ino, 3 * cs, T0 + 5, coord_fn, &coord, &plan) == EFS_OK,
+          "D25 captures extension race");
+    publish.chunk_index = 65; publish.candidate_gen = 0x7003;
+    publish.expected_gen = 0; publish.new_size = 66 * cs; publish.content_epoch = 2;
+    CHECK(efs_meta_apply_publish(kv, &publish) == EFS_OK,
+          "D25 publication races captured EOF on a different lane shard");
+    t.bytes[0] = 0x72; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_STALE &&
+              ctx.aborts == 1 && !ctx.commits,
+          "D25 changed lane sequence aborts stale extension classification");
+    CHECK(efs_meta_capture_resize(kv, ino, 3 * cs, T0 + 6, coord_fn, &coord, &plan) == EFS_OK &&
+              plan.requests[0].action == EFS_META_RESIZE_SHRINK,
+          "D25 recapture reclassifies the same size as a shrink");
+    CHECK(efs_meta_apply_activate_lane(kv, ino, 3) == EFS_OK,
+          "D25 lane activation races capture");
+    t.bytes[0] = 0x73; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_STALE &&
+              !ctx.commits, "D25 stale participant bitmap aborts before fencing");
+    CHECK(efs_meta_capture_resize(kv, ino, 3 * cs, T0 + 7, coord_fn, &coord, &plan) == EFS_OK &&
+              efs_kv_key_inode(efs_kv_inode_shard(ino), ino, ik, &il) == EFS_OK,
+          "D25 recaptures complete participant set");
+    t.bytes[0] = 0x74; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(resize_test_prepare(&ctx, &t, &plan.parts, &plan.requests[0]) == EFS_OK &&
+              efs_txn_key_exclusive(kv, ik, il) == EFS_ERR_BUSY,
+          "D25 first PREPARE freezes inode");
+    mkop(&op, 0x75, 1);
+    uint64_t off = UINT64_MAX;
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 10, &op, coord_fn, &coord, &off) == EFS_ERR_BUSY &&
+              off == UINT64_MAX, "D25 inode preparation blocks a new append reservation");
+    CHECK(resize_test_decide(&ctx, &t, &plan.parts, EFS_TXN_ABORT) == EFS_OK &&
+              resize_test_resolve(&ctx, &t, &plan.parts, EFS_TXN_ABORT) == EFS_OK,
+          "D25 release append exclusion through durable abort");
+    CHECK(efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, row.generation,
+                                 cursor_key, &ckl) == EFS_OK,
+          "D25 open append fixture key");
+    wr64_test(cursor, 66 * cs + 10); wr64_test(cursor + 8, 66 * cs);
+    cursor[19] = 1; /* nopen, big-endian u32 at 16 */
+    CHECK(efs_kv_put(kv, cursor_key, ckl, cursor, sizeof(cursor)) == EFS_OK,
+          "D25 open append fixture");
+    saved = plan;
+    CHECK(efs_meta_capture_resize(kv, ino, 10, T0 + 8, coord_fn, &coord, &plan) == EFS_ERR_BUSY &&
+              !memcmp(&plan, &saved, sizeof(plan)),
+          "D25 open reservations prevent capture without modifying output");
+    t.bytes[0] = 0x76; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(efs_meta_execute_resize(&saved, &t, &resize_test_ops, &ctx) == EFS_ERR_BUSY &&
+              ctx.aborts == 1, "D25 PREPARE also checks reservations started after capture");
+    CHECK(efs_kv_del(kv, cursor_key, ckl) == EFS_OK,
+          "D25 remove test reservation");
+    /* Decoder cannot redirect the authority or accept a partial payload. */
+    uint8_t key[EFS_KV_KEY_MAX], pay[EFS_META_RESIZE_PREPARE_BYTES];
+    uint32_t kl = 0;
+    CHECK(efs_meta_encode_resize_prepare(&saved.requests[0], key, &kl, pay) == EFS_OK,
+          "D25 encode resize request");
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_CONTENT_RESIZE, &t, &saved.parts,
+              key, kl, pay, sizeof(pay) - 1) == EFS_ERR_PROTO,
+          "D25 resize payload length exact");
+    key[0] ^= 1;
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_CONTENT_RESIZE, &t, &saved.parts,
+              key, kl, pay, sizeof(pay)) == EFS_ERR_PROTO,
+          "D25 resize key cannot redirect authority");
+    saved.count--; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(efs_meta_execute_resize(&saved, &t, &resize_test_ops, &ctx) == EFS_ERR_INVAL &&
+              !ctx.prepares, "D25 malformed plan cannot omit an active authority");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 race fixture consistent");
+    efs_kv_mem_free(kv);
+}
+
+static int resize_three_intents_fail(void *ctx, const struct efs_kv_item *items,
+                                      uint32_t count)
+{
+    (void)ctx;
+    CHECK(count == 3, "D25 inode/history/closed-cursor PREPARE is one bounded batch");
+    for (uint32_t i = 0; i < count; ++i)
+        CHECK(items[i].op == EFS_KV_PUT && items[i].key[2] == EFS_KV_KIND_INTENT,
+              "D25 three-record fault injects before any intent is installed");
+    return EFS_ERR_IO;
+}
+
+static void test_resize_history_bound_and_atomic_cursor(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_resize_plan plan = {0};
+    struct efs_meta_row row = {0}, after;
+    struct efs_fence_history history;
+    struct efs_txid t = {{0x80}};
+    struct coord_ctx coord = {kv, 0};
+    struct resize_test_ctx ctx = {.kv = kv};
+    uint8_t key[EFS_KV_KEY_MAX], ik[EFS_KV_KEY_MAX], cursor[24] = {0};
+    uint32_t kl = 0, il = 0, len;
+    efs_ino_t ino = 0;
+    const uint64_t cs = EFS_MIN_CHUNK_SIZE;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+              efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                          "resize-full", &ino) == EFS_OK,
+          "D25 history-bound fixture");
+    pub(kv, ino, 0, cs, 0x8001, 0, T0 + 1, "D25 history-bound base");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK &&
+              efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, row.generation,
+                                     key, &kl) == EFS_OK &&
+              efs_kv_key_inode(efs_kv_inode_shard(ino), ino, ik, &il) == EFS_OK,
+          "D25 cursor keys");
+    wr64_test(cursor, cs); wr64_test(cursor + 8, cs);
+    CHECK(efs_kv_put(kv, key, kl, cursor, sizeof(cursor)) == EFS_OK &&
+              efs_meta_capture_resize(kv, ino, 100, T0 + 2, coord_fn, &coord, &plan) == EFS_OK,
+          "D25 three-record preparation fixture");
+    const struct efs_kv_ops *original = kv->ops;
+    struct efs_kv_ops fault = *original;
+    fault.batch = resize_three_intents_fail; kv->ops = &fault;
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_IO &&
+              ctx.aborts == 1 && !ctx.commits, "D25 failed triple batch aborts resize");
+    kv->ops = original; len = sizeof(cursor);
+    CHECK(efs_txn_key_exclusive(kv, ik, il) == EFS_OK &&
+              efs_kv_get(kv, key, kl, cursor, &len) == EFS_OK &&
+              efs_meta_get_fence_history(kv, ino, row.generation,
+                                          EFS_META_FENCE_INODE, &history) == EFS_OK &&
+              !history.count, "D25 triple failure leaves inode, cursor and history untouched");
+    CHECK(efs_kv_del(kv, key, kl) == EFS_OK, "D25 remove closed cursor fixture");
+    for (uint32_t epoch = 1; epoch <= EFS_FENCE_HISTORY_MAX; ++epoch) {
+        uint64_t size = 1000 - epoch;
+        CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                  EFS_META_FENCE_INODE, epoch - 1, epoch, size, T0 + epoch) == EFS_OK &&
+                  efs_meta_apply_content_fence(kv, ino, row.generation,
+                      0, epoch - 1, epoch, size, T0 + epoch) == EFS_OK,
+              "D25 fill bounded history");
+    }
+    CHECK(efs_meta_capture_resize(kv, ino, 2 * cs, T0 + 50, coord_fn, &coord, &plan) == EFS_OK &&
+              plan.requests[0].action == EFS_META_RESIZE_EXTEND,
+          "D25 extension remains available with a full history");
+    t.bytes[0] = 0x81; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_OK &&
+              efs_meta_apply_get_inode(kv, ino, &after) == EFS_OK &&
+              after.content_epoch == EFS_FENCE_HISTORY_MAX && after.base_size == 2 * cs &&
+              efs_meta_get_fence_history(kv, ino, row.generation, 0, &history) == EFS_OK &&
+              history.count == EFS_FENCE_HISTORY_MAX,
+          "D25 full-history extension consumes no entry or epoch");
+    CHECK(efs_meta_capture_resize(kv, ino, 100, T0 + 51, coord_fn, &coord, &plan) == EFS_OK,
+          "D25 capture saturated shrink");
+    t.bytes[0] = 0x82; ctx = (struct resize_test_ctx){.kv = kv};
+    CHECK(efs_meta_execute_resize(&plan, &t, &resize_test_ops, &ctx) == EFS_ERR_BUSY &&
+              !ctx.commits && ctx.aborts == 1 &&
+              efs_txn_key_exclusive(kv, ik, il) == EFS_OK &&
+              efs_meta_apply_get_inode(kv, ino, &after) == EFS_OK && after.base_size == 2 * cs,
+          "D25 full-history shrink returns BUSY without fencing or deleting data");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 saturated history remains valid");
+    efs_kv_mem_free(kv);
+}
+
+static struct {
+    struct efs_kv *kv;
+    const struct efs_kv_ops *ops;
+    efs_ino_t ino;
+    unsigned inode_reads, mutations;
+    int continuous;
+} resize_capture_race;
+
+static int resize_capture_racing_get(void *ctx, const uint8_t *key,
+                                      uint32_t kl, uint8_t *value, uint32_t *len)
+{
+    if (kl == 11 && key[2] == EFS_KV_KIND_INODE &&
+        (++resize_capture_race.inode_reads % 2) == 0 &&
+        (!resize_capture_race.mutations || resize_capture_race.continuous)) {
+        const struct efs_kv_ops *wrapped = resize_capture_race.kv->ops;
+        struct efs_meta_setattr attrs = {.mask = EFS_META_SET_UID,
+            .uid = 2000 + 100 * resize_capture_race.continuous +
+                   resize_capture_race.mutations};
+        resize_capture_race.kv->ops = resize_capture_race.ops;
+        CHECK(efs_meta_apply_setattr(resize_capture_race.kv, resize_capture_race.ino,
+                  T0 + 2, &attrs) == EFS_OK, "D25 mutate inode during resize capture");
+        resize_capture_race.kv->ops = wrapped;
+        ++resize_capture_race.mutations;
+    }
+    return resize_capture_race.ops->get(ctx, key, kl, value, len);
+}
+
+static void test_resize_capture_validation(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_resize_plan plan = {0}, saved;
+    struct efs_txid t = {{0x90}};
+    struct coord_ctx coord = {kv, 0};
+    struct resize_test_ctx ctx = {.kv = kv};
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+              efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                          "resize-collect", &ino) == EFS_OK,
+          "D25 capture-validation fixture");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0x9001, 0, T0 + 1,
+        "D25 capture-validation base");
+    resize_capture_race.kv = kv; resize_capture_race.ops = kv->ops;
+    resize_capture_race.ino = ino; resize_capture_race.inode_reads = 0;
+    resize_capture_race.mutations = 0; resize_capture_race.continuous = 0;
+    struct efs_kv_ops wrapped = *kv->ops;
+    wrapped.get = resize_capture_racing_get; kv->ops = &wrapped;
+    CHECK(efs_meta_capture_resize(kv, ino, 100, T0 + 3, coord_fn, &coord, &plan) == EFS_OK &&
+              resize_capture_race.inode_reads == 4 && resize_capture_race.mutations == 1,
+          "D25 resize capture retries an inconsistent inode collection");
+    saved = plan;
+    resize_capture_race.inode_reads = resize_capture_race.mutations = 0;
+    resize_capture_race.continuous = 1;
+    CHECK(efs_meta_capture_resize(kv, ino, 100, T0 + 4, coord_fn, &coord, &plan) == EFS_ERR_BUSY &&
+              resize_capture_race.mutations == 4 && !memcmp(&plan, &saved, sizeof(plan)),
+          "D25 capture retry exhaustion is bounded and preserves output");
+    kv->ops = resize_capture_race.ops;
+    CHECK(efs_meta_capture_resize(kv, ino, 100, T0 + 5, coord_fn, &coord, &plan) == EFS_OK,
+          "D25 capture before undecided fence");
+    for (uint32_t i = 0; i < plan.count; ++i)
+        CHECK(resize_test_prepare(&ctx, &t, &plan.parts, &plan.requests[i]) == EFS_OK,
+              "D25 prepare undecided resize authorities");
+    struct fence_decision_race race = {kv, 0, 3};
+    CHECK(efs_meta_capture_resize(kv, ino, 2 * EFS_MIN_CHUNK_SIZE, T0 + 6,
+              fence_racing_coord, &race, &plan) == EFS_OK && race.calls > race.commit_at &&
+              plan.requests[0].epoch == 1 &&
+              plan.requests[0].fence.expected_base_size == 100 &&
+              plan.requests[0].action == EFS_META_RESIZE_EXTEND,
+          "D25 decision movement during capture retries to the committed epoch");
+    CHECK(resize_test_resolve(&ctx, &t, &saved.parts, EFS_TXN_COMMIT) == EFS_OK,
+          "D25 resolve capture-racing commit");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 capture fixture remains valid");
+    efs_kv_mem_free(kv);
+}
+
+static int content_fence_fail_batch(void *ctx, const struct efs_kv_item *items,
+                                   uint32_t count)
+{
+    (void)ctx;
+    CHECK(count == 2 && items[0].op == EFS_KV_PUT && items[1].op == EFS_KV_PUT,
+          "D25 exactly one bounded history/stamp batch");
+    CHECK(items[0].key[2] == EFS_KV_KIND_CONTENT_FENCE &&
+              items[1].key[2] == EFS_KV_KIND_INODE,
+          "D25 history and inode commit together");
+    return EFS_ERR_IO;
+}
+
+static void test_content_fence_history(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row row, after;
+    struct efs_fence_history h = {0}, decoded;
+    struct efs_meta_chunk chunk;
+    struct efs_meta_chunk_view view, saved_view;
+    struct efs_meta_pub span = {0};
+    struct gc_probe gc;
+    uint8_t value[EFS_META_FENCE_BYTES];
+    uint32_t len = 0;
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "D25 init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "fenced", &ino) == EFS_OK, "D25 create");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0x2501, 0, T0 + 1, "D25 base");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "D25 row");
+    CHECK(efs_meta_get_fence_history(kv, ino, row.generation,
+                                    EFS_META_FENCE_INODE, &h) == EFS_OK && !h.count,
+          "D25 legacy empty history");
+    {
+        const struct efs_kv_ops *original = kv->ops;
+        struct efs_kv_ops fault = *original;
+        fault.batch = content_fence_fail_batch;
+        kv->ops = &fault;
+        CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                           EFS_META_FENCE_INODE, 0, 1, 100, T0 + 2) == EFS_ERR_IO,
+              "D25 storage failure propagated");
+        kv->ops = original;
+        CHECK(efs_meta_apply_get_inode(kv, ino, &after) == EFS_OK &&
+                  !memcmp(&row, &after, sizeof(row)), "D25 failed batch leaves inode alone");
+        CHECK(efs_meta_get_fence_history(kv, ino, row.generation,
+                                        EFS_META_FENCE_INODE, &h) == EFS_OK && !h.count,
+              "D25 failed batch leaves history alone");
+    }
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, 0, 1, 100, T0 + 2) == EFS_OK,
+          "D25 inode logical fence");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &after) == EFS_OK &&
+              after.base_size == 100 && after.content_epoch == 1,
+          "D25 inode stamped");
+    CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &chunk) == EFS_OK &&
+              chunk.generation == 0x2501 && chunk.content_epoch == 0,
+          "D25 fence neither deletes nor restamps old base");
+    CHECK(gc_probe(kv, &gc) == 0 && !gc.n, "D25 no in-entry GC");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, 0, 1, 101, T0 + 3) == EFS_ERR_STALE,
+          "D25 conflicting same epoch rejected");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation + 1,
+                                       EFS_META_FENCE_INODE, 0, 1, 100, T0 + 3) == EFS_ERR_STALE,
+          "D25 stale FileID rejected");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation, 0,
+                                       0, 1, 100, T0 + 3) == EFS_OK,
+          "D25 lane history and stamp atomic");
+    CHECK(efs_meta_get_fence_history(kv, ino, row.generation, 0, &h) == EFS_OK &&
+              h.count == 1 && h.entries[0].size == 100,
+          "D25 lane durable history");
+    CHECK(efs_meta_get_fence_history(kv, ino, row.generation + 1, 0, &h) == EFS_OK &&
+              !h.count, "D25 FileID histories isolated");
+    span.ino = ino;
+    span.expected_gen = 0x2501;
+    span.candidate_gen = 0x2502;
+    span.new_size = 1000;
+    span.now = T0 + 4;
+    span.content_epoch = 1;
+    span.coding_profile_id = EFS_META_PROFILE_K2F1;
+    span.delta_off = 500;
+    span.delta_len = 100;
+    fill_ch(&span.ch);
+    CHECK(efs_meta_apply_publish(kv, &span) == EFS_OK, "D25 mixed-age span");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, 1, 2, 700, T0 + 5) == EFS_OK,
+          "D25 second inode fence");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation, 0,
+                                       1, 2, 700, T0 + 5) == EFS_OK,
+          "D25 second lane fence");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK,
+          "D25 self-contained mixed-age view");
+    CHECK(view.base.content_epoch == 0 && view.deltas[0].content_epoch == 1 &&
+              view.bytes.parts[0].len == 100 &&
+              view.bytes.parts[1].off == 500 && view.bytes.parts[1].len == 100 &&
+              view.fence_epoch == 2,
+          "D25 per-part epochs/masks captured together");
+    saved_view = view;
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, 2, 3, 550, T0 + 6) == EFS_OK,
+          "D25 third inode fence");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation, 0,
+                                       2, 3, 550, T0 + 6) == EFS_OK,
+          "D25 third lane fence");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK &&
+              view.bytes.parts[0].len == 100 && view.bytes.parts[1].len == 50 &&
+              saved_view.bytes.parts[1].len == 100,
+          "D25 old view masks immutable across another fence");
+    for (uint32_t epoch = 4; epoch <= EFS_FENCE_HISTORY_MAX; ++epoch)
+        CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                           EFS_META_FENCE_INODE, epoch - 1, epoch,
+                                           1000 - epoch, T0 + epoch) == EFS_OK,
+              "D25 append repeated fence, never replace");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "D25 full row");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, row.content_epoch,
+                                       row.content_epoch + 1, 0, T0 + 100) == EFS_ERR_BUSY,
+          "D25 full history BUSY");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &after) == EFS_OK &&
+              !memcmp(&row, &after, sizeof(row)), "D25 BUSY changes no inode bytes");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, 0, 1, 100, T0 + 100) == EFS_OK,
+          "D25 older exact replay is a no-op even at capacity");
+    CHECK(efs_meta_get_fence_history(kv, ino, row.generation,
+                                    EFS_META_FENCE_INODE, &h) == EFS_OK &&
+              h.count == EFS_FENCE_HISTORY_MAX && h.entries[0].size == 100,
+          "D25 full history preserved");
+    CHECK(efs_meta_pack_fence_history(&h, value, sizeof(value), &len) == EFS_OK &&
+              len == sizeof(value), "D25 format pack");
+    CHECK(efs_meta_unpack_fence_history(value, len, &decoded) == EFS_OK &&
+              !memcmp(&h, &decoded, sizeof(h)), "D25 format round trip");
+    CHECK(efs_meta_unpack_fence_history(value, len - 1, &decoded) == EFS_ERR_PROTO,
+          "D25 truncated history fails closed");
+    value[3] = 2;
+    CHECK(efs_meta_unpack_fence_history(value, len, &decoded) == EFS_ERR_PROTO,
+          "D25 unknown format fails closed");
+    value[3] = 1; value[7] = EFS_FENCE_HISTORY_MAX + 1;
+    CHECK(efs_meta_unpack_fence_history(value, len, &decoded) == EFS_ERR_PROTO,
+          "D25 corrupt count fails closed");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 KV consistency");
+    efs_kv_mem_free(kv);
+}
+
+/* A fence between the second history read and final lane read must force
+ * a fresh collection. Repeated changes must terminate without exposing a
+ * mixed snapshot or modifying the caller's previous view. */
+static struct {
+    struct efs_kv *kv;
+    const struct efs_kv_ops *ops;
+    efs_ino_t ino;
+    uint64_t generation, epoch;
+    unsigned history_reads, injected;
+    int continuous;
+} fence_read_race;
+
+static int content_fence_racing_get(void *ctx, const uint8_t *key,
+                                    uint32_t klen, uint8_t *value, uint32_t *len)
+{
+    int rc = fence_read_race.ops->get(ctx, key, klen, value, len);
+    if (klen == 20 && key[2] == EFS_KV_KIND_CONTENT_FENCE && key[19] == 0 &&
+        (++fence_read_race.history_reads % 2) == 0 &&
+        (fence_read_race.continuous || !fence_read_race.injected)) {
+        const struct efs_kv_ops *wrapped = fence_read_race.kv->ops;
+        uint64_t before = fence_read_race.epoch++;
+        fence_read_race.kv->ops = fence_read_race.ops;
+        CHECK(efs_meta_apply_content_fence(fence_read_race.kv, fence_read_race.ino,
+                  fence_read_race.generation, EFS_META_FENCE_INODE, before,
+                  before + 1, 100 - before, T0 + before) == EFS_OK,
+              "D25 racing inode fence");
+        CHECK(efs_meta_apply_content_fence(fence_read_race.kv, fence_read_race.ino,
+                  fence_read_race.generation, 0, before, before + 1,
+                  100 - before, T0 + before) == EFS_OK, "D25 racing lane fence");
+        fence_read_race.kv->ops = wrapped;
+        ++fence_read_race.injected;
+    }
+    return rc;
+}
+
+static void test_content_fence_view_race(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_kv_ops wrapped;
+    struct efs_meta_row row;
+    struct efs_meta_chunk_view view, saved;
+    uint8_t key[EFS_KV_KEY_MAX], bad[8] = {0};
+    uint32_t kl = 0;
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "D25 race init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                    "view-race", &ino) == EFS_OK, "D25 race create");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0x2530, 0, T0 + 1, "D25 race base");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "D25 race row");
+    memset(&fence_read_race, 0, sizeof(fence_read_race));
+    fence_read_race.kv = kv; fence_read_race.ops = kv->ops;
+    fence_read_race.ino = ino; fence_read_race.generation = row.generation;
+    wrapped = *kv->ops; wrapped.get = content_fence_racing_get; kv->ops = &wrapped;
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK &&
+              view.fence_epoch == 1 && view.bytes.parts[0].len == 100 &&
+              fence_read_race.injected == 1,
+          "D25 fence race retries to a coherent new view");
+    saved = view;
+    fence_read_race.history_reads = fence_read_race.injected = 0;
+    fence_read_race.continuous = 1;
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_ERR_BUSY &&
+              fence_read_race.injected == 4 && !memcmp(&view, &saved, sizeof(view)),
+          "D25 continual fence races terminate and leave output alone");
+    kv->ops = fence_read_race.ops;
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 raced KV valid");
+    CHECK(efs_kv_key_lane(efs_kv_lane_shard(ino, 0), ino, row.generation,
+                          0, key, &kl) == EFS_OK, "D25 malformed key");
+    key[2] = EFS_KV_KIND_CONTENT_FENCE;
+    CHECK(efs_kv_put(kv, key, kl, bad, sizeof(bad)) == EFS_OK,
+          "D25 inject malformed durable history");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_ERR_PROTO &&
+              !memcmp(&view, &saved, sizeof(view)), "D25 malformed history fails closed");
+    CHECK(efs_meta_apply_check(kv) == EFS_ERR_PROTO,
+          "D25 consistency check rejects malformed history");
+    efs_kv_mem_free(kv);
+}
+
+static int content_sweep_fail_batch(void *ctx, const struct efs_kv_item *items,
+                                    uint32_t count)
+{
+    (void)ctx;
+    CHECK(count <= 3 + EFS_CHUNK_DELTA_MAX && count >= 3,
+          "D25 sweep has a fixed mutation bound including GC");
+    CHECK(items[0].key[2] == EFS_KV_KIND_CHUNK &&
+              items[1].key[2] == EFS_KV_KIND_LANE,
+          "D25 sweep commits row, stamp and GC together");
+    return EFS_ERR_IO;
+}
+
+static void test_content_fence_sweep_cas(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_meta_row row;
+    struct efs_meta_chunk_view old, view;
+    struct efs_meta_chunk replacement;
+    struct efs_meta_pub span = {0};
+    struct gc_probe gc;
+    efs_ino_t ino = 0;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "D25 CAS init");
+    CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                     "sweep-cas", &ino) == EFS_OK, "D25 CAS create");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0x2510, 0, T0 + 1, "D25 CAS base");
+    CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "D25 CAS row");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, 0, 1, 100, T0 + 2) == EFS_OK,
+          "D25 CAS inode fence");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation, 0,
+                                       0, 1, 100, T0 + 2) == EFS_OK, "D25 CAS lane fence");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &old) == EFS_OK, "D25 CAS old view");
+    fill_ch(&replacement); replacement.generation = 0x2511; replacement.content_epoch = 1;
+    replacement.coding_profile_id = EFS_META_PROFILE_K2F1;
+    CHECK(efs_meta_apply_sweep_chunk(kv, ino, row.generation, 0, &old, NULL) == EFS_ERR_INVAL,
+          "D25 retained prefix cannot be deleted");
+    span.ino = ino; span.expected_gen = 0x2510; span.candidate_gen = 0x2511;
+    span.new_size = 600; span.content_epoch = 1; span.now = T0 + 3;
+    span.coding_profile_id = EFS_META_PROFILE_K2F1;
+    span.delta_off = 500; span.delta_len = 100; fill_ch(&span.ch);
+    CHECK(efs_meta_apply_publish(kv, &span) == EFS_OK, "D25 CAS concurrent span");
+    CHECK(efs_meta_apply_sweep_chunk(kv, ino, row.generation, 0, &old,
+                                    &replacement) == EFS_ERR_STALE,
+          "D25 stale row cannot sweep a newer publication");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &old) == EFS_OK, "D25 CAS new view");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, 1, 2, 550, T0 + 4) == EFS_OK,
+          "D25 CAS newer inode fence");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation, 0,
+                                       1, 2, 550, T0 + 4) == EFS_OK, "D25 CAS newer lane fence");
+    CHECK(efs_meta_apply_sweep_chunk(kv, ino, row.generation, 0, &old,
+                                    &replacement) == EFS_ERR_STALE,
+          "D25 stale fence revision cannot publish old materialization");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK, "D25 CAS current view");
+    replacement.content_epoch = 2;
+    {
+        const struct efs_kv_ops *original = kv->ops;
+        struct efs_kv_ops fault = *original;
+        struct efs_meta_chunk fresh = replacement;
+        struct efs_meta_chunk_view unchanged;
+        uint8_t lk[EFS_KV_KEY_MAX], before[64], after[64];
+        uint32_t kl = 0, bn = sizeof(before), an = sizeof(after);
+        fresh.content_epoch = 2; fresh.generation = 0x2519;
+        for (unsigned i = 0; i < EFS_NUM_FRAGMENTS; ++i) {
+            fresh.nodes[i] += 10;
+            fresh.checksums[i][0] ^= 0xff;
+        }
+        CHECK(efs_kv_key_lane(efs_kv_lane_shard(ino, 0), ino, row.generation,
+                              0, lk, &kl) == EFS_OK &&
+                  efs_kv_get(kv, lk, kl, before, &bn) == EFS_OK,
+              "D25 sweep failure prior lane stamp");
+        fault.batch = content_sweep_fail_batch; kv->ops = &fault;
+        CHECK(efs_meta_apply_sweep_chunk(kv, ino, row.generation, 0, &view,
+                                        &fresh) == EFS_ERR_IO,
+              "D25 sweep storage failure propagated");
+        kv->ops = original;
+        CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                      EFS_MIN_CHUNK_SIZE, &unchanged) == EFS_OK &&
+                  !memcmp(&view, &unchanged, sizeof(view)),
+              "D25 failed sweep leaves source row intact");
+        CHECK(efs_kv_get(kv, lk, kl, after, &an) == EFS_OK && bn == an &&
+                  !memcmp(before, after, bn), "D25 failed sweep leaves lane intact");
+        CHECK(gc_probe(kv, &gc) == 0 && !gc.n,
+              "D25 failed sweep cannot expose live fragments to GC");
+    }
+    CHECK(efs_meta_apply_sweep_chunk(kv, ino, row.generation, 0, &view,
+                                    &replacement) == EFS_OK, "D25 materialized base CAS");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 0,
+                                  EFS_MIN_CHUNK_SIZE, &old) == EFS_OK &&
+              old.base.generation == 0x2511 && old.base.content_epoch == 2 && !old.ndelta,
+          "D25 materialization installs stamped base and clears spans");
+    CHECK(gc_probe(kv, &gc) == 0 && !gc.n, "D25 W54 aliases never queued");
+    CHECK(efs_meta_apply_sweep_chunk(kv, ino, row.generation, 0, &view,
+                                    &replacement) == EFS_ERR_STALE,
+          "D25 old source no longer matches after CAS");
+    pub(kv, ino, 64, 65ull * EFS_MIN_CHUNK_SIZE, 0x2520, 0, T0 + 5, "D25 distant row");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+                                       EFS_META_FENCE_INODE, 2, 3, 100, T0 + 6) == EFS_OK,
+          "D25 CAS delete inode fence");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation, 0,
+                                       2, 3, 100, T0 + 6) == EFS_OK, "D25 CAS delete lane fence");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 64,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_OK &&
+              !view.bytes.parts[0].len, "D25 distant row wholly fenced");
+    CHECK(efs_meta_apply_sweep_chunk(kv, ino, row.generation, 64, &view, NULL) == EFS_OK,
+          "D25 versioned dead-row delete");
+    CHECK(efs_meta_get_chunk_view(kv, ino, row.generation, 64,
+                                  EFS_MIN_CHUNK_SIZE, &view) == EFS_ERR_NOT_FOUND,
+          "D25 deleted row absent");
+    CHECK(gc_probe(kv, &gc) == 0 && gc.n == 1 && gc_probe_find(&gc, 0x2520, 0, 64),
+          "D25 dead object queued for GC");
+    CHECK(efs_meta_apply_check(kv) == EFS_OK, "D25 CAS consistency");
+    efs_kv_mem_free(kv);
+}
+
+static void test_gc_fold_live_alias(void)
+{
+    for (unsigned variant = 0; variant < 5; ++variant) {
+        struct efs_kv *kv = efs_kv_mem_create();
+        efs_ino_t ino = 0;
+        struct efs_meta_pub p = {0};
+        struct efs_meta_chunk got;
+        struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
+        struct gc_probe pr;
+        uint32_t nd = 0;
+        uint64_t newest = 0;
+        const uint64_t span_gen = 0x5401;
+        int tombstone = variant == 2 || variant == 3;
+        int same_gen = variant == 0 || variant == 2;
+
+        CHECK(kv != NULL, "W54 kv");
+        CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "W54 init");
+        CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO,
+                                        S_IFREG | 0644, "fold", &ino) == EFS_OK,
+              "W54 create");
+        p.ino = ino;
+        p.new_size = EFS_MIN_CHUNK_SIZE;
+        p.now = T0 + 1;
+        p.candidate_gen = span_gen;
+        p.coding_profile_id = EFS_META_PROFILE_K2F1;
+        p.delta_off = 100;
+        p.delta_len = 200;
+        fill_ch(&p.ch);
+        CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "W54 span");
+        CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds,
+                                             EFS_CHUNK_DELTA_MAX, &nd,
+                                             &newest) == EFS_OK && nd == 1,
+              "W54 span observation");
+        p.delta_off = p.delta_len = 0;
+        p.delta_base_n = nd;
+        p.delta_base_seq = newest;
+        if (tombstone) {
+            p.candidate_gen = 0x5402;
+            CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK,
+                  "W54 initial alias fold");
+            CHECK(gc_probe(kv, &pr) == 0 && pr.n == 0,
+                  "W54 initial alias fold keeps live fragments");
+            CHECK(efs_meta_apply_get_chunk_deltas(kv, ino, 0, ds,
+                                                 EFS_CHUNK_DELTA_MAX, &nd,
+                                                 &newest) == EFS_OK && nd == 1 &&
+                      ds[0].len == 0,
+                  "W54 tombstone retained");
+            p.expected_gen = 0x5402;
+            p.delta_base_n = nd;
+            p.delta_base_seq = newest;
+        }
+        p.candidate_gen = same_gen ? span_gen : 0x5403;
+        if (variant == 0 || variant == 4) {
+            /* Same-generation protection is independent of the placement
+             * alias check; the distinct-generation control is truly dead. */
+            for (unsigned f = 0; f < EFS_NUM_FRAGMENTS; ++f)
+                p.ch.checksums[f][0] ^= 0x80;
+        }
+        CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "W54 fold");
+        CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK &&
+                  got.generation == p.candidate_gen,
+              "W54 replacement base installed");
+        CHECK(gc_probe(kv, &pr) == 0 &&
+                  pr.n == (variant == 4 ? 1 : 0),
+              "W54 only distinct dead objects queued");
+        CHECK(!gc_probe_find(&pr, p.candidate_gen, 0, 0),
+              "W54 no GC for live base identity");
+        if (variant == 4)
+            CHECK(gc_probe_find(&pr, span_gen, 0, 0),
+                  "W54 dead span still reclaimed");
+        CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK,
+              "W54 fold replay idempotent");
+        CHECK(gc_probe(kv, &pr) == 0 &&
+                  pr.n == (variant == 4 ? 1 : 0),
+              "W54 replay adds no GC");
+        CHECK(efs_meta_apply_check(kv) == EFS_OK, "W54 metadata check");
+        efs_kv_mem_free(kv);
+    }
+}
+
 static void test_gc_tail_alias(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -3691,7 +5020,18 @@ int main(void)
     test_rename_splitting();
     test_lookup_path();
     test_gc_reap();
-    test_gc_tail_alias();
+    test_gc_fold_live_alias();
+    test_content_fence_prepared_writers();
+    test_w36_split_source_snapshots();
+    test_w36_unlink_before_rename_prepare();
+    test_resize_coordinator();
+    test_resize_races_and_lane_initialization();
+    test_resize_history_bound_and_atomic_cursor();
+    test_resize_capture_validation();
+    test_content_fence_reductions_commute();
+    test_content_fence_history();
+    test_content_fence_sweep_cas();
+    test_content_fence_view_race();
     test_gc_tail_alias();
     test_gc_watermark();
     if (failures) {

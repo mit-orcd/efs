@@ -755,8 +755,395 @@ static void test_opid_reduce(void)
     efs_kv_mem_free(kv);
 }
 
+static int fail_pair_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
+{
+    (void)ctx;
+    CHECK(n == 2 && items[0].key[2] == EFS_KV_KIND_INTENT &&
+              items[1].key[2] == EFS_KV_KIND_INTENT,
+          "pair uses one bounded atomic intent batch");
+    return EFS_ERR_IO;
+}
+
+static void test_atomic_prepare_pair(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid t, other;
+    struct efs_txn_parts p = two(1, 2);
+    struct efs_txn_value_cas q[2];
+    uint8_t keys[2][EFS_KV_KEY_MAX], value[64] = {0};
+    uint32_t kl[2] = {0};
+    tid(&t, 66); tid(&other, 67);
+    CHECK(efs_kv_key_lane(1, 4242, 1, 0, keys[0], &kl[0]) == EFS_OK,
+          "pair stamp key");
+    memcpy(keys[1], keys[0], kl[0]); kl[1] = kl[0];
+    keys[1][2] = EFS_KV_KIND_CONTENT_FENCE;
+    for (unsigned i = 0; i < 2; ++i)
+        q[i] = (struct efs_txn_value_cas){keys[i], kl[i], NULL, EFS_TXN_ABSENT,
+                                          EFS_TXN_PUT, value, sizeof(value)};
+    CHECK(efs_txn_prepare_excl_value(kv, &other, &p, keys[1], kl[1], NULL,
+              EFS_TXN_ABSENT, EFS_TXN_PUT, value, sizeof(value)) == EFS_OK,
+          "second key held by another transaction");
+    CHECK(efs_txn_prepare_excl_pair(kv, &t, &p, q, 2) == EFS_ERR_BUSY &&
+              efs_txn_key_exclusive(kv, keys[0], kl[0]) == EFS_OK,
+          "second-key conflict cannot strand a first-key intent");
+    CHECK(efs_txn_resolve(kv, &other, 1, EFS_TXN_ABORT) == EFS_OK,
+          "release pair conflict");
+    {
+        const struct efs_kv_ops *original = kv->ops;
+        struct efs_kv_ops fault = *original;
+        fault.batch = fail_pair_batch; kv->ops = &fault;
+        CHECK(efs_txn_prepare_excl_pair(kv, &t, &p, q, 2) == EFS_ERR_IO,
+              "atomic pair storage failure propagated");
+        kv->ops = original;
+        CHECK(efs_txn_key_exclusive(kv, keys[0], kl[0]) == EFS_OK &&
+                  efs_txn_key_exclusive(kv, keys[1], kl[1]) == EFS_OK,
+              "failed pair storage leaves both keys unlocked");
+    }
+    q[1].expected_len = 0;
+    CHECK(efs_txn_prepare_excl_pair(kv, &t, &p, q, 2) == EFS_ERR_STALE &&
+              efs_txn_key_exclusive(kv, keys[0], kl[0]) == EFS_OK,
+          "second-key stale predicate leaves first key unlocked");
+    q[1].expected_len = EFS_TXN_ABSENT;
+    CHECK(efs_txn_prepare_excl_pair(kv, &t, &p, q, 2) == EFS_OK,
+          "prepare stamp/history pair");
+    {
+        const struct efs_kv_ops *original = kv->ops;
+        struct efs_kv_ops fault = *original;
+        fault.batch = fail_pair_batch; kv->ops = &fault;
+        CHECK(efs_txn_prepare_excl_pair(kv, &t, &p, q, 2) == EFS_OK,
+              "matching pair replay requires no write");
+        kv->ops = original;
+    }
+    CHECK(efs_txn_key_exclusive(kv, keys[0], kl[0]) == EFS_ERR_BUSY &&
+              efs_txn_key_exclusive(kv, keys[1], kl[1]) == EFS_ERR_BUSY,
+          "both pair keys held until resolution");
+    CHECK(efs_txn_resolve(kv, &t, 1, EFS_TXN_ABORT) == EFS_OK,
+          "pair abort releases both keys");
+    q[1] = q[0];
+    CHECK(efs_txn_prepare_excl_pair(kv, &t, &p, q, 2) == EFS_ERR_INVAL &&
+              efs_txn_key_exclusive(kv, keys[0], kl[0]) == EFS_OK,
+          "duplicate pair key rejected without installing intent");
+    efs_kv_mem_free(kv);
+}
+
+static void test_atomic_prepare_triple_bounds(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid t;
+    struct efs_txn_parts parts = two(1, 2);
+    struct efs_txn_value_cas q[3];
+    uint8_t keys[3][EFS_KV_KEY_MAX], value[1] = {1};
+    uint32_t lens[3] = {0};
+    tid(&t, 68);
+    for (uint8_t i = 0; i < 3; ++i) {
+        CHECK(efs_kv_key_lane(1, 4242, 1, i, keys[i], &lens[i]) == EFS_OK,
+              "triple test keys");
+        q[i] = (struct efs_txn_value_cas){keys[i], lens[i], NULL, EFS_TXN_ABSENT,
+                                          EFS_TXN_PUT, value, sizeof(value)};
+    }
+    q[2] = q[1];
+    CHECK(efs_txn_prepare_excl_batch(kv, &t, &parts, q, 3) == EFS_ERR_INVAL &&
+              efs_txn_key_exclusive(kv, keys[0], lens[0]) == EFS_OK &&
+              efs_txn_key_exclusive(kv, keys[1], lens[1]) == EFS_OK,
+          "duplicate second/third key cannot install earlier intents");
+    q[2] = (struct efs_txn_value_cas){keys[2], lens[2], NULL, EFS_TXN_ABSENT,
+                                     EFS_TXN_PUT, value, sizeof(value)};
+    q[2].expected_len = 0;
+    CHECK(efs_txn_prepare_excl_batch(kv, &t, &parts, q, 3) == EFS_ERR_STALE &&
+              efs_txn_key_exclusive(kv, keys[0], lens[0]) == EFS_OK &&
+              efs_txn_key_exclusive(kv, keys[1], lens[1]) == EFS_OK,
+          "third-key predicate failure leaves earlier keys unlocked");
+    q[2].expected_len = EFS_TXN_ABSENT;
+    CHECK(efs_txn_prepare_excl_pair(kv, &t, &parts, q, 3) == EFS_ERR_INVAL &&
+              efs_txn_prepare_excl_batch(kv, &t, &parts, q, 4) == EFS_ERR_INVAL,
+          "pair and bounded triple keep their distinct limits");
+    CHECK(efs_txn_prepare_excl_batch(kv, &t, &parts, q, 3) == EFS_OK &&
+              efs_txn_prepare_excl_batch(kv, &t, &parts, q, 3) == EFS_OK,
+          "triple PREPARE and matching replay succeed");
+    CHECK(efs_txn_resolve(kv, &t, 1, EFS_TXN_ABORT) == EFS_OK,
+          "triple abort releases all holds");
+    for (uint8_t i = 0; i < 3; ++i)
+        CHECK(efs_txn_key_exclusive(kv, keys[i], lens[i]) == EFS_OK,
+              "triple cleanup leaves every key unlocked");
+    efs_kv_mem_free(kv);
+}
+
+static void test_exact_value_prepare(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid a, b;
+    struct efs_txn_parts p = two(1, 2), changed;
+    uint8_t key[EFS_KV_KEY_MAX], before[64] = {0}, newer[64] = {0};
+    uint8_t replacement[64] = {0}, out[64], wire[9 + 2 * EFS_TXN_VALUE_MAX];
+    uint32_t kl = 0, n, wn = 0;
+    uint64_t ver = 99;
+    tid(&a, 60); tid(&b, 61);
+    newer[24] = 1; replacement[32] = 2;
+    CHECK(efs_kv_key_lane(1, 4242, 1, 0, key, &kl) == EFS_OK, "value lane key");
+    CHECK(efs_kv_put(kv, key, kl, before, sizeof(before)) == EFS_OK, "value old lane");
+    CHECK(efs_kv_put(kv, key, kl, newer, sizeof(newer)) == EFS_OK,
+          "unversioned publication after leader read");
+    CHECK(efs_txn_ver_get(kv, key, kl, &ver) == EFS_OK && !ver,
+          "publication did not change version sidecar");
+    CHECK(efs_txn_prepare_excl_value(kv, &a, &p, key, kl, before, sizeof(before),
+              EFS_TXN_PUT, replacement, sizeof(replacement)) == EFS_ERR_STALE,
+          "exact-value prepare rejects unversioned publication race");
+    CHECK(efs_txn_key_busy(kv, key, kl) == EFS_OK, "stale prepare leaves no intent");
+    CHECK(efs_txn_encode_excl_value(wire, sizeof(wire), &wn, newer, sizeof(newer),
+              EFS_TXN_PUT, replacement, sizeof(replacement)) == EFS_OK,
+          "encode exact-value prepare");
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &a, &p, key, kl,
+                                wire, wn) == EFS_OK, "wire exact prepare");
+    CHECK(efs_txn_prepare_excl_value(kv, &b, &p, key, kl, newer, sizeof(newer),
+              EFS_TXN_PUT, replacement, sizeof(replacement)) == EFS_ERR_BUSY,
+          "another coordinator cannot steal prepared row");
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &a, &p, key, kl,
+                                wire, wn) == EFS_OK, "matching prepared retry");
+    replacement[0] = 7;
+    CHECK(efs_txn_prepare_excl_value(kv, &a, &p, key, kl, newer, sizeof(newer),
+              EFS_TXN_PUT, replacement, sizeof(replacement)) == EFS_ERR_STALE,
+          "same txid cannot change replacement");
+    replacement[0] = 0;
+    changed = p; changed.shard[1] = 3;
+    CHECK(efs_txn_prepare_excl_value(kv, &a, &changed, key, kl, newer, sizeof(newer),
+              EFS_TXN_PUT, replacement, sizeof(replacement)) == EFS_ERR_STALE,
+          "same txid cannot change participants");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&a, &p), &a, EFS_TXN_ABORT) == EFS_OK &&
+              efs_txn_resolve(kv, &a, 1, EFS_TXN_ABORT) == EFS_OK,
+          "abort prepared exact-value operation");
+    n = sizeof(out);
+    CHECK(efs_kv_get(kv, key, kl, out, &n) == EFS_OK &&
+              n == sizeof(newer) && !memcmp(out, newer, n),
+          "abort preserves intervening publication");
+    /* Absence and an existing empty value are distinct predicates. */
+    CHECK(efs_kv_put(kv, key, kl, NULL, 0) == EFS_OK, "empty existing value");
+    CHECK(efs_txn_prepare_excl_value(kv, &b, &p, key, kl, NULL, EFS_TXN_ABSENT,
+              EFS_TXN_PUT, replacement, sizeof(replacement)) == EFS_ERR_STALE,
+          "absent predicate rejects existing empty value");
+    CHECK(efs_txn_prepare_excl_value(kv, &b, &p, key, kl, NULL, 0,
+              EFS_TXN_DEL, NULL, 0) == EFS_OK, "empty predicate accepts empty value");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&b, &p), &b, EFS_TXN_COMMIT) == EFS_OK &&
+              efs_txn_resolve(kv, &b, 1, EFS_TXN_COMMIT) == EFS_OK,
+          "exact-value delete resolves");
+    n = sizeof(out);
+    CHECK(efs_kv_get(kv, key, kl, out, &n) == EFS_ERR_NOT_FOUND, "delete absent");
+    efs_kv_mem_free(kv);
+}
+
+struct snapshot_copy { struct efs_kv *to; int rc; };
+static int copy_record(void *user, const uint8_t *key, uint32_t kl,
+                        const uint8_t *value, uint32_t vl)
+{
+    struct snapshot_copy *copy = user;
+    copy->rc = efs_kv_put(copy->to, key, kl, value, vl);
+    return copy->rc != EFS_OK;
+}
+
+static void test_full_fence_transaction(void)
+{
+    enum { AUTHORITIES = EFS_TXN_MAX_PART + 1, KEYS = AUTHORITIES * 2 };
+    struct efs_kv *kv = efs_kv_mem_create(), *reopened;
+    struct efs_txid t;
+    struct efs_txn_parts parts = {0};
+    struct efs_fence_history history = {0};
+    struct kvs ctx;
+    struct snapshot_copy copy;
+    uint8_t keys[KEYS][EFS_KV_KEY_MAX], values[KEYS][EFS_TXN_VALUE_MAX];
+    uint32_t lens[KEYS], vlens[KEYS], n, hn = 0;
+    uint8_t old[128] = {0}, packed[EFS_TXN_VALUE_MAX];
+    uint8_t wire[9 + 2 * EFS_TXN_VALUE_MAX], out[EFS_TXN_VALUE_MAX];
+    const efs_ino_t ino = 4242;
+    tid(&t, 62);
+    parts.n = EFS_TXN_MAX_PART;
+    for (uint32_t i = 0; i < parts.n; ++i)
+        parts.shard[i] = efs_kv_lane_shard(ino, (uint8_t)i);
+    for (uint32_t i = 1; i <= EFS_FENCE_HISTORY_MAX; ++i)
+        CHECK(efs_fence_history_append(&history, i, 1000 - i) == EFS_OK,
+              "full fence history");
+    CHECK(efs_meta_pack_fence_history(&history, packed, sizeof(packed), &hn) == EFS_OK &&
+              hn == EFS_TXN_VALUE_MAX, "full history fits bounded value");
+    for (uint32_t a = 0; a < AUTHORITIES; ++a) {
+        uint32_t j = a * 2, shard = a == EFS_TXN_MAX_PART ? parts.shard[0] : parts.shard[a];
+        uint32_t wn = 0;
+        if (a == EFS_TXN_MAX_PART) {
+            CHECK(efs_kv_key_inode(shard, ino, keys[j], &lens[j]) == EFS_OK,
+                  "full fence inode key");
+            vlens[j] = sizeof(old);
+        } else {
+            CHECK(efs_kv_key_lane(shard, ino, 1, (uint8_t)a, keys[j], &lens[j]) == EFS_OK,
+                  "full fence lane key");
+            vlens[j] = 64;
+        }
+        memset(values[j], 0, vlens[j]); values[j][0] = (uint8_t)(a + 1);
+        CHECK(efs_kv_put(kv, keys[j], lens[j], old, vlens[j]) == EFS_OK,
+              "full fence old stamp");
+        CHECK(efs_txn_encode_excl_value(wire, sizeof(wire), &wn, old, vlens[j],
+                  EFS_TXN_PUT, values[j], vlens[j]) == EFS_OK &&
+                  efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &t, &parts,
+                                        keys[j], lens[j], wire, wn) == EFS_OK,
+              "full fence prepare stamp via common wire decoder");
+        CHECK(efs_kv_key_lane(shard, ino, 1, (uint8_t)a, keys[j + 1], &lens[j + 1]) == EFS_OK,
+              "full fence history key");
+        keys[j + 1][2] = EFS_KV_KIND_CONTENT_FENCE;
+        vlens[j + 1] = hn; memcpy(values[j + 1], packed, hn);
+        CHECK(efs_txn_encode_excl_value(wire, sizeof(wire), &wn, NULL, EFS_TXN_ABSENT,
+                  EFS_TXN_PUT, packed, hn) == EFS_OK &&
+                  efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &t, &parts,
+                                        keys[j + 1], lens[j + 1], wire, wn) == EFS_OK,
+              "full fence prepare 520-byte history with 64-participant envelope");
+    }
+    ctx.kv = kv; ctx.fail = 0;
+    for (uint32_t j = 0; j < KEYS; ++j) {
+        n = sizeof(out);
+        int rc = efs_txn_read(kv, keys[j], lens[j], coord_ok, &ctx, out, &n);
+        CHECK((j & 1) ? rc == EFS_ERR_NOT_FOUND :
+                  rc == EFS_OK && n == vlens[j] && !memcmp(out, old, n),
+              "prepared fence invisible before durable decision");
+    }
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&t, &parts), &t, EFS_TXN_COMMIT) == EFS_OK,
+          "full fence durable commit");
+    /* Simulate recovery from applied-state snapshot after half the participants
+     * resolve. Remaining intents must preserve the full participant list. */
+    for (uint32_t i = 0; i < parts.n / 2; ++i)
+        CHECK(efs_txn_resolve(kv, &t, parts.shard[i], EFS_TXN_COMMIT) == EFS_OK,
+              "full fence partial resolution");
+    reopened = efs_kv_mem_create(); copy.to = reopened; copy.rc = EFS_OK;
+    CHECK(efs_kv_scan(kv, copy_record, &copy) == EFS_OK && copy.rc == EFS_OK,
+          "full fence snapshot copy");
+    efs_kv_mem_free(kv); kv = reopened; ctx.kv = kv;
+    for (uint32_t j = 0; j < KEYS; ++j) {
+        n = sizeof(out);
+        CHECK(efs_txn_read(kv, keys[j], lens[j], coord_ok, &ctx, out, &n) == EFS_OK &&
+                  n == vlens[j] && !memcmp(out, values[j], n),
+              "full fence visible after decision including unresolved participants");
+    }
+    {
+        struct efs_txn_pending_rec pending[2];
+        uint32_t count = 0;
+        CHECK(efs_txn_scan_pending(kv, parts.shard[parts.n - 1], pending, 2, &count) == EFS_OK &&
+                  count == 1 && pending[0].parts.n == parts.n &&
+                  !memcmp(pending[0].parts.shard, parts.shard, sizeof(parts.shard)),
+              "recovery retains all 64 participant identities");
+        ctx.fail = 1; n = sizeof(out);
+        CHECK(efs_txn_read(kv, keys[KEYS - 3], lens[KEYS - 3], coord_ok, &ctx,
+                           out, &n) == EFS_ERR_IO, "unreachable decision fails closed");
+        ctx.fail = 0;
+    }
+    for (uint32_t i = 0; i < parts.n; ++i) {
+        CHECK(efs_txn_resolve(kv, &t, parts.shard[i], EFS_TXN_COMMIT) == EFS_OK,
+              "full fence recovery resolution");
+        CHECK(efs_txn_resolve(kv, &t, parts.shard[i], EFS_TXN_COMMIT) == EFS_OK,
+              "full fence resolution replay");
+    }
+    for (uint32_t j = 0; j < KEYS; ++j) {
+        n = sizeof(out);
+        CHECK(efs_kv_get(kv, keys[j], lens[j], out, &n) == EFS_OK &&
+                  n == vlens[j] && !memcmp(out, values[j], n) &&
+                  efs_txn_key_busy(kv, keys[j], lens[j]) == EFS_OK,
+              "all fence records applied and intents released");
+    }
+    efs_kv_mem_free(kv);
+}
+
+static void test_extended_guard_reduce_envelopes(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txn_parts p = {0};
+    struct efs_txid guard, reduce;
+    struct efs_txn_reduce delta = {10, 20, 30, 40};
+    struct kvs ctx = {kv, 0};
+    uint8_t key[EFS_KV_KEY_MAX], out[64];
+    uint32_t kl = 0, n;
+    p.n = EFS_TXN_MAX_PART;
+    for (uint32_t i = 0; i < p.n; ++i) p.shard[i] = i + 1;
+    tid(&guard, 64); tid(&reduce, 65);
+    CHECK(efs_kv_key_lane(1, 4242, 1, 0, key, &kl) == EFS_OK, "large envelope key");
+    CHECK(efs_txn_prepare_guard(kv, &guard, &p, key, kl, 0) == EFS_OK,
+          "64-participant guard envelope fits");
+    CHECK(efs_txn_prepare_reduce(kv, &reduce, &p, key, kl, &delta) == EFS_ERR_BUSY,
+          "extended guard blocks other transaction reduce");
+    CHECK(efs_txn_resolve(kv, &guard, 1, EFS_TXN_ABORT) == EFS_OK,
+          "extended guard abort releases predicate");
+    CHECK(efs_txn_prepare_reduce(kv, &reduce, &p, key, kl, &delta) == EFS_OK,
+          "64-participant reduce envelope fits");
+    CHECK(efs_txn_decide(kv, efs_txn_coordinator(&reduce, &p), &reduce,
+                         EFS_TXN_COMMIT) == EFS_OK, "extended reduce decision");
+    {
+        struct efs_txn_reduce observed = {0};
+        CHECK(efs_txn_reduce_read(kv, key, kl, coord_ok, &ctx, &observed) == EFS_OK &&
+                  observed.max_end == 10 && observed.max_mtime == 20 &&
+                  observed.max_ctime == 30 && observed.mtime_gen == 40,
+              "extended reduce visible before resolution");
+    }
+    CHECK(efs_txn_resolve(kv, &reduce, 1, EFS_TXN_COMMIT) == EFS_OK,
+          "extended reduce resolves");
+    n = sizeof(out);
+    CHECK(efs_kv_get(kv, key, kl, out, &n) == EFS_OK && n >= 48 &&
+              out[7] == 10 && out[15] == 20 && out[23] == 30 && out[47] == 40,
+          "extended reduce folds all stamp fields");
+    efs_kv_mem_free(kv);
+}
+
+static void test_exact_prepare_bounds(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct efs_txid t;
+    struct efs_txn_parts p = two(1, 2);
+    uint8_t key[EFS_KV_KEY_MAX], wire[9 + EFS_TXN_VALUE_MAX + 1] = {0};
+    uint8_t value[EFS_TXN_VALUE_MAX + 1] = {0};
+    uint32_t kl = 0, wn = 99;
+    tid(&t, 63);
+    CHECK(efs_kv_key_lane(1, 4242, 1, 0, key, &kl) == EFS_OK, "bounds key");
+    CHECK(efs_txn_encode_excl_value(wire, sizeof(wire), &wn, NULL, EFS_TXN_ABSENT,
+              EFS_TXN_PUT, value, sizeof(value)) == EFS_ERR_INVAL && wn == 99,
+          "oversized history rejected before encoding");
+    CHECK(efs_txn_prepare_excl_value(kv, &t, &p, key, kl, NULL, EFS_TXN_ABSENT,
+              EFS_TXN_PUT, value, sizeof(value)) == EFS_ERR_INVAL,
+          "oversized value rejected before preparing");
+    CHECK(efs_txn_encode_excl_value(wire, sizeof(wire), &wn, NULL, EFS_TXN_ABSENT,
+              EFS_TXN_PUT, value, 1) == EFS_OK, "bounds valid encoding");
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &t, &p, key, kl,
+                                wire, wn - 1) == EFS_ERR_PROTO,
+          "truncated exact-value payload rejected");
+    wire[wn] = 0;
+    CHECK(efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &t, &p, key, kl,
+                                wire, wn + 1) == EFS_ERR_PROTO,
+          "trailing exact-value payload rejected");
+    p.shard[1] = p.shard[0];
+    CHECK(efs_txn_prepare_excl_value(kv, &t, &p, key, kl, NULL, EFS_TXN_ABSENT,
+              EFS_TXN_PUT, value, 1) == EFS_ERR_INVAL, "duplicate participants rejected");
+    p = two(2, 3);
+    CHECK(efs_txn_prepare_excl_value(kv, &t, &p, key, kl, NULL, EFS_TXN_ABSENT,
+              EFS_TXN_PUT, value, 1) == EFS_ERR_INVAL, "missing participant rejected");
+    CHECK(efs_txn_key_busy(kv, key, kl) == EFS_OK, "invalid prepares leave no intent");
+    p = two(1, 2);
+    CHECK(efs_txn_prepare_excl_value(kv, &t, &p, key, kl, NULL, EFS_TXN_ABSENT,
+              EFS_TXN_PUT, value, 1) == EFS_OK, "prepare for corruption check");
+    {
+        uint8_t ik[EFS_KV_KEY_MAX], record[EFS_TXN_RECORD_MAX], out[1];
+        uint32_t il = 0, rn = sizeof(record), on = sizeof(out);
+        struct kvs ctx = {kv, 0};
+        CHECK(efs_kv_key_intent(key, kl, ik, &il) == EFS_OK &&
+                  efs_kv_get(kv, ik, il, record, &rn) == EFS_OK,
+              "durable exclusive intent captured");
+        /* A malicious length must not wrap the envelope bounds check. */
+        memset(record + 16 + 1 + p.n * 4 + 10, 0xff, 4);
+        CHECK(efs_kv_put(kv, ik, il, record, rn) == EFS_OK,
+              "inject overflowing durable intent length");
+        CHECK(efs_txn_read(kv, key, kl, coord_ok, &ctx, out, &on) == EFS_ERR_PROTO,
+              "corrupt durable intent fails closed before consulting decision");
+    }
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_atomic_prepare_pair();
+    test_atomic_prepare_triple_bounds();
+    test_full_fence_transaction();
+    test_exact_value_prepare();
+    test_exact_prepare_bounds();
+    test_extended_guard_reduce_envelopes();
     test_opid_reduce();
     test_scan_pending();
     test_excl_conflict_i16();

@@ -4010,7 +4010,7 @@ static void host_fwd_setattr(struct efs_raft_host *h, efs_ino_t ino,
                        EFS_MSG_INODE_SETATTR_REPLY, out, groups, ng);
 }
 
-static void host_fwd_getchunks(struct efs_raft_host *h, efs_ino_t ino,
+static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_id, efs_ino_t ino,
                                uint32_t start, uint32_t max,
                                struct efs_msg_inode_getchunks_reply *out,
                                const uint8_t *groups, int ng)
@@ -4019,6 +4019,7 @@ static void host_fwd_getchunks(struct efs_raft_host *h, efs_ino_t ino,
     int tries, rid, skip = -1;
 
     memset(&req, 0, sizeof(req));
+    req.export_id = export_id;
     req.ino = ino;
     req.start = start;
     req.max = max;
@@ -4766,7 +4767,7 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
     rc = host_read_index(h, ig, leader_hint);
     if (rc != EFS_OK)
         return rc;
-    rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_coord, h, &row);
     if (rc != EFS_OK)
         return rc;
     bits = S_ISDIR(row.mode) && row.layout != EFS_META_LAYOUT_LOCAL
@@ -8154,7 +8155,7 @@ static int host_parts_add(struct efs_txn_parts *p, uint32_t shard)
         if (p->shard[i] == shard)
             return EFS_OK;
     }
-    if (p->n >= EFS_TXN_MAX_PART)
+    if (p->n >= EFS_TXN_NAMESPACE_MAX_PART)
         return EFS_ERR_BUSY;
     p->shard[p->n++] = shard;
     return EFS_OK;
@@ -8169,7 +8170,7 @@ struct host_pver_guard {
 
 /* Ancestry of dst_parent as shared pver GUARDs (not exclusive on the
  * inode row). src in the chain is INVAL. Too many distinct shards is
- * BUSY (EFS_TXN_MAX_PART). */
+ * BUSY (EFS_TXN_NAMESPACE_MAX_PART). */
 static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
                                  efs_ino_t src, struct efs_txn_parts *parts,
                                  struct host_pver_guard *g, int *ng, int *hint)
@@ -8192,7 +8193,7 @@ static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
             return rc;
         if (!S_ISDIR(r.mode))
             return EFS_ERR_INVAL;
-        if (*ng >= EFS_TXN_MAX_PART)
+        if (*ng >= EFS_TXN_NAMESPACE_MAX_PART)
             return EFS_ERR_BUSY;
         rc = efs_kv_key_pver(sh, cur, g[*ng].key, &g[*ng].klen);
         if (rc == EFS_OK)
@@ -8345,6 +8346,24 @@ static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
                         hint);
 }
 
+/* Namespace rows can change through unversioned log applies. Compare their
+ * captured bytes, rather than a version sidecar that those applies do not bump. */
+static int host_prep_value(struct efs_raft_host *h, uint32_t shard,
+                           const struct efs_txid *t, const struct efs_txn_parts *parts,
+                           const uint8_t *key, uint32_t kl,
+                           const uint8_t *expected, uint32_t en, int op,
+                           const uint8_t *value, uint32_t vn, int *hint)
+{
+    uint8_t pay[9 + 2 * EFS_META_DENT_BYTES];
+    uint32_t pn = 0;
+    int rc = efs_txn_encode_excl_value(pay, sizeof(pay), &pn, expected, en,
+                                       op, value, vn);
+    if (rc != EFS_OK)
+        return rc;
+    return host_prep_raw(h, shard, EFS_TXN_EXCL_VALUE, t, parts, key, kl,
+                          pay, pn, NULL, hint);
+}
+
 /* Parent (or moved-dir) inode row: nlink/nents delta, times MAX,
  * used_shards OR, parent SET. Replaces the EXCL full-image PUT that lost
  * concurrent log-path updates and serialized every op in one directory. */
@@ -8451,6 +8470,104 @@ static int host_drop_parts(struct efs_raft_host *h, const struct efs_txid *t,
         if (one != EFS_OK && rc == EFS_OK)
             rc = one;
     }
+    return rc;
+}
+
+/* D25 handler-side transport. SETATTR SIZE must not select this path until
+ * authoritative client masks/cache validation and writer epochs are wired. */
+struct host_resize_ctx {
+    struct efs_raft_host *host;
+    int *hint;
+};
+
+static int host_resize_prepare(void *user, const struct efs_txid *t,
+                                const struct efs_txn_parts *parts,
+                                const struct efs_meta_resize_prepare *q)
+{
+    struct host_resize_ctx *ctx = user;
+    uint8_t key[EFS_KV_KEY_MAX], pay[EFS_META_RESIZE_PREPARE_BYTES];
+    uint32_t kl = 0;
+    int rc = efs_meta_encode_resize_prepare(q, key, &kl, pay);
+    if (rc != EFS_OK)
+        return rc;
+    uint32_t shard = ((uint32_t)key[0] << 8) | key[1];
+    return host_prep_raw(ctx->host, shard, EFS_TXN_CONTENT_RESIZE, t, parts,
+                          key, kl, pay, sizeof(pay), NULL, ctx->hint);
+}
+
+static int host_resize_decide(void *user, const struct efs_txid *t,
+                               const struct efs_txn_parts *parts, int decision)
+{
+    struct host_resize_ctx *ctx = user;
+    uint8_t cmd[22];
+    uint32_t coord = efs_txn_coordinator(t, parts);
+    pack_decide(cmd, t, coord, decision);
+    int rc = host_propose_wait(ctx->host, efs_raft_shard_group(coord), cmd,
+                                sizeof(cmd), ctx->hint);
+    if (rc == EFS_ERR_BUSY)
+        host_fin_add(ctx->host, t, parts, coord);
+    return rc;
+}
+
+static int host_resize_resolve(void *user, const struct efs_txid *t,
+                                const struct efs_txn_parts *parts, int decision)
+{
+    struct host_resize_ctx *ctx = user;
+    struct host_idx_ref refs[EFS_TXN_MAX_PART];
+    uint8_t cmd[22];
+    int rc = EFS_OK, n = 0;
+    for (uint32_t i = 0; i < parts->n; ++i) {
+        pack_resolve(cmd, t, parts->shard[i], decision);
+        refs[n].group = efs_raft_shard_group(parts->shard[i]);
+        rc = host_propose(ctx->host, refs[n].group, cmd, sizeof(cmd),
+                           &refs[n].idx, &refs[n].term, ctx->hint);
+        if (rc != EFS_OK)
+            break;
+        ++n;
+    }
+    if (rc == EFS_OK)
+        rc = host_wait_refs(ctx->host, refs, n, ctx->hint);
+    if (rc != EFS_OK)
+        host_fin_add(ctx->host, t, parts, efs_txn_coordinator(t, parts));
+    return rc;
+}
+
+int server_raft_host_logical_resize(efs_ino_t ino, uint64_t size, uint64_t now,
+                                    int *leader_hint)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_resize_plan plan;
+    struct efs_txid t;
+    const struct efs_meta_resize_ops ops = {
+        host_resize_prepare, host_resize_decide, host_resize_resolve};
+    int hint = -1, rc;
+    struct host_resize_ctx ctx = {h, &hint};
+    uint8_t need[2];
+    if (leader_hint)
+        *leader_hint = -1;
+    if (!h || !h->running || !ino)
+        return EFS_ERR_INVAL;
+    host_need_both(need);
+    /* Capture can encounter a newly activated lane after the initial inode
+     * read. Establish authority on both implemented groups before collecting. */
+    for (unsigned i = 0; i < 2; ++i) {
+        if (!host_hosts(h, need[i])) {
+            if (leader_hint)
+                *leader_hint = host_pick_peer(h, need, 2, -1);
+            return EFS_ERR_NOT_PRIMARY;
+        }
+        rc = host_read_index(h, need[i], &hint);
+        if (rc != EFS_OK)
+            goto done;
+    }
+    rc = efs_meta_capture_resize(h->kv, ino, size, now, host_txn_coord, h, &plan);
+    if (rc == EFS_OK) {
+        fill_txid(h, &t);
+        rc = efs_meta_execute_resize(&plan, &t, &ops, &ctx);
+    }
+done:
+    if (leader_hint)
+        *leader_hint = hint;
     return rc;
 }
 
@@ -8668,73 +8785,21 @@ static void host_dir_spread_pass(struct efs_raft_host *h)
 /* LOCAL / HASHED / SPLITTING name drop matching apply dentry_drop_items
  * and sim drop_dentry_prep. SPLITTING writes HASHED=TOMBSTONE(epoch)
  * (I8) and DELs the local leftover unless the keys alias (lane 0). */
-struct host_dent_drop {
-    uint32_t psh, hsh;
-    uint8_t k_loc[EFS_KV_KEY_MAX];
-    uint8_t k_hash[EFS_KV_KEY_MAX];
-    uint8_t v_tomb[EFS_META_DENT_BYTES];
-    uint32_t kl, kh;
-    uint64_t loc_ver, hash_ver;
-    int del_loc, put_tomb, del_hash;
-};
-
-static int host_dent_drop_fill(struct efs_kv *kv, const struct efs_meta_row *prow,
-                               efs_ino_t parent, const char *name,
-                               struct host_dent_drop *d)
-{
-    struct efs_meta_dentry tomb;
-    int rc;
-
-    memset(d, 0, sizeof(*d));
-    d->psh = efs_kv_inode_shard(parent);
-    d->hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
-    rc = efs_kv_key_dentry(d->psh, parent, name, d->k_loc, &d->kl);
-    if (rc == EFS_OK)
-        rc = efs_kv_key_dentry(d->hsh, parent, name, d->k_hash, &d->kh);
-    if (rc != EFS_OK)
-        return rc;
-    if (prow->layout != EFS_META_LAYOUT_HASHED &&
-        !(prow->layout == EFS_META_LAYOUT_SPLITTING && d->kl == d->kh &&
-          memcmp(d->k_loc, d->k_hash, d->kl) == 0)) {
-        d->del_loc = 1;
-        rc = efs_txn_ver_get(kv, d->k_loc, d->kl, &d->loc_ver);
-        if (rc != EFS_OK)
-            return rc;
-    }
-    if (prow->layout == EFS_META_LAYOUT_SPLITTING) {
-        memset(&tomb, 0, sizeof(tomb));
-        tomb.generation = prow->layout_epoch;
-        tomb.type = EFS_META_DENT_TOMBSTONE;
-        rc = efs_meta_pack_dentry(&tomb, d->v_tomb, sizeof(d->v_tomb));
-        if (rc != EFS_OK)
-            return rc;
-        d->put_tomb = 1;
-        return efs_txn_ver_get(kv, d->k_hash, d->kh, &d->hash_ver);
-    }
-    if (prow->layout == EFS_META_LAYOUT_HASHED) {
-        d->del_hash = 1;
-        return efs_txn_ver_get(kv, d->k_hash, d->kh, &d->hash_ver);
-    }
-    return EFS_OK;
-}
-
 static int host_dent_drop_prep(struct efs_raft_host *h, uint32_t sh,
-                               const struct host_dent_drop *d,
+                               const struct efs_meta_dentry_drop *d,
                                const struct efs_txid *t,
                                const struct efs_txn_parts *parts, int *hint)
 {
     int rc = EFS_OK;
-
-    if (d->put_tomb && sh == d->hsh)
-        rc = host_prep(h, d->hsh, EFS_TXN_EXCL, t, parts, d->k_hash, d->kh,
-                        d->hash_ver, EFS_TXN_PUT, d->v_tomb,
-                        sizeof(d->v_tomb), hint);
-    else if (d->del_hash && sh == d->hsh)
-        rc = host_prep(h, d->hsh, EFS_TXN_EXCL, t, parts, d->k_hash, d->kh,
-                        d->hash_ver, EFS_TXN_DEL, NULL, 0, hint);
+    if ((d->put_tomb || d->del_hash) && sh == d->hsh)
+        rc = host_prep_value(h, d->hsh, t, parts, d->k_hash, d->kh,
+                              d->hash_value, d->hash_len,
+                              d->put_tomb ? EFS_TXN_PUT : EFS_TXN_DEL,
+                              d->put_tomb ? d->v_tomb : NULL,
+                              d->put_tomb ? sizeof(d->v_tomb) : 0, hint);
     if (rc == EFS_OK && d->del_loc && sh == d->psh)
-        rc = host_prep(h, d->psh, EFS_TXN_EXCL, t, parts, d->k_loc, d->kl,
-                       d->loc_ver, EFS_TXN_DEL, NULL, 0, hint);
+        rc = host_prep_value(h, d->psh, t, parts, d->k_loc, d->kl,
+                              d->loc_value, d->loc_len, EFS_TXN_DEL, NULL, 0, hint);
     return rc;
 }
 
@@ -9179,8 +9244,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     struct efs_meta_dir_ent one;
     struct efs_txid t;
     struct efs_txn_parts parts;
-    struct host_pver_guard gv[EFS_TXN_MAX_PART];
-    struct host_dent_drop drop;
+    struct host_pver_guard gv[EFS_TXN_NAMESPACE_MAX_PART];
+    struct efs_meta_dentry_drop drop;
     struct efs_txn_ino_delta pd;
     uint8_t k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
     uint8_t k_pdseq[EFS_KV_KEY_MAX], k_cdseq[EFS_KV_KEY_MAX];
@@ -9328,7 +9393,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
             uint32_t lsh;
             if ((row.used_shards & (1ull << lane)) == 0)
                 continue;
-            if (ngv >= EFS_TXN_MAX_PART) {
+            if (ngv >= EFS_TXN_NAMESPACE_MAX_PART) {
                 rc = EFS_ERR_BUSY;
                 break;
             }
@@ -9358,7 +9423,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
             stamp_lane = 1;
     }
     if (rc == EFS_OK)
-        rc = host_dent_drop_fill(h->kv, &prow, parent, name, &drop);
+        rc = efs_meta_capture_dentry_drop(h->kv, &prow, parent, name, &dent, &drop);
     if (rc == EFS_OK) {
         uint8_t g0 = efs_raft_shard_group(psh);
         int same = 1;
@@ -9529,7 +9594,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
     struct efs_meta_stat st;
     struct efs_txid t;
     struct efs_txn_parts parts;
-    struct host_dent_drop drop;
+    struct efs_meta_dentry_drop drop;
     struct efs_txn_ino_delta pd, id;
     uint8_t k_ino[EFS_KV_KEY_MAX], k_par[EFS_KV_KEY_MAX];
     uint8_t k_dseq[EFS_KV_KEY_MAX];
@@ -9613,7 +9678,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             stamp_lane = 1;
     }
     if (rc == EFS_OK)
-        rc = host_dent_drop_fill(h->kv, &prow, parent, name, &drop);
+        rc = efs_meta_capture_dentry_drop(h->kv, &prow, parent, name, &dent, &drop);
     if (rc == EFS_OK)
         rc = efs_kv_key_inode(ish, row.ino, k_ino, &ki);
     if (rc == EFS_OK && touch_parent)
@@ -10706,7 +10771,7 @@ link_prepped:
  * prevention). A dest dir that is itself SPLITTING stays BUSY.
  * Replacing an existing dest file is POSIX replace (nlink-- / DEL).
  * Replacing an empty dest dir is dest rmdir (LOCAL or HASHED; HASHED
- * GUARDs used-lane dseqs, cap EFS_TXN_MAX_PART → BUSY). HASHED dentries
+ * GUARDs used-lane dseqs, cap EFS_TXN_NAMESPACE_MAX_PART → BUSY). HASHED dentries
  * and scattered dir inodes bounce if this replica does not host every
  * participant. */
 void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
@@ -10720,7 +10785,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     struct efs_meta_stat st;
     struct efs_txid t;
     struct efs_txn_parts parts;
-    struct host_pver_guard gv[EFS_TXN_MAX_PART];
+    struct host_pver_guard gv[EFS_TXN_NAMESPACE_MAX_PART];
     struct efs_txn_ino_delta pd, dd, id, nd;
     uint8_t k_dst[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t k_par[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX], k_pver[EFS_KV_KEY_MAX];
@@ -10740,8 +10805,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
     int xist = 0, xdir = 0, xput = 0, same = 0;
     int touch_src = 0, stamp_src = 0, touch_dst = 0, stamp_dst = 0, two_dseq = 0;
     uint8_t s_lane = 0, d_lane = 0;
-    struct host_pver_guard xdseq[EFS_TXN_MAX_PART];
-    struct host_dent_drop drop;
+    struct host_pver_guard xdseq[EFS_TXN_NAMESPACE_MAX_PART];
+    struct efs_meta_dentry_drop drop;
     uint8_t k_dloc[EFS_KV_KEY_MAX];
     uint32_t kdl = 0;
     uint64_t dloc_ver = 0;
@@ -11019,7 +11084,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
 
                 if ((nrow.used_shards & (1ull << lane)) == 0)
                     continue;
-                if (nxd >= EFS_TXN_MAX_PART) {
+                if (nxd >= EFS_TXN_NAMESPACE_MAX_PART) {
                     rc = EFS_ERR_BUSY;
                     break;
                 }
@@ -11169,7 +11234,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
         rc = efs_meta_pack_dentry(&ndent, v_dent, sizeof(v_dent));
     }
     if (rc == EFS_OK)
-        rc = host_dent_drop_fill(h->kv, &prow, old_parent, old_name, &drop);
+        rc = efs_meta_capture_dentry_drop(h->kv, &prow, old_parent, old_name, &dent, &drop);
     if (rc == EFS_OK)
         rc = efs_kv_key_dentry(dsh, new_parent, new_name, k_dst, &kd);
     if (rc == EFS_OK)
@@ -11478,6 +11543,12 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     lg = efs_raft_shard_group(lsh);
     if (lg_out)
         *lg_out = lg;
+    /* A fold names the authority epoch of the bytes it actually fetched.
+     * Never re-stamp an old materialization with a later truncation epoch. */
+    uint64_t publish_epoch;
+    int epoch_rc = efs_chunk_publish_epoch(rec, row.content_epoch, &publish_epoch);
+    if (epoch_rc != EFS_OK)
+        return epoch_rc;
     if (lg != ig && (row.active_lanes & (1ULL << lane)) == 0) {
         /* First use of a cross-group lane: register it in the inode row's
          * active_lanes bitmap on the INODE group first (that bitmap is
@@ -11574,7 +11645,7 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
         p.candidate_gen = host_pub_candidate_gen(rec, rec->chunk_index);
     if (p.candidate_gen == 0)
         p.candidate_gen = 1;
-    p.content_epoch = row.content_epoch;
+    p.content_epoch = publish_epoch;
     p.coding_profile_id = EFS_META_PROFILE_K2F1;
     memcpy(p.ch.nodes, rec->nodes, sizeof(p.ch.nodes));
     memcpy(p.ch.checksums, rec->checksums, sizeof(p.ch.checksums));
@@ -12098,13 +12169,14 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     set_inode_rc(out, rc, hint);
 }
 
-void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
+void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max,
                                 struct efs_msg_inode_getchunks_reply *out)
 {
     struct efs_raft_host *h = g_host;
     struct efs_meta_row row;
     struct efs_meta_chunk ch;
     uint32_t ci, group_end, lsh, seen = 0;
+    uint32_t cs = EFS_DEFAULT_CHUNK_SIZE;
     uint8_t ig, lg;
     int hint = -1;
     int rc;
@@ -12116,6 +12188,13 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
+    pthread_mutex_lock(&h->s->lock);
+    struct efs_export *ex = server_export_acquire_locked(h->s, export_id);
+    if (ex)
+        cs = server_data_chunk_size(ex);
+    pthread_mutex_unlock(&h->s->lock);
+    if (ex)
+        server_export_put(h->s, ex);
     if (max == 0 || max > EFS_GETCHUNKS_MAX)
         max = EFS_GETCHUNKS_MAX;
     group_end = (start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
@@ -12123,13 +12202,13 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
     if (!host_hosts(h, ig)) {
         uint8_t need[2];
         host_need_both(need);
-        host_fwd_getchunks(h, ino, start, max, out, need, 2);
+        host_fwd_getchunks(h, export_id, ino, start, max, out, need, 2);
         return;
     }
     rc = host_read_index(h, ig, &hint);
     t_ri = now_ns() - t0;
     if (rc == EFS_OK)
-        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+        rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_coord, h, &row);
     if (rc == EFS_OK && !host_holds_chunks(row.mode))
         rc = EFS_ERR_INVAL;
     seen = (rc == EFS_OK) ? (1u << ig) : 0;
@@ -12152,7 +12231,7 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
             need[0] = ig;
             if (lg != ig)
                 need[nn++] = lg;
-            host_fwd_getchunks(h, ino, start, max, out, need, nn);
+            host_fwd_getchunks(h, export_id, ino, start, max, out, need, nn);
             return;
         }
         if ((seen & (1u << lg)) == 0) {
@@ -12169,21 +12248,25 @@ void server_raft_host_getchunks(efs_ino_t ino, uint32_t start, uint32_t max,
         if (rc != EFS_OK)
             break;
         {
+            struct efs_meta_chunk_view view;
             struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];
             uint32_t nd = 0, di;
             uint64_t newest = 0;
 
             /* One get: image and span trailer together. */
-            rc = efs_meta_apply_get_chunk_row(h->kv, ino, row.generation,
-                                              ci, &ch, ds,
-                                              EFS_CHUNK_DELTA_MAX, &nd,
-                                              &newest);
+            rc = efs_meta_get_chunk_view_tx(h->kv, ino, row.generation,
+                                            ci, cs, host_txn_coord, h, &view);
             if (rc == EFS_ERR_NOT_FOUND) {
                 rc = EFS_OK;
                 continue;
             }
             if (rc != EFS_OK)
                 break;
+            ch = view.base;
+            nd = view.ndelta;
+            newest = view.delta_seq;
+            memcpy(ds, view.deltas, nd * sizeof(*ds));
+            out->recs[out->count].read_view = view.bytes;
             out->recs[out->count].ino = ino;
             out->recs[out->count].chunk_index = ci;
             memcpy(out->recs[out->count].nodes, ch.nodes,
@@ -12489,4 +12572,3 @@ void server_raft_host_lookup_path(efs_ino_t start, const char *path,
         strncpy(out->inode.name, last_name, EFS_MAX_NAME - 1);
     }
 }
-

@@ -4,6 +4,7 @@
 #include "efs/common.h"
 #include "efs/kv.h"
 #include "efs/opid.h"
+#include "efs/fence_view.h"
 
 /* Cross-shard transaction SM (architecture.md §7.2 / §10 step 7).
  * Pure: one KV per participant, no sockets. PREPARE is no-wait
@@ -13,7 +14,14 @@
  * (I16). */
 
 #define EFS_TXN_ID_LEN   16
-#define EFS_TXN_MAX_PART 8
+/* A file's 64 lane shards include its inode shard (lane 0). Namespace
+ * coordinators retain their existing smaller work bound. */
+#define EFS_TXN_MAX_PART 64
+#define EFS_TXN_NAMESPACE_MAX_PART 8
+#define EFS_TXN_PARTS_BYTES (1u + 4u * EFS_TXN_MAX_PART)
+#define EFS_TXN_VALUE_MAX (8u + 16u * EFS_FENCE_HISTORY_MAX)
+#define EFS_TXN_RECORD_MAX (16u + EFS_TXN_PARTS_BYTES + 14u + EFS_TXN_VALUE_MAX)
+#define EFS_TXN_ABSENT UINT32_MAX
 
 #define EFS_TXN_EXCL       1
 #define EFS_TXN_REDUCE     2 /* lane MAX triple (+ mtime_gen), seq++ */
@@ -24,6 +32,12 @@
 #define EFS_TXN_REDUCE_OPID 6 /* op-id window: ack + record one verdict
                                * (I16 for the txn directory ops; the key
                                * is efs_kv_key_opid on a participant) */
+
+/* Exact-byte CAS PREPARE for rows also mutated by unversioned applies.
+ * The durable intent is the existing EXCL format. */
+#define EFS_TXN_EXCL_VALUE 7
+#define EFS_TXN_CONTENT_FENCE 8 /* atomic inode/lane stamp + history pair */
+#define EFS_TXN_CONTENT_RESIZE 9 /* coordinated shrink or epoch-preserving extension */
 
 #define EFS_TXN_UNDECIDED 0
 #define EFS_TXN_COMMIT    1
@@ -90,6 +104,48 @@ int efs_txn_prepare_excl(struct efs_kv *kv, const struct efs_txid *t,
                          const struct efs_txn_parts *p, const uint8_t *key,
                          uint32_t klen, uint64_t expected_ver, int op,
                          const uint8_t *new_val, uint32_t nlen);
+/* expected_len == EFS_TXN_ABSENT means the key must be absent; zero
+ * means an existing empty value. Caller serializes on the participant log.
+ * A matching outstanding intent is idempotent; a changed replacement or
+ * participant list for that intent is STALE. The coordinator
+ * must not reuse a completed txid for a different operation. Writers must
+ * honor EXCL intents before mutating any protected key. */
+int efs_txn_prepare_excl_value(struct efs_kv *kv, const struct efs_txid *t,
+                               const struct efs_txn_parts *p, const uint8_t *key,
+                               uint32_t klen, const uint8_t *expected_value,
+                               uint32_t expected_len, int op,
+                               const uint8_t *new_value, uint32_t new_len);
+/* Wire: op:u8, expected_len:u32, new_len:u32, expected bytes, new bytes;
+ * lengths are big-endian; ABSENT contributes no expected bytes. */
+int efs_txn_encode_excl_value(uint8_t *out, uint32_t cap, uint32_t *len,
+                              const uint8_t *expected_value,
+                              uint32_t expected_len, int op,
+                              const uint8_t *new_value, uint32_t new_len);
+
+struct efs_txn_value_cas {
+    const uint8_t *key;
+    uint32_t klen;
+    const uint8_t *expected_value;
+    uint32_t expected_len;
+    int op;
+    const uint8_t *new_value;
+    uint32_t new_len;
+};
+/* One authority's stamp/history pair: at most two distinct keys on the
+ * same participant shard. Validation/conflict failure installs neither;
+ * storage failure leaves the KV unchanged. Existing matching intents are
+ * retained. Caller owns participant-log serialization. */
+int efs_txn_prepare_excl_pair(struct efs_kv *kv, const struct efs_txid *t,
+                              const struct efs_txn_parts *p,
+                              const struct efs_txn_value_cas *requests,
+                              uint32_t count);
+/* Same atomic validation, up to three distinct keys on one shard. The
+ * resize inode authority can include retirement of a closed append cursor. */
+int efs_txn_prepare_excl_batch(struct efs_kv *kv, const struct efs_txid *t,
+                               const struct efs_txn_parts *p,
+                               const struct efs_txn_value_cas *requests,
+                               uint32_t count);
+
 int efs_txn_prepare_guard(struct efs_kv *kv, const struct efs_txid *t,
                           const struct efs_txn_parts *p, const uint8_t *key,
                           uint32_t klen, uint64_t observed_ver);
@@ -116,6 +172,10 @@ int efs_txn_drop(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard);
  * DELETEs a row (rmdir / last unlink) or otherwise depends on a row no
  * transaction is in the middle of changing — the same rule the txn layer
  * applies to itself ("PREPARE is no-wait, conflict → BUSY"). */
+/* Only an EXCL intent blocks ordinary applied writes; namespace REDUCEs
+ * intentionally commute with them. Does not consult a remote coordinator. */
+int efs_txn_key_exclusive(struct efs_kv *kv, const uint8_t *key, uint32_t klen);
+
 int efs_txn_key_busy(struct efs_kv *kv, const uint8_t *key, uint32_t klen);
 
 /* Current value of a dseq witness (0 when absent). GUARDs on a DSEQ key
@@ -182,6 +242,12 @@ struct efs_txn_pending {
     struct efs_txid txid[EFS_TXN_MAX_PENDING];
     struct efs_txn_parts parts[EFS_TXN_MAX_PENDING];
 };
+
+/* EXCL-aware read with the same undecided-set validation as reductions.
+ * Accumulate across every key in a collect, then recheck after its final read. */
+int efs_txn_read_ex(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                    efs_txn_coord_fn coord, void *ctx, uint8_t *val,
+                    uint32_t *vlen, struct efs_txn_pending *pend);
 
 /* As efs_txn_reduce_read, and records the undecided set. `pend` accumulates
  * across calls so one collect over many lanes builds a single set; zero it
