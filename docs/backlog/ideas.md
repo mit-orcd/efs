@@ -143,13 +143,15 @@ syscalls, peer visibility and same-file races. Not covered:
   stale resurrection across 128 KiB boundaries.
 - **Missing POSIX cases:** a second uid (most `perm_*` tests no-op as root),
   cross-client `MAP_SHARED` (or document it as unsupported — it is currently
-  ENODEV), a ≥1 GiB single write, a many-client hardlink storm, parent
-  directory mtime/ctime on create/unlink/rename/link, and directory
+  ENODEV), a ≥1 GiB single write, a many-client hardlink storm, and directory
   `utimens` once the directory has spread across both Raft groups
   (local-directory `utimens`, spread-directory `utimens` at
   `EFS_DIR_SPREAD_MIN`, and a second client observing those times). The
   spread case is `EINVAL` today; the feature and these tests are one item
-  under "Parked: cross-group directory `utimens`".
+  under "Parked: cross-group directory `utimens`". (Parent directory
+  mtime/ctime on create/unlink/rename/link left this list Oct 6 — it is
+  queue row 0m with tests in tree; a spread-directory mtime case is still
+  owed, see row 0m.)
 - **Invariant harnesses:** an offline `fsck --verify-only` to run after
   randomized load and after every Layer 4 case; a 300k-file single-directory
   spread stress; a fence test for leftover clients; and a stuck-catchup joiner

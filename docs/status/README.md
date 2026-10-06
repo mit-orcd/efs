@@ -244,6 +244,56 @@ hook. No sticky-error, stall-detection or safe-stop runtime guarantee is claimed
 by this checkpoint. 0a's historical inode investigation and live recovery /
 contention gates remain pending; D28 salvage remains undecided.
 
+**D27 runtime checkpoint (Oct 6, local and uncommitted; supersedes the
+foundation-only checkpoint above).** The client now tracks stable application
+mutation identity separately from PUT snapshot sequence. A successful rebase
+stages an observation; only an attempted REPORT followed by a successful
+authoritative repull proving that exact snapshot uncommitted completes the
+cycle. Failed pulls propagate errors without classifying stale local maps as
+committed. Verified residuals rebase even when the server state stayed still;
+this changes the earlier resend optimization and needs live contention cost
+measurement. Eight unchanged completed cycles mark the record stalled; server
+movement resets the count, and contention diagnostics are emitted every 256
+completed cycles.
+
+Stalled records retain bytes and inode pins, reject new writes on that inode,
+and survive ordinary cache-drop paths. Every FUSE file open now owns an error
+cursor shared by its duplicated descriptors; separate opens retain separate
+cursors. Sync/flush observations cannot clear an unresolved inode error.
+Matching REPORT acknowledgment resolves only that record. Full-overwrite
+bodies also remain within the hard allocator bound until acknowledgment,
+including successful PUTs, so full-image STALE recovery has local bytes.
+They are released after the matching commit; pressure may now force earlier
+REPORT drains. Unrelated inode admission still uses the common hard bound.
+
+A 30-second sync deadline begins before queued-write drain and append
+serialization, with inheritance into replay and pooled PUT RPCs. **The strict
+whole-call timing gate remains open:** accepted PUT jobs still own caller
+completion state, and queue/lock cancellation must not free that state early.
+Do not claim a hard 30-second fsync completion guarantee yet.
+
+Controlled stop now uses a private owner-only Unix socket and gates complete
+mutation-handler lifetimes before attempting a 60-second drain while mounted.
+A timeout refuses detach and leaves accepted recovery work alive; retry waits
+for that worker rather than reusing its state. Failed ordinary unmount resumes
+mutations. `scripts/client.sh stop --force-discard /mnt/efs` explicitly logs
+pending data ranges and permits lazy detach. Normal stop fails closed for old
+clients without the channel. Explicit force on an old/dead client reports that
+per-record diagnostics are unavailable. External unmount, SIGKILL and node
+loss remain outside this contract; D28 salvage is unchanged and undecided.
+
+WITHHOLD exists only in `EFS_FAULTS=1` builds and omits a selected record before
+RPC serialization. The retained batch reconciles transmitted records through
+authoritative repull. `OFF` in `/tmp/efs/fault` disables the startup target and
+allows recovery without restart. Local tests cover completed-cycle authority,
+partial acknowledgment, byte retention, descriptor errors, 1000 changing
+server states, omission/disable, stop refusal, live-worker timeout ownership,
+mutation quiescence and explicit detach. Normal and sanitizer gates pass;
+Linux client builds pass. Live gates, the historical 0a inode investigation,
+strict sync timing, coverage of legacy non-cache PUT fallbacks, and D25 dirty-range epochs / masked unpublished merges /
+sweep scheduling / durable progress / history retirement remain open.
+No deployment, workload rerun, mount change or commit was performed here.
+
 **Where the project is (Oct 2 2026).** [architecture.md §10](../how-it-works/architecture.md)
 steps 0–12 are landed and gated: simulator, KV, Raft, cross-shard txns,
 sessions, directory spread, delete-2PC, FUSE A–D. The Raft+KV engine is
@@ -309,6 +359,15 @@ parallel filesystem that returns wrong bytes has no throughput number worth
 reporting. Do not batch two items into one change. Every item ends with
 `Forbidden`, which is binding.
 
+Oct 6 triage: the user explicitly prioritizes **W59** because false ENOSPC
+blocks the suite. After its rebuilt-client sustained-write and posix gates,
+**W56** (root directory rename ghost) and **W57** (both rename parents' attrs)
+have specific client paths and existing failing gates, making them the next
+bounded implementation candidates. **W58** needs an opid/retry verdict trace;
+**W55** needs a missing-fragment publication reproducer before choosing a fix.
+The **W36 20/20 rename-vs-unlink gate** remains a release prerequisite for the
+existing local correctness fix; none of these items is closed by this triage.
+
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | IN TREE Oct 5, uncommitted — apply alias filters + regression; full metadata suite and ASan/UBSan pass locally; roll + cold cluster gate pending | [full text](../backlog/work-items.md#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
@@ -320,7 +379,7 @@ reporting. Do not batch two items into one change. Every item ends with
 | 0m | parent dir mtime/ctime bump on entry create/unlink/rename/link (POSIX, §7.4) — ruled a bug if missing (user, Oct 6) | correctness | gate Oct 6 (nuc bare-metal cluster): posix `dir_times_*` 6/7 — create/unlink/mkdir/rmdir/link + same-dir rename all bump same-client; the cross-dir rename dst-parent failure is **W57**; posix2 `peer_dir_mtime_bump_visible` owed | [full text](../backlog/work-items.md#0m--parent-directory-mtimectime-must-bump-on-entry-createunlinkrenamelink-queue-row-0m) |
 | 0n | **W57** · cross-directory rename never refreshes the dst parent's attrs on the renaming client | correctness | open — found Oct 6 on the nuc bare-metal cluster; posix gate in tree (`dir_times_rename` cross-dir phases, fail on the Oct 6 build); server verified correct via a second mount (ns-resolution bumps); a sibling layout also stales the SRC parent | [full text](../backlog/work-items.md#w57--cross-directory-rename-never-refreshes-the-dst-parents-attrs-on-the-renaming-client-queue-row-0n) |
 | 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | analyzed Oct 6 (xorinox, build `3d3f17c2-dirty`): the file exists (created 05:17:31.319Z, size 0), the retry was answered BUSY (rc=-13, 05:17:31.733Z), no server logged EEXIST; suspect the retry path — an opid replay must return the recorded verdict (I16), not EEXIST; BUSY on unique-name creates is new with the dirty D25 intent probes | [full text](../backlog/work-items.md#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
-| 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | analyzed Oct 6 (xorinox) + **confirmed same day on a second cluster** (nuc bare-metal: posix suite 180/217 ENOSPC on an essentially empty export, fuse log `live=2.75 MiB reserved=0` — only the metadata leg can fail; pinned across suites 18 min apart): two client defects in `fuse_write_admit` — client-local budget failure surfaces as ENOSPC, and the fixed 8 MiB dcache metadata budget pins at its cap with no drain → permanent write failure until remount; fix shape in full text | [full text](../backlog/work-items.md#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
+| 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | IN TREE Oct 6, uncommitted — metadata diagnostics + protected published-entry reclaim; local admission returns EAGAIN/ENOMEM; 8 MiB cap retained; metadata saturation + admitted-writer/drain reservation regressions and ASan/UBSan PASS; follow-up 251 MiB ENOMEM reproduced locally and reservation fix added; remount + sustained-write and posix jobs=1 gates owed | [full text](../backlog/work-items.md#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | IN TREE Oct 5, uncommitted — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced IOR-hard + cold hardscan gate pending | [full text](../backlog/work-items.md#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 0c | **W36** · rename-vs-unlink of one source both succeed, dangling dentry | correctness | in tree — **RECURRED Oct 6 00:41Z on the xorinox cluster** (build `3d3f17c2-dirty`, which contains the fix): dangling `b` in `posix-2c/peer_rename_vs_unlink_src` — `raft-readdir` lists it, `raft-lookup` returns ino=0; second pre-PREPARE race reproduced and exact-source fix now local/uncommitted; D25 causation unproven; Linux build and 20/20 gate still owed | [full text](../backlog/work-items.md#w36--rename-vs-unlink-of-one-source-both-succeed-dangling-dentry-queue-row-0c) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | in tree — verify on 19810; one-QUOTA-member PUT question open | [full text](../backlog/work-items.md#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
@@ -362,3 +421,21 @@ P2.2 waits for P2.1; P2.5 waits for P2.4. P3 needs no cluster. P4 needs
 P3. Nothing here needs a wipe except P4.1.
 
 Hardware ceilings and honest baselines now live in [performance.md](../how-it-works/performance.md#baselines-and-ceilings-current), including the normative sentence "if a benchmark stops at a mutex … that is by definition an EFS bug" and today's "write path = 9 % of client ceiling" state.
+
+
+## Review and commit checkpoint — Oct 6 2026
+
+The reviewed implementation is committed in `bb18e40a` (metadata fence views,
+transaction identities and alias-safe GC), `033a842a` (FUSE memory admission,
+publication recovery, worker cleanup and controlled stop), and `3d9bb6b2`
+(POSIX acceptance tests). Earlier dated “uncommitted” checkpoints describe
+the state at that time; these commits supersede that working-tree status.
+GETCHUNKS fan-out now inherits the caller recovery deadline. Local memory
+and runtime gates pass, including ASan/UBSan; an isolated Linux build and full
+`make test` pass.
+
+D25 and D27 remain open: public logical truncate activation, writer/sweep
+integration, strict whole-call deadlines, and live fault/RSS acceptance still
+need their recorded gates. W36 needs the live rename-versus-unlink 20/20 gate;
+no existing dangling dentry was removed during this review. No live deployment
+or workload rerun was performed.

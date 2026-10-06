@@ -790,7 +790,9 @@ Raft pump for the same single-digit milliseconds as a truncate of a page.
 The same fence distributes `mtime_gen`.
 
 **Validity rule — the one rule every reader, every publish merge and the
-sweep apply.** A chunk row `r` (epoch `e_r`, covering file offsets
+sweep apply.** The base image and each immutable delta span have their own
+`content_epoch`; the row does not have a single age. A part `r` (epoch
+`e_r`, covering file offsets
 `[c, c + len)`) is valid up to `valid_end(r) = min{ size_j : (epoch_j,
 size_j) in the fence history with epoch_j > e_r }`, or unbounded when no
 later fence exists. Bytes of `r` at or past `valid_end(r)` are **fenced
@@ -806,17 +808,57 @@ shrink / extend / partial-rewrite sequences: shrink to 100 B at `e1`,
 extend to 1 MiB, write `[500, 600)` at `e1`, shrink to 700 B at `e2` —
 the `e0` base is valid to 100 (fence `e1`), the `e1` span to 600 (within
 fence `e2`), bytes `[100, 500)` and `[600, 700)` read zero, and no fence
-alone could have said so.
+alone could have said so. The base is applied first, followed by live spans
+in increasing publication sequence; zero-length tombstones contribute no
+bytes. Mask each part independently before overlaying it. A masked span's
+discarded suffix must not zero a surviving earlier part underneath it.
+
+**Read views and fragment lifetime.** Resolve a chunk's exact base and span
+identities, publication sequence, fence revision and per-part surviving
+ranges together under quorum-backed read authority. Reading the row and
+history separately requires validation that neither changed; a mixed
+snapshot is not a read view. The view owns its masks for the entire read
+or merge. Cached mappings must be validated against the lane's current
+fence revision before reuse; a cache hit is not read authority. Retirement
+of history cannot alter a captured view's masks, so readers do not pin
+distributed fence-history records.
+
+Fragment lifetime is a separate requirement. Captured identities refer to
+immutable objects and their checksums, never a subsequently refreshed row.
+If reclamation removes a required object during a read, discard the partial
+image, acquire a fresh authoritative view, and retry within the existing
+request budget; exhausted retries return an error, never substitute zeros
+for missing live data. A successfully fetched old view can finish using its
+captured masks. History retirement alone cannot authorize deletion of an
+object still named by the current row. A merge's publication must compare
+the exact source base identity, span count and sequence, and fence revision,
+so a fence or publication during GET/PUT forces a fresh merge.
 
 **The sweep materialises fences and bounds the history.** The reaper's
 existing per-lane sweep (its own entries, 64 chunks per KV batch, off the
 client's path) walks each lane's rows older than the lane's newest fence:
 a dead row is deleted with a **versioned** DEL on the version it read, so
 a post-fence write that landed in between is never deleted; a boundary row
-is rewritten as the masked row at the fence epoch (versioned CAS). When no
+is rewritten as the masked row at the fence epoch (versioned CAS). The
+materializer starts with a zero-filled chunk, decodes each surviving part,
+and overlays only its surviving range in publication order. It uses the
+same masking implementation as reads and publish merges. Fragment GET,
+encoding and immutable PUT happen outside Raft apply; the resulting entry
+compares both the complete source row version (base identity plus span
+count/sequence) and the exact fence revision. A conflict leaves the row
+unchanged and requires a new materialization; it never re-stamps the old
+unmasked objects. Successful CAS installs a full base image at the captured
+fence epoch and clears the source spans. Superseded objects are queued for
+GC only if their identities are absent from the replacement row (including
+base/span aliases, W54).
+
+The live-file truncation sweep is distinguished from unlink's whole-lane
+sweep; it cannot delete every row of a live inode. Each entry examines at
+most 64 chunk rows and commits at most one bounded batch, then yields.
+When no
 row in a lane precedes fence `j`, the lane drops `j` from its stamp; when
 every active lane has, the inode row drops `j` from the history. The
-history is bounded by `FENCE_HISTORY_MAX` entries (an internal constant);
+history is bounded by `FENCE_HISTORY_MAX = 32` entries (an internal constant);
 a TRUNCATE that finds it full answers BUSY and the client retries on its
 existing budget — the sweep is the only progress, so a full history is a
 reaper backlog, never a reason to delete in the entry. The history, the
