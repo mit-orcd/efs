@@ -139,6 +139,7 @@ test-create-errors:
 
 test-fold-observation:
 	python3 tests/test_fold_observation.py
+	python3 tests/test_writer_fence_merge.py
 
 test-lookup-memo:
 	python3 tests/test_lookup_memo.py

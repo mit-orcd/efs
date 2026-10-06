@@ -4830,32 +4830,27 @@ static void dcache_img_to_rdcache(efs_ino_t ino, uint32_t ci, uint8_t *img,
         efs_buf_free(img, len);
 }
 
-static int dcache_need_published_merge(int have_base, uint64_t bg,
-                                       uint64_t object_gen,
-                                       efs_ino_t ino, uint32_t ci)
+/* Every partial image is rebuilt under fresh lane read authority. Object
+ * generation alone cannot validate bytes: a fence can mask the same object
+ * without changing its identity. Failures must preserve the local snapshot. */
+static int dcache_fetch_merge_base(efs_ino_t ino, uint32_t ci, uint8_t *base,
+                                    uint32_t len, struct efs_chunk_entry *obs,
+                                    int *have_obs)
 {
-    struct efs_chunk_entry ce;
-
-    if (bg == EFS_CHUNK_BASE_UNCOND)
-        return 0;
-    if (!have_base) {
-        if (bg != 0)
-            return 1;
-        return export_chunk_exists(ino, ci);
+    uint8_t absent = 0;
+    int rc = efs_client_pull_chunks_range_absent(ino, ci, ci + 1, &absent);
+    if (rc != EFS_OK)
+        return rc;
+    if (absent & 1) {
+        /* An absent server row can leave our own unreported PUT in the
+         * staging table. It is not a committed merge base. */
+        memset(base, 0, len);
+        memset(obs, 0, sizeof(*obs));
+        *have_obs = 0;
+        return EFS_OK;
     }
-    /* have_base is this client's image as of its last fetch. A peer's
-     * commit is invisible until the map is pulled; publishing the buffer
-     * then drops their bytes (peer_shared_pwrite, chunk-straddle). */
-    efs_client_pull_chunks_range(ino, ci, ci + 1);
-    if (export_chunk_copy(ino, ci, &ce) != 0)
-        return 0;
-    if (ce.ndelta > 0)
-        return 1;
-    if (object_gen && ce.generation == object_gen)
-        return 0;
-    if (ce.generation && ce.generation != bg)
-        return 1;
-    return 0;
+    return efs_client_fetch_published_chunk_obs(ino, ci, base, len, obs,
+                                                have_obs);
 }
 
 /* One committed span covers this flush when the dirty bytes are a single
@@ -4954,7 +4949,7 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
     uint32_t len, roff[DCACHE_NR], rlen[DCACHE_NR];
     uint8_t nrange = 0;
     int have_base;
-    uint64_t bg, object_gen;
+    uint64_t bg;
 
     *copy_out = NULL;
     if (doff)
@@ -4980,7 +4975,6 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
     have_base = e->have_base;
     nrange = e->nrange;
     bg = e->base_gen;
-    object_gen = e->object_gen;
     if (nrange) {
         memcpy(roff, e->roff, (size_t)nrange * sizeof(uint32_t));
         memcpy(rlen, e->rlen, (size_t)nrange * sizeof(uint32_t));
@@ -5005,7 +4999,7 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
     pthread_mutex_unlock(mu);
     pthread_mutex_unlock(io);
     int merged = 0;
-    if (dcache_need_published_merge(have_base, bg, object_gen, ino, ci)) {
+    if (bg != EFS_CHUNK_BASE_UNCOND) {
         merged = 1;
         uint8_t *base = efs_buf_alloc(len);
         uint8_t i;
@@ -5025,8 +5019,9 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
         struct efs_chunk_entry obs;
         int have_obs = 0;
 
-        if (efs_client_fetch_published_chunk_obs(ino, ci, base, len, &obs,
-                                                 &have_obs) != EFS_OK) {
+        int fetch_rc = dcache_fetch_merge_base(ino, ci, base, len, &obs,
+                                                &have_obs);
+        if (fetch_rc != EFS_OK) {
             /* Do not PUT a zero base over a chunk we failed to read. */
             efs_buf_free(base, len);
             efs_buf_free(copy, len);
@@ -5038,7 +5033,7 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
             }
             pthread_mutex_unlock(mu);
             put_win_close(ino);
-            return EFS_ERR_IO;
+            return fetch_rc;
         }
         for (i = 0; i < nrange; i++) {
             if (roff[i] + rlen[i] <= len)
@@ -5047,8 +5042,7 @@ static int dcache_steal_dirty_budgeted(efs_ino_t ino, uint32_t ci, uint8_t **cop
         memcpy(copy, base, len);
         efs_buf_free(base, len);
         /* The base this image extends is the row the fetch decoded. */
-        if (have_base && have_obs && obs.generation)
-            bg = obs.generation;
+        bg = have_obs ? obs.generation : 0;
         /* No local row = the image was built on zeros. Publish that as
          * an EMPTY observation (n=0, seq=0), never as "no observation":
          * with NULL the PUT read the table again, a window pulled in
@@ -5302,7 +5296,6 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
         uint32_t len = e->len;
         int have_base = e->have_base;
         uint64_t slot_bg = e->base_gen;
-        uint64_t object_gen = e->object_gen;
         uint8_t nrange = e->nrange;
         uint32_t roff[DCACHE_NR], rlen[DCACHE_NR];
         uint32_t doff = 0, dlen = 0;
@@ -5331,8 +5324,7 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
         int merge_have_obs = 0;
 
         memset(&merge_obs, 0, sizeof(merge_obs));
-        if (dcache_need_published_merge(have_base, slot_bg, object_gen,
-                                        ino, ci)) {
+        if (slot_bg != EFS_CHUNK_BASE_UNCOND) {
             uint8_t *base = efs_buf_alloc(len);
             if (!base) {
                 efs_buf_free(copy, len);
@@ -5348,9 +5340,8 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
                 put_win_close(ino);
                 return EFS_ERR_NOMEM;
             }
-            int rrc = efs_client_fetch_published_chunk_obs(ino, ci, base, len,
-                                                           &merge_obs,
-                                                           &merge_have_obs);
+            int rrc = dcache_fetch_merge_base(ino, ci, base, len,
+                                               &merge_obs, &merge_have_obs);
             if (rrc != EFS_OK) {
                 efs_buf_free(base, len);
                 efs_buf_free(copy, len);
@@ -5372,8 +5363,7 @@ static int dcache_flush_slot_inner_budgeted(uint32_t s, efs_ino_t only_ino, int 
             }
             memcpy(copy, base, len);
             efs_buf_free(base, len);
-            if (have_base && merge_have_obs && merge_obs.generation)
-                slot_bg = merge_obs.generation;
+            slot_bg = merge_have_obs ? merge_obs.generation : 0;
             /* Zero base (no local row) is an empty observation, not
              * none — see dcache_steal_dirty. */
             merge_have_obs = 1;
