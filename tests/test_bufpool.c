@@ -102,6 +102,47 @@ static void writer_admission_copy(void)
     assert(efs_writer_state_free(state)==EFS_OK && g_metadata==before);
 }
 
+static void writer_body_snapshot(void)
+{
+    uint64_t before=g_metadata;
+    struct efs_writer_state *state=NULL;
+    uint8_t body[EFS_MIN_CHUNK_SIZE], snapshot[EFS_MIN_CHUNK_SIZE], saved[EFS_MIN_CHUNK_SIZE];
+    uint8_t incoming[200];memset(body,0x55,sizeof(body));memset(incoming,'A',sizeof(incoming));
+    struct efs_msg_inode_writer_view_reply view={.ino=100,.generation=1};
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),0,incoming,200)==EFS_OK);
+    view.authority_epoch=1;view.history.count=1;
+    view.history.entries[0]=(struct efs_content_fence){1,100};
+    struct efs_msg_inode_getchunks_reply *base=calloc(1,sizeof(*base));assert(base);
+    base->ino=100;base->generation=1;base->authority_epoch=1;
+    struct efs_writer_plan plan, sentinel;
+    memset(&sentinel,0xa5,sizeof(sentinel));plan=sentinel;
+    memset(snapshot,0xa5,sizeof(snapshot));memcpy(saved,snapshot,sizeof(saved));
+    base->generation=2;
+    assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&plan,snapshot)==EFS_ERR_STALE);
+    assert(!memcmp(snapshot,saved,sizeof(saved)) && !memcmp(&plan,&sentinel,sizeof(plan)));
+    base->generation=1;
+    assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&plan,body)==EFS_ERR_INVAL);
+    assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&plan,snapshot)==EFS_OK);
+    assert(plan.base_absent && plan.original.ranges[0].len==200 && plan.surviving.ranges[0].len==100);
+    for(unsigned i=0;i<sizeof(snapshot);++i) assert(snapshot[i]==(i<100?'A':0));
+    memcpy(saved,snapshot,sizeof(saved));
+    assert(efs_writer_state_put(state,&plan,400,1)==EFS_OK);
+    memset(incoming,'B',sizeof(incoming));
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),200,incoming,50)==EFS_OK);
+    assert(!memcmp(snapshot,saved,sizeof(saved)));
+    assert(efs_writer_state_report(state,400,1,EFS_OK)==EFS_ERR_STALE);
+    assert(efs_writer_state_owned(state) && !state->has_publication);
+    assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&plan,snapshot)==EFS_OK);
+    for(unsigned i=0;i<sizeof(snapshot);++i)
+        assert(snapshot[i]==(i<100?'A':i>=200 && i<250?'B':0));
+    uint8_t peer[EFS_MIN_CHUNK_SIZE];memset(peer,'P',sizeof(peer));
+    assert(efs_dirty_ranges_overlay(&plan.surviving,peer,sizeof(peer),snapshot)==EFS_OK);
+    assert(peer[0]=='A' && peer[100]=='P' && peer[200]=='B' && peer[250]=='P');
+    assert(efs_writer_state_put(state,&plan,401,2)==EFS_OK);
+    assert(efs_writer_state_report(state,401,2,EFS_OK)==EFS_OK);
+    assert(efs_writer_state_free(state)==EFS_OK && g_metadata==before);free(base);
+}
+
 int main(void)
 {
     setenv("EFS_DCACHE_HARD_BYTES", "33554432", 1);
@@ -186,6 +227,7 @@ int main(void)
     assert(g_metadata == 0);
     writer_state_lifetime();
     writer_admission_copy();
+    writer_body_snapshot();
     puts("test_bufpool: OK (hard bound, reserve, failures, concurrency, metadata)");
     return 0;
 }

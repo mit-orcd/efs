@@ -22,6 +22,16 @@ int efs_writer_state_write(struct efs_writer_state **state,
                             const struct efs_msg_inode_writer_view_reply *view,
                             uint8_t *body, uint32_t body_len,
                             uint32_t off, const uint8_t *src, uint32_t len);
+/* Caller holds the same lock for body and ranges. Output storage is
+ * caller-budgeted and must not overlap the cache body or state. Snapshot
+ * contains only surviving owned bytes; overlay it onto a masked peer base,
+ * never publish it as a whole image. Errors leave both outputs unchanged. */
+int efs_writer_state_snapshot(const struct efs_writer_state *state,
+                              const struct efs_msg_inode_writer_view_reply *view,
+                              const struct efs_msg_inode_getchunks_reply *base,
+                              const uint8_t *body, uint32_t body_len,
+                              struct efs_writer_plan *out_plan,
+                              uint8_t *out_body);
 /* BUSY preserves the sidecar whenever accepted bytes/publication are owned. */
 int efs_writer_state_free(struct efs_writer_state *state);
 int efs_writer_state_put(struct efs_writer_state *state,

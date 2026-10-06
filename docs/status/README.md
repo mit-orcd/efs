@@ -747,3 +747,25 @@ serialize it or explicitly bound multiple in-flight plans. Incomplete history
 must retain accepted bytes, never re-age or discard them. Public logical truncate
 and history retirement remain disabled/pending; these five rounds do not
 activate epoch-based FUSE writes or complete D25.
+
+## D25 cache lifetime/admission checkpoint — Oct 6 2026
+
+Another five rounds fix two active late-loader races (`2fd76ef1`, `fb88cb6f`),
+protect optional writer state through cache lifetime (`fd44a8c0`), add a
+budgeted admission-before-copy API (`c0f7efee`), and capture immutable matching
+body/range snapshots. REPORT completion now checks typed publication tokens;
+legacy clean/committed flags cannot release a body while typed ownership remains.
+The race regressions fail against the previous implementations. Full Linux
+build/tests, local normal/ASan/UBSan tests and the documentation gate pass.
+Private NUC acceptance is 216 PASS/0 FAIL/1 mmap SKIP for single-client POSIX
+and 64/64 PASS for two-client POSIX. Both fresh clients stopped without discard.
+[Evidence and live acceptance](../../results/measure/20261006-cache-five-rounds/SUMMARY.md).
+
+**Still outstanding:** sidecar allocation/admission is not activated in FUSE.
+All write entry points and both flush paths must adopt the authoritative API,
+retain matching snapshots, serialize pending publications and drain bounded
+range exhaustion before accepting bytes. The legacy unlabelled range union
+still runs and can collapse sparse ownership on overflow; this checkpoint does
+not claim that peer-hole overwrite risk is fixed. Never re-age existing legacy
+writes to manufacture admission authority. Logical truncate/history retirement
+and D27 timing/fault/RSS gates remain open.

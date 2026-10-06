@@ -145,6 +145,12 @@ int main(void) {
     dcache_drop_locked(1,0,0);assert(e->data==p); /* even explicit cache drop */
     e->stalled=0;
     assert(!dcache_note_committed(1,0,12,12,19));assert(e->data==p);
+    e->writer=efs_writer_state_alloc(EFS_CHUNK_SIZE);assert(e->writer);
+    e->writer->ranges.bytes.count=1;
+    assert(dcache_note_committed(1,0,12,12,20));
+    assert(e->data==p && e->writer && dcache_keep_on_drop(e));
+    e->writer->ranges.bytes.count=0;
+    assert(efs_writer_state_free(e->writer)==EFS_OK);e->writer=NULL;
     assert(dcache_note_committed(1,0,12,12,20));
     assert(!e->data&&!g_live);
     /* Failed full-image PUT restores the stolen body without a new charge. */

@@ -5686,6 +5686,10 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen,
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find_meta(s, ino, ci);
     if (e) {
+        /* Typed ownership is acknowledged by its immutable publication,
+         * including an older successful REPORT racing a newer cache PUT. */
+        if (e->writer && e->writer->has_publication)
+            (void)efs_writer_state_report(e->writer, object_gen, object_seq, EFS_OK);
         /* A span publish does not move the base generation (pass 0).
          * A full image does: later CAS expects that object. */
         if (gen && e->base_gen != EFS_CHUNK_BASE_UNCOND)
@@ -5709,14 +5713,14 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen,
          * replay paint the old image over a peer's exclusive range
          * (peer_overlap_pwrite_partial / chunk_straddle). A write that
          * re-dirtied the slot during the report still needs its ranges. */
-        if (hit && !e->dirty) {
+        if (hit && !e->dirty && !efs_writer_state_owned(e->writer)) {
             e->nrange = 0;
             dcache_pin_release(e);
         }
         /* D23: the committed full image is the slot's whole content now
          * (base = this object, no ranges of ours outstanding); it moves
          * to the budgeted rdcache and the body is dropped. */
-        if (hit && !e->dirty) {
+        if (hit && !e->dirty && !efs_writer_state_owned(e->writer)) {
             if (e->object_delta_len || e->base_gen == EFS_CHUNK_BASE_UNCOND) {
                 /* A committed span or full overwrite's local image is not a read-cache base.
                  * It is reconstructible from the published span chain;

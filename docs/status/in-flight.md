@@ -16,14 +16,18 @@ authority in both flush paths; it does not activate logical truncation.
 
 Next, in order:
 
-1. The bounded dirty-range primitive is implemented and byte-model tested in
-   `include/efs/dirty_ranges.h` (`6221d22f`); it is not connected to FUSE. Add authoritative
-   writer snapshots (FileID/epoch/complete history/retirement floor), including
-   absent chunks and new lanes, before assigning epochs at write admission.
-   Replace dcache's unlabelled range union with the primitive, reserve its
-   metadata cost, and preserve matching byte/range snapshots across retries.
-   Test unpublished overlapping writes across repeated shrink/extend and
-   history retirement; do not use cached epochs as write authority.
+1. Writer authority, FileID-tagged GETCHUNKS, typed base/publication planning,
+   budgeted sidecar lifetime, admission-before-copy and immutable body snapshots
+   are implemented and tested. Optional state now participates in cache drop,
+   replacement/reclaim and REPORT acknowledgement. The active legacy cache also
+   preserves pending bytes across late-loader merges and holds the slot lock
+   through installation. [Current checkpoint](../../results/measure/20261006-cache-five-rounds/SUMMARY.md).
+   Next connect every FUSE write entry point and both flush paths to these APIs;
+   replace the unlabelled union, serialize pending publications and drain range
+   exhaustion before copying bytes. No epoch-aware FUSE admission is active.
+   Test unpublished overlapping writes across shrink/extend and history
+   retirement; never re-age retained legacy writes or derive authority from a
+   cache hit.
 2. Carry captured epochs for spans and unconditional full overwrites, with
    fence races returning STALE and rebuilding from a new authoritative view.
 3. Implement bounded live-file materialization scheduling, durable progress
@@ -35,4 +39,5 @@ Next, in order:
 
 On the next authorized rollout, W36 `peer_rename_vs_unlink_src` 20/20 goes
 first. W54 post-GC cold reads and W38 traced/cold verification remain owed.
-No live deployment, repair or workload replay was performed in this phase.
+Isolated NUC acceptance uses private clients; original mounts and retained
+write evidence are unchanged. Public logical truncate remains disabled.

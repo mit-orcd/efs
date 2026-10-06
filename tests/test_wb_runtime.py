@@ -16,6 +16,7 @@ source=r'''
 #include "efs/protocol.h"
 #include "efs/metadata.h"
 #include "efs/wb_recovery.h"
+#include "efs/writer_state.h"
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -49,7 +50,7 @@ static int dcache_body_to_rdcache(struct dcache_ent *e,uint8_t **p,uint32_t *n) 
 static void dcache_img_to_rdcache(efs_ino_t ino,uint32_t ci,uint8_t *p,uint32_t n) {
     (void)ino;(void)ci;(void)n;free(p);
 }
-'''+function(w,'dcache_cycle_sent')+'\n'+function(w,'dcache_cycle_verdict')+'\n'+function(w,'dcache_note_committed')+r'''
+'''+function((root/'src/client/writer_state.c').read_text(),'efs_writer_state_report')+'\n'+function(w,'dcache_cycle_sent')+'\n'+function(w,'dcache_cycle_verdict')+'\n'+function(w,'dcache_note_committed')+r'''
 struct fuse_file_info {uint64_t fh;};
 '''+handles+r'''
 static void prepare_cycle(uint32_t ci,uint64_t mutation,uint64_t seq) {

@@ -40,6 +40,30 @@ int efs_writer_state_write(struct efs_writer_state **slot,
     return EFS_OK;
 }
 
+int efs_writer_state_snapshot(const struct efs_writer_state *state,
+                              const struct efs_msg_inode_writer_view_reply *view,
+                              const struct efs_msg_inode_getchunks_reply *base,
+                              const uint8_t *body, uint32_t body_len,
+                              struct efs_writer_plan *out_plan,
+                              uint8_t *out_body)
+{
+    if (!state || !body || !out_body || !out_plan || body == out_body ||
+        !efs_chunk_size_valid(body_len) || state->ranges.bytes.chunk_size != body_len)
+        return EFS_ERR_INVAL;
+    struct efs_writer_plan plan;
+    int rc = efs_writer_ranges_plan_base(&state->ranges, view, base, &plan);
+    if (rc != EFS_OK)
+        return rc;
+    /* Successful planning validated every surviving range before output. */
+    memset(out_body, 0, body_len);
+    for (uint32_t i = 0; i < plan.surviving.count; ++i) {
+        const struct efs_fence_part *p = &plan.surviving.ranges[i];
+        memcpy(out_body + p->off, body + p->off, p->len);
+    }
+    *out_plan = plan;
+    return EFS_OK;
+}
+
 int efs_writer_state_free(struct efs_writer_state *state)
 {
     if (!state)
