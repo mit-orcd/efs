@@ -4853,81 +4853,40 @@ static int dcache_fetch_merge_base(efs_ino_t ino, uint32_t ci, uint8_t *base,
                                                 have_obs);
 }
 
-/* One committed span covers this flush when the dirty bytes are a single
- * proper sub-chunk range and the chain still has a free slot. A range
- * that starts inside an already-published span (appends merge with the
- * previous range before that span's report clears it) publishes only
- * the uncovered tail. Replacing the whole chain with this buffer there
- * dropped the earlier records. A range that is entirely covered, or a
- * full chain, stays a full-chunk image. */
+/* One disjoint owned range can append a span. Any overlap with a committed
+ * span needs a full CAS fold of the freshly fetched image: trimming a covered
+ * prefix drops application overwrites in that prefix. */
 static void span_of(efs_ino_t ino, uint32_t ci, uint64_t bg, uint8_t nrange,
                     const uint32_t *roff, const uint32_t *rlen, uint32_t len,
                     uint32_t *off, uint32_t *sp)
 {
     struct efs_chunk_entry ce;
-    uint32_t i, rs, re, cover;
-
     *off = 0;
     *sp = 0;
-    if (bg == EFS_CHUNK_BASE_UNCOND || nrange != 1 || !roff || !rlen)
+    if (bg == EFS_CHUNK_BASE_UNCOND || nrange != 1 || !roff || !rlen ||
+        rlen[0] == 0 || (uint64_t)roff[0] + rlen[0] > len || rlen[0] >= len)
         return;
-    if (rlen[0] == 0 || (uint64_t)roff[0] + rlen[0] > len || rlen[0] >= len)
-        return;
-    rs = roff[0];
-    re = roff[0] + rlen[0];
-    cover = rs;
     memset(&ce, 0, sizeof(ce));
     if (export_chunk_copy(ino, ci, &ce) == 0) {
-        struct efs_chunk_rec mine;
+        struct efs_chunk_rec mine = {0};
         uint64_t mine_gen = 0;
-        int grew = 1;
-
         if (ce.ndelta >= EFS_CHUNK_DELTA_MAX)
             return;
-        /* The table also lists this client's own span PUT until its
-         * REPORT commits (dcache_put_now adds it). That span does not
-         * cover anything: the REPORT carries one object per chunk, so a
-         * tail-only publish here would replace it in putid and its
-         * bytes would never reach the host. Publish over it instead —
-         * the host has not seen it, so there is no overlap to STALE. */
-        memset(&mine, 0, sizeof(mine));
+        /* Our unreported local span is not committed coverage. The next
+         * snapshot must still include every application byte it owns. */
         if (putid_fill(ino, ci, &mine, NULL) && mine.delta_len)
             mine_gen = mine.chunk_generation;
-        /* Contiguous coverage from rs: a span extends `cover` only if it
-         * starts at or before it. Any overlapping span used to, so a
-         * range with an uncovered head and a covered tail counted as
-         * covered and went out as a full image. */
-        while (grew && cover < re) {
-            grew = 0;
-            for (i = 0; i < ce.ndelta; i++) {
-                uint32_t a = ce.deltas[i].off, al = ce.deltas[i].len;
-                uint32_t b = a + al;
-
-                if (mine_gen && ce.deltas[i].generation == mine_gen)
-                    continue;
-                if (al && a <= cover && b > cover) {
-                    cover = b;
-                    grew = 1;
-                }
-            }
-        }
-        if (cover < re) {
-            /* Uncovered head with a covered piece further right: not one
-             * range. Fold instead. */
-            for (i = 0; i < ce.ndelta; i++) {
-                uint32_t a = ce.deltas[i].off, al = ce.deltas[i].len;
-
-                if (mine_gen && ce.deltas[i].generation == mine_gen)
-                    continue;
-                if (al && a < re && a + al > cover && a > cover)
-                    return;
-            }
+        for (uint32_t i = 0; i < ce.ndelta; ++i) {
+            const struct efs_chunk_delta *d = &ce.deltas[i];
+            if (mine_gen && d->generation == mine_gen)
+                continue;
+            if (d->len && d->off < roff[0] + rlen[0] &&
+                roff[0] < d->off + d->len)
+                return;
         }
     }
-    if (cover >= re)
-        return;
-    *off = cover;
-    *sp = re - cover;
+    *off = roff[0];
+    *sp = rlen[0];
 }
 
 /* W3: steal one dirty (ino,ci) so the PUT can run on the write pipeline
