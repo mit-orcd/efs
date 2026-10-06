@@ -104,7 +104,11 @@ int efs_writer_state_report(struct efs_writer_state *state,
                                               object_generation, snapshot_sequence, verdict);
     /* A matching committed old publication is finished even if a concurrent
      * rewrite prevents clearing ownership. Its newer bytes need a new PUT. */
-    if (verdict == EFS_OK && object_generation == state->publication.object_generation &&
+    if ((rc == EFS_OK || rc == EFS_ERR_STALE) && verdict == EFS_OK &&
+        state->ranges.ino == state->publication.plan.ino &&
+        state->ranges.generation == state->publication.plan.generation &&
+        state->ranges.chunk_index == state->publication.plan.chunk_index &&
+        object_generation == state->publication.object_generation &&
         snapshot_sequence == state->publication.snapshot_sequence) {
         state->has_publication = 0;
         memset(&state->publication, 0, sizeof(state->publication));

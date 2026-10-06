@@ -64,6 +64,17 @@ static void writer_state_lifetime(void)
     assert(state->has_publication && state->ranges.bytes.count);
     assert(efs_writer_state_report(state, 1001, 1, EFS_OK) == EFS_ERR_STALE);
     assert(state->has_publication);
+    struct efs_writer_state intact=*state;
+    state->publication.plan.surviving.ranges[0].off=100;
+    assert(efs_writer_state_report(state,1000,1,EFS_OK)==EFS_ERR_INVAL);
+    assert(state->has_publication && state->ranges.bytes.count);
+    *state=intact;state->ranges.generation++;
+    assert(efs_writer_state_report(state,1000,1,EFS_OK)==EFS_ERR_STALE);
+    assert(state->has_publication && state->ranges.bytes.count);
+    *state=intact;state->ranges.bytes.count=EFS_DIRTY_RANGE_MAX+1;
+    assert(efs_writer_state_report(state,1000,1,EFS_OK)==EFS_ERR_INVAL);
+    assert(state->has_publication);
+    *state=intact;
     assert(efs_writer_ranges_admit(&state->ranges, &view, 0, 1) == EFS_OK);
     assert(efs_writer_state_report(state, 1000, 1, EFS_OK) == EFS_ERR_STALE);
     assert(!state->has_publication && state->ranges.bytes.count);

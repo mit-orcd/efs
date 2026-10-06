@@ -216,7 +216,8 @@ static inline int efs_writer_publication_complete(
     uint64_t committed_object, uint64_t committed_sequence, int verdict)
 {
     if (!writer || !publication || !publication->object_generation ||
-        !publication->snapshot_sequence)
+        !publication->snapshot_sequence ||
+        efs_writer_plan_valid(&publication->plan) != EFS_OK)
         return EFS_ERR_INVAL;
     if (verdict != EFS_OK)
         return verdict;
@@ -224,7 +225,8 @@ static inline int efs_writer_publication_complete(
         committed_sequence != publication->snapshot_sequence)
         return EFS_ERR_STALE;
     int rc = efs_writer_ranges_ack(writer, &publication->plan);
-    if (writer->ino == publication->plan.ino &&
+    if ((rc == EFS_OK || rc == EFS_ERR_STALE) &&
+        writer->ino == publication->plan.ino &&
         writer->generation == publication->plan.generation &&
         writer->chunk_index == publication->plan.chunk_index &&
         writer->observed_epoch < publication->plan.publish_epoch)
