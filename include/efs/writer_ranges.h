@@ -23,6 +23,7 @@ struct efs_writer_plan {
     int base_absent; /* zero image + expected object generation zero */
     int base_bound; /* GETCHUNKS captured exact CAS identity */
     uint64_t base_generation, base_sequence;
+    uint64_t cache_sequence; /* cache snapshot identity, zero outside cache */
     uint32_t base_delta_count;
     struct efs_dirty_ranges original;
     struct efs_dirty_ranges surviving;
@@ -236,6 +237,13 @@ static inline int efs_writer_plan_valid(const struct efs_writer_plan *plan)
             return EFS_ERR_INVAL;
     }
     return EFS_OK;
+}
+
+static inline int efs_writer_buffers_overlap(const void *a, size_t an,
+                                               const void *b, size_t bn)
+{
+    uintptr_t x=(uintptr_t)a,y=(uintptr_t)b;
+    return an && bn && (x<=y ? y-x<an : x-y<bn);
 }
 
 /* A whole-image CAS is always rebuilt from a fresh, masked peer base plus

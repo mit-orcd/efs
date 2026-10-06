@@ -111,8 +111,10 @@ int efs_writer_state_put(struct efs_writer_state *state,
     }
     int rc = efs_writer_publication_bind(plan, object_generation, snapshot_sequence,
                                          &state->publication);
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
         state->has_publication = 1;
+        state->publication_ready = 1;
+    }
     return rc;
 }
 int efs_writer_state_report(struct efs_writer_state *state,
@@ -121,6 +123,8 @@ int efs_writer_state_report(struct efs_writer_state *state,
 {
     if (!state || !state->has_publication)
         return EFS_ERR_INVAL;
+    if (!state->publication_ready)
+        return EFS_ERR_BUSY;
     int rc = efs_writer_publication_complete(&state->ranges, &state->publication,
                                               object_generation, snapshot_sequence, verdict);
     /* A matching committed old publication is finished even if a concurrent
@@ -132,6 +136,7 @@ int efs_writer_state_report(struct efs_writer_state *state,
         object_generation == state->publication.object_generation &&
         snapshot_sequence == state->publication.snapshot_sequence) {
         state->has_publication = 0;
+        state->publication_ready = 0;
         memset(&state->publication, 0, sizeof(state->publication));
     }
     return rc;
@@ -163,4 +168,45 @@ int efs_writer_state_snapshot_lane(const struct efs_writer_state *state,
     int rc = writer_lane_geometry(view, body_len);
     return rc == EFS_OK ? efs_writer_state_snapshot(state, &view->view, base,
                                     body, body_len, out_plan, out_body) : rc;
+}
+
+int efs_writer_state_begin_put(struct efs_writer_state *state,
+    const struct efs_writer_plan *plan, uint64_t object_generation, uint64_t sequence)
+{
+    if (!plan || !plan->base_bound || !plan->surviving.count ||
+        (plan->cache_sequence && plan->cache_sequence!=sequence))
+        return EFS_ERR_INVAL;
+    int rc=efs_writer_state_put(state,plan,object_generation,sequence);
+    if (rc==EFS_OK) state->publication_ready=0;
+    return rc;
+}
+int efs_writer_state_finish_put(struct efs_writer_state *state,
+    uint64_t object_generation, uint64_t sequence, int verdict)
+{
+    if (!state || !state->has_publication) return EFS_ERR_INVAL;
+    if (state->publication.object_generation!=object_generation ||
+        state->publication.snapshot_sequence!=sequence) return EFS_ERR_STALE;
+    if (state->publication_ready) return EFS_ERR_BUSY;
+    if (verdict==EFS_OK) state->publication_ready=1;
+    else {
+        state->has_publication=0;
+        memset(&state->publication,0,sizeof(state->publication));
+    }
+    return verdict;
+}
+int efs_writer_state_retire_clipped(struct efs_writer_state *state,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base)
+{
+    if (!state) return EFS_ERR_INVAL;
+    if (state->has_publication) return EFS_ERR_BUSY;
+    int rc=writer_lane_geometry(view,state->ranges.bytes.chunk_size);
+    if (rc!=EFS_OK) return rc;
+    struct efs_writer_plan plan;
+    rc=efs_writer_ranges_plan_base(&state->ranges,&view->view,base,&plan);
+    if (rc!=EFS_OK) return rc;
+    if (plan.surviving.count) return EFS_ERR_BUSY;
+    rc=efs_writer_ranges_ack(&state->ranges,&plan);
+    if (rc==EFS_OK) state->ranges.observed_epoch=plan.publish_epoch;
+    return rc;
 }

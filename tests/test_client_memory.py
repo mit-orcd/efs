@@ -52,11 +52,12 @@ static void dcache_dirty_link(struct dcache_ent *e, uint32_t s) { (void)s; e->on
 static void dcache_set_dirty(struct dcache_ent *e, uint32_t s) { e->dirty=1; dcache_dirty_link(e,s); }
 static void dcache_note_dirty_bytes(int64_t n) { dirty_bytes+=n; }
 static uint64_t dcache_seq_now(void) { return 1; }
+static uint64_t dcache_seq_next(struct dcache_ent *e) { return ++e->snap_seq; }
 static void dcache_account_extra(efs_ino_t ino, uint32_t ci) { (void)ino;(void)ci; }
 static void dcache_add_range(struct dcache_ent *e,uint32_t off,uint32_t len) { e->nrange=1;e->roff[0]=off;e->rlen[0]=len; }
 void efs_export_present_add(struct efs_export *ex,efs_ino_t ino,int which,int delta) { (void)ex;(void)ino;(void)which;(void)delta; }
 '''
-for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','efs_dcache_snapshot_lane','dcache_take']:
+for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','dcache_take']:
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
@@ -235,11 +236,25 @@ int main(void) {
     cached_base->ino=1;cached_base->generation=7;cached_base->authority_epoch=1;
     assert(efs_dcache_snapshot_lane(1,7,0,&cached_view,cached_base,&cached_plan,cached_copy,owned->len)==EFS_OK);
     assert(cached_copy[0]==0 && !memcmp(cached_copy+10,patch,4));
-    assert(efs_writer_state_put(owned->writer,&cached_plan,10,3)==EFS_OK);
+    assert(efs_dcache_snapshot_publication(1,7,0,&cached_view,cached_base,&cached_plan,cached_copy,owned->len)==EFS_OK);
+    uint64_t sequence=cached_plan.cache_sequence;assert(sequence);
+    assert(efs_dcache_begin_publication(1,8,0,&cached_plan,10)==EFS_ERR_INVAL);
+    assert(efs_dcache_begin_publication(1,7,0,&cached_plan,10)==EFS_OK);
+    struct efs_chunk_rec uploaded={.ino=1,.chunk_generation=10},report;
+    for(unsigned i=0;i<EFS_NUM_FRAGMENTS;i++) uploaded.nodes[i]=i+1;
+    assert(efs_dcache_complete_publication(1,7,0,10,sequence,EFS_OK)==EFS_ERR_BUSY);
+    assert(efs_dcache_finish_publication(1,7,0,10,sequence,EFS_OK,&uploaded)==EFS_OK);
+    assert(efs_dcache_publication_report(1,7,0,10,sequence,&report)==EFS_OK);
+    assert(report.file_generation==7 && report.publish_flags==3 && report.base_gen==0);
+    assert(efs_dcache_publication_report(1,7,0,10,sequence,(void *)owned->data)==EFS_ERR_INVAL);
+    assert(efs_dcache_complete_publication(1,7,0,10,sequence,EFS_ERR_STALE)==EFS_ERR_STALE);
+    assert(owned->writer->has_publication && owned->dirty && owned->pin_held);
+
     assert(efs_dcache_snapshot_lane(1,7,0,&cached_view,cached_base,&cached_plan,cached_copy,owned->len)==EFS_ERR_BUSY);
-    assert(efs_writer_state_report(owned->writer,10,3,EFS_OK)==EFS_OK);
+    assert(efs_dcache_complete_publication(1,7,0,10,sequence,EFS_OK)==EFS_OK);
+    assert(!owned->dirty && !owned->pin_held && !owned->data);
     free(cached_base);free(cached_copy);
-    owned->dirty=0;dcache_pin_release(owned);dirty_bytes-=owned->len;
+
     dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata && !g_live);
     /* Snapshot outputs must never overwrite body/state through partial aliases. */
     uint32_t cs=EFS_MIN_CHUNK_SIZE;
@@ -275,8 +290,24 @@ int main(void) {
     forged.original.ranges[0].len=forged.surviving.ranges[0].len=4;
     assert(efs_writer_state_put(writer,&forged,19,2)==EFS_ERR_STALE);
     assert(!writer->has_publication && writer->ranges.bytes.ranges[0].len==8);
-    assert(efs_writer_state_put(writer,&plan,19,2)==EFS_OK);
-    assert(efs_writer_state_report(writer,19,2,EFS_OK)==EFS_OK);
+    assert(efs_writer_state_begin_put(writer,&plan,19,2)==EFS_OK);
+    assert(efs_writer_state_report(writer,19,2,EFS_OK)==EFS_ERR_BUSY);
+    assert(efs_writer_state_finish_put(writer,20,2,EFS_OK)==EFS_ERR_STALE);
+    assert(efs_writer_state_finish_put(writer,19,2,EFS_ERR_NET)==EFS_ERR_NET);
+    assert(!writer->has_publication && writer->ranges.bytes.count);
+    assert(efs_writer_state_begin_put(writer,&plan,19,3)==EFS_OK);
+    assert(efs_writer_state_finish_put(writer,19,3,EFS_OK)==EFS_OK);
+    assert(efs_writer_state_finish_put(writer,19,3,EFS_ERR_NET)==EFS_ERR_BUSY);
+    assert(writer->has_publication && writer->publication_ready);
+
+    assert(efs_writer_state_report(writer,19,3,EFS_OK)==EFS_OK);
+    assert(efs_writer_state_write_lane(&writer,&lane_view,body,cs,500,body,4)==EFS_OK);
+    assert(efs_writer_state_retire_clipped(writer,&lane_view,base)==EFS_ERR_BUSY);
+    lane_view.view.authority_epoch=1;lane_view.view.history.count=1;
+    lane_view.view.history.entries[0]=(struct efs_content_fence){1,100};
+    base->authority_epoch=1;
+    assert(efs_writer_state_retire_clipped(writer,&lane_view,base)==EFS_OK);
+    assert(!efs_writer_state_owned(writer) && writer->ranges.observed_epoch==1);
     assert(efs_writer_state_free(writer)==EFS_OK);free(body);free(copy);free(base);
     /* Saturate the real metadata allocator with published, body-less nodes.
      * An unresolved and a stalled node must survive pressure reclamation. */

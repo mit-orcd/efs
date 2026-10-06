@@ -8,6 +8,7 @@ struct efs_writer_state {
     struct efs_writer_ranges ranges;
     struct efs_writer_publication publication;
     int has_publication;
+    int publication_ready; /* fragments completed; REPORT may acknowledge */
 };
 static inline int efs_writer_state_owned(const struct efs_writer_state *state)
 {
@@ -46,6 +47,17 @@ int efs_writer_state_free(struct efs_writer_state *state);
 int efs_writer_state_put(struct efs_writer_state *state,
                           const struct efs_writer_plan *plan,
                           uint64_t object_generation, uint64_t snapshot_sequence);
+/* Reserve immutable identity before fragment I/O. A failed PUT clears only
+ * this unsent publication, retaining every accepted byte for a retry. */
+int efs_writer_state_begin_put(struct efs_writer_state *state,
+    const struct efs_writer_plan *plan, uint64_t object_generation, uint64_t sequence);
+int efs_writer_state_finish_put(struct efs_writer_state *state,
+    uint64_t object_generation, uint64_t sequence, int verdict);
+/* Drop only ownership completely superseded by a fresh complete fence view;
+ * no PUT or REPORT is required for bytes that no longer survive. */
+int efs_writer_state_retire_clipped(struct efs_writer_state *state,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base);
 int efs_writer_state_report(struct efs_writer_state *state,
                              uint64_t object_generation, uint64_t snapshot_sequence,
                              int verdict);

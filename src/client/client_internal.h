@@ -416,6 +416,19 @@ int efs_dcache_snapshot_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
     const struct efs_msg_lane_writer_view_reply *view,
     const struct efs_msg_inode_getchunks_reply *base,
     struct efs_writer_plan *plan, uint8_t *body, uint32_t len);
+/* Staged immutable typed publication lifecycle; no legacy fallback. */
+int efs_dcache_snapshot_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base,
+    struct efs_writer_plan *plan, uint8_t *body, uint32_t len);
+int efs_dcache_begin_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_writer_plan *plan, uint64_t object);
+int efs_dcache_finish_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, int verdict, const struct efs_chunk_rec *put);
+int efs_dcache_publication_report(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, struct efs_chunk_rec *out);
+int efs_dcache_complete_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, int verdict);
 /* Whole 128 KiB chunk. `chunk` is efs_buf_alloc'd; stolen on success. */
 int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
                                 uint32_t cs);

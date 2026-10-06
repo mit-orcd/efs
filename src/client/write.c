@@ -2962,6 +2962,7 @@ struct dcache_ent {
     int pending_sent;
     uint32_t recovery_cycles;
     uint8_t stalled;
+    uint64_t object_file_generation;
     uint64_t object_publish_epoch;
     uint32_t object_publish_flags;
     struct dcache_ent *next;
@@ -3487,6 +3488,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
             de->object_delta_len = span ? delta_len : 0;
             de->object_delta_base_n = obs_n;
             de->object_delta_base_seq = obs_seq;
+            de->object_file_generation = 0;
             de->object_publish_epoch = obs ? obs->read_view.fence_epoch : 0;
             de->object_publish_flags = obs && obs->read_view.count ?
                                       EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0;
@@ -4043,10 +4045,10 @@ int efs_dcache_write_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
 
 /* Capture ownership and its bytes together; caller reserves output memory
  * before acquiring this lock. Typed publication is still separately gated. */
-int efs_dcache_snapshot_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
+static int dcache_snapshot_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
     const struct efs_msg_lane_writer_view_reply *view,
     const struct efs_msg_inode_getchunks_reply *base,
-    struct efs_writer_plan *plan, uint8_t *body, uint32_t len)
+    struct efs_writer_plan *plan, uint8_t *body, uint32_t len, int publication)
 {
     if (!ino || !generation || !view || !plan || !body)
         return EFS_ERR_INVAL;
@@ -4064,9 +4066,116 @@ int efs_dcache_snapshot_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
     else
         rc = efs_writer_state_snapshot_lane(e->writer, view, base, e->data,
                                             len, plan, body);
+    if (rc == EFS_OK && publication)
+        plan->cache_sequence = dcache_seq_next(e);
     pthread_mutex_unlock(mu);
     return rc;
 }
+int efs_dcache_snapshot_lane(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base,
+    struct efs_writer_plan *plan, uint8_t *body, uint32_t len)
+{
+    return dcache_snapshot_lane(ino,generation,ci,view,base,plan,body,len,0);
+}
+int efs_dcache_snapshot_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_msg_lane_writer_view_reply *view,
+    const struct efs_msg_inode_getchunks_reply *base,
+    struct efs_writer_plan *plan, uint8_t *body, uint32_t len)
+{
+    return dcache_snapshot_lane(ino,generation,ci,view,base,plan,body,len,1);
+}
+int efs_dcache_begin_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    const struct efs_writer_plan *plan, uint64_t object)
+{
+    if (!plan || plan->ino!=ino || plan->generation!=generation || plan->chunk_index!=ci ||
+        !plan->cache_sequence) return EFS_ERR_INVAL;
+    dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
+    pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find(slot,ino,ci);
+    int rc=(!e || !e->writer || e->snap_seq!=plan->cache_sequence) ? EFS_ERR_STALE :
+        efs_writer_state_begin_put(e->writer,plan,object,plan->cache_sequence);
+    pthread_mutex_unlock(mu);return rc;
+}
+int efs_dcache_finish_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, int verdict, const struct efs_chunk_rec *put)
+{
+    dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
+    pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find_meta(slot,ino,ci);
+    int rc=EFS_ERR_STALE;struct efs_chunk_rec report;
+    if (!e || !e->writer || e->writer->ranges.generation!=generation ||
+        !e->writer->has_publication) goto done;
+    if (verdict==EFS_OK) {
+        if (!put || put->chunk_generation!=object) { rc=EFS_ERR_INVAL;goto done; }
+        rc=efs_writer_plan_report(&e->writer->publication.plan,put,&report);
+        if (rc!=EFS_OK) goto done;
+    }
+    rc=efs_writer_state_finish_put(e->writer,object,sequence,verdict);
+    if (rc==EFS_OK) {
+        e->object_gen=object;e->object_seq=sequence;
+        memcpy(e->object_nodes,report.nodes,sizeof(e->object_nodes));
+        memcpy(e->object_cks,report.checksums,sizeof(e->object_cks));
+        e->object_delta_off=e->object_delta_len=0;
+        e->object_delta_base_n=report.delta_base_n;e->object_delta_base_seq=report.delta_base_seq;
+        e->object_file_generation=report.file_generation;
+        e->object_publish_epoch=report.publish_epoch;e->object_publish_flags=report.publish_flags;
+    }
+done:
+    pthread_mutex_unlock(mu);return rc;
+}
+int efs_dcache_publication_report(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, struct efs_chunk_rec *out)
+{
+    if (!out) return EFS_ERR_INVAL;
+    dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
+    pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find_meta(slot,ino,ci);
+    int rc=EFS_ERR_STALE;
+    if (!e || !e->writer || e->writer->ranges.generation!=generation ||
+        !e->writer->has_publication || e->object_gen!=object || e->object_seq!=sequence)
+        goto done;
+    if (!e->writer->publication_ready) { rc=EFS_ERR_BUSY;goto done; }
+    if (efs_writer_buffers_overlap(out,sizeof(*out),e,sizeof(*e)) ||
+        efs_writer_buffers_overlap(out,sizeof(*out),e->writer,sizeof(*e->writer)) ||
+        (e->data && efs_writer_buffers_overlap(out,sizeof(*out),e->data,e->len))) {
+        rc=EFS_ERR_INVAL;goto done;
+    }
+    struct efs_chunk_rec put={0};put.ino=ino;put.chunk_index=ci;put.chunk_generation=object;
+    memcpy(put.nodes,e->object_nodes,sizeof(put.nodes));
+    memcpy(put.checksums,e->object_cks,sizeof(put.checksums));
+    rc=efs_writer_plan_report(&e->writer->publication.plan,&put,out);
+done:
+    pthread_mutex_unlock(mu);return rc;
+}
+/* Only an exact successful REPORT may release accepted ownership. An
+ * aggregate STALE or transport failure keeps publication/bytes pinned. */
+int efs_dcache_complete_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, int verdict)
+{
+    dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
+    pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find_meta(slot,ino,ci);int rc=EFS_ERR_STALE;
+    if (!e || !e->writer || e->writer->ranges.generation!=generation ||
+        !e->writer->has_publication ||
+        e->writer->publication.object_generation!=object ||
+        e->writer->publication.snapshot_sequence!=sequence) goto done;
+    rc=efs_writer_state_report(e->writer,object,sequence,verdict);
+    if (verdict==EFS_OK && !e->writer->has_publication && (rc==EFS_OK || rc==EFS_ERR_STALE)) {
+        e->committed_object=object;e->committed_seq=sequence;
+        if (!efs_writer_state_owned(e->writer)) {
+            if (e->dirty) dcache_note_dirty_bytes(-(int64_t)e->len);
+            dcache_dirty_unlink(e,slot);e->dirty=0;dcache_pin_release(e);
+            /* Cached input is an owned overlay, not the newly materialized
+             * peer image. Re-read committed data rather than promoting it. */
+            if (e->data) efs_buf_free(e->data,e->len);
+            e->data=NULL;e->len=0;e->have_base=0;e->nrange=0;
+        }
+    }
+done:
+    pthread_mutex_unlock(mu);return rc;
+}
+
 
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci)
 {
@@ -5777,6 +5886,7 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
         rec->delta_len = e->object_delta_len;
         rec->delta_base_n = e->object_delta_base_n;
         rec->delta_base_seq = e->object_delta_base_seq;
+        rec->file_generation = e->object_file_generation;
         rec->publish_epoch = e->object_publish_epoch;
         rec->publish_flags = e->object_publish_flags;
         hit = 1;
