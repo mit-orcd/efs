@@ -669,3 +669,37 @@ snapshots. History-retirement races must retain accepted bytes and fail closed;
 the RPC itself grants no lifetime guarantee against a later fence. Public
 logical truncate and live sweep/retirement remain disabled/pending. This phase
 has not changed production write admission or rolled the original NUC mounts.
+
+
+## D25 FileID-bound writer planning checkpoint — Oct 6 2026
+
+`include/efs/writer_ranges.h` now connects authoritative writer replies to the
+bounded dirty-range primitive. Admission captures the exact FileID, chunk and
+authority epoch, rejects identity changes/regressed authority and commits
+ownership only on success. Capacity overflow returns BUSY without changing
+ranges or promoting sparse bytes to an unconditional full-chunk overwrite.
+The caller must reserve metadata and succeed at admission before copying bytes.
+
+Publication planning requires a freshly materialized published base at the
+same authority epoch as the writer snapshot, clips each locally owned range
+against complete retained history, and keeps both original acknowledgement
+identity and surviving byte ownership. Lost history returns STALE with the
+previous plan and accepted ranges intact; it never recaptures old bytes as new.
+Only the surviving ranges overlay peer data. Exact acknowledgement uses the
+original snapshot, FileID and chunk; concurrent rewrites remain owned. The
+caller must separately match the committed PUT/REPORT object and sequence.
+
+Normal and ASan/UBSan tests cover mixed-age overwrites across successive fences,
+peer bytes under discarded suffixes, missing history, mismatched base authority,
+FileID/chunk changes, range exhaustion, failed initial admission, exact ACK and
+fully fenced chunks. The target is included in the full Linux `make test`,
+which passes with all five documentation checks.
+
+**Not activated in FUSE yet.** The existing cache still unions ranges and its
+old overflow fallback can promote sparse ownership to a full overwrite. The
+next runtime change must replace that union under its lock, account for the
+larger ownership record, capture matching bodies/ranges in both flush paths,
+retain ownership across PUT/REPORT failure and publish only a matching plan.
+History retirement also needs an explicit retained-byte recovery policy before
+public logical truncate can be enabled. This checkpoint adds no runtime RPCs,
+changes no mounts and does not claim the live D25 acceptance gates are complete.
