@@ -13,7 +13,16 @@ sends you to — not the whole spec.
 ---
 ## 1. The task right now
 
-**REPORT/write backpressure (Oct 6, local and uncommitted).** Admission now charges live and in-flight publication records, preserves failed batches, and bounds REPORT/write-queue admission waits. Regression and Linux syntax gates pass; rollout/load gates remain pending. The xefsct1 OOM had 2.68 GiB swapped out despite low RSS. Later inspection found a stale serving-client deployment gap: xefsct2 still runs the old unbounded client; scripts now detect this and require explicit remount. See the [memory checkpoints and evidence](fuse-memory.md#reportwrite-backpressure-checkpoint--oct-6-2026).
+**Current implementation task — D25 writer integration (Oct 6).**
+Memory/recovery fixes are committed; the dated checkpoints below retain their
+original working-tree status and are superseded by the review checkpoint.
+Partial flushes now rebuild from a fresh authoritative masked view even when
+the base object generation is unchanged. Missing rows use a zero merge base
+and empty-row CAS; failed read authority preserves the local dirty body and
+returns its actual error. Both pipelined and direct flush paths carry the
+captured byte observation into publication. See the current
+[in-flight handoff](in-flight.md) for the remaining writer/sweep sequence.
+
 
 **Metadata scaling gap (Oct 5).** The implementation still maps logical
 metadata shards into two fixed Raft groups and routes REPORT batches through
@@ -439,3 +448,26 @@ integration, strict whole-call deadlines, and live fault/RSS acceptance still
 need their recorded gates. W36 needs the live rename-versus-unlink 20/20 gate;
 no existing dangling dentry was removed during this review. No live deployment
 or workload rerun was performed.
+
+
+## D25 partial-writer merge checkpoint — Oct 6 2026
+
+Implemented in `8727f682`. The generation-only merge shortcut has been removed: a fence may change the
+valid byte ranges of the same object. Every partial snapshot now obtains a
+fresh GETCHUNKS view and masked published image before overlaying its owned
+ranges. The exact fetched base generation, span observation and captured
+authority epoch travel with the PUT/REPORT. An authoritative absence never
+reads this client's staged, unreported object as a committed base. RPC/fetch
+failures leave accepted local bytes dirty and pinned, with balanced publication
+windows and the original error code. Whole-chunk unconditional overwrites keep
+their existing path.
+
+The regression executes both production flush functions, reproduces the old
+fenced-tail resurrection with an unchanged generation, and checks empty-row
+CAS, BUSY/NOMEM retention and full-overwrite behavior. Normal and ASan/UBSan
+gates pass; strict Linux syntax, an isolated complete build and full
+`make test` pass. Partial flushes now do additional metadata/fragment reads; live
+performance is unmeasured. This is the published-base portion of writer
+integration: local dirty-range epoch capture, clipping pre-fence unpublished
+bytes, unconditional publication epochs, and live-file sweep scheduling and
+history retirement remain open. Public logical truncation stays disabled.
