@@ -2300,6 +2300,11 @@ Next, in order:
    adds durable bootstrap crash recovery, snapshot overlap protection, exact
    same-mutation PUT ownership checks and lane-validated cache APIs. Legacy flush
    refuses typed ownership before I/O. These APIs do not activate D25.
+   The [publication ten-round checkpoint](../../results/measure/20261006-publication-ten-rounds/SUMMARY.md)
+   binds captured FileID and exact CAS bases, reserves identity before PUT, and
+   supplies typed cache completion APIs. They remain staged. Before activation,
+   resolve durable per-publication REPORT outcomes: aggregate STALE can follow
+   partial commit, so it cannot authorize dropping or rebasing ownership.
    Next connect every FUSE write entry point and both flush paths to these APIs;
    replace the unlabelled union, serialize pending publications and drain range
    exhaustion before copying bytes. No epoch-aware FUSE admission is active.
@@ -2316,7 +2321,7 @@ Next, in order:
    run the recorded fault/recovery and small-host RSS acceptance gates.
 
 NUC rollout 79983128 passed W36 `peer_rename_vs_unlink_src` 20/20 first.
-The next xorinox rollout still owes its current-build gate. W54 post-GC cold reads and W38 traced/cold verification remain owed.
+Xorinox b4a75492 passed the real two-client W36 gate 20/20 after guarded orphan cleanup. A later rollout must repeat that gate. W54 post-GC cold reads and W38 traced/cold verification remain owed.
 NUC unit/build acceptance used a private source directory. Live acceptance
 used both normal mounts after clean drains and a four-node rollout. Public logical truncate remains disabled.
 

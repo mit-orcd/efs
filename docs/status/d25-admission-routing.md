@@ -85,3 +85,13 @@ history/floor retirement, dead-FileID lifecycle cleanup,
 live sweep progress and the recorded 100/1000-client routing/byte gates. The
 internal cold adapter currently requires a node hosting both relevant groups;
 the ordinary lane read path has no such topology requirement.
+
+The [publication continuation](../../results/measure/20261006-publication-ten-rounds/SUMMARY.md)
+adds captured FileID validation at REPORT preflight and same-group durable apply,
+exact base/list identity, immutable materialization and staged typed cache PUT/
+REPORT lifecycle APIs. Failed PUT retains accepted bytes; ambiguous REPORT retains
+its pending token. Activation first needs durable per-publication outcome recovery,
+because the current aggregate reply cannot distinguish partial commit from a CAS
+loser or an evicted apply verdict. Recommend per-record results plus durable
+retry/status identity before wiring typed flush paths. No new client-scaling or
+live activation result is claimed.
