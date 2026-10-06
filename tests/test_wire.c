@@ -311,7 +311,15 @@ static void test_getchunks_reply_validation(void)
     struct efs_msg_inode_getchunks_reply *r = calloc(1, sizeof(*r));
     assert(r);
     req.ino = 123; req.start = 5; req.max = 2;
+    r->ino = req.ino; r->generation = 7;
     CHECK(efs_getchunks_reply_valid(&req, r) == EFS_OK, "empty GETCHUNKS reply");
+    req.generation = 8;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS FileID mismatch");
+    req.generation = 7;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_OK, "GETCHUNKS exact FileID");
+    r->generation = 0;
+    CHECK(efs_getchunks_reply_valid(&req, r) == EFS_ERR_PROTO, "GETCHUNKS absent FileID");
+    r->generation = 7;
     r->count = 1; r->recs[0].ino = 123; r->recs[0].chunk_index = 5;
     r->recs[0].read_view.chunk_size = EFS_MIN_CHUNK_SIZE; r->recs[0].read_view.count = 1;
     CHECK(efs_getchunks_reply_valid(&req, r) == EFS_OK, "valid GETCHUNKS reply");

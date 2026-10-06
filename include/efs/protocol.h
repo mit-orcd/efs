@@ -883,6 +883,7 @@ struct efs_msg_inode_getchunks {
     efs_ino_t ino;
     uint32_t start; /* first chunk_index to consider */
     uint32_t max;
+    uint64_t generation; /* zero discovers; otherwise require this FileID */
 };
 
 struct efs_msg_inode_getchunks_reply {
@@ -890,6 +891,9 @@ struct efs_msg_inode_getchunks_reply {
     /* On NOT_PRIMARY: owner of the request's chunk group. */
     efs_node_id_t primary_id;
     uint32_t count;
+    efs_ino_t ino;
+    uint64_t generation;
+    uint64_t authority_epoch; /* inode epoch, including an empty result */
     struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
 };
 
@@ -898,7 +902,9 @@ static inline int efs_getchunks_reply_valid(
     const struct efs_msg_inode_getchunks *req,
     const struct efs_msg_inode_getchunks_reply *reply)
 {
-    if (!req || !reply || !req->ino || reply->count > EFS_GETCHUNKS_MAX)
+    if (!req || !reply || !req->ino || reply->ino != req->ino || !reply->generation ||
+        (req->generation && req->generation != reply->generation) ||
+        reply->count > EFS_GETCHUNKS_MAX)
         return EFS_ERR_PROTO;
     uint32_t max = req->max && req->max < EFS_GETCHUNKS_MAX ? req->max : EFS_GETCHUNKS_MAX;
     uint64_t end = ((uint64_t)req->start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1;

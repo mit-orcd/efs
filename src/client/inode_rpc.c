@@ -871,14 +871,16 @@ int efs_client_rpc_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci,
     return EFS_ERR_BUSY;
 }
 
-int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
+int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
+                                    uint64_t generation,
                              uint32_t start, struct efs_chunk_rec *recs,
-                             uint32_t *inout_count)
+                             uint32_t *inout_count, uint64_t *resolved_generation)
 {
     struct efs_msg_inode_getchunks req;
     memset(&req, 0, sizeof(req));
     req.export_id = export_id;
     req.ino = ino;
+    req.generation = generation;
     req.start = start;
     req.max = inout_count ? *inout_count : EFS_GETCHUNKS_MAX;
     /* Enter at the inode's shard; the host walks the file's lane shards
@@ -957,8 +959,18 @@ int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
         memcpy(recs, r->recs, n * sizeof(recs[0]));
     if (inout_count)
         *inout_count = n;
+    if (resolved_generation)
+        *resolved_generation = r->generation;
     free(payload);
     return EFS_OK;
+}
+
+int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
+                             uint32_t start, struct efs_chunk_rec *recs,
+                             uint32_t *inout_count)
+{
+    return efs_client_rpc_getchunks_fileid(export_id, ino, 0, start, recs,
+                                          inout_count, NULL);
 }
 
 int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,

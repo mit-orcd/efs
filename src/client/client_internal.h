@@ -227,6 +227,11 @@ struct efs_chunk_rec;
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,
                              uint32_t *inout_count);
+int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
+                                    uint64_t generation, uint32_t start,
+                                    struct efs_chunk_rec *recs,
+                                    uint32_t *inout_count,
+                                    uint64_t *resolved_generation);
 /* Returns EFS_OK only if every GETCHUNKS in the range succeeded; on an
  * error the local table may be PARTIAL for the range. */
 int efs_client_pull_chunks_range(efs_ino_t ino, uint32_t start_ci,

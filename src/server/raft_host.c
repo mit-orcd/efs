@@ -4011,7 +4011,7 @@ static void host_fwd_setattr(struct efs_raft_host *h, efs_ino_t ino,
 }
 
 static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_id, efs_ino_t ino,
-                               uint32_t start, uint32_t max,
+                               uint32_t start, uint32_t max, uint64_t generation,
                                struct efs_msg_inode_getchunks_reply *out,
                                const uint8_t *groups, int ng)
 {
@@ -4023,6 +4023,7 @@ static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_i
     req.ino = ino;
     req.start = start;
     req.max = max;
+    req.generation = generation;
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_NOT_PRIMARY;
     for (tries = 0; tries < h->n; tries++) {
@@ -12224,7 +12225,7 @@ void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
     }
 }
 
-void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max,
+void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max, uint64_t generation,
                                 struct efs_msg_inode_getchunks_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -12257,7 +12258,7 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
     if (!host_hosts(h, ig)) {
         uint8_t need[2];
         host_need_both(need);
-        host_fwd_getchunks(h, export_id, ino, start, max, out, need, 2);
+        host_fwd_getchunks(h, export_id, ino, start, max, generation, out, need, 2);
         return;
     }
     rc = host_read_index(h, ig, &hint);
@@ -12266,6 +12267,13 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
         rc = efs_meta_apply_get_inode_tx(h->kv, ino, host_txn_coord, h, &row);
     if (rc == EFS_OK && !host_holds_chunks(row.mode))
         rc = EFS_ERR_INVAL;
+    if (rc == EFS_OK && generation && row.generation != generation)
+        rc = EFS_ERR_STALE;
+    if (rc == EFS_OK) {
+        out->ino = ino;
+        out->generation = row.generation;
+        out->authority_epoch = row.content_epoch;
+    }
     seen = (rc == EFS_OK) ? (1u << ig) : 0;
     for (ci = start; rc == EFS_OK && ci < group_end && out->count < max; ci++) {
         uint8_t lane = (uint8_t)(ci % EFS_META_LANES);
@@ -12286,7 +12294,7 @@ void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32
             need[0] = ig;
             if (lg != ig)
                 need[nn++] = lg;
-            host_fwd_getchunks(h, export_id, ino, start, max, out, need, nn);
+            host_fwd_getchunks(h, export_id, ino, start, max, generation, out, need, nn);
             return;
         }
         if ((seen & (1u << lg)) == 0) {

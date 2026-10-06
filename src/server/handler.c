@@ -925,7 +925,7 @@ send_reply:
             if (server_raft_host_active() &&
                 payload_len >= sizeof(struct efs_msg_inode_getchunks)) {
                 struct efs_msg_inode_getchunks *req = payload;
-                server_raft_host_getchunks(req->export_id, req->ino, req->start, req->max, &r);
+                server_raft_host_getchunks(req->export_id, req->ino, req->start, req->max, req->generation, &r);
             }
             efs_conn_send_msg(conn, EFS_MSG_INODE_GETCHUNKS_REPLY, &r,
                               sizeof(r));
