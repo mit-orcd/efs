@@ -678,6 +678,12 @@ static void test_publish(void)
     p.candidate_gen = 0xA1;
     p.coding_profile_id = EFS_META_PROFILE_K2F1;
     p.ch = ch;
+    struct efs_meta_row identity;
+    CHECK(efs_meta_apply_get_inode(kv,ino,&identity)==EFS_OK,"publication FileID");
+    p.inode_gen=identity.generation+1;
+    CHECK(efs_meta_apply_publish(kv,&p)==EFS_ERR_STALE,"durable FileID mismatch is stale");
+    CHECK(efs_meta_apply_get_chunk(kv,ino,0,&got)==EFS_ERR_NOT_FOUND,"wrong FileID has no mapping");
+    p.inode_gen=identity.generation;
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK, "publish");
     CHECK(efs_meta_apply_get_chunk(kv, ino, 0, &got) == EFS_OK, "get");
     CHECK(got.generation == 0xA1 && got.nodes[0] == 1 &&

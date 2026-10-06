@@ -754,6 +754,7 @@ struct efs_msg_inode_flock {
  * GETCHUNKS: both fields are the committed generation of the mapping. */
 #define EFS_CHUNK_BASE_UNCOND UINT64_MAX
 #define EFS_CHUNK_REC_F_CAPTURED_EPOCH 1u
+#define EFS_CHUNK_REC_F_CAPTURED_FILEID 2u
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -761,6 +762,7 @@ struct efs_chunk_rec {
     uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE];
     uint64_t base_gen;
     uint64_t chunk_generation;
+    uint64_t file_generation; /* exact FileID when CAPTURED_FILEID is set */
     uint64_t publish_epoch; /* byte-backed view used by this PUT */
     uint32_t publish_flags;
     /* delta_len > 0: this rec is one immutable span [delta_off, +len),
@@ -784,13 +786,31 @@ struct efs_chunk_rec {
 static inline int efs_chunk_publish_epoch(const struct efs_chunk_rec *r,
                                           uint64_t current, uint64_t *out)
 {
-    if (r->publish_flags & ~EFS_CHUNK_REC_F_CAPTURED_EPOCH)
+    if (!r || !out || (r->publish_flags &
+        ~(EFS_CHUNK_REC_F_CAPTURED_EPOCH | EFS_CHUNK_REC_F_CAPTURED_FILEID)) ||
+        ((r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) &&
+         (!(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) || !r->file_generation)))
         return EFS_ERR_INVAL;
     if ((r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) &&
         r->publish_epoch != current)
         return EFS_ERR_STALE;
     *out = (r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) ?
                r->publish_epoch : current;
+    return EFS_OK;
+}
+
+/* Typed writers cannot adopt the receiving host's newer inode generation. */
+static inline int efs_chunk_publish_authority(const struct efs_chunk_rec *r,
+    uint64_t generation, uint64_t epoch, uint64_t *out)
+{
+    uint64_t captured;
+    int rc = efs_chunk_publish_epoch(r, epoch, &captured);
+    if (rc != EFS_OK) return rc;
+    if ((r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) &&
+        r->file_generation != generation)
+        return EFS_ERR_STALE;
+    if (!out) return EFS_ERR_INVAL;
+    *out = captured;
     return EFS_OK;
 }
 

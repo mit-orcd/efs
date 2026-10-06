@@ -3813,9 +3813,11 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
          * chunk, so NOT_FOUND after commit ordering means deleted, not
          * not-yet-created. */
         if (rc == EFS_ERR_NOT_FOUND)
-            return EFS_OK;
+            return p->inode_gen ? EFS_ERR_STALE : EFS_OK;
         if (rc != EFS_OK)
             return rc;
+        if (p->inode_gen && p->inode_gen != row.generation)
+            return EFS_ERR_STALE;
         /* FUSE stores a symlink target as ordinary published bytes.
          * Directories have no chunk map. */
         if (!S_ISREG(row.mode) && !S_ISLNK(row.mode))

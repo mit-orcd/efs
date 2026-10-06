@@ -21,6 +21,9 @@ struct efs_writer_plan {
     uint64_t publish_epoch;
     uint32_t chunk_index;
     int base_absent; /* zero image + expected object generation zero */
+    int base_bound; /* GETCHUNKS captured exact CAS identity */
+    uint64_t base_generation, base_sequence;
+    uint32_t base_delta_count;
     struct efs_dirty_ranges original;
     struct efs_dirty_ranges surviving;
 };
@@ -140,9 +143,42 @@ static inline int efs_writer_ranges_plan_base(
     rc = efs_writer_ranges_plan(writer, view, base->authority_epoch, &plan);
     if (rc == EFS_OK) {
         plan.base_absent = absent;
+        plan.base_bound = 1;
+        if (!absent) {
+            plan.base_generation = base->recs[0].chunk_generation;
+            plan.base_sequence = base->recs[0].delta_base_seq;
+            plan.base_delta_count = base->recs[0].delta_base_n;
+        }
         *out = plan;
     }
     return rc;
+}
+
+/* Verify the base again before touching a materialized output. A token
+ * captured from one object list cannot be reused with a later peer image. */
+static inline int efs_writer_plan_base_valid(const struct efs_writer_plan *plan,
+    const struct efs_msg_inode_getchunks_reply *base)
+{
+    if (!plan || !base || !plan->base_bound || base->status != EFS_INODE_RPC_OK)
+        return EFS_ERR_INVAL;
+    struct efs_msg_inode_getchunks req = {0};
+    req.ino=plan->ino;req.generation=plan->generation;
+    req.start=plan->chunk_index;req.max=1;
+    int rc=efs_getchunks_reply_valid(&req,base);
+    if (rc != EFS_OK) return rc;
+    if (base->authority_epoch != plan->publish_epoch) return EFS_ERR_STALE;
+    int absent=!base->count || base->recs[0].chunk_index>plan->chunk_index;
+    if (absent != plan->base_absent) return EFS_ERR_STALE;
+    if (!absent) {
+        const struct efs_chunk_rec *r=&base->recs[0];
+        if (r->chunk_generation != plan->base_generation ||
+            r->delta_base_seq != plan->base_sequence ||
+            r->delta_base_n != plan->base_delta_count ||
+            r->read_view.chunk_size != plan->original.chunk_size ||
+            r->read_view.fence_epoch != plan->publish_epoch)
+            return EFS_ERR_STALE;
+    }
+    return EFS_OK;
 }
 
 /* Caller first matches the committed PUT/REPORT object and snapshot sequence.
@@ -172,6 +208,11 @@ static inline int efs_writer_plan_valid(const struct efs_writer_plan *plan)
 {
     if (!plan || !plan->ino || !plan->generation ||
         (plan->base_absent != 0 && plan->base_absent != 1) ||
+        (plan->base_bound != 0 && plan->base_bound != 1) ||
+        plan->base_delta_count > EFS_CHUNK_DELTA_MAX ||
+        plan->base_generation == EFS_CHUNK_BASE_UNCOND ||
+        (plan->base_absent && (plan->base_generation || plan->base_sequence || plan->base_delta_count)) ||
+        (!plan->base_bound && (plan->base_generation || plan->base_sequence || plan->base_delta_count)) ||
         efs_dirty_ranges_valid(&plan->original) != EFS_OK ||
         efs_dirty_ranges_valid(&plan->surviving) != EFS_OK ||
         plan->original.chunk_size != plan->surviving.chunk_size ||
@@ -194,6 +235,63 @@ static inline int efs_writer_plan_valid(const struct efs_writer_plan *plan)
         if (!owned)
             return EFS_ERR_INVAL;
     }
+    return EFS_OK;
+}
+
+/* A whole-image CAS is always rebuilt from a fresh, masked peer base plus
+ * the immutable owned snapshot. The caller fetched/merged published bytes
+ * for exactly this GETCHUNKS identity. Output must be separate storage. */
+static inline int efs_writer_plan_materialize(const struct efs_writer_plan *plan,
+    const struct efs_msg_inode_getchunks_reply *base, const uint8_t *peer,
+    const uint8_t *owned, uint8_t *out, uint32_t size)
+{
+    if (efs_writer_plan_valid(plan)!=EFS_OK || !owned || !out ||
+        size!=plan->original.chunk_size || !efs_chunk_size_valid(size))
+        return EFS_ERR_INVAL;
+    int rc=efs_writer_plan_base_valid(plan,base);
+    if (rc!=EFS_OK) return rc;
+    if (!plan->base_absent && !peer) return EFS_ERR_INVAL;
+    uintptr_t o=(uintptr_t)out, w=(uintptr_t)owned, p=(uintptr_t)peer;
+    uintptr_t t=(uintptr_t)plan, b=(uintptr_t)base;
+    if ((o<=t ? t-o<size : o-t<sizeof(*plan)) ||
+        (o<=b ? b-o<size : o-b<sizeof(*base)) ||
+        (o<=w ? w-o<size : o-w<size) ||
+        (peer && (o<=p ? p-o<size : o-p<size))) return EFS_ERR_INVAL;
+    memset(out,0,size);
+    if (!plan->base_absent) {
+        const struct efs_fence_view *v=&base->recs[0].read_view;
+        for (uint32_t i=0;i<v->count;i++)
+            memcpy(out+v->parts[i].off,peer+v->parts[i].off,v->parts[i].len);
+    }
+    for (uint32_t i=0;i<plan->surviving.count;i++) {
+        const struct efs_fence_part *r=&plan->surviving.ranges[i];
+        memcpy(out+r->off,owned+r->off,r->len);
+    }
+    return EFS_OK;
+}
+
+/* PUT identity supplies only immutable object placement/checksums. The plan
+ * supplies every CAS/epoch/FileID field; cached publication defaults cannot
+ * turn a sparse patch into an unconditional overwrite. */
+static inline int efs_writer_plan_report(const struct efs_writer_plan *plan,
+    const struct efs_chunk_rec *put, struct efs_chunk_rec *out)
+{
+    if (efs_writer_plan_valid(plan)!=EFS_OK || !plan->base_bound || !put || !out ||
+        !plan->surviving.count || !put->chunk_generation || put->delta_len ||
+        put->ino!=plan->ino || put->chunk_index!=plan->chunk_index)
+        return EFS_ERR_INVAL;
+    for (unsigned i=0;i<EFS_NUM_FRAGMENTS;i++)
+        if (!put->nodes[i]) return EFS_ERR_INVAL;
+    struct efs_chunk_rec r={0};
+    r.ino=plan->ino;r.chunk_index=plan->chunk_index;
+    r.chunk_generation=put->chunk_generation;
+    memcpy(r.nodes,put->nodes,sizeof(r.nodes));
+    memcpy(r.checksums,put->checksums,sizeof(r.checksums));
+    r.base_gen=plan->base_generation;
+    r.delta_base_n=plan->base_delta_count;r.delta_base_seq=plan->base_sequence;
+    r.file_generation=plan->generation;r.publish_epoch=plan->publish_epoch;
+    r.publish_flags=EFS_CHUNK_REC_F_CAPTURED_EPOCH|EFS_CHUNK_REC_F_CAPTURED_FILEID;
+    *out=r;
     return EFS_OK;
 }
 

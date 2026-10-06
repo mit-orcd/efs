@@ -89,8 +89,49 @@ static void test_publication_identity(void)
 
 }
 
+static void test_materialized_publication(void)
+{
+    uint32_t cs=EFS_MIN_CHUNK_SIZE;
+    uint8_t *peer=malloc(cs+1),*owned=malloc(cs),*out=malloc(cs);
+    struct efs_msg_inode_getchunks_reply *base=calloc(1,sizeof(*base));
+    assert(peer && owned && out && base);
+    memset(peer,'P',cs+1);memset(owned,'L',cs);memset(out,0x5a,cs);
+    struct efs_writer_ranges writer={0};writer.bytes.chunk_size=cs;
+    struct efs_msg_inode_writer_view_reply view=authority(0);
+    assert(efs_writer_ranges_admit(&writer,&view,20,4)==EFS_OK);
+    assert(efs_writer_ranges_admit(&writer,&view,500,4)==EFS_OK);
+    view.authority_epoch=1;view.history.count=1;
+    view.history.entries[0]=(struct efs_content_fence){1,100};
+    base->ino=100;base->generation=7;base->authority_epoch=1;base->count=1;
+    struct efs_chunk_rec *r=&base->recs[0];r->ino=100;r->chunk_generation=5;
+    r->base_gen=5;r->delta_base_seq=3;
+    r->read_view=(struct efs_fence_view){.chunk_size=cs,.count=1,.fence_epoch=1,.revision=1};
+    r->read_view.parts[0]=(struct efs_fence_part){.len=100};
+    struct efs_writer_plan plan;
+    assert(efs_writer_ranges_plan_base(&writer,&view,base,&plan)==EFS_OK);
+    assert(plan.base_bound && plan.base_generation==5 && plan.base_sequence==3);
+    ++r->chunk_generation;
+    assert(efs_writer_plan_materialize(&plan,base,peer,owned,out,cs)==EFS_ERR_STALE);
+    assert(out[0]==0x5a);--r->chunk_generation;
+    assert(efs_writer_plan_materialize(&plan,base,peer,owned,peer+1,cs)==EFS_ERR_INVAL);
+    assert(efs_writer_plan_materialize(&plan,base,peer,owned,out,cs)==EFS_OK);
+    for(uint32_t i=0;i<cs;i++) assert(out[i]==(i>=20 && i<24?'L':i<100?'P':0));
+    struct efs_chunk_rec put={.ino=100,.chunk_generation=17}, report;
+    for(unsigned i=0;i<EFS_NUM_FRAGMENTS;i++) put.nodes[i]=i+1;
+    assert(efs_writer_plan_report(&plan,&put,&report)==EFS_OK);
+    assert(report.file_generation==7 && report.publish_epoch==1 && report.base_gen==5 &&
+           report.delta_base_seq==3 && report.publish_flags==3 && !report.delta_len);
+    size_t n=efs_chunk_rec_wire_size(&report),used=0;uint8_t *wire=malloc(n);assert(wire);
+    assert(efs_chunk_rec_pack(wire,n,&report)==n);
+    memset(&put,0,sizeof(put));
+    assert(efs_chunk_recs_unpack(wire,n,1,&put,&used)==0 && used==n);
+    assert(put.file_generation==7 && put.publish_flags==3);
+    free(wire);free(peer);free(owned);free(out);free(base);
+}
+
 int main(void)
 {
+    test_materialized_publication();
     test_base_identity();
     test_publication_identity();
     struct efs_writer_ranges writer = {0}, saved;

@@ -11595,6 +11595,8 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
      * ReadIndex guarantees we see the committed create, so NOT_FOUND here
      * means the unlink already won. */
     if (rc == EFS_ERR_NOT_FOUND) {
+        if (rec->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID)
+            return EFS_ERR_STALE;
         if (raft_dbg_on())
             fprintf(stderr, "raft-host: pub ino=%llu ci=%u stale (deleted), skip\n",
                     (unsigned long long)rec->ino, rec->chunk_index);
@@ -11620,7 +11622,7 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     /* A fold names the authority epoch of the bytes it actually fetched.
      * Never re-stamp an old materialization with a later truncation epoch. */
     uint64_t publish_epoch;
-    int epoch_rc = efs_chunk_publish_epoch(rec, row.content_epoch, &publish_epoch);
+    int epoch_rc = efs_chunk_publish_authority(rec, row.generation, row.content_epoch, &publish_epoch);
     if (epoch_rc != EFS_OK)
         return epoch_rc;
     if (lg != ig && (row.active_lanes & (1ULL << lane)) == 0) {
@@ -11727,6 +11729,8 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     p.delta_len = rec->delta_len;
     p.delta_base_n = rec->delta_base_n;
     p.delta_base_seq = rec->delta_base_seq;
+    if (rec->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID)
+        p.inode_gen = rec->file_generation;
     if (lg != ig) {
         /* Lane-local: the lane group's KV has no inode row. The FileID
          * fields ride the entry (read above under ReadIndex on the inode
@@ -12027,6 +12031,10 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                 ic[k].ino = recs[i].ino;
                 rc = efs_meta_apply_get_inode(h->kv, recs[i].ino, &ic[k].row);
                 if (rc == EFS_ERR_NOT_FOUND) {
+                    if (recs[i].publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) {
+                        rc = EFS_ERR_STALE;
+                        break;
+                    }
                     rc = EFS_OK;
                     continue;
                 }
@@ -12037,6 +12045,11 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             }
             if (!ic[k].have)
                 continue;
+            uint64_t captured_epoch;
+            rc = efs_chunk_publish_authority(&recs[i], ic[k].row.generation,
+                                              ic[k].row.content_epoch, &captured_epoch);
+            if (rc != EFS_OK)
+                break;
             lane = (uint8_t)(recs[i].chunk_index % EFS_META_LANES);
             ish = efs_kv_inode_shard(recs[i].ino);
             lsh = efs_kv_lane_shard(recs[i].ino, lane);
