@@ -47,7 +47,8 @@ else
 BLAKE3_ARCH_SRCS =
 endif
 
-COMMON_SRCS = $(COMMON_DIR)/common.c \
+COMMON_SRCS = $(COMMON_DIR)/publication.c \
+              $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/version.c \
               $(COMMON_DIR)/protocol.c \
@@ -95,8 +96,8 @@ COMMON_SRCS = $(COMMON_DIR)/common.c \
 COMMON_OBJS = $(COMMON_SRCS:.c=.o)
 LIB = libefs.a
 
-TEST_SRCS = tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c
-TEST_BINS = tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd
+TEST_SRCS = tests/test_publication_recovery.c tests/test_lane_bootstrap_recovery.c tests/test_fence_view.c tests/test_reply_buffers.c tests/test_bufpool.c tests/test_erasure.c tests/test_placement.c tests/test_rdma_xprt.c tests/test_wire.c tests/test_data.c tests/test_kv.c tests/test_kv_lsm.c tests/test_raft_store.c tests/test_meta_apply.c tests/test_raft.c tests/test_sim.c tests/test_txn.c tests/test_session.c tests/test_lock.c tests/test_stage_evict.c tests/test_conn_fd.c
+TEST_BINS = tests/test_publication_recovery tests/test_lane_bootstrap_recovery tests/test_fence_view tests/test_reply_buffers tests/test_bufpool tests/test_erasure tests/test_placement tests/test_rdma_xprt tests/test_wire tests/test_data tests/test_kv tests/test_kv_lsm tests/test_raft_store tests/test_meta_apply tests/test_raft tests/test_sim tests/test_txn tests/test_session tests/test_lock tests/test_stage_evict tests/test_conn_fd
 
 SERVER_SRCS = src/server/efsd.c src/server/store.c src/server/store_nvme.c \
               src/server/handler.c \
@@ -225,6 +226,8 @@ docs-check:
 	python3 docs/check-architecture.py
 
 test: all
+	python3 tests/test_publication_host.py
+	python3 tests/test_publication_rpc.py
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py
 	python3 docs/check-architecture.py
@@ -248,6 +251,7 @@ test: all
 	./tests/test_kv
 	./tests/test_kv_lsm
 	./tests/test_raft_store
+	./tests/test_publication_recovery
 	./tests/test_meta_apply
 	./tests/test_lane_bootstrap_recovery
 	./tests/test_raft

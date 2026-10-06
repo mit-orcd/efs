@@ -908,6 +908,16 @@ send_reply:
                               sizeof(r));
             break;
         }
+        case EFS_MSG_PUBLICATION:
+        case EFS_MSG_PUBLICATION_STATUS: {
+            struct efs_msg_publication_reply r = {0};
+            r.rpc.status = EFS_INODE_RPC_INVAL;
+            if (server_raft_host_active() && payload_len == sizeof(struct efs_msg_publication))
+                server_raft_host_publication(payload, type == EFS_MSG_PUBLICATION_STATUS, &r);
+            efs_conn_send_msg(conn, type == EFS_MSG_PUBLICATION_STATUS ?
+                EFS_MSG_PUBLICATION_STATUS_REPLY : EFS_MSG_PUBLICATION_REPLY, &r, sizeof(r));
+            break;
+        }
         case EFS_MSG_LANE_BOOTSTRAP: {
             struct efs_msg_lane_writer_view_reply r = {0};
             r.view.status = EFS_INODE_RPC_INVAL;

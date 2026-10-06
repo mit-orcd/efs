@@ -229,6 +229,9 @@ int efs_client_rpc_writer_admission_view(efs_export_id_t export_id, efs_ino_t in
 int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino,
                                    uint64_t generation, uint32_t ci, uint32_t chunk_size,
                                    struct efs_msg_lane_writer_view_reply *out);
+int efs_client_publication_id(uint64_t sequence, struct efs_opid *);
+int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only,
+                               struct efs_msg_publication_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,
                                      uint32_t ci, uint32_t chunk_size,
                                      struct efs_msg_lane_writer_view_reply *out);
@@ -427,6 +430,10 @@ int efs_dcache_finish_publication(efs_ino_t ino, uint64_t generation, uint32_t c
     uint64_t object, uint64_t sequence, int verdict, const struct efs_chunk_rec *put);
 int efs_dcache_publication_report(efs_ino_t ino, uint64_t generation, uint32_t ci,
     uint64_t object, uint64_t sequence, struct efs_chunk_rec *out);
+int efs_dcache_publication_request(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, uint64_t size, struct efs_msg_publication *);
+int efs_dcache_publication_result(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, const struct efs_msg_publication_reply *);
 int efs_dcache_complete_publication(efs_ino_t ino, uint64_t generation, uint32_t ci,
     uint64_t object, uint64_t sequence, int verdict);
 /* Whole 128 KiB chunk. `chunk` is efs_buf_alloc'd; stolen on success. */

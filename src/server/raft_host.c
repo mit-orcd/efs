@@ -6,6 +6,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/kv_snap.h"
 #include "efs/meta_apply.h"
+#include "efs/publication.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
@@ -98,6 +99,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
  * pack/push loop. */
 #define HOST_PUB_BATCH_N   2048u
 #define HOST_PUB_F_LANE_LOCAL 1
+#define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
 #define HOST_ACTIVATE_MASK_LEN 17 /* tag + ino:8 + mask:8 */
@@ -1939,6 +1941,12 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
     p.inode_gen = rd64be(q);
     p.mtime_gen = rd64be(q + 8);
     p.lane_local = (q[16] & HOST_PUB_F_LANE_LOCAL) ? 1 : 0;
+    if (cmd[0] == EFS_MD_CMD_PUBLICATION) {
+        p.durable_result = 1;
+        memcpy(p.publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
+        p.publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
+        p.publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
+    }
     rc = efs_meta_apply_publish(h->kv, &p);
     /* Deleted inode: P3 no-op. STALE stays on the apply-result ring so
      * host_pub_batch_finish can fail the report (W1 / I12). host_apply
@@ -2162,6 +2170,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
+           cmd[0] == EFS_MD_CMD_PUBLICATION ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
            cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
@@ -2493,6 +2502,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
         return apply_unlink_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_RMDIR)
         return apply_rmdir_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_PUBLICATION)
+        return clen == HOST_PUBLICATION_LEN ? apply_one_publish(h,cmd,index) : EFS_ERR_PROTO;
     if (cmd[0] == EFS_MD_CMD_PUBLISH)
         return apply_publish_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_SETATTR)
@@ -12254,6 +12265,58 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         }
     }
     set_inode_rc(out, rc, hint);
+}
+
+/* Staged endpoint: one immutable intent, one durable outcome. No aggregate
+ * reply or transient apply-result ring is used as evidence of ownership. */
+void server_raft_host_publication(const struct efs_msg_publication *req, int query_only,
+                                  struct efs_msg_publication_reply *out)
+{
+    struct efs_raft_host *h=g_host;struct efs_meta_pub p;int hint=-1,verdict;
+    memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
+    if(!h || !h->running || !req ||
+       efs_publication_from_rec(&req->rec,req->size,&p)!=EFS_OK)return;
+    p.publication_id=req->id;
+    if(efs_publication_digest(&p,out->digest)!=EFS_OK)return;
+    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(p.ino,p.chunk_index%EFS_META_LANES));
+    if(!host_hosts(h,group)) {
+        int skip=-1;out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;
+        for(int tries=0;tries<h->n;tries++) {
+            int rid=host_pick_peer(h,&group,1,skip);if(rid<0)return;
+            if(host_inode_rpc_peer(h,rid,query_only?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION,
+               req,sizeof(*req),query_only?EFS_MSG_PUBLICATION_STATUS_REPLY:EFS_MSG_PUBLICATION_REPLY,
+               out,sizeof(*out))==0 && out->rpc.status!=EFS_INODE_RPC_NOT_PRIMARY)return;
+            memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;skip=rid;
+        }
+        return;
+    }
+    int rc=host_read_index(h,group,&hint);
+    if(rc==EFS_OK)rc=efs_meta_publication_result(h->kv,&p,&verdict);
+    if(rc==EFS_ERR_NOT_FOUND && !query_only) {
+        /* Apply validates FileID/fences again. No pack-time CAS skip: losers
+         * must have a replicated terminal result, and retries use that result. */
+        p.now=now_ns();p.durable_result=1;
+        p.lane_local=group!=efs_raft_shard_group(efs_kv_inode_shard(p.ino));
+        uint8_t cmd[HOST_PUBLICATION_LEN];uint32_t len=0;
+        rc=pack_publish_cmd(cmd,&len,&p);
+        if(rc==EFS_OK) {
+            cmd[0]=EFS_MD_CMD_PUBLICATION;
+            memcpy(cmd+len,p.publication_id.client_uuid,EFS_OPID_UUID_LEN);
+            wr32be(cmd+len+16,p.publication_id.session_epoch);wr64be(cmd+len+20,p.publication_id.seq);
+            len+=28;rc=host_propose_wait(h,group,cmd,len,&hint);
+        }
+        /* Even STALE may describe another entry or a lost apply-ring result.
+         * Resolve this intent from durable state after an authoritative read. */
+        if(rc==EFS_OK || rc==EFS_ERR_STALE || rc==EFS_ERR_BUSY) {
+            rc=host_read_index(h,group,&hint);
+            if(rc==EFS_OK)rc=efs_meta_publication_result(h->kv,&p,&verdict);
+        }
+    }
+    set_inode_rc(&out->rpc,rc,hint);
+    if(rc==EFS_OK) {
+        out->verdict=verdict;
+        out->state=verdict==EFS_OK?EFS_PUBLICATION_COMMITTED:EFS_PUBLICATION_REJECTED;
+    }
 }
 
 void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *req,

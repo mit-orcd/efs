@@ -7,6 +7,7 @@
 #include "efs/meta_apply.h"
 #include "efs/wb_recovery.h"
 #include "efs/writer_state.h"
+#include "efs/publication.h"
 #include "efs/write_extent.h"
 #include <errno.h>
 #include <stddef.h>
@@ -4174,6 +4175,75 @@ int efs_dcache_complete_publication(efs_ino_t ino, uint64_t generation, uint32_t
     }
 done:
     pthread_mutex_unlock(mu);return rc;
+}
+
+/* Bind the wire size and digest once BEFORE any send. A retry must use this
+ * request even if the inode grew or shrank while the reply was missing. */
+int efs_dcache_publication_request(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, uint64_t size, struct efs_msg_publication *out)
+{
+    if (!out) return EFS_ERR_INVAL;
+    struct efs_chunk_rec rec;
+    int rc = efs_dcache_publication_report(ino,generation,ci,object,sequence,&rec);
+    if (rc != EFS_OK) return rc;
+    dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
+    pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find_meta(slot,ino,ci);
+    if (!e || !e->writer || !e->writer->has_publication ||
+        e->writer->publication.object_generation!=object ||
+        e->writer->publication.snapshot_sequence!=sequence) { rc=EFS_ERR_STALE;goto done; }
+    if (efs_writer_buffers_overlap(out,sizeof(*out),e,sizeof(*e)) ||
+        efs_writer_buffers_overlap(out,sizeof(*out),e->writer,sizeof(*e->writer)) ||
+        (e->data && efs_writer_buffers_overlap(out,sizeof(*out),e->data,e->len))) {
+        rc=EFS_ERR_INVAL;goto done;
+    }
+    struct efs_writer_publication *token=&e->writer->publication;
+    struct efs_meta_pub p;uint8_t digest[EFS_HASH_SIZE];
+    struct efs_opid identity;
+    if (token->result_bound) { size=token->result_size;identity=token->result_id; }
+    else {
+        rc=efs_client_publication_id(sequence,&identity);
+        if (rc!=EFS_OK) goto done;
+    }
+    rc=efs_publication_from_rec(&rec,size,&p);
+    p.publication_id=identity;
+    if (rc==EFS_OK)rc=efs_publication_digest(&p,digest);
+    if (rc!=EFS_OK)goto done;
+    if (token->result_bound && memcmp(token->result_digest,digest,sizeof(digest))) {
+        rc=EFS_ERR_STALE;goto done;
+    }
+    token->result_id=identity;token->result_size=size;memcpy(token->result_digest,digest,sizeof(digest));token->result_bound=1;
+    memset(out,0,sizeof(*out));out->rec=rec;out->size=size;out->id=identity;
+done:
+    pthread_mutex_unlock(mu);return rc;
+}
+/* Only durable, matching terminal evidence releases the pending identity.
+ * Rejection retains every accepted byte; caller must fetch a fresh view before
+ * planning another publication. Unknown/transport failure changes nothing. */
+int efs_dcache_publication_result(efs_ino_t ino, uint64_t generation, uint32_t ci,
+    uint64_t object, uint64_t sequence, const struct efs_msg_publication_reply *reply)
+{
+    if (!reply || reply->rpc.status!=EFS_INODE_RPC_OK ||
+        (reply->state!=EFS_PUBLICATION_COMMITTED && reply->state!=EFS_PUBLICATION_REJECTED) ||
+        (reply->state==EFS_PUBLICATION_COMMITTED && reply->verdict!=EFS_OK) ||
+        (reply->state==EFS_PUBLICATION_REJECTED && reply->verdict!=EFS_ERR_STALE && reply->verdict!=EFS_ERR_INVAL))
+        return EFS_ERR_BUSY;
+    dcache_ensure();uint32_t slot=dcache_slot(ino,ci);
+    pthread_mutex_t *mu=dcache_mu(slot);pthread_mutex_lock(mu);
+    struct dcache_ent *e=dcache_find_meta(slot,ino,ci);int rc=EFS_ERR_STALE;
+    if (!e || !e->writer || !e->writer->has_publication ||
+        e->writer->ranges.generation!=generation || !e->writer->publication_ready)goto done;
+    struct efs_writer_publication *token=&e->writer->publication;
+    if (token->object_generation!=object || token->snapshot_sequence!=sequence ||
+        !token->result_bound || memcmp(token->result_digest,reply->digest,EFS_HASH_SIZE))goto done;
+    if (reply->state==EFS_PUBLICATION_REJECTED) {
+        e->writer->has_publication=0;e->writer->publication_ready=0;
+        memset(token,0,sizeof(*token));e->object_gen=0;e->object_seq=0;
+        rc=reply->verdict;
+    } else rc=EFS_OK;
+done:
+    pthread_mutex_unlock(mu);
+    return rc==EFS_OK ? efs_dcache_complete_publication(ino,generation,ci,object,sequence,EFS_OK) : rc;
 }
 
 

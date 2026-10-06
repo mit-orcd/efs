@@ -5,6 +5,7 @@
 #include "efs/kv_key.h"
 #include "efs/session.h"
 #include "efs/checksum.h"
+#include "efs/publication.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
 #include "efs/txn.h"
@@ -3759,7 +3760,27 @@ int efs_meta_apply_publish_stale_why(void)
         return EFS_ERR_STALE;          \
     } while (0)
 
-int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
+static void publication_key(const struct efs_meta_pub *p, uint8_t key[51])
+{
+    uint32_t shard=efs_kv_lane_shard(p->ino,p->chunk_index%EFS_META_LANES);
+    key[0]=(uint8_t)(shard>>8);key[1]=(uint8_t)shard;key[2]=EFS_KV_KIND_PUBLICATION;
+    be64(key+3,p->ino);be64(key+11,p->inode_gen);be32(key+19,p->chunk_index);
+    memcpy(key+23,p->publication_id.client_uuid,EFS_OPID_UUID_LEN);
+    be32(key+39,p->publication_id.session_epoch);be64(key+43,p->publication_id.seq);
+}
+int efs_meta_publication_result(struct efs_kv *kv, const struct efs_meta_pub *p, int *verdict)
+{
+    if(!kv || !p || !verdict)return EFS_ERR_INVAL;
+    uint8_t digest[EFS_HASH_SIZE],key[51],v[8+EFS_HASH_SIZE];uint32_t len=sizeof(v);
+    int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
+    publication_key(p,key);rc=efs_kv_get(kv,key,sizeof(key),v,&len);if(rc!=EFS_OK)return rc;
+    if(len!=sizeof(v)||rd32(v)!=1||rd32(v+4)<1||rd32(v+4)>3 ||
+       memcmp(v+8,digest,sizeof(digest)))return EFS_ERR_PROTO;
+    *verdict=rd32(v+4)==1?EFS_OK:rd32(v+4)==2?EFS_ERR_STALE:EFS_ERR_INVAL;
+    return EFS_OK;
+}
+static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
+                         const struct efs_kv_item *receipt)
 {
     struct efs_meta_row row;
     struct efs_meta_chunk stored, got;
@@ -3776,7 +3797,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     uint64_t committed = 0;
     uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
-    struct efs_kv_item it[4 + EFS_CHUNK_DELTA_MAX];
+    struct efs_kv_item it[5 + EFS_CHUNK_DELTA_MAX];
     uint32_t n = 0;
     uint32_t ch_wlen = CHUNK_VAL;
     uint32_t nd_old = 0;
@@ -3791,6 +3812,19 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     rc = evidence_ok(p);
     if (rc != EFS_OK)
         return rc;
+    if (p->durable_result && p->lane_local) {
+        uint8_t ak[EFS_KV_KEY_MAX],av[EFS_META_LANE_AUTHORITY_BYTES];
+        uint32_t kl=0,vl=sizeof(av),cs;uint64_t epoch,floor;
+        rc=lane_authority_key(p->ino,p->inode_gen,p->chunk_index%EFS_META_LANES,ak,&kl);
+        if(rc==EFS_OK)rc=efs_kv_get(kv,ak,kl,av,&vl);
+        if(rc==EFS_ERR_NOT_FOUND)return EFS_ERR_BUSY; /* cold bootstrap required */
+        if(rc!=EFS_OK)return rc;
+        rc=unpack_lane_authority(av,vl,&cs,&epoch,&floor);if(rc!=EFS_OK)return rc;
+        struct efs_meta_writer_view authority;
+        rc=efs_meta_get_lane_writer_view(kv,p->ino,p->inode_gen,p->chunk_index,cs,&authority);
+        if(rc!=EFS_OK)return rc;
+        if(p->content_epoch!=authority.authority_epoch)return EFS_ERR_STALE;
+    }
     if (p->lane_local) {
         /* Cross-group lane: this group's KV has no inode row. The host read
          * the row under ReadIndex on the inode group and carries the FileID
@@ -3822,7 +3856,8 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
          * Directories have no chunk map. */
         if (!S_ISREG(row.mode) && !S_ISLNK(row.mode))
             return EFS_ERR_INVAL;
-        if (p->content_epoch < row.content_epoch)
+        if ((p->durable_result && p->content_epoch != row.content_epoch) ||
+            p->content_epoch < row.content_epoch)
             PUB_STALE(EFS_PUB_STALE_ROW_EPOCH);
         {
             struct append_cur cur;
@@ -3862,8 +3897,12 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     }
     /* A delta's candidate names the span object, not the base image, so
      * matching the base generation is not a replay of this publish. */
-    if (!p->delta_len && committed == p->candidate_gen)
-        return EFS_OK;
+    if (!p->delta_len && committed == p->candidate_gen) {
+        if (!p->durable_result) return EFS_OK;
+        /* A new identical write has its own identity and still updates time.
+         * Missing evidence for an older CAS must not fabricate its success. */
+        if (p->expected_gen != committed) return EFS_ERR_STALE;
+    }
     /* D1: a span attaches to whatever base is current. expected_gen is
      * the full-image CAS. Overlap and a chain of live spans still STALE. */
     if (!p->delta_len && p->expected_gen != committed)
@@ -3880,6 +3919,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     } else {
         return rc;
     }
+    if (p->durable_result && p->lane_local) mtime_gen = ln.mtime_gen;
     if (p->content_epoch < ln.fenced_epoch)
         PUB_STALE(EFS_PUB_STALE_LANE_EPOCH);
     if (ln.append_bar && p->new_size > ln.append_bar)
@@ -3902,8 +3942,12 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
             if (dlist[i].generation == p->candidate_gen &&
                 (dlist[i].len == 0 ||
                  (dlist[i].off == p->delta_off &&
-                  dlist[i].len == p->delta_len)))
-                return EFS_OK;
+                  dlist[i].len == p->delta_len))) {
+                if (!p->durable_result) return EFS_OK;
+                /* New identity: append even identical bytes, preserving order
+                 * and epoch. Only a stored receipt proves a previous commit. */
+                continue;
+            }
             if (dlist[i].len == 0)
                 continue;
             if (ranges_overlap(dlist[i].off, dlist[i].len, p->delta_off,
@@ -4104,7 +4148,31 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
                 return rc;
         }
     }
+    if (receipt) it[n++] = *receipt;
     return meta_write_batch(kv, it, n);
+}
+
+int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
+{
+    if(!p || !p->durable_result) return publish_inner(kv,p,NULL);
+    uint8_t digest[EFS_HASH_SIZE],key[51],value[8+EFS_HASH_SIZE];int verdict;
+    int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
+    rc=efs_meta_publication_result(kv,p,&verdict);
+    if(rc==EFS_OK)return verdict;
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    publication_key(p,key);
+    be32(value,1);be32(value+4,1);memcpy(value+8,digest,sizeof(digest));
+    struct efs_kv_item receipt={EFS_KV_PUT,key,sizeof(key),value,sizeof(value)};
+    rc=publish_inner(kv,p,&receipt);
+    if(rc!=EFS_OK && rc!=EFS_ERR_STALE && rc!=EFS_ERR_INVAL)return rc;
+    /* A mutation included the receipt atomically. A replay/no-op or terminal
+     * rejection has no mapping mutation; record its verdict before answering. */
+    int found=efs_meta_publication_result(kv,p,&verdict);
+    if(found==EFS_OK)return verdict;
+    if(found!=EFS_ERR_NOT_FOUND)return found;
+    be32(value+4,rc==EFS_OK?1:rc==EFS_ERR_STALE?2:3);
+    int written=meta_write_batch(kv,&receipt,1);
+    return written==EFS_OK?rc:written;
 }
 
 int efs_meta_apply_activate_lanes(struct efs_kv *kv, efs_ino_t ino,
@@ -7315,6 +7383,18 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
         if (r.ino == EFS_ROOT_INO)
             c->saw_root = 1;
         if (efs_kv_inode_shard(r.ino) != (((uint32_t)key[0] << 8) | key[1])) {
+            c->rc = EFS_ERR_PROTO;
+            return 1;
+        }
+        return 0;
+    }
+    if (key[2] == EFS_KV_KIND_PUBLICATION) {
+        uint32_t ci = klen == 51 ? rd32(key + 19) : 0;
+        if (klen != 51 || !rd64(key + 3) || !rd64(key + 11) ||
+            efs_kv_lane_shard(rd64(key + 3), ci % EFS_META_LANES) !=
+                (((uint32_t)key[0] << 8) | key[1]) ||
+            !rd32(key + 39) || !rd64(key + 43) ||
+            vlen != 8 + EFS_HASH_SIZE || rd32(val) != 1 || rd32(val + 4) < 1 || rd32(val + 4) > 3) {
             c->rc = EFS_ERR_PROTO;
             return 1;
         }

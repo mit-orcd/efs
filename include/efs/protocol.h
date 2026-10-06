@@ -2,6 +2,7 @@
 #define EFS_PROTOCOL_H
 
 #include "efs/common.h"
+#include "efs/opid.h"
 #include "efs/metadata.h"
 #include "efs/meta_cmd.h"
 #include <stddef.h>
@@ -164,6 +165,10 @@ enum efs_msg_type {
     EFS_MSG_LANE_WRITER_VIEW_REPLY = 110,
     EFS_MSG_LANE_BOOTSTRAP = 111,
     EFS_MSG_LANE_BOOTSTRAP_REPLY = 112,
+    EFS_MSG_PUBLICATION = 113,
+    EFS_MSG_PUBLICATION_REPLY = 114,
+    EFS_MSG_PUBLICATION_STATUS = 115,
+    EFS_MSG_PUBLICATION_STATUS_REPLY = 116,
 };
 
 /* D25 read authority for write admission, including holes and new lanes.
@@ -779,6 +784,23 @@ struct efs_chunk_rec {
     uint64_t delta_base_seq;
     struct efs_fence_view read_view; /* GETCHUNKS only; REPORT leaves zero */
     struct efs_chunk_delta deltas[EFS_CHUNK_DELTA_MAX];
+};
+
+/* Per-publication transport status is separate from its durable verdict.
+ * UNKNOWN (including NOT_FOUND) never authorizes dropping/rebasing ownership. */
+#define EFS_PUBLICATION_UNKNOWN 0u
+#define EFS_PUBLICATION_COMMITTED 1u
+#define EFS_PUBLICATION_REJECTED 2u
+struct efs_msg_publication {
+    struct efs_opid id;
+    struct efs_chunk_rec rec;
+    uint64_t size;
+};
+struct efs_msg_publication_reply {
+    struct efs_msg_inode_reply rpc;
+    uint32_t state;
+    int32_t verdict;
+    uint8_t digest[EFS_HASH_SIZE];
 };
 
 /* Resolve the publication epoch before any registration/proposal side effect.

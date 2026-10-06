@@ -5,6 +5,7 @@
 #include "efs/raft.h"
 #include "efs/kv_key.h"
 #include "efs/meta_cmd.h"
+#include "efs/publication.h"
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
@@ -202,6 +203,16 @@ static void opid_seed_locked(void)
     g_client.opid_epoch = 1;
     g_client.opid_next = 1;
     memset(g_client.opid_inflight, 0, sizeof(g_client.opid_inflight));
+}
+
+int efs_client_publication_id(uint64_t sequence, struct efs_opid *out)
+{
+    if(!sequence || !out)return EFS_ERR_INVAL;
+    memset(out,0,sizeof(*out));
+    pthread_mutex_lock(&opid_mu);opid_seed_locked();
+    memcpy(out->client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN);
+    out->session_epoch=g_client.opid_epoch;out->seq=sequence;
+    pthread_mutex_unlock(&opid_mu);return EFS_OK;
 }
 
 /* Fill q and take a slot (returned; -1 = none, q left invalid). */
@@ -889,6 +900,55 @@ static int rpc_writer_retry_pause(unsigned attempt)
     }
     usleep(delay);
     return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
+}
+
+int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,
+                               struct efs_msg_publication_reply *out)
+{
+    struct efs_meta_pub p;uint8_t digest[EFS_HASH_SIZE];
+    if(!out || !request)return EFS_ERR_INVAL;
+    struct efs_msg_publication req=*request;
+    memset(out,0,sizeof(*out));
+    if(efs_publication_from_rec(&req.rec,req.size,&p)!=EFS_OK)return EFS_ERR_INVAL;
+    p.publication_id=req.id;
+    if(efs_publication_digest(&p,digest)!=EFS_OK)return EFS_ERR_INVAL;
+    uint32_t shard=efs_kv_lane_shard(req.rec.ino,req.rec.chunk_index%EFS_META_LANES);
+    efs_node_id_t target=0;
+    for(unsigned attempt=0;attempt<8;attempt++) {
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        efs_node_id_t nid=target;
+        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
+        if(!conn)return EFS_ERR_NET;
+        uint8_t msg=query_only?EFS_MSG_PUBLICATION_STATUS:EFS_MSG_PUBLICATION;
+        if(efs_conn_send_msg(conn,msg,&req,sizeof(req))) {
+            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        uint8_t type=0;uint32_t len=0;void *payload=NULL;
+        if(efs_conn_recv_msg(conn,&type,&payload,&len)) {
+            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid,conn);
+        if(type!=(query_only?EFS_MSG_PUBLICATION_STATUS_REPLY:EFS_MSG_PUBLICATION_REPLY) || len!=sizeof(*out)) {
+            free(payload);return EFS_ERR_PROTO;
+        }
+        struct efs_msg_publication_reply reply;memcpy(&reply,payload,sizeof(reply));free(payload);
+        if(reply.rpc.status==EFS_INODE_RPC_NOT_PRIMARY && reply.rpc.primary_id && reply.rpc.primary_id!=nid) {
+            target=reply.rpc.primary_id;continue;
+        }
+        if(reply.rpc.status==EFS_INODE_RPC_BUSY) {
+            if(rpc_writer_retry_pause(attempt)!=EFS_OK)return EFS_ERR_BUSY;
+            continue;
+        }
+        int rc=rpc_status_to_efs(reply.rpc.status);if(rc!=EFS_OK)return rc;
+        if(memcmp(digest,reply.digest,sizeof(digest)) ||
+           (reply.state!=EFS_PUBLICATION_COMMITTED && reply.state!=EFS_PUBLICATION_REJECTED) ||
+           (reply.state==EFS_PUBLICATION_COMMITTED && reply.verdict!=EFS_OK) ||
+           (reply.state==EFS_PUBLICATION_REJECTED && reply.verdict!=EFS_ERR_STALE && reply.verdict!=EFS_ERR_INVAL))
+            return EFS_ERR_PROTO;
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        *out=reply;return EFS_OK;
+    }
+    return EFS_ERR_BUSY;
 }
 
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci, uint32_t cs,

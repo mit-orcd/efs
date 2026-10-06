@@ -371,6 +371,8 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              uint32_t ino_count, struct efs_msg_inode_reply *out);
 void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *,
                                           struct efs_msg_lane_writer_view_reply *);
+void server_raft_host_publication(const struct efs_msg_publication *, int query_only,
+                                  struct efs_msg_publication_reply *);
 void server_raft_host_lane_writer_view(const struct efs_msg_lane_writer_view *,
                                         struct efs_msg_lane_writer_view_reply *);
 /* Internal cold coordinator; not enabled in application write admission yet. */

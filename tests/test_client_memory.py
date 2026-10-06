@@ -30,12 +30,23 @@ source = r'''
 #include <pthread.h>
 #include "client_internal.h"
 #include "efs/writer_state.h"
+#include "efs/publication.h"
 #include "efs/write_extent.h"
 #include <limits.h>
 struct efs_client g_client;
 int efs_rdma_zc_region_add(void *p, size_t n) { (void)p; (void)n; return 0; }
 #include "bufpool.c"
 #include "writer_state.c"
+/* Hash implementation is covered by the durable LSM test; this harness faults
+ * the actual cache identity/ownership transitions without SIMD linkage. */
+void efs_hash(const void *input,size_t n,uint8_t out[EFS_HASH_SIZE]) {
+    const uint8_t *p=input;memset(out,0,EFS_HASH_SIZE);
+    for(size_t i=0;i<n;i++)out[i%EFS_HASH_SIZE]=(uint8_t)((out[i%EFS_HASH_SIZE]*33)^p[i]);
+}
+#include "publication.c"
+int efs_client_publication_id(uint64_t seq,struct efs_opid *out) {
+    memset(out,0,sizeof(*out));out->client_uuid[0]=1;out->session_epoch=1;out->seq=seq;return EFS_OK;
+}
 #define DCACHE_NR 32
 #define DCACHE_SLOTS 65536
 #define DCACHE_SHARDS 64
@@ -57,7 +68,7 @@ static void dcache_account_extra(efs_ino_t ino, uint32_t ci) { (void)ino;(void)c
 static void dcache_add_range(struct dcache_ent *e,uint32_t off,uint32_t len) { e->nrange=1;e->roff[0]=off;e->rlen[0]=len; }
 void efs_export_present_add(struct efs_export *ex,efs_ino_t ino,int which,int delta) { (void)ex;(void)ino;(void)which;(void)delta; }
 '''
-for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','dcache_take']:
+for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','efs_dcache_write_lane','dcache_snapshot_lane','efs_dcache_snapshot_lane','efs_dcache_snapshot_publication','efs_dcache_begin_publication','efs_dcache_finish_publication','efs_dcache_publication_report','efs_dcache_complete_publication','efs_dcache_publication_request','efs_dcache_publication_result','dcache_take']:
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
@@ -251,7 +262,29 @@ int main(void) {
     assert(owned->writer->has_publication && owned->dirty && owned->pin_held);
 
     assert(efs_dcache_snapshot_lane(1,7,0,&cached_view,cached_base,&cached_plan,cached_copy,owned->len)==EFS_ERR_BUSY);
-    assert(efs_dcache_complete_publication(1,7,0,10,sequence,EFS_OK)==EFS_OK);
+    struct efs_msg_publication request;
+    assert(efs_dcache_publication_request(1,7,0,10,sequence,100,&request)==EFS_OK);
+    assert(request.size==100);
+    assert(efs_dcache_publication_request(1,7,0,10,sequence,999,&request)==EFS_OK && request.size==100);
+    assert(efs_dcache_publication_request(1,7,0,10,sequence,999,(void *)owned->data)==EFS_ERR_INVAL);
+    struct efs_msg_publication_reply outcome={0};
+    assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_BUSY);
+    assert(owned->writer->has_publication && owned->dirty && owned->pin_held);
+    outcome.state=EFS_PUBLICATION_REJECTED;outcome.verdict=EFS_ERR_STALE;
+    assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_STALE);
+    assert(owned->writer->has_publication && owned->dirty && owned->pin_held);
+    memcpy(outcome.digest,owned->writer->publication.result_digest,EFS_HASH_SIZE);
+    assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_STALE);
+    assert(!owned->writer->has_publication && owned->dirty && owned->pin_held && owned->data);
+    assert(owned->writer->ranges.bytes.count && !owned->object_gen);
+    assert(efs_dcache_snapshot_publication(1,7,0,&cached_view,cached_base,&cached_plan,cached_copy,owned->len)==EFS_OK);
+    sequence=cached_plan.cache_sequence;uploaded.chunk_generation=11;
+    assert(efs_dcache_begin_publication(1,7,0,&cached_plan,11)==EFS_OK);
+    assert(efs_dcache_finish_publication(1,7,0,11,sequence,EFS_OK,&uploaded)==EFS_OK);
+    assert(efs_dcache_publication_request(1,7,0,11,sequence,101,&request)==EFS_OK && request.size==101);
+    outcome.state=EFS_PUBLICATION_COMMITTED;outcome.verdict=EFS_OK;
+    memcpy(outcome.digest,owned->writer->publication.result_digest,EFS_HASH_SIZE);
+    assert(efs_dcache_publication_result(1,7,0,11,sequence,&outcome)==EFS_OK);
     assert(!owned->dirty && !owned->pin_held && !owned->data);
     free(cached_base);free(cached_copy);
 

@@ -277,6 +277,8 @@ struct efs_meta_pub {
     uint64_t inode_gen;
     uint64_t mtime_gen;
     uint8_t lane_local;
+    struct efs_opid publication_id; /* mount/session + unique snapshot sequence */
+    uint8_t durable_result; /* atomically record exact immutable publication result */
     /* delta_len > 0 appends an immutable span instead of CAS-replacing
      * the chunk image. expected_gen is still the base image's generation
      * (0 if the chunk has no base object yet). A full CAS (delta_len == 0)
@@ -676,6 +678,8 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
  * never strand the chunks. */
 int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino);
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
+/* NOT_FOUND means unknown, NEVER permission to rebase. Read under lane ReadIndex. */
+int efs_meta_publication_result(struct efs_kv *, const struct efs_meta_pub *, int *verdict);
 /* Which rule STALEd the last efs_meta_apply_publish on this thread. */
 enum {
     EFS_PUB_STALE_NONE = 0,

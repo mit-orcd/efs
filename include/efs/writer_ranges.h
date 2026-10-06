@@ -202,6 +202,10 @@ struct efs_writer_publication {
     struct efs_writer_plan plan;
     uint64_t object_generation;
     uint64_t snapshot_sequence;
+    struct efs_opid result_id;
+    uint64_t result_size;
+    uint8_t result_digest[EFS_HASH_SIZE];
+    int result_bound; /* immutable RPC intent, bound after PUT and before send */
 };
 /* Clipping can only remove owned bytes. A token must never manufacture
  * ranges in holes, change their admission ages, or name a future epoch. */

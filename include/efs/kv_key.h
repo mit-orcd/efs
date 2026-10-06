@@ -12,6 +12,8 @@
 #define EFS_KV_SHARD_MASK 0xFFFu
 #define EFS_KV_KEY_MAX    320
 
+#define EFS_KV_KIND_PUBLICATION 26 /* FileID/chunk/intent digest: durable verdict */
+
 #define EFS_KV_KIND_ALLOC    1
 #define EFS_KV_KIND_INODE    2
 #define EFS_KV_KIND_DENTRY   3
