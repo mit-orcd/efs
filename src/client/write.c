@@ -190,6 +190,15 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen,
                                   uint64_t object_gen, uint64_t object_seq);
 static int dcache_replay_stale_ex(efs_ino_t ino, uint32_t ci, int absent);
 static int report_replay_stale(efs_ino_t ino);
+static int dcache_pending_of(efs_ino_t ino, uint32_t ci);
+
+/* A pulled span-only row has no local PUT identity. Retain its report mark
+ * only when local cache ownership proves there are bytes still to publish. */
+static void report_retry_without_identity(efs_ino_t ino, uint32_t ci)
+{
+    if (dcache_pending_of(ino, ci))
+        efs_client_mark_chunk_dirty(ino, ci);
+}
 
 /* Object identity for PUT/GET. Must match host_pub_candidate_gen. */
 static uint64_t chunk_candidate_gen(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
@@ -1707,10 +1716,9 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             putid_miss_note(ds.chunk_inos[i], ds.chunk_idxs[i],
                             ce.fragment_nodes);
             if (ce.fragment_nodes[0] == 0) {
-                /* Server's span-only row, not our PUT: INVAL at the
-                 * server, "committed" here. Keep it dirty instead. */
-                efs_client_mark_chunk_dirty(ds.chunk_inos[i],
-                                            ds.chunk_idxs[i]);
+                /* Never publish a peer's span-only row as our object. */
+                report_retry_without_identity(ds.chunk_inos[i],
+                                                ds.chunk_idxs[i]);
                 ds.chunk_inos[i] = 0;
                 continue;
             }
@@ -1901,16 +1909,13 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                                 &crecs[cn], &cseq[cn]) &&
                     !dcache_object_of(ds.chunk_inos[i], ds.chunk_idxs[i],
                                       &crecs[cn], &cseq[cn])) {
-                    /* The repull above may have installed the server's
-                     * row here (nodes 0,0,0 for a span-only chunk).
-                     * Such a rec is INVAL at the server and would be
-                     * skipped as committed: keep the chunk dirty and
-                     * leave it out of this round instead. */
+                    /* Repull can install a peer's span-only row. A stale
+                     * report mark without local bytes is not pending work. */
                     putid_miss_note(ds.chunk_inos[i], ds.chunk_idxs[i],
                                     ce.fragment_nodes);
                     if (ce.fragment_nodes[0] == 0) {
-                        efs_client_mark_chunk_dirty(ds.chunk_inos[i],
-                                                    ds.chunk_idxs[i]);
+                        report_retry_without_identity(ds.chunk_inos[i],
+                                                        ds.chunk_idxs[i]);
                         ds.chunk_inos[i] = 0;
                         continue;
                     }
@@ -3951,6 +3956,18 @@ static int dcache_keep_on_drop(const struct dcache_ent *e)
     return e->pin_held || (e->object_gen &&
                           (e->committed_object != e->object_gen ||
                            e->committed_seq != e->object_seq));
+}
+
+static int dcache_pending_of(efs_ino_t ino, uint32_t ci)
+{
+    int pending;
+    dcache_ensure();
+    uint32_t slot = dcache_slot(ino, ci);
+    pthread_mutex_lock(dcache_mu(slot));
+    struct dcache_ent *e = dcache_find_meta(slot, ino, ci);
+    pending = e && dcache_keep_on_drop(e);
+    pthread_mutex_unlock(dcache_mu(slot));
+    return pending;
 }
 
 static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
