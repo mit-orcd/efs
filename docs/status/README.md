@@ -848,3 +848,16 @@ UNKNOWN retains ownership, exact rejection retains bytes but releases its token,
 and exact success acknowledges only its snapshot. Legacy REPORT and active FUSE
 flush paths are unchanged. [Validation evidence](../../results/measure/20261006-durable-publication/SUMMARY.md).
 See [implementation and remaining activation gates](d25-admission-routing.md#durable-publication-results--implemented-staged).
+
+
+## D25 receipt retirement checkpoint — Oct 6 2026
+
+Explicit lane-routed retirement, exact digest verification, a 64-receipt
+per-stream admission cap, and atomic durable replay floors are implemented and
+staged. Retirement follows stored sequence order. Replays below the floor return
+RETIRED, which never authorizes dropping or rebasing dirty ownership. Linux
+build, metadata/session, publication transport, cache retention and durable
+recovery regressions pass. Public FUSE flush integration remains disabled.
+The per-stream bound is not a global bound: ordered client ACK retry ownership
+and I23 session admission/fencing before abandoned-stream cleanup remain required
+before activation. [Evidence and remaining gates](../../results/measure/20261006-publication-retirement/SUMMARY.md).

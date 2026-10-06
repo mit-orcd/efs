@@ -127,11 +127,48 @@ rejection clears the pending identity but retains all accepted bytes and pins;
 replanning then requires a fresh authoritative view. UNKNOWN, missing results,
 transport failures and mismatched identities retain the token and bytes.
 
-Activation remains gated on integrating authoritative admission and both flush
-paths, live lane/leader-change and shrink/recovery gates, and bounded receipt
-lifecycle. Results currently have no expiry or deletion: automatic eviction
-would lose the evidence. Implement explicit acknowledgement/retirement with
-replay protection before admitting production receipt growth. Cross-group
-publication timestamps also need coherent lane-local mtime invalidation during
-activation; the staged adapter preserves the existing lane stamp, rather than
-consulting the inode on every publish. No production activation is claimed.
+## Acknowledged receipt retirement — implemented, staged
+
+`PUBLICATION_RETIRE` (117/118) acknowledges the exact immutable request through
+its lane authority. Raft command 29 preserves the publication payload and digest
+identity. The applier verifies the stored terminal result and retires only the
+lowest outstanding sequence in that FileID/chunk/mount-session stream. A higher
+acknowledgement returns BUSY until lower receipts are retired. Unknown requests
+cannot advance the floor; a changed request fails digest validation.
+
+Receipt deletion and a durable sequence floor are one atomic KV batch. Requests
+at or below the floor return the distinct RETIRED state and cannot mutate data,
+even after a crash, superseding write, or fence. Repeating an acknowledgement is
+idempotent. RETIRED carries no original verdict or original digest proof: its
+returned digest identifies the queried request only. It must never authorize
+release or rebasing of accepted bytes. The typed cache therefore retains its
+pending token, body and pin on this state.
+
+Each stream admits at most 64 outstanding receipts; a new request at capacity
+returns BUSY without publishing or manufacturing a terminal receipt. Retries of
+existing receipts remain available at capacity. Enumeration stops after 65 live
+receipts, allowing legacy oversized streams to drain in order. This bounds live
+receipt count per stream, not total stream count or physical LSM tombstone work.
+One compact floor survives per retired stream and never expires on a timer.
+
+Integration must submit and acknowledge monotonically within each stream and
+retain an acknowledgement retry queue until retirement is confirmed. Never ACK
+past an older locally pending request simply because the server has not received
+it yet. ACK only after applying the exact terminal result to local ownership;
+retirement itself proves neither original commit nor rejection.
+
+Activation still needs session-lifetime admission and cleanup. Use the existing
+I23 session-fencing barrier to reject the old epoch on every touched lane before
+reclaiming abandoned receipts/floors; erasing a floor first would reopen replay.
+The staged publication endpoints do not yet enforce that session barrier, so no
+abandoned-session/floor cleanup is enabled and no global storage bound is claimed.
+Finish this admission/recovery lifecycle alongside the ACK queue before enabling
+production flush callers. No new product decision is required for retaining
+floors safely while staged.
+
+Remaining: connect authoritative admission and both flush paths, coherent
+lane-local mtime invalidation, live lane/leader-change and shrink/recovery gates,
+and sweep/history retirement. The staged adapter preserves the existing lane
+stamp rather than consulting the inode on every publish. No production activation
+or live cluster acceptance is claimed. See the
+[retirement validation checkpoint](../../results/measure/20261006-publication-retirement/SUMMARY.md).

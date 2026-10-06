@@ -43,8 +43,11 @@ Next, in order:
    [durable publication submission/status and cache result handling](d25-admission-routing.md#durable-publication-results--implemented-staged)
    now distinguish exact commit from terminal rejection and unknown. Legacy
    aggregate STALE still cannot authorize dropping or rebasing ownership.
-   Before activation, bound receipt lifetime with acknowledged retirement and
-   replay protection; finish coherent lane-local mtime invalidation.
+   Acknowledged retirement now bounds each stream to 64 live receipts and
+   advances a durable replay floor atomically. RETIRED never releases ownership.
+   Before activation, integrate ordered ACK retry ownership and I23 session
+   fencing/admission before cleanup of abandoned streams/floors; finish coherent
+   lane-local mtime invalidation.
    Next connect every FUSE write entry point and both flush paths to these APIs;
    replace the unlabelled union, serialize pending publications and drain range
    exhaustion before copying bytes. No epoch-aware FUSE admission is active.
