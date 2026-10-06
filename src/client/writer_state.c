@@ -17,7 +17,7 @@ int efs_writer_state_free(struct efs_writer_state *state)
 {
     if (!state)
         return EFS_OK;
-    if (state->ranges.bytes.count || state->has_publication)
+    if (efs_writer_state_owned(state))
         return EFS_ERR_BUSY;
     efs_buf_metadata_free(state, sizeof(*state));
     return EFS_OK;

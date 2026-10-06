@@ -12,6 +12,7 @@ a = text.index('struct dcache_init {'); init = text[a:text.index('\n};', a)+3]
 store_name = 'dcache_store_owned_locked' if 'dcache_store_owned_locked(' in text else 'dcache_store_owned'
 source = r'''
 #include "client_internal.h"
+#include "efs/writer_state.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>

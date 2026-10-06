@@ -29,9 +29,11 @@ source = r'''
 #include <unistd.h>
 #include <pthread.h>
 #include "client_internal.h"
+#include "efs/writer_state.h"
 struct efs_client g_client;
 int efs_rdma_zc_region_add(void *p, size_t n) { (void)p; (void)n; return 0; }
 #include "bufpool.c"
+#include "writer_state.c"
 #define DCACHE_NR 32
 #define DCACHE_SLOTS 65536
 #define DCACHE_SHARDS 64
@@ -154,6 +156,28 @@ int main(void) {
     assert(g_live==EFS_CHUNK_SIZE);
     dcache_drop_locked(1,0,0);
     assert(!g_live);
+    /* Typed ownership alone protects against legacy drop/replacement/reuse. */
+    uint32_t owned_slot=dcache_slot(1,0);
+    struct dcache_ent *owned=&g_dcache.e[owned_slot];
+    owned->ino=1;owned->ci=0;
+    owned->writer=efs_writer_state_alloc(EFS_CHUNK_SIZE);assert(owned->writer);
+    owned->writer->ranges.bytes.count=1;
+    assert(dcache_keep_on_drop(owned) && !dcache_metadata_idle(owned));
+    dcache_drop_locked(1,0,0);assert(owned->writer && owned->ino==1);
+    p=efs_buf_alloc(EFS_CHUNK_SIZE);assert(p);
+    assert(dcache_take(owned,1,0,p,EFS_CHUNK_SIZE)==EFS_ERR_BUSY);
+    assert(!owned->data);efs_buf_free(p,EFS_CHUNK_SIZE);
+    owned->writer->ranges.bytes.count=0;owned->writer->has_publication=1;
+    dcache_drop_locked(1,0,0);assert(owned->writer);
+    owned->writer->has_publication=0;
+    dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata);
+    struct dcache_ent *idle=efs_buf_metadata_alloc(sizeof(*idle));assert(idle);
+    idle->writer=efs_writer_state_alloc(EFS_CHUNK_SIZE);assert(idle->writer);
+    owned->next=idle;
+    assert(dcache_chain_reuse(owned_slot)==idle && !idle->writer);
+    assert(g_metadata==sizeof(*idle));
+    idle->writer=efs_writer_state_alloc(EFS_CHUNK_SIZE);assert(idle->writer);
+    efs_dcache_trim_metadata();assert(!owned->next && !g_metadata);
     /* Saturate the real metadata allocator with published, body-less nodes.
      * An unresolved and a stalled node must survive pressure reclamation. */
     struct dcache_ent *head=&g_dcache.e[0];
@@ -181,7 +205,7 @@ int main(void) {
 '''
 with tempfile.TemporaryDirectory(prefix='efs-memory-test-') as d:
     p=Path(d)/'test.c';p.write_text(source)
-    cmd=[os.environ.get('CC','cc'),'-std=gnu11','-D_GNU_SOURCE','-O1','-g','-pthread',f'-I{root}/include',f'-I{root}/src/common',f'-I{root}/src/client',str(p),'-o',str(p.with_suffix(''))]
+    cmd=[os.environ.get('CC','cc'),'-std=gnu11','-D_GNU_SOURCE','-O1','-g','-pthread',f'-I{root}/include',f'-I{root}/src/common',f'-I{root}/src/client',str(p),str(root/'src/common/common.c'),'-o',str(p.with_suffix(''))]
     if '--sanitize' in sys.argv: cmd[1:1]=['-fsanitize=address,undefined']
     subprocess.run(cmd,check=True)
     subprocess.run([str(p.with_suffix(''))],check=True)
@@ -209,7 +233,7 @@ int main(void) {
 """
 with tempfile.TemporaryDirectory(prefix='efs-read-pressure-') as d:
     p=Path(d)/'test.c';p.write_text(source2)
-    cmd=[os.environ.get('CC','cc'),'-std=gnu11','-D_GNU_SOURCE','-O1','-g','-pthread',f'-I{root}/include',f'-I{root}/src/common',f'-I{root}/src/client',str(p),'-o',str(p.with_suffix(''))]
+    cmd=[os.environ.get('CC','cc'),'-std=gnu11','-D_GNU_SOURCE','-O1','-g','-pthread',f'-I{root}/include',f'-I{root}/src/common',f'-I{root}/src/client',str(p),str(root/'src/common/common.c'),'-o',str(p.with_suffix(''))]
     if '--sanitize' in sys.argv: cmd[1:1]=['-fsanitize=address,undefined']
     subprocess.run(cmd,check=True)
     subprocess.run([str(p.with_suffix(''))],check=True)

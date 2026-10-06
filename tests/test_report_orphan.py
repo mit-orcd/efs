@@ -9,9 +9,10 @@ def function(name):
     return text[m.start():text.index('\n}', m.end()) + 2]
 source = r'''
 #include "client_internal.h"
+#include "efs/writer_state.h"
 #include <assert.h>
 #include <stdio.h>
-struct dcache_ent { int dirty, stalled, pin_held; uint64_t object_gen, committed_object, object_seq, committed_seq; };
+struct dcache_ent { struct efs_writer_state *writer; int dirty, stalled, pin_held; uint64_t object_gen, committed_object, object_seq, committed_seq; };
 static struct dcache_ent entry, *current;
 static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
 static int marks;

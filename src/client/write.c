@@ -6,6 +6,7 @@
 #include "efs/placement.h"
 #include "efs/meta_apply.h"
 #include "efs/wb_recovery.h"
+#include "efs/writer_state.h"
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -2898,6 +2899,8 @@ static int dcache_put_now(efs_ino_t ino, uint32_t ci, const uint8_t *chunk,
  * chunk of 4 KiB pages. */
 #define DCACHE_NR     32
 struct dcache_ent {
+    /* Optional D25 state; legacy entries leave this NULL. Slot lock owns it. */
+    struct efs_writer_state *writer;
     efs_ino_t ino;
     uint32_t ci;
     uint8_t *data;
@@ -3538,7 +3541,7 @@ static struct dcache_ent *dcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
  * the slot's dcache_mu; unlocked work re-finds by identity and sequence. */
 static int dcache_metadata_idle(const struct dcache_ent *e)
 {
-    return !e->stalled && !e->dirty && !e->data && !e->pin_held && !e->on_dirty &&
+    return !efs_writer_state_owned(e->writer) && !e->stalled && !e->dirty && !e->data && !e->pin_held && !e->on_dirty &&
             !e->reclaim_claimed && !e->present_extra && (!e->ino || !e->object_gen ||
              (e->committed_object == e->object_gen &&
               e->committed_seq == e->object_seq));
@@ -3550,6 +3553,7 @@ static struct dcache_ent *dcache_chain_reuse(uint32_t s)
         if (dcache_metadata_idle(e)) {
             struct dcache_ent *nx = e->next;
 
+            efs_writer_state_free(e->writer);
             memset(e, 0, sizeof(*e));
             e->next = nx;
             return e;
@@ -3572,6 +3576,7 @@ void efs_dcache_trim_metadata(void)
             struct dcache_ent *e = prev->next;
             if (dcache_metadata_idle(e)) {
                 prev->next = e->next;
+                efs_writer_state_free(e->writer);
                 efs_buf_metadata_free(e, sizeof(*e));
             } else {
                 prev = e;
@@ -3951,7 +3956,7 @@ void efs_dcache_overlay(efs_ino_t ino, uint32_t ci, uint8_t *dst, uint32_t len)
  * the next reservation), so "shrink" fires on our own echo. */
 static int dcache_keep_on_drop(const struct dcache_ent *e)
 {
-    if (e->dirty || e->stalled)
+    if (efs_writer_state_owned(e->writer) || e->dirty || e->stalled)
         return 1;
     return e->pin_held || (e->object_gen &&
                           (e->committed_object != e->object_gen ||
@@ -3978,7 +3983,7 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
     pthread_mutex_lock(mu);
     struct dcache_ent *head = &g_dcache.e[s];
     if (head->ino == ino && head->ci == ci) {
-        if (head->stalled || (skip_dirty && dcache_keep_on_drop(head))) {
+        if (efs_writer_state_owned(head->writer) || head->stalled || (skip_dirty && dcache_keep_on_drop(head))) {
             DTRACE(head, "drop-KEEP unreported");
             pthread_mutex_unlock(mu);
             return;
@@ -3992,6 +3997,7 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
         }
         dcache_pin_release(head);
         dcache_dirty_unlink(head, s);
+        efs_writer_state_free(head->writer);
         efs_buf_free(head->data, head->len);
         if (head->next) {
             struct dcache_ent *n = head->next;
@@ -4017,7 +4023,7 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
     struct dcache_ent *prev = head;
     for (struct dcache_ent *e = head->next; e; prev = e, e = e->next) {
         if (e->ino == ino && e->ci == ci) {
-            if (e->stalled || (skip_dirty && dcache_keep_on_drop(e))) {
+            if (efs_writer_state_owned(e->writer) || e->stalled || (skip_dirty && dcache_keep_on_drop(e))) {
                 DTRACE(e, "drop-KEEP unreported");
                 break;
             }
@@ -4031,6 +4037,7 @@ static void dcache_drop_locked(efs_ino_t ino, uint32_t ci, int skip_dirty)
             dcache_pin_release(e);
             dcache_dirty_unlink(e, s);
             prev->next = e->next;
+            efs_writer_state_free(e->writer);
             efs_buf_free(e->data, e->len);
             efs_buf_metadata_free(e, sizeof(*e));
             break;
@@ -4472,6 +4479,10 @@ int efs_dcache_try_patch_sparse(efs_ino_t ino, uint64_t offset, uint32_t len,
 static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
                        const uint8_t *chunk, uint32_t chunk_size)
 {
+    if (efs_writer_state_owned(e->writer))
+        return EFS_ERR_BUSY;
+    efs_writer_state_free(e->writer);
+    e->writer = NULL;
     int was_dirty = e->dirty && e->data;
     /* Pool buffers are always EFS_CHUNK_SIZE-capacity; only allocate when
      * the slot has none. (The old realloc path also mixed pool/non-pool
@@ -4513,6 +4524,10 @@ static int dcache_fill(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
 static int dcache_take(struct dcache_ent *e, efs_ino_t ino, uint32_t ci,
                        uint8_t *chunk, uint32_t chunk_size)
 {
+    if (efs_writer_state_owned(e->writer))
+        return EFS_ERR_BUSY;
+    efs_writer_state_free(e->writer);
+    e->writer = NULL;
     int was_dirty = e->dirty && e->data;
     if (e->data)
         DTRACE(e, "take-REPLACE was_dirty=%d", was_dirty);

@@ -9,6 +9,10 @@ struct efs_writer_state {
     struct efs_writer_publication publication;
     int has_publication;
 };
+static inline int efs_writer_state_owned(const struct efs_writer_state *state)
+{
+    return state && (state->ranges.bytes.count || state->has_publication);
+}
 struct efs_writer_state *efs_writer_state_alloc(uint32_t chunk_size);
 /* BUSY preserves the sidecar whenever accepted bytes/publication are owned. */
 int efs_writer_state_free(struct efs_writer_state *state);
