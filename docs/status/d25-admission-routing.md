@@ -72,10 +72,16 @@ cover bootstrap of holes, partial resolution, FileID reuse isolation, aborted
 fences, storage failure and concurrent fence collections. This is a staged
 foundation, not a completed D25 activation or scaling measurement.
 
-Next connect a cold bootstrap request/response to FUSE admission, then use only
-the lane view for ordinary admitted writes and carry immutable epoch-owned plans
-through both flush paths. Before activation, also complete durable bootstrap
-restart tests, coherent history/floor retirement, dead-FileID lifecycle cleanup,
+Cold bootstrap (111/112) now validates export geometry before adoption; the
+client admission helper invokes it only after lane NOT_FOUND. Cache admission
+and snapshot APIs validate lane geometry and preserve accepted ownership under
+the slot lock. Durable LSM bootstrap restart tests pass for COMMIT, ABORT and
+undecided PREPARE; unresolved lane intents remain BUSY. See the
+[NUC ten-round checkpoint](../../results/measure/20261006-nuc-ten-rounds/SUMMARY.md).
+
+Next connect FUSE callers to those staged APIs and carry immutable epoch-owned
+plans through both flush paths. Before activation, also complete coherent
+history/floor retirement, dead-FileID lifecycle cleanup,
 live sweep progress and the recorded 100/1000-client routing/byte gates. The
 internal cold adapter currently requires a node hosting both relevant groups;
 the ordinary lane read path has no such topology requirement.

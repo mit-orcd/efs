@@ -63,3 +63,29 @@ NUC final build/test and live acceptance results follow below.
 Final NUC private build `make -j8 -B all` and full `make test`: PASS.
 Local real cache/state ASan/UBSan and legacy flush fence regressions: PASS.
 Architecture documentation gate: 5/5. Live rollout results are recorded below.
+
+Live NUC rollout: 79983128, four identical daemons, two remounted clients.
+Both original mounts drained cleanly before server stop; no client force-discard.
+The existing NUC stop script escalated node 1 to SIGKILL after its grace period;
+recorded as an operational finding, not a clean daemon shutdown claim.
+Build identity includes `-dirty` because Makefile counts untracked files in
+`git status --porcelain`. Remote `git diff` and `git diff --cached` were empty;
+only the six pre-existing untracked Mac test artifacts were listed.
+Source revision is 79983128.
+
+W36 `peer_rename_vs_unlink_src`: 20/20 PASS, first live gate after rollout.
+TSVs saved under `tsv/w36-20261006-165927-*.tsv`. This NUC result does not close
+the xorinox recurrence or substitute for its current-build gate.
+
+Live full suites on 79983128:
+- Single client: 216 PASS, 0 FAIL, 1 SKIP (`mmap_write_read`: unsupported).
+- Two clients: 64/64 PASS.
+- Persistence: 26/26 prepare and 26/26 verify PASS after clean unmount/remount.
+- Final status: 4/4 healthy, identical versions, both mounts present.
+TSVs retained alongside this checkpoint. No logical resize activation or
+100/1000-client routing/load acceptance is claimed. D25 still needs FUSE entry
+points, typed publication across both flush paths, retirement and live sweeps;
+D27 still needs strict socket/checkout whole-call bounds and recorded load gates.
+
+Commits: 34775d99 (rounds 1–2), fd3531b5 (3), f899fb6b (4–6),
+79983128 (7–10). No required design decision arose during this batch.

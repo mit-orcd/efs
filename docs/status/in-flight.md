@@ -52,7 +52,7 @@ Next, in order:
 5. Complete D27 strict whole-call timing and remaining legacy PUT coverage;
    run the recorded fault/recovery and small-host RSS acceptance gates.
 
-On the next authorized rollout, W36 `peer_rename_vs_unlink_src` 20/20 goes
-first. W54 post-GC cold reads and W38 traced/cold verification remain owed.
-Isolated NUC acceptance uses private clients; original mounts and retained
-write evidence are unchanged. Public logical truncate remains disabled.
+NUC rollout 79983128 passed W36 `peer_rename_vs_unlink_src` 20/20 first.
+The next xorinox rollout still owes its current-build gate. W54 post-GC cold reads and W38 traced/cold verification remain owed.
+NUC unit/build acceptance used a private source directory. Live acceptance
+used both normal mounts after clean drains and a four-node rollout. Public logical truncate remains disabled.
