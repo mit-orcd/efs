@@ -301,3 +301,32 @@ addresses are shown separately, with warnings for substantial unresolved sample
 coverage. The manifest records CPU affinity and perf permission settings; reports
 show the recorded event (which may differ from the requested event). No kernel
 address is assigned to a guessed function.
+
+## Generating perf reports
+
+Measurements run sequentially. After all workloads finish, the harness generates
+reports and source annotations with up to four parallel case jobs by default.
+`--report-jobs N` controls the limit; each job runs one perf subprocess at a time.
+This keeps reporting CPU/memory pressure out of subsequent measurements.
+Progress prints `[reports n/total]` with each case's result. Cases remain
+REPORTS_PENDING until their reports finish; failed reports fail the overall run.
+
+Each `perf/` directory includes `flat.txt`, `by_thread.txt` and `callers.txt`,
+plus the original `.stdout`, `.stderr` and `.command.json` evidence and a
+semicolon-delimited `symbols.stdout` for analysis. The flat and caller options
+match the standard perf report forms; the thread report sorts `comm,pid,symbol`
+to distinguish worker thread IDs. Reports filter `--comms efs-bench` to exclude
+helper processes. Failed profiled workloads with captured data also get reports,
+marked as diagnostic evidence rather than representative measurements.
+
+Regenerate reports without running any workload, using the original recording
+user on the Linux host (ownership/access is checked before starting):
+
+```sh
+./efs-bench.sh --reports-only logs/efs-bench-20261006T230611.472138Z --report-jobs 4
+```
+
+`--analyze DIR` only rebuilds Markdown from existing reports. It does not run
+perf report. Older runs keep working with their `.stdout` report names.
+Kernel copy and page-pinning/IOMMU symbols now have explicit heuristic categories;
+use the raw symbols and callers to assess a proposed optimization.
