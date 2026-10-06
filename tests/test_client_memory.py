@@ -30,6 +30,8 @@ source = r'''
 #include <pthread.h>
 #include "client_internal.h"
 #include "efs/writer_state.h"
+#include "efs/write_extent.h"
+#include <limits.h>
 struct efs_client g_client;
 int efs_rdma_zc_region_add(void *p, size_t n) { (void)p; (void)n; return 0; }
 #include "bufpool.c"
@@ -91,10 +93,18 @@ static int efs_append_flush_report(void *fi, efs_ino_t ino) {
         }
     return EFS_OK;
 }
-'''+function(f,'fuse_write_admit')
+'''+function(f,'fuse_validate_write_extent')+'\n'+function(f,'fuse_write_admit')
 source += r'''
 static struct dcache_ent *entry(uint32_t ci) { return dcache_find_meta(dcache_slot(1,ci),1,ci); }
 int main(void) {
+    uint64_t limit=(uint64_t)UINT32_MAX*EFS_CHUNK_SIZE;
+    assert(!fuse_validate_write_extent(0,1));
+    assert(fuse_validate_write_extent(-1,1)==-EINVAL);
+    assert(fuse_validate_write_extent(0,(size_t)INT_MAX+1)==-EFBIG);
+    assert(!fuse_validate_write_extent((off_t)(limit-1),1));
+    assert(fuse_validate_write_extent((off_t)(limit-1),2)==-EFBIG);
+    assert(efs_write_extent_valid(UINT64_MAX,2,EFS_CHUNK_SIZE)==EFS_ERR_INVAL);
+    assert(efs_write_extent_valid(0,1,1)==EFS_ERR_INVAL);
     setenv("EFS_DCACHE_HARD_BYTES","33554432",1);
     setenv("EFS_DCACHE_DRAIN_BYTES","33554432",1);
     for(int i=0;i<DCACHE_SHARDS;i++) assert(!pthread_mutex_init(&g_dcache.shard[i],NULL));

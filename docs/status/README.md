@@ -769,3 +769,23 @@ still runs and can collapse sparse ownership on overflow; this checkpoint does
 not claim that peer-hole overwrite risk is fixed. Never re-age existing legacy
 writes to manufacture admission authority. Logical truncate/history retirement
 and D27 timing/fault/RSS gates remain open.
+
+## D25 overwrite/binding checkpoint — Oct 6 2026
+
+Five further rounds make full-overwrite bytes and range reset atomic
+(`882d2dbd`), retain the cache-hit path without extra allocation (`0bbd33af`),
+reject a second snapshot while REPORT is pending (`a229b30d`), and add clean
+cache binding to expected FileID/authority (`fce4e629`). The binding API refuses
+legacy dirty, pinned and unreported bytes; no accepted legacy bytes acquire a
+new epoch. Write extent validation now rejects negative offsets, callback count
+overflow, end overflow and chunk-index/exclusive-end overflow before copying.
+Actual append reservations are checked before pins/invalidation/index casts.
+[Tests and acceptance](../../results/measure/20261006-admission-five-rounds/SUMMARY.md).
+
+Full Linux build/tests, local normal/ASan/UBSan regressions and the five
+checks in the documentation gate pass. Private NUC acceptance is 216 PASS,
+0 FAIL, 1 mmap SKIP plus 64/64 two-client PASS; both clients stop cleanly.
+The full-overwrite regression fails against the previous production function.
+The cache binding API is staged; authoritative FUSE admission and both flush paths still
+need wiring before activation. The active legacy union's sparse-overflow risk,
+logical truncate/history retirement and D27 fault/timing/RSS gates remain open.

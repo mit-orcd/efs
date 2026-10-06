@@ -1,0 +1,7 @@
+Assertion failed: (entry.base_gen==EFS_CHUNK_BASE_UNCOND && entry.have_base), function main, file test.c, line 304.
+Traceback (most recent call last):
+  File "/Users/mike/git/efs/tests/test_load_merge_race.py", line 104, in <module>
+    subprocess.run([str(path.with_suffix(''))],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-load-merge-jwb3i2_r/test']' died with <Signals.SIGABRT: 6>.

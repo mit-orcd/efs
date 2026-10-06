@@ -22,6 +22,11 @@ Next, in order:
    replacement/reclaim and REPORT acknowledgement. The active legacy cache also
    preserves pending bytes across late-loader merges and holds the slot lock
    through installation. [Current checkpoint](../../results/measure/20261006-cache-five-rounds/SUMMARY.md).
+   Full-overwrite ownership/reset is now atomic, its cache-hit fast path avoids
+   extra allocation, and pending publication blocks another snapshot. Clean
+   cache binding to expected FileID/authority is staged and tested; legacy dirty
+   bytes cannot acquire a new epoch. Write extent guards reject index/end wrap.
+   [Latest checkpoint](../../results/measure/20261006-admission-five-rounds/SUMMARY.md).
    Next connect every FUSE write entry point and both flush paths to these APIs;
    replace the unlabelled union, serialize pending publications and drain range
    exhaustion before copying bytes. No epoch-aware FUSE admission is active.

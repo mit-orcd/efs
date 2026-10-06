@@ -7,6 +7,7 @@
 #include "efs/meta_apply.h"
 #include "efs/wb_recovery.h"
 #include "efs/writer_state.h"
+#include "efs/write_extent.h"
 #include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -4386,7 +4387,7 @@ int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
     if (!src || !len)
         return -1;
     uint32_t cs = data_chunk_size();
-    if (cs == 0)
+    if (efs_write_extent_valid(offset, len, cs) != EFS_OK)
         return -1;
     uint64_t remaining = len;
     uint64_t pos = offset;
@@ -4502,7 +4503,7 @@ int efs_dcache_try_patch_sparse(efs_ino_t ino, uint64_t offset, uint32_t len,
     if (!src || !len)
         return -1;
     uint32_t cs = data_chunk_size();
-    if (cs == 0)
+    if (efs_write_extent_valid(offset, len, cs) != EFS_OK)
         return -1;
     uint64_t remaining = len;
     uint64_t pos = offset;

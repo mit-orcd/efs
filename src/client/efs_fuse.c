@@ -4,6 +4,8 @@
 #include "reply_buffers.h"
 #include "stop_control.h"
 #include "efs/common.h"
+#include "efs/write_extent.h"
+#include <limits.h>
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/kv_key.h"
@@ -2849,8 +2851,11 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
     /* The size below is ahead of the PUT. Pin until the caller has the
      * bytes in dcache or the ino is marked dirty. An early dirty mark
      * would release the server's append barrier before the PUT. */
+    uint64_t off = (start <= UINT64_MAX - len && start + len == ns) ? start : (ns - len);
+    uint32_t reserve_cs = g_client.export.chunk_size ? g_client.export.chunk_size : EFS_CHUNK_SIZE;
+    if (efs_write_extent_valid(off, len, reserve_cs) != EFS_OK)
+        return -EFBIG;
     efs_client_stage_pin(ino);
-    uint64_t off = (start + len == ns) ? start : (ns - len);
     if (len > 0) {
         uint32_t cs = g_client.export.chunk_size ? g_client.export.chunk_size
                                                  : EFS_CHUNK_SIZE;
@@ -2880,6 +2885,18 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
  * Under pressure, use exactly the fsync ordering (queued writes, append
  * stripe, data PUTs, REPORT). A failed drain retains previously owned bytes
  * and rejects this request before touching its data or append reservation. */
+static int fuse_validate_write_extent(off_t offset, size_t size)
+{
+    if (offset < 0)
+        return -EINVAL;
+    if (size > INT_MAX)
+        return -EFBIG;
+    uint32_t cs = fuse_chunk_size();
+    if (!efs_chunk_size_valid(cs))
+        return -EIO;
+    return efs_write_extent_valid((uint64_t)offset, size, cs) == EFS_OK ? 0 : -EFBIG;
+}
+
 static int fuse_write_admit(size_t size)
 {
     uint64_t cs = fuse_chunk_size();
@@ -3034,6 +3051,9 @@ static int efs_fuse_write_admitted(const char *path, const char *buf, size_t siz
 static int efs_fuse_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
+    int extent = fuse_validate_write_extent(offset, size);
+    if (extent)
+        return extent;
     if (!fi || !fi->fh || virt_kind(efs_file_ino(fi, 0)) || !size ||
         fuse_odirect_unaligned(fi, offset, size))
         return efs_fuse_write_admitted(path, buf, size, offset, fi);
@@ -3241,6 +3261,9 @@ static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf
 static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
                               off_t offset, struct fuse_file_info *fi)
 {
+    int extent = fuse_validate_write_extent(offset, fuse_buf_size(buf));
+    if (extent)
+        return extent;
     size_t size = fuse_buf_size(buf);
     if (!fi || !fi->fh || virt_kind(efs_file_ino(fi, 0)) || !size ||
         fuse_odirect_unaligned(fi, offset, size))
