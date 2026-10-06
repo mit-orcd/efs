@@ -56,9 +56,17 @@ for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
-for name in ['dcache_apply_init','dcache_store_owned','dcache_drop_locked','dcache_body_to_rdcache','dcache_install_image','dcache_flush_keep']:
+for name in ['dcache_apply_init','dcache_store_owned_locked','dcache_drop_locked','dcache_body_to_rdcache','dcache_install_image','dcache_flush_keep']:
     source += '\n'+function(w,name)
 source += r'''
+static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *p, uint32_t len, const struct dcache_init *in) {
+    pthread_mutex_t *mu=dcache_mu(dcache_slot(ino,ci));
+    pthread_mutex_lock(mu);
+    int rc=dcache_store_owned_locked(ino,ci,p,len,in);
+    pthread_mutex_unlock(mu);
+    if (!rc) dcache_account_extra(ino,ci);
+    return rc;
+}
 static void dcache_img_to_rdcache(efs_ino_t ino,uint32_t ci,uint8_t *img,uint32_t len) { (void)ino;(void)ci;efs_buf_free(img,len); }
 '''+function(w,'dcache_note_committed')+'\n'+function(w,'efs_dcache_pressure_ino')
 source += r'''

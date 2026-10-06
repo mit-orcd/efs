@@ -4063,7 +4063,8 @@ struct dcache_init {
     int full;          /* whole-chunk image: nrange 0, UNCOND */
     uint32_t off, len; /* the range this write owns (partial) */
 };
-static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
+/* Caller holds the slot mutex through ownership lookup and installation. */
+static int dcache_store_owned_locked(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
                               uint32_t chunk_size,
                               const struct dcache_init *in);
 static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
@@ -4665,23 +4666,18 @@ static void dcache_apply_init(struct dcache_ent *e,
     dcache_add_range(e, in->off, in->len);
 }
 
-static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
+static int dcache_store_owned_locked(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
                               uint32_t chunk_size,
                               const struct dcache_init *in)
 {
     if (!chunk || !chunk_size)
         return EFS_ERR_INVAL;
     uint32_t s = dcache_slot(ino, ci);
-    pthread_mutex_t *mu = dcache_mu(s);
-    pthread_mutex_lock(mu);
     struct dcache_ent *e = dcache_find_meta(s, ino, ci); /* see dcache_store */
     if (e) {
         int rc = dcache_take(e, ino, ci, chunk, chunk_size);
         if (rc == 0)
             dcache_apply_init(e, in);
-        pthread_mutex_unlock(mu);
-        if (rc == 0)
-            dcache_account_extra(ino, ci);
         return rc;
     }
     struct dcache_ent *head = &g_dcache.e[s];
@@ -4689,9 +4685,6 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
         int rc = dcache_take(head, ino, ci, chunk, chunk_size);
         if (rc == 0)
             dcache_apply_init(head, in);
-        pthread_mutex_unlock(mu);
-        if (rc == 0)
-            dcache_account_extra(ino, ci);
         return rc;
     }
     int reused = 0;
@@ -4701,14 +4694,12 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
     else
         n = efs_buf_metadata_alloc(sizeof(*n));
     if (!n) {
-        pthread_mutex_unlock(mu);
         return EFS_ERR_NOMEM;
     }
     int rc = dcache_take(n, ino, ci, chunk, chunk_size);
     if (rc != 0) {
         if (!reused)
             efs_buf_metadata_free(n, sizeof(*n));
-        pthread_mutex_unlock(mu);
         return rc;
     }
     dcache_apply_init(n, in);
@@ -4716,8 +4707,6 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
         n->next = head->next;
         head->next = n;
     }
-    pthread_mutex_unlock(mu);
-    dcache_account_extra(ino, ci);
     return 0;
 }
 
@@ -4748,9 +4737,13 @@ static int dcache_merge_owned(efs_ino_t ino, uint32_t ci, uint32_t off,
         efs_rdcache_invalidate(ino, ci);
         return 1;
     }
+    /* Keep lookup and installation in one critical section. A second
+     * writer may otherwise create ownership between the two lock holds. */
+    int rc = dcache_store_owned_locked(ino, ci, chunk, cs, in);
     pthread_mutex_unlock(mu);
-    if (dcache_store_owned(ino, ci, chunk, cs, in) != 0)
-        return -1;
+    if (rc != 0)
+        return rc;
+    dcache_account_extra(ino, ci);
     efs_rdcache_invalidate(ino, ci);
     return 0;
 }
