@@ -221,6 +221,29 @@ int main(void) {
     view.authority_epoch=0;view.history.count=0;
     assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_ERR_STALE);
     dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata && !g_live);
+    /* Snapshot outputs must never overwrite body/state through partial aliases. */
+    uint32_t cs=EFS_MIN_CHUNK_SIZE;
+    uint8_t *body=malloc(cs+1), *copy=malloc(cs); assert(body && copy);
+    memset(body,77,cs+1);
+    struct efs_writer_state *writer=NULL;
+    view=(struct efs_msg_inode_writer_view_reply){.ino=1,.generation=7};
+    assert(efs_writer_state_write(&writer,&view,body,cs,0,body,8)==EFS_OK);
+    struct efs_msg_inode_getchunks_reply *base=calloc(1,sizeof(*base));assert(base);
+    base->ino=1;base->generation=7;
+    struct efs_writer_plan plan, saved_plan;memset(&plan,0x5a,sizeof(plan));saved_plan=plan;
+    assert(efs_writer_state_snapshot(writer,&view,base,body,cs,&plan,body+1)==EFS_ERR_INVAL);
+    assert(body[0]==77 && body[cs]==77 && !memcmp(&plan,&saved_plan,sizeof(plan)));
+    assert(efs_writer_state_snapshot(writer,&view,base,body,cs,(void *)copy,copy)==EFS_ERR_INVAL);
+    assert(efs_writer_state_snapshot(writer,&view,base,body,cs,&plan,(void *)writer)==EFS_ERR_INVAL);
+    assert(efs_writer_state_snapshot(writer,&view,base,body,cs,&plan,copy)==EFS_OK);
+    assert(copy[0]==77 && copy[8]==0);
+    struct efs_writer_plan forged=plan;
+    forged.original.ranges[0].len=forged.surviving.ranges[0].len=4;
+    assert(efs_writer_state_put(writer,&forged,19,2)==EFS_ERR_STALE);
+    assert(!writer->has_publication && writer->ranges.bytes.ranges[0].len==8);
+    assert(efs_writer_state_put(writer,&plan,19,2)==EFS_OK);
+    assert(efs_writer_state_report(writer,19,2,EFS_OK)==EFS_OK);
+    assert(efs_writer_state_free(writer)==EFS_OK);free(body);free(copy);free(base);
     /* Saturate the real metadata allocator with published, body-less nodes.
      * An unresolved and a stalled node must survive pressure reclamation. */
     struct dcache_ent *head=&g_dcache.e[0];

@@ -40,6 +40,13 @@ int efs_writer_state_write(struct efs_writer_state **slot,
     return EFS_OK;
 }
 
+/* Compare distances rather than pointer ends: no wrap at UINTPTR_MAX. */
+static int writer_storage_overlaps(const void *a, size_t an, const void *b, size_t bn)
+{
+    uintptr_t x = (uintptr_t)a, y = (uintptr_t)b;
+    return an && bn && (x <= y ? y - x < an : x - y < bn);
+}
+
 int efs_writer_state_snapshot(const struct efs_writer_state *state,
                               const struct efs_msg_inode_writer_view_reply *view,
                               const struct efs_msg_inode_getchunks_reply *base,
@@ -47,7 +54,11 @@ int efs_writer_state_snapshot(const struct efs_writer_state *state,
                               struct efs_writer_plan *out_plan,
                               uint8_t *out_body)
 {
-    if (!state || !body || !out_body || !out_plan || body == out_body ||
+    if (!state || !body || !out_body || !out_plan || writer_storage_overlaps(body, body_len, out_body, body_len) ||
+        writer_storage_overlaps(state, sizeof(*state), out_body, body_len) ||
+        writer_storage_overlaps(body, body_len, out_plan, sizeof(*out_plan)) ||
+        writer_storage_overlaps(state, sizeof(*state), out_plan, sizeof(*out_plan)) ||
+        writer_storage_overlaps(out_body, body_len, out_plan, sizeof(*out_plan)) ||
         !efs_chunk_size_valid(body_len) || state->ranges.bytes.chunk_size != body_len)
         return EFS_ERR_INVAL;
     /* One sidecar has one publication token. Drain REPORT before capturing
@@ -90,6 +101,14 @@ int efs_writer_state_put(struct efs_writer_state *state,
         state->ranges.bytes.chunk_size != plan->original.chunk_size ||
         plan->original.mutation > state->ranges.bytes.mutation)
         return EFS_ERR_STALE;
+    /* Equal mutation must describe exactly the accepted ownership. An older
+     * immutable snapshot may differ after a concurrent admission. */
+    if (plan->original.mutation == state->ranges.bytes.mutation) {
+        struct efs_dirty_ranges original = state->ranges.bytes;
+        int match = efs_dirty_ranges_ack(&original, &plan->original);
+        if (match != EFS_OK)
+            return match;
+    }
     int rc = efs_writer_publication_bind(plan, object_generation, snapshot_sequence,
                                          &state->publication);
     if (rc == EFS_OK)
