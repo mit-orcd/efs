@@ -127,6 +127,9 @@ static void writer_body_snapshot(void)
     for(unsigned i=0;i<sizeof(snapshot);++i) assert(snapshot[i]==(i<100?'A':0));
     memcpy(saved,snapshot,sizeof(saved));
     assert(efs_writer_state_put(state,&plan,400,1)==EFS_OK);
+    struct efs_writer_plan blocked=sentinel;
+    assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&blocked,snapshot)==EFS_ERR_BUSY);
+    assert(!memcmp(&blocked,&sentinel,sizeof(blocked)) && !memcmp(snapshot,saved,sizeof(saved)));
     memset(incoming,'B',sizeof(incoming));
     assert(efs_writer_state_write(&state,&view,body,sizeof(body),200,incoming,50)==EFS_OK);
     assert(!memcmp(snapshot,saved,sizeof(saved)));

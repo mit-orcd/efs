@@ -50,6 +50,10 @@ int efs_writer_state_snapshot(const struct efs_writer_state *state,
     if (!state || !body || !out_body || !out_plan || body == out_body ||
         !efs_chunk_size_valid(body_len) || state->ranges.bytes.chunk_size != body_len)
         return EFS_ERR_INVAL;
+    /* One sidecar has one publication token. Drain REPORT before capturing
+     * another PUT; rejecting at bind time would already have spent I/O. */
+    if (state->has_publication)
+        return EFS_ERR_BUSY;
     struct efs_writer_plan plan;
     int rc = efs_writer_ranges_plan_base(&state->ranges, view, base, &plan);
     if (rc != EFS_OK)
