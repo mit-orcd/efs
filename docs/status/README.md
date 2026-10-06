@@ -633,3 +633,39 @@ validate/adopt its epoch on the publication lane (including absent lanes), then
 connect bounded dirty ranges to FUSE admission and exact flush acknowledgements.
 The inode snapshot alone is not a lane publication permit. Public logical
 truncate, live sweep scheduling and history retirement remain outstanding.
+
+
+## D25 writer snapshot RPC and lane validation checkpoint — Oct 6 2026
+
+`INODE_WRITER_VIEW` (107/108) now exposes the bounded writer snapshot through
+an inode-routed RPC. The host establishes ReadIndex authority on both inode
+and requested publication-lane groups, forwarding when it cannot host both.
+Generation zero discovers FileID because existing LOOKUP replies omit its
+generation; subsequent requests can require the exact discovered generation.
+Replies include chunk identity, authority epoch, complete-history floor and
+retained history. Client validation rejects mismatched identities, malformed
+histories and floors that claim completeness across retired gaps. Failed reads
+leave the previous snapshot unchanged; redirect/BUSY retries are bounded.
+
+`efs_meta_get_writer_chunk_view_tx` collects the lane stamp around the inode
+snapshot and rechecks transaction decisions. An absent inactive lane may use
+the captured inode epoch; first publication already initializes its stamp at
+that epoch. An active missing lane or a present lane at a different epoch
+returns BUSY. This read performs no adoption or mutation; lagging lanes still
+need the existing coordinated resize/adoption path.
+
+Linux `make test` passes. RPC extraction tests pass normally and under
+ASan/UBSan, covering redirects, BUSY exhaustion, bad type/length/identity,
+incomplete history, STALE and transport failure. Metadata tests cover absent
+and lagging lanes, first-publication epoch initialization, stale publication,
+and committed/undecided fence transactions before RESOLVE. On the isolated
+NUC cluster, **216 live checks PASS** across all three nodes for holes, FileID
+mismatch and published rows; malformed requests are rejected. Both test clients
+cleanly stop without discard. [Saved results](../../results/measure/20261006-writer-rpc/SUMMARY.md).
+
+**Next:** bind FileID/authority snapshots to bounded FUSE dirty-range admission,
+retain matching bytes/ranges across flush/retry and acknowledge exact owned
+snapshots. History-retirement races must retain accepted bytes and fail closed;
+the RPC itself grants no lifetime guarantee against a later fence. Public
+logical truncate and live sweep/retirement remain disabled/pending. This phase
+has not changed production write admission or rolled the original NUC mounts.

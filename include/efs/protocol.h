@@ -158,7 +158,51 @@ enum efs_msg_type {
      * Reply is struct efs_msg_version_reply. */
     EFS_MSG_VERSION = 105,
     EFS_MSG_VERSION_REPLY = 106,
+    EFS_MSG_INODE_WRITER_VIEW = 107,
+    EFS_MSG_INODE_WRITER_VIEW_REPLY = 108,
 };
+
+/* D25 read authority for write admission, including holes and new lanes.
+ * Fixed bounded history; FileID and chunk identity must match the request.
+ * This is a snapshot, not a promise against subsequent fences. */
+struct efs_msg_inode_writer_view {
+    efs_ino_t ino;
+    uint64_t generation; /* zero discovers FileID; nonzero validates it */
+    uint32_t chunk_index;
+    uint32_t reserved;
+};
+struct efs_msg_inode_writer_view_reply {
+    uint8_t status;
+    efs_node_id_t primary_id;
+    efs_ino_t ino;
+    uint64_t generation;
+    uint32_t chunk_index;
+    uint32_t reserved;
+    uint64_t authority_epoch;
+    uint64_t oldest_complete_epoch;
+    struct efs_fence_history history;
+};
+static inline int efs_writer_view_reply_valid(
+    const struct efs_msg_inode_writer_view *req,
+    const struct efs_msg_inode_writer_view_reply *reply)
+{
+    if (!req || !reply || reply->ino != req->ino ||
+        (!reply->generation || (req->generation && reply->generation != req->generation)) ||
+        reply->chunk_index != req->chunk_index || reply->reserved ||
+        reply->oldest_complete_epoch > reply->authority_epoch ||
+        efs_fence_history_valid(&reply->history) != EFS_OK)
+        return EFS_ERR_PROTO;
+    uint64_t floor = reply->authority_epoch;
+    for (uint32_t i = reply->history.count; i > 0; --i) {
+        uint64_t epoch = reply->history.entries[i - 1].epoch;
+        if (epoch > reply->authority_epoch)
+            return EFS_ERR_PROTO;
+        if (epoch != floor)
+            break;
+        --floor;
+    }
+    return reply->oldest_complete_epoch >= floor ? EFS_OK : EFS_ERR_PROTO;
+}
 
 /* GC_FRAGMENT request: delete fragment `fragment_index` of chunk
  * `chunk_index` of `ino` iff its stored checksum sidecar equals

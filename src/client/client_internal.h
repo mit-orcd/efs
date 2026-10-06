@@ -220,6 +220,9 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
                                struct efs_inode *ents, uint32_t *inout_count,
                                uint32_t *src_io, char *name_io,
                                uint32_t *done_out);
+struct efs_msg_inode_writer_view_reply;
+int efs_client_rpc_writer_view(efs_ino_t ino, uint64_t generation, uint32_t ci,
+                                struct efs_msg_inode_writer_view_reply *out);
 struct efs_chunk_rec;
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,

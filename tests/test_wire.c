@@ -304,8 +304,44 @@ static void test_raft_codec(void)
           "short decode");
 }
 
+static void test_writer_view_reply(void)
+{
+    struct efs_msg_inode_writer_view req = {123, 456, 17, 0};
+    struct efs_msg_inode_writer_view_reply r = {0};
+    r.ino = req.ino; r.generation = req.generation; r.chunk_index = req.chunk_index;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_OK, "writer zero epoch reply");
+    r.authority_epoch = 3; r.history.count = 2;
+    r.history.entries[0] = (struct efs_content_fence){1, 100};
+    r.history.entries[1] = (struct efs_content_fence){3, 50};
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO,
+          "writer reply cannot invent completeness across a retired gap");
+    r.oldest_complete_epoch = 2;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_OK, "writer valid conservative floor");
+    r.history.count = EFS_FENCE_HISTORY_MAX + 1;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO, "writer oversized history");
+    r.history.count = 0; r.oldest_complete_epoch = 3;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_OK, "writer retired history reply");
+    req.generation = 0;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_OK, "writer bootstrap discovers FileID");
+    r.generation = 0;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO, "writer bootstrap needs nonzero FileID");
+    req.generation = r.generation = 456;
+    ++r.generation;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO, "writer wrong FileID reply");
+    --r.generation; ++r.chunk_index;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO, "writer wrong chunk reply");
+    --r.chunk_index; r.oldest_complete_epoch = 4;
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO, "writer future floor");
+    r.oldest_complete_epoch = 3; r.history.count = 1;
+    r.history.entries[0] = (struct efs_content_fence){4, 1};
+    CHECK(efs_writer_view_reply_valid(&req, &r) == EFS_ERR_PROTO, "writer future fence");
+    rt_struct("writer-view-request", sizeof(req));
+    rt_struct("writer-view-reply", sizeof(r));
+}
+
 int main(void)
 {
+    test_writer_view_reply();
     test_frame_roundtrip();
     test_frame_reject();
     test_status_offset();

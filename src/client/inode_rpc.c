@@ -817,6 +817,60 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
     return EFS_OK;
 }
 
+int efs_client_rpc_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci,
+                                struct efs_msg_inode_writer_view_reply *out)
+{
+    if (!ino || !out)
+        return EFS_ERR_INVAL;
+    struct efs_msg_inode_writer_view req = {ino, gen, ci, 0};
+    uint32_t shard = efs_kv_inode_shard(ino);
+    efs_node_id_t target = 0;
+    for (unsigned attempt = 0; attempt < 8; ++attempt) {
+        efs_node_id_t nid = target;
+        struct efs_conn *conn = target ? efs_client_conn_get(target) :
+                                         rpc_owner_conn_shard(shard, &nid);
+        if (!conn)
+            return EFS_ERR_NET;
+        if (efs_conn_send_msg(conn, EFS_MSG_INODE_WRITER_VIEW, &req, sizeof(req))) {
+            efs_client_conn_drop(nid, conn);
+            return EFS_ERR_NET;
+        }
+        uint8_t type = 0;
+        uint32_t len = 0;
+        void *payload = NULL;
+        if (efs_conn_recv_msg(conn, &type, &payload, &len)) {
+            free(payload);
+            efs_client_conn_drop(nid, conn);
+            return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid, conn);
+        if (type != EFS_MSG_INODE_WRITER_VIEW_REPLY || len != sizeof(*out)) {
+            free(payload);
+            return EFS_ERR_PROTO;
+        }
+        struct efs_msg_inode_writer_view_reply reply;
+        memcpy(&reply, payload, sizeof(reply));
+        free(payload);
+        if (reply.status == EFS_INODE_RPC_NOT_PRIMARY && reply.primary_id &&
+            reply.primary_id != nid) {
+            target = reply.primary_id;
+            continue;
+        }
+        if (reply.status == EFS_INODE_RPC_BUSY) {
+            usleep(50000u << (attempt < 4 ? attempt : 4));
+            continue;
+        }
+        int rc = rpc_status_to_efs(reply.status);
+        if (rc != EFS_OK)
+            return rc;
+        rc = efs_writer_view_reply_valid(&req, &reply);
+        if (rc == EFS_OK)
+            *out = reply;
+        return rc;
+    }
+    return EFS_ERR_BUSY;
+}
+
 int efs_client_rpc_getchunks(efs_export_id_t export_id, efs_ino_t ino,
                              uint32_t start, struct efs_chunk_rec *recs,
                              uint32_t *inout_count)

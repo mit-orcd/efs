@@ -12167,6 +12167,63 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     set_inode_rc(out, rc, hint);
 }
 
+void server_raft_host_writer_view(const struct efs_msg_inode_writer_view *req,
+                                   struct efs_msg_inode_writer_view_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    struct efs_meta_writer_view view;
+    int hint = -1, rc;
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_INVAL;
+    if (!h || !h->running || !req->ino || req->reserved)
+        return;
+    uint8_t groups[2] = {
+        efs_raft_shard_group(efs_kv_inode_shard(req->ino)),
+        efs_raft_shard_group(efs_kv_lane_shard(req->ino,
+                              req->chunk_index % EFS_META_LANES))};
+    int ng = groups[0] == groups[1] ? 1 : 2;
+    if (!host_hosts(h, groups[0]) || !host_hosts(h, groups[ng - 1])) {
+        int skip = -1;
+        out->status = EFS_INODE_RPC_NOT_PRIMARY;
+        for (int tries = 0; tries < h->n; ++tries) {
+            int rid = host_pick_peer(h, groups, ng, skip);
+            if (rid < 0)
+                return;
+            if (host_inode_rpc_peer(h, rid, EFS_MSG_INODE_WRITER_VIEW, req,
+                  sizeof(*req), EFS_MSG_INODE_WRITER_VIEW_REPLY, out, sizeof(*out)) == 0 &&
+                out->status != EFS_INODE_RPC_NOT_PRIMARY)
+                return;
+            memset(out, 0, sizeof(*out));
+            out->status = EFS_INODE_RPC_NOT_PRIMARY;
+            skip = rid;
+        }
+        return;
+    }
+    rc = host_read_index(h, groups[0], &hint);
+    if (rc == EFS_OK && ng == 2)
+        rc = host_read_index(h, groups[1], &hint);
+    uint64_t gen = req->generation;
+    if (rc == EFS_OK && !gen) {
+        struct efs_meta_row row;
+        rc = efs_meta_apply_get_inode_tx(h->kv, req->ino, host_txn_coord, h, &row);
+        if (rc == EFS_OK)
+            gen = row.generation;
+    }
+    if (rc == EFS_OK)
+        rc = efs_meta_get_writer_chunk_view_tx(h->kv, req->ino, gen,
+                    req->chunk_index, host_txn_coord, h, &view);
+    out->status = rc_to_inode_status(rc);
+    out->primary_id = hint >= 0 ? (efs_node_id_t)(hint + 1) : 0;
+    if (rc == EFS_OK) {
+        out->ino = view.ino;
+        out->generation = view.generation;
+        out->chunk_index = req->chunk_index;
+        out->authority_epoch = view.authority_epoch;
+        out->oldest_complete_epoch = view.oldest_complete_epoch;
+        out->history = view.history;
+    }
+}
+
 void server_raft_host_getchunks(efs_export_id_t export_id, efs_ino_t ino, uint32_t start, uint32_t max,
                                 struct efs_msg_inode_getchunks_reply *out)
 {

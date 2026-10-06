@@ -2583,6 +2583,60 @@ static void test_writer_authority_view(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_writer_lane_authority(void)
+{
+    struct efs_kv *kv = efs_kv_mem_create();
+    struct coord_ctx coord = {0};
+    struct efs_meta_row row;
+    struct efs_meta_writer_view view, saved;
+    efs_ino_t ino = 0;
+    coord.kv = kv;
+    CHECK(efs_meta_apply_init(kv, T0) == EFS_OK &&
+          efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                    "writer-lane", &ino) == EFS_OK &&
+          efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "writer lane fixture");
+    CHECK(efs_meta_get_writer_chunk_view_tx(kv, ino, row.generation, 17,
+              coord_fn, &coord, &view) == EFS_OK && !view.authority_epoch,
+          "writer absent lane epoch zero");
+    pub(kv, ino, 0, EFS_MIN_CHUNK_SIZE, 0x5980, 0, T0 + 1, "writer lane base");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation,
+              EFS_META_FENCE_INODE, 0, 1, 100, T0 + 2) == EFS_OK,
+          "writer lane advance inode authority");
+    CHECK(efs_meta_get_writer_chunk_view_tx(kv, ino, row.generation, 17,
+              coord_fn, &coord, &view) == EFS_OK && view.authority_epoch == 1,
+          "writer absent inactive lane inherits current inode authority");
+    saved = view;
+    CHECK(efs_meta_get_writer_chunk_view_tx(kv, ino, row.generation, 0,
+              coord_fn, &coord, &view) == EFS_ERR_BUSY && !memcmp(&view, &saved, sizeof(view)),
+          "writer populated lagging lane fails closed");
+    CHECK(efs_meta_apply_content_fence(kv, ino, row.generation, 0, 0, 1,
+              100, T0 + 2) == EFS_OK &&
+          efs_meta_get_writer_chunk_view_tx(kv, ino, row.generation, 0,
+              coord_fn, &coord, &view) == EFS_OK && view.authority_epoch == 1,
+          "writer matching lane accepts current epoch");
+    {
+        struct efs_meta_pub first = {0};
+        first.ino = ino; first.chunk_index = 18; first.candidate_gen = 0x5981;
+        first.content_epoch = view.authority_epoch; first.new_size = 100;
+        first.now = T0 + 3; first.coding_profile_id = EFS_META_PROFILE_K2F1;
+        fill_ch(&first.ch);
+        CHECK(efs_meta_apply_publish(kv, &first) == EFS_OK &&
+              efs_meta_get_writer_chunk_view_tx(kv, ino, row.generation, 18,
+                  coord_fn, &coord, &view) == EFS_OK && view.authority_epoch == 1,
+              "writer first publication stamps absent lane at captured global epoch");
+        first.expected_gen = 0x5981; first.candidate_gen = 0x5982; first.content_epoch = 0;
+        CHECK(efs_meta_apply_publish(kv, &first) == EFS_ERR_STALE,
+              "writer first lane publication rejects stale captured epoch");
+    }
+    CHECK(efs_meta_apply_activate_lanes(kv, ino, 1ull << 17) == EFS_OK,
+          "writer activate lane without stamp fixture");
+    saved = view;
+    CHECK(efs_meta_get_writer_chunk_view_tx(kv, ino, row.generation, 17,
+              coord_fn, &coord, &view) == EFS_ERR_BUSY && !memcmp(&view, &saved, sizeof(view)),
+          "writer missing active lane is not a new lane");
+    efs_kv_mem_free(kv);
+}
+
 static void test_sparse_grow_tail_epoch(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -3584,6 +3638,9 @@ static void test_content_fence_prepared_writers(void)
                                           &writer) == EFS_OK && !writer.authority_epoch &&
               !writer.history.count && !writer.oldest_complete_epoch,
               "D25 undecided writer snapshot retains old authority");
+        CHECK(efs_meta_get_writer_chunk_view_tx(kv, ino, row.generation, 0,
+                  coord_fn, &ctx, &writer) == EFS_OK && !writer.authority_epoch,
+              "D25 undecided writer lane snapshot retains old authority");
     }
     n = sizeof(raw);
     CHECK(efs_txn_read(kv, ik, il, coord_fn, &ctx, raw, &n) == EFS_OK &&
@@ -3608,6 +3665,9 @@ static void test_content_fence_prepared_writers(void)
                                           &writer) == EFS_OK && writer.authority_epoch == 1 &&
               writer.history.count == 1 && !writer.oldest_complete_epoch,
               "D25 writer snapshot sees committed inode and history before resolve");
+        CHECK(efs_meta_get_writer_chunk_view_tx(kv, ino, row.generation, 0,
+                  coord_fn, &ctx, &writer) == EFS_OK && writer.authority_epoch == 1,
+              "D25 writer lane snapshot sees unresolved committed fence");
     }
     CHECK(efs_meta_get_chunk_view_tx(kv, ino, row.generation, 0,
               EFS_MIN_CHUNK_SIZE, coord_fn, &ctx, &view) == EFS_OK &&
@@ -5129,6 +5189,7 @@ int main(void)
     test_stat_dir_hashed();
     test_utimens_fence();
     test_writer_authority_view();
+    test_writer_lane_authority();
     test_sparse_grow_tail_epoch();
     test_truncate_range_del();
     test_cross_group_lane();

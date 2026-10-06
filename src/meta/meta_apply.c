@@ -4461,6 +4461,51 @@ static int resize_lane_read(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     return rc == EFS_OK ? unpack_lane(val, *len, stamp) : rc;
 }
 
+int efs_meta_get_writer_chunk_view_tx(struct efs_kv *kv, efs_ino_t ino,
+                                      uint64_t gen, uint32_t ci,
+                                      efs_txn_coord_fn coord, void *ctx,
+                                      struct efs_meta_writer_view *out)
+{
+    if (!kv || !ino || !gen || !coord || !out)
+        return EFS_ERR_INVAL;
+    uint8_t lane = (uint8_t)(ci % EFS_META_LANES);
+    for (unsigned attempt = 0; attempt < 4; ++attempt) {
+        struct efs_meta_writer_view view, again;
+        struct efs_meta_row row;
+        struct lane_rec before, after;
+        struct efs_txn_pending pend = {0};
+        uint8_t b[LANE_VAL], a[LANE_VAL];
+        uint32_t bl, al;
+        int moved = 0;
+        int rc = efs_meta_get_writer_view_tx(kv, ino, gen, coord, ctx, &view);
+        if (rc == EFS_OK)
+            rc = resize_lane_read(kv, ino, gen, lane, coord, ctx, &pend, b, &bl, &before);
+        if (rc == EFS_OK)
+            rc = inode_read_tx(kv, ino, coord, ctx, &pend, &row);
+        if (rc == EFS_OK)
+            rc = resize_lane_read(kv, ino, gen, lane, coord, ctx, &pend, a, &al, &after);
+        if (rc == EFS_OK)
+            rc = efs_meta_get_writer_view_tx(kv, ino, gen, coord, ctx, &again);
+        if (rc == EFS_OK)
+            rc = efs_txn_pending_recheck(&pend, coord, ctx, &moved);
+        if (rc != EFS_OK)
+            return rc;
+        if (moved || bl != al || memcmp(b, a, bl) ||
+            memcmp(&view, &again, sizeof(view)) || row.generation != gen ||
+            row.content_epoch != view.authority_epoch)
+            continue;
+        if (!bl) {
+            if (row.active_lanes & (1ull << lane))
+                return EFS_ERR_BUSY;
+        } else if (before.fenced_epoch != view.authority_epoch) {
+            return EFS_ERR_BUSY;
+        }
+        *out = view;
+        return EFS_OK;
+    }
+    return EFS_ERR_BUSY;
+}
+
 int efs_meta_capture_resize(struct efs_kv *kv, efs_ino_t ino, uint64_t size,
                              uint64_t now, efs_txn_coord_fn coord, void *ctx,
                              struct efs_meta_resize_plan *out)

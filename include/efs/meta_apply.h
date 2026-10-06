@@ -48,6 +48,15 @@ int efs_meta_get_writer_view_tx(struct efs_kv *kv, efs_ino_t ino,
                                 uint64_t generation, efs_txn_coord_fn coord,
                                 void *ctx, struct efs_meta_writer_view *out);
 
+/* Validate the publication lane under the same collected inode authority.
+ * An absent inactive lane inherits the inode epoch on first publication.
+ * A present lagging lane fails BUSY; this read never mutates/adopts a stamp.
+ * Caller establishes read authority on both groups before collecting. */
+int efs_meta_get_writer_chunk_view_tx(struct efs_kv *kv, efs_ino_t ino,
+                                      uint64_t generation, uint32_t ci,
+                                      efs_txn_coord_fn coord, void *ctx,
+                                      struct efs_meta_writer_view *out);
+
 /* Atomic single-authority fence, for the future serialized TRUNCATE path.
  * Caller owns Raft apply serialization and cross-authority coordination.
  * This does not replace the current public truncate command by itself. */
