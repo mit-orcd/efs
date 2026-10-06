@@ -393,6 +393,10 @@ void efs_dcache_drop_if_clean(efs_ino_t ino, uint32_t ci);
  * 0 = cached (size updated if the write grew the file), -1 = cannot cache. */
 int efs_dcache_try_patch(efs_ino_t ino, uint64_t offset, uint32_t len,
                          const uint8_t *src);
+/* Staged D25 binding: only a clean existing body may acquire a FileID/epoch.
+ * BUSY requires legacy bytes to drain first; no FUSE caller is enabled yet. */
+int efs_dcache_bind_writer(efs_ino_t ino, uint64_t generation, uint32_t ci,
+                           const struct efs_msg_inode_writer_view_reply *view);
 /* Whole 128 KiB chunk. `chunk` is efs_buf_alloc'd; stolen on success. */
 int efs_dcache_store_full_owned(efs_ino_t ino, uint32_t ci, uint8_t *chunk,
                                 uint32_t cs);

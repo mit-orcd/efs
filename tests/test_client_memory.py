@@ -54,7 +54,7 @@ static void dcache_account_extra(efs_ino_t ino, uint32_t ci) { (void)ino;(void)c
 static void dcache_add_range(struct dcache_ent *e,uint32_t off,uint32_t len) { e->nrange=1;e->roff[0]=off;e->rlen[0]=len; }
 void efs_export_present_add(struct efs_export *ex,efs_ino_t ino,int which,int delta) { (void)ex;(void)ino;(void)which;(void)delta; }
 '''
-for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','dcache_take']:
+for name in ['dcache_slot','dcache_mu','dcache_find','dcache_find_meta','dcache_metadata_idle','dcache_chain_reuse','dcache_keep_on_drop','efs_dcache_bind_writer','dcache_take']:
     source += '\n'+function(w,name)
 source += '\n'+function(w,'efs_dcache_trim_metadata')
 source += '\n'+block(w, 'struct dcache_init {')
@@ -184,6 +184,28 @@ int main(void) {
     assert(g_metadata==sizeof(*idle));
     idle->writer=efs_writer_state_alloc(EFS_CHUNK_SIZE);assert(idle->writer);
     efs_dcache_trim_metadata();assert(!owned->next && !g_metadata);
+    /* Binding must not invent authority for previously accepted bytes. */
+    owned->ino=1;owned->ci=0;owned->data=efs_buf_alloc(EFS_CHUNK_SIZE);
+    owned->len=EFS_CHUNK_SIZE;assert(owned->data);owned->data[0]=77;
+    struct efs_msg_inode_writer_view_reply view={.ino=1,.generation=7};
+    owned->dirty=1;
+    assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_ERR_BUSY && !owned->writer);
+    owned->dirty=0;owned->pin_held=1;
+    assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_ERR_BUSY && !owned->writer);
+    owned->pin_held=0;view.generation=8;
+    assert(efs_dcache_bind_writer(1,7,0,&view)!=EFS_OK && !owned->writer);
+    view.generation=7;
+    assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_OK);
+    assert(owned->writer->ranges.ino==1 && owned->writer->ranges.generation==7);
+    assert(owned->data[0]==77 && !owned->dirty);
+    uint64_t charged_metadata=g_metadata;
+    assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_OK && g_metadata==charged_metadata);
+    view.authority_epoch=1;view.history.count=1;
+    view.history.entries[0]=(struct efs_content_fence){1,100};
+    assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_OK);
+    view.authority_epoch=0;view.history.count=0;
+    assert(efs_dcache_bind_writer(1,7,0,&view)==EFS_ERR_STALE);
+    dcache_drop_locked(1,0,0);assert(!owned->writer && !g_metadata && !g_live);
     /* Saturate the real metadata allocator with published, body-less nodes.
      * An unresolved and a stalled node must survive pressure reclamation. */
     struct dcache_ent *head=&g_dcache.e[0];

@@ -191,6 +191,7 @@ static int dcache_note_committed(efs_ino_t ino, uint32_t ci, uint64_t gen,
                                   uint64_t object_gen, uint64_t object_seq);
 static int dcache_replay_stale_ex(efs_ino_t ino, uint32_t ci, int absent);
 static int report_replay_stale(efs_ino_t ino);
+
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci);
 
 /* A pulled span-only row has no local PUT identity. Retain its report mark
@@ -3961,6 +3962,43 @@ static int dcache_keep_on_drop(const struct dcache_ent *e)
     return e->pin_held || (e->object_gen &&
                           (e->committed_object != e->object_gen ||
                            e->committed_seq != e->object_seq));
+}
+
+int efs_dcache_bind_writer(efs_ino_t ino, uint64_t generation, uint32_t ci,
+                           const struct efs_msg_inode_writer_view_reply *view)
+{
+    if (!ino || !generation || !view || view->status != EFS_INODE_RPC_OK)
+        return EFS_ERR_INVAL;
+    struct efs_msg_inode_writer_view request = {ino, generation, ci, 0};
+    int rc = efs_writer_view_reply_valid(&request, view);
+    if (rc != EFS_OK)
+        return rc;
+    dcache_ensure();
+    uint32_t slot = dcache_slot(ino, ci);
+    pthread_mutex_t *mu = dcache_mu(slot);
+    pthread_mutex_lock(mu);
+    struct dcache_ent *e = dcache_find(slot, ino, ci);
+    if (!e || !efs_chunk_size_valid(e->len) || dcache_keep_on_drop(e)) {
+        pthread_mutex_unlock(mu);
+        return EFS_ERR_BUSY;
+    }
+    struct efs_writer_ranges next = e->writer ? e->writer->ranges :
+        (struct efs_writer_ranges){.bytes.chunk_size = e->len};
+    rc = efs_writer_ranges_authority(&next, view);
+    if (rc == EFS_OK && !e->writer) {
+        e->writer = efs_writer_state_alloc(e->len);
+        if (!e->writer)
+            rc = EFS_ERR_NOMEM;
+    }
+    if (rc == EFS_OK) {
+        next.ino = ino;
+        next.generation = generation;
+        next.chunk_index = ci;
+        next.observed_epoch = view->authority_epoch;
+        e->writer->ranges = next;
+    }
+    pthread_mutex_unlock(mu);
+    return rc;
 }
 
 static int dcache_pending_of(efs_ino_t ino, uint32_t ci)
