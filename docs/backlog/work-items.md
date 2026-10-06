@@ -510,7 +510,7 @@ Steps, in this order; each is its own change with its own gate:
 
 - **Gate:** items above, plus posix 1 jobs=1 and 9-host, posix 2, and a
   1-client and 9-client 8 GiB dd with the flush in the clock, none worse
-  than the Sep 28 numbers in `.cursor/rules/efs-fio-honest.mdc`.
+  than the Sep 28 numbers in `docs/how-it-works/performance.md`.
 - **Forbidden:** raising the election timeout or `HOST_TICK_US`;
   chunking InstallSnapshot differently (W11 is done; [../project-history.md](../archive/project-history.md)); the global or
   thread-local fd cache; changing `EFS_RAFT_SNAP_CHUNK`, `HOST_PUB_BATCH_N`
@@ -2378,5 +2378,5 @@ item.
 
 After each of P1.2, P2.2 and P4.x: 1-client
 8/16 GiB dd+fsync, 16× dd, 4-reader cold read, 9-client dd, IO-500 9×4
-debug; update the ceiling table and `efs-fio-honest.mdc`; commit the
+debug; update the ceiling table in `docs/how-it-works/performance.md`; commit the
 results dirs; move this plan's finished rows to project-history.

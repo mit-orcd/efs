@@ -1747,8 +1747,8 @@ steps 0–12 are landed and gated: simulator, KV, Raft, cross-shard txns,
 sessions, directory spread, delete-2PC, FUSE A–D. The Raft+KV engine is
 the only metadata engine (Step 11, Sep 11). There is no next §10 step.
 What remains is the work queue in [§1a](#1a-the-work-queue): measured
-gaps, in order. The live cluster state (build, leaders, recorders) is the
-cluster fact in `.cursor/rules/efs-project-state.mdc`, not this page.
+gaps, in order. Record current cluster build, leaders and run evidence in
+[in-flight.md](#appendix-2--in-flight--the-current-handoff-block); verify live state before using a historical handoff.
 
 **How to pick work.** Finish [§1b](#appendix-2--in-flight--the-current-handoff-block)
 first. Then take the lowest-numbered open item in §1a; correctness before
@@ -3052,7 +3052,7 @@ Steps, in this order; each is its own change with its own gate:
 
 - **Gate:** items above, plus posix 1 jobs=1 and 9-host, posix 2, and a
   1-client and 9-client 8 GiB dd with the flush in the clock, none worse
-  than the Sep 28 numbers in `.cursor/rules/efs-fio-honest.mdc`.
+  than the Sep 28 numbers in `docs/how-it-works/performance.md`.
 - **Forbidden:** raising the election timeout or `HOST_TICK_US`;
   chunking InstallSnapshot differently (W11 is done; [../project-history.md](../archive/project-history.md)); the global or
   thread-local fd cache; changing `EFS_RAFT_SNAP_CHUNK`, `HOST_PUB_BATCH_N`
@@ -4920,7 +4920,7 @@ item.
 
 After each of P1.2, P2.2 and P4.x: 1-client
 8/16 GiB dd+fsync, 16× dd, 4-reader cold read, 9-client dd, IO-500 9×4
-debug; update the ceiling table and `efs-fio-honest.mdc`; commit the
+debug; update the ceiling table in `docs/how-it-works/performance.md`; commit the
 results dirs; move this plan's finished rows to project-history.
 
 
@@ -7231,8 +7231,8 @@ coordinator before a physical resource, *that is by definition an EFS bug*.
 By that rule the write path is still a bug, not a tuning task.
 
 Baselines, all honest (flush in the clock, reads after remount, `findmnt`
-verified `fuse.efs-fuse`). The full history of these numbers is in
-`.cursor/rules/efs-fio-honest.mdc`.
+verified `fuse.efs-fuse`). Historical context is in `docs/archive/project-history.md`; the table below
+links the retained measurement evidence.
 
 | measurement | value | where |
 | --- | --- | --- |

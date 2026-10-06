@@ -107,8 +107,8 @@ coordinator before a physical resource, *that is by definition an EFS bug*.
 By that rule the write path is still a bug, not a tuning task.
 
 Baselines, all honest (flush in the clock, reads after remount, `findmnt`
-verified `fuse.efs-fuse`). The full history of these numbers is in
-`.cursor/rules/efs-fio-honest.mdc`.
+verified `fuse.efs-fuse`). Historical context is in `docs/archive/project-history.md`; the table below
+links the retained measurement evidence.
 
 | measurement | value | where |
 | --- | --- | --- |

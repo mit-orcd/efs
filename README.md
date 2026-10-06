@@ -95,8 +95,8 @@ together (the build-ID gate rejects mixed builds), and with `--clients`
 remounts fcstor003–015. Anything that takes more than 10 s runs in a
 detached screen on a cluster node, not in a login-node shell. The rules of
 that cluster — pre-flight, timeouts, what a dead mount looks like, why
-`pkill -f` is forbidden — are `.cursor/rules/efs-fcstor-deploy.mdc`,
-`efs-remote-timeouts.mdc` and `efs-fio-honest.mdc`.
+`pkill -f` is forbidden — are in [cluster test operations](docs/operations/cluster-testing.md) and
+[performance measurement](docs/how-it-works/performance.md).
 
 ## Tests and numbers
 
@@ -152,6 +152,6 @@ The index is [docs/README.md](docs/README.md). The short version:
 | [docs/backlog/product-gaps.md](docs/backlog/product-gaps.md) | what is missing before this is a filesystem you could run |
 | [docs/backlog/ideas.md](docs/backlog/ideas.md) | parked ideas and landed scaling history |
 | [docs/archive/project-history.md](docs/archive/project-history.md) | the archive: every roll, gate and root cause since Aug 2026 — search it before re-deriving one |
-| `.cursor/rules/efs-project-state.mdc` | current facts and the do-not-re-chase learnings |
+| [docs/status/in-flight.md](docs/status/in-flight.md) | current work and handoff |
 
 MIT. See [LICENSE](LICENSE).

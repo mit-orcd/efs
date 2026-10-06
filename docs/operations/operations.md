@@ -175,7 +175,7 @@ bash tests/preflight.sh                    # read-only health check, run first
 
 Rules for that cluster (build on the node, never in the NFS home; `pgrep
 -x`, never `-f`; every long command in a screen) are in
-`.cursor/rules/efs-fcstor-deploy.mdc`.
+`docs/operations/cluster-testing.md`.
 
 ## FUSE surface
 

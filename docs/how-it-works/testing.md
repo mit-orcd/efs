@@ -17,8 +17,8 @@ Everything must be green. There is no accepted-failure list.
 ## Cluster gates
 
 Build and run on the dedicated fcstor test cluster — never Slurm, never the NFS
-home (see `.cursor/rules/efs-fcstor-deploy.mdc` for the deploy procedure and
-`.cursor/rules/efs-remote-timeouts.mdc` for timeouts).
+home (see [cluster test operations](../operations/cluster-testing.md) for
+pre-flight, deployment and timeout guidance).
 
 `bash tests/preflight.sh` first (read-only: one efsd per server, one build
 ID, both Raft leaders, `commit == applied`, idle commit rate, every mount
@@ -47,7 +47,7 @@ conv=fsync` of a non-zero source (all-zero chunks skip PUTs), or fio with
 every reading client. A `time_based` fio with `--direct=1` skips the kernel
 page cache but not the client's userspace dcache, so its write column is
 memory bandwidth. Method and the number history live in
-`.cursor/rules/efs-fio-honest.mdc`; the current references are in
+`docs/how-it-works/performance.md`; the current references are in
 [performance.md](performance.md) ("Baselines"). `tests/stress/fio_honest_matrix.sh` is the
 fio form; `tests/measure/*.sh` hold the dd and IOR runbooks.
 

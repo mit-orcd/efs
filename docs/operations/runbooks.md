@@ -20,11 +20,10 @@ call.
 
 ## 0. Rules that apply to every runbook
 
-1. **Read first:** `.cursor/rules/efs-fcstor-deploy.mdc` (pre-flight, what a
-   dead mount looks like), `.cursor/rules/efs-remote-timeouts.mdc` (a
-   timeout is a FAIL, never widen it), `.cursor/rules/efs-fio-honest.mdc`
-   (write numbers need the flush in the clock; `NOT_FUSE` = local disk =
-   fiction).
+1. **Read first:** [cluster test operations](cluster-testing.md) for pre-flight,
+   remote execution and cleanup, and [performance measurement](../how-it-works/performance.md)
+   for flush timing and cold-read requirements. `NOT_FUSE` means local disk,
+   so it invalidates an EFS measurement.
 2. **Anything estimated over 10 s runs in a screen on node9901, fstor007,
    or an fcstor**, not in the login-node shell. That includes every
    runbook and the 15 s pre-flight. The Cursor shell there dies with
@@ -303,7 +302,7 @@ question; do not wipe.
 
 - `git add results/measure/<dir>` and commit it with the [in-flight.md](../status/in-flight.md)
   progress-log lines (newest first) and, if a fact changed, the one line in
-  `.cursor/rules/efs-project-state.mdc`.
+  `docs/status/in-flight.md`.
 - Clients you remounted with `EFS_RPC_PROF=1` are remounted plain by the
   scripts; confirm with `tests/preflight.sh` (the `fuse.log` of a
   RPC_PROF mount grows a line every 2 s — that is how you can tell).

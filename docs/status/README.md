@@ -308,8 +308,8 @@ steps 0–12 are landed and gated: simulator, KV, Raft, cross-shard txns,
 sessions, directory spread, delete-2PC, FUSE A–D. The Raft+KV engine is
 the only metadata engine (Step 11, Sep 11). There is no next §10 step.
 What remains is the work queue in [§1a](#1a-the-work-queue): measured
-gaps, in order. The live cluster state (build, leaders, recorders) is the
-cluster fact in `.cursor/rules/efs-project-state.mdc`, not this page.
+gaps, in order. Record current cluster build, leaders and run evidence in
+[in-flight.md](in-flight.md); verify live state before using a historical handoff.
 
 **How to pick work.** Finish [§1b](in-flight.md)
 first. Then take the lowest-numbered open item in §1a; correctness before
