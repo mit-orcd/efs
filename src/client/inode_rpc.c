@@ -850,6 +850,8 @@ int efs_client_rpc_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci,
     uint32_t shard = efs_kv_inode_shard(ino);
     efs_node_id_t target = 0;
     for (unsigned attempt = 0; attempt < 8; ++attempt) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
         efs_node_id_t nid = target;
         struct efs_conn *conn = target ? efs_client_conn_get(target) :
                                          rpc_owner_conn_shard(shard, &nid);
@@ -868,6 +870,10 @@ int efs_client_rpc_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci,
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
+        if (efs_client_rpc_past_deadline()) {
+            free(payload);
+            return EFS_ERR_BUSY;
+        }
         if (type != EFS_MSG_INODE_WRITER_VIEW_REPLY || len != sizeof(*out)) {
             free(payload);
             return EFS_ERR_PROTO;
@@ -881,7 +887,8 @@ int efs_client_rpc_writer_view(efs_ino_t ino, uint64_t gen, uint32_t ci,
             continue;
         }
         if (reply.status == EFS_INODE_RPC_BUSY) {
-            usleep(50000u << (attempt < 4 ? attempt : 4));
+            if (attempt == 7 || rpc_writer_retry_pause(attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
             continue;
         }
         int rc = rpc_status_to_efs(reply.status);
