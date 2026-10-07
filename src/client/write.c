@@ -1584,8 +1584,22 @@ static int report_send_records(const struct efs_chunk_rec *records, uint32_t n,
                                             n, inodes, ni, sync);
 }
 
+static int report_retry_pause(unsigned delay_us)
+{
+    uint64_t deadline = efs_client_rpc_deadline_ms();
+    uint64_t now = report_clock_ms();
+    if (deadline && now >= deadline)
+        return EFS_ERR_BUSY;
+    if (deadline && deadline - now < (delay_us + 999u) / 1000u)
+        delay_us = (unsigned)(deadline - now) * 1000u;
+    usleep(delay_us);
+    return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
+}
+
 static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
 {
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
     struct dirty_snap ds;
     int pub = -1;
     memset(&ds, 0, sizeof(ds));
@@ -1631,7 +1645,16 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             }
             struct timespec until;
             clock_gettime(CLOCK_REALTIME, &until);
-            until.tv_nsec += 50000000;
+            uint64_t wait = 50;
+            uint64_t deadline = efs_client_rpc_deadline_ms();
+            uint64_t now = report_clock_ms();
+            if (deadline && now >= deadline) {
+                pthread_mutex_unlock(&g_client.dirty_mu);
+                return EFS_ERR_BUSY;
+            }
+            if (deadline && deadline - now < wait)
+                wait = deadline - now;
+            until.tv_nsec += (long)wait * 1000000;
             until.tv_sec += until.tv_nsec / 1000000000;
             until.tv_nsec %= 1000000000;
             pthread_cond_timedwait(&pub_cv, &g_client.dirty_mu, &until);
@@ -1808,7 +1831,7 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
      * A killed writer used to sit in this loop (64 STALE rounds, each
      * REPORT up to 16 retries) until the kernel FUSE request returned. */
     struct timespec ts_budget;
-    uint64_t budget0 = 0;
+    uint64_t budget0 = report_clock_ms();
     uint64_t outer = efs_client_rpc_deadline_ms();
     int hit_budget = 0, nstale = 0, nbusy = 0, rounds = 0;
     uint64_t t_rpc_ms = 0, t_replay_ms = 0, t_sleep_ms = 0;
@@ -1879,8 +1902,14 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             slp = 2000u * (unsigned)(attempt + 1);
             if (slp > 20000u)
                 slp = 20000u;
-            usleep(slp);
-            t_sleep_ms += slp / 1000u;
+            uint64_t sleep0 = report_clock_ms();
+            int pause_rc = report_retry_pause(slp);
+            t_sleep_ms += report_clock_ms() - sleep0;
+            if (pause_rc != EFS_OK) {
+                rc = pause_rc;
+                hit_budget = 1;
+                break;
+            }
             efs_client_table_lock();
             cn = 0;
             for (uint64_t i = 0; i < ds.chunk_count; i++) {
@@ -1941,10 +1970,16 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
             break;
         if (attempt >= 7)
             break;
-        usleep(50000u << (attempt < 4 ? attempt : 3));
+        uint64_t sleep0 = report_clock_ms();
+        int pause_rc = report_retry_pause(50000u << (attempt < 4 ? attempt : 3));
+        t_sleep_ms += report_clock_ms() - sleep0;
+        if (pause_rc != EFS_OK) {
+            rc = pause_rc;
+            hit_budget = 1;
+            break;
+        }
     }
-    if (!outer)
-        efs_client_rpc_set_deadline_ms(0);
+    efs_client_rpc_set_deadline_ms(outer);
     if (hit_budget) {
         struct timespec ts;
         uint64_t now, ms;
