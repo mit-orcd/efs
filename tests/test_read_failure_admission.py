@@ -7,6 +7,8 @@ root=Path(__file__).resolve().parents[1];s=(root/'src/client/read.c').read_text(
 f=s[a:b]+'    return EFS_OK;\n}'
 code=r'''
 #include "client_internal.h"
+#include "efs/write_extent.h"
+int efs_chunk_size_valid(uint32_t cs){return cs==131072;}
 #include <assert.h>
 #include <string.h>
 struct efs_client g_client;
@@ -31,6 +33,8 @@ int main(void) {
  expired=1;got=77;assert(efs_client_read(1,0,4,buf,&got)==EFS_ERR_BUSY&&!got);
  assert(efs_client_read(1,0,4,buf,NULL)==EFS_ERR_INVAL);
  assert(efs_client_read(1,0,4,NULL,&got)==EFS_ERR_INVAL);
+ expired=0;got=77;assert(efs_client_read(1,UINT64_MAX-1,4,buf,&got)==EFS_ERR_INVAL&&!got);
+ uint64_t limit=(uint64_t)UINT32_MAX*131072;assert(efs_client_read(1,limit,4,buf,&got)==EFS_ERR_INVAL&&!got);
  assert(!efs_client_read(1,0,0,NULL,&got)&&!got);return 0;
 }
 '''

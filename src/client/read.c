@@ -4,6 +4,7 @@
 #include "efs/erasure.h"
 #include "efs/checksum.h"
 #include "efs/placement.h"
+#include "efs/write_extent.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1623,6 +1624,12 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
 {
     uint32_t cs = data_chunk_size();
 
+    if (!refs || max_refs <= 0)
+        return EFS_ERR_INVAL;
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
+    if (size && efs_write_extent_valid(offset, size, cs) != EFS_OK)
+        return 0;
     if (!cs || size == 0 || (offset % cs) != 0 || (size % cs) != 0 ||
         size / cs > (size_t)max_refs || efs_ino_is_meta_table(ino))
         return 0;
@@ -1682,6 +1689,8 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     if (!out_len || (!buf && size))
         return EFS_ERR_INVAL;
     *out_len = 0;
+    if (size && efs_write_extent_valid(offset, size, data_chunk_size()) != EFS_OK)
+        return EFS_ERR_INVAL;
     if (size && efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     int want_pf;
