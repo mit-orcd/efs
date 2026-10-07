@@ -4494,6 +4494,15 @@ signals (63–215 ms); handlers still drain before teardown.
 
 **Evidence/current state:** Committed foundation 033a842a implements pthread-key reply owners; local retirement/failure tests pass.
 
+**Continuation acceptance (Oct 7):** optional EFS_REPLY_BUFFER_TRACE records
+successful ownership/growth and destructor retirement without changing default
+logging. NUC real FUSE read/readdir bursts with max_threads=16 and idle=1 retire
+4,581 owners / 77,746,176 bytes of capacity; no owners remain after the burst.
+Forty cycles show 3,292 KiB RSS span after warmup. Production helper units also
+cover 128 retired workers, failed allocation/growth/TLS ownership. Subsequent
+physical GC/restart gates pass. This is live direct-mode lifecycle evidence;
+buffered and real fault-injected RSS variants remain separate acceptance.
+
 **Home:** [current detail](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit).
 
 **Gate:** Repeated real Linux FUSE worker creation/retirement and RSS with TLS/allocation-failure coverage.

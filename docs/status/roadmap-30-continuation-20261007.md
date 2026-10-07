@@ -264,3 +264,14 @@ refuse below-usage shrink, preserve the quota on refusal and read unchanged
 bytes; no migration is advertised. Integrity and malformed PUT gates still pass.
 Log `/private/tmp/efs-roadmap-quota-cli.log`. Startup quota remains configuration,
 so this does not claim a persistent quota-setting feature.
+
+## Round 26 — W68 real worker retirement and memory evidence
+
+Added opt-in reply-buffer lifecycle trace and an owned FUSE burst gate, 40 cycles
+of unaligned reads plus readdir with sixteen active/one idle worker limits. NUC
+retired 4,581 owners / 77,746,176 capacity bytes, zero remaining owners, 3,292 KiB
+post-warmup RSS span. Allocation/growth/TLS failure units (128 retired workers)
+and subsequent physical GC/restart/valid-PUT gates pass. Log
+`/private/tmp/efs-roadmap-worker-retirement.log`; fixture
+`/data1/efs/gc-direct-zvlzgj9m/worker-retirement.json`. Default tracing is off.
+This measures process behavior in that workload, not a general RSS ceiling.

@@ -7,6 +7,7 @@ and processes are used; failed fixtures/logs are retained for diagnosis.
 """
 import argparse
 import ctypes
+import concurrent.futures
 import struct
 import hashlib
 import json
@@ -27,6 +28,7 @@ p.add_argument('--integrity', action='store_true')
 p.add_argument('--namespace', action='store_true')
 p.add_argument('--namespace-boundary', action='store_true')
 p.add_argument('--mount-label', default='default')
+p.add_argument('--workers', action='store_true')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
 source = Path(__file__).resolve().parents[2]
@@ -47,6 +49,7 @@ for path in sorted(inputs):
     digest.update(str(path.relative_to(source)).encode()+b'\0'+path.read_bytes())
 (work/"manifest.json").write_text(json.dumps({"mode":a.mode,"roots":[str(x) for x in roots],"port":a.port,"source_tree_sha256":digest.hexdigest()},indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT='tcp')
+if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
 servers=[]
 client=None
 peer=None
@@ -102,7 +105,7 @@ def stop(crash=False):
 def mount_client():
     global client
     log=open(work/'fuse.log','ab');handles.append(log)
-    client=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f'],env=env,stdout=log,stderr=log)
+    client=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=env,stdout=log,stderr=log)
     def ready():
         if client.poll() is not None:raise AssertionError('FUSE exited')
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
@@ -292,6 +295,42 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         os.unlink(target);os.unlink(donor)
         wait(lambda:not files(target_ino) and not files(donor_ino),'integrity fixtures reclaimed')
         print('two swapped fragments fail read; restored bytes verify cold PASS',flush=True)
+    if a.workers:
+        body=bytes(range(256))*4096
+        sample,fd,sample_ino=create('worker-read',body)
+        directory=mount/'worker-readdir';directory.mkdir()
+        for index in range(64):(directory/f'n{index}').touch()
+        rss=[]
+        def worker_read(index):
+            assert os.pread(fd,32768,1)==(body*9)[1:32769]
+            assert len(os.listdir(directory))==64
+        with concurrent.futures.ThreadPoolExecutor(max_workers=32) as pool:
+            for cycle in range(40):
+                list(pool.map(worker_read,range(64)))
+                time.sleep(.03)
+                text=(Path('/proc')/str(client.pid)/'status').read_text()
+                rss.append(int(re.search(r'VmRSS:\s+(\d+)',text).group(1)))
+        time.sleep(.3)
+        events=re.findall(r'reply-buffer (new|grow|retire) owner=(\S+) read=(\d+) readdir=(\d+)',(work/'fuse.log').read_text())
+        owners={};retired=0;new=0;retired_bytes=0
+        for event,owner,read,directory_bytes in events:
+            capacities=(int(read),int(directory_bytes))
+            if event=='new':
+                assert owner not in owners,(event,owner);owners[owner]=capacities;new+=1
+            elif event=='grow':
+                assert owner in owners,(event,owner);owners[owner]=capacities
+            else:
+                assert owners.pop(owner)==capacities,(event,owner)
+                retired+=1;retired_bytes+=sum(capacities)
+        assert new>=16 and retired>=16 and retired_bytes>0,(new,retired,retired_bytes)
+        assert len(owners)<=2,owners
+        assert max(rss[5:])-min(rss[5:])<32*1024,rss
+        (work/'worker-retirement.json').write_text(json.dumps({'new':new,'retired':retired,'retired_capacity_bytes':retired_bytes,'live_owners':len(owners),'rss_kib':rss},indent=2))
+        print(f'real worker retirement: new={new} retired={retired} live={len(owners)} retired_bytes={retired_bytes} RSS_span_kib={max(rss[5:])-min(rss[5:])} PASS',flush=True)
+        os.close(fd);sample.unlink()
+        for child in directory.iterdir():child.unlink()
+        directory.rmdir()
+        wait(lambda:not files(sample_ino),'worker fixture fragments reclaimed')
     # Two peers repeatedly touch adjacent ranges until the span chain folds.
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
     peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
