@@ -168,6 +168,7 @@ test-create-errors:
 	python3 tests/test_open_lease.py
 	python3 tests/test_unlink_verdict.py
 	python3 tests/test_gc_verdict.py
+	python3 tests/test_put_hint.py
 
 test-fold-observation:
 	python3 tests/test_fold_observation.py

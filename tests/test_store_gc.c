@@ -54,6 +54,20 @@ int main(void){
  }
  assert(s.gc_removed_fragments==4&&s.gc_removed_payload_bytes==4*EFS_FRAGMENT_SIZE);
  assert(server_delete_fragment_if_sum(NULL,&ex,42,0,0,sum)==EFS_ERR_INVAL);
+ /* Lost ACK: retry may be scheduled on another root, but probe must
+  * find the original body and charge exactly once. */
+ s.direct_io=0;ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;
+ efs_tls_chunk_gen=777;efs_tls_write_root=0;efs_tls_path_hint=EFS_PATH_HINT_SKIP;
+ assert(!server_write_fragment_with_sum_sync(&s,&ex,777,0,0,body,EFS_FRAGMENT_SIZE,sum));
+ assert(s.nodes[0].used==EFS_FRAGMENT_SIZE);
+ efs_tls_write_root=1;efs_tls_path_hint=-1;
+ int retry_root=server_find_fragment_root(&s,&ex,777,0,0);assert(retry_root==0);
+ efs_tls_write_root=retry_root;
+ assert(!server_write_fragment_with_sum_sync(&s,&ex,777,0,0,body,EFS_FRAGMENT_SIZE,sum));
+ assert(s.nodes[0].used==EFS_FRAGMENT_SIZE&&server_compute_local_usage(&s)==EFS_FRAGMENT_SIZE);
+ char duplicate[8192];fragment_path_at(&s,1,&ex,777,0,0,duplicate,sizeof(duplicate));assert(access(duplicate,F_OK));
+ assert(server_gc_inode(&s,1,777,99)==EFS_OK&&s.nodes[0].used==0);
+ efs_tls_path_hint=-1;
  s.direct_io=0;ex.chunk_size=EFS_DEFAULT_CHUNK_SIZE;efs_tls_chunk_gen=200;
  for(int root=0;root<2;root++)for(unsigned ci=0;ci<70;ci++){
   efs_tls_write_root=root;

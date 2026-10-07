@@ -2246,19 +2246,17 @@ int efs_client_note_meta_change(int force)
 /* Consume one PUT_CHUNK reply from a conn that reply_watch marked ready
  * (or whose poll fd fired). Returns 1 on OK ack, 0 on quota, -1 when the
  * conn was dropped. */
-/* W14.4: last storage root that accepted (nid, ino, ci, fi). A miss
- * costs one extra access() on the server, so the slot is unsynchronized. */
+/* Root hints are an evictable placement cache, never retry history. The
+ * owning PUT attempt decides NEW; a cache miss on a retry always probes. */
 #define PATH_HINT_N 4096
 struct path_hint_slot {
     efs_node_id_t nid;
     efs_ino_t ino;
     uint32_t ci;
-    uint8_t fi;
-    uint8_t path;
-    uint8_t valid;
-    uint8_t tried; /* sent once with no reply yet; a retry probes */
+    uint8_t fi, path, valid;
 };
 static struct path_hint_slot g_path_hint[PATH_HINT_N];
+static pthread_mutex_t g_path_hint_mu = PTHREAD_MUTEX_INITIALIZER;
 
 static uint32_t path_hint_index(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
                                 uint8_t fi)
@@ -2271,39 +2269,24 @@ static uint32_t path_hint_index(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
 static uint32_t path_hint_get(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
                               uint8_t fi)
 {
-    struct path_hint_slot *e =
-        &g_path_hint[path_hint_index(nid, ino, ci, fi)];
-    if (e->nid == nid && e->ino == ino && e->ci == ci && e->fi == fi &&
-        (e->valid || e->tried)) {
-        if (e->valid)
-            return (uint32_t)e->path + 1u;
-        return 0; /* retry of a PUT that has not been acknowledged */
-    }
-    /* First send of this (nid, ino, ci, fi). The server skips the
-     * probe and creates on its least-queued root. */
-    e->nid = nid;
-    e->ino = ino;
-    e->ci = ci;
-    e->fi = fi;
-    e->path = 0xff;
-    e->valid = 0;
-    e->tried = 1;
-    return EFS_PATH_HINT_NEW;
+    uint32_t hint = 0;
+    pthread_mutex_lock(&g_path_hint_mu);
+    struct path_hint_slot *e = &g_path_hint[path_hint_index(nid, ino, ci, fi)];
+    if (e->valid && e->nid == nid && e->ino == ino && e->ci == ci && e->fi == fi)
+        hint = (uint32_t)e->path + 1u;
+    pthread_mutex_unlock(&g_path_hint_mu);
+    return hint;
 }
 
 static void path_hint_put(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
                           uint8_t fi, uint8_t path)
 {
-    struct path_hint_slot *e;
-    if (path == 0xff)
-        return;
-    e = &g_path_hint[path_hint_index(nid, ino, ci, fi)];
-    e->nid = nid;
-    e->ino = ino;
-    e->ci = ci;
-    e->fi = fi;
-    e->path = path;
-    e->valid = 1;
+    if (path == 0xff) return;
+    pthread_mutex_lock(&g_path_hint_mu);
+    struct path_hint_slot *e = &g_path_hint[path_hint_index(nid, ino, ci, fi)];
+    e->nid = nid; e->ino = ino; e->ci = ci; e->fi = fi;
+    e->path = path; e->valid = 1;
+    pthread_mutex_unlock(&g_path_hint_mu);
 }
 
 static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
@@ -2337,7 +2320,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
-                                      int failed_out[EFS_NUM_FRAGMENTS], uint64_t object_gen)
+                                      int failed_out[EFS_NUM_FRAGMENTS], uint64_t object_gen, int first_send)
 {
     struct efs_conn *conns[EFS_NUM_FRAGMENTS];
     int pending[EFS_NUM_FRAGMENTS];
@@ -2391,8 +2374,11 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         hdrs[i].data_len = frag_len;
         memcpy(hdrs[i].checksum, checksums[i], EFS_HASH_SIZE);
         hdrs[i].chunk_generation = object_gen;
-        hdrs[i].path_hint = path_hint_get(nodes[i], ino, chunk_index,
-                                          (uint8_t)i);
+        /* This new object identity has never been sent on attempt one.
+         * Once any send is possible, every later attempt probes or uses an
+         * acknowledged root, even if the evictable hint cache lost it. */
+        hdrs[i].path_hint = first_send ? EFS_PATH_HINT_NEW :
+            path_hint_get(nodes[i], ino, chunk_index, (uint8_t)i);
     }
 
     /* Send on every live conn before waiting (overlap RTTs). */
@@ -2727,7 +2713,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
     for (int attempt = 1; attempt <= 4; attempt++) {
         reroute_down_fragments(nodes, attempt == 1 ? NULL : failed);
         rc = put_fragments_parallel_once(ino, chunk_index, nodes, fragments,
-                                         frag_len, checksums, failed, object_gen);
+                                         frag_len, checksums, failed, object_gen, attempt == 1);
         if (rc == EFS_OK || rc == EFS_ERR_QUOTA)
             return rc;
         /* Only hard I/O failures invalidate a node's idle pool. failed[] is
