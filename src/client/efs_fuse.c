@@ -6791,6 +6791,12 @@ int main(int argc, char **argv)
     }
     const char *mountpoint = argv[arg_idx++];
 
+    if (strcmp(export_name, "default") != 0) {
+        fprintf(stderr, "efs-fuse: legacy export label '%s' is ignored; "
+                "mounting the single export 'default' (id=1)\n", export_name);
+        export_name = "default";
+    }
+
     /* Level cpu needs no cluster, no export and no mount: the client's
      * arithmetic only. Run before any network or NUMA setup. */
     if (g_bench_kind && strcmp(g_bench_kind, "cpu") == 0)
@@ -6865,20 +6871,10 @@ int main(int argc, char **argv)
     fflush(stdout);
     int rc = raft_bootstrap_metadata();
     if (rc != 0) {
-        if (rc == EFS_ERR_NOT_FOUND && g_client.export_name[0]) {
-            fprintf(stderr,
-                    "ERROR: export '%s' does not exist on this cluster.\n"
-                    "Create it with efs-mgmt mkfs (or check the name with\n"
-                    "efs-mgmt list-exports). Refusing to mount.\n",
-                    g_client.export_name);
-        } else {
-            fprintf(stderr,
-                    "Could not fetch metadata from any node (%s).\n"
-                    "status/list-exports can still work while mount fails if the\n"
-                    "export root exists but its 2+1 meta table pages cannot be\n"
-                    "reconstructed (missing/corrupt fragments on peers).\n",
-                    efs_strerror(rc));
-        }
+        fprintf(stderr, "Could not establish the single Raft export root (%s). "
+                "Check cluster health with efs-mgmt raft-status; initialize "
+                "an unformatted cluster with efs-mgmt raft-mkfs.\n",
+                efs_strerror(rc));
         return 1;
     }
     /* PUTs carry export_id; do not leave the hardcoded 1 if meta says otherwise. */

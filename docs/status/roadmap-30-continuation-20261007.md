@@ -226,3 +226,11 @@ four-node stop/deploy/start and accepted file persistence cycle. No concurrent
 benchmark source was included. Logs `/private/tmp/efs-roadmap-cycle21-live.log`
 and `/private/tmp/efs-roadmap-cycle21-units.log`. RDMA/fault-time mutation
 shutdown acceptance and original incident causality remain open.
+
+## Round 22 — W79 FUSE mount names and failure guidance
+
+Legacy non-default mount labels explicitly report ignored single-export behavior
+and normalize the local shell to default/id 1. Failure guidance uses Raft root
+health/initialization instead of retired named-export/meta-table instructions.
+NUC owned compatibility-label mount passes normal file operations and the full
+physical GC/restart/valid-PUT fence gate. Log `/private/tmp/efs-roadmap-mount-label.log`.

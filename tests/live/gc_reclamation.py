@@ -25,6 +25,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--posix', action='store_true')
 p.add_argument('--integrity', action='store_true')
 p.add_argument('--namespace', action='store_true')
+p.add_argument('--mount-label', default='default')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
 source = Path(__file__).resolve().parents[2]
@@ -100,7 +101,7 @@ def stop(crash=False):
 def mount_client():
     global client
     log=open(work/'fuse.log','ab');handles.append(log)
-    client=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(mount),'-f'],env=env,stdout=log,stderr=log)
+    client=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f'],env=env,stdout=log,stderr=log)
     def ready():
         if client.poll() is not None:raise AssertionError('FUSE exited')
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
@@ -177,6 +178,10 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.mount_label!='default':
+        text=(work/'fuse.log').read_text()
+        assert 'is ignored' in text and "mounted export 'default'" in text,text
+        print('legacy mount label explicitly ignored; canonical single export selected PASS',flush=True)
     if a.namespace:
         nested = mount/'deep-namespace';nested.mkdir()
         chain = [nested]

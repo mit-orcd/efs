@@ -4822,6 +4822,12 @@ NUC real-daemon tests repeatedly initialize through both aliases, preserve the
 committed salt and an existing dentry, and verify excess arguments are refused.
 Uncertain-reply initialization and retired FUSE hints remain additional coverage.
 
+FUSE now reports non-default legacy labels as ignored and uses the canonical
+single-export name. Mount failure guidance refers to Raft status/root health and
+raft-mkfs, replacing retired named-export/meta-table instructions. NUC private
+mount with a compatibility label emits the notice and passes physical GC/restart,
+quota and valid delayed-PUT fencing on all members.
+
 **Gate:** both aliases' help and invocation tests; extra/malformed arguments
 have an explicit outcome. Repeated initialization against the same intended
 cluster preserves root, data and committed salt, including uncertain-reply
