@@ -498,7 +498,7 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
     }
     int seq = slot >= 0 && seen[slot].ns &&
               ci0 >= seen[slot].ci0 &&
-              ci0 <= seen[slot].ci1 + EFS_CHUNK_GROUP_SIZE;
+              (uint64_t)ci0 <= (uint64_t)seen[slot].ci1 + EFS_CHUNK_GROUP_SIZE;
     /* Fresh means the requested range [ci0, ci1) is inside a pull
      * younger than 200 ms AND that pull still has a full window of
      * lookahead past ci1. The old test required seen.ci1 >= ci0+2*win.
@@ -513,7 +513,7 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
     uint32_t win = META_WIN_MIN;
     if (seq && seen[slot].win)
         win = seen[slot].win;
-    if (covered && seen[slot].ci1 >= ci1 + win) {
+    if (covered && (uint64_t)seen[slot].ci1 >= (uint64_t)ci1 + win) {
         pthread_mutex_unlock(&mu);
         return EFS_OK;
     }
@@ -530,7 +530,8 @@ int efs_client_pull_layout_miss(efs_ino_t ino, uint32_t ci0, uint32_t ci1)
         win = win ? win * 2 : META_WIN_MIN;
     else if (seq)
         win = META_WIN_MAX;
-    ahead = ci1 + win * 2u;
+    uint64_t limit = (uint64_t)ci1 + win * 2u;
+    ahead = limit > UINT32_MAX ? UINT32_MAX : (uint32_t)limit;
     if (!covered && seq && seen[slot].ci1 > ci0 && seen[slot].ci1 < ahead)
         pull_from = seen[slot].ci1;
     if (ahead < pull_from)

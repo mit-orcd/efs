@@ -226,6 +226,7 @@ test-wb-runtime:
 	python3 tests/test_replay_fan_budget.py
 	python3 tests/test_pull_deadline.py
 	python3 tests/test_pull_group_boundary.py
+	python3 tests/test_read_ahead_boundary.py
 	python3 tests/test_getchunks_budget.py
 	python3 tests/test_metadata_retry_budget.py
 	python3 tests/test_inode_writer_view_budget.py
