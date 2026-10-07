@@ -83,6 +83,7 @@ struct efsd_server {
     uint16_t rejoin_port;
 
     int direct_io; /* use O_DIRECT for fragment reads/writes */
+    int bench_sync; /* benchmark-only O_SYNC; daemon store builds ignore it */
     /* Shared writer-pool size (0 = inline, <0 = auto from nproc at start). */
     int nwriters;
     int persist_nodes; /* persist cluster membership to disk */

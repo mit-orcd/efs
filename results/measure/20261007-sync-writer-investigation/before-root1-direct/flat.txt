@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles'
+# Event count (approx.): 365950518
+#
+# Overhead  Shared Object         Symbol                                       IPC   [IPC Coverage]
+# ........  ....................  ...........................................  ....................
+#
+    16.09%  [xfs]                 [k] xfs_rmapbt_init_high_key_from_rec        -      -            
+     8.93%  [kernel.kallsyms]     [k] blk_account_io_start                     -      -            
+     7.91%  [kernel.kallsyms]     [k] arch_exit_to_user_mode_prepare.isra.0    -      -            
+     7.71%  [xfs]                 [k] xfs_btree_shift_recs                     -      -            
+     6.99%  [xfs]                 [k] xfs_verify_fileext                       -      -            
+     6.22%  [kernel.kallsyms]     [k] try_to_wake_up                           -      -            
+     5.21%  [kernel.kallsyms]     [k] crc32_body                               -      -            
+     4.08%  [kernel.kallsyms]     [k] syscall_exit_to_user_mode                -      -            
+     3.31%  [xfs]                 [k] xfs_alloc_cur_check                      -      -            
+     3.07%  [kernel.kallsyms]     [k] iommu_dma_map_sg                         -      -            
+     2.81%  [xfs]                 [k] xfs_alloc_check_irec                     -      -            
+     2.63%  [xfs]                 [k] xfs_btree_get_leaf_keys                  -      -            
+     2.19%  [xfs]                 [k] xfs_btree_lookup                         -      -            
+     1.99%  [xfs]                 [k] xfs_rmap_convert_extent                  -      -            
+     1.94%  [xfs]                 [k] xfs_cntbt_key_diff                       -      -            
+     1.82%  [kernel.kallsyms]     [k] kiocb_invalidate_post_direct_write       -      -            
+     1.77%  [kernel.kallsyms]     [k] update_curr                              -      -            
+     1.69%  [xfs]                 [k] __xfs_trans_commit                       -      -            
+     1.65%  libc.so.6             [.] pthread_cond_signal@@GLIBC_2.3.2         -      -            
+     1.60%  [xfs]                 [k] xfs_buf_item_init                        -      -            
+     1.16%  [xfs]                 [k] xfs_buf_lookup.constprop.0               -      -            
+     1.06%  [xfs]                 [k] xfs_rmap_defer_add                       -      -            
+     1.00%  libc.so.6             [.] __memset_avx512_unaligned_erms           -      -            
+     0.80%  [xfs]                 [k] xfs_trans_reserve                        -      -            
+     0.65%  [kernel.kallsyms]     [k] __wake_up                                -      -            
+     0.63%  [kernel.kallsyms]     [k] __queue_work                             -      -            
+     0.36%  [kernel.kallsyms]     [k] perf_ctx_disable                         -      -            
+
+
+#
+# (Tip: To record every process run by a user: perf record -u <user>)
+#

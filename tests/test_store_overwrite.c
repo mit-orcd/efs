@@ -4,11 +4,25 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
+static int sync_opens, fail_sync;
+static int test_open(const char *path, int flags, ...)
+{
+    int mode = 0;
+    if (flags & O_CREAT) { va_list ap; va_start(ap, flags); mode = va_arg(ap, int); va_end(ap); }
+    if ((flags & O_SYNC) == O_SYNC) sync_opens++;
+    return open(path, flags, mode);
+}
+static int test_fsync(int fd)
+{
+    if (fail_sync) { errno = EIO; return -1; }
+    return fsync(fd);
+}
 static int fail_finish, fail_write, fail_stat, interrupt_stat, interrupt_finish, finish_calls, stat_calls, last_fd;
 static int test_fstat(int fd, struct stat *st)
 {
@@ -34,11 +48,16 @@ static ssize_t test_writev(int fd, const struct iovec *iov, int n)
     if (fail_write) { errno = EIO; return -1; }
     return writev(fd, iov, n);
 }
+#define EFS_BENCH_BUILD
+#define open test_open
+#define fsync test_fsync
 #define fstat test_fstat
 #define ftruncate test_ftruncate
 #define write test_write
 #define writev test_writev
 #include "../src/server/store.c"
+#undef open
+#undef fsync
 #undef fstat
 #undef ftruncate
 #undef write
@@ -102,6 +121,11 @@ int main(void)
     fail_write = 1; finish_calls = 0; shard_io_thread(&a);
     assert(a.result == EFS_ERR_IO && finish_calls == 0); fail_write = 0;
     check(path, aligned, a.len, sum, 0); /* failed before write: prior image survives */
+    a.sync_write = 1; sync_opens = 0;
+    shard_io_thread(&a); assert(a.result == EFS_OK && sync_opens == 1);
+    check(path, aligned, a.len, sum, 0);
+    fail_sync = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_IO);
+    fail_sync = 0; a.sync_write = 0;
     a.excl = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_EXIST); check(path, aligned, a.len, sum, 0);
     unlink(path); a.excl = 0; a.no_create = 1; shard_io_thread(&a);
     assert(a.result == EFS_ERR_NOT_FOUND && access(path, F_OK) == -1);

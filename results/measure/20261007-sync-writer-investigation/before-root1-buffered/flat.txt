@@ -1,0 +1,40 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 973  of event 'cycles'
+# Event count (approx.): 111295983
+#
+# Overhead  Shared Object         Symbol                                       IPC   [IPC Coverage]
+# ........  ....................  ...........................................  ....................
+#
+    13.26%  [kernel.kallsyms]     [k] rmqueue.isra.0                           -      -            
+     7.94%  [kernel.kallsyms]     [k] update_load_avg                          -      -            
+     7.02%  [xfs]                 [k] xlog_cil_insert_items                    -      -            
+     6.54%  [kernel.kallsyms]     [k] iomap_file_buffered_write                -      -            
+     6.50%  [kernel.kallsyms]     [k] syscall_exit_to_user_mode                -      -            
+     5.26%  [xfs]                 [k] xfs_buf_read_map                         -      -            
+     4.79%  [kernel.kallsyms]     [k] kmem_cache_alloc_noprof                  -      -            
+     4.69%  [xfs]                 [k] xfs_trans_log_inode                      -      -            
+     4.25%  [xfs]                 [k] xfs_iextents_copy                        -      -            
+     4.14%  [kernel.kallsyms]     [k] blk_insert_flush                         -      -            
+     3.98%  [kernel.kallsyms]     [k] kmem_cache_free                          -      -            
+     3.91%  [kernel.kallsyms]     [k] kvfree                                   -      -            
+     3.86%  [xfs]                 [k] xfs_extent_busy_trim                     -      -            
+     3.73%  [xfs]                 [k] xfs_alloc_walk_iter                      -      -            
+     3.71%  [kernel.kallsyms]     [k] __futex_wait                             -      -            
+     3.22%  [kernel.kallsyms]     [k] put_prev_task_fair                       -      -            
+     2.38%  [xfs]                 [k] xfs_alloc_compute_aligned                -      -            
+     1.46%  [kernel.kallsyms]     [k] perf_ctx_disable                         -      -            
+     1.38%  [kernel.kallsyms]     [k] generic_write_checks                     -      -            
+     1.25%  [kernel.kallsyms]     [k] blk_mq_get_tag                           -      -            
+     0.46%  [kernel.kallsyms]     [k] folio_remove_rmap_ptes                   -      -            
+     0.43%  [kernel.kallsyms]     [k] __rcu_read_unlock                        -      -            
+     0.41%  [xfs]                 [k] xfs_alloc_cur_check                      -      -            
+     0.34%  [kernel.kallsyms]     [k] osq_lock                                 -      -            
+
+
+#
+# (Tip: To record every process run by a user: perf record -u <user>)
+#

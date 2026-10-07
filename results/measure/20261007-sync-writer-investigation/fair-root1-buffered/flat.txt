@@ -1,0 +1,38 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles'
+# Event count (approx.): 110704732
+#
+# Overhead  Shared Object         Symbol                                     IPC   [IPC Coverage]
+# ........  ....................  .........................................  ....................
+#
+    12.52%  [kernel.kallsyms]     [k] kmem_cache_alloc_noprof                -      -            
+    10.72%  [kernel.kallsyms]     [k] down_trylock                           -      -            
+     9.83%  [kernel.kallsyms]     [k] copy_page_from_iter_atomic             -      -            
+     8.87%  [kernel.kallsyms]     [k] folio_clear_dirty_for_io               -      -            
+     8.46%  [kernel.kallsyms]     [k] _raw_spin_unlock_irqrestore            -      -            
+     6.84%  [kernel.kallsyms]     [k] crc32_body                             -      -            
+     5.78%  [xfs]                 [k] xfs_iget_cache_miss                    -      -            
+     4.95%  [kernel.kallsyms]     [k] dequeue_entity                         -      -            
+     4.87%  [xfs]                 [k] xfs_buf_find_lock                      -      -            
+     3.87%  [xfs]                 [k] xfs_buf_item_size                      -      -            
+     2.84%  [xfs]                 [k] xfs_alloc_compute_aligned              -      -            
+     2.64%  [kernel.kallsyms]     [k] _find_next_zero_bit                    -      -            
+     2.48%  [xfs]                 [k] xfs_buf_item_format                    -      -            
+     1.71%  [xfs]                 [k] xfs_btree_get_leaf_keys                -      -            
+     1.66%  [kernel.kallsyms]     [k] iomap_writeback_folio                  -      -            
+     1.62%  [xfs]                 [k] xfs_rmapbt_key_diff                    -      -            
+     1.41%  [kernel.kallsyms]     [k] xas_store                              -      -            
+     1.24%  [xfs]                 [k] xfs_btree_read_buf_block               -      -            
+     0.79%  [kernel.kallsyms]     [k] sched_tick                             -      -            
+     0.42%  [xfs]                 [k] xlog_cil_insert_items                  -      -            
+     0.39%  [xfs]                 [k] xfs_btree_get_block                    -      -            
+     0.32%  [kernel.kallsyms]     [k] __fput_sync                            -      -            
+
+
+#
+# (Tip: Order by the overhead of source file name and line number: perf report -s srcline)
+#

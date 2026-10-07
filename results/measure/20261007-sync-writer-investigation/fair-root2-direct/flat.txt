@@ -1,0 +1,74 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles'
+# Event count (approx.): 154678271
+#
+# Overhead  Shared Object         Symbol                                      IPC   [IPC Coverage]
+# ........  ....................  ..........................................  ....................
+#
+    10.36%  [kernel.kallsyms]     [k] crc32_body                              -      -            
+     7.72%  [kernel.kallsyms]     [k] rseq_ip_fixup                           -      -            
+     5.25%  [xfs]                 [k] xfs_attr_defer_add                      -      -            
+     3.60%  [kernel.kallsyms]     [k] rw_verify_area                          -      -            
+     3.28%  [xfs]                 [k] xfs_rmap_update_cancel_item             -      -            
+     3.07%  [kernel.kallsyms]     [k] do_futex                                -      -            
+     2.54%  [xfs]                 [k] xfs_alloc_walk_iter                     -      -            
+     2.40%  [xfs]                 [k] xfs_buf_item_init                       -      -            
+     2.25%  [kernel.kallsyms]     [k] __schedule                              -      -            
+     2.15%  [xfs]                 [k] xfs_group_grab                          -      -            
+     2.02%  [kernel.kallsyms]     [k] file_close_fd                           -      -            
+     1.97%  [kernel.kallsyms]     [k] d_flags_for_inode                       -      -            
+     1.95%  [kernel.kallsyms]     [k] __audit_syscall_exit                    -      -            
+     1.94%  [xfs]                 [k] xfs_defer_finish_noroll                 -      -            
+     1.90%  [kernel.kallsyms]     [k] __rq_qos_throttle                       -      -            
+     1.85%  [kernel.kallsyms]     [k] update_entity_lag                       -      -            
+     1.76%  [xfs]                 [k] xfs_rmapbt_diff_two_keys                -      -            
+     1.50%  [kernel.kallsyms]     [k] __memmove                               -      -            
+     1.49%  [xfs]                 [k] xfs_bmapi_write                         -      -            
+     1.46%  [kernel.kallsyms]     [k] selinux_inode_permission                -      -            
+     1.45%  [xfs]                 [k] xfs_bmbt_to_iomap                       -      -            
+     1.43%  [kernel.kallsyms]     [k] kmem_cache_free                         -      -            
+     1.38%  [xfs]                 [k] xfs_dabuf_map.constprop.0               -      -            
+     1.37%  [kernel.kallsyms]     [k] __rcu_read_lock                         -      -            
+     1.33%  [xfs]                 [k] xfs_attr_set                            -      -            
+     1.29%  [xfs]                 [k] xfs_inode_item_format                   -      -            
+     1.27%  [kernel.kallsyms]     [k] __rcu_read_unlock                       -      -            
+     1.21%  [xfs]                 [k] xlog_grant_head_check                   -      -            
+     1.19%  [kernel.kallsyms]     [k] sbitmap_find_bit                        -      -            
+     1.15%  [kernel.kallsyms]     [k] update_load_avg                         -      -            
+     1.12%  [kernel.kallsyms]     [k] update_curr_se                          -      -            
+     1.10%  [kernel.kallsyms]     [k] _raw_spin_lock                          -      -            
+     1.00%  [kernel.kallsyms]     [k] policydb_context_isvalid                -      -            
+     0.95%  [kernel.kallsyms]     [k] try_get_folio                           -      -            
+     0.93%  [kernel.kallsyms]     [k] inode_set_ctime_current                 -      -            
+     0.89%  [kernel.kallsyms]     [k] copy_from_kernel_nofault.part.0         -      -            
+     0.88%  [xfs]                 [k] xfs_btree_get_rec                       -      -            
+     0.75%  [kernel.kallsyms]     [k] sched_balance_update_blocked_averages   -      -            
+     0.69%  [kernel.kallsyms]     [k] dequeue_entities                        -      -            
+     0.66%  [kernel.kallsyms]     [k] try_to_block_task.constprop.0.isra.0    -      -            
+     0.66%  [kernel.kallsyms]     [k] do_syscall_64                           -      -            
+     0.63%  [xfs]                 [k] xfs_btree_get_leaf_keys                 -      -            
+     0.53%  [kernel.kallsyms]     [k] _find_next_zero_bit                     -      -            
+     0.48%  [kernel.kallsyms]     [k] native_queued_spin_lock_slowpath        -      -            
+     0.47%  [kernel.kallsyms]     [k] mas_walk                                -      -            
+     0.43%  [kernel.kallsyms]     [k] __list_add_valid_or_report              -      -            
+     0.43%  [kernel.kallsyms]     [k] arch_exit_to_user_mode_prepare.isra.0   -      -            
+     0.43%  [kernel.kallsyms]     [k] asm_sysvec_reschedule_ipi               -      -            
+     0.42%  [kernel.kallsyms]     [k] syscall_trace_enter                     -      -            
+     0.41%  [kernel.kallsyms]     [k] update_rq_clock_task                    -      -            
+     0.41%  [kernel.kallsyms]     [k] futex_wait                              -      -            
+     0.40%  [kernel.kallsyms]     [k] pick_task_idle                          -      -            
+     0.37%  [kernel.kallsyms]     [k] update_rt_rq_load_avg                   -      -            
+     0.34%  [xfs]                 [k] xfs_buf_get_map                         -      -            
+     0.32%  [kernel.kallsyms]     [k] plist_del                               -      -            
+     0.31%  [kernel.kallsyms]     [k] perf_ctx_unlock                         -      -            
+     0.31%  [kernel.kallsyms]     [k] avtab_search_node                       -      -            
+     0.30%  [kernel.kallsyms]     [k] syscall_exit_to_user_mode               -      -            
+
+
+#
+# (Tip: To adjust path to source files to local file system use perf report --prefix=... --prefix-strip=...)
+#

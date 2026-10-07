@@ -1462,8 +1462,10 @@ sends you to — not the whole spec.
 isolated profiles passed. Inline multi-root placement is fixed. Buffered shard
 overwrites now preserve extents and enforce exact completed length: matched warm
 bounded writes improved about 4–8×, with lower p99. Direct I/O and durability
-barriers are unchanged. Linux unit/CLI/fault gates pass. Next performance work is
-fair writer admission; naive signal handoff was rejected for starvation. Live
+barriers are unchanged. Linux unit/CLI/fault gates pass. Reserved per-slot FIFO admission now prevents older waiters being bypassed;
+matched buffered throughput costs about 5%, while demonstrated starvation is
+removed. See the [admission results](../../results/measure/20261007-writer-fair-admission/SUMMARY.md).
+Root1 direct-I/O variance still needs investigation. Live
 workload validation remains separate. See the
 [completed investigation](../../results/measure/20261007-writer-investigation/SUMMARY.md).
 
@@ -7674,6 +7676,15 @@ overwrite gain is about 4–8×; it is not physical-media or FUSE throughput.
 A single-waiter signal experiment caused starvation and was rejected. Fair
 admission needs reserved handoff and anti-bypass protection, including worst-wait
 and shutdown gates. Writer-count defaults remain unchanged.
+
+
+For synchronous engine-write diagnostics use `efs-bench --bench data --sync`
+or `efs-bench.sh --data-sync`. This benchmark-only option opens fragment files
+with O_SYNC; buffered writes also sync final length handling. Body/checksum
+writes can therefore incur multiple persistence waits per PUT. The daemon's
+build and defaults do not enable it. Compare untraced repeats before separate
+perf/strace runs; O_SYNC does not establish SSD power-loss guarantees. See the
+[synchronous writer measurements](../../results/measure/20261007-sync-writer-investigation/SUMMARY.md).
 
 
 ## Appendix 13 — Development — modularity constraint

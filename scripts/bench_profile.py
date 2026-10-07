@@ -73,6 +73,7 @@ def parser():
     p.add_argument('--hash-sizes', type=sizes, default=sizes('4K,64K,128K,1M'))
     p.add_argument('--threads', type=integers, help='BLAKE3 thread ladder; default 1,2,4,affinity CPU count')
     p.add_argument('--writers', type=writers, default=writers('0,2,auto'), help='inline, fixed pool and automatic pool variants')
+    p.add_argument('--data-sync', action='store_true', help='benchmark-only O_SYNC engine writes')
     p.add_argument('--data-rw', choices=['both', 'split', 'read', 'write'], default='both', help='split records isolated write and populated-read cases')
     p.add_argument('--data-full-paths', action='store_true', help='measure all selected roots together without the engine prefix ladder')
     p.add_argument('--writer-stats', action='store_true', help='opt-in engine writer admission, handoff and service timing')
@@ -174,13 +175,14 @@ def cases_for(a, cpus):
     if 'data' in modes:
         phases = ['write', 'read'] if a.data_rw == 'split' else [a.data_rw]
         for direct, writer, qd, rw in itertools.product([False, True], a.writers, a.qds, phases):
-            suffix = '' if rw == 'both' else f'-{rw}'
+            suffix = ('' if rw == 'both' else f'-{rw}') + ('-sync' if a.data_sync else '')
             add(f'data-{"direct" if direct else "buffered"}-w{writer}-qd{qd}{suffix}', 'data',
                 ['--bench', 'data', '--time', duration, '--qd', str(qd), '--window', str(a.data_size[0] // (65536 * qd)),
                  '--rw', rw, '--direct-io' if direct else '--no-direct-io'] +
                 ([] if writer == 'auto' else ['--writers', str(writer)]) +
                 (['--full-paths'] if a.data_full_paths else []) +
-                (['--writer-stats'] if a.writer_stats else []))
+                (['--writer-stats'] if a.writer_stats else []) +
+                (['--sync'] if a.data_sync else []))
     if 'meta' in modes:
         add('meta-local', 'meta', ['--bench', 'meta', '--time', duration])
     # A fixed-size PUT primes the entire read window; no reads of uninitialized
@@ -407,7 +409,7 @@ def analyze(output):
         done.add(r['name'])
         measurements = []
         for m in r.get('metrics', []):
-            tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd', 'allocation'] if k in m)
+            tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd', 'allocation', 'sync'] if k in m)
             numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_us', 'avg_us', 'max_us'] if k in m)
             if baseline_valid(r) and numbers:
                 measurements.append(f'{tag} {numbers}'.strip())

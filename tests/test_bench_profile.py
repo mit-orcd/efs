@@ -19,6 +19,15 @@ spec.loader.exec_module(bench)
 
 
 class ProfileTests(unittest.TestCase):
+    def test_data_sync_is_opt_in(self):
+        for enabled in [False, True]:
+            args = ['--modes', 'data', '--writers', 'auto', '--qds', '16']
+            if enabled: args += ['--data-sync']
+            cases = bench.cases_for(bench.parser().parse_args(args), 12)
+            for case in cases:
+                self.assertEqual('--sync' in case['args'], enabled)
+                self.assertEqual(case['name'].endswith('-sync'), enabled)
+
     def test_remote_prime_and_matrix(self):
         a = bench.parser().parse_args(['--modes', 'all', '--seed', 'seed:123', '--threads', '1',
                                       '--hash-sizes', '64K', '--io-sizes', '64K', '--qds', '1', '--writers', '0'])

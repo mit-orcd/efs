@@ -1,0 +1,5 @@
+bench data paths=1..1 time_s=1.500 writers=-1 direct_io=off sync=on frag_bytes=65536 selected_qd=16 window_per_slot=64 (0=append-only)
+BENCH_OK kind=data rw=write paths=1 qd=16 ops=648 wall_s=1.750 ops_s=370.2 p50_us=2411 p99_us=526475 max_us=1743705 GiB_s=0.023 errors=0 diskw_ops=648 diskw_avg_us=32347 idle_workers=0 max_start_us=53 writers=12
+BENCH_WAIT jobs=648 queued=648 fallback=13 peak_active=16 admission_us=6990921 admission_max_us=1741952 queue_us=4579 queue_max_us=281 service_us=20961927 service_max_us=526663 resume_us=6754 resume_max_us=80 lock_us=1 lock_max_us=1
+BENCH_ROOT path=0 writes=648
+ diskutil: nvme1n1=100%

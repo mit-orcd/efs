@@ -116,7 +116,7 @@ BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blak
 BENCH_STORE_OBJS = src/bench/store.o src/bench/store_nvme.o \
                    src/bench/writer.o src/bench/iostats.o src/bench/thread.o
 src/bench/%.o: src/server/%.c .build_id.stamp
-	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -c -o $@ $<
+	$(CC) $(CFLAGS) $(INCLUDES) -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o $@ $<
 
 BENCH_CLIENT_OBJ = $(BENCH_CLIENT_SRC:.c=.o)
 src/bench/bench_local.o src/bench/io_bench.o: src/bench/perf_control.h

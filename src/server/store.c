@@ -637,6 +637,7 @@ static int read_file_bytes(const char *path,
 }
 
 struct shard_io_arg {
+    int sync_write;
     struct efsd_server *s;
     char path[8192];
     uint8_t *buf;
@@ -652,7 +653,7 @@ struct shard_io_arg {
 /* Preserve buffered extents for same-size rewrites, while retaining the exact payload
  * and checksum-tail length for shrinking writes. Never acknowledge failure
  * to establish that length. This does not add or remove a durability barrier. */
-static int finish_shard_write(int fd, size_t bytes)
+static int finish_shard_write(int fd, size_t bytes, int sync_write)
 {
     struct stat st;
     int rc;
@@ -666,6 +667,9 @@ static int finish_shard_write(int fd, size_t bytes)
             rc = ftruncate(fd, (off_t)bytes);
         } while (rc < 0 && errno == EINTR);
     }
+    if (rc == 0 && sync_write) {
+        do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
+    }
     close(fd);
     return rc == 0 ? EFS_OK : EFS_ERR_IO;
 }
@@ -675,6 +679,9 @@ static void *shard_io_thread(void *arg)
     struct shard_io_arg *a = arg;
     if (a->is_write) {
         int flags = O_WRONLY | (a->direct ? O_TRUNC : 0);
+#ifdef EFS_BENCH_BUILD
+        if (a->sync_write) flags |= O_SYNC;
+#endif
         if (!a->no_create)
             flags |= O_CREAT;
         if (a->excl)
@@ -844,7 +851,7 @@ static void *shard_io_thread(void *arg)
             close(fd);
             a->result = EFS_OK;
         } else {
-            a->result = finish_shard_write(fd, written);
+            a->result = finish_shard_write(fd, written, a->sync_write);
         }
     } else {
         uint32_t got = 0;
@@ -1384,6 +1391,9 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
     if (arg.direct)
         arg.len = server_frag_len(ex, ino);
     arg.is_write = 1;
+#ifdef EFS_BENCH_BUILD
+    arg.sync_write = s->bench_sync;
+#endif
     arg.sum = checksum;
     arg.result = EFS_ERR_IO;
     size_t plen = strlen(path);

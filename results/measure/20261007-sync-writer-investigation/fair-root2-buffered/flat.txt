@@ -1,0 +1,76 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 859  of event 'cycles'
+# Event count (approx.): 114388773
+#
+# Overhead  Shared Object      Symbol                                     IPC   [IPC Coverage]
+# ........  .................  .........................................  ....................
+#
+    14.98%  [kernel.kallsyms]  [k] kmem_cache_free                        -      -            
+     6.70%  [xfs]              [k] xfs_defer_trans_roll                   -      -            
+     6.63%  [kernel.kallsyms]  [k] crc32_body                             -      -            
+     5.02%  [kernel.kallsyms]  [k] iomap_iter_advance                     -      -            
+     4.47%  [kernel.kallsyms]  [k] __d_lookup_rcu                         -      -            
+     4.16%  [xfs]              [k] xfs_dialloc_ag                         -      -            
+     3.62%  [kernel.kallsyms]  [k] pick_task_fair                         -      -            
+     3.12%  [kernel.kallsyms]  [k] __dequeue_entity                       -      -            
+     3.12%  [kernel.kallsyms]  [k] dequeue_entity                         -      -            
+     2.81%  [kernel.kallsyms]  [k] iomap_write_iter                       -      -            
+     2.34%  [kernel.kallsyms]  [k] __d_add                                -      -            
+     2.26%  [kernel.kallsyms]  [k] wbt_track                              -      -            
+     2.11%  [kernel.kallsyms]  [k] bio_init                               -      -            
+     2.06%  [kernel.kallsyms]  [k] __schedule                             -      -            
+     1.82%  [kernel.kallsyms]  [k] xas_create                             -      -            
+     1.80%  [xfs]              [k] xfs_rmapbt_init_cursor                 -      -            
+     1.72%  [kernel.kallsyms]  [k] lookup_fast                            -      -            
+     1.71%  [kernel.kallsyms]  [k] futex_wake_mark                        -      -            
+     1.58%  [kernel.kallsyms]  [k] __rq_qos_throttle                      -      -            
+     1.24%  [kernel.kallsyms]  [k] merge                                  -      -            
+     1.18%  [kernel.kallsyms]  [k] update_curr_dl_se                      -      -            
+     0.98%  libc.so.6          [.] __GI___lll_lock_wake                   -      -            
+     0.98%  efs-bench          [.] shard_io_thread.part.0.constprop.0     -      -            
+     0.87%  [xfs]              [k] xfs_btree_lookup                       -      -            
+     0.84%  [kernel.kallsyms]  [k] sched_balance_newidle                  -      -            
+     0.82%  [kernel.kallsyms]  [k] sched_balance_update_blocked_averages  -      -            
+     0.81%  [kernel.kallsyms]  [k] asm_sysvec_apic_timer_interrupt        -      -            
+     0.71%  [xfs]              [k] xfs_blockgc_clear_iflag                -      -            
+     0.67%  libc.so.6          [.] pthread_cond_destroy@@GLIBC_2.3.2      -      -            
+     0.67%  [kernel.kallsyms]  [k] inode_init_owner                       -      -            
+     0.64%  [kernel.kallsyms]  [k] __audit_syscall_exit                   -      -            
+     0.61%  [kernel.kallsyms]  [k] kmem_cache_alloc_noprof                -      -            
+     0.61%  [kernel.kallsyms]  [k] xa_load                                -      -            
+     0.58%  [kernel.kallsyms]  [k] select_task_rq                         -      -            
+     0.55%  [kernel.kallsyms]  [k] put_prev_entity                        -      -            
+     0.55%  libc.so.6          [.] pthread_cond_signal@@GLIBC_2.3.2       -      -            
+     0.54%  [kernel.kallsyms]  [k] futex_wake                             -      -            
+     0.52%  [kernel.kallsyms]  [k] update_irq_load_avg                    -      -            
+     0.50%  [xfs]              [k] xfs_buf_lock                           -      -            
+     0.50%  [kernel.kallsyms]  [k] scx_tick                               -      -            
+     0.47%  [dm_mod]           [k] __send_empty_flush                     -      -            
+     0.44%  [kernel.kallsyms]  [k] update_curr_se                         -      -            
+     0.44%  [kernel.kallsyms]  [k] __mod_memcg_lruvec_state               -      -            
+     0.43%  [kernel.kallsyms]  [k] __audit_syscall_entry                  -      -            
+     0.40%  [kernel.kallsyms]  [k] restore_fpregs_from_fpstate            -      -            
+     0.39%  [kernel.kallsyms]  [k] from_kgid                              -      -            
+     0.38%  [kernel.kallsyms]  [k] _raw_spin_lock_irqsave                 -      -            
+     0.38%  [xfs]              [k] xfs_lookup_get_search_key              -      -            
+     0.38%  [xfs]              [k] xfs_buf_find_lock                      -      -            
+     0.38%  [xfs]              [k] xlog_prepare_iovec                     -      -            
+     0.38%  [vdso]             [.] 0x00000000000008da                     -      -            
+     0.36%  [kernel.kallsyms]  [k] up                                     -      -            
+     0.35%  [kernel.kallsyms]  [k] syscall_return_via_sysret              -      -            
+     0.34%  [kernel.kallsyms]  [k] update_rq_clock_task                   -      -            
+     0.34%  [kernel.kallsyms]  [k] __memset                               -      -            
+     0.34%  [kernel.kallsyms]  [k] native_queued_spin_lock_slowpath       -      -            
+     0.32%  [kernel.kallsyms]  [k] policydb_filenametr_search             -      -            
+     0.31%  [xfs]              [k] xlog_cil_insert_items                  -      -            
+     0.31%  [xfs]              [k] xfs_ilock                              -      -            
+     0.30%  [kernel.kallsyms]  [k] context_compute_hash                   -      -            
+
+
+#
+# (Tip: To adjust path to source files to local file system use perf report --prefix=... --prefix-strip=...)
+#

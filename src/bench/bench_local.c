@@ -630,14 +630,14 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
     double gib_s = (double)ops * frag_len / (1 << 30) / wall;
     printf("%s kind=data rw=%s paths=%d qd=%d ops=%llu wall_s=%.3f "
            "ops_s=%.1f p50_us=%llu p99_us=%llu max_us=%llu GiB_s=%.3f "
-           "errors=%llu diskw_ops=%llu diskw_avg_us=%llu idle_workers=%llu max_start_us=%llu writers=%d\n",
+           "errors=%llu diskw_ops=%llu diskw_avg_us=%llu idle_workers=%llu max_start_us=%llu writers=%d sync=%s\n",
            errors || !ops || idle ? "BENCH_FAIL" : "BENCH_OK",
            reading ? "read" : "write", npaths, qd, (unsigned long long)ops,
            wall, (double)ops / wall, (unsigned long long)p50,
            (unsigned long long)p99, (unsigned long long)max, gib_s,
            (unsigned long long)errors, (unsigned long long)diskw_ops,
            (unsigned long long)(diskw_ops ? diskw_us / diskw_ops : 0),
-           (unsigned long long)idle, (unsigned long long)max_start, slots[0].s->nwriters);
+           (unsigned long long)idle, (unsigned long long)max_start, slots[0].s->nwriters, slots[0].s->bench_sync && !reading ? "on" : "off");
     if (writer_stats && !reading) {
         printf("BENCH_WAIT jobs=%llu queued=%llu fallback=%llu peak_active=%llu "
                "admission_us=%llu admission_max_us=%llu queue_us=%llu queue_max_us=%llu "
@@ -727,10 +727,10 @@ static int run_data_bench(struct efsd_server *s, double time_sec, int qd, int ce
     }
     uint32_t frag_len = server_frag_len(ex, (efs_ino_t)0xBEEF0000u);
 
-    printf("bench data paths=1..%u time_s=%.3f writers=%d direct_io=%s "
+    printf("bench data paths=1..%u time_s=%.3f writers=%d direct_io=%s sync=%s "
            "frag_bytes=%u selected_qd=%d window_per_slot=%u (0=append-only)\n",
            npaths_total, time_sec,
-           s->nwriters, s->direct_io ? "on" : "off", frag_len, qd, window);
+           s->nwriters, s->direct_io ? "on" : "off", s->bench_sync ? "on" : "off", frag_len, qd, window);
     fflush(stdout);
 
     struct bench_slot *slots = calloc(BENCH_MAX_SLOTS, sizeof(*slots));
@@ -1109,6 +1109,7 @@ static void local_usage(const char *prog)
         "Local engine benchmarks; no cluster or sockets. Scratch roots must be\n"
         "empty. Data sweeps paths x QD 1/16/64/256; meta measures KV and Raft log.\n"
         "--rw read|write|both isolates phases; read requires --window.\n"
+        "--sync enables O_SYNC for engine writes (benchmark only).\n"
         "--full-paths skips the path-prefix ladder; --writer-stats enables wait timing.\n"
         "--skip-ceiling omits the separate fio/raw ceiling probe.\n"
         "--storage may repeat; meta also accepts its first root. Default time: 10s.\n",
@@ -1145,6 +1146,7 @@ int efs_bench_local_main(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         const char *opt = argv[i];
         if (!strcmp(opt, "--help")) { local_usage(argv[0]); return 0; }
+        if (!strcmp(opt, "--sync")) { s.bench_sync = 1; continue; }
         if (!strcmp(opt, "--writer-stats")) { writer_stats = 1; continue; }
         if (!strcmp(opt, "--full-paths")) { full_paths = 1; continue; }
         if (!strcmp(opt, "--skip-ceiling")) { ceiling = 0; continue; }

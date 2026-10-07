@@ -453,3 +453,12 @@ overwrite gain is about 4–8×; it is not physical-media or FUSE throughput.
 A single-waiter signal experiment caused starvation and was rejected. Fair
 admission needs reserved handoff and anti-bypass protection, including worst-wait
 and shutdown gates. Writer-count defaults remain unchanged.
+
+
+For synchronous engine-write diagnostics use `efs-bench --bench data --sync`
+or `efs-bench.sh --data-sync`. This benchmark-only option opens fragment files
+with O_SYNC; buffered writes also sync final length handling. Body/checksum
+writes can therefore incur multiple persistence waits per PUT. The daemon's
+build and defaults do not enable it. Compare untraced repeats before separate
+perf/strace runs; O_SYNC does not establish SSD power-loss guarantees. See the
+[synchronous writer measurements](../../results/measure/20261007-sync-writer-investigation/SUMMARY.md).
