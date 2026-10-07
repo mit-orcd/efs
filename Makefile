@@ -146,6 +146,7 @@ test-report-pressure:
 	python3 tests/test_report_pressure.py
 	python3 tests/test_write_queue.py
 	python3 tests/test_wb_worker_budget.py
+	python3 tests/test_put_window_deadline.py
 	python3 tests/test_write_budget.py
 	python3 tests/test_report_orphan.py
 

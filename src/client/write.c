@@ -3693,23 +3693,29 @@ static int put_win_busy_locked(efs_ino_t ino)
  * still open after max_ms. */
 static int put_win_wait(efs_ino_t ino, unsigned max_ms)
 {
-    struct timespec dl;
+    uint64_t end = report_clock_ms() + max_ms;
+    uint64_t outer = efs_client_rpc_deadline_ms();
+    if (outer && outer < end)
+        end = outer;
     int rc = 0;
-
-    clock_gettime(CLOCK_REALTIME, &dl);
-    dl.tv_sec += max_ms / 1000u;
-    dl.tv_nsec += (long)(max_ms % 1000u) * 1000000L;
-    if (dl.tv_nsec >= 1000000000L) {
-        dl.tv_sec++;
-        dl.tv_nsec -= 1000000000L;
-    }
     pthread_mutex_lock(&put_win_mu);
     while (put_win_busy_locked(ino)) {
+        uint64_t now = report_clock_ms();
+        if (now >= end) {
+            rc = EFS_ERR_BUSY;
+            break;
+        }
         rc = 1;
-        if (pthread_cond_timedwait(&put_win_cv, &put_win_mu, &dl) ==
-            ETIMEDOUT) {
-            if (put_win_busy_locked(ino))
-                rc = EFS_ERR_BUSY;
+        uint64_t wait = end - now;
+        if (wait > 50) wait = 50;
+        struct timespec dl;
+        clock_gettime(CLOCK_REALTIME, &dl);
+        dl.tv_nsec += (long)wait * 1000000;
+        dl.tv_sec += dl.tv_nsec / 1000000000;
+        dl.tv_nsec %= 1000000000;
+        int wrc = pthread_cond_timedwait(&put_win_cv, &put_win_mu, &dl);
+        if (wrc && wrc != ETIMEDOUT) {
+            rc = EFS_ERR_IO;
             break;
         }
     }
