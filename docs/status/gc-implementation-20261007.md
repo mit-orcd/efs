@@ -60,8 +60,9 @@ members retain the ledger. Retirement must leave a replay floor.
 - Span-only truncate tails use the owned-image flush pipeline and preserve the
   server delta list rather than replacing it with a zero stub.
 
-These changes are tested in isolated NUC stores. The existing NUC services and
-xorinox incident stores have not been rolled or repaired by this checkpoint.
+These changes are tested in isolated NUC stores. At the original private-store checkpoint the existing NUC services and
+xorinox incident stores had not been rolled. The later xorinox rollout and
+observed reclamation are recorded below; complete incident closure is not claimed.
 Previously lost references whose inode and reap ledger are already absent need
 an authority-safe inventory reconciliation; blindly deleting inventory is unsafe.
 

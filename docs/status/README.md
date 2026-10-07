@@ -13,9 +13,11 @@ from their dated runs, not a live cluster inventory.
 
 - **W61/W62/W63 — GC reclamation:** repairs are committed in `3a1b4a52`;
   the [GC checkpoint](gc-implementation-20261007.md) records private-store
-  direct acceptance and a buffered append failure (**W87**). Existing NUC
-  services and the xorinox incident stores are not established as rolled.
-  The original 40 GiB incident and authority-safe reconciliation remain open.
+  direct acceptance and a buffered append failure (**W87**). The xorinox incident cluster was rolled to `cb5e86de` on Oct 7 with safe
+  client drains and full units; a captured sample shows 24.2 GiB payload
+  reclaimed and physical free space rising to 9.8–10.8 GB/node. Queues were
+  still draining and xefs3 had one reap error. Existing NUC service rollout,
+  final incident drain and authority-safe lost-ledger reconciliation remain open.
 - **W86/D31 — durable PUT tickets:** narrow abandoned-upload policy is recorded
   in that checkpoint; metadata state machine is committed in `b3a11877` and staged for integration. Production sessions,
   versioned PUT/publication and all-member revocation/deletion are not active.
@@ -59,11 +61,11 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | analyzed Oct 6 (xorinox, build `3d3f17c2-dirty`): the file exists (created 05:17:31.319Z, size 0), the retry was answered BUSY (rc=-13, 05:17:31.733Z), no server logged EEXIST; suspect the retry path — an opid replay must return the recorded verdict (I16), not EEXIST; BUSY on unique-name creates is new with the dirty D25 intent probes | [full text](../backlog/work-items.md#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
 | 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | code present; dated Oct 6 checkpoint — metadata diagnostics + protected published-entry reclaim; local admission returns EAGAIN/ENOMEM; 8 MiB cap retained; metadata saturation + admitted-writer/drain reservation regressions and ASan/UBSan PASS; follow-up 251 MiB ENOMEM reproduced locally and reservation fix added; remount + sustained-write and posix jobs=1 gates owed | [full text](../backlog/work-items.md#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; Xorinox full-tree gate owed | [evidence and remaining gates](fuse-memory.md) |
-| 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; existing-service rollout and incident reconciliation remain open | [full text](../backlog/work-items.md#w61) |
-| 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; existing-service rollout and incident reconciliation remain open | [full text](../backlog/work-items.md#w62) |
+| 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](../backlog/work-items.md#w61) |
+| 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](../backlog/work-items.md#w62) |
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | open — host-local replay race fixed in `ec1500ec`; durable failover replay remains unresolved | [work item](../backlog/work-items.md#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | open — nuc n1 exceeded ten-second wait twice; blocker not established | [work item](../backlog/work-items.md#w65) |
-| gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; existing-service rollout and incident reconciliation remain open | [full text](../backlog/work-items.md#w63) |
+| gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](../backlog/work-items.md#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced IOR-hard + cold hardscan gate pending | [full text](../backlog/work-items.md#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; full-node protection/reroute acceptance remains open | [full text](../backlog/work-items.md#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
 | 0b | **W27** · REPORT identity from the staging table | correctness | phantom ownership-free marks fixed in `febc55e5`; nonzero-node staging identity fallback remains; current traced putid-miss gate owed | [full text](../backlog/work-items.md#w27--report-identity-from-the-staging-table-queue-row-0b) |
@@ -153,4 +155,4 @@ superseded D25/D27 rollout narratives live there; their result logs remain linke
 The [GC checkpoint](gc-implementation-20261007.md) records production repairs,
 NUC physical deletion/restart gates, and the approved discard-after-durable-
 revocation policy. PUT ticket metadata is committed in `b3a11877` and staged for integration; production session, wire and
-storage-fence integration remains open. Historical xorinox repair is unconfirmed.
+storage-fence integration remains open. Xorinox rollout and substantial reclamation are confirmed in the checkpoint; complete backlog drainage and historical lost-ledger reconciliation are not.

@@ -13,8 +13,10 @@ Do not use a historical cluster address, binary hash or mount as current state.
 **W61/W62/W63 — GC:** repairs are committed in `3a1b4a52`; the
 [implementation checkpoint](gc-implementation-20261007.md) records isolated
 NUC direct-store acceptance. Buffered broad concurrent append lost records
-(**W87**) despite later isolated repeats passing. Existing services and the
-xorinox incident stores are not established as rolled or reconciled. Preserve
+(**W87**) despite later isolated repeats passing. Xorinox was rolled to `cb5e86de` on Oct 7 with safe drains and full units;
+24.2 GiB payload reclamation and increased physical free space were observed.
+The queues had not fully drained, xefs3 recorded one reap error, and lost-ledger
+reconciliation remains open. Existing NUC service rollout is not established. Preserve
 live references and keep the original [incident review](gc-reclamation-review.md).
 This round did not inspect the remote fixture logs.
 
