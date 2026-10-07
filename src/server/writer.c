@@ -63,17 +63,16 @@ static __thread int tls_in_writer;
 /* One job slot per writer. The handler hands a job to an idle slot and
  * waits on that slot; there is no shared queue mutex on the PUT path
  * (Oct 1: ~27 futex per fragment was this hand-off). */
-/* W46: one condvar per waiter class, so every transition wakes exactly
- * the thread that waits on it — the writer (cv_work: EMPTY→QUEUED), the
- * owning handler (cv_done: QUEUED→DONE), the handlers in the fallback
- * wait (cv_empty: DONE→EMPTY). Before, one cv carried all three and
- * every transition had to broadcast (a signal could have woken the
- * wrong class and left the owner asleep with no timeout); with 64
- * handlers parked on a slot that was 3 futex wakes per fragment for one
- * useful one. pthread_cond_signal with no waiter is a user-space check,
- * no syscall. The fallback class may hold several waiters, so EMPTY
- * still broadcasts on ITS cv; shutdown broadcasts all three. */
+/* Separate writer and owning-caller conditions avoid waking the wrong class.
+ * Fallback admission uses a FIFO list with a private condition per waiter.
+ * EMPTY is reserved for its head, including while that caller is waking;
+ * new fast-path submissions cannot bypass it. Fairness is per slot, not a
+ * global scheduling order across all writers. */
 enum { WSLOT_EMPTY = 0, WSLOT_QUEUED = 1, WSLOT_DONE = 2 };
+struct slot_waiter {
+    pthread_cond_t ready;
+    struct slot_waiter *next;
+};
 struct writer_slot {
     pthread_mutex_t mu;
     pthread_cond_t cv_work;
@@ -81,6 +80,7 @@ struct writer_slot {
     pthread_cond_t cv_empty;
     struct writer_job *job;
     int state;
+    struct slot_waiter *wait_head, *wait_tail;
 };
 static struct writer_slot g_slots[EFS_MAX_WRITERS];
 static int g_slot_rr;
@@ -289,7 +289,8 @@ static int slot_run_locked(struct writer_slot *sl, struct writer_job *job)
     rc = job->result;
     sl->state = WSLOT_EMPTY;
     sl->job = NULL;
-    pthread_cond_broadcast(&sl->cv_empty);
+    if (sl->wait_head)
+        pthread_cond_signal(&sl->wait_head->ready);
     return rc;
 }
 
@@ -310,7 +311,7 @@ static int slot_handoff(struct writer_job *job, int nw, int *queued)
         int rc;
         if (pthread_mutex_trylock(&sl->mu) != 0)
             continue;
-        if (sl->state != WSLOT_EMPTY || !g_pool.running) {
+        if (sl->state != WSLOT_EMPTY || sl->wait_head || !g_pool.running) {
             pthread_mutex_unlock(&sl->mu);
             continue;
         }
@@ -328,16 +329,35 @@ static int slot_handoff(struct writer_job *job, int nw, int *queued)
             job->fallback = 1;
             job->lock_us += efs_iostats_now_us() - lock_start;
         }
-        while (sl->state != WSLOT_EMPTY && g_pool.running) {
-            if (pthread_cond_timedwait(&sl->cv_empty, &sl->mu, &deadline) ==
-                ETIMEDOUT) {
-                pthread_mutex_unlock(&sl->mu);
-                return EFS_ERR_BUSY;
-            }
-        }
-        if (!g_pool.running || sl->state != WSLOT_EMPTY) {
+        /* Reserve EMPTY for the oldest fallback waiter. Fast-path callers
+         * must not steal it before the signalled thread reacquires the mutex. */
+        struct slot_waiter waiter = {0};
+        if (pthread_cond_init(&waiter.ready, NULL) != 0) {
             pthread_mutex_unlock(&sl->mu);
             return EFS_ERR_IO;
+        }
+        if (sl->wait_tail) sl->wait_tail->next = &waiter;
+        else sl->wait_head = &waiter;
+        sl->wait_tail = &waiter;
+        int timed_out = 0;
+        while (g_pool.running &&
+               (sl->state != WSLOT_EMPTY || sl->wait_head != &waiter)) {
+            if (pthread_cond_timedwait(&waiter.ready, &sl->mu, &deadline) ==
+                ETIMEDOUT) {
+                timed_out = 1;
+                break;
+            }
+        }
+        struct slot_waiter **link = &sl->wait_head, *prev = NULL;
+        while (*link != &waiter) { prev = *link; link = &(*link)->next; }
+        *link = waiter.next;
+        if (sl->wait_tail == &waiter) sl->wait_tail = prev;
+        pthread_cond_destroy(&waiter.ready);
+        if (!g_pool.running || timed_out) {
+            if (sl->state == WSLOT_EMPTY && sl->wait_head)
+                pthread_cond_signal(&sl->wait_head->ready);
+            pthread_mutex_unlock(&sl->mu);
+            return timed_out ? EFS_ERR_BUSY : EFS_ERR_IO;
         }
         *queued = 1;
         rc = slot_run_locked(sl, job);
@@ -462,6 +482,7 @@ int server_writer_pool_start(struct efsd_server *s)
         pthread_cond_init(&g_slots[i].cv_done, NULL);
         pthread_cond_init(&g_slots[i].cv_empty, NULL);
         g_slots[i].job = NULL;
+        g_slots[i].wait_head = g_slots[i].wait_tail = NULL;
         g_slots[i].state = WSLOT_EMPTY;
     }
     g_slots_live = nw;
@@ -494,6 +515,8 @@ void server_writer_pool_stop(struct efsd_server *s)
             pthread_cond_broadcast(&g_slots[i].cv_work);
             pthread_cond_broadcast(&g_slots[i].cv_done);
             pthread_cond_broadcast(&g_slots[i].cv_empty);
+            for (struct slot_waiter *w = g_slots[i].wait_head; w; w = w->next)
+                pthread_cond_signal(&w->ready);
             pthread_mutex_unlock(&g_slots[i].mu);
         }
         for (int i = 0; i < g_pool.nwriters; i++)

@@ -17,8 +17,10 @@ sends you to — not the whole spec.
 isolated profiles passed. Inline multi-root placement is fixed. Buffered shard
 overwrites now preserve extents and enforce exact completed length: matched warm
 bounded writes improved about 4–8×, with lower p99. Direct I/O and durability
-barriers are unchanged. Linux unit/CLI/fault gates pass. Next performance work is
-fair writer admission; naive signal handoff was rejected for starvation. Live
+barriers are unchanged. Linux unit/CLI/fault gates pass. Reserved per-slot FIFO admission now prevents older waiters being bypassed;
+matched buffered throughput costs about 5%, while demonstrated starvation is
+removed. See the [admission results](../../results/measure/20261007-writer-fair-admission/SUMMARY.md).
+Root1 direct-I/O variance still needs investigation. Live
 workload validation remains separate. See the
 [completed investigation](../../results/measure/20261007-writer-investigation/SUMMARY.md).
 

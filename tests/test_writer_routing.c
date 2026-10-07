@@ -6,6 +6,8 @@
 __thread uint64_t efs_tls_chunk_gen;
 static int roots[64], calls[2], fail_thread;
 static unsigned delay_us;
+static int gate_hold, record_order;
+static unsigned service_order[16], service_count;
 
 int efsd_pthread_create(pthread_t *tid, void *(*fn)(void *), void *arg)
 {
@@ -33,6 +35,8 @@ int server_write_fragment_with_sum_sync(struct efsd_server *s, struct efs_export
 {
     (void)s; (void)ex; (void)ino; (void)fi; (void)data; (void)len; (void)checksum;
     if (ci >= 64) return EFS_ERR_IO;
+    while (ci == 0 && __atomic_load_n(&gate_hold, __ATOMIC_ACQUIRE)) usleep(100);
+    if (record_order) service_order[service_count++] = ci;
     if (delay_us) usleep(delay_us);
     assert(efs_tls_write_root >= 0 && efs_tls_write_root < 2);
     if (roots[ci] >= 0) assert(roots[ci] == efs_tls_write_root);
@@ -104,6 +108,31 @@ int main(void)
         server_writer_stats_reset(0); server_writer_pool_stop(&s);
     }
     delay_us = 0;
+    /* Hold the sole writer while callers enter fallback in a known order.
+     * Each newly arriving caller must join behind the reserved older ones. */
+    memset(roots, -1, sizeof(roots));
+    s.nwriters = 1; gate_hold = 1; record_order = 1; service_count = 0;
+    assert(server_writer_pool_start(&s) == 0);
+    pthread_t ordered[9]; struct producer ordered_args[9];
+    for (unsigned i = 0; i < 9; i++) {
+        ordered_args[i] = (struct producer){ &s, &ex, i, 1, 1 };
+        assert(pthread_create(&ordered[i], NULL, produce, &ordered_args[i]) == 0);
+        for (;;) {
+            pthread_mutex_lock(&g_slots[0].mu);
+            unsigned count = 0;
+            for (struct slot_waiter *w = g_slots[0].wait_head; w; w = w->next) count++;
+            int ready = i ? count == i : g_slots[0].state == WSLOT_QUEUED;
+            pthread_mutex_unlock(&g_slots[0].mu);
+            if (ready) break;
+            usleep(100);
+        }
+    }
+    __atomic_store_n(&gate_hold, 0, __ATOMIC_RELEASE);
+    for (unsigned i = 0; i < 9; i++) pthread_join(ordered[i], NULL);
+    assert(service_count == 9);
+    for (unsigned i = 0; i < 9; i++) assert(service_order[i] == i);
+    assert(!g_slots[0].wait_head && !g_slots[0].wait_tail);
+    record_order = 0; server_writer_pool_stop(&s);
     s.nwriters = 2; fail_thread = 1;
     assert(server_writer_pool_start(&s) != 0);
     fail_thread = 0; s.nwriters = 0;
