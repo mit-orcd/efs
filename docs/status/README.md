@@ -885,3 +885,14 @@ clean code build `2a30c8eb960c`, four matching servers and both normal mounts.
 Post-deployment POSIX repeats 216 pass / 0 fail / 1 mmap skip. A cold ReadIndex
 startup false refusal was fixed by bounded serving-probe retries. Generated
 W60 fixtures and diagnostic mounts were cleaned up.
+
+## D25 I23 session admission checkpoint — Oct 6 2026
+
+Publication endpoints and serialized apply now enforce lane-local session
+admission/fencing. ESTABLISH verifies ACTIVE epoch and registered shard membership;
+management fencing follows each shard's advertised leader. Safe abandoned-epoch
+reclaim eligibility is implemented, but no receipts/floors are deleted yet.
+Linux units and live same-group/cross-group gates pass; NUC POSIX passes
+216 / 0 failures / 1 mmap skip. D25 remains staged. Next finish lane-local mtime
+coherence and FUSE integration, plus bounded abandoned-stream cleanup.
+[Evidence and scope](../../results/measure/20261006-d25-session-admission/SUMMARY.md).

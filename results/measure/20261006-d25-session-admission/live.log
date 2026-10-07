@@ -1,0 +1,20 @@
+raft-session status=1 rc=-3 primary=0 op=establish ssh=959 shard=1 epoch=0 state=0 touched=0 index=0
+raft-session status=0 rc=0 primary=2 op=create ssh=959 shard=959 epoch=0 state=0 touched=0 index=117994
+raft-session status=3 rc=-13 primary=0 op=establish ssh=959 shard=1 epoch=0 state=0 touched=0 index=0
+raft-session status=0 rc=0 primary=2 op=register ssh=959 shard=1 epoch=0 state=0 touched=0 index=117995
+raft-session status=0 rc=0 primary=2 op=establish ssh=959 shard=1 epoch=0 state=0 touched=0 index=117996
+raft-session status=3 rc=-13 primary=0 op=establish ssh=959 shard=1 epoch=0 state=0 touched=0 index=0
+raft-session status=0 rc=0 primary=2 op=fence ssh=959 shard=1 epoch=2 state=1 touched=1 index=118005
+raft-session status=0 rc=0 primary=2 op=register ssh=959 shard=1 epoch=0 state=0 touched=0 index=118006
+raft-session status=0 rc=0 primary=2 op=establish ssh=959 shard=1 epoch=0 state=0 touched=0 index=118007
+live publication session gate PASS uuid=c9bea937872ac2cc908591568d892b21 ino=155649 shard=1 lane_group=0 session_group=0
+raft-session status=1 rc=-3 primary=0 op=establish ssh=3170 shard=1 epoch=0 state=0 touched=0 index=0
+raft-session status=0 rc=0 primary=2 op=create ssh=3170 shard=3170 epoch=0 state=0 touched=0 index=110300
+raft-session status=3 rc=-13 primary=0 op=establish ssh=3170 shard=1 epoch=0 state=0 touched=0 index=0
+raft-session status=0 rc=0 primary=2 op=register ssh=3170 shard=1 epoch=0 state=0 touched=0 index=110301
+raft-session status=0 rc=0 primary=2 op=establish ssh=3170 shard=1 epoch=0 state=0 touched=0 index=118014
+raft-session status=3 rc=-13 primary=0 op=establish ssh=3170 shard=1 epoch=0 state=0 touched=0 index=0
+raft-session status=0 rc=0 primary=2 op=fence ssh=3170 shard=1 epoch=2 state=1 touched=1 index=110305
+raft-session status=0 rc=0 primary=2 op=register ssh=3170 shard=1 epoch=0 state=0 touched=0 index=110306
+raft-session status=0 rc=0 primary=2 op=establish ssh=3170 shard=1 epoch=0 state=0 touched=0 index=118020
+live publication session gate PASS uuid=b2a4c992bbb2b24563097ee70e934f0b ino=159745 shard=1 lane_group=0 session_group=2

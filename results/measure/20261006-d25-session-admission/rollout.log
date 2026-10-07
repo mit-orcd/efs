@@ -1,0 +1,361 @@
+
+== 1/5 stop
+stopping n1 (pid 2487300)
+stopping n2 (pid 2487365)
+stopping n3 (pid 2487489)
+stopping n4 (pid 2487527)
+n1 killed -9
+nuc-efs stopped
+
+== 2/5 deploy
+== rsync source -> nuc_efs:/data1/efs/src
+== rsync devops scripts -> nuc_efs:/data1/efs/devops
+== build on nuc_efs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/efsd.o src/server/efsd.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/handler.o src/server/handler.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/cluster.o src/server/cluster.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/peer_pool.o src/server/peer_pool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/iostats.o src/server/iostats.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/thread.o src/server/thread.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/raft_host.o src/server/raft_host.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/publication.o src/common/publication.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/publication_ack.o src/common/publication_ack.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/common.o src/common/common.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/log_ts.o src/common/log_ts.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/version.o src/common/version.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/protocol.o src/common/protocol.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/wire/wire.o src/wire/wire.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/erasure.o src/data/erasure.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/store_mem.o src/data/store_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_loop.o src/data/transport_loop.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_conn.o src/data/transport_conn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_mem.o src/kv/kv_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_key.o src/kv/kv_key.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_lsm.o src/kv/kv_lsm.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_compact.o src/kv/kv_compact.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_wal.o src/kv/kv_wal.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_seg.o src/kv/kv_seg.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_snap.o src/kv/kv_snap.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/metadata.o src/meta/metadata.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/meta_apply.o src/meta/meta_apply.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/txn.o src/meta/txn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/session.o src/meta/session.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/lock.o src/meta/lock.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_layout.o src/meta/dir_layout.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_spread.o src/meta/dir_spread.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/sim/opid.o src/sim/opid.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft.o src/raft/raft.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_mem.o src/raft/raft_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_disk.o src/raft/raft_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_log.o src/raft/raft_log.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/placement.o src/common/placement.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/checksum.o src/common/checksum.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/network.o src/common/network.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/rdma.o src/common/rdma.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3.o deps/blake3/blake3.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_portable.o deps/blake3/blake3_portable.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_dispatch.o deps/blake3/blake3_dispatch.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -msse2 -c -o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -msse4.1 -c -o deps/blake3/blake3_sse41.o deps/blake3/blake3_sse41.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx2 -maes -c -o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx512f -mavx512vl -c -o deps/blake3/blake3_avx512.o deps/blake3/blake3_avx512.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/client.o src/client/client.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/ops.o src/client/ops.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/read.o src/client/read.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/write.o src/client/write.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/bufpool.o src/client/bufpool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/writer_state.o src/client/writer_state.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/publication_ack_owner.o src/client/publication_ack_owner.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/inode_rpc.o src/client/inode_rpc.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/stage_evict.o src/client/stage_evict.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/node_cache.o src/client/node_cache.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -I/usr/include/fuse3 -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_fuse.o src/client/efs_fuse.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/mgmt/efs_mgmt.o src/mgmt/efs_mgmt.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/query/efs_query.o src/query/efs_query.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_bench.o src/client/efs_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/bench_local.o src/bench/bench_local.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/blake3_bench.o src/bench/blake3_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/io_bench.o src/bench/io_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -c -o src/bench/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -c -o src/bench/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -c -o src/bench/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -c -o src/bench/iostats.o src/server/iostats.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -c -o src/bench/thread.o src/server/thread.c
+ar rcs libefs.a src/common/publication.o src/common/publication_ack.o src/common/common.o src/common/log_ts.o src/common/version.o src/common/protocol.o src/wire/wire.o src/data/erasure.o src/data/store_mem.o src/data/transport_loop.o src/data/transport_conn.o src/kv/kv_mem.o src/kv/kv_key.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_wal.o src/kv/kv_seg.o src/kv/kv_snap.o src/meta/metadata.o src/meta/meta_apply.o src/meta/txn.o src/meta/session.o src/meta/lock.o src/meta/dir_layout.o src/meta/dir_spread.o src/sim/opid.o src/raft/raft.o src/raft/raft_mem.o src/raft/raft_disk.o src/raft/raft_log.o src/common/placement.o src/common/checksum.o src/common/network.o src/common/rdma.o deps/blake3/blake3.o deps/blake3/blake3_portable.o deps/blake3/blake3_dispatch.o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse41.o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx512.o src/client/client.o src/client/ops.o src/client/read.o src/client/write.o src/client/bufpool.o src/client/writer_state.o src/client/publication_ack_owner.o src/client/inode_rpc.o src/client/stage_evict.o src/client/node_cache.o
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-mgmt src/mgmt/efs_mgmt.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-query src/query/efs_query.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Wl,--gc-sections -o efs-bench src/client/efs_bench.o src/bench/bench_local.o src/bench/blake3_bench.o src/bench/io_bench.o src/bench/store.o src/bench/store_nvme.o src/bench/writer.o src/bench/iostats.o src/bench/thread.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I/usr/include/fuse3 -o efs-fuse src/client/efs_fuse.o libefs.a -lpthread -lm -ldl -libverbs -lfuse3 -lpthread
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04f267a03a24"' -DEFS_VERSION='"v0.1.0-pre-alpha-89-g04f267a0"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T01:36:02Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efsd src/server/efsd.o src/server/store.o src/server/store_nvme.o src/server/handler.o src/server/cluster.o src/server/peer_pool.o src/server/writer.o src/server/iostats.o src/server/thread.o src/server/raft_host.o libefs.a -lpthread -lm -ldl -libverbs
+deploy OK — start with: ssh nuc_efs /data1/efs/devops/start.sh
+
+== 3/5 start
+n1 up on 127.0.0.1:17432
+n2 up on 127.0.0.1:17433
+n3 up on 127.0.0.1:17434
+n4 up on 127.0.0.1:17435
+already formatted (rm /data1/efs/.mkfs-done + wipe n* to redo)
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt
+Logging efs-fuse to /data1/efs/efs-fuse-mnt.log
+Mounted /data1/efs/mnt
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt2
+Logging efs-fuse to /data1/efs/efs-fuse-mnt2.log
+Mounted /data1/efs/mnt2
+nuc-efs up: n1..n4 on 127.0.0.1:17432/17433/17434/17435, mounted at /data1/efs/mnt + /data1/efs/mnt2
+
+== 4/5 smoke
+parallel 210 tests jobs=4 (serial 7 after)
+pass basic_write_read                
+pass basic_empty_file                
+pass basic_append                    
+pass basic_oappend_flag              
+pass basic_read_past_eof             
+pass basic_seek_read                 
+pass basic_dd_rw                     
+pass basic_overwrite_middle          
+pass basic_o_trunc                   
+pass basic_pread_pwrite              
+pass basic_chunk_boundary            
+pass basic_dup_write                 
+pass basic_terminal_cp_cat           
+pass basic_seek_end_then_write       
+pass fsync_reopen_visible            
+pass basic_ftruncate_vs_truncate     
+pass basic_seek_cur_past_eof_write   
+pass basic_rdwr_no_reopen            
+pass trunc_shrink                    
+pass trunc_grow_sparse               
+pass trunc_to_zero                   
+pass sparse_write_huge_offset        
+pass sparse_st_blocks                
+pass dir_mkdir_rmdir                 
+pass dir_mkdir_p_terminal            
+pass dir_rename_file                 
+pass dir_rename_over_existing        
+pass dir_move_into_subdir            
+pass dir_rename_file_over_dir        
+pass dir_rename_dir_with_contents    
+pass dir_rename_dir_over_file        
+pass dir_rename_dir_over_nonempty    
+pass root_rename_dir_old_name_gone   
+pass root_rename_file_old_name_gone  
+pass dir_rename_noreplace            
+pass root_rename_from_subdir         
+pass dir_rename_symlink              
+pass root_create_unlink_immediate    
+pass root_mkdir_rmdir_immediate      
+pass root_rename_into_subdir         
+pass dir_many_files                  
+pass dir_times_create                
+pass dir_readdir_listing             
+pass dir_times_unlink                
+pass dir_deep_nesting                
+pass dir_times_mkdir_rmdir           
+pass dir_times_write_no_bump         
+pass dir_times_link                  
+pass dir_dot_entries                 
+pass dir_chmod_and_create_denied     
+pass dir_nlink                       
+pass dir_hidden_files                
+pass symlink_create_readlink         
+pass dir_readdir_while_unlink        
+pass symlink_to_dir                  
+pass symlink_dangling                
+pass symlink_chain                   
+pass symlink_absolute                
+pass hardlink_basic                  
+pass hardlink_shared_data            
+pass hardlink_terminal_ln            
+pass hardlink_rename_one_name        
+pass hardlink_unlink_one             
+pass symlink_unlink_keeps_target     
+pass symlink_relative_after_parent_rename
+pass symlink_chmod_follows           
+pass attr_chmod                      
+pass attr_chown_self                 
+pass attr_utimens                    
+pass attr_utimens_ns                 
+pass attr_stat_fields                
+pass attr_access                     
+pass attr_touch_terminal             
+pass attr_ctime_after_chmod          
+pass perm_file_000_denied            
+pass perm_file_read_only_ops         
+pass perm_file_write_only            
+pass perm_owner_bits_not_group       
+pass perm_owner_bits_not_other       
+pass dir_times_rename                
+pass perm_create_mode_000_reopen     
+pass perm_owner_chmod_restore        
+pass perm_open_fd_survives_chmod     
+pass perm_access_rwx                 
+pass perm_owner_utime_readonly       
+pass perm_fchmod                     
+pass perm_ftruncate_after_chmod      
+pass perm_exec_denied_no_x           
+pass perm_exec_allowed_with_x        
+pass perm_chown_other_uid_denied     
+pass perm_suid_sgid_sticky_stored    
+pass perm_sticky_owner_can_unlink    
+pass perm_chown_other_gid_denied     
+pass perm_dir_readonly_mutate        
+pass perm_dir_no_r_list              
+pass perm_dir_000_restore            
+pass perm_unlink_mode_000_file       
+pass perm_dir_wx_no_r                
+pass perm_nested_parent_no_x         
+pass perm_rename_into_readonly_dir   
+pass perm_symlink_target_denied      
+pass perm_hardlink_shares_mode       
+pass names_too_long_component        
+pass names_dash_prefix_terminal      
+pass names_reserved_dots             
+pass names_near_path_max             
+pass names_path_too_long             
+pass names_control_and_high_bytes    
+pass names_near_path_max_dir         
+pass names_unicode_nfc_nfd_coexist   
+pass content_random_roundtrip        
+pass content_all_byte_values         
+pass content_whitespace_and_line_endings
+pass content_nul_and_control         
+pass content_random_overwrite_append 
+pass content_random_large_multichunk 
+pass err_mkdir_existing              
+pass err_rmdir_nonempty              
+pass err_rmdir_a_file                
+pass err_open_dir_for_write          
+pass err_read_from_dir               
+pass err_create_excl_existing        
+pass err_rename_dir_into_itself      
+pass err_hardlink_to_dir             
+pass err_unlink_nonexistent          
+pass err_hardlink_nonexistent_src    
+pass err_write_readonly_file         
+pass err_symlink_loop                
+pass names_crazy_roundtrip           
+pass err_create_under_a_file         
+pass err_stat_nonexistent            
+pass err_unlink_a_directory          
+pass err_rmdir_dot_dotdot            
+pass fsync_write                     
+pass fdatasync_write                 
+pass unlink_open_file                
+pass fsync_dir                       
+pass names_crazy_dirs                
+pass flock_basic                     
+pass dir_deep_nesting_beyond_64      
+pass fcntl_lock_basic                
+pass flock_shared_then_exclusive     
+SKIP mmap_write_read                  mmap unsupported: [Errno 19] No such device
+pass flock_two_proc_exclusive        
+pass statfs_sane                     
+pass mmap_private_not_visible        
+pass concurrent_appends_two_proc     
+pass concurrent_writes_disjoint      
+pass concurrent_appends              
+pass fcntl_byte_range_lock           
+pass concurrent_write_and_readdir    
+pass virt_find_query                 
+pass virt_stats_readable             
+pass virt_find_not_a_real_dir        
+pass opt_fallocate                   
+pass opt_xattr                       
+pass opt_seek_hole_data              
+pass opt_copy_file_range             
+pass opt_openat                      
+pass flock_second_fd_exclusive       
+pass direct_aligned_rdwr             
+pass direct_unaligned_einval         
+pass direct_rmw_4k_in_chunk          
+pass packed_then_grow_past_chunk     
+pass zero_length_write               
+pass writev_readv_chunk_straddle     
+pass two_fds_size_mtime              
+pass trunc_open_other_fd             
+pass fcntl_setfl_oappend             
+pass link_across_dirs                
+pass nlink_after_unlink_open         
+pass last_link_unlink_other_dir      
+pass o_nofollow                      
+pass o_directory                     
+pass st_ino_unique_hardlink_same     
+pass create_excl_two_proc            
+pass concurrent_overlap_write        
+pass fstat_size_after_write          
+pass trunc_shrink_same_fd            
+pass unlink_open_then_recreate       
+pass rename_to_self                  
+pass rename_empty_over_empty_dir     
+pass lstat_symlink_size              
+pass chmod_preserves_mtime           
+pass unlink_recreate_new_ino         
+pass case_sensitive_names            
+pass ctime_on_link_rename            
+pass two_fds_independent_offset      
+pass o_append_pwrite_absolute        
+pass dir_nlink_after_rmdir_child     
+pass access_f_ok_after_unlink        
+pass write_hole_pread_zeros          
+pass hardlink_three_names            
+pass flock_unlock_on_close           
+pass mkdirat_unlinkat                
+pass trailing_slash_on_file          
+pass rename_file_over_symlink        
+pass creat_existing_dir_eisdir       
+pass fsync_then_fstat_size           
+pass mtime_bumps_on_write            
+pass concurrent_create_unlink_two_proc
+pass rename_dir_same_parent          
+pass concurrent_creates_same_dir     
+pass rename_readdir_lookup_consistent
+pass link_of_symlink                 
+pass concurrent_extend_high_then_low 
+pass write_beyond_eof_then_seek_end  
+pass trunc_zero_then_high_pwrite     
+pass dir_times_bump_on_child_mutation
+pass mtime_monotonic_many_writes     
+pass truncate_big_ftruncate_honest   
+pass truncate_big_o_trunc_honest     
+pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 216/217 pass, 0 fail, 1 skip, 0 notrun  (48.7s)
+wrote /data1/efs/logs/posix-20261006-213613.tsv
+results: /data1/efs/logs/posix-20261006-213613.tsv
+
+== 5/5 status
+n1 up (pid 2516560, 127.0.0.1:17432)
+n2 up (pid 2516676, 127.0.0.1:17433)
+n3 up (pid 2516702, 127.0.0.1:17434)
+n4 up (pid 2516739, 127.0.0.1:17435)
+mount: /data1/efs/mnt
+mount: /data1/efs/mnt2
+Cluster nodes (4):
+  node 1: 127.0.0.1:17432  up  used=1.14 GiB  quota=187.50 GiB (0.6%)  storage(1):
+      /data1/efs/n1
+  node 2: 127.0.0.1:17433  up  used=1.12 MiB  quota=187.50 GiB (0.0%)  storage(1):
+      /data1/efs/n2
+  node 3: 127.0.0.1:17434  up  used=5.38 MiB  quota=187.50 GiB (0.0%)  storage(1):
+      /data2/efs/n3
+  node 4: 127.0.0.1:17435  up  used=6.12 MiB  quota=187.50 GiB (0.0%)  storage(1):
+      /data2/efs/n4
+Usable (2+1 logical): used=786.88 MiB  free=499.23 GiB  capacity=500.00 GiB (0.2%)
+Cluster state: OK (4 up, 0 down)
+Versions: efsd v0.1.0-pre-alpha-89-g04f267a0 (branch devel, built 2026-10-07T01:36:02Z) — 4/4 identical
+Node 127.0.0.1:17432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
+  node 4: idle
+Filesystem      Size  Used Avail Use% Mounted on
+efs-fuse        500G  804M  500G   1% /data1/efs/mnt
+
+deploy-and-restart: OK
