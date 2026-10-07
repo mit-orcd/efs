@@ -228,6 +228,7 @@ test-wb-runtime:
 	python3 tests/test_metadata_retry_budget.py
 	python3 tests/test_inode_writer_view_budget.py
 	python3 tests/test_readdir_reply_boundary.py
+	python3 tests/test_report_frame_boundary.py
 
 test-wb-recovery:
 	@set -e; wb_test=$$(mktemp /tmp/efs-test-wb-recovery.XXXXXX); \

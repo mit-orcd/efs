@@ -1637,12 +1637,30 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
 {
     if (count == 0 && ino_count == 0 && !sync)
         return EFS_OK;
-    size_t rec_bytes = 0;
+    if ((count && !recs) || (ino_count && !irecs))
+        return EFS_ERR_INVAL;
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
+    size_t limit = EFS_MSG_MAX_LEN - 1u;
+    size_t len = sizeof(struct efs_msg_report_chunks);
+    /* Reject impossible counts before touching arrays or allocating. Keep
+     * every subtraction in size_t and the eventual wire cast representable. */
+    if (ino_count > (limit - len) / sizeof(struct efs_ino_size_rec))
+        return EFS_ERR_INVAL;
+    len += (size_t)ino_count * sizeof(struct efs_ino_size_rec);
+    if (count > (limit - len) / offsetof(struct efs_chunk_rec, deltas))
+        return EFS_ERR_INVAL;
     uint32_t i;
-    for (i = 0; i < count; i++)
-        rec_bytes += efs_chunk_rec_wire_size(&recs[i]);
-    size_t len = sizeof(struct efs_msg_report_chunks) + rec_bytes +
-                 (size_t)ino_count * sizeof(struct efs_ino_size_rec);
+    for (i = 0; i < count; i++) {
+        if (!(i & 255u) && efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
+        if (recs[i].delta_base_n > EFS_CHUNK_DELTA_MAX)
+            return EFS_ERR_INVAL;
+        size_t bytes = efs_chunk_rec_wire_size(&recs[i]);
+        if (bytes > limit - len)
+            return EFS_ERR_INVAL;
+        len += bytes;
+    }
     uint8_t *buf = malloc(len);
     if (!buf)
         return EFS_ERR_NOMEM;
