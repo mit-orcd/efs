@@ -607,6 +607,9 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         wait(lambda:not files(target_ino) and not files(donor_ino),'integrity fixtures reclaimed')
         print('two swapped fragments fail read; restored bytes verify cold PASS',flush=True)
     if a.workers:
+        # Prior cold integrity reads can leave kernel readahead callbacks in
+        # flight. Give the retirement/RSS gate its own fresh client process.
+        unmount();mount_client()
         body=bytes(range(256))*4096
         sample,fd,sample_ino=create('worker-read',body)
         directory=mount/'worker-readdir';directory.mkdir()
