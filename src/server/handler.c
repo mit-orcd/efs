@@ -30,6 +30,18 @@ static __thread uint32_t tls_payload_cap;
 static __thread uint8_t *tls_reply;
 static __thread uint32_t tls_reply_cap;
 
+/* Data PUT evidence must match the received payload before storage or quota
+ * mutation. Metadata tables retain their separate root-checksum protocol. */
+static int data_payload_valid(efs_ino_t ino, const uint8_t *data, uint32_t len,
+                              const uint8_t expected[EFS_HASH_SIZE])
+{
+    uint8_t actual[EFS_HASH_SIZE];
+    if (efs_ino_is_meta_table(ino))
+        return 1;
+    efs_hash(data, len, actual);
+    return memcmp(actual, expected, EFS_HASH_SIZE) == 0;
+}
+
 /* Optional op-id suffix on a directory RPC (protocol.h EFS_DIROP_OPID_LEN):
  * present iff the payload is exactly struct + suffix and names a real
  * identity. Anything else = no op-id (pre-I16 client). */
@@ -410,7 +422,8 @@ send_reply:
                 if (ex) {
                     uint32_t expect = server_frag_len(ex, req->ino);
                     if (req->data_len != expect ||
-                        payload_len < sizeof(*req) + req->data_len) {
+                        payload_len < sizeof(*req) + req->data_len ||
+                        !data_payload_valid(req->ino, data, expect, req->checksum)) {
                         reply = EFS_PUT_CHUNK_ERROR;
                     } else {
                         /* ACK after length + store. */

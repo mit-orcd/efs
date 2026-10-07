@@ -61,6 +61,11 @@ for direct in (False, True):
                         assert reply==bytes([5,1]),(label,reply[:40])
                         print(f'{direct=} {roots=} {label}: unavailable PASS',flush=True)
                     good()
+                    put.sum[0] ^= 1
+                    assert rpc(6,bytes(put)+b'x'*65536)[:2] == bytes([7,1]), 'wrong caller digest accepted'
+                    put.sum[0] ^= 1
+                    good()  # A rejected retry cannot damage the existing object.
+                    print(f'{direct=} {roots=} wrong PUT digest: rejected, existing bytes retained PASS',flush=True)
                     candidates=[path for root in Path(work).glob('root*') for path in (root/'data/exports/1').rglob('*') if path.is_file()]
                     assert len(candidates)==1,candidates
                     path=candidates[0];original=path.read_bytes()

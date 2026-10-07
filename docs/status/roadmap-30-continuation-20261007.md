@@ -61,3 +61,12 @@ value, and initializes the option once without a data race. NUC production-code
 reply tests cover valid/corrupt zero/nonzero packets; all sixteen real-server
 corruption combinations still pass. Log `/private/tmp/efs-roadmap-w75-verify.log`.
 This verifies payload hashes; it does not claim identity-bound integrity or repair.
+
+## Round 6 — W75 validate PUT evidence before mutation
+
+Data PUT independently hashes the received payload and rejects a mismatching
+caller digest before storage/quota mutation. NUC buffered/direct, one/two-root
+RPC tests reject wrong-digest retries and verify that the existing valid object
+is unchanged; the GET corruption matrix and client verification tests pass.
+Log `/private/tmp/efs-roadmap-w75-put.log`. Adds one hash per data PUT; identity-
+bound format and metadata-table integrity remain separate work.

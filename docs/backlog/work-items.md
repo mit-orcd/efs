@@ -2747,7 +2747,9 @@ The client verification option now checks ordinary parallel GET replies as well
 as fallback GETs, hashes zero payloads rather than trusting a zero digest, and
 initializes its shared option with pthread_once. NUC production-code reply tests
 reject corrupted zero/nonzero replies and accept valid ones. Identity binding
-and PUT validation remain below.
+binding remains below. Data PUT also rehashes the received payload before storage
+or quota mutation; NUC tests reject wrong caller digests without damaging an
+existing valid object. Metadata-table integrity remains on its separate protocol.
 
 **Change/gate:** define a compatible, trusted identity-bound integrity format
 and fail-closed behavior for missing/corrupt integrity evidence; preserve
