@@ -4839,6 +4839,13 @@ learned size and made a subsequent valid 64 KiB PUT fail. NUC wrong-digest and
 truncated-body probes now leave valid subsequent PUT/GET working across buffered/
 direct and one/two-root configurations; the corruption matrix still passes.
 
+NUC owned TCP relay now deliberately drops committed CREATE, RENAME and UNLINK
+replies before delivering bytes to the client. Exact request/identity retry
+recovers the same inode/verdict; authoritative names reflect the completed
+rename/unlink, and the subsequent GC/restart gate passes. This covers actual
+lost replies. Max-concurrency, process restart and leadership-change replay
+remain owed; no production session activation is inferred.
+
 **Gate:** isolated wrapper fixtures for absent/dead/nonnumeric/reused PID,
 matching daemon and unrelated live process; unrelated processes survive start
 and stop. Verify identity again around escalation to address PID reuse races.

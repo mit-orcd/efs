@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import signal
+import threading
 import socket
 import subprocess
 import tempfile
@@ -30,6 +31,7 @@ p.add_argument('--namespace-boundary', action='store_true')
 p.add_argument('--mount-label', default='default')
 p.add_argument('--workers', action='store_true')
 p.add_argument('--pressure', action='store_true')
+p.add_argument('--opid', action='store_true')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
 source = Path(__file__).resolve().parents[2]
@@ -382,6 +384,91 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         record={'hard_body_bytes':32<<20,'drain_bytes':8<<20,'files':8,'writes':256,'retry_count':sum(item[3] for item in pressure),'peak_rss_kib':max(samples),'before_delete':before_delete,'after_delete':after_delete}
         (work/'sparse-pressure.json').write_text(json.dumps(record,indent=2))
         print(f'sparse concurrent admission, cold bytes/holes and physical reclaim: peak_RSS_kib={max(samples)} retries={record["retry_count"]} PASS',flush=True)
+    if a.opid:
+        helper=work/'opid-client.c'
+        helper.write_text(r'''#include "efs/protocol.h"
+#include "efs/network.h"
+#include "efs/opid.h"
+#include <assert.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/stat.h>
+static unsigned port;
+static efs_ino_t call(unsigned type,const void*req,unsigned size,unsigned seq){
+    unsigned char packet[1024];struct efs_opid_req q={0};
+    assert(size+EFS_OPID_WIRE_LEN<=sizeof(packet));memcpy(packet,req,size);
+    q.id.client_uuid[0]=1;unsigned pid=getpid();memcpy(q.id.client_uuid+4,&pid,sizeof(pid));
+    q.id.session_epoch=1;q.id.seq=seq;q.ack=seq-1;
+    efs_opid_req_pack(&q,packet+size);
+    for(unsigned phase=0;phase<2;phase++){
+        int completed=0;
+        for(unsigned attempt=0;attempt<64;attempt++){
+            int fd=efs_connect_tcp("127.0.0.1",port);assert(fd>=0);
+            efs_set_recv_timeout(fd,5000);efs_set_send_timeout(fd,5000);
+            assert(efs_send_msg(fd,type,packet,size+EFS_OPID_WIRE_LEN)==0);
+            void*body=NULL;unsigned len=0;unsigned char reply_type=0;
+            int rc=efs_recv_msg(fd,&reply_type,&body,&len);close(fd);
+            if(rc){free(body);assert(phase==0);completed=1;break;}
+            assert(reply_type==type+1 && len==sizeof(struct efs_msg_inode_reply));
+            struct efs_msg_inode_reply reply;memcpy(&reply,body,sizeof(reply));free(body);
+            if(reply.status==EFS_INODE_RPC_BUSY || reply.status==EFS_INODE_RPC_NOT_PRIMARY){usleep(10000);continue;}
+            assert(phase==1 && reply.status==EFS_INODE_RPC_OK);
+            return reply.inode.ino;
+        }
+        assert(completed);
+    }
+    abort();
+}
+int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
+    struct efs_msg_inode_create create={0};create.export_id=1;create.parent=1;create.mode=S_IFREG|0600;strcpy(create.name,"opid-source");
+    efs_ino_t ino=call(EFS_MSG_INODE_CREATE,&create,sizeof(create),1);assert(ino);
+    struct efs_msg_inode_rename_at rename={0};rename.export_id=1;rename.old_parent=rename.new_parent=1;strcpy(rename.old_name,"opid-source");strcpy(rename.new_name,"opid-renamed");
+    assert(call(EFS_MSG_INODE_RENAME_AT,&rename,sizeof(rename),2)==ino);
+    struct efs_msg_inode_unlink unlink={0};unlink.export_id=1;unlink.parent=1;strcpy(unlink.name,"opid-renamed");
+    assert(call(EFS_MSG_INODE_UNLINK,&unlink,sizeof(unlink),3)==ino);
+    puts("CREATE/RENAME/UNLINK lost replies recovered with same operation identity PASS");
+}
+''')
+        run(['cc','-I'+str(source/'include'),helper,source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',work/'opid-client'])
+        listener=socket.socket();listener.bind(('127.0.0.1',0));listener.listen();listener.settimeout(.2)
+        proxy_port=listener.getsockname()[1];proxy_stop=threading.Event();proxy_errors=[];dropped={};replayed={}
+        target=a.port
+        def proxy():
+            endpoint=target
+            while not proxy_stop.is_set():
+                try:client_socket,_=listener.accept()
+                except socket.timeout:continue
+                except OSError:break
+                try:
+                    with client_socket, socket.create_connection(('127.0.0.1',endpoint),5) as upstream:
+                        length=recv_exact(client_socket,4);request=recv_exact(client_socket,struct.unpack('>I',length)[0]);kind=request[0]
+                        upstream.sendall(length+request)
+                        reply_length=recv_exact(upstream,4);reply=recv_exact(upstream,struct.unpack('>I',reply_length)[0])
+                        if reply[1]==7:
+                            primary=struct.unpack_from('=I',reply,5)[0]
+                            if primary: endpoint=a.port+primary-1
+                        if reply[1]==0 and kind not in dropped:
+                            dropped[kind]=(request,reply)
+                            continue # commit reply deliberately lost before client sees bytes
+                        if reply[1]==0:
+                            assert kind in dropped and request==dropped[kind][0]
+                            assert reply[9:17]==dropped[kind][1][9:17] # native reply inode identity
+                            replayed[kind]=True
+                        client_socket.sendall(reply_length+reply)
+                except Exception as error:proxy_errors.append(repr(error));proxy_stop.set()
+        proxy_thread=threading.Thread(target=proxy);proxy_thread.start()
+        try:
+            run([work/'opid-client',proxy_port],timeout=60)
+            assert not proxy_errors,proxy_errors
+            assert len(dropped)==len(replayed)==3,(dropped.keys(),replayed.keys())
+            for name in ('opid-source','opid-renamed'):
+                reply=run([source/'efs-mgmt','raft-lookup',f'127.0.0.1:{target}','1',name],capture_output=True,text=True).stdout
+                assert 'status=1' in reply,reply
+            (work/'namespace-lost-replies.json').write_text(json.dumps({'dropped_reply_types':sorted(dropped),'replayed_types':sorted(replayed),'unchanged_request_identity':True},indent=2))
+        finally:
+            proxy_stop.set();listener.close();proxy_thread.join(5)
     # Two peers repeatedly touch adjacent ranges until the span chain folds.
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
     peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

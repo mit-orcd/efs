@@ -285,3 +285,14 @@ Fragments are physically removed, counters rise and the remaining GC/restart/
 quota/valid-PUT gates pass. Log `/private/tmp/efs-roadmap-sparse-pressure.log`;
 fixture `/data1/efs/gc-direct-znd5nw4n/sparse-pressure.json`. Failed-publication
 and extended pressure/recovery coverage remain open; no general RSS bound claim.
+
+## Round 28 — W76 actual lost-reply namespace replay
+
+Added owned TCP relay that drops only successful committed CREATE/RENAME/UNLINK
+replies before the client receives bytes. Client retries byte-identical requests
+with the same operation identity; relay verifies same inode and all three replay
+results, and authoritative lookups confirm final removal. NUC direct fixture plus
+physical GC/restart/valid-PUT gates pass. Log
+`/private/tmp/efs-roadmap-namespace-lost-reply.log`; fixture
+`/data1/efs/gc-direct-uvt7yab1/namespace-lost-replies.json`. Maximum concurrency
+and restart/leadership-change replay remain separate gates.
