@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
-static int sync_opens, fail_sync;
+static int sync_opens, fail_sync, sync_calls;
 static int test_open(const char *path, int flags, ...)
 {
     int mode = 0;
@@ -20,6 +20,7 @@ static int test_open(const char *path, int flags, ...)
 }
 static int test_fsync(int fd)
 {
+    sync_calls++;
     if (fail_sync) { errno = EIO; return -1; }
     return fsync(fd);
 }
@@ -99,14 +100,12 @@ int main(void)
     a.len = 1003; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 0);
     a.len = 7003; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 0);
     a.sum = NULL; a.len = 0; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, 0, NULL, 0);
-    int buffered_finishes = finish_calls;
     a.direct = 1; a.sum = sum; a.len = 65536;
     image(path, 90000); shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 1);
     a.len = 4096; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 1);
     a.sum = NULL; a.len = 8192; shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, NULL, 1);
     a.sum = sum; a.buf = aligned + 1; a.len = 4096; /* bounce path */
     shard_io_thread(&a); assert(a.result == EFS_OK); check(path, a.buf, a.len, sum, 1);
-    assert(finish_calls == buffered_finishes); /* direct path retains its old behavior */
     a.direct = 0; a.buf = aligned; a.len = 1003; a.sum = sum;
     fail_finish = 1; finish_calls = 0; shard_io_thread(&a);
     assert(a.result == EFS_ERR_IO && finish_calls == 1);
@@ -126,6 +125,19 @@ int main(void)
     check(path, aligned, a.len, sum, 0);
     fail_sync = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_IO);
     fail_sync = 0; a.sync_write = 0;
+    /* Conditional direct finalization: sync only a length change. */
+    a.direct = 1; a.sync_write = 1; a.buf = aligned; a.len = 4096; a.sum = sum;
+    image(path, 90000); sync_calls = 0;
+    shard_io_thread(&a); assert(a.result == EFS_OK && sync_calls == 1);
+    check(path, aligned, a.len, sum, 1);
+    finish_calls = 0; sync_calls = 0; fail_sync = 1;
+    shard_io_thread(&a); assert(a.result == EFS_OK && sync_calls == 0 && finish_calls == 0);
+    image(path, 90000); shard_io_thread(&a); assert(a.result == EFS_ERR_IO && sync_calls == 1);
+    fail_sync = 0; fail_stat = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_IO); fail_stat = 0;
+    image(path, 90000); fail_finish = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_IO); fail_finish = 0;
+    a.sum = NULL; a.len = 0; shard_io_thread(&a); assert(a.result == EFS_OK); uint8_t zero_page[4096] = {0}; check(path, zero_page, sizeof(zero_page), NULL, 1);
+    a.direct = 0; a.sync_write = 0; a.sum = sum; a.len = 1003;
+    shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 0);
     a.excl = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_EXIST); check(path, aligned, a.len, sum, 0);
     unlink(path); a.excl = 0; a.no_create = 1; shard_io_thread(&a);
     assert(a.result == EFS_ERR_NOT_FOUND && access(path, F_OK) == -1);

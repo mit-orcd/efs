@@ -653,7 +653,7 @@ struct shard_io_arg {
 /* Preserve buffered extents for same-size rewrites, while retaining the exact payload
  * and checksum-tail length for shrinking writes. Never acknowledge failure
  * to establish that length. This does not add or remove a durability barrier. */
-static int finish_shard_write(int fd, size_t bytes, int sync_write)
+static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
 {
     struct stat st;
     int rc;
@@ -662,12 +662,15 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write)
     } while (rc < 0 && errno == EINTR);
     /* A completed write already extends the file to its new end. Avoid
      * another inode-size transaction unless an older, longer tail remains. */
-    if (rc == 0 && st.st_size != (off_t)bytes) {
+    int resized = rc == 0 && st.st_size != (off_t)bytes;
+    if (resized) {
         do {
             rc = ftruncate(fd, (off_t)bytes);
         } while (rc < 0 && errno == EINTR);
     }
-    if (rc == 0 && sync_write) {
+    /* O_SYNC persists direct writes; only a later length change needs
+     * another barrier. Buffered benchmark semantics retain their barrier. */
+    if (rc == 0 && sync_write && (!direct || resized)) {
         do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
     }
     close(fd);
@@ -678,7 +681,7 @@ static void *shard_io_thread(void *arg)
 {
     struct shard_io_arg *a = arg;
     if (a->is_write) {
-        int flags = O_WRONLY | (a->direct ? O_TRUNC : 0);
+        int flags = O_WRONLY;
 #ifdef EFS_BENCH_BUILD
         if (a->sync_write) flags |= O_SYNC;
 #endif
@@ -778,8 +781,8 @@ static void *shard_io_thread(void *arg)
                         a->result = EFS_ERR_IO;
                         return NULL;
                     }
-                    close(fd);
-                    a->result = EFS_OK;
+                    a->result = finish_shard_write(fd, (size_t)a->len + 4096,
+                                                   a->sync_write, 1);
                     return NULL;
                 }
                 wbuf = a->buf;
@@ -847,12 +850,7 @@ static void *shard_io_thread(void *arg)
              * cache until process exit / umount (same model as many parallel
              * FS clients); add an explicit fsync RPC later if needed. */
         }
-        if (a->direct) {
-            close(fd);
-            a->result = EFS_OK;
-        } else {
-            a->result = finish_shard_write(fd, written, a->sync_write);
-        }
+        a->result = finish_shard_write(fd, written, a->sync_write, a->direct);
     } else {
         uint32_t got = 0;
         a->result = read_file_bytes(a->path, a->buf, a->len, &got,
