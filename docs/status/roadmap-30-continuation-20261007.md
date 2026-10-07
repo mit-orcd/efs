@@ -81,3 +81,12 @@ recovers via parity; two swapped fragments return EIO; restored bytes verify
 cold; all GC protection/restart/inventory checks pass afterward. Production-code
 packet tests also reject a valid-but-wrong digest. Log
 `/private/tmp/efs-roadmap-w75-anchor.log`. On-disk identity hashing remains open.
+
+## Round 8 — W76 bounded namespace identity admission
+
+All four namespace mutation entry points return BUSY without sending when no
+retry identity slot is available; sequence exhaustion also fails closed. NUC
+production-code saturation test occupies 512 slots, checks zero RPCs for all
+four operations, releases one slot and verifies a valid identity/watermark below
+outstanding requests. Log `/private/tmp/efs-roadmap-w76.log`. Live lost-reply and
+maximum-concurrency acceptance remain owed; ordinary FUSE limits are not changed.

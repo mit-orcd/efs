@@ -176,8 +176,8 @@ static int stale_retryable(uint8_t type)
  * - 1, so a server window advances past seqs it never served. A slot is
  * held from before the first send to after the final return — every
  * BUSY / STALE / NOT_PRIMARY retry inside rpc_send_recv_* reuses the
- * same bytes, which is the whole point. Table full = the op goes out
- * without an identity (unprotected, as before I16). */
+ * same bytes, which is the whole point. Table full = the op
+ * receives BUSY before any RPC; no mutation loses its identity. */
 static pthread_mutex_t opid_mu = PTHREAD_MUTEX_INITIALIZER;
 
 static void opid_seed_locked(void)
@@ -234,7 +234,7 @@ static int opid_begin(struct efs_opid_req *q)
             low = s;
         }
     }
-    if (slot >= 0) {
+    if (slot >= 0 && g_client.opid_next != UINT64_MAX) {
         uint64_t seq = g_client.opid_next++;
 
         g_client.opid_inflight[slot] = seq;
@@ -242,6 +242,8 @@ static int opid_begin(struct efs_opid_req *q)
         q->id.session_epoch = g_client.opid_epoch;
         q->id.seq = seq;
         q->ack = (low ? low : seq) - 1;
+    } else {
+        slot = -1;
     }
     pthread_mutex_unlock(&opid_mu);
     return slot;
@@ -709,6 +711,8 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
         g_client.flock_token = 1;
     req->owner = g_client.flock_token;
     slot = opid_begin(&q);
+    if (slot < 0)
+        return EFS_ERR_BUSY;
     slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     /* Files co-locate with the parent (one group). MKDIR scatters the
@@ -1264,6 +1268,8 @@ int efs_client_rpc_unlink(efs_export_id_t export_id, efs_ino_t parent,
         strncpy(req->name, name, EFS_MAX_NAME - 1);
     req->is_dir = is_dir ? 1 : 0;
     slot = opid_begin(&q);
+    if (slot < 0)
+        return EFS_ERR_BUSY;
     slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     int rc = rpc_send_recv_owner(parent, EFS_MSG_INODE_UNLINK, buf, slen,
@@ -1293,6 +1299,8 @@ int efs_client_rpc_rename_at(efs_export_id_t export_id, efs_ino_t old_parent,
     if (new_name)
         strncpy(req->new_name, new_name, EFS_MAX_NAME - 1);
     slot = opid_begin(&q);
+    if (slot < 0)
+        return EFS_ERR_BUSY;
     slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     int rc = rpc_send_recv_owner(old_parent, EFS_MSG_INODE_RENAME_AT, buf,
@@ -1458,6 +1466,8 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
     if (new_name)
         strncpy(req->new_name, new_name, EFS_MAX_NAME - 1);
     slot = opid_begin(&q);
+    if (slot < 0)
+        return EFS_ERR_BUSY;
     slen = opid_suffix(buf, sizeof(*req), &q);
     struct efs_msg_inode_reply r;
     int rc = rpc_send_recv_owner(new_parent, EFS_MSG_INODE_LINK, buf, slen,

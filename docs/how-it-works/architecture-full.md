@@ -4692,6 +4692,14 @@ identified retries preserve their bytes, but the exhaustion fallback does
 not satisfy I16's stable identity. Healthy POSIX acceptance does not exercise
 an ambiguous reply at that limit. Session lifecycle is separately W72.
 
+**Continuation repair (Oct 7):** all four namespace mutation callers return
+BUSY before RPC submission when opid slots are full. The allocator refuses
+sequence exhaustion rather than wrapping to an invalid zero identity. NUC
+production-code saturation tests occupy all 512 slots, verify zero network sends
+from CREATE/UNLINK/RENAME/LINK, release one slot and check valid identity plus a
+watermark below the oldest outstanding operation. Full live acceptance and lost-
+reply concurrency at maximum admission remain separate gates.
+
 **Change/gate:** bounded admission/backpressure or a visible error when no
 identity slot is available, preserving the caller's whole-call deadline;
 never issue an unprotected mutation as success admission. Occupy every slot,
