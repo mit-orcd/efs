@@ -207,3 +207,12 @@ repair: POSIX 216/0/1 skip, peer 64/64, valid PUT positive control and restart
 fencing, final physical inventory/usage zero. Log
 `/private/tmp/efs-roadmap-buffered-serial.log`. The earlier overlapping peer
 failure remains retained and is not causally explained by a passing repeat.
+
+## Round 20 — peer gate preserves directory-probe failures
+
+The peer runner used isdir(), which converts EIO/EBUSY/ENOENT alike into a
+misleading missing-directory result. It now records stat errno and distinguishes
+a nondirectory. NUC self-tests inject all three errors and check valid directory
+and regular-file cases; live peer mkdir visibility passes on the normal service.
+Log `/private/tmp/efs-roadmap-directory-probe.log`. This improves failure evidence
+and does not excuse or automatically retry the earlier peer failure.

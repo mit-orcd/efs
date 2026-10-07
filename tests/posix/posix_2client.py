@@ -1844,6 +1844,18 @@ def stat_isdir(st):
     return (st.st_mode & 0o170000) == 0o040000
 
 
+def directory_probe_error(path):
+    # isdir hides EIO/EBUSY as False, falsely describing an authority failure
+    # as a missing directory. Preserve the syscall error in gate evidence.
+    try:
+        info = os.stat(path)
+    except OSError as error:
+        return "stat errno=%s: %s" % (error.errno, error.strerror)
+    if not stat_isdir(info):
+        return "not a directory (mode=0%o)" % info.st_mode
+    return None
+
+
 # ==========================================================================
 # Prepare / exec / runners
 # ==========================================================================
@@ -1959,8 +1971,9 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
     # B must already see PARENT (harness remounted B after a prior prepare,
     # or we just prepared on A and B is the same path).
     parent_b = os.path.join(mnt_b, PARENT)
-    if not os.path.isdir(parent_b):
-        print("ERROR: %s missing on B — remount B after --prepare" % parent_b)
+    error = directory_probe_error(parent_b)
+    if error:
+        print("ERROR: %s on B: %s" % (parent_b, error))
         return 2
 
     selected = [t[0] for t in _matched(filt)]
@@ -1972,11 +1985,12 @@ def run_local(mnt_a, mnt_b, results_file, filt, keep):
                 continue
             da = testdir(mnt_a, name)
             db = testdir(mnt_b, name)
-            if not os.path.isdir(db):
+            error = directory_probe_error(db)
+            if error:
                 nfail += 1
-                RESULTS.append((name, "FAIL",
-                                "testdir missing on B (stale snapshot?)"))
-                print("FAIL %-32s testdir missing on B" % name, flush=True)
+                detail = "testdir probe on B: " + error
+                RESULTS.append((name, "FAIL", detail))
+                print("FAIL %-32s %s" % (name, detail), flush=True)
                 continue
             try:
                 for side, fn in steps:
@@ -2155,6 +2169,25 @@ def _self_test():
             fn()
         except Fail as e:
             fails.append("%s: %s" % (label, e))
+
+    original_stat = os.stat
+    for code in (errno.ENOENT, errno.EBUSY, errno.EIO):
+        def broken_stat(_path, code=code):
+            raise OSError(code, os.strerror(code))
+        os.stat = broken_stat
+        try:
+            detail = directory_probe_error('/owned-fixture')
+            if "errno=%s:" % code not in detail:
+                fails.append("directory probe hid errno %s" % code)
+        finally:
+            os.stat = original_stat
+    with tempfile.TemporaryDirectory(prefix='posix2-probe-') as directory:
+        if directory_probe_error(directory) is not None:
+            fails.append('valid directory refused')
+        filename = os.path.join(directory,'file')
+        open(filename,'w').close()
+        if 'not a directory' not in directory_probe_error(filename):
+            fails.append('file accepted as directory')
 
     must_pass("rc0 PASS", lambda: _check_exec_result(
         "a", 0, 0, "RESULT\tPASS\t\n", ""))
