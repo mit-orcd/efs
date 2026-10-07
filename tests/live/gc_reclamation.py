@@ -41,6 +41,7 @@ p.add_argument('--rename-cache', action='store_true', help='root rename evicts t
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
 p.add_argument('--compactor-pressure', action='store_true', help='fault-build follower pressure with finite stop and recovery')
+p.add_argument('--du-audit',action='store_true',help='measure repeated GNU du on a cold never-writing client')
 p.add_argument('--lookup-barrier',action='store_true',help='delay an actual LOOKUP row across local chmod')
 p.add_argument('--storage-roots',type=int,choices=(1,2),default=1)
 p.add_argument('--put-reply-fault',action='store_true',help='fault client loses accepted PUT replies and collides path hints')
@@ -622,6 +623,26 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         os.unlink(target);os.unlink(donor)
         wait(lambda:not files(target_ino) and not files(donor_ino),'integrity fixtures reclaimed')
         print('two swapped fragments fail read; restored bytes verify cold PASS',flush=True)
+    if a.du_audit:
+        directory=mount/'du-audit';directory.mkdir()
+        for index in range(128):
+            with (directory/str(index)).open('xb',buffering=0) as out:
+                assert out.write(bytes([index+1])*4096)==4096
+                os.fsync(out.fileno())
+        unmount();mount_client()
+        allocated=[path.stat().st_blocks*512 for path in directory.iterdir()]
+        assert len(allocated)==128 and all(4096<=size<=128*1024 for size in allocated),allocated
+        expected=sum(allocated)+directory.stat().st_blocks*512
+        samples=[]
+        for index in range(5):
+            started=time.monotonic()
+            result=run(['du','-s','--block-size=1',directory],capture_output=True,text=True)
+            samples.append(time.monotonic()-started)
+            assert int(result.stdout.split()[0])==expected,(result.stdout,expected)
+        (work/'du-audit.json').write_text(json.dumps({'files':128,'allocated_bytes':expected,'elapsed_seconds':samples,'tool':'GNU du; not the unidentified Spark workload'},indent=2))
+        print(f'cold-client GNU du: 128 files, allocated={expected}, seconds={samples} PASS',flush=True)
+        for path in directory.iterdir():path.unlink()
+        directory.rmdir();wait(drained,'du-audit physical deletion drained',600)
     if a.lookup_barrier:
         target,fd,target_ino=create('memo-blocked',b'memo-race')
         os.close(fd);unmount();mount_client()
