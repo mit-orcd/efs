@@ -110,3 +110,11 @@ service acceptance: POSIX 216/0/1 skip, peer 64/64, persistence 26/26 prepare an
 26/26 verify. No concurrent benchmark changes were deployed. Logs
 `/tmp/efs-roadmap-cycle10-units.log` on NUC and
 `/private/tmp/efs-roadmap-cycle09-live.log` on the driver.
+
+## Round 11 — W79 explicit single-export initialization CLI
+
+Both mkfs aliases accept one legacy label with an explicit ignored-label notice;
+help advertises single-export behavior and excess arguments fail before RPC.
+NUC private real-daemon tests preserve namespace and committed salt through
+repeated calls to both aliases, then pass the GETATTR/LOOKUP partition gate.
+Log `/private/tmp/efs-roadmap-w79.log`.

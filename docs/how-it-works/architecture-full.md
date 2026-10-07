@@ -4789,10 +4789,12 @@ a second named export or fail because a supplied name exists. FUSE still
 accepts a name token and builds a local shell with it; this is not named-export
 creation. No cluster initialization was run in review.
 
-**Next:** align help, argument validation and success text with the accepted
-single-export contract. If legacy extra arguments remain accepted, explicitly
-report their compatibility meaning; do not imply namespace creation. Check the
-FUSE failure hints for retired `list-exports`/old metadata-table guidance too.
+**Continuation repair (Oct 7):** both aliases advertise the single-export
+contract and optional ignored legacy label, explicitly explain the label on
+invocation, and reject more than one extra argument before contacting a server.
+NUC real-daemon tests repeatedly initialize through both aliases, preserve the
+committed salt and an existing dentry, and verify excess arguments are refused.
+Uncertain-reply initialization and retired FUSE hints remain additional coverage.
 
 **Gate:** both aliases' help and invocation tests; extra/malformed arguments
 have an explicit outcome. Repeated initialization against the same intended

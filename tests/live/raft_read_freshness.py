@@ -140,6 +140,15 @@ try:
     assert 'status=0' in mgmt(old,'raft-setattr',1,1,'0755')
     assert 'status=0' in mgmt(old,'raft-create',1,'before-rename')
     assert 'status=0' in mgmt(old,'raft-lookup',1,'before-rename')
+    first_salt = re.search(r'salt=(\d+)',mgmt(old,'raft-status')).group(1)
+    for command in ('mkfs','raft-mkfs'):
+        repeated = mgmt(old,command,'compatibility-name')
+        assert 'rc=0' in repeated and 'is ignored' in repeated,repeated
+        assert re.search(r'salt=(\d+)',mgmt(old,'raft-status')).group(1)==first_salt
+        assert 'status=0' in mgmt(old,'raft-lookup',1,'before-rename')
+        malformed = mgmt(old,command,'label','extra')
+        assert 'usage:' in malformed and 'rc=0' not in malformed,malformed
+    print('PASS: both mkfs aliases preserve namespace/salt and explain ignored legacy label',flush=True)
     before = mgmt(old,'raft-getattr',1)
     assert 'status=0' in before and 'mode=040755' in before, before
     isolated = old

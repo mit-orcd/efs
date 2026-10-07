@@ -980,14 +980,17 @@ static int cmd_raft_mkfs(int argc, char **argv)
     uint32_t reply_len = 0;
     struct efs_msg_raft_mkfs_reply *r;
 
-    if (argc < 1) {
-        fprintf(stderr, "usage: raft-mkfs <node:port>\n");
+    if (argc < 1 || argc > 2) {
+        fprintf(stderr, "usage: mkfs|raft-mkfs <node:port> [legacy-label]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
         fprintf(stderr, "Invalid address: %s\n", argv[0]);
         return 1;
     }
+    if (argc == 2)
+        fprintf(stderr, "Note: legacy label '%s' is ignored; initializes the single cluster export.\n",
+                argv[1]);
     fd = efs_connect_tcp(host, port);
     if (fd < 0) {
         fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
@@ -2372,7 +2375,7 @@ int main(int argc, char **argv)
     fprintf(stderr, "Usage: %s <command> [args]\n"
                     "Commands:\n"
                     "  status <node:port>\n"
-                    "  mkfs <node:port> <export-name>\n"
+                    "  mkfs <node:port> [legacy-label] (single export; label ignored)\n"
                     "  add-node <new-node:port> <existing-node:port>\n"
                     "  shrink-quota <node:port> <amount>[T|G|M|K]\n"
                     "  add-storage <node:port> <path>[,path...]\n"
@@ -2380,7 +2383,7 @@ int main(int argc, char **argv)
                     "  version <node:port>\n"
                     "  raft-status <node:port>\n"
                     "  gc-status <node:port>\n"
-                    "  raft-mkfs <node:port>\n"
+                    "  raft-mkfs <node:port> [legacy-label] (single export; label ignored)\n"
                     "  raft-change <node:port> <group> <voters>\n"
                     "  raft-dir <node:port> <ino> <begin|migrate|finish>\n"
                     "  raft-session <node:port> <create|register|establish|get|fence> <uuid-hex> [epoch|shard] [shard]\n"
