@@ -1,0 +1,119 @@
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 66013 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 65980 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+n1 already running (pid 4035399)
+n2 already running (pid 4035480)
+n3 already running (pid 4035579)
+n4 already running (pid 4035612)
+already formatted (rm /data1/efs/.mkfs-done + wipe n* to redo)
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt
+Logging efs-fuse to /data1/efs/efs-fuse-mnt.log
+Mounted /data1/efs/mnt
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt2
+Logging efs-fuse to /data1/efs/efs-fuse-mnt2.log
+Mounted /data1/efs/mnt2
+nuc-efs up: n1..n4 on 127.0.0.1:17432/17433/17434/17435, mounted at /data1/efs/mnt + /data1/efs/mnt2
+/data1/efs/mnt/append-investigation-1791361665246554673
+PASS 0
+PASS 1
+PASS 2
+PASS 3
+PASS 4
+PASS 5
+PASS 6
+PASS 7
+PASS 8
+PASS 9
+PASS 10
+PASS 11
+PASS 12
+PASS 13
+PASS 14
+PASS 15
+PASS 16
+PASS 17
+PASS 18
+PASS 19
+PASS 20
+PASS 21
+PASS 22
+PASS 23
+PASS 24
+PASS 25
+PASS 26
+PASS 27
+PASS 28
+PASS 29
+PASS 30
+PASS 31
+PASS 32
+PASS 33
+PASS 34
+PASS 35
+PASS 36
+PASS 37
+PASS 38
+PASS 39
+PASS 40
+PASS 41
+PASS 42
+PASS 43
+PASS 44
+PASS 45
+PASS 46
+PASS 47
+PASS 48
+PASS 49
+PASS 50
+PASS 51
+PASS 52
+PASS 53
+PASS 54
+PASS 55
+PASS 56
+PASS 57
+PASS 58
+PASS 59
+PASS 60
+PASS 61
+PASS 62
+PASS 63
+PASS 64
+PASS 65
+PASS 66
+PASS 67
+PASS 68
+PASS 69
+PASS 70
+PASS 71
+PASS 72
+PASS 73
+PASS 74
+PASS 75
+PASS 76
+PASS 77
+PASS 78
+PASS 79
+PASS 80
+PASS 81
+PASS 82
+PASS 83
+PASS 84
+PASS 85
+PASS 86
+PASS 87
+PASS 88
+PASS 89
+PASS 90
+PASS 91
+PASS 92
+PASS 93
+PASS 94
+PASS 95
+PASS 96
+PASS 97
+PASS 98
+PASS 99

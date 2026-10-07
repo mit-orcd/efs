@@ -1,0 +1,6 @@
+parallel 1 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+============================================================
+POSIX suite: 1/1 pass, 0 fail, 0 skip, 0 notrun  (2.8s)
+wrote /data1/efs/logs/posix-20261007-042655.tsv
+results: /data1/efs/logs/posix-20261007-042655.tsv

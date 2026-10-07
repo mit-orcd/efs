@@ -153,6 +153,7 @@ test-report-pressure:
 	python3 tests/test_rdma_reply_budget.py
 	python3 tests/test_wb_worker_budget.py
 	python3 tests/test_wb_drain_budget.py
+	python3 tests/test_append_flush_budget.py
 	python3 tests/test_put_pool_budget.py
 	python3 tests/test_put_window_deadline.py
 	python3 tests/test_write_budget.py

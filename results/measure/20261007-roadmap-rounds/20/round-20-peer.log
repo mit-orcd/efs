@@ -1,0 +1,8 @@
+prepared /data1/efs/mnt/posix-2c-20261007-043442 (64 testdirs)
+pass peer_oappend                    
+pass peer_concurrent_append          
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 3/3 pass, 0 fail  (5.3s)
+wrote /data1/efs/logs/posix2c-20261007-043442.tsv
+results: /data1/efs/logs/posix2c-20261007-043442.tsv

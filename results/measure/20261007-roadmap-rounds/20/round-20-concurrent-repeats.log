@@ -1,0 +1,13 @@
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_creates_same_dir     
+pass concurrent_writes_disjoint      
+pass concurrent_create_unlink_two_proc
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_write_and_readdir    
+pass concurrent_appends_two_proc     
+FAIL concurrent_appends               append record b'W1S0000' count 0, want 1
+============================================================
+POSIX suite: 7/8 pass, 1 fail, 0 skip, 0 notrun  (10.0s)
+wrote /data1/efs/logs/posix-20261007-042902.tsv
+results: /data1/efs/logs/posix-20261007-042902.tsv

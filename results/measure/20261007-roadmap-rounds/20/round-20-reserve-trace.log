@@ -1,0 +1,150 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"09f1a4deb92d-dirty"' -DEFS_VERSION='"v0.1.0-pre-alpha-130-g09f1a4de-dirty"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T08:31:32Z"'  -I/usr/include/fuse3 -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_fuse.o src/client/efs_fuse.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"09f1a4deb92d-dirty"' -DEFS_VERSION='"v0.1.0-pre-alpha-130-g09f1a4de-dirty"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T08:31:32Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I/usr/include/fuse3 -o efs-fuse src/client/efs_fuse.o libefs.a -lpthread -lm -ldl -libverbs -lfuse3 -lpthread
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 73871 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 73838 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+n1 already running (pid 4035399)
+n2 already running (pid 4035480)
+n3 already running (pid 4035579)
+n4 already running (pid 4035612)
+already formatted (rm /data1/efs/.mkfs-done + wipe n* to redo)
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt
+Logging efs-fuse to /data1/efs/efs-fuse-mnt.log
+Mounted /data1/efs/mnt
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt2
+Logging efs-fuse to /data1/efs/efs-fuse-mnt2.log
+Mounted /data1/efs/mnt2
+nuc-efs up: n1..n4 on 127.0.0.1:17432/17433/17434/17435, mounted at /data1/efs/mnt + /data1/efs/mnt2
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_creates_same_dir     
+pass concurrent_writes_disjoint      
+pass concurrent_create_unlink_two_proc
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_write_and_readdir    
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (9.7s)
+wrote /data1/efs/logs/posix-20261007-043135.tsv
+results: /data1/efs/logs/posix-20261007-043135.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_creates_same_dir     
+pass concurrent_create_unlink_two_proc
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_write_and_readdir    
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (10.2s)
+wrote /data1/efs/logs/posix-20261007-043144.tsv
+results: /data1/efs/logs/posix-20261007-043144.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_appends_two_proc     
+pass concurrent_write_and_readdir    
+pass concurrent_overlap_write        
+pass concurrent_appends              
+pass concurrent_extend_high_then_low 
+pass concurrent_create_unlink_two_proc
+pass concurrent_creates_same_dir     
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (11.3s)
+wrote /data1/efs/logs/posix-20261007-043155.tsv
+results: /data1/efs/logs/posix-20261007-043155.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_writes_disjoint      
+pass concurrent_write_and_readdir    
+pass concurrent_overlap_write        
+pass concurrent_appends              
+pass concurrent_extend_high_then_low 
+pass concurrent_create_unlink_two_proc
+pass concurrent_creates_same_dir     
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (11.2s)
+wrote /data1/efs/logs/posix-20261007-043206.tsv
+results: /data1/efs/logs/posix-20261007-043206.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_creates_same_dir     
+pass concurrent_create_unlink_two_proc
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_write_and_readdir    
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (11.6s)
+wrote /data1/efs/logs/posix-20261007-043217.tsv
+results: /data1/efs/logs/posix-20261007-043217.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_creates_same_dir     
+pass concurrent_writes_disjoint      
+pass concurrent_create_unlink_two_proc
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_write_and_readdir    
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (12.2s)
+wrote /data1/efs/logs/posix-20261007-043229.tsv
+results: /data1/efs/logs/posix-20261007-043229.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_creates_same_dir     
+pass concurrent_create_unlink_two_proc
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_write_and_readdir    
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (10.4s)
+wrote /data1/efs/logs/posix-20261007-043241.tsv
+results: /data1/efs/logs/posix-20261007-043241.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_creates_same_dir     
+pass concurrent_writes_disjoint      
+pass concurrent_create_unlink_two_proc
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_write_and_readdir    
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (10.5s)
+wrote /data1/efs/logs/posix-20261007-043252.tsv
+results: /data1/efs/logs/posix-20261007-043252.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_creates_same_dir     
+pass concurrent_create_unlink_two_proc
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_write_and_readdir    
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (10.0s)
+wrote /data1/efs/logs/posix-20261007-043302.tsv
+results: /data1/efs/logs/posix-20261007-043302.tsv
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+pass concurrent_write_and_readdir    
+pass concurrent_overlap_write        
+pass concurrent_extend_high_then_low 
+pass concurrent_create_unlink_two_proc
+pass concurrent_creates_same_dir     
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (11.5s)
+wrote /data1/efs/logs/posix-20261007-043312.tsv
+results: /data1/efs/logs/posix-20261007-043312.tsv

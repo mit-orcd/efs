@@ -2797,15 +2797,15 @@ static int efs_append_flush_report_run(struct fuse_file_info *fi, efs_ino_t ino)
      * has nothing to publish; the REPORT for it would carry no record. */
     if (!efs_ino_has_unpublished(ino))
         return EFS_OK;
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
     rc = efs_wb_sync_ino(ino);
     if (rc != EFS_OK)
         return rc;
     amu = append_mu(ino);
-    while (pthread_mutex_trylock(amu) != 0) {
-        if (efs_client_rpc_past_deadline())
-            return EFS_ERR_BUSY;
-        usleep(1000);
-    }
+    rc = wb_lock_budget(amu);
+    if (rc != EFS_OK)
+        return rc;
     rc = efs_dcache_flush_ino(ino);
     if (rc == EFS_OK)
         rc = efs_client_report_dirty_ino(ino, 1);
@@ -2933,6 +2933,11 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
      * bytes in dcache or the ino is marked dirty. An early dirty mark
      * would release the server's append barrier before the PUT. */
     uint64_t off = (start <= UINT64_MAX - len && start + len == ns) ? start : (ns - len);
+    if (efs_dcache_trace_on())
+        fprintf(stderr, "append-reserve ino=%llu seq=%llu start=%llu end=%llu len=%llu\n",
+                (unsigned long long)ino, (unsigned long long)seq,
+                (unsigned long long)start, (unsigned long long)ns,
+                (unsigned long long)len);
     uint32_t reserve_cs = g_client.export.chunk_size ? g_client.export.chunk_size : EFS_CHUNK_SIZE;
     if (efs_write_extent_valid(off, len, reserve_cs) != EFS_OK)
         return -EFBIG;
