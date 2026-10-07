@@ -1,4 +1,5 @@
 # build artifacts
+*.dSYM/
 /efsd
 /efs-fuse
 /efs-bench
@@ -12,6 +13,12 @@ build.log
 libefs.a
 
 # tests (built binaries; keep sources and scripts)
+tests/test_publication_ack
+tests/test_publication_recovery
+tests/test_lane_bootstrap_recovery
+tests/test_fence_view
+tests/test_reply_buffers
+tests/test_bufpool
 tests/test_erasure
 tests/test_placement
 tests/test_rdma_xprt
@@ -35,6 +42,7 @@ tests/faults/fault_sim
 /logs/
 
 # editor / tooling
+.DS_Store
 /.cursor/
 /.codex
 /notes.txt
