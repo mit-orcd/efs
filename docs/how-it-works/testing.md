@@ -5,19 +5,22 @@
 
 ## `make test`
 
-Builds and runs the unit suites: `test_erasure`, `test_placement`, `test_wire`,
-`test_data`, `test_kv`, `test_kv_lsm`, `test_raft`, `test_raft_store`,
-`test_meta_apply`, `test_sim`, `test_txn`, `test_session`, `test_lock`,
-`test_stage_evict`, `test_conn_fd`. `test_sim` is the deterministic simulator
-and is the correctness gate for protocol changes; the cluster is the perf
-harness, not the correctness harness.
+Builds and runs the suites listed in the current Makefile, including the
+simulator, metadata/session/transaction, store, buffer, publication and
+writeback gates. The list evolves; use `TEST_BINS` and the `test` target
+rather than this guide as a fixed suite inventory. Focused protocol tests
+exercise logical behavior; public callbacks, real storage and RDMA require
+their own acceptance gates. [Verification](verification.md) distinguishes
+simulation, process restart and hardware power loss.
 
 Everything must be green. There is no accepted-failure list.
 
 ## Cluster gates
 
-Build and run on the dedicated fcstor test cluster — never Slurm, never the NFS
-home (see [cluster test operations](../operations/cluster-testing.md) for
+The following commands describe the recorded fcstor harness, not a live
+inventory or the NUC/xorinox controller. Verify its configuration and use the
+correct cluster runbook before invoking setup/restart. Build on node-local
+scratch rather than the NFS home (see [cluster test operations](../operations/cluster-testing.md) for
 pre-flight, deployment and timeout guidance).
 
 `bash tests/preflight.sh` first (read-only: one efsd per server, one build
@@ -32,9 +35,9 @@ ID, both Raft leaders, `commit == applied`, idle commit rate, every mount
 | `setup` | rsync + build + mount the clients |
 | `posix` / `posixstress` | POSIX suite 1 vs an XFS baseline, one client or N in parallel |
 | `posix2` | cross-client visibility, one pair or several |
-| `posixpersist` | durability across unmount/remount (the only suite that proves anything is durable) |
+| `posixpersist` | acknowledged data survives the selected remount/process-crash scenario; does not establish hardware power-loss durability ([W71](../backlog/work-items.md#w71)) |
 | `nvme` | the local `/data1/01-06` NVMe ceiling (no efs involved) |
-| `meta` | `efs-bench --meta` metadata op rates |
+| `meta` | `efs-bench <seed:port> --meta` cluster RPC metadata op rates; distinct from local `--bench meta` |
 | `leaks` | valgrind memcheck, client and server, TCP and RDMA |
 
 A timeout is a FAIL, not a skip.
@@ -45,15 +48,17 @@ A write number counts only with the flush inside the clock: `dd bs=1M
 conv=fsync` of a non-zero source (all-zero chunks skip PUTs), or fio with
 `--end_fsync=1` and no `time_based`; read numbers only after a remount of
 every reading client. A `time_based` fio with `--direct=1` skips the kernel
-page cache but not the client's userspace dcache, so its write column is
-memory bandwidth. Method and the number history live in
-`docs/how-it-works/performance.md`; the current references are in
+page cache but not the client's userspace dcache, so its write column
+can include buffered acceptance/cache work. Confirm publication boundaries,
+working-set size and post-run integrity before calling it storage throughput.
+Flushing inside the clock does not independently prove target persistence
+(W71). The dated references and measurement limits are in
 [performance.md](performance.md) ("Baselines"). `tests/stress/fio_honest_matrix.sh` is the
 fio form; `tests/measure/*.sh` hold the dd and IOR runbooks.
 
 Before every number: `findmnt -o FSTYPE /tmp/efs-mount` must print
-`fuse.efs-fuse` and `stat` of the mount must succeed. Sanity check any
-write number against on-disk `du` of `/data1/0*/efs`.
+`fuse.efs-fuse` and `stat` of the mount must succeed. Sanity check physical fragment allocation and readback on each actual storage
+root; `/data1/0*/efs` is specific to the recorded fcstor layout.
 
 ## Other harnesses
 

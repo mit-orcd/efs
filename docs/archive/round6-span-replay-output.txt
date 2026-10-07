@@ -1,0 +1,3 @@
+FAIL work/round6/span-replay-repro.c:69: ambiguous retry must not reintroduce old span after a later full overwrite
+old-span=209 retry-rc=0 later-base=242 active-old-span=1 trailer-count=8
+exit status: 1

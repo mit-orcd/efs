@@ -90,11 +90,13 @@ The [publication continuation](../../results/measure/20261006-publication-ten-ro
 adds captured FileID validation at REPORT preflight and same-group durable apply,
 exact base/list identity, immutable materialization and staged typed cache PUT/
 REPORT lifecycle APIs. Failed PUT retains accepted bytes; ambiguous REPORT retains
-its pending token. Activation first needs durable per-publication outcome recovery,
-because the current aggregate reply cannot distinguish partial commit from a CAS
-loser or an evicted apply verdict. Recommend per-record results plus durable
-retry/status identity before wiring typed flush paths. No new client-scaling or
-live activation result is claimed.
+its pending token. That checkpoint recommended durable per-publication outcome
+recovery because the legacy aggregate reply cannot distinguish partial commit
+from a CAS loser or an evicted apply verdict. The following durable-result,
+retirement and ordered-client primitives implement that recommendation in staged
+APIs. Production typed flush/publication integration still must carry those
+results and identities before activation. No new client-scaling or live
+activation result is claimed.
 
 ## Durable publication results — implemented, staged
 
@@ -160,14 +162,16 @@ retirement itself proves neither original commit nor rejection.
 Activation still needs session-lifetime admission and cleanup. Use the existing
 I23 session-fencing barrier to reject the old epoch on every touched lane before
 reclaiming abandoned receipts/floors; erasing a floor first would reopen replay.
-The staged publication endpoints do not yet enforce that session barrier, so no
-abandoned-session/floor cleanup is enabled and no global storage bound is claimed.
+At the initial receipt-retirement checkpoint, publication endpoints did not
+yet enforce that barrier. The I23 checkpoint below supersedes that limitation:
+endpoint/apply admission gates are implemented; abandoned-stream/floor cleanup
+remains pending, and no global storage bound is claimed.
 Finish this admission/recovery lifecycle alongside the ACK queue before enabling
 production flush callers. No new product decision is required for retaining
 floors safely while staged.
 
-Remaining: connect authoritative admission and both flush paths, coherent
-lane-local mtime invalidation, live lane/leader-change and shrink/recovery gates,
+Remaining after the later I23/mtime checkpoints: connect FUSE admission and
+both flush paths, live lane/leader-change and shrink/recovery gates,
 and sweep/history retirement. The staged adapter preserves the existing lane
 stamp rather than consulting the inode on every publish. No production activation
 or live cluster acceptance is claimed. See the

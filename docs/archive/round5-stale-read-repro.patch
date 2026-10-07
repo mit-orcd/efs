@@ -1,0 +1,76 @@
+--- tests/test_raft.c
++++ review/stale-read-repro.c
+@@ -223,7 +223,7 @@
+             }
+         }
+     }
+-    if (n->drop[msg->to])
++    if (n->drop[msg->to] || (msg->from >= 0 && n->drop[msg->from]))
+         return EFS_OK;
+     if (msg->to < 0 || msg->to >= n->n || !n->r[msg->to])
+         return EFS_ERR_INVAL;
+@@ -1323,29 +1323,38 @@
+     }
+ }
+ 
+-int main(void)
+-{
+-    test_election_i1();
+-    test_ae_full_window_not_resent_per_propose();
+-    test_step_down_no_campaign();
+-    test_replicate_and_readindex();
+-    test_i3_i4_and_restart();
+-    test_snapshot();
+-    test_grow_3_to_5();
+-    test_i18_joint_quorum();
+-    test_stale_boot_id();
+-    test_ae_reply_match_stops_at_prev();
+-    test_noop_over_stale_tail();
+-    test_ae_batch_catchup();
+-    test_ae_catchup_flow_control();
+-    test_install_snapshot();
+-    test_install_snapshot_needs_blob();
+-    test_install_snapshot_restarted_leader();
+-    test_snap_chunks();
+-    if (failures) {
+-        fprintf(stderr, "test_raft: %d failure(s)\n", failures);
+-        return 1;
+-    }
+-    printf("test_raft: OK\n");
+-    return 0;
+-}
++
++static void review_stale_read(void)
++{
++    struct net n = { .n = 3 };
++    struct efs_raft_store *st[3];
++    struct app app[3] = {0};
++    struct efs_raft_cfg cfg = {0};
++    int i, old, newer;
++    uint8_t a = 'A', b = 'B';
++    uint64_t idx = 0;
++    cfg.n=3;cfg.send=send_now;cfg.net=&n;cfg.apply=apply_cmd;
++    for(i=0;i<3;i++) {
++        st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
++        cfg.election_ticks=4+i*4;cfg.heartbeat_ticks=1;cfg.app=&app[i];
++        n.r[i]=efs_raft_new(&cfg);
++    }
++    CHECK(elect(&n,20)==1,"initial election");old=leader_id(&n);
++    CHECK(efs_raft_propose(n.r[old],&a,1,&idx)==EFS_OK,"initial proposal");
++    elect(&n,8);CHECK(efs_raft_read_covers(n.r[old],efs_raft_commit(n.r[old])),"initial coverage");
++    n.drop[old]=1;
++    CHECK(elect(&n,60)==1,"majority election");newer=leader_id(&n);
++    CHECK(newer>=0 && newer!=old,"different leader");
++    CHECK(efs_raft_propose(n.r[newer],&b,1,&idx)==EFS_OK,"new-majority proposal");
++    elect(&n,8);CHECK(app[newer].last=='B',"majority applied B");
++    for(i=0;i<40;i++) efs_raft_tick(n.r[old]);
++    printf("old=%d old_term=%llu old_value=%c old_commit=%llu old_role=%d covers=%d; new=%d new_term=%llu new_value=%c new_commit=%llu\n",
++      old,(unsigned long long)efs_raft_term(n.r[old]),app[old].last,
++      (unsigned long long)efs_raft_commit(n.r[old]),efs_raft_role(n.r[old]),
++      efs_raft_read_covers(n.r[old],efs_raft_commit(n.r[old])),newer,
++      (unsigned long long)efs_raft_term(n.r[newer]),app[newer].last,
++      (unsigned long long)efs_raft_commit(n.r[newer]));
++    CHECK(!efs_raft_read_covers(n.r[old],efs_raft_commit(n.r[old])),"a later read must not reuse old authority after majority writes B");
++    for(i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);}
++}
++int main(void){review_stale_read();return failures?1:0;}

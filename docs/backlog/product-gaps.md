@@ -10,12 +10,17 @@ comments or spec prose. A
 function that exists but is only reachable from tests counts as absent.
 
 It is deliberately separate from [the status page §1a](../status/README.md), which is
-the *near-term work queue* (numbered W items, most of them closed).
+the *near-term work queue* of active findings and their remaining gates.
 Everything here is larger than a queue item and most of it needs a design
 decision first. Nothing on this page is scheduled. Do not start an item here
 without asking.
 
-Re-audit before trusting this page: it will rot.
+**Oct 7 review note:** the original Sep 18/Oct 1 inventory remains a dated
+baseline, not a complete current source audit. Fault-harness availability and core durability/session/protection/integrity
+gaps below have been checked against public paths; remaining surface claims
+need re-audit against the
+current build and public paths. Follow the [active queue](../status/README.md)
+and [current handoff](../status/in-flight.md) for current implementation/gates.
 
 ---
 
@@ -34,11 +39,11 @@ storage rejoins empty and rebuilds from peers".
 generation **consumes protection budget until repair completes**, and a
 returning node "restores capacity, not the fragments it never held".
 
-No repair exists. The only background data-plane thread on a server is the GC
-reaper (`host_gc_thread` in `src/server/raft_host.c`), which *deletes*
-fragments orphaned by unlink and truncate. Nothing scans for a live chunk whose
-fragment set is short, and nothing re-encodes a missing fragment onto a healthy
-node.
+No production owner that scans under-protected live chunks and reconstructs
+missing fragments was found. The GC reaper deletes obsolete fragments;
+metadata transaction/snapshot recovery and reading from two survivors do not
+restore the missing fragment. This accepted feature gap is indexed as
+[W74](work-items.md#w74), with permanent-loss and protection-restoration gates.
 
 The consequence is not "slow recovery", it is silent loss of the headline
 guarantee. At f=1: node A dies, its fragments are gone; every chunk it held is
@@ -60,8 +65,12 @@ no operator-visible "this cluster is one failure from loss". `efs-mgmt status`
 reports node liveness and quota; the heal field is a stub that always returns
 zeros (`EFS_MSG_HEAL_STATUS` in `src/server/handler.c`). A degraded publish
 path is specified in [§2](../how-it-works/architecture.md) (publish with ≥ k+(f−u) fragments
-when u domains are already unavailable) and is not implemented — publication
-requires the full ACK set or fails.
+when u domains are already unavailable) and is not implemented as that committed-debt protocol. The legacy PUT path
+can return OK with two fragment ACKs after one quota failure; this concern is
+tracked in [W42](work-items.md#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a).
+Staged typed publication validates three distinct nodes but does not establish
+durable physical ACKs or repair. Follow [W71](work-items.md#w71) and
+[W74](work-items.md#w74); do not claim a full-ACK production guarantee here.
 
 ### 1.3 The client does not run the session protocol, so fencing is not real
 
@@ -73,24 +82,25 @@ longer make an authoritative mutation. The server side of this exists
 not participate — when a request carries no session suffix the server
 substitutes a stand-in UUID.
 
-So the mechanism that is supposed to stop a stale client from corrupting state,
-reclaim its locks, resolve its append reservations, and drop its open-unlinked
-leases is inert on the only production client. What exists instead is
-connection-level retry (`rpc_send_recv_shard`: 16 attempts with backoff,
-peer marked down for 30 s after four failures), which recovers from a dropped
-socket but carries no state and provides no fencing.
+Production HOLD/FLOCK still omit that suffix. The mount's operation-ID UUID
+at locally fixed epoch 1 provides retry identity, not a committed session
+lifecycle. Append's owner suffix also does not implement that lifecycle.
+Management can create/register/establish/fence sessions, and staged D25
+publication admission enforces local session authority. Those primitives are
+implemented; mount-wide establishment, touched-shard registration and all
+public dependent paths remain [W72](work-items.md#w72). Avoid describing every
+session mechanism as absent or treating the staged endpoint as full activation.
 
 ### 1.4 Fragment integrity is verified inconsistently
 
-Invariant **I25** says every durable fragment is checksummed over identity plus
-payload, and a failing fragment is treated as unavailable and repaired, never
-fed to the decoder. Partially true: the server re-hashes on GET and returns
-NOT_FOUND on mismatch, which correctly keeps bad bytes out of the decoder. But
-client-side verification is off unless `EFS_READ_VERIFY` is set, PUT stores
-the digest the client sent (the 4 KiB tail of the fragment file) without
-re-hashing the payload it just received, and
-"never decoded, always repaired" cannot hold while §1.1 is open — a corrupt
-fragment is detected and then nothing repairs it.
+Invariant **I25** specifies immutable identity plus payload checksums and
+repair of unavailable fragments. Current PUT hashes are payload-only and the
+server stores the caller's digest. GET rejects a mismatch against a stored
+checksum, but missing checksum evidence causes a fresh payload hash to be
+returned rather than rejection. The parallel preferred-pair receive path
+ignores returned digests; EFS_READ_VERIFY only affects the single-fragment
+helper, not that common path. These trust/coverage gaps are
+[W75](work-items.md#w75). Automatic repair remains [W74](work-items.md#w74).
 
 ### 1.5 Two clients writing disjoint ranges of one chunk — CLOSED
 
@@ -106,7 +116,10 @@ Do not reopen with a distributed chunk lock. Details in [project-history.md](../
 says a returned `write()` is client-buffered; durable + cross-client
 visible at `fsync` / last `close` / `O_SYNC`. Measured
 `results/stress/20260918-w2/`: peer 0/10, kill -9 loses 64 MiB.
-`O_SYNC` is specified, not wired. [project-history.md](../archive/project-history.md) "START-HERE closed items", **W2**.
+`O_SYNC` is specified; explicit publication is unwired and actual kernel
+sequencing needs the [W73](work-items.md#w73) trace gate. Independently,
+[W71](work-items.md#w71) records that production PUT lacks the target
+persistence barrier required by a successful durability operation. [project-history.md](../archive/project-history.md) "START-HERE closed items", **W2**.
 
 ---
 
@@ -130,42 +143,47 @@ parallel filesystem has and efs does not.
 
 ## 2. Missing product surface
 
-Real gaps, but they contradict nothing — the spec simply does not claim them
-yet. Roughly in the order a user would notice.
+Product scope and acceptance limits, source-reviewed Oct 7. These rows do not
+add approved features or certify a deployment. Previous overbroad wording and
+the dated gateway symptom are [preserved](../archive/product-surface-before-round4-20261007.md).
 
 | Capability | Status | Where it stands |
 | --- | --- | --- |
-| **Authentication** | absent | Plain TCP/RDMA. No TLS, shared secret, Kerberos, or capability tokens. `EFS_MSG_HELLO` gates *cluster join* on build ID; it authenticates nothing. Any host that can reach port 19810 is a peer. |
+| **Authentication** | absent | Plain TCP/RDMA. No TLS, shared secret, Kerberos, or capability tokens. `EFS_MSG_HELLO` gates *cluster join* on build ID; it authenticates nothing. Network reachability is not authentication; the configured listen port is not necessarily 19810. |
 | **Authorization** | POSIX only | uid/gid/mode checked in the FUSE daemon (`check_access`). No ACLs. [§2](../how-it-works/architecture.md) is explicit that clients are assumed non-Byzantine and that hostile clients would make capability-based data authorization mandatory — so this is a scope boundary, not an oversight. |
-| **Cluster identity (name / UUID)** | absent | `raft-mkfs` writes no cluster UUID or name; `cluster_nodes.bin` records membership only. Two clusters on one network are indistinguishable: nothing keeps a peer or client of cluster A from talking to cluster B (HELLO gates on build ID, not identity), and `efs-mgmt status` shows no cluster name. A mkfs-minted UUID carried in HELLO + a name in status output is the shape; no wire field or metadata key exists for either. |
-| **fsck / offline consistency check** | absent | Nothing validates dangling dentries, orphan inodes, or chunk maps pointing at absent fragments. The simulator checks invariants on simulated state; there is no tool for a real cluster. Listed in [roadmap "tests still to write"](ideas.md) as `fsck --verify-only`, unbuilt. |
+| **Cluster identity (name / UUID)** | absent | HELLO checks build/version, not a minted cluster UUID or human name. Membership is persisted and mkfs creates a placement salt, but neither is authenticated cluster isolation. Do not confuse the salt with a checked network identity. |
+| **fsck / offline consistency check** | incomplete | Targeted metadata probes, invariant tests and live reclamation fixtures exist, but there is no complete operator checker for dangling dentries, orphan inodes and missing chunk fragments on a real store. The proposed `fsck --verify-only` remains unbuilt. |
 | **Extended attributes** | `user.*` only | One blob per inode (`EFS_KV_KIND_XATTR`), raft command `EFS_MD_CMD_XATTR`. set/get/list/remove for names starting with `user.`. `security.*` and `system.*` return EOPNOTSUPP and are not stored. No ACLs. `opt_xattr` passes (`results/posix/20260928-043918`). |
 | **User-visible snapshots** | absent | No snapshot/clone FUSE surface. Do not confuse with Raft InstallSnapshot or `kv_snap.c`, which are internal replication machinery. |
 | **Node removal (data plane)** | absent | `add-node`/`JOIN`/`NODE_LEFT` update the membership list in `cluster_nodes.bin`. No fragment evacuation, no rebalance onto a new node. `shrink-quota` refuses when `used > new_quota` rather than migrating. |
-| **Multi-export** | partial | Server arrays hold `EFS_MAX_EXPORTS` (16) and `raft-mkfs` creates one, but list/create/destroy are retired opcodes and the client selects one export name at mount. |
+| **Multi-export** | single export by design | Legacy arrays and mount-name syntax do not establish multiple exports. `raft-mkfs` initializes one root/salt; its CLI ignores an extra name ([W79](work-items.md#w79)). The FUSE bootstrap uses a local compatibility name token. Multi-export creation/list/destruction is not a supported product path. |
 | **Quota** | node-level only | Per-node byte quota enforced on new fragment creation (`EFS_ERR_QUOTA` → `ENOSPC`). No per-user, per-group, or per-directory quota, and no inode quota. |
 | **Quota growth (`grow-quota`)** | absent | The opposite of `shrink-quota`. A node's quota is set once at startup (`efsd --quota`) and `shrink-quota` only subtracts from it (`src/server/handler.c`, refused when `used > new_quota`); nothing raises it at runtime. After a shrink — or after adding capacity with `add-storage` — the node stays capped until it is restarted with a larger `--quota`. Trivial compared to shrink (no migration, just raise the ceiling in `g_server->quota` and the local node record), but the wire op and the `efs-mgmt grow-quota` command do not exist. |
-| **Metrics** | human-readable only | `efs-mgmt status` / `raft-status` text, plus per-directory `.stats` through FUSE. No Prometheus endpoint, no structured stats, no time series. |
-| **Logging** | unstructured | `fprintf(stderr, ...)` throughout, no levels, no rotation, no request IDs. (`raft_log_rotate_locked` is WAL compaction, not application logging.) Debug output is env-gated per subsystem, which is not the same as a log level. |
-| **Non-FUSE access** | absent | FUSE is the only client. No NFS or SMB re-export, no library/DAOS-style direct API. Note [§9](../how-it-works/architecture.md) already bounds intra-mount scaling because upstream Linux serializes extending direct writes, `IOCB_APPEND`, and `O_CREAT` per mount — so a second access path is a performance question, not only a compatibility one. |
-| **Stable NFS file handles across efs-fuse restarts** | absent | When efs-fuse is used as an NFS re-export (`EFS_FUSE_EXPORT=1` on a gateway), file handles are built by the kernel's generic fuse export from libfuse's per-process nodeid→(parent,name) table (`src/client/efs_fuse.c`). An efs-fuse restart empties that table, so every previously issued NFS file handle becomes unresolvable and clients must remount or re-resolve by path (observed Oct 5 2026: macOS client kept a mount working for STATFS/READDIR/CREATE but rename of a cached entry failed EIO until the path was re-walked). efs inodes/generations are cluster-persistent, so handles could instead encode (export id, efs inode, generation) and survive a gateway restart — that needs efs-fuse's own export logic instead of the libfuse default. |
-| **ESTALE for unresolvable by-handle lookups** | absent | When a by-handle lookup fails after an efs-fuse restart, the NFS client sees EIO, not ESTALE — same unmapped-errno class as the FUSE_MKNOD case (`ll_mknod`, dca87c71). ESTALE would let clients recover by path re-resolution instead of hard-failing. |
-| **Rolling upgrade** | works, narrowly | HELLO rejects a build-ID/version mismatch, so same-build restarts roll one at a time. There is no wire version negotiation, so an actual version *change* requires stopping every server together. |
+| **Metrics** | CLI / typed RPC counters | `status`, `raft-status`, `io-stats`, GC diagnostics and `.stats` provide targeted counters/queries; wire replies are structured, while operator output is mainly text. The old `efs-query` returns placeholder zeros ([W80](work-items.md#w80)); no integrated Prometheus endpoint or persistent time-series service was found. |
+| **Logging** | text, subsystem debug switches | UTC timestamps are enabled by default (`EFS_LOG_TS=0` disables them). Some paths log inode/opid context, but there is no uniform request-correlation schema, global level policy or integrated application log rotation. Raft WAL compaction is separate from application logging. |
+| **Non-FUSE access** | limited | FUSE is the filesystem mount path; management and benchmark clients also use userspace RPC paths. External NFS re-export is used with `EFS_FUSE_EXPORT=1`; a packaged general application API, native NFS/SMB server and MPI-IO client are not established. See the gateway lifetime limitation below. |
+| **Stable NFS file handles across efs-fuse restarts** | acceptance missing | Oct 5 recorded a macOS NFS client keeping STATFS/READDIR/CREATE usable but cached-entry rename failing EIO until path re-resolution. Preserve that symptom; it does not prove every handle fails or identify the mechanism. The source enables `FUSE_CAP_EXPORT_SUPPORT`, returns EFS inode IDs through the low-level API and fixes entry generation at 1. Its comment attributes restart failures to a libfuse node table, but this review did not establish that explanation. Trace kernel export/decode, inode generation and gateway restart before choosing a fix; no current restart gate is claimed. |
+| **ESTALE for unresolvable by-handle lookups** | unresolved gateway symptom | The Oct 5 cached-entry rename produced EIO. The by-handle failure stage and errno mapping need tracing; it is not established that this is the same cause as the earlier MKNOD mapping bug. Gate missing/stale handles and recovery by path, alongside gateway restart. |
+| **Rolling upgrade** | same-build restart only | HELLO rejects build-ID/version mismatch. Same-build restart is distinct from a mixed-version upgrade; no wire-version negotiation was found. Membership quorum and public-write recovery gates still apply, so this row is not blanket restart acceptance. |
 
 ---
 
-## 3. Verification that does not exist
+## 3. Verification gaps
 
-From [roadmap "tests still to write"](ideas.md), because it belongs in
-any honest readiness assessment: **there is no fault-injection harness at all.**
-POSIX layers 1–3 (201 single-client tests, 63 two-client) cover syscalls, peer
-visibility and same-file races on a healthy cluster. Layer 4 — crash after
-fsync, kill between EC and publish, degraded read with a node down, silent
-corruption repair, partition and fencing, lock-holder crash, kill mid-rename on
-a spreading directory — has no harness.
+Fault-injection infrastructure exists: [the fault suite](../../tests/faults/README.md)
+provides simulator and isolated real-process/FUSE integration layers, including
+server/client crashes and corruption cases. Its documentation distinguishes
+`GAP` and `not_run` from passes; it is not part of the ordinary `make test`
+green gate. [WITHHOLD unit coverage](../../tests/test_wb_fault.py) checks outgoing
+publication omission, snapshot retention and fault-hook exclusion from
+production builds. A [live GC reclamation fixture](../../tests/live/gc_reclamation.py)
+is also present in the reviewed working tree.
 
-Note the circularity with §1: several Layer 4 cases are the only way to test
-repair and fencing, and repair and fencing are the things that do not exist.
+These files establish harness availability, not execution or acceptance of a
+current deployment. The remaining fault/recovery, protection/repair, fencing,
+GC and deadline gates are tracked in the [queue](../status/README.md) and
+[handoff](../status/in-flight.md). Inspect named raw results and build identity
+before claiming a scenario passes. This review did not run those fixtures.
 
 ---
 

@@ -23,13 +23,15 @@ Implements the documentation gate specified in docs/how-it-works/developing.md
                          than restate; architecture.html is generated,
                          not an md source.
 
-Scope: the normative index (docs/how-it-works/architecture.md) plus the
+Normative-check scope: the normative index (docs/how-it-works/architecture.md) plus the
 satellites that docs/gen-architecture-full.py renders as appendices (the
 status pages, backlog/work-items.md, the how-it-works/ satellites and
 archive/design-history.md) and operations/runbooks.md. The generated
 docs/how-it-works/architecture-full.md is covered by check 1 and excluded
-from the content checks. Exit 0 on pass, 1 with per-check diagnostics on
-failure. Python 3 standard library only; CWD-independent.
+from the content checks. Link checks additionally cover every active Markdown
+page outside archive/ and the repository README. Historical appendices already
+in the normative source list remain checked. Exit 0 on pass, 1 with per-check
+diagnostics on failure. Python 3 standard library only; CWD-independent.
 
     python3 docs/check-architecture.py
 """
@@ -66,6 +68,15 @@ def doc_sources():
         if s != FULL and s not in out:
             out.append(s)
     return out
+
+
+def link_sources():
+    """Normative sources plus all active documentation entry points."""
+    srcs = doc_sources()
+    srcs += sorted(p for p in DOCS.rglob("*.md")
+                   if "archive" not in p.relative_to(DOCS).parts and p != FULL)
+    srcs.append(DOCS.parent / "README.md")
+    return list(dict.fromkeys(srcs))
 
 
 def rel(path):
@@ -165,7 +176,7 @@ def github_anchors(text):
 def check_links():
     problems = []
     anchor_cache = {}
-    for src in doc_sources():
+    for src in link_sources():
         lines = lines_without_fences(src.read_text())
         for lineno, line in enumerate(lines, 1):
             for m in LINK_RE.finditer(line):

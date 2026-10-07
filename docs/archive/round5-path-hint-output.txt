@@ -1,0 +1,2 @@
+slots=1959/1959 first=4294967295 collision=4294967295 lost-reply-retry=4294967295 expected-safe-probe=0
+exit status: 1 (unsafe retry hint reproduced)

@@ -3,6 +3,12 @@
 [Architecture](architecture.md) · [Data protocol](protocols/data.md) ·
 [Verification](verification.md)
 
+**Scope:** the execution rules below are design requirements, not a claim
+that the current two-group/worker runtime implements every rule. See
+[W66 and public-path limits](../status/spec-implementation.md). Dated fcstor
+measurements do not identify the running NUC/xorinox topology or establish
+W71 durability; local engine studies are separate from FUSE/cluster results.
+
 The topology in [the spec](architecture.md) makes linear scaling
 *possible*. This document is the contract that makes it *actual* — the
 difference between "the architecture scales" and "the implementation
@@ -85,7 +91,10 @@ hardware the groups were meant to exploit.
 ## Baselines and ceilings (current)
 
 Moved here verbatim from the work queue ([../status/README.md](../status/README.md))
-on Oct 3 2026; the queue links here instead of carrying the tables.
+on Oct 3 2026; the queue links here instead of carrying the tables. These
+are dated fcstor reference measurements/configurations, not current universal
+hardware ceilings. Preserve each run's build, mode and error qualifications;
+newer local engine results later in this page do not replace cluster baselines.
 
 **What the hardware allows.** Every performance item is measured against
 this, not against last week's number. Cluster traffic rides `ibs1f0`
@@ -106,9 +115,11 @@ mutex, one leader, one thread, FUSE serialization, one WAL or one
 coordinator before a physical resource, *that is by definition an EFS bug*.
 By that rule the write path is still a bug, not a tuning task.
 
-Baselines, all honest (flush in the clock, reads after remount, `findmnt`
-verified `fuse.efs-fuse`). Historical context is in `docs/archive/project-history.md`; the table below
-links the retained measurement evidence.
+These dated runs included flush in the clock, remount-before-read and
+`findmnt` checks where recorded. They do not establish target power-loss
+durability ([W71](../backlog/work-items.md#w71)); the debug IO-500 run below
+explicitly includes an error. [Historical context](../archive/project-history.md)
+and retained raw measurements define each result's acceptance scope.
 
 | measurement | value | where |
 | --- | --- | --- |
@@ -503,3 +514,14 @@ writes can therefore incur multiple persistence waits per PUT. The daemon's
 build and defaults do not enable it. Compare untraced repeats before separate
 perf/strace runs; O_SYNC does not establish SSD power-loss guarantees. See the
 [synchronous writer measurements](../../results/measure/20261007-sync-writer-investigation/SUMMARY.md).
+
+
+### Latency-study qualification
+
+The short bounded writer studies above mixed initial population and replacement;
+per-run p99 averages are not pooled percentiles. The
+[corrected latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md)
+separates population from timing and retains individual observations. Preserve
+older numbers as historical measurements; use the corrected method for a new
+steady-state tail-latency gate. CPU samples and aggregate syscall time do not
+measure the fraction of wall time waiting.

@@ -41,13 +41,11 @@ requirement than "the code is organized," and it has concrete consequences:
 rest of the tree to change one component safely, the modularity has failed —
 regardless of how the directories are named.
 
-**Where we are (Oct 1 2026, honest).** The boundaries exist (Phase M is
-complete) and the state machines are pure enough that `tests/test_sim`
-runs them. The file-size rule is not met: of a 70k-line `src/`,
-`server/raft_host.c` is 12.1k lines, `client/write.c` 6.0k,
-`meta/meta_apply.c` 5.7k, `client/efs_fuse.c` 5.5k, `meta/metadata.c`
-3.8k. Splitting those by responsibility is a standing follow-on, taken
-when a change touches them, never as a drive-by.
+**Source-size snapshot (Oct 7, 2026).** The file-size target is not met:
+`server/raft_host.c` 13056 lines, `client/write.c` 7301 lines, `meta/meta_apply.c` 7709 lines, `client/efs_fuse.c` 7128 lines, `meta/metadata.c` 3884 lines.
+These counts describe the reviewed working tree, not a permanent module budget.
+Split by responsibility when the selected task touches a large module; this
+review does not authorize unrelated refactoring.
 
 **Boundaries** (aligned with the planes, so the architecture and the
 code structure are the same map):
@@ -108,10 +106,10 @@ extra steps, and the contributor who reads only one of them is misled. The
 documentation gate is therefore part of the build, not an editorial habit:
 
 ```text
-regenerate docs/architecture-full.md and fail on any diff
+regenerate docs/how-it-works/architecture-full.md and fail on any diff
     -> the generated review artifact can never be stale
 
-validate every internal link resolves
+validate internal links in normative sources, all active docs and root README
     -> the index-plus-satellite structure stays navigable
 
 validate every invariant reference (I1..I25) names a defined invariant
@@ -241,3 +239,17 @@ rediscover them (the other recurring ones are already in §3):
   swallow it as a race and move on.
 - **`pgrep -x`, never `pgrep -f`** on this project's processes — the `-f`
   pattern matches your own ssh command line and kills your own session.
+
+## Keeping the agent handoff current
+
+Start with [the status index](../status/README.md) and
+[the current handoff](../status/in-flight.md), then the selected work item's
+home and gates. Historical rollout results are not live cluster state.
+
+When documenting a bug, feature, enhancement or investigation, allocate an
+unused W identity and update the status index plus its detailed home together.
+Record decisions in the D register without confusing approved design with
+implemented code or accepted behavior. Keep implementation, local checks,
+cluster gates and closure separate. Archive superseded checkpoint narratives
+intact, repair links, and retain every unresolved gate in the active queue.
+Regenerate architecture artifacts and run the documentation gate after edits.

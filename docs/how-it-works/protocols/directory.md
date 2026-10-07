@@ -3,6 +3,11 @@
 [Architecture](../architecture.md) · [Transactions](transactions.md) ·
 [Data protocol](data.md)
 
+**Implementation limits:** accepted ancestry/all-used-lane predicates exceed
+the current eight-record namespace guard bound ([W84](../../backlog/work-items.md#w84)).
+ReadIndex-backed observations also require the fresh-authority gate
+[W82](../../backlog/work-items.md#w82). Protocol requirements below remain binding.
+
 This is the placement decision everything else hangs off. The authoritative
 operation→participant matrix derived from these rules is
 [§6 of the spec](../architecture.md); this document is the placement
@@ -116,15 +121,18 @@ that same parent-row PUT — one Raft entry, no extra round. After spread the
 count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
 a distributed counter (the spec rejected that). Runtime override:
 `EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
-bound is not a number in the spec and is not invented here. Draining
+bound is not a number in the spec and is not invented here. Source review
+found size-based admission and migration of already-SPLITTING directories,
+but no pressure-based automatic trigger ([W81](../../backlog/work-items.md#w81)). Draining
 SPLITTING leftovers is the background migrator (in-memory queue, GC-thread
 pass on the host, opportunistic drain in the sim after a size-trigger
 flip). `raft-dir migrate` plus finish stay as the idempotent operator
 path.
 
 (a 100-entry directory with 100,000 clients creating and unlinking never
-crosses the size threshold but melts its leader — pressure-triggered spread
-catches it). Spread is one-way initially: once HASHED, a directory does not
+crosses the size threshold but can overload its leader — the required
+pressure trigger is intended to catch this case; current size-only admission
+does not establish that behavior). Spread is one-way initially: once HASHED, a directory does not
 collapse back. And crossing the trigger does not flip a bit — a 100M-entry
 directory cannot be re-partitioned atomically, and
 lookups/creates/unlinks/readdir must keep working *during* the move. The

@@ -1,5 +1,10 @@
 # The data plane, specified precisely
 
+**Implementation scope:** this page specifies the accepted design, not a
+current deployment guarantee. The [public-path review](../../status/spec-implementation.md)
+records persistence, session, fixed-profile/repair and integrity limitations;
+consult those gates before claiming this contract is implemented.
+
 [Architecture](../architecture.md) · [Transactions](transactions.md) ·
 [Sessions](sessions.md) · [Failure tolerance](../failure-tolerance.md) ·
 [Performance](../performance.md)
@@ -89,7 +94,17 @@ generation** under the new profile, satisfy the new durability requirement,
 publish it atomically, then GC the old generation. An existing generation's
 coding interpretation is never mutated in place.
 
-**The write commit state machine (direct write).**
+Legacy folded-span replay is separately limited by
+[W88](../../backlog/work-items.md#w88): trailer tombstones can be evicted
+before an ambiguous retry. Staged durable receipt/floor primitives are not
+proof that the production REPORT path carries them.
+
+**The publication state machine (a durability boundary).**
+
+This runs at synchronization/publication, not at every ordinary buffered
+`write()` return. Under the accepted consistency contract, `fsync`/last
+`flush` and supported synchronous writes wait for this boundary. Public
+implementation limitations are W71/W73 in the linked scope review.
 
 ```text
 1. allocate chunk generation G
@@ -97,7 +112,7 @@ coding interpretation is never mutated in place.
 3. obtain ALL k+f durable fragment ACKs         (EC durability, see below)
 4. Raft-commit the metadata publication of G  (chunk-map/size/mtime/ctime)
 5. apply the publication
-6. return write success
+6. return successful synchronization/publication
 ```
 
 Step 3 waits for **all** k+f fragments, not the fastest k: a generation
@@ -110,8 +125,8 @@ guarantee, and it is hidden by queue depth and pipelining
 ([performance.md](../performance.md)), never by weakening the durability
 definition.
 
-**"Durable ACK" is defined precisely, because the whole
-returned-write-is-durable semantic rests on it.** A durable fragment ACK
+**"Durable ACK" is defined precisely, because a successful
+durability boundary rests on it.** A durable fragment ACK
 means the storage target has completed the required **persistent-NVMe
 operation** for the fragment — an NVMe flush / FUA write, or a write into
 power-loss-protected (PLP) media — *not* that the RDMA WRITE completed.

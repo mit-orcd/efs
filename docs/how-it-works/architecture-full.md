@@ -30,6 +30,11 @@ the appendix anchor when the target is itself an appendix).
 
 # Architecture
 
+**Implementation scope:** this page specifies the accepted design, not a
+current deployment guarantee. The [public-path review](../status/spec-implementation.md)
+records persistence, session, fixed-profile/repair and integrity limitations;
+consult those gates before claiming this contract is implemented.
+
 **New here, or looking for the next task? → [Project status](../status/README.md)**
 (what to work on now, which pages govern a given change, what "done" means).
 
@@ -659,6 +664,9 @@ Authoritative reads (LOOKUP/GETATTR/readdir) go to the **shard leader**,
 which establishes quorum-backed read authority (ReadIndex-style) and waits
 until its applied index covers the read before reading the KV. There are
 **no clock-based leader leases** (clocks are never correctness inputs, §2).
+Implementation acceptance requires a fresh authority round for each admitted
+request/batch: an old completed quorum cannot authorize indefinitely later
+reads. The isolated-core/source finding is [W82](../backlog/work-items.md#w82).
 Read authority is **amortized**: one quorum round serves a whole batch of
 requests — the read-side analog of publication batching (§7.3).
 
@@ -1449,963 +1457,155 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-This page exists because of the bar in [developing.md](#appendix-13--development--modularity-constraint): **a
-less advanced model must be able to contribute a correct change.** That is
-only true if finding *the next task* and *the exact pages that govern it* is
-mechanical. Read this page, then read at most the two or three files it
-sends you to — not the whole spec.
-
----
 ### 1. The task right now
 
-**Latency measurement correction (Oct 7).** Engine benchmark collection now
-counts all operations, exposes histogram percentile bounds and exact observed
-maxima, and populates bounded windows outside timing. Earlier short engine
-write runs mixed creation and replacement; their per-run p99 averages are not
-pooled p99 or steady-state acceptance evidence. Nuc validation completed 40 accepted 30-second runs (11.77 million measured
-operations), eight perf captures and eight separate straces; see the
-[latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md).
-The user authorized production direct extent retention on Oct 7. Direct and
-buffered paths now enforce exact completed length without truncating before
-each overwrite. NUC direct-I/O gates passed: 216/217 single-client (one mmap skip),
-64/64 two-client, and 26/26 cold-remount durability checks. See the
-[rollout checkpoint](../../results/measure/20261007-direct-rollout/SUMMARY.md).
-The mac gate is deferred during maintenance; the user corrected its intended
-mode to buffered I/O. Thirty roadmap implementation rounds are committed and
-individually validated on NUC; see the [round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
-Final NUC direct-I/O acceptance: full source rebuild/unit suite PASS,
-216/217 single-client (one mmap skip), 64/64 two-client, 26/26 persistence
-prepare and cold-remount verify, and W36 rename-versus-unlink 20/20. Ten concurrent-suite repeats passed 8/8 each.
-Truncate error handling, read authority/extent checks, REPORT/readdir boundary
-validation, worker startup/cleanup and inherited network/queue deadlines are
-hardened. Append replay-cache concurrency and authoritative replies are fixed;
-durable append replay across leader changes remains open. D25 is staged and
-D27 strict timing/fault/RSS gates remain owed. The final rollout also found nuc
-n1 exceeding the ten-second daemon stop wait; investigate its shutdown blocker.
-See [in flight](#appendix-2--in-flight--the-current-handoff-block) for remaining integration work.
+Reviewed Oct 7, 2026, final round, from HEAD `b3a11877` through the
+`75f6a42e` GC checkpoint / `7582df59` generated-artifact update and existing
+working changes. Earlier round ledgers retain their own baselines. This is a documentation review; recorded deployments are evidence
+from their dated runs, not a live cluster inventory.
 
-**Writer investigation (Oct 7), complete.** All 324 baseline repeats and 108
-isolated profiles passed. Inline multi-root placement is fixed. Buffered shard
-overwrites now preserve extents and enforce exact completed length: matched warm
-bounded writes improved about 4–8×, with lower p99. Direct I/O and durability
-barriers are unchanged. Linux unit/CLI/fault gates pass. Reserved per-slot FIFO admission now prevents older waiters being bypassed;
-matched buffered throughput costs about 5%, while demonstrated starvation is
-removed. See the [admission results](../../results/measure/20261007-writer-fair-admission/SUMMARY.md).
-Root1 direct-I/O variance still needs investigation. Live
-workload validation remains separate. See the
-[completed investigation](../../results/measure/20261007-writer-investigation/SUMMARY.md).
+- **W61/W62/W63 — GC reclamation:** repairs are committed in `3a1b4a52`;
+  the [GC checkpoint](../status/gc-implementation-20261007.md) records private-store
+  direct acceptance and a buffered append failure (**W87**). Existing NUC
+  services and the xorinox incident stores are not established as rolled.
+  The original 40 GiB incident and authority-safe reconciliation remain open.
+- **W86/D31 — durable PUT tickets:** narrow abandoned-upload policy is recorded
+  in that checkpoint; metadata state machine is committed in `b3a11877` and staged for integration. Production sessions,
+  versioned PUT/publication and all-member revocation/deletion are not active.
+- **W43/D25 — writer integration:** lane-local authority, typed publication,
+  ordered ACK and session gates are staged. Public logical truncate is still
+  disabled. Follow [the handoff](#appendix-2--in-flight--the-current-handoff-block) for the remaining activation gates.
+- **D27/0a — writeback recovery:** runtime ownership/error/stop foundations
+  are implemented; strict whole-call timing, fault recovery and RSS gates remain
+  open. DNS resolution and accepted-job lifetime still limit deadline claims.
+- **W64/W65:** durable append failover replay and slow daemon shutdown are
+  unresolved findings from the [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
 
-
-**Benchmark review (Oct 7).** Cached KV segment lookup now uses validated record
-offsets and binary search; matched warm reads improved about 25%. Raw QD256
-release gates, allocation counters, invalid-profile labels, engine-data DWARF
-unwinding, and metadata result validation are fixed. Linux unit tests, backend
-smoke/fault tests and targeted perf reruns pass. See the
-[benchmark review checkpoint](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md).
-This benchmark work does not activate D25 or change writer durability defaults.
-
-
-**Current implementation task — D25 writer integration (Oct 6).**
-Memory/recovery fixes are committed; the dated checkpoints below retain their
-original working-tree status and are superseded by the review checkpoint.
-Partial flushes now rebuild from a fresh authoritative masked view even when
-the base object generation is unchanged. Missing rows use a zero merge base
-and empty-row CAS; failed read authority preserves the local dirty body and
-returns its actual error. Both pipelined and direct flush paths carry the
-captured byte observation into publication. See the current
-[in-flight handoff](#appendix-2--in-flight--the-current-handoff-block) for the remaining writer/sweep sequence.
-
-
-**Metadata scaling gap (Oct 5).** The implementation still maps logical
-metadata shards into two fixed Raft groups and routes REPORT batches through
-nodes hosting both groups. The architecture calls for independent shard groups
-with leadership distributed across nodes. This needs implementation work before
-claiming metadata capacity for 100–1,000 active clients; connection count alone
-does not establish capacity. The [metadata scaling plan](../status/metadata-scaling.md)
-records the code evidence, routing/runtime changes, hotspot handling and gates.
-Open follow-up after correctness work, including W43/D25 and D27/0a; recording
-this plan does not enable or deploy a new topology.
-
-**W38 checkpoint (Oct 5).** STALE replay now preserves live spans even when
-the base still names this client's object. Full folds no longer infer byte
-coverage from a later metadata-only list; chain-full conversion requires a
-captured byte observation. Production-function tests reproduce the old replay
-byte loss and pass with the fix, including ASan/UBSan. The
-[W38 backlog entry](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e)
-records remaining traced IOR/cold-hardscan gates and the possible STALE return
-on an unsafe conversion. Uncommitted; no cluster rollout. Next code item:
-**W43/D25**, durable history and production read/publish/sweep integration;
-its metadata primitives are now implemented and locally tested; production integration remains open.
-
-**0j checkpoint (Oct 5).** Local FUSE mutations now invalidate the lookup
-memo; active operations suppress memo use and a serial rejects older LOOKUP
-replies. Production-function/callback regressions, ASan/UBSan and earlier
-memory tests pass locally. The
-[0j backlog entry](#0j--the-clients-50-ms-lookup-memo-returns-pre-mutation-stats-queue-row-0j)
-records conservative whole-memo invalidation and pending Linux posix/Spark du
-gates. Changes remain uncommitted. The following **W38** byte-observation fixes are now in tree too; see below.
-
-**W54 checkpoint (Oct 5).** The next item in the agreed sequence was W54;
-its apply fix and regression tests are now in tree with local gates passing.
-The [W54 backlog entry](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i)
-records the change and the outstanding cluster gate. The following **0j** memo fix is now in tree too; see its checkpoint below. W54 is not
-marked fully gated until the post-GC cold-read check passes on the cluster.
-
-**Concurrent create/mkdir errors (Oct 6, local and uncommitted).** The
-`testing` screen on xefsgw stopped on EIO creating
-`tiny_files6/folder_000278/level_2`, under a million-file/16-worker workload.
-The new FUSE process remained alive at about 278 MiB RSS; this run was not an
-OOM. Server logs showed BUSY replies and apply lag, but do not establish the
-exact final failure path. Inspection found that create/mkdir/symlink read a
-shared `g_client.last_err`, allowing another request to overwrite the error.
-`efs_client_create_result` now returns each request's error and inode directly;
-all FUSE create/mkdir/symlink callers consume that result. BUSY remains EBUSY,
-quota remains ENOSPC, and EXIST visibility checks preserve lookup failures.
-The compatibility inode-only wrappers remain for existing non-FUSE callers.
-A deterministic 16-thread regression exercises overlapping success/BUSY/quota
-results and visibility-error mapping, and is included in `make test` as
-`test-create-errors`. It passes locally normally and under ASan/UBSan, and
-with Linux GCC on the gateway. Linux syntax checks for the full ops/FUSE sources
-pass. The gateway lacks sanitizer runtime libraries; Linux sanitizer execution
-and the actual workload rerun remain pending. No deployment, restart, directory
-cleanup or live workload replay was performed for this fix.
-
-**W36 follow-up (Oct 6, local and uncommitted).** A deterministic regression
-reproduces a second window: unlink removes the source and its last-link inode
-before rename's source PREPARE. The unversioned unlink leaves the txn version
-sidecar unchanged, so the old version-only DEL accepts the absent key. The
-existing BUSY probes cover only unlink after preparation. This mechanism is
-present in the committed implementation too; the cluster's dirty D25 build
-alone does not establish that D25 caused the recurrence.
-Source capture now validates the originally observed dentry identity and
-captures exact local/hashed bytes or absence. The shared server rename,
-unlink and rmdir source-drop helper uses EXCL_VALUE PREPARE, rejecting deletion
-or name reuse before preparation; existing BUSY probes protect prepared keys.
-Split-directory copies and tombstones are handled explicitly. Actual-core
-regressions reproduce the unsafe old acceptance and verify both race orders,
-unlink/recreate ABA, local/hashed/splitting snapshots and a live destination
-after resolution. Metadata and transaction suites pass normally and under
-ASan/UBSan; deterministic simulator and strict server syntax checks pass locally.
-**W36 remains open pending Linux build and the cluster's 20/20
-`peer_rename_vs_unlink_src` gate, first on the next rollout.** The dangling
-`b` remains untouched as evidence; no deployment or repair was performed.
-
-**D25 implementation checkpoint (Oct 5, local and uncommitted).** The design
-in [architecture.md §7.3](#architecture) and shared C masking
-helper now have metadata support in `src/meta/meta_apply.c`: versioned,
-FileID-scoped inode/lane history sidecars; atomic history/stamp append with
-expected-epoch checks, replay and full-history BUSY; bounded coherent chunk
-views with separate base/span epochs and captured masks; and a single-row
-sweep CAS that atomically commits the replacement or dead-row deletion,
-lane stamp and alias-safe GC records. Existing inode/lane encodings are
-unchanged; absent histories decode as empty and malformed records fail closed.
-Metadata regressions pass normally and under ASan/UBSan, including storage
-failure, concurrent publication/fencing, read-view collection races and bounded
-retry exhaustion. The independent 20,000-operation byte model and earlier
-client-memory, 0j and W38 regressions pass again.
-
-**D25 transaction checkpoint (Oct 5, local and uncommitted).** Transaction
-records now support all 64 participant shards (the inode shares lane 0's
-shard), full 520-byte histories and their intent envelopes. New exact-value
-PREPARE compares the observed row bytes instead of relying on a version
-sidecar untouched by ordinary publication. It persists the existing EXCL
-intent format; matching prepared retries are idempotent, conflicting
-transactions return BUSY, and changed replacements/participant lists are
-STALE. Server and simulator namespace coordinators retain their previous
-eight-participant/guard limit. Transaction regressions pass normally and under
-ASan/UBSan: all 65 authorities, visibility before/after the decision, recovery
-from an applied-state snapshot after partial resolution, replay, unreachable
-coordinator, unversioned lane races, guard/reduce envelopes, malformed payloads
-and durable-intent length overflow. The metadata suite passes under
-ASan/UBSan and the full deterministic simulator passes locally. This is
-transaction support, not a production truncate coordinator.
-
-**D25 participant-fence checkpoint (Oct 5, local and uncommitted).**
-`efs_meta_prepare_content_fence` now prepares the authority's stamp and
-history as one atomic EXCL pair. An inode checks its captured active-lane
-bitmap and base size, and requires every active lane shard in the participant
-list; a lane checks its publication sequence and epoch. No intent is installed on a
-second-key conflict, stale snapshot or failed storage batch. A fixed
-big-endian CONTENT_FENCE PREPARE subtype uses the existing server/simulator
-transaction decoder and verifies that the command key names the encoded
-authority. All ordinary inode/lane/history writes in metadata apply now
-honor EXCL intents; chunk-only sweeps honor their parent lane's intent too.
-Commutative namespace reductions remain allowed. This adds local KV probes
-on guarded mutations, with no coordinator RPC in ordinary apply; Linux
-performance remains to be measured. Metadata and transaction regressions
-pass under ASan/UBSan, strict syntax checks pass, and the deterministic
-simulator passes. Tests include lane activation before/after preparation,
-competing truncates, publication, setattr/utimens/legacy-truncate exclusion,
-chunk-only sweep exclusion, atomic pair failure, decision visibility,
-resolved masks and resumed writes. This completes participant preparation
-and metadata writer exclusion, not the production shrink coordinator.
-
-**D25 committed-reader checkpoint (Oct 5, local and uncommitted).**
-Handler inode reads now resolve committed EXCL replacements even when an old
-row exists. `efs_txn_read_ex` accumulates undecided decisions across a collect;
-GETATTR uses transaction-aware inode/lane reads, validates lane sequences and
-base size, and rechecks decisions after its final row read. Reduction reads use
-the committed lane replacement as their starting value. The new
-`efs_meta_get_chunk_view_tx` resolves lane stamp/history replacements and owns
-its per-part masks before RESOLVE, with bounded retries when decisions move.
-The host's lane-authority preflight now reads the transaction-visible inode.
-Regressions cover undecided/committed/aborted fences, replacement of existing
-histories, commit during a chunk-view or stat collect, partial resolution and
-unreachable coordinators; metadata and transaction suites pass normally and
-under ASan/UBSan, and the full deterministic simulator passes locally. This
-completes the metadata reader prerequisite; GETCHUNKS/client integration,
-production coordination and live-file reclamation remain open.
-
-**D25 resize-coordinator checkpoint (Oct 6, local and uncommitted).**
-The shared coordinator captures a coherent inode/lane plan, freezes the inode
-first to prevent lane activation and append reservation, prepares every active
-lane, and persists one COMMIT before resolution. Failed or ambiguous preparation
-requires durable ABORT before releasing holds; an ambiguous COMMIT is never
-followed by ABORT. The internal server adapter uses the existing Raft transaction
-appliers and recovery finisher. A distinct 74-byte resize PREPARE preserves the
-old 65-byte fence subtype. Extensions retain epoch/history; shrink appends the
-same global epoch to all authorities. First publication initializes a new lane
-at its captured epoch. A lagging lane may skip earlier epochs only after a
-first-row existence probe proves it has no chunk rows; populated lanes fail
-closed. Closed append cursors retire atomically with inode/history intents;
-open reservations return BUSY.
-Tests cover all 65 authorities, partial preparation/resolution, lost decision
-replies, applied-state restart recovery, stale snapshots, append exclusion,
-empty-lane initialization, populated-lane epoch gaps, full history and atomic
-three-intent storage failure. Full metadata and transaction suites pass normally
-and under ASan/UBSan; the deterministic simulator passes locally. Strict server
-syntax checks pass using a declaration-only Linux eventfd shim on macOS;
-At that checkpoint Linux runtime/build and cluster gates remained pending;
-the later GETCHUNKS checkpoint below records the completed isolated build.
-
-**D25 GETCHUNKS/read-cache checkpoint (Oct 6, local and uncommitted).**
-GETCHUNKS now reads committed transaction-aware inode and chunk views and
-returns self-contained per-part masks/revisions with captured object identities.
-Clients validate the reply before adoption, skip fully masked fragment GETs,
-zero the fenced base tail before overlaying clipped spans, and refresh once
-when captured fragments have disappeared. A failed refresh is an error.
-Decoded cache keys include every mask/epoch and revision; a cache fill retains
-the view it fetched rather than a newer map's identity. Demand and zero-copy
-reads refresh maps before trusting cached bytes; partially fenced bases cannot
-be served whole from the write cache. This adds metadata RPCs to cache hits;
-performance needs measurement before claiming a throughput result.
-
-Normal and ASan/UBSan captured-read/cache-fill/wire regressions pass. The full
-Linux metadata, transaction and staging suites pass; strict changed-file syntax
-checks and an isolated complete FUSE client build pass. The staging test covers
-view retention across compaction and clearing on local generation replacement.
-The wire record changed: rebuild and roll matching server/client binaries
-before live gates; an installed replacement does not update an existing mount.
-
-**W43/D25 is still open: production logical truncation is not enabled.**
-SETATTR SIZE still uses the existing path. Next implement writer epochs and
-masked merge/publication, including concurrent unpublished local bytes, then
-bounded live-file sweep scheduling, durable progress and safe history
-retirement. These must pass before connecting the logical resize coordinator.
-The read-view phase above does not activate that coordinator.
-Linux cold-read, concurrency, restart, history-full and apply-duration gates
-remain pending. Changes are uncommitted; no cluster rollout. The separate unlink
-sweep remains in place, and W54 still needs its post-GC cold-read cluster gate.
-
-**D25 publication checkpoint (Oct 6, local and uncommitted).** Byte-backed
-folds now retain the captured lane authority epoch separately from the mask
-revision (which can include newer object epochs). That epoch follows the PUT
-identity and its REPORT fallback; an older PUT cannot replace a newer
-snapshot's identity. Before registration/proposal, the server rejects unknown
-publication flags and captured epochs that differ from its inode epoch. The
-apply request retains the captured epoch so the existing apply-side check also
-covers a fence racing after that read. Cache keys include the authority epoch,
-and wire validation rejects authority epochs beyond the view revision.
-
-This closes the captured-fold re-stamping gap; it does **not** finish writer
-integration. Metadata-only/unconditional publications retain the legacy path;
-per-application dirty-range epochs, fence-aware merge of unpublished local
-bytes, and the live-file sweep/progress/history-retirement work remain open.
-Production logical truncation remains disabled. Fold/read/wire/pressure tests,
-Linux metadata/transaction/staging tests and the complete FUSE build pass.
-Matching server/client rebuilds remain required; no live rollout was performed.
-
-**D27 / 0a checkpoint (Oct 6, foundation only, local and uncommitted).**
-`include/efs/wb_recovery.h` starts the decided recovery policy with caller-locked
-per-inode error state and per-record completed-cycle tracking. Tests cover
-sticky errors even for reopened descriptions while unresolved, partial
-resolution of two records, unseen historical errors once per description after
-resolution, successful recovering sync, and fresh descriptions after recovery.
-The stall tracker compares stable application operation identity plus server
-generation, epoch and span count over eight completed cycles; movement resets
-it, including a 1000-cycle changing-generation case. Standalone STALE replies
-and failed fetches must never feed this tracker. Normal and ASan/UBSan tests
-pass (`make test-wb-recovery`).
-
-These helpers are **not wired into FUSE yet**. Next connect stable application
-mutation identity and completed replay/publication accounting, retained
-per-inode state and open-description cursors, recovery deadlines, write
-admission and pinned dirty records, then controlled stop and the WITHHOLD fault
-hook. No sticky-error, stall-detection or safe-stop runtime guarantee is claimed
-by this checkpoint. 0a's historical inode investigation and live recovery /
-contention gates remain pending; D28 salvage remains undecided.
-
-**D27 runtime checkpoint (Oct 6, local and uncommitted; supersedes the
-foundation-only checkpoint above).** The client now tracks stable application
-mutation identity separately from PUT snapshot sequence. A successful rebase
-stages an observation; only an attempted REPORT followed by a successful
-authoritative repull proving that exact snapshot uncommitted completes the
-cycle. Failed pulls propagate errors without classifying stale local maps as
-committed. Verified residuals rebase even when the server state stayed still;
-this changes the earlier resend optimization and needs live contention cost
-measurement. Eight unchanged completed cycles mark the record stalled; server
-movement resets the count, and contention diagnostics are emitted every 256
-completed cycles.
-
-Stalled records retain bytes and inode pins, reject new writes on that inode,
-and survive ordinary cache-drop paths. Every FUSE file open now owns an error
-cursor shared by its duplicated descriptors; separate opens retain separate
-cursors. Sync/flush observations cannot clear an unresolved inode error.
-Matching REPORT acknowledgment resolves only that record. Full-overwrite
-bodies also remain within the hard allocator bound until acknowledgment,
-including successful PUTs, so full-image STALE recovery has local bytes.
-They are released after the matching commit; pressure may now force earlier
-REPORT drains. Unrelated inode admission still uses the common hard bound.
-
-A 30-second sync deadline begins before queued-write drain and append
-serialization, with inheritance into replay and pooled PUT RPCs. **The strict
-whole-call timing gate remains open:** accepted PUT jobs still own caller
-completion state, and queue/lock cancellation must not free that state early.
-Do not claim a hard 30-second fsync completion guarantee yet.
-
-Controlled stop now uses a private owner-only Unix socket and gates complete
-mutation-handler lifetimes before attempting a 60-second drain while mounted.
-A timeout refuses detach and leaves accepted recovery work alive; retry waits
-for that worker rather than reusing its state. Failed ordinary unmount resumes
-mutations. `scripts/client.sh stop --force-discard /mnt/efs` explicitly logs
-pending data ranges and permits lazy detach. Normal stop fails closed for old
-clients without the channel. Explicit force on an old/dead client reports that
-per-record diagnostics are unavailable. External unmount, SIGKILL and node
-loss remain outside this contract; D28 salvage is unchanged and undecided.
-
-WITHHOLD exists only in `EFS_FAULTS=1` builds and omits a selected record before
-RPC serialization. The retained batch reconciles transmitted records through
-authoritative repull. `OFF` in `/tmp/efs/fault` disables the startup target and
-allows recovery without restart. Local tests cover completed-cycle authority,
-partial acknowledgment, byte retention, descriptor errors, 1000 changing
-server states, omission/disable, stop refusal, live-worker timeout ownership,
-mutation quiescence and explicit detach. Normal and sanitizer gates pass;
-Linux client builds pass. Live gates, the historical 0a inode investigation,
-strict sync timing, coverage of legacy non-cache PUT fallbacks, and D25 dirty-range epochs / masked unpublished merges /
-sweep scheduling / durable progress / history retirement remain open.
-No deployment, workload rerun, mount change or commit was performed here.
-
-**Where the project is (Oct 2 2026).** [architecture.md §10](#architecture)
-steps 0–12 are landed and gated: simulator, KV, Raft, cross-shard txns,
-sessions, directory spread, delete-2PC, FUSE A–D. The Raft+KV engine is
-the only metadata engine (Step 11, Sep 11). There is no next §10 step.
-What remains is the work queue in [§1a](#1a-the-work-queue): measured
-gaps, in order. Record current cluster build, leaders and run evidence in
-[in-flight.md](#appendix-2--in-flight--the-current-handoff-block); verify live state before using a historical handoff.
-
-**How to pick work.** Finish [§1b](#appendix-2--in-flight--the-current-handoff-block)
-first. Then take the lowest-numbered open item in §1a; correctness before
-performance. Each item names what to change, how to measure it, what
-proves it, and what is forbidden. If an item needs a decision the spec
-does not contain, **stop and ask** (§4). Decisions already taken are the
-rows marked **decided** in §1a "Decisions"; implement them, do not
-re-ask. **Oct 2 19:05Z: two open correctness rows go first — W54 (row
-0i, a fold's GC deletes the live base → read EIO, data loss) and row 0j
-(the client's 50 ms lookup memo returns pre-mutation stats, posix
-164/201).** Open asks as of Oct 2 13:45Z: **D28** (who owns acknowledged
-bytes across client death), **D29** (a REPORT receipt for "committed,
-apply pending"; its live symptom did not appear untraced — P0.2),
-**D30** (the remedy for compaction-induced apply lag), **W53**
-(keep or revert W41 given the create/close-storm p99 37 → 100–120 ms
-under four concurrent 8 GiB writers), **W52**'s fix shape (serial
-reservation resolves make an O_APPEND REPORT exceed 30 s). Open
-**investigations** — evidence gathering, not approved implementations:
-**W48** (four dd streams ended early), **W53**. **W50** and **W51**
-closed as investigations (14:57Z / 14:38Z). D27 was
-corrected 04:20Z and is to be implemented as its row now reads. The
-performance plan's P0, P1, P2.1 and P2.4 are done (§1b); **P2.2 D26**
-is in tree and gated on the dev cluster (Oct 4: per-anchor pending-GC
-watermark + the cursor; an idle leader runs no frag scan at all).
-Everything else in the Oct 2 plan is decided, asked, closed or
-deferred — see that table.
-
-**What this page is not.** Approvals and decisions recorded here are
-document claims about what the user said on the date given; they are
-not authorization to mutate the cluster now. The long-form item texts
-(sources, steps, forbidden lists for W6–W25) are in
-[work-items.md](#appendix-4--work-items--long-form-text-for-the-open-w-items-and-the-queue-rows); superseded handoffs, closed items and
-the old ordering tables are in project-history.md — cite its anchors:
-[handoff archive Oct 1 18:00–22:00Z](../archive/project-history.md#ph-start-here-handoff-archive-oct-1-2026-1800z--2200z--moved-oc-8297ba),
-[handoff archive Sep 28 – Oct 1](../archive/project-history.md#ph-start-here-handoff-archive-sep-28--oct-1-2026-1400z--moved-o-4e37f3),
-[closed items moved Oct 2](../archive/project-history.md#ph-start-here-closed-items--moved-oct-2-2026-ea8027),
-[closed items moved Oct 1](../archive/project-history.md#ph-start-here-closed-items--full-text-w1w5-w7-w11-w13-moved-oct-7d6df9).
-
-**Before touching the cluster** run `tests/preflight.sh` (the deploy
-rule's pre-flight as one command). Stop/start is
-`tests/cluster.sh stop|start|restart [--clients] [--perf] [--strace]`;
-a fresh table after a wipe is `cluster.sh start --fresh`. Runbooks for
-the open measurement items are in [runbooks.md](../operations/runbooks.md)
-(`tests/measure/*.sh`). **The one live cluster is port 19810** on
-fcstor003–006 (`/data1/01–06/efs`, `--quota 36T --direct-io`, RDMA),
-clients fcstor003–015 at `/tmp/efs-mount`, the user's own client on
-fstor007 via `scripts/client.sh`. 19820 is retired. Do not
-`wipe_cluster.sh`, `pkill -x efsd`, or `raft-mkfs` without being asked.
+Latest recorded NUC production acceptance: `128f6b7d`, direct I/O, full rebuilt
+Linux units, W36 20/20, single-client POSIX 216 pass/0 fail/one unsupported mmap
+skip, peer POSIX 64/64, persistence 26/26 in each phase and ten concurrent
+8/8 repeats. This does not close D25, D27, GC reconciliation, append failover
+or shutdown. Mac buffered acceptance remains deferred. See the ledger for raw
+logs and build identity; verify current processes before using any cluster.
 
 #### 1a. The work queue
 
-Rules for this queue: **take the lowest-numbered open item.** Do not start a
-later item to avoid a harder earlier one — the order encodes a dependency and
-a severity: **correctness items come before performance items**, because a
-parallel filesystem that returns wrong bytes has no throughput number worth
-reporting. Do not batch two items into one change. Every item ends with
-`Forbidden`, which is binding.
+W numbers identify bugs, features, enhancements and investigations; queue
+positions express order and need not match the W number. D numbers identify
+product/architecture decisions, with status in the decision register.
+P rows identify the existing measurement plan. Correctness precedes
+performance; do not infer a new priority order from a larger W number.
+User-directed work overrides the historical queue order.
 
-Oct 6 triage: the user explicitly prioritizes **W59** because false ENOSPC
-blocks the suite. After its rebuilt-client sustained-write and posix gates,
-**W56** (root directory rename ghost) and **W57** (both rename parents' attrs)
-have specific client paths and existing failing gates, making them the next
-bounded implementation candidates. **W58** needs an opid/retry verdict trace;
-**W55** needs a missing-fragment publication reproducer before choosing a fix.
-The **W36 20/20 rename-vs-unlink gate** remains a release prerequisite for the
-existing local correctness fix; none of these items is closed by this triage.
+Read this index, then the selected item's detail and gate. Keep one canonical
+row per item. Code present, local test passed, cluster validated and closed are
+separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | IN TREE Oct 5, uncommitted — apply alias filters + regression; full metadata suite and ASan/UBSan pass locally; roll + cold cluster gate pending | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
-| 0j | the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | IN TREE Oct 5, uncommitted — guarded memo invalidation + mutation serial; local regressions and ASan/UBSan pass; Linux posix + Spark du gates pending | [full text](#0j--the-clients-50-ms-lookup-memo-returns-pre-mutation-stats-queue-row-0j) |
+| 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | code present; dated Oct 5 checkpoint — apply alias filters + regression; full metadata suite and ASan/UBSan pass locally; roll + cold cluster gate pending | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
+| 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | implementation present — guarded memo invalidation + mutation serial; broad NUC POSIX/unit acceptance recorded; targeted stale-reply/Spark du evidence not verified in this review | [full text](#w69) |
 | 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — found Oct 5 on the xorinox test cluster (write via the nfsd re-export from a macOS client); trigger not isolated | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
 | 0l | **W56** · root-level rename leaves a ghost name in the renaming client's local lookup | correctness | fixed in `f8fef814` — exact old directory-name cache eviction across parent/hash tabs; NUC full POSIX jobs=4/jobs=1 and two-client suites PASS Oct 6; xorinox roll still owed | [full text](#w56--root-level-rename-leaves-a-ghost-name-in-the-renaming-clients-local-lookup-queue-row-0l) |
-| mem1 | sparse dirty writes bypass reclaim; cache admission has no hard bound | correctness / resource exhaustion | in tree — Oct 5 working-tree implementation; local memory gates PASS; Linux load/cold-read/failure gates owed | [evidence, fix shape and gates](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound) |
-| mem2 | read/readdir reply buffers leak when FUSE workers exit | resource lifetime | in tree — Oct 5 working-tree cleanup; 128 retired-worker and allocation/TLS-failure tests PASS; Linux FUSE worker gate owed | [evidence, fix shape and gates](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit) |
-| 0m | parent dir mtime/ctime bump on entry create/unlink/rename/link (POSIX, §7.4) — ruled a bug if missing (user, Oct 6) | correctness | gate Oct 6 (nuc bare-metal cluster): posix `dir_times_*` 6/7 — create/unlink/mkdir/rmdir/link + same-dir rename all bump same-client; the cross-dir rename dst-parent failure is **W57**; posix2 `peer_dir_mtime_bump_visible` owed | [full text](#0m--parent-directory-mtimectime-must-bump-on-entry-createunlinkrenamelink-queue-row-0m) |
-| 0n | **W57** · cross-directory rename never refreshes the dst parent's attrs on the renaming client | correctness | fixed in `f8fef814` — refresh both parent attrs after rename and adopt authoritative directory attrs; NUC full POSIX jobs=4/jobs=1 and two-client suites PASS Oct 6 | [full text](#w57--cross-directory-rename-never-refreshes-the-dst-parents-attrs-on-the-renaming-client-queue-row-0n) |
+| mem1 | **W67** · sparse dirty writes and bounded body admission | correctness / resource exhaustion | committed foundation `033a842a`; Linux units and NUC POSIX pass; targeted sparse-pressure/failure/RSS gates owed | [evidence, fix shape and gates](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound) |
+| mem2 | **W68** · reply-buffer worker lifetime | resource lifetime | committed foundation `033a842a`; local retirement/failure regression passes; repeated real FUSE worker-retirement/RSS gate owed | [evidence, fix shape and gates](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit) |
 | 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | analyzed Oct 6 (xorinox, build `3d3f17c2-dirty`): the file exists (created 05:17:31.319Z, size 0), the retry was answered BUSY (rc=-13, 05:17:31.733Z), no server logged EEXIST; suspect the retry path — an opid replay must return the recorded verdict (I16), not EEXIST; BUSY on unique-name creates is new with the dirty D25 intent probes | [full text](#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
-| 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | IN TREE Oct 6, uncommitted — metadata diagnostics + protected published-entry reclaim; local admission returns EAGAIN/ENOMEM; 8 MiB cap retained; metadata saturation + admitted-writer/drain reservation regressions and ASan/UBSan PASS; follow-up 251 MiB ENOMEM reproduced locally and reservation fix added; remount + sustained-write and posix jobs=1 gates owed | [full text](#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
+| 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | code present; dated Oct 6 checkpoint — metadata diagnostics + protected published-entry reclaim; local admission returns EAGAIN/ENOMEM; 8 MiB cap retained; metadata saturation + admitted-writer/drain reservation regressions and ASan/UBSan PASS; follow-up 251 MiB ENOMEM reproduced locally and reservation fix added; remount + sustained-write and posix jobs=1 gates owed | [full text](#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; Xorinox full-tree gate owed | [evidence and remaining gates](../status/fuse-memory.md) |
-| 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | IN TREE Oct 5, uncommitted — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced IOR-hard + cold hardscan gate pending | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
-| 0c | **W36** · rename-vs-unlink of one source both succeed, dangling dentry | correctness | exact-source PREP guards committed earlier; `75b06624` also returns simple UNLINK apply verdict; NUC rename-vs-unlink 20/20 and full two-client 64/64 PASS again on 79983128 Oct 6; xorinox b4a75492 current-build race gate 20/20 PASS; historical dangling b repaired by guarded Raft unlink; du/dua clean | [full text](#w36--rename-vs-unlink-of-one-source-both-succeed-dangling-dentry-queue-row-0c) |
-| 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | in tree — verify on 19810; one-QUOTA-member PUT question open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
-| 0b | **W27** · REPORT identity from the staging table | correctness | rerun on the current client; close if `putid miss` is 0 | [full text](#w27--report-identity-from-the-staging-table-queue-row-0b) |
-| 0g | **W43** · big truncate is a silent no-op past 32 chunks per lane; step a = **D25** (decided) | correctness | D25 metadata primitives, committed readers and internal resize coordinator in tree, uncommitted; public read-cache/writer/sweep integration open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-3--decisions--taken-and-pending-register-d1d30) |
-| 0a | STALE replay that never converges; remedy = **D27** (decided) | correctness | implement D27 as its row reads, with 0a (a)–(c) | [full text](#0a--stale-replay-that-never-converges-queue-row-0a) · [D27](#appendix-3--decisions--taken-and-pending-register-d1d30) |
-| 0h | **W44** · the leader's GC frag pass scans the whole prefix every 1.2 s; remedy = **D26** | performance | D26 in tree + gated (dev cluster, Oct 4): watermark gates the scan, cursor bounds the pass; idle leaders logged no `gc-pass` line for 10 min; a 5120-record `rm` drained at ~514 records/pass | [full text](#w44--the-group-leaders-gc-frag-pass-scans-the-whole-prefix-every-12-s-queue-row-0h) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d30) |
+| 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; existing-service rollout and incident reconciliation remain open | [full text](#w61) |
+| 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; existing-service rollout and incident reconciliation remain open | [full text](#w62) |
+| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | open — host-local replay race fixed in `ec1500ec`; durable failover replay remains unresolved | [work item](#w64) |
+| 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | open — nuc n1 exceeded ten-second wait twice; blocker not established | [work item](#w65) |
+| gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; existing-service rollout and incident reconciliation remain open | [full text](#w63) |
+| 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced IOR-hard + cold hardscan gate pending | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
+| 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; full-node protection/reroute acceptance remains open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
+| 0b | **W27** · REPORT identity from the staging table | correctness | phantom ownership-free marks fixed in `febc55e5`; nonzero-node staging identity fallback remains; current traced putid-miss gate owed | [full text](#w27--report-identity-from-the-staging-table-queue-row-0b) |
+| 0g | **W43** · large truncate is refused; logical truncate = **D25** (decided) | correctness | explicit failure is implemented; `3a1b4a52` makes oversized legacy truncate fail atomically; D25 metadata/read/resize foundations exist, but FUSE publication, live-file sweep and public activation remain open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-3--decisions--taken-and-pending-register-d1d31) |
+| 0a | STALE replay that never converges; remedy = **D27** (decided) | correctness | runtime foundations present; strict timing, fault/recovery/contention and RSS gates remain in handoff | [full text](#0a--stale-replay-that-never-converges-queue-row-0a) · [D27](#appendix-3--decisions--taken-and-pending-register-d1d31) |
+| 0h | **W44** · the leader's GC frag pass scans the whole prefix every 1.2 s; remedy = **D26** | performance | D26 in tree + gated (dev cluster, Oct 4): watermark gates the scan, cursor bounds the pass; idle leaders logged no `gc-pass` line for 10 min; a 5120-record `rm` drained at ~514 records/pass; live-table idle-hour and raft-tail GC_ACK-share gates owed | [full text](#w44--the-group-leaders-gc-frag-pass-scans-the-whole-prefix-every-12-s-queue-row-0h) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | 12 | **W48** · four of the 16 dd streams ended early | investigation | investigate — evidence only | [full text](#w48--four-of-the-16-dd-streams-ended-early--investigate-plan-row-12) |
-| 15 | **W52** · a REPORT after thousands of O_APPEND writes answers after > 30 s | correctness | decided Oct 5 (user): shape A — one batched proposal for all caught-up reservations before the reply; gate = `append_gate` | [full text](#w52--a-report-after-thousands-of-o_append-writes-answers-after--30-s-plan-row-15) |
+| 15 | **W52** · a REPORT after thousands of O_APPEND writes answers after > 30 s | correctness | approved shape A, not implemented: current host_resolve_caught_up still proposes each reservation serially; batch implementation and append_gate owed | [full text](#w52--a-report-after-thousands-of-o_append-writes-answers-after--30-s-plan-row-15) |
 | 16 | **W53** · W41's create/close-storm p99 regression — keep or revert | investigation | investigate — evidence only, then the user decides | [full text](#w53--w41s-createclose-storm-tail-under-concurrent-big-writers--investigate-plan-row-16) |
-| E | **D17** · `st_blocks` = 0 for files this client did not write | performance | in tree + gated (dev cluster, Oct 4): lane-stamp present count, summed at getattr, client takes max with its local table; `du` on a non-writing client = size/512 | [D17](#appendix-3--decisions--taken-and-pending-register-d1d30) |
-| P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d30) |
-| P2.3 | **W23** · stalled-compactor test | performance | test + hook in tree; measured Oct 5Z (dev cluster): no stall-specific effect to 4.35 GiB (n_l0 never left 0 — the stall never bit; rss-2x stop = small-VM calibration artifact); refinements named in SUMMARY | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
-| P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools in tree + gated (dev cluster, Oct 5); Oct 6: local CLI moved to `efs-bench`, raw parallel read/write isolation (`io`), identical I/O with BLAKE3 (`io-blake3`), CPU-only BLAKE3 and `efs-bench.sh` baseline/perf/optional separate strace harness added ([usage](#benchmark-profiling-harness)); first numbers measured on efs1 (write ≈82 % of the 1-disk fio ceiling at QD16; meta = the 36 ms fsync wall, batch ×32; client cpu 2.8 ≫ put 0.26 ≈ write GiB/s). Owed: the 6-NVMe fcstor run (named host) and the two-host client ladder | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) |
+| E | **D17** · `st_blocks` = 0 for files this client did not write | performance | in tree + gated (dev cluster, Oct 4): lane-stamp present count, summed at getattr, client takes max with its local table; non-writing-client du gate recorded; ecrawl false-positive gate owed; allocation comes from present chunks rather than size alone | [D17](#appendix-3--decisions--taken-and-pending-register-d1d31) |
+| P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; live-table idle-hour and raft-tail GC_ACK-share gates owed | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d31) |
+| P2.3 | **W23** · stalled-compactor test | performance | test + hook in tree; measured Oct 5Z (dev cluster): 4352 MiB/27 s RSS stop; original zero-L0 summary invalid due W89 TSV field shift; corrected samples show follower L0=22; valid pressure bound still owed | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
+| P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
-| meta-scale | metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](../status/metadata-scaling.md) |
-| — | **D28** (who owns acknowledged bytes across client death) · **D29** (a REPORT receipt for "committed, apply pending") · **D30** (the remedy for compaction-induced apply lag) | ask | ask — not code until the user decides | [decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d30) |
-| — | **io-stats** · always-on per-op-class data-plane counters (`iostats:` log line + `efs-mgmt io-stats`) | observability | landed (dev cluster, Oct 4) | [note](../backlog/io-stats.md) |
-| — | **version reporting** · `--version` on all five binaries, startup log lines, `EFS_MSG_VERSION` op, `efs-mgmt version`, `status` Versions line | observability | landed (dev cluster, Oct 5) | [code](../../include/efs/version.h) |
-
-**Order of work from here (one order, correctness first — Oct 2
-04:20Z):** (1) **D25** (logical truncation + background reclamation) completes W43 (`truncate_big.sh` exit 3 → 0 with t1–t9, `apply_max` flat);
-(2) **D27** with 0a (a)–(c) and its gates; (3) the correctness gates
-still owed — W36 20/20, W38 (row 4), W27 rerun (row 6), the W42
-one-QUOTA-member PUT question; (4) only then the measurements — W44 a
-idle-hour reading, W46/W47 counts (rows 9/10), the untraced 16× dd
-re-measurement (row 11); (5) D23, W41, D17, D26 (after step 4's W44
-reading); (6) `efs-bench --bench data/meta`, then `efs-fuse --bench`; (7) the open
-asks go to the user — D28 with 0a (a)'s answer and D27's gate result,
-D29 with W41, D30 with W51's table. The investigations W48 / W50 / W51
-(rows 12–14) are quick evidence tasks that may run at any point the
-cluster is up; they are not approvals to implement anything. §1b
-"Next" is this list and nothing else.
-
-**Dependencies, in one line.** P0 needs a cluster roll (no `--strace`).
-P1.1 and P1.2 are independent of each other and of the servers; P1.2
-wants P1.3 decided to realise its full effect but does not need it.
-P2.2 waits for P2.1; P2.5 waits for P2.4. P3 needs no cluster. P4 needs
-P3. Nothing here needs a wipe except P4.1.
-
-Hardware ceilings and honest baselines now live in [performance.md](#baselines-and-ceilings-current), including the normative sentence "if a benchmark stops at a mutex … that is by definition an EFS bug" and today's "write path = 9 % of client ceiling" state.
-
-
-### Review and commit checkpoint — Oct 6 2026
-
-The reviewed implementation is committed in `bb18e40a` (metadata fence views,
-transaction identities and alias-safe GC), `033a842a` (FUSE memory admission,
-publication recovery, worker cleanup and controlled stop), and `3d9bb6b2`
-(POSIX acceptance tests). Earlier dated “uncommitted” checkpoints describe
-the state at that time; these commits supersede that working-tree status.
-GETCHUNKS fan-out now inherits the caller recovery deadline. Local memory
-and runtime gates pass, including ASan/UBSan; an isolated Linux build and full
-`make test` pass.
-
-D25 and D27 remain open: public logical truncate activation, writer/sweep
-integration, strict whole-call deadlines, and live fault/RSS acceptance still
-need their recorded gates. W36 needs the live rename-versus-unlink 20/20 gate;
-no existing dangling dentry was removed during this review. No live deployment
-or workload rerun was performed.
-
-
-### D25 partial-writer merge checkpoint — Oct 6 2026
-
-Implemented in `8727f682`. The generation-only merge shortcut has been removed: a fence may change the
-valid byte ranges of the same object. Every partial snapshot now obtains a
-fresh GETCHUNKS view and masked published image before overlaying its owned
-ranges. The exact fetched base generation, span observation and captured
-authority epoch travel with the PUT/REPORT. An authoritative absence never
-reads this client's staged, unreported object as a committed base. RPC/fetch
-failures leave accepted local bytes dirty and pinned, with balanced publication
-windows and the original error code. Whole-chunk unconditional overwrites keep
-their existing path.
-
-The regression executes both production flush functions, reproduces the old
-fenced-tail resurrection with an unchanged generation, and checks empty-row
-CAS, BUSY/NOMEM retention and full-overwrite behavior. Normal and ASan/UBSan
-gates pass; strict Linux syntax, an isolated complete build and full
-`make test` pass. Partial flushes now do additional metadata/fragment reads; live
-performance is unmeasured. This is the published-base portion of writer
-integration: local dirty-range epoch capture, clipping pre-fence unpublished
-bytes, unconditional publication epochs, and live-file sweep scheduling and
-history retirement remain open. Public logical truncation stays disabled.
-
-
-### D25 dirty-range foundation checkpoint — Oct 6 2026
-
-Committed in `6221d22f`: `include/efs/dirty_ranges.h` implements bounded
-epoch-labelled ownership for
-application bytes. Overlapping writes replace only their covered bytes and
-split older ranges; adjacent ranges coalesce only at the same epoch. At most
-32 ranges are owned. Overflow returns BUSY without changing the state; the
-caller must drain before accepting/copying that write. There is no collapse
-to an unconditional whole-chunk overwrite. Snapshot copies retain original
-ages and a mutation identity. Acknowledgement clears only the exact original
-snapshot; concurrent rewrites remain owned. The caller must also validate the
-PUT/REPORT identity before acknowledging.
-
-Clipping uses the shared fence validity rule and an authoritative history
-completeness floor. Snapshots older than the retained complete history return
-STALE; an empty/retired history never silently revives old bytes. Surviving
-local ranges overlay an already-masked published image, preserving peer bytes
-under discarded dirty suffixes. Failed validation leaves outputs untouched.
-
-`make test-dirty-ranges` passes normally and under ASan/UBSan. The independent
-50,000-step byte model checks ownership ages, overlapping writes, repeated
-shrinks/extensions and clipped overlay. Deterministic cases cover full
-ownership splits, range exhaustion, mutation overflow, stale acknowledgements
-and incomplete-history rejection. The target is included in `make test`; the full isolated Linux build/test
-suite and all five documentation checks pass.
-
-**This is a tested writer primitive, not activated FUSE epoch tracking.** The
-current GETCHUNKS view exposes masks for published parts, not a complete
-history for arbitrary local writer epochs; absent rows expose no authority
-stamp. The next step must add an authoritative writer snapshot, including
-FileID, authority epoch, complete history and its retirement floor, before
-write admission can assign epochs. It must cover holes/new lanes and reject
-retirement races. Then replace the existing dcache range union under its lock,
-reserve any increased metadata budget, capture matching bytes/ranges for
-flush/retry, and acknowledge only matching snapshots. Never use cached
-inode/chunk epochs or assume a retired history is complete from epoch zero.
-Logical truncation remains disabled.
-
-
-### NUC deployment gate — Oct 6 2026, 16:26Z
-
-The user authorized the driver workflow
-`/Users/mike/git/devops/nuc-efs/deploy-and-restart.sh` for future code changes.
-It stops, rsyncs the working tree, rebuilds server/client binaries on `nuc_efs`,
-starts three loopback servers and runs POSIX smoke. `--full` adds two-client
-visibility and prepare/clean-remount/verify durability gates. Results are under
-`/data1/efs/logs`. These are three processes on one host, not three independent
-failure domains. Its deployment builds binaries only; isolated `make test`
-remains a separate prerequisite.
-
-**This attempt did not deploy or rerun suites.** Clean-stop preflight on
-`/data1/efs/mnt` refused after its drain: `stop-refused: unresolved writes
-remain; mount retained` at 16:26:27.154Z. All three original server PIDs and
-both original client PIDs remained running. Running binaries identify as
-`v0.1.0-pre-alpha-22-g1b7ed050`, built 16:14:15Z. The wrapper's `stop.sh`
-automatically force-discards after clean-stop refusal; that fallback was not
-executed. Investigate retained writes before requesting explicit discard.
-
-Existing results collected read-only, from earlier runs (not this attempt):
-
-- `/data1/efs/logs/posix-20261006-122007.tsv`: 207 PASS, 9 FAIL, 1 SKIP.
-  Failures: both large honest-truncate tests (EIO), root directory rename old
-  name remains, rename destination directory mtime, unlink-open, disjoint
-  concurrent writes, nlink-after-unlink-open, unlink/recreate with an open old
-  file, and unlink/recreate new inode. Most report EIO; this does not establish
-  a common root cause.
-- `/data1/efs/logs/posix2c-20261006-121440.tsv`: 62 PASS, 2 FAIL.
-  `peer_overlap_pwrite_chunk_straddle`: exclusive above-chunk range was not B.
-  `peer_rename_vs_unlink_src`: rename and unlink both succeeded. W36's live
-  gate therefore remains failed/open; no 20/20 claim is justified.
-- `/data1/efs/logs/persist-prepare-20261006-121623.tsv`: 26 PASS. No matching
-  verify result was found; prepare alone does not prove cold durability.
-
-These results include the preceding partial-merge change but predate the
-dirty-range primitive commits. That primitive is not connected to FUSE and
-cannot explain or resolve this live failure. Do not claim the NUC acceptance
-gate passed. Preserve current pending writes and test artifacts for diagnosis.
-
-### NUC correctness fixes — Oct 6 2026, follow-up
-
-The original NUC mounts and three servers were retained. The clean-stop
-failure was diagnosed by reading the old client's cache without modifying it:
-eight dirty chunk bodies initially, then twelve at capture time, reference
-inodes that authoritative GETATTR says are deleted. The twelve bodies (1.5 MiB)
-and a checksum manifest are preserved at
-`/data1/efs/logs/retained-350696-20261006/`. This is diagnostic evidence, not a
-claim that the deleted files have been recovered. The old binary still needs
-an explicit recovery/discard decision before its mount can be replaced.
-
-Six fixes are committed:
-
-- `a07fbfb5`: CREATE takes the inode HOLD required for unlink-open semantics.
-  Serialize first-open/last-close lease RPCs; flock flush no longer drops an
-  inode lease while another descriptor exists. Allocation/HOLD failures unwind.
-- `75b06624`: simple UNLINK returns its apply verdict, rather than reporting
-  success merely because the Raft index settled. A losing rename/unlink race
-  now reaches the client as a rejection.
-- `f8fef814`: W56/W57 directory cache fixes. Forget only matching old-name
-  dentry copies and refresh both rename parents from committed GETATTR; cached
-  directory attrs are updated without overwriting regular-file dirty bytes.
-- `1a12aa25`: sparse truncate-grow creates a new tail lane at the truncate
-  epoch. Previously its chunk was epoch 1 while its lane stamp remained 0,
-  making captured-epoch writes repeatedly STALE (`concurrent_writes_disjoint`).
-- `c7a56201`: a dirty range overlapping a committed span uses a full CAS fold.
-  The former suffix-only selection dropped the application's overlapping
-  overwrite (`peer_overlap_pwrite_chunk_straddle`). Disjoint spans remain spans.
-- `febc55e5`: clear phantom span-only REPORT marks when neither a PUT identity
-  nor local dirty/stalled/pinned/unreported ownership remains. Both initial and
-  STALE-rebuild paths preserve marks for actual local bytes. This addresses a
-  W27-adjacent clean-stop loop; the nonzero staging-identity fallback is still
-  a separate open audit item.
-
-Validation ran on separate NUC loopback clusters (ports 18432–18434 and
-19432–19434), without replacing the original cluster on 17432–17434. These
-source snapshots have build ID `unknown` because they contain no Git metadata;
-they contain the listed code changes. Linux `make test` passes. Both sparse-tail
-and overlap-selection regressions fail against the preceding production source
-and pass with their fixes; lease and span-selection ASan/UBSan checks pass.
-Full POSIX jobs=4 and jobs=1 each return **216 PASS, 0 FAIL, 1 mmap SKIP**;
-full two-client suite returns **64 PASS, 0 FAIL**. W36 and chunk-straddle gates
-pass **20/20** each. Clean-unmount/remount durability has **26/26 prepare and
-26/26 verify PASS**. Test teardown then exposed phantom span-only marks on
-older peer clients; the final drain fix reran **64/64 PASS**, followed by clean
-stop of both new clients without discard. Older diagnostic/test mounts with
-pending work were retained; no force-stop was used. [Saved results](../../results/measure/20261006-nuc-correctness/SUMMARY.md).
-
-This does not finish D25: logical resize remains internal, the epoch-owned
-range primitive is not wired into FUSE, and complete writer/absent-chunk
-authority is still pending. CREATE then HOLD is also still two RPCs: the lease
-is guaranteed before returning the descriptor, but an atomic create-and-open
-operation is needed to close the remote-unlink window between those RPCs.
-The NUC gates do not replace the xorinox roll, IOR-hard, or fault/RSS gates.
-
-
-### D25 inode writer-authority snapshot checkpoint — Oct 6 2026
-
-`efs_meta_get_writer_view_tx` now captures FileID, inode authority epoch,
-retained fence history and its completeness floor without requiring a chunk
-row or an active lane. Inode/history double collection and transaction-decision
-revalidation reject mixed applies; four unsuccessful collections return BUSY
-without changing the caller's output. Committed, unresolved fence transactions
-are visible; undecided ones retain the previous authority.
-
-The completeness floor is derived conservatively from the contiguous retained
-history suffix ending at the current authority epoch. A gap, missing newest
-fence or entirely retired history cannot silently authorize epoch-zero dirty
-bytes. Legacy physical truncation without history also raises the floor.
-Snapshots carry their history by value, independent of later retirement.
-
-Linux metadata regressions cover empty files, retired interior gaps, empty
-history at a nonzero stamp, FileID mismatch, future history, concurrent fence
-retry, bounded repeated races and committed/undecided transaction visibility.
-The full Linux `make test` passes. This internal API changes no public FUSE
-behavior and needs no cluster rollout yet.
-
-**Next:** expose this inode snapshot through an authoritative wire operation,
-validate/adopt its epoch on the publication lane (including absent lanes), then
-connect bounded dirty ranges to FUSE admission and exact flush acknowledgements.
-The inode snapshot alone is not a lane publication permit. Public logical
-truncate, live sweep scheduling and history retirement remain outstanding.
-
-
-### D25 writer snapshot RPC and lane validation checkpoint — Oct 6 2026
-
-`INODE_WRITER_VIEW` (107/108) now exposes the bounded writer snapshot through
-an inode-routed RPC. The host establishes ReadIndex authority on both inode
-and requested publication-lane groups, forwarding when it cannot host both.
-Generation zero discovers FileID because existing LOOKUP replies omit its
-generation; subsequent requests can require the exact discovered generation.
-Replies include chunk identity, authority epoch, complete-history floor and
-retained history. Client validation rejects mismatched identities, malformed
-histories and floors that claim completeness across retired gaps. Failed reads
-leave the previous snapshot unchanged; redirect/BUSY retries are bounded.
-
-`efs_meta_get_writer_chunk_view_tx` collects the lane stamp around the inode
-snapshot and rechecks transaction decisions. An absent inactive lane may use
-the captured inode epoch; first publication already initializes its stamp at
-that epoch. An active missing lane or a present lane at a different epoch
-returns BUSY. This read performs no adoption or mutation; lagging lanes still
-need the existing coordinated resize/adoption path.
-
-Linux `make test` passes. RPC extraction tests pass normally and under
-ASan/UBSan, covering redirects, BUSY exhaustion, bad type/length/identity,
-incomplete history, STALE and transport failure. Metadata tests cover absent
-and lagging lanes, first-publication epoch initialization, stale publication,
-and committed/undecided fence transactions before RESOLVE. On the isolated
-NUC cluster, **216 live checks PASS** across all three nodes for holes, FileID
-mismatch and published rows; malformed requests are rejected. Both test clients
-cleanly stop without discard. [Saved results](../../results/measure/20261006-writer-rpc/SUMMARY.md).
-
-**Next:** bind FileID/authority snapshots to bounded FUSE dirty-range admission,
-retain matching bytes/ranges across flush/retry and acknowledge exact owned
-snapshots. History-retirement races must retain accepted bytes and fail closed;
-the RPC itself grants no lifetime guarantee against a later fence. Public
-logical truncate and live sweep/retirement remain disabled/pending. This phase
-has not changed production write admission or rolled the original NUC mounts.
-
-
-### D25 FileID-bound writer planning checkpoint — Oct 6 2026
-
-`include/efs/writer_ranges.h` now connects authoritative writer replies to the
-bounded dirty-range primitive. Admission captures the exact FileID, chunk and
-authority epoch, rejects identity changes/regressed authority and commits
-ownership only on success. Capacity overflow returns BUSY without changing
-ranges or promoting sparse bytes to an unconditional full-chunk overwrite.
-The caller must reserve metadata and succeed at admission before copying bytes.
-
-Publication planning requires a freshly materialized published base at the
-same authority epoch as the writer snapshot, clips each locally owned range
-against complete retained history, and keeps both original acknowledgement
-identity and surviving byte ownership. Lost history returns STALE with the
-previous plan and accepted ranges intact; it never recaptures old bytes as new.
-Only the surviving ranges overlay peer data. Exact acknowledgement uses the
-original snapshot, FileID and chunk; concurrent rewrites remain owned. The
-caller must separately match the committed PUT/REPORT object and sequence.
-
-Normal and ASan/UBSan tests cover mixed-age overwrites across successive fences,
-peer bytes under discarded suffixes, missing history, mismatched base authority,
-FileID/chunk changes, range exhaustion, failed initial admission, exact ACK and
-fully fenced chunks. The target is included in the full Linux `make test`,
-which passes with all five documentation checks.
-
-**Not activated in FUSE yet.** The existing cache still unions ranges and its
-old overflow fallback can promote sparse ownership to a full overwrite. The
-next runtime change must replace that union under its lock, account for the
-larger ownership record, capture matching bodies/ranges in both flush paths,
-retain ownership across PUT/REPORT failure and publish only a matching plan.
-History retirement also needs an explicit retained-byte recovery policy before
-public logical truncate can be enabled. This checkpoint adds no runtime RPCs,
-changes no mounts and does not claim the live D25 acceptance gates are complete.
-
-
-### D25 five-round transport/ownership checkpoint — Oct 6 2026
-
-Five implementation rounds follow the FileID-bound planner:
-
-1. `7072d97b`: GETCHUNKS validates the entire fixed reply before exposing cache
-   records: count/request bounds, inode identity, ordered distinct chunk indices,
-   group bounds and per-part views. Wrong lengths and malformed replies fail closed.
-2. `b6ca5f86`: GETCHUNKS requests may require an exact FileID generation;
-   forwarded requests retain it. Replies carry FileID and inode authority epoch
-   even for holes. `efs_client_rpc_getchunks_fileid` leaves outputs unchanged on
-   error; the existing getter remains its discovery-mode wrapper.
-3. `c093b021`: the planner checks the actual base reply's FileID, chunk geometry
-   and both inode/lane epochs. A `max=1` result that skips a hole and returns a
-   later chunk is never used as the requested base. The fifth round turns
-   this proof of a hole into an explicit zero-image/zero-CAS plan instead of
-   repeatedly retrying the same later row.
-4. `972bbca9`: immutable publication tokens bind original ownership to PUT object
-   generation and snapshot sequence. Failed/mismatched REPORT cannot acknowledge
-   ownership; concurrent rewrites prevent an older snapshot clearing their bytes.
-5. Budgeted writer sidecars allocate through the metadata hard bound. Pending
-   ownership/publication prevents destruction. A matching committed older PUT
-   retires its token while keeping concurrently rewritten ranges for another PUT.
-   Committed publication also advances observed authority, preventing later
-   admission from regressing to a pre-fence snapshot.
-
-Linux full `make test` and all five documentation checks pass. Planner and
-allocator/lifetime regressions pass under ASan/UBSan. An isolated NUC native
-wire probe passes **432 checks** across all three nodes, including GETCHUNKS
-holes, FileID mismatches and published rows. Single-client POSIX is **216 PASS,
-0 FAIL, 1 mmap SKIP**; two-client POSIX is **64/64 PASS**. Both new clients
-cleanly stop without discard. [Saved results](../../results/measure/20261006-writer-five-rounds/SUMMARY.md).
-GETCHUNKS wire shapes changed; deploy matched server/client binaries together.
-The original mounts and older retained diagnostic clients were unchanged.
-
-**Still outstanding:** attach the budgeted ownership sidecar to dcache entries,
-reserve its full metadata charge before copying writes, replace the range union,
-and carry immutable plans/tokens through both flush paths and REPORT/retry.
-One sidecar currently owns one pending publication; runtime integration must
-serialize it or explicitly bound multiple in-flight plans. Incomplete history
-must retain accepted bytes, never re-age or discard them. Public logical truncate
-and history retirement remain disabled/pending; these five rounds do not
-activate epoch-based FUSE writes or complete D25.
-
-### D25 cache lifetime/admission checkpoint — Oct 6 2026
-
-Another five rounds fix two active late-loader races (`2fd76ef1`, `fb88cb6f`),
-protect optional writer state through cache lifetime (`fd44a8c0`), add a
-budgeted admission-before-copy API (`c0f7efee`), and capture immutable matching
-body/range snapshots. REPORT completion now checks typed publication tokens;
-legacy clean/committed flags cannot release a body while typed ownership remains.
-The race regressions fail against the previous implementations. Full Linux
-build/tests, local normal/ASan/UBSan tests and the documentation gate pass.
-Private NUC acceptance is 216 PASS/0 FAIL/1 mmap SKIP for single-client POSIX
-and 64/64 PASS for two-client POSIX. Both fresh clients stopped without discard.
-[Evidence and live acceptance](../../results/measure/20261006-cache-five-rounds/SUMMARY.md).
-
-**Still outstanding:** sidecar allocation/admission is not activated in FUSE.
-All write entry points and both flush paths must adopt the authoritative API,
-retain matching snapshots, serialize pending publications and drain bounded
-range exhaustion before accepting bytes. The legacy unlabelled range union
-still runs and can collapse sparse ownership on overflow; this checkpoint does
-not claim that peer-hole overwrite risk is fixed. Never re-age existing legacy
-writes to manufacture admission authority. Logical truncate/history retirement
-and D27 timing/fault/RSS gates remain open.
-
-### D25 overwrite/binding checkpoint — Oct 6 2026
-
-Five further rounds make full-overwrite bytes and range reset atomic
-(`882d2dbd`), retain the cache-hit path without extra allocation (`0bbd33af`),
-reject a second snapshot while REPORT is pending (`a229b30d`), and add clean
-cache binding to expected FileID/authority (`fce4e629`). The binding API refuses
-legacy dirty, pinned and unreported bytes; no accepted legacy bytes acquire a
-new epoch. Write extent validation now rejects negative offsets, callback count
-overflow, end overflow and chunk-index/exclusive-end overflow before copying.
-Actual append reservations are checked before pins/invalidation/index casts.
-[Tests and acceptance](../../results/measure/20261006-admission-five-rounds/SUMMARY.md).
-
-Full Linux build/tests, local normal/ASan/UBSan regressions and the five
-checks in the documentation gate pass. Private NUC acceptance is 216 PASS,
-0 FAIL, 1 mmap SKIP plus 64/64 two-client PASS; both clients stop cleanly.
-The full-overwrite regression fails against the previous production function.
-The cache binding API is staged; authoritative FUSE admission and both flush paths still
-need wiring before activation. The active legacy union's sparse-overflow risk,
-logical truncate/history retirement and D27 fault/timing/RSS gates remain open.
-
-### D25 token checks and admission-routing decision — Oct 6 2026
-
-Three further rounds validate that publication ranges/ages remain subsets of
-accepted ownership (`dccd8a57`), retain tokens on invalid REPORT completion
-(`a5dfacd8`), and reject cache/publication geometry or future-mutation mismatches.
-Linux build/tests, normal/ASan/UBSan regressions and the documentation gate pass.
-[Evidence](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
-
-The user accepted the [lane-local admission route](../status/d25-admission-routing.md):
-the existing writer RPC consults both inode and lane authorities, whereas §7.3
-keeps ordinary writes on lane authority. Implement lane-local authoritative
-views before activation; do not enable the temporary per-write inode RPC. No authoritative FUSE admission has been enabled.
-
-
-### D25 lane-local authority checkpoint — Oct 6 2026
-
-The user accepted lane-local authority before D25 activation. FileID/lane records
-now persist geometry, epoch and history completeness. Cold bootstrap atomically
-prepares inode/bitmap/history guards and the lane stamp/history/authority triple,
-then uses durable COMMIT and normal transaction resolution. Shrink updates
-installed lane authority together with its fence. Missing authority cannot grant
-an epoch, and a retired history cannot keep a stale complete floor.
-
-`LANE_WRITER_VIEW` (109/110) establishes one lane-group ReadIndex and reads no
-inode or remote decision. Its client routes by the actual publication lane.
-Tests exercise holes, FileID/geometry mismatch, partial resolution, aborted
-fences, failed storage, bounded fence races and single-group host routing.
-
-This stages the recommended foundation. FUSE admission and public logical
-truncate remain disabled. Cold bootstrap RPC, missing-lane-only admission helper,
-geometry-checked cache APIs and durable bootstrap crash recovery are now staged.
-Next connect FUSE write callers and immutable epoch-owned flush plans, then
-finish coherent retirement, live sweep and distribution acceptance gates.
-[NUC ten-round checkpoint](../../results/measure/20261006-nuc-ten-rounds/SUMMARY.md). See the
-[accepted route and remaining work](../status/d25-admission-routing.md).
-
-[Lane-authority verification evidence](../../results/measure/20261006-lane-authority/SUMMARY.md).
-
-### Xorinox retained W36 artifact repaired — Oct 6 2026
-
-All three servers were current at d0e8dce4 when du reported the retained
-`/posix-2c/peer_rename_vs_unlink_src/b`. Its directory timestamp matched the old
-00:41:38 UTC occurrence. Prevention alone does not repair persisted names.
-b4a75492 adds single-shard guarded unlink cleanup; the name was removed through
-Raft, server readdir is empty, and full-export du now completes without errors.
-The current xorinox build passed the rename-vs-unlink gate 20/20 after repair.
-Directory/foreign-shard orphan recovery remains outside this narrow fix.
-[Evidence and scope](../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md).
-
-### D25 durable publication recovery checkpoint — Oct 6 2026
-
-The accepted next step adds canonical per-publication identity, atomic durable
-outcomes, lane-routed submission/status RPCs and staged cache result handling.
-Retries recover the same intent after lost replies or superseding writes;
-UNKNOWN retains ownership, exact rejection retains bytes but releases its token,
-and exact success acknowledges only its snapshot. Legacy REPORT and active FUSE
-flush paths are unchanged. [Validation evidence](../../results/measure/20261006-durable-publication/SUMMARY.md).
-See [implementation and remaining activation gates](../status/d25-admission-routing.md#durable-publication-results--implemented-staged).
-
-
-### D25 receipt retirement checkpoint — Oct 6 2026
-
-Explicit lane-routed retirement, exact digest verification, a 64-receipt
-per-stream admission cap, and atomic durable replay floors are implemented and
-staged. Retirement follows stored sequence order. Replays below the floor return
-RETIRED, which never authorizes dropping or rebasing dirty ownership. Linux
-build, metadata/session, publication transport, cache retention and durable
-recovery regressions pass. Public FUSE flush integration remains disabled.
-The per-stream bound is not a global bound: ordered client ACK retry ownership
-and I23 session admission/fencing before abandoned-stream cleanup remain required
-before activation. [Evidence and remaining gates](../../results/measure/20261006-publication-retirement/SUMMARY.md).
-
-### D25 ordered ACK / W60 checkpoint — Oct 6 2026
-
-W60 speculative admission and bounded demand scratch recovery are committed
-(`73ce8aaa`). Read-pressure and sixteen-thread budget tests pass on the NUC;
-live NUC A/B passes: baseline 2000/2000 failures, fixed 0/2000 with zero
-read-NOMEM lines after aligning all four server builds. See [FUSE memory](../status/fuse-memory.md).
-
-D25 now has staged, metadata-budgeted ordered receipt ACK ownership. It
-retains immutable intents across unknown/lost replies, prevents a newer
-receipt from fencing out older unsubmitted local intents, and applies
-backpressure at 64 entries. [Integration contract](../status/d25-admission-routing.md#ordered-client-retirement-ownership--implemented-staged).
-Public FUSE write/flush activation remains gated on I23 and mtime coherence.
-
-[Ten-round implementation and NUC acceptance checkpoint](../../results/measure/20261006-d25-w60-ten-rounds/SUMMARY.md):
-full Linux unit PASS; POSIX 216 pass / 0 fail / 1 skip; W36 20/20; verified
-W60 mixed read 0/2000 failures. D25 ACK integration remains staged.
-
-Final NUC rollout for this checkpoint: normal deploy/start/smoke **PASS** on
-clean code build `2a30c8eb960c`, four matching servers and both normal mounts.
-Post-deployment POSIX repeats 216 pass / 0 fail / 1 mmap skip. A cold ReadIndex
-startup false refusal was fixed by bounded serving-probe retries. Generated
-W60 fixtures and diagnostic mounts were cleaned up.
-
-### D25 I23 session admission checkpoint — Oct 6 2026
-
-Publication endpoints and serialized apply now enforce lane-local session
-admission/fencing. ESTABLISH verifies ACTIVE epoch and registered shard membership;
-management fencing follows each shard's advertised leader. Safe abandoned-epoch
-reclaim eligibility is implemented, but no receipts/floors are deleted yet.
-Linux units and live same-group/cross-group gates pass; NUC POSIX passes
-216 / 0 failures / 1 mmap skip. D25 remains staged. Next finish lane-local mtime
-coherence and FUSE integration, plus bounded abandoned-stream cleanup.
-[Evidence and scope](../../results/measure/20261006-d25-session-admission/SUMMARY.md).
-
-### D25 regular-file mtime coherence checkpoint — Oct 6 2026
-
-Regular-file mtime SETATTR now uses a durable inode/active-lane transaction.
-Cold bootstrap copies the current mtime generation; stale legacy REPORT stamps
-cannot resurrect pre-utimens mtime. Size/data and ctime are preserved. Full
-Linux units and durable recovery pass; the four-node NUC POSIX gate is
-216 pass / 0 fail / 1 mmap skip. A live multi-lane test verifies backwards
-mtime changes and subsequent fsynced writes. Both FUSE flush integrations and
-bounded abandoned-stream cleanup remain pending; D25 remains staged.
-[Evidence and scope](../../results/measure/20261006-d25-mtime-coherence/SUMMARY.md).
+| meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](../status/metadata-scaling.md) |
+| — | **D28** (who owns acknowledged bytes across client death) · **D29** (a REPORT receipt for "committed, apply pending") · **D30** (the remedy for compaction-induced apply lag) | ask | ask — not code until the user decides | [decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d31) |
+| op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | open — handler only reduces a running quota; CLI announces a nonexistent migration | [work item](#w70) |
+
+#### Source findings awaiting triage
+
+These review findings have canonical identities and gates below; their
+positions do not assign an execution order or override the active handoff.
+
+| review ID | finding | classification | review state | evidence / gate |
+| --- | --- | --- | --- | --- |
+| spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | open — fsync publication does not issue a separate target flush; no power-loss gate established | [evidence and gate](#w71) |
+| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | open — metadata primitives exist; mounted HOLD/FLOCK and session lifecycle remain legacy | [evidence and gate](#w72) |
+| spec3 | **W73** · synchronous application-write publication | integration | no explicit O_SYNC/O_DSYNC handling; real kernel/FUSE sequencing must be verified | [evidence and gate](#w73) |
+| spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | fixed 2+1; no automatic repair/profile cutover; accepted design exceeds current capability | [evidence and gate](#w74) |
+| spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | payload-only hashes; missing checksum can be replaced with a freshly computed digest | [evidence and gate](#w75) |
+| spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | open — 512-slot exhaustion omits identity; default-mount reachability unverified | [evidence and gate](#w76) |
+| spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](#w77) |
+| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | open — stale/reused PID can signal an unrelated process; no runtime reproduction performed | [evidence and gate](#w78) |
+| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | open — advertised extra name is silently ignored; initialization remains idempotent | [evidence and gate](#w79) |
+| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | open — server QUERY_STATS returns an all-zero placeholder; not evidence of an empty store | [evidence and gate](#w80) |
+| scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](#w81) |
+| proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | reproduced in isolated core model; host covering-view path inspected; live RPC gate owed | [evidence and gate](#w82) |
+| proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
+| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | ancestry and used-lane guard limits return BUSY; live gate not run | [evidence and gate](#w84) |
+| storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | baseline helper collision reproduced; repair committed `6d6056c3`; checkpoint reports helper/concurrency and two-root accounting tests; independent release/restart acceptance not established here | [evidence and gate](#w85) |
+| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine committed `b3a11877`, staged for integration; production admission, sessions and all-member collection not active | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
+| append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
+| replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | isolated metadata reproduction; actual host/FUSE byte gate owed | [evidence and gate](#w88) |
+| measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | raw samples/logs confirm invalid summary; corrected expansion retained; harness fix and valid bound owed | [evidence and gate](#w89) |
+
+The [specification/public-path review](../status/spec-implementation.md) separates accepted
+contracts from current capabilities (W71–W77). These findings add no deployment
+acceptance or new priority order.
+
+### Maintaining this index
+
+Every new active finding must receive an unused W number and a row here,
+with its class, current state, evidence, next action and acceptance gate.
+A decision belongs in the D register; "decided" means an approved design,
+not an implementation or a passing gate. Existing identifiers are never reused.
+Number allocation must check the active queue, decision register and work-item
+index for collisions. Cross-link supporting status pages and long-form work items.
+
+Archive superseded handoffs and dated implementation narratives intact; update
+links to their historical home. Keep unresolved gates in this queue even when
+most implementation is done. Preserve historical evidence without letting its
+old "next" instructions or cluster claims govern current work.
+
+W57's NUC implementation/gates are complete; its detail remains in the work-item
+ledger, and the previous status row is retained in the archive. W56 and W60
+remain here only for their named xorinox verification obligations.
+
+### Latest queue reconciliation
+
+The [final review ledger](../archive/final-documentation-review-20261007.md)
+records the completed active-documentation review, final corrections and
+verification scope. Earlier round evidence is indexed in the
+[archive](../archive/README.md). Open implementation and acceptance gates remain
+in this queue; historical build acceptance does not validate a new rollout.
+
+### Historical checkpoints
+
+The former 966-line running page is retained in
+[Oct 5–7 status checkpoints](../archive/status-checkpoints-20261007.md).
+Do not use its old "uncommitted", "not wired", "next item" or deployment
+statements as current status. Completed writer/benchmark investigations and
+superseded D25/D27 rollout narratives live there; their result logs remain linked.
 
 
 ### GC implementation checkpoint — Oct 7
 
 The [GC checkpoint](../status/gc-implementation-20261007.md) records production repairs,
 NUC physical deletion/restart gates, and the approved discard-after-durable-
-revocation policy. PUT ticket metadata is staged; production session, wire and
+revocation policy. PUT ticket metadata is committed in `b3a11877` and staged for integration; production session, wire and
 storage-fence integration remains open. Historical xorinox repair is unconfirmed.
 
 
@@ -2413,239 +1613,229 @@ storage-fence integration remains open. Historical xorinox repair is unconfirmed
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-### Oct 6 2026 — correctness before performance
+Reviewed Oct 7, 2026. Historical rollout facts are in the
+[30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md);
+previous handoff text is [archived](../archive/handoff-20261007.md).
+Do not use a historical cluster address, binary hash or mount as current state.
 
-The Oct 2 handoff is preserved in [project history](../archive/project-history.md).
-Its cluster-state claims are historical; establish current state before any
-live operation. Current acceptance targets the four-node NUC; live results are recorded per rollout.
+### Active correctness work
 
-Committed foundations: `bb18e40a` metadata/read views, `033a842a` FUSE memory
-and D27 recovery/stop, and `3d9bb6b2` POSIX acceptance gates. The current
-partial-writer change (`8727f682`) validates published merge bases under fresh lane
-authority in both flush paths; it does not activate logical truncation.
+**W61/W62/W63 — GC:** repairs are committed in `3a1b4a52`; the
+[implementation checkpoint](../status/gc-implementation-20261007.md) records isolated
+NUC direct-store acceptance. Buffered broad concurrent append lost records
+(**W87**) despite later isolated repeats passing. Existing services and the
+xorinox incident stores are not established as rolled or reconciled. Preserve
+live references and keep the original [incident review](../status/gc-reclamation-review.md).
+This round did not inspect the remote fixture logs.
 
-The user accepted [lane-local authority first](../status/d25-admission-routing.md).
-Durable lane authority/bootstrap primitives and the lane-only read RPC are now
-staged; the older inode writer RPC remains for cold discovery and tests.
-Cold bootstrap RPC and missing-lane-only client admission fallback are implemented. Geometry-checked cache admission and immutable snapshots are staged; connect FUSE callers and typed publication next. The latest token checks are recorded in the
-[checkpoint](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
+**W86/D31 — PUT tickets:** checkpoint-recorded policy and metadata
+state machine committed in `b3a11877` exist, staged for integration; versioned wire/PUT admission, actual W72 sessions,
+distributed authoritative revocation and all-member storage fences/deletion
+remain. D28 salvage is separate. Do not activate collection from age or a
+local/cached fence.
 
-### Oct 7 — 30-round NUC correctness checkpoint
+**W43/D25 — staged, public logical truncate disabled.** Metadata histories,
+committed readers, internal resize coordination, lane authority/bootstrap,
+FileID-bound planning, durable publication, ordered ACK, I23 admission and
+mtime coherence are implemented and tested in recorded checkpoints. The
+[lane-local routing plan](../status/d25-admission-routing.md) owns their detailed contract.
+Remaining sequence:
 
-The [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md)
-records each production commit and its NUC acceptance. Direct shard writes now
-retain existing extents and finalize exact completed lengths; delayed close
-errors are surfaced. Client changes reject failed truncate-prefix/flush work,
-propagate read authority failures, guard read and REPORT boundaries, validate
-readdir pagination, clean partial worker startup, and carry deadlines through
-writeback, pooled GET/PUT, connection checkout and network frames.
+1. Connect every FUSE write entry point and both flush paths to epoch-owned
+   admission and typed publication/retirement. Replace unlabelled dirty unions;
+   serialize pending publication and drain range exhaustion before copying.
+2. Carry captured authority epochs for spans and unconditional overwrites.
+   Fence races must retain bytes, return STALE and rebuild from authoritative views.
+3. Add bounded live-file materialization scheduling, durable progress and safe
+   lane/inode history retirement. Unlink sweep is a separate path.
+4. Enable logical resize only after unpublished overlapping writes across
+   shrink/extend, cold reads, restart, leader changes, history-full and bounded
+   apply gates pass. A legacy cache hit cannot grant current authority.
 
-Concurrent append loss recurred during round 20. The retained failure trace
-shows the first reservation beginning at offset 8. Round 21 serializes complete
-append replay entries and requires allocation results from the leader; the old
-cache reproduces wrong offsets in the regression. Passing later gates does not
-prove a sole cause or durable replay across leader changes. Append reservations
-still need a durable replay/failover design; their host-local cache is not such
-a design. This checkpoint does not activate D25 or close D27 strict timing.
-Hostname resolution, uncancellable accepted job ownership, live RDMA hardware,
-recorded fault/recovery and small-host RSS gates remain outstanding. Public
-logical truncate remains disabled. Mac buffered acceptance is deferred during
-maintenance.
+**D27/0a — implemented runtime, acceptance incomplete.** Sticky per-inode and
+per-description errors, retained snapshots, completed-cycle stall detection,
+WITHHOLD faults and controlled stop exist. Strict whole-call timing, remaining
+legacy PUT coverage, recorded fault/recovery/contention and small-host RSS
+acceptance remain owed. Accepted workers retain caller-owned completion state;
+a timeout must not free it. DNS resolution remains outside connection bounds.
+D28 salvage is undecided. Keep the D27 decision's fault-before-publication gates.
 
-The final rollout twice observed nuc n1 exceeding the devops stop script's
-ten-second SIGTERM wait and being killed with SIGKILL, after both clients had
-drained and unmounted cleanly. Capture its thread stacks/strace during the next
-controlled stop and fix the actual shutdown blocker. This is an open finding,
-not a graceful-daemon-shutdown acceptance claim.
+**W64 — append:** host-local replay races were fixed in `ec1500ec`; replay
+across leader changes is not durable merely because concurrent repeats pass.
+The round-20 first-record-loss trace remains evidence, not a proven sole cause.
 
-Next, in order:
+**W65 — shutdown:** nuc n1 exceeded the ten-second SIGTERM wait twice after
+clean client drains and was SIGKILLed by the rollout tooling. Capture userspace
+stacks during a controlled stop; do not label graceful daemon shutdown accepted.
 
-1. Writer authority, FileID-tagged GETCHUNKS, typed base/publication planning,
-   budgeted sidecar lifetime, admission-before-copy and immutable body snapshots
-   are implemented and tested. Optional state now participates in cache drop,
-   replacement/reclaim and REPORT acknowledgement. The active legacy cache also
-   preserves pending bytes across late-loader merges and holds the slot lock
-   through installation. [Current checkpoint](../../results/measure/20261006-cache-five-rounds/SUMMARY.md).
-   Full-overwrite ownership/reset is now atomic, its cache-hit fast path avoids
-   extra allocation, and pending publication blocks another snapshot. Clean
-   cache binding to expected FileID/authority is staged and tested; legacy dirty
-   bytes cannot acquire a new epoch. Write extent guards reject index/end wrap.
-   [Latest checkpoint](../../results/measure/20261006-admission-five-rounds/SUMMARY.md).
-   The [NUC ten-round checkpoint](../../results/measure/20261006-nuc-ten-rounds/SUMMARY.md)
-   adds durable bootstrap crash recovery, snapshot overlap protection, exact
-   same-mutation PUT ownership checks and lane-validated cache APIs. Legacy flush
-   refuses typed ownership before I/O. These APIs do not activate D25.
-   The [publication ten-round checkpoint](../../results/measure/20261006-publication-ten-rounds/SUMMARY.md)
-   binds captured FileID and exact CAS bases, reserves identity before PUT, and
-   supplies typed cache completion APIs. They remain staged. Before activation,
-   [durable publication submission/status and cache result handling](../status/d25-admission-routing.md#durable-publication-results--implemented-staged)
-   now distinguish exact commit from terminal rejection and unknown. Legacy
-   aggregate STALE still cannot authorize dropping or rebasing ownership.
-   Acknowledged retirement now bounds each stream to 64 live receipts and
-   advances a durable replay floor atomically. RETIRED never releases ownership.
-   Ordered ACK retry ownership is now staged and NUC-tested (immutable,
-   bounded, oldest-consumed-first, metadata-budgeted). Before activation,
-   integrate it with both flush paths. I23 publication endpoint/apply gates,
-   authoritative ACTIVE/REGISTER establishment and reclaim eligibility are
-   now implemented; bounded abandoned-stream cleanup remains pending. Regular-file
-   mtime invalidation now uses a durable inode/active-lane transaction; bootstrap
-   installs the captured mtime generation.
-   Next connect every FUSE write entry point and both flush paths to these APIs;
-   replace the unlabelled union, serialize pending publications and drain range
-   exhaustion before copying bytes. No epoch-aware FUSE admission is active.
-   Test unpublished overlapping writes across shrink/extend and history
-   retirement; never re-age retained legacy writes or derive authority from a
-   cache hit.
-2. Carry captured epochs for spans and unconditional full overwrites, with
-   fence races returning STALE and rebuilding from a new authoritative view.
-3. Implement bounded live-file materialization scheduling, durable progress
-   and safe lane/inode history retirement; keep unlink sweep separate.
-4. Enable the logical resize coordinator only after those prerequisites pass
-   cold-read, concurrency, restart, history-full and bounded-apply gates.
-5. Complete D27 strict whole-call timing and remaining legacy PUT coverage;
-   run the recorded fault/recovery and small-host RSS acceptance gates.
+### Additional public-contract findings
 
-NUC rollout `128f6b7d` passed W36 20/20 first, full single/peer POSIX,
-26/26 persistence in each phase, full source-rebuilt units and ten concurrent
-8/8 repeats. These results supersede the earlier rollout gate status below.
+The [source review](../status/spec-implementation.md) indexes W71–W77. In particular,
+W71's production fragment ACK lacks a persistence barrier; a successful
+healthy fsync/restart test does not establish power-loss durability. W75
+records missing integrity evidence and the parallel-read verification bypass.
+These are source findings, not a diagnosis of the GC incident or a new
+production acceptance result. The queue and detailed gates govern follow-up.
 
-NUC rollout 79983128 passed W36 `peer_rename_vs_unlink_src` 20/20 first.
-Xorinox b4a75492 passed the real two-client W36 gate 20/20 after guarded orphan cleanup. A later rollout must repeat that gate. W54 post-GC cold reads and W38 traced/cold verification remain owed.
-NUC unit/build acceptance used a private source directory. Live acceptance
-used both normal mounts after clean drains and a four-node rollout. Public logical truncate remains disabled.
+### Verification still owed
+
+- W54 post-GC cold-read and W38 traced/cold hardscan gates.
+- W56 xorinox rollout verification; W60 full-tree mixed reads on xorinox.
+- W67 sparse-pressure/failure/RSS and W68 real worker-retirement/RSS gates.
+- Mac buffered acceptance after maintenance; real RDMA hardware acceptance.
+- Repeat W36 rename-versus-unlink first on a new production rollout. The
+  recorded NUC `128f6b7d` and xorinox `b4a75492` 20/20 runs establish those
+  builds only; they do not automatically validate changed working sources.
+
+Read the [queue](#1a-the-work-queue) for remaining investigations,
+measurement work and decisions. This handoff adds no deployment authorization.
 
 
-## Appendix 3 — Decisions — taken and pending (register D1–D30)
+### Operator review findings
+
+[W78–W80](#source-findings-awaiting-triage) record conditional stale
+PID-file signaling, misleading mkfs name syntax and zero-filled `efs-query`
+statistics. These are source findings with gates, not a new execution order.
+Use the corrected operations guide; query zeros are not GC completion evidence.
+W81 separately records the missing automatic directory pressure trigger; its
+size-based admission/migrator exists and the pressure policy still needs review.
+
+
+### Protocol review findings
+
+[W82–W85](#source-findings-awaiting-triage) cover stale completed read
+coverage, missing transaction-decision retirement, namespace guard bounds
+and eviction of ambiguous PUT retry history. W82 has an isolated core
+reproduction and W85 an isolated helper reproduction; live RPC/FUSE and
+storage/accounting gates remain owed. W85's attempt-owned/locked placement-cache repair is now committed in
+`6d6056c3`; the GC checkpoint reports helper/concurrency and two-root tests.
+This review did not rerun those tests or establish release/restart acceptance. These findings do not assign a new work order or change accepted designs.
+
+### Contract/evidence review
+
+W23's first completed measurement exists; its zero-L0 interpretation is
+invalid due to W89's TSV field shift. Corrected samples show follower L0=22,
+but the pressure bound remains unproven. Current production apply defers flushing instead of waiting at the
+L0 threshold; its log line alone is not a pump-stall measurement. The follower
+memory/lag bound still needs a valid preconditioned run. W87 needs the full
+traced buffered append outcome and retained failing evidence. See the
+[round-6 ledger](../archive/contract-review-20261007-round6.md).
+
+**W88 — D1 legacy span replay:** isolated metadata reproduction shows a
+folded identity can be evicted and its old retry reintroduced over a later
+base. Actual host/FUSE byte and lost-ACK/restart gates remain open. Keep the
+durable identity/retirement primitives separate from bounded trailer hints.
+
+
+## Appendix 3 — Decisions — taken and pending (register D1–D31)
 
 *Source: `status/decisions.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-**Rows marked decided are implemented per their text — do not re-ask. Rows
-marked ASK are not code until the user decides.**
+**Decided means the design was accepted; it does not mean implementation or
+acceptance is complete. Preserve accepted choices and check their current work
+items before implementation. ASK rows remain unresolved design choices.**
 
 [Work queue + status](#appendix-1--status--the-task-right-now-and-the-work-queue) · [In flight](#appendix-2--in-flight--the-current-handoff-block) ·
 [Architecture](#architecture)
 
 ---
 
-##### Decisions — taken and pending (register D1–D30)
+##### Decisions — taken and pending (register D1–D31)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
 per the item it points at. A row marked **done** is history. Nothing
-in an open row is implemented until the user asks. D14 was never
+in an ASK row authorizes implementation; explicit user instructions govern work. D14 was never
 assigned. D15/D16 (closed Oct 2) and the Sep 28/29 ordering tables are
-in project-history.md "START-HERE closed items". **D29 and D30 (Oct 2
-05:30Z) are ASKS** — rows N and O of the plan table above hold their
-text; nothing of either is implemented until the user decides.
+in project-history.md "START-HERE closed items". **D28, D29 and D30 remain ASKS.** D29/D30 detail is in the
+[open ask rows](#open-ask-rows--d29-p13-and-d30-p25); the former A–O
+ordering table is historical, not current implementation status.
 
-**Decided Sep 28 2026 (user accepted the recommendations):**
+### Earlier decisions — compact register
 
-| item | question | decision (Sep 28) | why, in one line |
-| --- | --- | --- | --- |
-| **D1 · W6.1 / W17** | what do N-1 shared-file writes do under conflict? | **A span publish commutes; no lock; no CAS on the base generation for spans.** A sub-range writer always publishes a span (even when it holds the base). `expected_gen` applies to full-image publishes only. The trailer keeps the folded spans' `candidate_gen`s (≤ `EFS_CHUNK_DELTA_MAX`) so a replay of a folded span is a no-op. The fold is done by the publisher that fills the last slot, or by a reader — never on another rank's `fsync`. | the code already has commuting non-overlapping spans; what collapses at nine ranks is the base-gen check *before* the span path (one fold STALEs every in-flight span) and the `have_base → full CAS` branch. This is §7.2's commutative reduction applied to the chunk map, and P1 (no serialization point). A distributed chunk lock stays forbidden. Gate in W17 |
-| **D2 · W6.2** | may `open()` return before the chunk map is known; how big is the map window? | **Yes. `open()` adopts the inode row only.** Chunk maps are pulled per lane group, in parallel, by `pull_layout_miss` in a metadata window that runs one data window ahead of the prefetcher. Window size is internal and adaptive (start at the prefetch depth, grow while the read stays sequential). No mount option, no environment variable. | `performance.md` already says reads fetch chunk maps in per-lane windows; the code pulls the whole map sequentially at open and the server serializes 36 openers to 14.6 ms per GETCHUNKS. A row without a map is already the evictor's steady state (W9); a miss is pulled and an error is an error, never a zero-fill (I9) |
-| **D3 · idle gate** | may the 5/s REAP_DONE gate be raised to remeasure ior-hard 1/9/36? | **No.** Measure after the reaper drains. If it does not drain, that is a bug to file. | the tail is the reaper clearing deleted IOR data, and a measurement started during it measures the reaper |
+Exact accepted text, rationale and dated measurements are preserved in
+[earlier decision records](../archive/decision-records-d1-d24.md). Consult the
+relevant contract when changing that component; do not load the full historical
+measurement narrative for unrelated work. Archiving detail does not revoke it.
 
-**Decided Sep 29 2026 (user accepted D4–D8 as written; source
-`results/io500/20260929-023447-iorperf2/ana`). Implement per the item
-each row points at; do not re-ask. D8 is a measurement whose result
-comes back to the user before any budget changes.**
-
-| item | question | decision (Sep 29) | why, in one line |
-| --- | --- | --- | --- |
-| **D4 · W22 step 1** | when does a group take a snapshot and truncate its log? | **By log bytes and follower reach, not every 256 entries.** Take a snapshot only when the log since the last one exceeds a byte budget (recommend 512 MiB — the export itself is 2.67 GB and takes 5–12 s, so anything smaller makes export the steady state), and keep a trailing window of log entries after the snapshot point so `send_ae` serves a follower that is behind by less than that window from the log. Send InstallSnapshot only when `next_index` is below the retained window | `HOST_SNAP_MIN` = 256 applied entries triggers a 2.67 GB export back to back on every node; `raft.c:672` sends the file to any peer more than 256 entries behind; three imports of 12–16 s happened in one 4-minute IOR and each one is a follower that answers nothing while its pump applies the diff |
-| **D5 · W22 step 2** | may a follower answer heartbeats while its pump applies an InstallSnapshot diff? | **Yes — slice the diff.** Apply the import diff in bounded slices between pump cycles (one `HOST_TICK_US` worth of keys, then drain the inbox and answer the heartbeat), instead of one 12 s apply. The follower stays a follower; the leader keeps its term | this is W14 step 2's "heartbeat answered from a thread that is not importing", with the evidence: terms moved +45 / +105 across the run with `drop=0` on every outbox, so the outbox was not the trigger; the import-diff apply is the only multi-second pump hold left (`apply_max` 1.17 s on fcstor006, `pump_hold_max` 4–5 s on fcstor005 in the earlier run) |
-| **D6 · W22 step 3** | may `mdraft/` (Raft log, KV WAL, segments) live on a root the fragment writers do not use? | **Yes, and measure first.** One `dd` on a quiet node: `fsync` of a 4 KiB file on `/data1/01` while the writer pool creates fragments there, versus on a root with no writers. If the shared root shows the 100 ms mode, give `efsd` a `--meta-storage <root>` (default: first root, today's layout) and point 19810 at a root the six `--storage` paths do not include (or a seventh partition) | the compactor's segment `fsync` was a flat 100 ms 97 times and `persist_max` reached 254 ms while twenty writer threads did `openat`/`write`/`close` on the same XFS; the Raft commit path and the data path share one journal |
-| **D7 · W14 step 4** | may the client tell the server a PUT is the first write of `(ino, ci, fi, gen)` so the server skips the six-root probe? | **Yes, with a sentinel, not a guess.** `path_hint = 0xffffffff` means "the client has never PUT this fragment generation"; the server then creates on the writer's least-queue root with no `access()`. Any retry of the same generation (REPORT STALE replay, failed reply) sends the real hint or 0. A fragment name includes its generation, so a first write of a new generation cannot collide with an existing file | the hint from a previous PUT can only help a re-PUT; IOR-easy and a fresh `dd` write every chunk once, so 1.59M `access()` (192 s across six handler threads on fcstor004) survived W14.4 unchanged. The step-4 gate ("under 1 % on a single-client dd") cannot be met by the hint as specified |
-| **D8 · W16 steps 2–3** | how does a 86 234-record REPORT reach the log? | **Measure the per-batch commit latency first, then bring the number.** `report-split` shows `push_ms=9869` for 337 publish batches — ~29 ms per batch through the one in-flight batch per peer — and `finish_ms=9227` waiting on the last apply. Add `pub_batch_ms` (p50/max) to `raft-obs`; if the per-batch commit is the ~2–6 ms a Raft round costs here, the 29 ms is queueing behind other clients' batches and the answer is fewer, larger entries per REPORT; if it is the 100 ms `fsync` mode, D6 is the fix. Pipelining past one in-flight batch stays forbidden | the client's fsync waited 19.4 s in one TCP `recvfrom` for a server that was still pushing; nine clients × ~80K records at the observed rate is minutes of leader time per stonewall |
-
-**D9–D11 — DECIDED Sep 29 2026 and rolled 05:31Z (from the 04:07–04:27Z trace, `results/measure/20260929-040800-idle-trace/ana`; the numbers are in the handoff archive). D9 and D10 are the two halves of one problem — the KV cannot absorb writes as fast as the Raft log commits them, and the wait lands on the pump. D9's memory-bound sentence is retracted (see the row).**
-
-| item | question | decided (D9–D11, Sep 29) | why, in one line |
-| --- | --- | --- | --- |
-| **D9 · W13 step 2, W23** | may the apply path (the pump) block on L0 back-pressure? | **No. The pump never waits for the compactor.** When L0 is within `KV_LSM_RANGE_MAX` of the cap, the apply keeps writing the memtable and lets it grow past `memtable_max` (**the "bounded by the 512 MiB Raft window" claim written here on Sep 29 is wrong** — that figure is a snapshot trigger, it admits nothing and a follower acks on persist, not apply; the real mechanisms and the stalled-compactor measurement that must name the bound are the W23 correction in [work-items.md](#appendix-4--work-items--long-form-text-for-the-open-w-items-and-the-queue-rows)); back-pressure moves to admission on the leader: `host_propose` for REPORT/publish batches returns BUSY while the local L0 is over the cap, so the client retries with its existing budget and the follower's pump is never the one that stalls. Heartbeats and AppendEntries replies do not depend on the KV | the pump waited 4.1 / 1.7 / **24.2** / 2.7 / 3.6 s in `kv_maybe_flush_locked` on fcstor004 in one 7-minute write, each wait one compaction long; every wait produced `apply-sleep` 400 ms timeouts → REPORT `rc=-13` → client fsync EIO, and the two term changes of the run. Same class as W13 (a lock hold the apply does not need) and W22.2 (a follower must answer while it imports) |
-| **D10 · W23** | how does L0 reach L1 so that a 7-minute write does not rewrite the table thirty times? | **Compact by bytes, not by file count, and split range 0.** (a) Merge a range's L0 into its L1 only when that range's pending L0 bytes are at least a fraction of its L1 bytes (recommend 1/8: a 250 MB range waits for ~30 MB of L0, a 1.8 GB range for ~220 MB), otherwise let L0 files accumulate — the cap that matters is bytes in L0, not 64 files; reads already probe every L0 (`kv_seg_probe`), so make the L0 cap a byte budget (recommend 1 GiB) and drop the 64-file cap. (b) Partition on more than `key[0]` where a range is large: range 0 is 1.8 GB against 190–330 MB for the other fifteen; split it by the next key byte at flush and compaction time so no range exceeds ~256 MB. (c) The merge reads input blocks one `pread` at a time (3.7M of ~8 KB): read each input segment through a 1 MiB sequential buffer | 433 compactions wrote 159 GB to keep a 5.3 GB table current through one 7-minute write; the compactor is 48–55 % of two servers' samples; range 0 alone is 61 GB of the 159 and the 24 s pump hold. `inputs=` 5–11 files of ≤256 KB each per rewrite of 200–1800 MB is write amplification of several hundred. W13 step 5's partitioned flush bounded the rewrite to one range; it did not bound how often a range is rewritten |
-| **D11 · W22 step 3 / D6** | is `mdraft/` sharing an XFS with the fragment writers the 100 ms `fsync` mode? | **No — close D6 as "not the sharing", skip the `dd` measurement, do not move `mdraft/`.** The pump's Raft-log `fsync` averaged 0.38–0.40 ms on all three servers measured (61 228 of 61 668 under 2 ms on 004) while twenty writers created 408K fragments; the 90–120 ms `fsync`s are the compactor's own 200–300 MB segments (299 of 695 on 004, 407 of 733 on 005). `--meta-storage` stays as an option; the compaction fix (D10) is what removes the 100 ms mode and the 130 MB/s the compactor puts on `/data1/01` | per-thread `fsync` histograms in `idle-detail2-fcstor00{3,4,5}.txt`; a segment written at ~2–3 GB/s and then `fsync`'d is ~100 ms by arithmetic, no journal needed |
-| **D8 · answered** | is the per-batch commit ~3 ms or ~100 ms? | **~3 ms** (`pub_p50=3109us` in 17 of 23 samples with traffic); the 46 ms samples and `pub_max` 0.8–2.4 s are the pump holds above. No "fewer, larger entries per REPORT" wire change is indicated. Remeasure `pub_p50`/`pub_max` after D9/D10 in one 9-client IOR | the number the D8 row asked for, from the `raft-obs` line W16.2 added |
-
-D9, D10, and D11 were rolled 05:31Z (`a53b253f2455-dirty`). The 12:02Z trace (§1b) is the measurement: D9 held (no pump wait, no `backpressure` line), D11 held (`fsync` max 91 ms), and D10's byte rule held (0.25 GB compacted, not 159 GB). D10's "drop the file cap" did not. That correction is D12.
-
-**D12 was implemented and rolled 12:29Z** (`a53b253f2455-dirty`, no perf, no strace). On the 12:36Z IOR, fcstor004's compactor brought L0 from 7 files down to 3 (L1 stayed 397). The recommendation below is what was built. The 400 ms apply wait still returned BUSY (73 of 99 `report-split` lines on fcstor004).
-
-| item | question | recommended (D12, Sep 29) | why, in one line |
-| --- | --- | --- | --- |
-| **D12 · W23 step 4** | may L0's file count grow without a bound while L0 bytes stay under 1 GiB? | **No. Keep the 1/8 byte rule, and put the file cap back as a backstop.** When `n_l0` is over `KV_LSM_L0_DEFAULT` (4), compact the range with the most L0 files even if its bytes are under 1/8 of its L1, and repeat until `n_l0` is under the cap. The 1/8 rule still applies when the count is already under the cap, so a fat range is not rewritten for a few KB. The pump still does not wait. D9's 1 GiB admission stays; it did not fire here | fcstor004 went 26 → 310 L0 files (L1 353) in one IOR while 34 compactions wrote 0.254 GB at 10–14 ms each; `lookup` then probes every file, the publish apply falls behind, and `host_wait_applied` returns BUSY at 400 ms (`pack_ms=0 rc=-13`, 54 of 60 reports). D10 said to drop the file cap because "reads already probe every L0" — that probe is the abort. **The backstop as built rewrote L1 for the whole of the 13:17Z copy (D13)** |
-
-**D13 · W23 step 5 (from the 13:08Z trace, `results/measure/20260929-130800-ddposix/ana`). In tree 14:20Z, not rolled, not gated.** The shape below is what was built. A file-cap compact writes one L0 file and does not open L1. A compact that already meets 1/8, or the 1 GiB byte cap, still rewrites L1.
-
-| item | question | recommended (D13, Sep 29) | why, in one line |
-| --- | --- | --- | --- |
-| **D13 · W23 step 5** | when the file cap forces a compact, may that compact read the range's L1? | **No. Merge that range's L0 files with each other into one L0 file, and do not read its L1.** Repeat until `n_l0` is under the cap. The 1/8 rule stays the only merge that rewrites L1. The pump still does not wait. D9's 1 GiB admission stays | D12 ran a full L0+L1 merge whenever the count was over 4, which was the entire 100 GiB copy: fcstor004 wrote 67.5 GB in 425 compacts (max 17 s, L0 peak 379) and `lookup` still binary-searched them (`kv_seg_probe` 8.3 % self). `pack_ms=0` on 172 of 184 BUSY reports; one `push_ms` was 206 s |
-
-**From Sep 30 2026 07:10Z (`results/measure/20260930-063500-perf-dir-review/SUMMARY.txt`). Both DECIDED: D18 Oct 1 (implemented), D17 Oct 2 01:45Z (user accepted the per-lane present-chunk count; implement per the row, queue order in "Plan after the Oct 1 22:00Z review").**
-
-| item | question | decided (D17–D18) | why, in one line |
-| --- | --- | --- | --- |
-| **D17 · `st_blocks` — DECIDED Oct 2 2026 (user): per-lane present-chunk count in the lane stamp** | where does a client get the allocated-block count for a file it did not write? `inode_allocated_bytes` counts the client-local present-chunk table (W20), empty since D2 for unopened files, so `du` sums 0 for every regular file (52K for 3.8 TB) and ecrawl calls 21150 of 21503 files sparse. `efs_meta_row` has no count; W20 forbids `st_blocks` from size alone | **A per-lane present-chunk count in the lane stamp** (each publish adds the chunks it made present, a truncate subtracts), reduced at getattr like `max_end`/`max_mtime` and returned in the row image; the client sums it. One more u64 per lane read, no new RPC. Alternative: define `st_blocks = 0` as "unknown" for files this client did not write and tell tools so | sparse detection, `du`, quota tooling and ecrawl all read `st_blocks`; only the server sees every lane's publishes |
-| **D18 · client staging-table floor — DECIDED Oct 1 2026 (user): evict whole cold tabs; implemented `f073e136`, see §1b** | the staging estimate is dominated by the per-shard-tab floor (one 256-row slab + 16 × 1232 B chunk entries + 512-slot indexes ≈ 90–170 KB per tab, ×4096 tabs ≈ 360–700 MB) and exceeds `EFS_CLIENT_META_MB` (256 MB) with a few thousand rows staged (412 MB at 10780 rows, RSS 330 MB). The evictor then drops 64 hot rows a second forever and never reaches the cap. Which bound do you want? | **Evict whole cold tabs** (`shard_tick` already tracks tab age; a tab with no dirty/pinned/open ino is freed and rebuilt on demand), so eviction frees the floor it cannot otherwise reach; keep the row LRU for the rest. Alternatives: a smaller first slab and lazily sized indexes (the floor shrinks ~10×), or apply the cap above the floor (RSS then ≈ floor + cap) | the 22 ms/s stall from this churn is fixed mechanically (targeted `efs_export_evict_ino`), but the cache still cannot hold a du's rows, and the RSS bound the cap promises is not the one delivered. Sep 30 21:10Z: with the floor above the cap the evictor's LRU scan is **31.6 % of a 62 min client profile and 47.6 % (≈ 0.6 core) during an ecopy**, re-armed by every staging op (`results/measure/20260930-205300-ecopy-perf-review`) |
-
-**D25–D26 — DECIDED Oct 2 2026 01:45Z (user accepted the recommendations as written; from the review of the 20:56Z 16× dd run, §1b 22:00Z block; `~/orcd/scratch/efs/perf/efs-mount/server-2056/`). Implement: D25 with W43 (the drain inside the entry; the `truncate_big.sh` gate goes from exit 3 to exit 0), D26 after W44 step a's idle-hour number (watermark first).**
-
-| item | question | decided (D25–D26, Oct 2) | why, in one line |
-| --- | --- | --- | --- |
-| **D25 · W43 / W24** | how does a truncate that drops more than 32 chunks per lane reach the KV? Today one Raft entry per cross-group lane (LANE_FENCE) plus one inode-group entry (TRUNCATE) each carry one `efs_kv_batch` capped at 32 chunk DELs per lane, and the apply gives up (NOMEM → logged → OK) on anything bigger | **REVISED Oct 2 05:15Z (user) — now normative in [architecture.md §7.3](#architecture) "Truncate is logical; reclamation is deferred"; the op-matrix TRUNCATE row, I22, L7 and the glossary were updated with it, so the spec no longer requires an in-entry range delete or tail rewrite.** Summary (the spec wins on any difference): the TRUNCATE / LANE_FENCE entry bumps the epoch, stamps `base_size`, appends `(epoch, size)` to the inode's **fence history** and pushes both to the active lanes — O(lanes) apply, measured as **total apply duration per entry** (`apply_max` on every replica during `truncate_big.sh`, single-digit ms); no chunk deletes, no tail rewrite (the Oct 2 01:45Z in-entry 64-chunk batches bounded each batch, not the entry). **Validity rule** for reads, publish merges and the sweep: `valid_end(r) = min{ size_j : epoch_j > e_r }` over the history; bytes past it read zero, a sub-chunk merge takes the masked base, a row wholly past it is dead; retained data keeps its old epoch and is never re-stamped — *offset first, then epoch*; "older epochs are never served" is wrong and must not be implemented. Extension stamps size only. **The history is the durable truncation record:** shrink to 100 B, extend to 1 MiB before the sweep, read → zeros past 100, because fence `e1`'s entry is still in the history; a single replaceable fence size would expose the discarded bytes, so entries are appended, never replaced, and only the sweep retires them. **Sweep** = the reaper's existing LANE_SWEEP (64 chunks per KV batch, its own entries): versioned DEL of dead rows (a new-epoch write that landed in between is never deleted), versioned CAS rewrite of a boundary row as the masked row at the fence epoch; a fence leaves the lane stamp when no older row remains and the inode history when every lane has dropped it; `FENCE_HISTORY_MAX` bounds the history and a TRUNCATE against a full history answers BUSY (client retries on its budget) — never an in-entry delete. **Crash replay:** history, lane stamps and rows are replicated; the sweep is re-derived from them and every step is idempotent. **Gates added to `truncate_big.sh` (each on a file > 32 chunks per lane, checked cold after remount and again after the sweep has finished):** (t1) **retained prefix survives** — `md5sum` of bytes `[0, new_size)` before and after equals, after the sweep too; (t2) **partial tail is zero after re-extension** — truncate to a non-chunk-aligned size, `truncate` back up (and separately `pwrite` past EOF): bytes `[old_tail_off, chunk_end)` read as zeros, not the old data; (t3) **no stale beyond the fence** — `raft-getchunks` on a chunk past the fence shows no served row until a new write; (t4) **the sweep cannot delete new-epoch writes** — truncate, immediately write new data into the swept range (several chunks, before and while the reaper runs, `EFS_FAULT_SWEEP_SLOW=1` to widen the window on the private cluster), cold `cmp` of the new data after the sweep finishes; (t5) **restart mid-sweep** — kill the anchor-group leader during the sweep, restart, the sweep completes (`gc-pass` shows the range drained) and t1/t4 still hold; (t6) **apply bound** — `apply_max` on every replica during the fence stays in the single-digit ms class. (t7) **durable truncation history** — shrink to 100 B, extend to 1 MiB *before* the sweep runs (`EFS_FAULT_SWEEP_SLOW=1`), read the whole file: bytes `[100, 1 MiB)` are zero; then the §7.3 sequence (shrink 100 @e1, extend, write `[500,600)` @e1, shrink 700 @e2, extend): `[0,100)` old data, `[100,500)` zero, `[500,600)` new, `[600,700)` zero, beyond 700 zero — checked cold before the sweep, after a leader restart mid-sweep, and after the sweep; (t8) **history bound** — `FENCE_HISTORY_MAX + 1` truncates faster than the sweep: the last is BUSY-retried by the client (eventually 0), none is applied as a delete, t7's reads hold throughout; (t9) **partial rewrites across fences** — sub-chunk writes into the boundary chunk before and after each shrink, cold `cmp` against a model file the test maintains. Space is reclaimed asynchronously; `df` may lag a big truncate by the sweep time (say so in the user-facing doc). No new opcode; no handler-side deletes; W43 step b's verdict rule stays (an apply that cannot fence answers an error, never OK). **Added Oct 2 05:30Z (user): one row epoch cannot describe mixed-age content.** The spec text must give an epoch to the **base image and to each delta span** of a row separately (a span written after a fence carries the new epoch while the base keeps the old one), state how the **sweep materialises** a boundary row from those per-part epochs (mask the parts whose epoch is fenced, keep the rest, stamp the result), and define **safe retirement of a history entry across concurrent readers** (a reader that resolved `valid_end` against an entry must not see it retired under it — pin, or retire only after every reader of the older view is gone). **Oct 5 implementation checkpoint:** §7.3 now specifies per-part epochs, zero-first ordered materialization, exact row/fence CAS, and self-contained authoritative read views with fragment-loss refresh/retry. The shared C masking helper and its reference-model test are in tree and locally gated. Versioned FileID-scoped history sidecars, atomic single-authority history/stamp append, coherent masked chunk views and a bounded single-row sweep CAS are now implemented in the metadata core and pass normal/ASan/UBSan regressions, including storage failure and read-view races. This resolves the three textual omissions and implements the metadata primitives; The Oct 6 checkpoint implements durable cross-authority shrink coordination and extension without epoch bump; wire/cache validation (implemented in the later Oct 6 checkpoint), epoch-preserving production publication, live-file sweep scheduling/progress and history retirement are still pending. Transaction support now accommodates the 64 participant shards and full history envelopes, with exact-value PREPARE for unversioned row snapshots; namespace coordinators retain their eight-participant bound. The transaction suite covers decision visibility and applied-state snapshot recovery after partial resolution, and participant fence PREPARE now atomically installs the stamp/history intent pair with inode bitmap/base-size and lane sequence checks. Ordinary metadata inode/lane/history writes and chunk-only sweeps honor EXCL intents while commutative reductions remain allowed. The encoded subtype uses the shared Raft transaction appliers; metadata transaction-aware inode, lane and fence-view readers are now implemented and locally tested, including decision movement, aborted fences and partial resolution. The Oct 6 shared resize coordinator and internal Raft adapter now prepare inode-first, decide durably and recover partial resolution; a new 74-byte subtype preserves the old 65-byte fence payload. Empty lanes can adopt the global epoch, while populated lagging lanes fail closed. GETCHUNKS now carries committed per-part read views, with reply validation, masked reads and cache-view identity implemented and locally/Linux gated. Writer epoch preservation, masked merge/publication, sweep scheduling/retirement and public-path activation remain pending. See the [current implementation checkpoint](#1-the-task-right-now). The production truncate path has not been switched to logical truncation | 16 × `apply truncate rc=-2`, files kept 10 GiB, the rewrite's 34 REPORTs published nothing; W24's "open(O_TRUNC) did not return" is the same path under load |
-| **D26 · W44 / W23** | may the leader's GC frag pass pay a full prefix merge over every L0 segment plus L1 every 1.2 s when there is nothing to collect — i.e. is the 50–54-file L0 steady state (D12/D13 leave `l0=54` for an hour, one L0 compacted per 7 min) the table shape we want, given that every prefix scan and every REPORT `chunk_holds` get pays it? | **Measure first (W44 step a), then one of:** (i) a per-anchor pending-GC watermark the apply maintains (one get per empty pass; the scan runs only when records exist) — smallest, no KV shape change; (ii) a D12 backstop that keeps L0 under ~8 files when the apply is idle (compact L0→L0 opportunistically, never L1) so the merge width is bounded; (iii) both | 80 % of each leader's `efsd` cycles for 84 min, 20–40 % of a core under the KV lock; the frag drain rate itself is only 140 records/s per group (78 min per 160 GiB) |
-
-**D27 — DECIDED Oct 2 2026 03:50Z (user, verbatim intent; replaces the rejected spill and the rejected "drop after 16"). D28 — the architectural choice D27 leaves open; ask.** Source: 0a (d), fstor007 Oct 1 00:05 (`report-stale` ×2768 on one chunk, then `UNMOUNT DATA LOSS rc=-14 after 60s`). Framing: a successful buffered `write()` (returns the byte count) means the filesystem **owns** the pending bytes, not that they are durable; `fsync()` is the durability boundary; `close()` alone is not. `close()` runs the same publish and reports failure through `flush`, but is not a guarantee a program may rely on — the spec's "durable after last `close`" (architecture.md §3) is read that way (the one-paragraph statement is at the top of [work-items.md](#appendix-4--work-items--long-form-text-for-the-open-w-items-and-the-queue-rows)). A delayed-writeback error is legitimate; reporting it does not recover the data, and a log line plus a counter are diagnostics, not a substitute for delivering the error ([write(2)](https://www.man7.org/linux/man-pages/man2/write.2.html), [errseq](https://www.kernel.org/doc/html/latest/core-api/errseq.html)).
-
-| item | decided | implementation (binding where stated; the constants are proposals until the gate) |
+| ID | Topic | Register state |
 | --- | --- | --- |
-| **D27 · stalled publication** | **"Detect stalled publication, surface a persistent writeback failure, retain unresolved dirty state, and prohibit successful clean teardown while it remains."** Four parts: (1) **bound recovery attempts, not data retention** — on demonstrable non-progress stop the replay loop, keep the dirty bytes, record a writeback error that synchronization calls observe; (2) **contention is not breakage** — a cycle after which the observed server state moved is contention and keeps replaying; repeated cycles against the **same** observed state are a protocol/client defect and are what "stalled" means; a count of STALE replies alone decides nothing; (3) **the drain happens before unmount or daemon exit; ordinary teardown fails visibly while unresolved writes remain** and the daemon and mount stay up; forcing is an explicit operator action, and only a controlled forced teardown can report what it discards; (4) a dirty chunk is **never discarded automatically** — a discard-after-report policy, if ever chosen, is written down as an explicit unrecoverable-writeback policy (D28, not D27). **Corrected Oct 2 04:20Z (user):** the error is sticky, not consumed once; the drain precedes termination; SIGKILL promises nothing; the stall counter counts completed cycles with their identity | **Stall detection.** The unit is one completed *fetch → rebase → publish* cycle of a rec, keyed by (ino, ci, content epoch of the row the rebase used, the rec's operation identity — the client's publish op-id/seq). After each cycle record the observed server state (row generation, content epoch, span count). `STALL_CYCLES` (proposal 8) completed cycles in a row with the observed state unchanged = stalled; any change resets the count (that was contention; a contention stream is logged every 256 cycles as `report-contended`, never trips). On stall: the rec leaves the replay loop, its dcache entry stays dirty + pinned and is never a reclaim victim; one `publish-stalled ino= ci= off= len= gen= epoch= opid= cycles=` line + counter. **Memory admission (policy, corrected Oct 2 04:55Z — the earlier "separate stalled account" did not reduce memory and could be overshot by concurrent stalls):** pending and stalled bytes are budgeted **together under the one dirty cap**; a stalled byte was already under the cap when it stalled, so there is no overshoot and RSS stays bounded by the dirty cap + the clean caches. Stalled bytes are simply never reclaimable. **What is charged (Oct 2 05:05Z):** the cap is charged in **allocated chunk bodies**, not logical bytes — a 1-byte write that materialises a 128 KiB slot charges 128 KiB, a replay/rebase buffer (`stale_repull_replay`, the fetched base image) charges its full size while it exists, and a staged full image charges once. **Reservation is atomic across writers:** a writer reserves `need = (new slots × chunk) + replay buffers` under the cap's lock *before* allocating, and releases on free; two FUSE workers cannot both pass a check against the same headroom. Admission: (i) `write()` on an inode that has a stalled rec returns EIO at once — nothing queues behind a failed publish, so a stalled inode is bounded to the slots it held at detection (plus one replay buffer, released when the loop stops); (ii) `write()` on any other inode reserves and is admitted while `allocated_pending + allocated_stalled + need ≤ cap`, waiting for reclaim as today; (iii) reclaim can only free *pending* allocations, so when `cap − allocated_stalled` is below `need` the wait could never end — the client then returns ENOSPC instead of blocking, logs `stall-budget exhausted` once, and clears the condition on a resolution or an explicit forced discard. **Recovery workspace (Oct 2 05:15Z):** a recovery cycle needs capacity too — the fetched base image and the rebase buffer — and at a cap full of stalled bodies it could never reserve it, so recovery would deadlock. A fixed **recovery reserve** (`RECOVERY_RESERVE`, proposal 8 chunk bodies = 1 MiB) sits outside the dirty cap: ordinary writes can never reserve from it, only recovery cycles can, one at a time per reserve slot, released at cycle end; recovery concurrency is therefore bounded by the reserve, not by free cap. The RSS bound is `cap + RECOVERY_RESERVE + clean caches + the fixed pools`; g3 asserts it against `VmRSS`, not against a byte count. The dirty cap and the reserve are the two constants. **Added Oct 2 05:30Z (user):** each recovery slot is sized for the **maximum number of buffers one cycle holds at once** (fetched base image + rebase buffer + the span images a sub-chunk replay fetches — count them in `stale_repull_replay`, do not assume one), and the whole-call budget `FSYNC_RECOVERY_MS` **includes the time spent waiting for a reserve slot and the RPC time** of the cycle — a call that spent its budget queueing for the reserve returns EIO with no progress logged as such, it never overruns. **Error surfacing.** Per-inode `wb_err` (errseq model) **plus a sticky "unresolved" state**: while any stalled rec of the inode exists, **every** `fsync`/`fdatasync`/`flush`(close) on **any** description of that inode — including one opened after the stall, after close/reopen, from another process — returns EIO; observing the error never clears it. The unresolved state is **per inode and counts its stalled recs**: a landed publish removes one rec; the state clears only when the inode's stalled count reaches zero — one landed record never clears an inode that still holds other stalled records. A `fsync`/`fdatasync` on a stalled inode runs recovery cycles for its stalled recs, one per rec, from the recovery reserve, **under a whole-call budget** (`FSYNC_RECOVERY_MS`, proposal `EFS_IO_TIMEOUT_MS` = 30 s): cycles that land decrement the count and stay landed; when the budget expires with recs remaining the call returns EIO and the next call continues where it stopped — thousands of individually bounded cycles never turn one `fsync` into a hang. If every rec lands within the budget, the state clears and **that call returns 0** (it observed the resolution it caused). After resolution the errseq rule applies to the recorded failure: a description that already observed EIO during the unresolved window has sampled the sequence and sees 0; a description opened before the resolution that never observed it sees EIO **once**, then 0; a description opened after the resolution sees 0. Exact expected sequence, which g5 asserts: D1 opened before the stall → `fsync` ×3 = EIO, EIO, EIO; hook cleared; `fsync`(D1) = 0 (the resolving call), `fsync`(D1) = 0; D2 opened before the stall and never synced → `fsync` = EIO, then 0; D3 opened after → 0. (`write()` outcomes are the admission rules above: EIO on a stalled inode, ENOSPC when stalled bytes have exhausted the cap, otherwise admitted.) **Teardown.** The drain runs *before* the mount is detached and before the daemon exits: `efs_unmount_drain` with unresolved recs after its 60 s refuses — `scripts/client.sh stop` exits non-zero, prints the ino/ci list, the mount and the daemon stay up. `client.sh stop --force-discard` is the explicit action: it prints `UNMOUNT DATA LOSS ino= ci= off= len= epoch= opid= cause=` per rec and then unmounts. Where the kernel detaches without asking the daemon (`fusermount3 -uz`, a kernel umount of an idle mount): the daemon's session end runs the same drain and refuses to exit the same way where libfuse permits, else logs the per-rec lines before exiting — verify which during implementation and write the answer here. **SIGKILL / node death:** no logging, no per-record report, no promise; what survives is what the servers durably accepted — D28's question. **Gates (deterministic; the 0a (b) dd repro stays as a smoke test, it is not the gate).** The fault must reject **before** anything reaches the server, or the test cannot prove retention — a hook that relabels a successful reply as STALE would leave bytes already published. Primary hook, client side: `EFS_FAULT_WITHHOLD=<ino>:<ci>` (read at mount and re-read from `/tmp/efs/fault` per cycle, logged once) makes the REPORT packer **drop that rec from the REPORT before it is sent** and hand the classifier a synthetic verdict "STALE, observed state unchanged"; nothing of that chunk is published, so during the stall `efs-mgmt raft-getchunks <leader> <ino> <ci>` must show the row's generation unchanged (asserted in g1), and after a forced discard the chunk holds exactly the server's prior bytes (g6). The PUT of the fragment object may happen (it is unreferenced garbage the GC reaps) — the row is what retention is measured against. Secondary hook, server side, for the real wire path: `EFS_FAULT_REJECT_PUBLISH=<ino>:<ci>` on the leader makes `server_raft_host_report` answer STALE for that rec with the current row state and **propose nothing**; run on the private 3-node cluster (`tests/rdma_first_inode.sh` layout), never on 19810. Both hooks are compiled in only with `EFS_FAULTS=1`. `tests/stress/stalled_publish.sh` on one client: (g1) **repeated fsync** — write the chunk, `fsync` ×3 → EIO ×3, `raft-getchunks` row generation unchanged, `close`, `open`, `fsync` → EIO, second process `open`+`fsync` → EIO, `write()` on the stalled file → EIO; (g2) **isolation** — `fsync` on another file in the same mount → 0; (g3) **memory pressure** — with the stalled chunk pinned, write 4× the dirty cap to other files with `fsync` → all 0, the stalled entry still dirty + pinned afterwards (`EFS_DCACHE_TRACE`), RSS under the dirty cap + clean caches; (g3b) **cap exhausted by stalls** — withhold enough chunks (several inodes, written up to the cap first, then all stalled at once) that `cap − stalled` is under one chunk: `stall-budget exhausted` logged once, `write()` on an unrelated file → ENOSPC (not a hang), nothing discarded, RSS did not grow, `client.sh stop` refused; clear one hook → that file's `fsync` 0, writes elsewhere resume; (g4) **teardown** — `client.sh stop` → non-zero with the ino list, `findmnt` still `fuse.efs-fuse`, daemon alive; (g5) **recovery** — the exact D1/D2/D3 sequence above; (g5b) **partial recovery does not clear** — withhold two chunks of one file, clear the hook for one: `fsync` → EIO, `publish-stalled` count for the inode 2 → 1, `write()` still EIO; clear the second → `fsync` 0; (g5) clear the hook via `/tmp/efs/fault` (a remount is not recovery, it is teardown), `fsync`(D1) → 0 and again 0, `fsync`(D2) → EIO then 0, `fsync`(D3) → 0, the unresolved state gone, remount, `cmp` the chunk against the source; (g6) **forced discard** — repeat g1, `client.sh stop --force-discard` → one `UNMOUNT DATA LOSS` line per rec with ino/ci/off/len/epoch/opid/cause, remount, the chunk holds the server's bytes, nothing else of the file is lost; (g8) **recovery at a full cap** — fill the cap with stalled bodies (several inodes, g3b's setup) until `write()` elsewhere returns ENOSPC, then clear every hook: the next `fsync` on each file recovers using the reserve only (log shows `recovery-reserve` cycles), all return 0 within the per-call budget or after a bounded number of calls, `VmRSS` never exceeds the bound, and writes elsewhere resume; (g9) **whole-call bound** — withhold 2000 chunks of one file, clear the hook, `fsync` returns within `FSYNC_RECOVERY_MS` + one cycle (0, or EIO with progress logged), repeated calls converge to 0; (g7) **contention is not a stall** — two clients, one chunk, 1000 alternating writes with `fsync` → 0 and no `publish-stalled` line. Unit: `test_wb_err` for the sequence semantics (sticky while unresolved; once-per-description after resolution; a description opened after resolution sees 0). Forbidden: dropping a dirty chunk on a count; widening the drain; publishing a rec the server rejected; clearing the error on observation; a teardown path that discards without the explicit flag |
+| D1 | what do N-1 shared-file writes do under conflict? | accepted span-commutation contract; bounded folded-replay history gap is [W88](#w88) |
+| D2 | may `open()` return before the chunk map is known; how big is the map window? | accepted contract; gate state belongs to its W item |
+| D3 | may the 5/s REAP_DONE gate be raised to remeasure ior-hard 1/9/36? | accepted contract; gate state belongs to its W item |
+| D4 | when does a group take a snapshot and truncate its log? | accepted contract; gate state belongs to its W item |
+| D5 | may a follower answer heartbeats while its pump applies an InstallSnapshot diff? | accepted contract; gate state belongs to its W item |
+| D6 | may `mdraft/` (Raft log, KV WAL, segments) live on a root the fragment writers do not use? | superseded by D11 |
+| D7 | First-PUT sentinel to skip the storage-root probe | accepted contract; committed retry/cache repair and acceptance limits are [W85](#w85) |
+| D8 | how does an 86 234-record REPORT reach the log? | answered historically: ~3 ms per batch; no larger-entry wire change indicated; remeasurement is separate |
+| D9 | may the apply path (the pump) block on L0 back-pressure? | accepted: pump does not wait for compaction; current source defers flush, while W23 follower memory/lag gate remains open |
+| D10 | Byte-triggered L0/L1 compaction and range splitting | accepted byte rule; file-cap treatment revised by D12/D13; W23 owns gates |
+| D11 | is `mdraft/` sharing an XFS with the fragment writers the 100 ms `fsync` mode? | accepted contract; gate state belongs to its W item |
+| D12 | Restore a file-count backstop | accepted bound; L1-rewriting backstop superseded by D13; W23 owns gates |
+| D13 | when the file cap forces a compact, may that compact read the range's L1? | accepted contract; gate state belongs to its W item |
+| D17 | Per-lane present-chunk counts for server-authoritative st_blocks | accepted contract; gate state belongs to its W item |
+| D18 | Evict whole cold staging tabs to reclaim their allocation floor | accepted contract; gate state belongs to its W item |
+| D14 | No assignment | unassigned in the recorded register; do not infer a design |
+| D15/D16 | Leader stickiness / peer transport class | closed; motivating sender-channel bug was fixed |
+| D23 | Clean body transfer to read cache | landed/gated historical record in the archive index |
+| D24 | Close-time REPORT | accepted/in-tree historical record in the archive index |
+
+D19–D22 were missing from the active index, but their identities and later
+implementation records exist in [project history](../archive/project-history.md):
+
+| ID | Topic | Recorded state and limit |
+| --- | --- | --- |
+| D19 | Early PUT eligibility for completed chunks; REPORT still at close/sync | implemented with W30 in the historical W28–W35 rollout; no publish-on-write approval |
+| D20 | Fragment digest trailer instead of a separate checksum inode | historical rollout records the 4 KiB direct-I/O tail; format changes still need explicit design review |
+| D21 | Compact common-case REPORT record | historical W35 implementation; not authorization for further wire changes |
+| D22 | RDMA frame capacity of at least 84 KiB | historical W35 implementation; modern real-hardware gates remain separate |
+
+The initial ask text and later rollout record are retained in that history;
+this review does not create a new approval or infer acceptance on today's
+cluster. D15/D16 and D23/D24 records are linked from the
+[archive index](../archive/README.md#decisions-d).
+
+**D25–D26 decision history.** The initial Oct 2 01:45Z recommendation
+was accepted, then D25 was revised at 05:15Z to logical truncation with deferred
+reclamation. The revised D25 row and normative architecture govern; the earlier
+in-entry drain recommendation does not. D26 implementation state is in W44;
+its development-cluster gate is not a blanket production capacity claim.
+
+### D25–D27 — accepted, implementation separately gated
+
+The [full accepted contracts and gates](../backlog/decision-contracts.md) remain
+active; they are moved out of this running register, not archived or revoked.
+Read the relevant contract before changing its component.
+
+| ID | Accepted choice | Current state / gates |
+| --- | --- | --- |
+| D25 / W43 | Logical truncate with per-part epoch histories; deferred versioned reclamation, safe history retirement and bounded apply | Metadata/read/resize/publication primitives staged; FUSE integration, live-file sweep and public activation remain. [Contract](../backlog/decision-contracts.md#d25--logical-truncate), [handoff](#appendix-2--in-flight--the-current-handoff-block), [routing](../status/d25-admission-routing.md) |
+| D26 / W44 | Pending-GC watermark plus bounded resumable scan | Historical development gate recorded; current reclamation correctness/diagnostics are W61–W63. [Contract](../backlog/decision-contracts.md#d26--bounded-gc-scan) |
+| D27 / 0a | Bound recovery attempts, retain unresolved bytes, sticky inode errors and refuse ordinary teardown before unresolved drain | Runtime foundations present; strict timing, contention/fault/recovery/RSS gates remain. [Contract](../backlog/decision-contracts.md#d27--retained-failed-writeback), [handoff](#appendix-2--in-flight--the-current-handoff-block) |
+
+### D28 — unresolved client-death salvage choice
+
+| item | question / choices | state |
+| --- | --- | --- |
 | **D28 · who owns the bytes across client death — ASK (restated Oct 2 04:55Z)** | What D27 leaves: a client that dies (SIGKILL, node loss) with *pending* or *failed* bytes loses them, and the original case (0a) is a process that **closed without `fsync`, whose `flush` failed or stalled, and whose client then died** — the application has already gone. Two things the user established: (1) an intent persisted only at `fsync` protects nothing in that case, because no `fsync` happened; a server-side intent can protect bytes only if it is durable **before the acknowledgment being protected** — for `write()`-returned bytes that acknowledgment is the `write()` itself, i.e. the rejected "every write publishes" cost class, or at the latest the `flush`; (2) under the visibility contract (§3) a durable intent **never** justifies a successful `fsync` — publication must complete; an intent can only make a later recovery possible. So the choice is: **(i) accept the loss on client death and forced teardown** as the written unrecoverable-writeback policy, with D27's controlled-teardown report as the whole contract and ENOSPC/EIO as the live signals; or **(ii) a server-side intent as best-effort salvage, scoped precisely** — one design, not the only one: at detection time (the client is alive, the servers reachable, only the publication rejected) the client persists an intent naming the inode, ranges, PUT objects and opid; a group-side recovery pass after client death can then complete or *name* the loss. Another: periodic server journaling of pending ranges, which can protect some pending writes too. **What (ii) protects, exactly: stalled writes whose intent was successfully persisted** — there is a death window between detection and persistence, and pending bytes are covered only if a journaling variant catches them; neither variant makes every acknowledged write survive death — only durable acceptance *before* the acknowledgment does that, which is the rejected cost class for `write()`. `fsync` still returns EIO until publication lands under either | not to be built either way until decided. (ii) is a protocol and metadata change (intent key kind, a recovery pass like `host_txn_recover_pass`, a client identity that survives restart, and the question of why an intent write succeeds where the publish did not); bring its cost after D27's gate exists and after 0a (a) says whether the Oct 1 stall was a defect or contention |
 
 ---
 
-### The Oct 2 2026 01:45Z plan table (rows A–O)
+The [public-path review](../status/spec-implementation.md) records W71–W77; accepted
+decisions and healthy POSIX results do not close those implementation gaps.
 
-This is the plan table the queue refers to as "the Oct 2 plan", moved here
-verbatim from the status page (Oct 3 2026). Row → register mapping: A = D25,
-B = D27 (+ D28 open), C = W41, D = D23, E = D17, F = D26, G/L = the two bench
-plans (their texts are in [../backlog/work-items.md](#appendix-4--work-items--long-form-text-for-the-open-w-items-and-the-queue-rows)),
-H = D15/D16 (closed), I–K = deferred (performance-plan P4.1–P4.3), M = the
-recorder setup, N = D29, O = D30.
+### Historical ordering
 
-**Decided Oct 2 2026 01:45Z — the user accepted every recommendation
-below EXCEPT row B.** Rows A, C–F are design decisions, now part of the
-spec: implement per the recommendation column, do not re-ask. G and L
-are queue items now (the two bench plans below; `efs-fuse --bench`
-follows `efsd --bench`). H is closed. I–K stay deferred until G's number. M is
-the measurement setup. **B became D27 (decided Oct 2 03:50Z) and D28
-(open)** — see the decisions table; until D27 is implemented an
-unconverging STALE rec is still handled as today (logged, dropped at the
-60 s unmount drain) and that remains a known data-loss case (0a).
-
-| # | item | question | effort | decision (Oct 2) / recommendation |
-| --- | --- | --- | --- | --- |
-| A | **D25 — decided, REVISED Oct 2 04:55Z** | how a truncate of > 32 chunks per lane reaches the KV | medium | **logical truncation (fence entry sets epoch + size, O(lanes)) + background reclamation by the reaper**; the 01:45Z "drain inside the entry" bounded each batch, not the pump hold. Visibility and crash-replay conditions are in the D25 row. Implement with W43 b/c; `apply truncate rc=` must never appear and `apply_max` must stay flat during the 16× dd afterwards |
-| B | **0a (d) — DECIDED Oct 2 03:50Z as D27; D28 OPEN** | what does a rec that STALEs on every replay do? | medium (D27); long (D28 ii) | **D27 (user):** detect stalled publication (same server generation repeated, not a count of gen advances), surface a persistent errseq-style writeback error on `fsync`/`fdatasync`/`flush`, retain the dirty bytes, refuse clean teardown while they remain, forced teardown reports ino/ci/off/len/cause per rec. Spill and drop-after-N both rejected. **D28 (ask, after 0a (a) and the D27 gate):** accept loss on forced client teardown as a written unrecoverable-writeback policy, or move recovery ownership to the servers (durable write intent referencing the PUT object, publication resolved server-side). Queue: D27 implements with 0a (a)–(c) |
-| C | **W41 — decided yes; IN TREE + gated Oct 2 13:30Z (P1.2), W53 open** | remove `report_mu` (per-inode dirty sets, per-inode publish slots, 4-thread meta-flush pool for D24's landed REPORTs) | medium | **landed:** posix 200/201, posix2 63/63, md_latency unchanged; wedge dd wall 9.70 → 8.30 s but storm p99 37 → 101 ms (row 16, W53). Original text: a `close()` on file A must not wait behind file B's REPORT retry. Gate: the D24 wedge gate plus a concurrent STALE-looping file not delaying other closes beyond their own REPORT. **Evidence Oct 2 (§1b item 2):** 16 writers, publish ≈ 2.7 k rec/s vs PUT ≈ 5 k chunks/s, dirty set 8 k → 570 k, last close 74.6 s; every REPORT packed twice because the host answered BUSY after committing (`fail=wait/-13`) — bring **D29** (the REPORT receipt — row N) with this item; it is an ask, not in the spec |
-| D | **D23 — decided; IN TREE + gated Oct 2 13:30Z (P1.1)** | clean dcache bodies have no budget; RSS tracks bytes written | quick | **landed as "hand the body to the rdcache when the REPORT commits the full-image object"** (`dcache_note_committed` → `dcache_body_to_rdcache`, put outside the slot lock) — not "when the PUT lands": a STALE replay needs the body and its ranges until the commit, and a span-only row (table gen 0) cannot enter the rdcache. Gate: 4 × 1 GiB bs=64k dd+fsync RSS 2.55 GB flat (old build 4.64 GB); `cmp` after remount OK (`…p1-d23-w41/SUMMARY.txt` §3). Original: drop a clean body once its PUT lands; reads go to the rdcache |
-| E | **D17 — decided; IN TREE + gated Oct 4 (dev cluster)** | `st_blocks` = 0 for files this client did not write | medium (row/wire) | **per-lane present-chunk count in the lane stamp**, reduced at getattr like `max_end`, returned in the row image; the client sums it. Gate: `du` of a file written by another client ≈ size/512 (× EC not counted), ecrawl sparse heuristic 0 false positives. **Landed:** lane records carry `present` (publish adds on creation, truncate's range delete subtracts, LANE_FENCE same), getattr sums it into the row image's `alloc_chunks`, the client takes max with its local present count. Gate result: `du` on a non-writer = size/512 exactly (partial tail exact, sparse stays sparse, truncate drops the count); 16 unit suites + posix2 two-client PASS. The ecrawl half is owed to 19810 (down) |
-| F | **D26 — decided; IN TREE + gated Oct 4 (dev cluster)** | GC frag pass / L0 steady state | medium | **pending-GC watermark first** (one get per empty pass) — W44 a says a pass walks ~1 M tombstones under the GC prefix, **but it also emits 257 live records each time, so these are not empty passes and the watermark alone does not help while they remain** (user, 05:30Z): pair it with bounded scan progress (resume where the last pass stopped) and with W50 (row 13), and maintain the watermark atomically with insertion/removal and across recovery; the L0 width (`l0=100–170` during a 16× write, 50–54 idle) is a separate cost that shows in REPORT pack (100–133 µs per record get) — bring that number when D12/D13 come up. **Landed:** the apply maintains a per-anchor pending-GC watermark (`efs_meta_gc_pending_*`: `gc_queue` bumps, a retiring GC_ACK lowers, one counting prefix scan re-derives it at start and after a snapshot import, a fully-empty pass clamps drift with `zero_if`); the frag pass peeks it before scanning and resumes from the in-tree cursor. Gate: 16 unit suites PASS (`test_gc_watermark`); dev cluster — a 5120-record `rm` drained at ~514 records/pass, then idle leaders printed no `gc-pass` line for 10 min; the 19810 idle-hour reading and the raft-tail 99.7 % GC_ACK check are owed to the live cluster (down). Gate: W44's |
-| G | **`efs-bench --bench` — original ask Oct 2** | local server storage bench; CLI moved from `efsd` Oct 6 | medium–long | tool in tree; same production backends, scratch roots and no network. The named-host storage curve remains owed; its number decides I–K |
-| H | **D15 / D16 — closed** | leader stickiness / peer transport class | — | closed; the motivating 30 s stall was the sender's channel bug (`85f5b31c`) |
-| I | **fragment on-disk layout — deferred** | fewer path components per fragment (W34 residual) | long + **wipe** | not before G says the server PUT path is the wall (writers were 10 % busy in the 20:56Z trace) |
-| J | **W40 — deferred** | FUSE write copy — own `/dev/fuse` receive loop | long | not before G; the write wall is RTT × in-flight depth, client at 1.35 cores |
-| K | **RDMA zero-copy receive — deferred** | per-request posted receives | long | not before G; reads are in-flight bound at 3.6 / 6.5 GB/s |
-| L | **`efs-fuse --bench` — asked Oct 2, after G** | the client-side ladder | medium | implement the plan below after `efsd --bench` |
-| M | **recorders — decided** | for the re-measurement (row 11) | — | `--perf` only on the servers; the client untraced |
-| N | **D29 — ASK (Oct 2 05:30Z)** | a REPORT the host committed is answered BUSY after the apply-wait deadline, and the client re-sends it whole (§1b 05:00Z item 2) | medium | a **receipt** ("committed, apply pending": group, index, term, op identity) the client uses to wait on or query the *same* operation, never to re-pack or re-propose. Not a successful publication; dirty bytes stay owned until the apply verdict (STALE and other failures remain possible). Tests: lost receipt (client re-queries, host answers from the verdict ring or NOT_FOUND → ordinary resend), leader change between receipt and verdict (`(index, term)` identity, I17 rule). Not to be built until decided |
-| O | **D30 — ASK, blocked on W51 (Oct 2 05:30Z)** | remedy for compaction-induced apply lag on followers (row 14) | medium–long | open until W51's table says lock blocking vs slow application vs transport; the candidate remedies differ per class (compaction shape D9/D10; apply batching; sender pacing) and none is chosen now |
+The Oct 2 A–O sequencing table is [archived](../archive/decision-plan-20261002.md).
+Use the current status queue; its old implementation states are not current.
+Decided means approved design, not implementation or acceptance. D28–D30
+remain unresolved asks; no new decision is created by this cleanup.
 
 ### Open ask rows — D29 (P1.3) and D30 (P2.5)
 
-The primary ask texts are rows N and O of the table above; below are the
-same two asks as their performance-plan rows, verbatim.
+The primary ask texts are rows N and O in the
+[historical ordering record](../archive/decision-plan-20261002.md); below are
+the active performance-plan asks. That archived order is not the current queue.
 
 #### P1.3 · D29 — the REPORT receipt (performance plan row; ask)
 
@@ -2655,7 +1845,7 @@ same two asks as their performance-plan rows, verbatim.
 
 **What changes.** a "committed, apply pending" receipt (group, index, term, op identity) the client waits on / queries instead of re-sending; not a publication, frees no dirty bytes; with it the per-record `efs_meta_apply_chunk_holds` get in pack (one get per record, 100–133 µs under `l0=100–170`, added only to make byte-identical resends cheap) can be skipped on a first send — that skip is part of the ask, not a separate change
 
-**Gate / done when.** lost receipt and leader change tests (row N); pack_ms per record on the 16× dd drops from ~130 µs to the proposal cost
+**Gate / done when.** lost receipt and leader change tests (archived row N); pack_ms per record on the 16× dd drops from ~130 µs to the proposal cost
 
 **Forbidden.** implementing any of it before the decision
 
@@ -2679,6 +1869,24 @@ read only its publication lane under ReadIndex; inode/lane coordination is
 reserved for cold lane bootstrap and rare resize/fence operations. Do not
 activate the staged inode-plus-lane RPC per application write. See the
 [implementation checkpoint and remaining gates](../status/d25-admission-routing.md).
+
+
+<a id="d31--recorded-abandoned-upload-policy"></a>
+
+### D31 — recorded abandoned-upload policy
+
+The Oct 7 [GC implementation checkpoint](../status/gc-implementation-20261007.md#approved-unpublished-body-policy)
+records user approval: unpublished uploaded fragments may be discarded only
+after their client's session is durably revoked, using durable PUT tickets.
+This review assigns the missing register identity to that recorded policy; it
+does not create a new approval or independently recover the approving exchange.
+
+**Implementation:** [W86](#w86), pure metadata
+state machine committed in `b3a11877`, staged for integration; production integration and distributed fault gates remain open.
+Completed global revocation, durable lane/storage rejection floors, all-member
+deletion acknowledgements and replay-floor retirement are required. Age,
+disconnect and missing receipt are not authority. D28's broader client-death
+salvage/durability choice remains unresolved.
 
 
 ## Appendix 4 — Work items — long-form text for the open W items and the queue rows
@@ -2816,12 +2024,12 @@ its data at the end of a run).
   (matches the agent). Kill hung `io500` with `pkill -9 -x io500`. **Do not remount as the
   next step:** a remount is a client teardown and the killed ranks may
   hold unpublished bytes. Follow D27's procedure in
-  [decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d30) (decisions table): `scripts/client.sh stop` must
+  [decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d31) (decisions table): `scripts/client.sh stop` must
   complete its drain; if it refuses, the stalled recs it lists are part
   of the run's result, and a forced teardown is the explicit
-  `--force-discard` only. Until D27 is implemented the 60 s drain
-  discards silently — record every `UNMOUNT DATA LOSS` line from each
-  client's `fuse.log` with the run. (D-state `request_wait_answer`
+  `--force-discard` only. The old pre-D27 drain behavior is historical. The current controlled
+  stop implementation must refuse unresolved work; its remaining fault/RSS
+  gates are in the handoff. Retain every forced-discard report with the run. (D-state `request_wait_answer`
   ignores SIGKILL until `efs-fuse` answers or dies.) Never gdb-attach an MPI rank through a timeout'd ssh
   (left a rank T-stopped, job unrecoverable).
 
@@ -3776,7 +2984,7 @@ What to implement:
 
 > **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** steps 1–2 DONE (Sep 29, `present_chunks`/`present_extra`, `ll_setattr` reads `size` from the row). The residual — `st_blocks` is 0 for files this client did not write — is **D17, decided Oct 2** (per-lane present-chunk count in the lane stamp), plan row E.
 >
-> **Remaining action:** none — D17 landed Oct 4 (dev cluster): lane stamps carry a present-chunk count, getattr sums it into the row image, the client takes the max with its local table; `du` on a non-writing client = size/512 (16 unit suites + posix2 two-client PASS; the ecrawl false-positive check is owed to 19810, which is down).
+> **Remaining action:** implementation landed; the ecrawl false-positive gate remains owed. D17 landed Oct 4 (dev cluster): lane stamps carry a present-chunk count, getattr sums it into the row image, the client takes the max with its local table; `du` on a non-writing client = size/512 (16 unit suites + posix2 two-client PASS; the ecrawl false-positive check is owed to 19810, which is down).
 >
 > **Governing decision:** D17.
 >
@@ -4277,16 +3485,17 @@ cheap measurement an agent can produce first, named here:
   `O_SYNC`. Do not reopen as publish-on-write. `O_SYNC` wiring is a later
   item, not a silent side-cut.
 - Already listed before this review: C1 relaxed coherence; a pressure-triggered
-  directory-spread bound (unspecified); cutover of a 36T `efs-test`; any new
+  directory-spread bound (unspecified; now indexed as [W81](#w81)); cutover of a 36T `efs-test`; any new
   REPORT or SNAP wire shape.
 
 **Bigger than this queue.** [product-gaps.md](../backlog/product-gaps.md) inventories
 what is missing before efs is a filesystem anyone could run — including the
 things that contradict a guarantee the spec already makes (no fragment
 repair, no protection-debt tracking, no session/fencing on the client, and
-W1/W2 in [../project-history.md](../archive/project-history.md) "START-HERE closed items"). Those are not queue items beyond what W1–W2 say; each needs a
-design decision first. Do not start one without asking, and do not treat the
-queue in [the status page](#appendix-1--status--the-task-right-now-and-the-work-queue) §1a as the whole distance to a product.
+W1/W2 in [../project-history.md](../archive/project-history.md) "START-HERE closed items"). That was the historical review's scope, not the current index: W71–W77 and
+W81 now give these source gaps canonical queue identities and gates. Accepted
+contracts remain binding; unresolved design choices stay in the decision
+register. Do not treat the queue as the whole distance to a product.
 
 ##### W22 — Server: the snapshot cadence makes InstallSnapshot the steady state, and a follower inside an import campaigns
 
@@ -4422,13 +3631,13 @@ use `EFS_STRACE_EXPR`.
 
 ##### W23 — Server: the apply path blocks on L0 back-pressure, and compaction rewrites the table to absorb a few MiB
 
-> **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** D9–D13 DECIDED and rolled (Sep 29; the "pending" header below is historical). Open under this number: (1) the **memory / lag bound is unproven** — see the correction below the steps; (2) the GC frag pass over a 50-file L0 steady state is **D26** (decided: watermark first, after W44 a). **Oct 5Z update on (1):** the stalled-compactor test is IN TREE — fault hook `EFS_FAULT_COMPACT_STALL` + `/tmp/efs/fault` in `compactor_main` (compiled only with `EFS_FAULTS=1`, parks between iterations holding no lock), the pump's `kv-obs: mt_bytes= l0_bytes= l0= l1=` line it samples, and `tests/measure/w23_stalled_compactor.sh` (private 3-node cluster on one dev VM, one client, dd to fresh files, the 5 s/node sampler, the text's five stop bounds, then fault cleared and catch-up timed). Deploy gate PASS (dev cluster, 16/16 unit suites; strings gate: hook absent from the normal build). **The measurement itself has no numbers yet:** the one run died at setup on a scratch-dir EACCES (fixed after, with a results-path bug in the script); rerun owed — `results/measure/20261005-014440-w23-stalled-compactor/SUMMARY.txt`.
+> **Current status (reviewed Oct 7, round 6):** D9–D13 implementation and Sep 29 rollout are historical acceptance. The follower memory/lag bound remains unproven. The first [completed Oct 5 measurement](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) wrote 4352 MiB and stopped after 27 seconds at the RSS threshold. The summary's zero-L0/no-effect interpretation is invalid: [W89](#w89) finds four KV values packed into one TSV field. Re-expanding the retained samples shows node3 reached 22 L0 files / 3,367,253 bytes, versus node1 4 / 105,281. Raw server logs confirm L0=22 during the park. The run still does not validate the pressure bound. The earlier [setup failure](../../results/measure/20261005-014440-w23-stalled-compactor/SUMMARY.txt) is superseded, not the only run.
 >
-> **Remaining action:** the first measurement is recorded (`results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt`): no stall-specific effect up to 4.35 GiB — n_l0 stayed 0 on every node, so merges were never needed and the stall never bit; the rss-2x stop fired on ordinary working-set growth (the healthy leader grew the same way). The follow-up run, when this item is picked up again: differential RSS bound (node3 vs max(leaders)) and a pre-stall phase that forces n_l0 > 0 (SUMMARY.txt "Interpretation"); then D26 per its row (DONE Oct 4 — see its row).
+> **Remaining action:** repair TSV serialization/validation and derived summaries, then force enough L0 pressure to test the bound, compare follower RSS with healthy leaders, and record lag/catch-up under the finite stop conditions below. D26 watermark/cursor acceptance is separate; it does not prove W23.
 >
-> **Governing decision:** D9–D13, D26.
+> **Current source distinction:** `kv_maybe_flush_locked` keeps the memtable when L0 bytes hit the cap or no file slots fit; with the production compactor started it kicks compaction and returns, rather than waiting. A `kv-compact: backpressure` line marks deferred flushing, not proof that the pump blocked. `host_pub_batch_propose` gates legacy REPORT batches on local L0 bytes; that is not cluster-wide follower-lag admission or a universal metadata proposal gate. Snapshot bytes are a trigger, not a memory budget.
 >
-> **Gate:** the stalled-compactor test's numbers recorded in `results/measure/`; `md_latency.py` medians unchanged; no `kv-compact: backpressure` line in a 9×4 IOR.
+> **Governing decisions/gates:** D9–D13 and D26; real pressure measurements, unchanged metadata latency and bounded recovery. Preserve the historical correction below, but do not use its old “64-file pump stall” description as current source behavior.
 
 **Historical record (dated).** Evidence and steps as they were written at the time. A step marked *done* or *superseded* in the status block above is not to be executed; its text stays so the gate directories and the reasoning remain findable.
 
@@ -4581,7 +3790,7 @@ text is unchanged). The queue order and the one-line rows live in
 [../status/README.md](#appendix-1--status--the-task-right-now-and-the-work-queue) §1a; references of the form
 "§1a", "§1b", "row N" and "plan row N" below refer to that page's tables
 and its archived handoff blocks unless they are linked. D-numbered
-decisions cited here are in [../status/decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d30).
+decisions cited here are in [../status/decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d31).
 
 **Open correctness rows (Oct 1–2 2026; these go before every
 performance row). Rows that are done (1j, 0f, 1i, 0d, 1a–1h) are in
@@ -4697,6 +3906,16 @@ Next code item in the agreed sequence is W43/D25 production wiring.
 
 ### W36 · rename-vs-unlink of one source both succeed, dangling dentry (queue row 0c)
 
+**Current acceptance, reviewed Oct 7.** The exact-source/value PREPARE and
+UNLINK verdict changes passed the named `peer_rename_vs_unlink_src` gate
+20/20 on xorinox `b4a75492` and again on final NUC `128f6b7d`, with broad
+peer acceptance. W36 is accepted for those recorded builds; repeating the
+gate on a new rollout is a release obligation, not evidence that the old
+implementation remains unaccepted. The historical recurrence/next-rollout
+instructions below are superseded by the
+[round-2 ledger](../archive/queue-review-20261007-round2.md).
+
+
 **Oct 6 reply-path fix:** `75b06624` makes simple UNLINK wait for the actual apply verdict. Previously an apply NOT_FOUND/BUSY was hidden by `host_wait_settled`, allowing both operations to report success even when unlink lost. This is distinct from the earlier exact-source PREP protection against dangling entries. NUC race gate 20/20 and full posix2 PASS; repeat on the current xorinox build before closing its recurrence.
 
 **W36 · rename-vs-unlink of one source both succeed, dangling dentry** (posix2 `peer_rename_vs_unlink_src`, 1 in 6)
@@ -4741,6 +3960,18 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 
 ### W42 · df / efs-mgmt status report the 3-node capacity model on any node count (queue row 2a)
 
+**Current state, reviewed Oct 7.** Both FUSE statfs and management status
+use `efs_capacity_logical`. Final four-node NUC evidence reports 500 GiB
+capacity from four 187.5 GiB quotas, with the FUSE total agreeing. The old
+mechanical replacement steps below describe the original defect, not missing
+implementation. The named fcstor capacity gate has not been established by
+this review. The full-stripe protection question remains open: current PUT
+returns OK with two ACKs and fewer than two quota failures, and its outer
+retry loop returns immediately on OK, without rerouting a quota-rejected
+third fragment. Trace and validate protection debt/repair before closing W42.
+[Evidence and limits](../archive/queue-review-20261007-round2.md).
+
+
 **W42 · `df` / `efs-mgmt status` report the 3-node capacity model on any node count** (Oct 1 2026, user). **IN TREE Oct 2:** `efs_capacity_logical` (placement.c, binary search on the Σ min(cᵢ, M) ≥ 3M bound), used by `efs_fuse_statfs` (total = quotas, avail = room, used = total − avail) and `efs-mgmt status`; `test_placement` covers 3 equal / 4 equal / 100/100/1000 → 200 / 6 equal / < 3 nodes → 0. Still to do: verify on 19810 (`df` vs `4 × 36T × 2/3`) and the one-QUOTA-member PUT question
 
 **Follow-up steps.** mechanical: replace `total_logical = 2 × min_quota` (`efs_fuse_statfs`, `efs_fuse.c:3108–3120`) and `usable_cap = 2 × min_quota` / `usable_free = 2 × min_free` (`efs_mgmt.c:129–185`) with the 3-of-N placement bound: the largest `M` (chunks) with `Σ_i min(c_i, M) ≥ 3M`, `c_i` = node `i`'s quota (or free) in 64 KiB fragments, times 128 KiB; count only up nodes with a quota, as today. Reduces to `2 × min` on three nodes and to `Σ × 2/3` on N equal nodes. Also make `f_blocks` and the used figure come from the same model (statfs today derives used from `Σ phys × 2/3` and total from `2 × min`, so on four nodes used can exceed total and `avail` clamps to 0 while writes still succeed). Unit test with 3 equal, 4 equal, 3 unequal (100/100/1000 → 200, not 800). Then verify on 19810 (`df` vs `efs-mgmt status` vs `4 × 36T × 2/3`)
@@ -4767,6 +3998,14 @@ nonzero-node staging-identity fallback remains; this is not a complete W27 close
 
 ### W43 · truncate/O_TRUNC of a file with > 32 chunks in a lane is a silent no-op (queue row 0g)
 
+**Current checkpoint (Oct 7):** the original silent-success bug is historical.
+Explicit failure is implemented; `3a1b4a52` also makes oversized legacy truncate
+reject atomically, preserving all fragment references on capacity failure
+(`tests/test_meta_apply.c` covers the refusal). D25 logical resize/public FUSE
+activation and the named live acceptance gates remain open. The heading is
+retained for existing links; the following dated observations describe earlier
+builds, not a new finding that current truncate silently succeeds.
+
 **W43 · `truncate`/`O_TRUNC` of a file with > 32 chunks in a lane is a silent no-op; the apply answers OK on NOMEM** (Oct 1 22:00Z review, §1b). **Steps b and c IN TREE Oct 2** (the truncate now FAILS with EIO instead of lying; `tests/stress/truncate_big.sh`); step a is **D25, decided and revised Oct 2** (logical truncation + background reclamation), step d follows it
 
 **Follow-up steps.** (a) **D25 (decided):** the fence entry sets epoch + size, the reaper reclaims; (b) mechanical regardless of D25: `apply_truncate_cmd` / `apply_lane_fence_cmd` put the apply's rc on the ring instead of `EFS_OK`, so SETATTR fails (EIO/EBUSY, W16 mapping) rather than lying; (c) repro + gate: `dd bs=1M count=10 conv=fsync` of a non-zero source onto an existing 1 GiB file, then `stat` (size 10 MiB), `md5sum` (the new bytes), `efs-mgmt raft-getchunks` on chunk 100 (gone); same with a 300 MiB file (every lane > 32 chunks) and with different content; add it to posix (`truncate_big_*`) and posix_persist; (d) then the apply drains per D25 and `apply truncate rc=` never appears in `efsd.log` during the 16× dd
@@ -4785,7 +4024,7 @@ nonzero-node staging-identity fallback remains; this is not a complete W27 close
 
 **STALE replay that never converges** (no W number; the earlier `W26` label here collided with the `fallocate` item)
 
-**Follow-up steps.** (a) identify ino 116202 on 19810 from a KV copy and compare its chunk row with what the classifier (`write.c:880–968`) would replay; (b) repro: eight `dd bs=1M` into one mount, SIGINT mid-write, client stop, `EFS_DCACHE_TRACE=1`; (c) mechanical: the unmount drain names the inos and rc it abandons, and a `report-stale` round that replays the same single chunk > 16 times logs ino/ci/row gen/verdict once; (d) **DECIDED Oct 2 03:50Z = D27** ([decisions table](#appendix-3--decisions--taken-and-pending-register-d1d30)): detect non-progress as repeated STALE against the *same* server generation (a gen advance is contention), stop the loop, keep the dirty bytes pinned, errseq-style EIO on `fsync`/`fdatasync`/`flush` of that inode, `client.sh stop` refused while a stalled rec exists, forced teardown reports ino/ci/off/len/cause per rec. Spill (Oct 1 23:00Z) and drop-after-N (Oct 2 01:45Z) were both rejected. **D28 (ask):** loss on forced teardown as written policy vs server-held write intents. Note: 2768 rounds prove a stalled operation, not a content mismatch — (a) decides which
+**Follow-up steps.** (a) identify ino 116202 on 19810 from a KV copy and compare its chunk row with what the classifier (`write.c:880–968`) would replay; (b) repro: eight `dd bs=1M` into one mount, SIGINT mid-write, client stop, `EFS_DCACHE_TRACE=1`; (c) mechanical: the unmount drain names the inos and rc it abandons, and a `report-stale` round that replays the same single chunk > 16 times logs ino/ci/row gen/verdict once; (d) **DECIDED Oct 2 03:50Z = D27** ([decisions table](#appendix-3--decisions--taken-and-pending-register-d1d31)): detect non-progress as repeated STALE against the *same* server generation (a gen advance is contention), stop the loop, keep the dirty bytes pinned, errseq-style EIO on `fsync`/`fdatasync`/`flush` of that inode, `client.sh stop` refused while a stalled rec exists, forced teardown reports ino/ci/off/len/cause per rec. Spill (Oct 1 23:00Z) and drop-after-N (Oct 2 01:45Z) were both rejected. **D28 (ask):** loss on forced teardown as written policy vs server-held write intents. Note: 2768 rounds prove a stalled operation, not a content mismatch — (a) decides which
 
 **Evidence and limits.** fstor007 Oct 1 00:05: 2768 rounds of `report-stale: chunks=1 … committed=0 replayed=1` and then `UNMOUNT DATA LOSS … rc=-14 after 60s`. Acknowledged writes were discarded; the log cannot say whose. Forbidden: widening the 60 s drain, dropping the STALE check, or publishing a rec the server rejected
 
@@ -4800,6 +4039,12 @@ nonzero-node staging-identity fallback remains; this is not a complete W27 close
 
 
 ### 0m · parent directory mtime/ctime must bump on entry create/unlink/rename/link (queue row 0m)
+
+**Acceptance update, Oct 7.** Final NUC raw TSVs show all seven directory-time
+tests and `peer_dir_mtime_bump_visible` passing on `128f6b7d`; this supersedes
+the 6/7 single-client and peer-gate-pending statements below. The row is archived
+as accepted on that build. [Raw evidence](../archive/queue-review-20261007-round2.md).
+
 
 **Parent directory mtime/ctime must bump on entry create/unlink/rename/link/mkdir/rmdir — POSIX, and ruled a bug if missing (user, Oct 6 2026: "EFS is as much as possible POSIX compliant").** The open "bug vs. intended" question is closed: intended = POSIX.
 
@@ -4896,6 +4141,13 @@ the quick ones).** Each row is a queue item; the W number is binding.
 
 ### W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s (plan row 15)
 
+**Implementation check, Oct 7.** Approved shape A is still pending:
+`host_resolve_caught_up()` loops over each eligible reservation and calls
+`host_propose_wait()` separately. The ordinary append POSIX/concurrency
+passes do not prove the agreed one-batch proposal gate. No batching
+implementation or new acceptance is claimed by this review.
+
+
 **W52 · a REPORT after thousands of O_APPEND writes answers after > 30 s — NEW Oct 2 13:45Z (both builds); DECIDED Oct 5 2026 (user): fix shape A — one batched proposal for all caught-up reservations before the reply**
 
 **What.** `host_resolve_caught_up` (raft_host.c, after the `report-split` line, before `set_inode_rc`) runs one serial `host_propose_wait` per OPEN reservation at/below the published size — N appends = N proposals before the reply. Client: `inode-rpc: retry type=67 why=recv rc=-6 recv_ms=30312`, byte-identical resend, server `skip=all`, dd `fsync: I/O error`; the published size lags (completed prefix) then converges. ~5 ms per O_APPEND write. fcstor004 `report-split nrec=1133` 06:03:30Z then `skip=1133` 06:04:01Z (old build); `nrec=625` ×3 at 06:06:45/07:15/07:46Z (P1 build) — `results/measure/20261002-060052-p1-d23-w41/SUMMARY.txt` §5
@@ -4951,6 +4203,14 @@ historical command labels; future measurements use `efs-bench`. See
 [local usage](#local-storage-benchmarks).
 
 **Status (Oct 5 2026).** **Tool in tree + gated (dev cluster): 16 unit suites PASS.** `efsd --bench data|meta` as specified below (fio ceilings in the same log, store + writer pool exactly as the handlers drive them, paths × QD 1/16/64/256 ladders with exact p50/p99, iostats cross-check, diskstats util, `--perf` top symbols; the old pwrite loop is deleted). First numbers measured on efs1 (dev VM, one virtio disk — not an fcstor node): `results/measure/20261005-045140-p3-benches/SUMMARY.txt`. Write ≈ 82 % of the single-disk fio ceiling at QD16 with the disk at 82–99 % util (the engine reaches the disk's limit on this host); meta sits exactly on the fsync wall (27 puts/s QD1 = fio wsync4k, batch32 ×32). **Owed:** the 1→6 real-NVMe curve on a named fcstor host — the dev VM's six roots share one device, so the path-scaling question the plan asks is not answered by this run.
+
+**Current checkpoint (Oct 7):** production-backend tools are implemented;
+corrected latency/window and metadata validation checkpoints are indexed in
+[queue row P3](#1a-the-work-queue). The named fcstor six-NVMe
+curve and two-host client ladder remain owed. The original design/evidence below
+is retained as history: its old “what exists” pwrite-loop description and
+“what to add” instructions are not a claim that the current tool is missing.
+Use `efs-bench --bench` for local storage measurements.
 
 **Why this goes before the client tests (Oct 1 04:50Z).** The cluster write wall is ~2.5–2.8 GB/s logical with nine clients (`results/measure/20260928-134637-dd-prof-r5b`): ×1.5 for 2+1 EC ≈ 4.2 GB/s of 64 KiB fragments ≈ **16 K fragment writes/s per server**, each a file create plus an `O_DIRECT` write on XFS. That is an ordinary filesystem-metadata rate, not the 16.7–21.4 GB/s the `results/nvme/` fio shape measures, and only a bench that calls the fragment store the way the PUT handler does can say whether it is the number. Same for metadata: 4.6 kIOPS mdtest-easy-write across two groups against a 0.4 ms Raft-log `fsync` is an inference that the disk is not the limit; `--bench-meta` makes it a measurement. The bench needs no cluster, no clients, no quorum, no network, no wipe, and none of the things that have confused every cluster measurement (strace on the daemon, elections, a dead mount). **What it will not find:** the ~1 GB/s single-client wall — every client profile shows the server near idle; that one needs the client-side ladder (04:30Z §1b block: one dd, Little's law on one reclaim thread, then a `/dev/shm` private cluster), which comes after this.
 
@@ -5029,11 +4289,11 @@ Rows P0.1–P0.4 are DONE; one-line records are in [../archive/README.md](../arc
 
 **P1 — decided client items (no spec change; take in this order).**
 
-Rows P1.1 and P1.2 are DONE (archive index); P1.3 (D29) is an ask — its row text is in [../status/decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d30).
+Rows P1.1 and P1.2 are DONE (archive index); P1.3 (D29) is an ask — its row text is in [../status/decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d31).
 
 **P2 — decided server items.**
 
-Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections below; P2.5 (D30) is an ask — its row text is in [../status/decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d30).
+Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections below; P2.5 (D30) is an ask — its row text is in [../status/decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d31).
 
 ### P2.2 · D26 — the GC pass (performance plan row)
 
@@ -5052,7 +4312,7 @@ Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections be
 
 **Item.** **W23** stalled-compactor test
 
-**Status.** **test in tree, measurement owed (Oct 5Z, dev cluster).** The fault hook (`EFS_FAULT_COMPACT_STALL` + `/tmp/efs/fault` in `compactor_main`, `EFS_FAULTS=1` only), the `kv-obs` sample line, and `tests/measure/w23_stalled_compactor.sh` are in the tree and built; deploy gate PASS (16/16 unit suites; the hook verified absent from the normal binary). The one run attempt died at setup — scratch dir on a root-owned path, EACCES before mkfs (fixed in the script after the attempt, along with its results-path bug); no samples, no numbers. Rerun is one command (`results/measure/20261005-014440-w23-stalled-compactor/SUMMARY.txt` has the full state). The 19810 dependency does not apply: the text puts this test on a private 3-node cluster, which the dev cluster provides.
+**Status.** **Test/hook in tree; valid stalled-compactor bound still owed.** The [completed Oct 5 run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) supersedes the earlier setup failure: it recorded 4352 MiB in 27 seconds, but its zero-L0 interpretation comes from shifted TSV columns ([W89](#w89)). Corrected samples show real L0 accumulation; the cap/lag bound remains untested. Use the [current W23 checkpoint](#w23--server-the-apply-path-blocks-on-l0-back-pressure-and-compaction-rewrites-the-table-to-absorb-a-few-mib) for the source distinction and next measurement. This private-cluster gate does not depend on the historical 19810 endpoint.
 
 **What changes (server).** the test written in [W23](#w23--server-the-apply-path-blocks-on-l0-back-pressure-and-compaction-rewrites-the-table-to-absorb-a-few-mib) "correction": compactor stalled by a fault, measure memory and lag bound
 
@@ -5064,7 +4324,7 @@ Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections be
 
 ### P3 — the benches (asked; they decide P4)
 
-`efsd --bench` per its
+`efs-bench --bench` per its
 plan above (ceiling first, 1→6 paths, QD 1/16/64/256, meta kind,
 `--perf` in-process, one fcstor not serving 19810), then `efs-fuse
 --bench` (`cpu` / `put` / `write` / dd ladder against the private
@@ -5076,10 +4336,10 @@ item.
 
 | row | item | taken only if | what |
 | --- | --- | --- | --- |
-| P4.1 | plan row I — fragment on-disk layout (W34 residual) | `efsd --bench` shows the server PUT path (create + O_DIRECT write per 64 KiB fragment, 16 K/s per server at the cluster wall) is the wall | fewer path components / larger containers per fragment; **wipe**; design row first |
+| P4.1 | plan row I — fragment on-disk layout (W34 residual) | `efs-bench --bench` shows the server PUT path (create + O_DIRECT write per 64 KiB fragment, 16 K/s per server at the cluster wall) is the wall | fewer path components / larger containers per fragment; **wipe**; design row first |
 | P4.2 | plan row J — **W40** FUSE write copy | `efs-fuse --bench` shows `write` ≫ dd (the kernel FUSE path is the wall) | own `/dev/fuse` receive loop into pool buffers; W15 step 5 (`FUSE_CAP_SPLICE_READ`, kernel prerequisite done Sep 29) rides with it |
 | P4.3 | plan row K — RDMA zero-copy receive | `efs-fuse --bench` shows `put` ≈ `write` ≈ dd with RTT the whole wall and reads in-flight bound | per-request posted receives into chunk buffers; transport change, design row first |
-| P4.4 | 9-client scaling | after P1/P2 | `dd_wall.sh` 1/4/9 and `fio_honest_matrix.sh`; if 9 clients still share one ceiling (Sep 28: 2.5–2.8 GB/s = 6 % of 44 GB/s), the shared point is on the servers — P3's `efsd --bench` meta line vs data line says which |
+| P4.4 | 9-client scaling | after P1/P2 | `dd_wall.sh` 1/4/9 and `fio_honest_matrix.sh`; if 9 clients still share one ceiling (Sep 28: 2.5–2.8 GB/s = 6 % of 44 GB/s), the shared point is on the servers — P3's `efs-bench --bench` meta line vs data line says which |
 
 ### P5 — re-baseline and close
 
@@ -5087,6 +4347,654 @@ After each of P1.2, P2.2 and P4.x: 1-client
 8/16 GiB dd+fsync, 16× dd, 4-reader cold read, 9-client dd, IO-500 9×4
 debug; update the ceiling table in `docs/how-it-works/performance.md`; commit the
 results dirs; move this plan's finished rows to project-history.
+
+
+<a id="w61"></a>
+
+### W61 · Local GC discards failed lane-sweep apply verdicts (queue row 0r)
+
+**Class:** correctness bug. **Status:** repaired in `3a1b4a52`; private-store acceptance is recorded in the [GC checkpoint](../status/gc-implementation-20261007.md). Existing-service rollout and reconciliation of the incident remain open; this review did not inspect the remote raw fixture logs.
+
+**Evidence and required change:** [GC reclamation review](../status/gc-reclamation-review.md#w61--local-gc-proposals-discard-the-apply-verdict). The reported xorinox 40 GiB deletion remains an investigation; these entries do not claim its cause is established.
+
+**Gate:** Fault local and forwarded sweeps with BUSY/I/O errors; retain the reap marker on failure or unknown verdict; retry to complete fragment cleanup. Include verdict-ring eviction and term changes.
+
+**Forbidden:** Removing a reap marker based solely on an applied index; hiding errors with longer retries.
+
+
+<a id="w62"></a>
+
+### W62 · Sweep/truncate batch boundaries lose delta GC records (queue row 0s)
+
+**Class:** correctness bug. **Status:** repaired in `3a1b4a52`; private-store acceptance is recorded in the [GC checkpoint](../status/gc-implementation-20261007.md). Existing-service rollout and reconciliation of the incident remain open; this review did not inspect the remote raw fixture logs.
+
+**Evidence and required change:** [GC reclamation review](../status/gc-reclamation-review.md#w62--batch-capacity-can-drop-delta-gc-records). The reported xorinox 40 GiB deletion remains an investigation; these entries do not claim its cause is established.
+
+**Gate:** Sweep and truncate across batch boundaries with eight live deltas per chunk; durably queue every generation before deleting its references; verify all fragments are removed, including retry/crash cases.
+
+**Forbidden:** Deleting chunk references while omitting live delta GC records; silently clipping delta counts.
+
+
+<a id="w63"></a>
+
+### W63 · GC progress and backlog visibility (queue row gc-obs)
+
+**Class:** observability enhancement. **Status:** reporting implemented in `3a1b4a52`; [GC checkpoint](../status/gc-implementation-20261007.md) records private-store testing. Operational rollout, reliable interpretation and the original incident remain open; remote raw logs were not inspected in this review.
+
+**Evidence and required change:** [GC reclamation review](../status/gc-reclamation-review.md#w63--missing-operational-visibility). The reported xorinox 40 GiB deletion remains an investigation; these entries do not claim its cause is established.
+
+**Gate:** Expose bounded periodic backlog, actual fragment/byte reclamation, stage/error retries, oldest marker and last-progress times; distinguish idle, blocked and failing cleanup without per-fragment debug flood.
+
+**Forbidden:** Calling scan counts freed bytes; claiming a root cause from quiet logs or unchanged record counts.
+
+
+<a id="w64"></a>
+
+### W64 · Durable append reservation replay across leader changes (queue row 0t)
+
+**Class:** correctness / recovery. **Status:** open; indexed Oct 7, 2026.
+
+**Evidence/current state:** The host-local replay race is fixed in ec1500ec, but reservation replay/failover is not a durable protocol. The round-20 first-record-loss trace remains unresolved evidence.
+
+**Home:** [current detail](#appendix-2--in-flight--the-current-handoff-block).
+
+**Gate:** Leader churn, lost reservation replies, identical-op replay, server restart and exact offsets/bytes; demonstrate a durable identity and fail-closed behavior for unknown outcomes.
+
+**Forbidden:** Treating host-local cache state or clean concurrent repeats as durable failover proof.
+
+
+<a id="w65"></a>
+
+### W65 · Daemon exceeds graceful shutdown wait (queue row 0u)
+
+**Class:** liveness investigation. **Status:** open; indexed Oct 7, 2026.
+
+**Evidence/current state:** The final NUC rollout observed n1 exceeding a ten-second SIGTERM wait twice after clean client drains; deployment tooling used SIGKILL. The blocking path is not identified.
+
+**Home:** [current detail](#appendix-2--in-flight--the-current-handoff-block).
+
+**Gate:** Capture userspace stacks during a controlled stop; remove the actual blocker and show bounded graceful shutdown without discarding accepted data.
+
+**Forbidden:** Raising a timeout or sending SIGKILL as the correctness fix; claiming graceful shutdown from client drain alone.
+
+
+<a id="w66"></a>
+
+### W66 · Metadata leadership distribution and routing (queue row meta-scale)
+
+**Class:** scalability enhancement. **Status:** open; indexed Oct 7, 2026.
+
+**Evidence/current state:** Two fixed parity Raft groups and dual-group routing remain implemented; logical shard count is not independent leadership capacity.
+
+**Home:** [current detail](../status/metadata-scaling.md).
+
+**Gate:** Follow the staged topology/routing plan and measured hotspot, transaction, restart and capacity gates in the linked home.
+
+**Forbidden:** Claiming 1000 active-client capacity from connection counts; enabling an unvalidated topology.
+
+
+<a id="w67"></a>
+
+### W67 · Sparse dirty writes and bounded body admission (queue row mem1)
+
+**Class:** correctness / resource exhaustion. **Status:** open; indexed Oct 7, 2026.
+
+**Evidence/current state:** Committed foundation 033a842a and later regressions implement body admission and retained-byte ownership. Targeted pressure/failure/RSS acceptance remains open.
+
+**Home:** [current detail](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound).
+
+**Gate:** Sparse/append concurrent pressure, failed publication, cold-byte checks and small-host recovery-reserve/RSS gates.
+
+**Forbidden:** Calling the body allocator budget a process RSS ceiling; discarding retained dirty data on pressure.
+
+
+<a id="w68"></a>
+
+### W68 · Reply-buffer lifetime on FUSE worker retirement (queue row mem2)
+
+**Class:** resource lifetime bug. **Status:** open; indexed Oct 7, 2026.
+
+**Evidence/current state:** Committed foundation 033a842a implements pthread-key reply owners; local retirement/failure tests pass.
+
+**Home:** [current detail](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit).
+
+**Gate:** Repeated real Linux FUSE worker creation/retirement and RSS with TLS/allocation-failure coverage.
+
+**Forbidden:** Closing from mocked retirement tests alone.
+
+
+<a id="w69"></a>
+
+### W69 · Lookup memo returns pre-mutation stats (queue row 0j)
+
+**Class:** correctness bug. **Status:** open; indexed Oct 7, 2026.
+
+**Evidence/current state:** Existing queue row 0j now has a W identity. Mutation serial/invalidation code exists; historical dates do not establish current targeted rollout acceptance.
+
+**Home:** [current detail](#0j--the-clients-50-ms-lookup-memo-returns-pre-mutation-stats-queue-row-0j).
+
+**Gate:** Follow the original 0j POSIX/Spark du and stale-reply concurrency gates; record the build and current result.
+
+**Forbidden:** Serving a pre-mutation reply as a fresh memo or closing from unrelated tests.
+
+
+<a id="w70"></a>
+
+### W70 · shrink-quota falsely reports background migration (queue row op1)
+
+**Class:** operator observability bug. **Status:** open, found during the
+Oct 7 documentation review. Documentation corrected; source behavior unchanged.
+
+**Evidence:** `src/server/handler.c` handles SHRINK_QUOTA by subtracting the
+requested amount from the running node quota, refusing a result below usage.
+It starts no migration worker, but returns the legacy IN_PROGRESS status.
+`cmd_shrink_quota()` in `src/mgmt/efs_mgmt.c` then prints "background migration
+started". The capability inventory already says evacuation/migration is absent.
+
+**Change/gate:** make the successful CLI response describe the actual quota
+reduction and keep the wire response compatible or explicitly version it.
+Exercise accepted and rejected reductions, verify the updated running quota,
+and assert no migration is advertised. Do not promise restart persistence
+without checking the startup quota source.
+
+**Forbidden:** implementing an unreviewed evacuation protocol as a wording
+fix; claiming migration/repair from an IN_PROGRESS enum name alone.
+
+
+<a id="w71"></a>
+
+### W71 · Fragment PUT success is not a durable persistence acknowledgement (queue row spec1)
+
+**Class:** durability correctness. **Status:** open, source finding Oct 7;
+no power-loss reproduction or deployment change in this review.
+
+**Evidence:** `src/server/store.c:server_write_fragment_to_path` zero-initializes
+`shard_io_arg`; `sync_write` is assigned only under `EFS_BENCH_BUILD`.
+`shard_io_thread` adds O_SYNC only in that benchmark build. `finish_shard_write`
+flushes only when `sync_write` is set, so the production PUT path can return OK
+after write/length/close without a persistence barrier. Buffered PUT explicitly
+omits fsync. `handler.c` then ACKs a successful store. `efs_fuse_fsync_ino`
+drains/REPORTs but issues no separate fragment-store flush. Direct I/O alone
+does not establish the spec's durable-ACK boundary; process restart tests do
+not simulate losing the OS/device's volatile state. This is not proof of the
+cause of the 40 GiB reclamation incident or W55.
+
+**Change/gate:** establish the required persistence boundary for fragment
+payload, stored checksum, final length and necessary directory entries before
+acknowledged durable publication, with batching allowed if the acknowledgement
+ordering remains correct. Inject write/flush/close failures; reject publication
+on a failed barrier; test buffered/direct paths, new and existing objects,
+crash and power-loss behavior on the supported hardware assumptions. Check
+metadata/data ordering and retain raw build/configuration evidence.
+
+**Forbidden:** equating RDMA completion, O_DIRECT, successful close or a
+benchmark --sync result with production persistence; silently weakening the
+accepted durability contract or fixing only FUSE flag handling.
+
+<a id="w72"></a>
+
+### W72 · Production mount session lifecycle is not connected to I23 (queue row spec2)
+
+**Class:** fencing integration. **Status:** open; metadata/coordinator and
+staged publication gates exist, full production integration absent.
+
+**Evidence:** `inode_rpc.c:opid_seed_locked` creates a local random UUID at
+fixed epoch 1. HOLD sends only its base request; FLOCK sends its range but
+no session suffix. The server's `host_sess_gate` accepts an absent suffix via
+the legacy stand-in path. Append has a fixed-epoch owner suffix, which does
+not establish the mount-wide session/revocation lifecycle. `efs-mgmt
+raft-session` can create/register/establish/fence, and D25 typed publication
+checks shard-local session state: those are implemented primitives, not proof
+that all mounted production mutations participate. See the D25 routing page
+for staged I23 admission and remaining abandoned-stream cleanup.
+
+**Change/gate:** establish real mount sessions, register every touched authority
+and connect the relevant production requests to that authority. Exercise a
+partitioned old client, coordinator restart and leader changes; old mutations
+must be rejected after the completed barrier, and lease/lock/append cleanup
+must not precede it. Record public-path results, not only metadata unit passes.
+
+**Forbidden:** treating opid epoch fields, connection timeouts or manually
+fencing an unrelated UUID as mount fencing; duplicating the existing D25
+publication primitives or reclaiming state before revocation completes.
+
+<a id="w73"></a>
+
+### W73 · Synchronous application-write publication is not explicitly wired (queue row spec3)
+
+**Class:** synchronous-write integration. **Status:** specified, no explicit
+O_SYNC/O_DSYNC publication in the inspected FUSE write callbacks.
+
+**Evidence:** both `efs_fuse_write_admitted` and
+`efs_fuse_write_buf_admitted` can accept dirty data/queued jobs and return bytes;
+they check O_APPEND/O_DIRECT but do not dispatch publication on O_SYNC/O_DSYNC.
+The spec already marks O_SYNC unwired. Engine benchmark O_SYNC is a separate
+build/option and does not implement the application's flags. A kernel may
+issue follow-up FUSE fsync requests: this review did not trace the real kernel
+sequence, so the finding does not prove every O_SYNC syscall returns early.
+
+**Change/gate:** trace both write callbacks under O_SYNC, O_DSYNC and the
+supported mount-sync behavior. Either demonstrate correct kernel-driven
+publication for each supported path or wire it explicitly. A successful
+synchronous syscall must satisfy publication plus W71's target durability;
+exercise stalled publication, PUT failure, append and buffered/direct paths.
+
+**Forbidden:** claiming support from flag retention or engine --sync; requiring
+ordinary buffered writes to publish; closing without real syscall evidence.
+
+<a id="w74"></a>
+
+### W74 · Configurable protection profiles, debt and automatic repair remain absent (queue row spec4)
+
+**Class:** protection/recovery feature gap. **Status:** accepted design, absent
+public control-plane/data-plane integration; no new design decision here.
+
+**Evidence:** `EFS_NUM_FRAGMENTS` is 3 and `erasure.h` specifies fixed 2+1.
+`efs_publication_from_rec` stamps K2F1; `meta_apply.c:evidence_ok` rejects other
+profiles. HEAL_STATUS returns a zero-filled structure. No production owner
+that reconstructs missing live fragments, effective_f/target_f transition or
+profile-cutover controller was found. Namespace/metadata recovery and reading
+from two survivors are not data repair. W42 separately records the two-ACK
+legacy PUT success/protection-debt concern; staged evidence validation is not
+a repair implementation. Five or seven nodes alone do not activate f=2/f=3.
+
+**Change/gate:** implement the accepted profile/debt/repair control plane in
+stages; advertise only supported and validated guarantees. Demonstrate missing
+fragment reconstruction onto a healthy target, protection restored before a
+subsequent loss, durable debt across restart and authority changes, and safe
+profile cutover while writers remain active. Retain actual configured RF/EC
+and permanent-loss evidence. Coordinate with W66 metadata topology.
+
+**Forbidden:** counting returning/empty nodes as restored fragments, calling
+GC or metadata snapshot recovery repair, or advertising the spec's f=2/f=3
+matrix as current production capability.
+
+<a id="w75"></a>
+
+### W75 · Integrity evidence is payload-only and missing evidence is accepted (queue row spec5)
+
+**Class:** integrity correctness. **Status:** open, inspected source gap to I25;
+no corruption experiment was run in this documentation review.
+
+**Evidence:** `write.c` hashes each fragment payload using `efs_hash` without
+its immutable identity. PUT passes the supplied digest to the store without
+an independent nonzero-payload rehash. GET verifies a stored checksum when
+`sum_ok` is true, but when it is false computes a new checksum from the bytes
+and serves them. Optional client verification compares against returned
+checksum; it does not restore a lost independent trust anchor. A readable
+object with corrupted bytes and missing integrity evidence can therefore be
+returned with a freshly matching digest. The ordinary two-fragment path
+`get_one_reply` also discards the returned digest and does not consult
+EFS_READ_VERIFY; the switch only affects `efs_client_get_fragment`, so it is
+not comprehensive client read verification. I25 specifies identity plus
+payload; automatic repair is separately absent under W74.
+
+**Change/gate:** define a compatible, trusted identity-bound integrity format
+and fail-closed behavior for missing/corrupt integrity evidence; preserve
+explicit legacy-format handling rather than silently reclassifying bytes as
+verified. Exercise payload flips, digest removal/truncation, object swaps,
+incorrect caller digests, and valid legacy/new objects on TCP/RDMA. A verified
+alternate fragment or explicit error is acceptable; silent corrupted bytes
+are not. Check metadata-page integrity separately.
+
+**Forbidden:** using freshly computed checksums as evidence that existing
+bytes are correct; assuming client rehash proves immutable identity; making
+an unreviewed on-disk format change or claiming repair from a decode fallback.
+
+
+<a id="w76"></a>
+
+### W76 · Namespace opid capacity exhaustion silently removes retry identity (queue row spec6)
+
+**Class:** conditional retry/idempotency correctness. **Status:** open source
+finding; reaching this limit on an ordinary mounted workload is not established.
+
+**Evidence:** `EFS_OPID_INFLIGHT` is 512 in `client_internal.h`.
+`inode_rpc.c:opid_begin` leaves its request identity zero and returns -1 when
+all slots are occupied. `opid_suffix` then omits the suffix, and CREATE,
+UNLINK, RENAME_AT and LINK callers still send/retry the mutation. Normal
+identified retries preserve their bytes, but the exhaustion fallback does
+not satisfy I16's stable identity. Healthy POSIX acceptance does not exercise
+an ambiguous reply at that limit. Session lifecycle is separately W72.
+
+**Change/gate:** bounded admission/backpressure or a visible error when no
+identity slot is available, preserving the caller's whole-call deadline;
+never issue an unprotected mutation as success admission. Occupy every slot,
+exercise all affected callers, inject a lost successful reply and retry,
+then release slots. Verify single namespace effect, bounded timing and no
+watermark advancement past outstanding requests. Check actual FUSE concurrency
+limits before claiming this is reachable in the default mount.
+
+**Forbidden:** dropping identity to avoid waiting, treating an arbitrarily
+larger finite table as a correctness fix, or closing from unrelated POSIX tests.
+
+
+<a id="w77"></a>
+
+### W77 · Multi-chunk public publication/observation lacks an established I24 gate (queue row spec7)
+
+**Class:** atomic-publication/observation integration gap. **Status:** open,
+source inspection; no torn-read reproduction or current I24 acceptance found
+in this review.
+
+**Evidence:** the accepted atomicity unit is one FUSE write request, not an
+arbitrarily larger kernel syscall. Legacy REPORT accumulates publications in
+separate `host_pub_batch` buffers per Raft group and may split each buffer into
+several proposals. It does not encode one original FUSE request's cross-lane
+transaction identity. The staged PUBLICATION endpoint is per chunk; namespace
+and resize transaction primitives do not activate whole-write publication.
+`efs_client_read_refs` pulls a range and then pins cache entries one chunk at
+a time without a final cross-lane version collect/revalidation. This is a
+public-path gap to the specified contract, not proof that every multi-chunk
+operation tears. Other read paths and actual request boundaries must be
+included in the gate.
+
+**Change/gate:** preserve the supported request's mutation identity/range,
+connect all participating lanes to one atomic visibility decision, and validate
+a whole read's collected mapping versions. Deterministically pause between
+cross-lane proposals and between chunk fetches; a peer must observe all-old
+or all-new for one accepted atomic request, never a splice. Cover partial
+chunks, both FUSE write callbacks, read/ref paths, restart and leader change.
+Keep the above-max_write kernel-interface limitation explicit. Coordinate
+with D25 integration, W66 topology and W71 persistence rather than claiming
+those primitive gates already establish I24.
+
+**Forbidden:** equating a REPORT batch or successful per-chunk CAS with one
+request-wide transaction; extending the atomicity claim beyond observable
+FUSE request boundaries; closing from healthy non-racing POSIX tests.
+
+
+<a id="w78"></a>
+
+### W78 · Server wrapper trusts stale PID-file ownership (queue row op2)
+
+**Class/state:** conditional operator correctness; open, source-reviewed Oct 7.
+**Evidence:** `scripts/server.sh:kill_from_pidfile` reads the stored PID and
+passes it to `kill_pid_graceful`. That helper checks only `kill -0`, sends
+SIGTERM, then SIGKILL after about three seconds. Startup and path-based stop
+both use this cleanup. No executable, start-time or storage/port identity is
+checked before signaling. A stale PID reused by another process can therefore
+cause an unrelated process to be terminated. This is conditional source
+reachability, not a reproduced incident; no processes were signaled in review.
+
+**Next:** validate numeric PID and process identity before signaling, bind the
+record to a process start identity, and handle stale records without killing
+an unrelated process. Coordinate the shutdown bound with W65 rather than
+assuming SIGTERM completion means data was drained.
+
+**Gate:** isolated wrapper fixtures for absent/dead/nonnumeric/reused PID,
+matching daemon and unrelated live process; unrelated processes survive start
+and stop. Verify identity again around escalation to address PID reuse races.
+No cleanup test may operate on an operator's real storage/processes.
+
+<a id="w79"></a>
+
+### W79 · mkfs CLI advertises a name it silently ignores (queue row op3)
+
+**Class/state:** operator observability bug; open, source-reviewed Oct 7.
+**Evidence:** `src/mgmt/efs_mgmt.c` general help advertises
+`mkfs <node:port> <export-name>`, but `cmd_raft_mkfs` only parses `argv[0]`
+and ignores extra arguments. Both mkfs aliases use that handler. Metadata
+`efs_meta_apply_mkfs` returns OK for an existing root; the host reads back the
+committed placement salt before distributing it. The command does not create
+a second named export or fail because a supplied name exists. FUSE still
+accepts a name token and builds a local shell with it; this is not named-export
+creation. No cluster initialization was run in review.
+
+**Next:** align help, argument validation and success text with the accepted
+single-export contract. If legacy extra arguments remain accepted, explicitly
+report their compatibility meaning; do not imply namespace creation. Check the
+FUSE failure hints for retired `list-exports`/old metadata-table guidance too.
+
+**Gate:** both aliases' help and invocation tests; extra/malformed arguments
+have an explicit outcome. Repeated initialization against the same intended
+cluster preserves root, data and committed salt, including uncertain-reply
+retry. This work does not authorize multi-export design or destructive reset.
+
+
+<a id="w80"></a>
+
+### W80 · efs-query presents retired placeholder statistics as real totals (queue row op4)
+
+**Class/state:** operator observability bug / missing query integration; open,
+source-reviewed Oct 7. `src/server/handler.c:EFS_MSG_QUERY_STATS` explicitly
+notes that the whole-table query was retired, zeroes a reply and sends it.
+`src/query/efs_query.c` accepts that reply and prints total files/bytes and
+users as an ordinary successful result (also under `--raw`). The command
+therefore has no current source path to report real filesystem totals. This
+was source inspection, not execution against a live nonempty cluster.
+
+**Next:** explicitly report the unsupported/placeholder state or implement a
+verified metadata-backed query, with a defined consistency and accounting
+scope. Do not substitute physical node fragment usage for logical file/user
+statistics or claim `.stats` is an equivalent cluster-wide per-user query.
+
+**Gate:** a nonempty isolated export must not produce a successful empty-store
+claim in either output mode. If implemented, test create/write/unlink,
+open-unlinked files, users, directory rollups, restart and query races against
+an independent oracle. If retired, gate an explicit unsupported outcome and
+update command help. Placeholder zero is not a GC completion signal and does
+not diagnose the current reclamation incident.
+
+
+<a id="w81"></a>
+
+### W81 · Automatic directory spread responds to size, not pressure
+
+**Class/state:** accepted scalability requirement / feature gap; source-reviewed
+Oct 7, awaiting triage. The directory protocol requires size OR sustained
+serialization pressure to start spread, with the numeric pressure bound still
+unspecified. `src/meta/dir_layout.c:efs_meta_dir_note_entry` starts SPLITTING
+only when an added entry makes nents exceed `efs_dir_spread_min`.
+`host_dir_spread_pass` drains directories already marked SPLITTING; it is not
+a queue/latency/rate-based admission trigger. No automatic pressure trigger
+was found in reviewed metadata/server paths. Explicit DIR commands and
+size-triggered migration exist. No new hotspot measurement was performed.
+
+**Next:** define and review the bounded pressure signal/admission policy,
+coordinate it with W66 metadata scaling, and use the existing committed layout
+transition/migration machinery. Do not invent a numeric trigger as documentation
+or mistake old same-directory rate improvements for this feature's completion.
+
+**Gate:** a hot directory kept below the size threshold can admit spread under
+the agreed sustained-pressure policy, while cold/small directories do not
+churn. Validate bounded migration, lookup/create/unlink/readdir consistency,
+restart/leader change and fair progress alongside unrelated directories;
+report offered load, achieved rates, tails and memory on a named build.
+
+
+<a id="w82"></a>
+
+### W82 · Completed read authority is reused by an isolated former leader
+
+**Class/state:** linearizable-read correctness; core-model reproduction Oct 7.
+`host_read_index` captures the local commit index and returns immediately when
+`host_view_covers` sees a completed read index covering it. `try_commit` can
+populate that coverage from a prior write quorum. `efs_raft_read_covers` has no
+request freshness criterion; leader ticks send heartbeats but do not revoke
+completed coverage merely because the leader has lost contact with a majority.
+A higher-term message steps it down, but an isolated node cannot receive one.
+
+**Reproduction:** an isolated copy of the existing in-memory Raft test elects
+node 0 in term 1, commits A, and partitions it bidirectionally from nodes 1/2.
+The majority elects node 1 in term 2 and commits B. After further old-leader
+ticks, node 0 retains A and `read_covers(local_commit)` returns 1. The assertion
+that later reads must not reuse that authority fails (exit 1). Retained
+[patch](../archive/round5-stale-read-repro.patch) and
+[output](../archive/round5-stale-read-output.txt) establish this core path;
+no live FUSE/server stale-read experiment was run. The host's covering-view
+fast path is source inspection, not a model of its full networking stack.
+
+This violates the purpose of quorum-backed authoritative reads if the cached
+result is used for a later request. The
+[Raft paper, §8](https://raft.github.io/raft.pdf) requires a majority leadership
+check for read-only requests; previously committed writes are not perpetual
+read authority. The architecture forbids clock-based leader leases.
+
+**Next:** define fresh request/batch authority and make host/core read coverage
+respect it. Readers already admitted to a pending round can share work;
+a completed round cannot automatically authorize later requests. Preserve
+current-term commit and apply barriers, and correlate acknowledgements with
+the appropriate round instead of accepting delayed responses as new evidence.
+
+**Gate:** old leader serves A, majority commits B after isolation, then a new
+read at the old leader must fail/retry, never return A as authoritative.
+Cover delayed heartbeat replies, multiple concurrent readers, leadership and
+configuration changes, current-term no-op and follower-forwarded reads. Repeat
+through actual LOOKUP/GETATTR, transaction-decision and session/publication-view
+RPC paths. No healthy POSIX result closes this partition gate.
+
+<a id="w83"></a>
+
+### W83 · Transaction decisions have no inspected retirement protocol
+
+**Class/state:** metadata lifecycle / bounded-state feature gap; source-reviewed
+Oct 7. `efs_txn_decide` stores a decision keyed by coordinator shard and txid.
+`efs_txn_resolve` and `efs_txn_drop` scan/delete INTENT, GUARD and REDUCE kinds;
+the coordinator decision is outside those scans. Reviewed decision-key callers
+only write/read it. No durable participant-acknowledgement or safe decision-GC
+path was found. Transaction recovery resolves pending intents, not old decisions.
+Thus the documented bound by active/recovering transactions is not established;
+retained decision keys can grow with completed transaction history. No growth
+benchmark or measured disk-cost claim was made.
+
+**Next:** design the accepted safe retirement condition: every relevant
+participant has durably acknowledged resolution and no eligible recovery/retry
+can still require the decision. Track that proof explicitly. Do not delete
+decisions by wall age, lack of locally visible intents, or an in-memory ACK.
+A missing decision must not reinterpret a committed effect as undecided.
+
+**Gate:** sustained completed transactions reach a defined retained-state bound;
+crash between decision, resolve and acknowledgement; lagging/offline participant,
+lost replies, old retry and coordinator restart all recover the same verdict.
+Demonstrate safe crash-restart reclamation without depending on GC thread timing.
+
+<a id="w84"></a>
+
+### W84 · Namespace guard bounds reject supported deep/spread-directory work
+
+**Class/state:** namespace completeness / admission gap; source-reviewed Oct 7.
+`EFS_TXN_MAX_PART` is 64 for general transaction envelopes, but
+`EFS_TXN_NAMESPACE_MAX_PART` remains 8. `host_pver_guard_chain` refuses once it
+has eight ancestry guard records, even if another ancestor shares a shard;
+its separate 64-hop walk bound is not the effective supported depth. Namespace
+`host_parts_add` can hit its eight-distinct-participant limit earlier.
+
+`host_rmdir` also returns BUSY after eight used-lane dseq guards on a HASHED
+child. An empty directory whose historical used-lane set exceeds eight can
+therefore be refused even after all children are removed. Equivalent hashed
+replacement checks exist in the directory rename path. Repeating without a
+layout/input change does not remove these static bounds. No live deep-rename
+or emptied-spread-directory reproduction was run.
+
+**Next:** reconcile bounded work with the accepted full-ancestry and all-used-
+lane predicates. Document any approved product limit explicitly; otherwise
+support the required predicate set without dropping guards. A bounded memory
+allocation is necessary, but BUSY on permanently supported work is not a
+complete overload policy. Coordinate envelope/buffer sizing and recovery gates.
+
+**Gate:** rename below/above eight ancestry records (including same-shard
+ancestors), concurrent cycle attempts, and empty HASHED directories with more
+than eight used lanes; rmdir and directory replacement must preserve phantom
+protection and make progress. Validate restart/leader changes, wire bounds,
+status/errno and finite retry behavior. Do not weaken guards to pass the tests.
+
+
+<a id="w85"></a>
+
+### W85 · Path-hint eviction can relabel an ambiguous PUT retry as first-send
+
+**Round-6 current source:** a concurrent repair, now committed as `6d6056c3`, owns first-send
+state in the PUT attempt and locks the root cache; cache misses on retry probe.
+`tests/test_put_hint.py` is present. The GC checkpoint now reports
+helper/concurrency and two-root accounting tests; this review did not rerun
+them or independently establish release/restart acceptance. The
+reproduction below retains the round-5 defect-bearing baseline.
+
+**Class/state:** conditional storage/accounting correctness; hint-helper
+reproduction Oct 7. D7 permits NEW only for a generation never PUT before;
+an ambiguous/lost-reply retry must use a real root hint or probe (0).
+`write.c:path_hint_get` remembers tried/valid in a 4096-entry direct-mapped
+cache. A collision overwrites the tried record. Retrying the earlier PUT then
+returns NEW again. The source comment says a collision only costs an access,
+but this case suppresses the server's probe instead.
+
+An extracted helper fixture uses node 1, chunk/fragment 0, inodes 1 and 4097,
+which both map to slot 1959. First A, colliding B, then lost-reply retry A all
+return 0xffffffff. Retained [fixture](../archive/round5-path-hint-repro.c) and
+[output](../archive/round5-path-hint-output.txt) reproduce the hint violation;
+no end-to-end multi-root/store/quota experiment was performed. The helper's
+existing lack of synchronization also requires a concurrency audit; the
+sequential collision already suffices for this finding.
+
+Server source treats NEW as skip-search, selects a writer root, and treats
+that write as newly chargeable when quota accounting is enabled. An earlier
+successful PUT with a lost ACK can therefore be charged again on the same
+root or recreated on another root. These are downstream source concerns,
+not measured quota drift or a diagnosis of the 40 GiB reclamation incident.
+
+**Next:** own first-send versus retry state with the actual PUT generation/
+request lifetime, or use a safe probe when history is unavailable. An evictable
+performance hint must not assert nonexistence after an ambiguous outcome.
+Preserve bounded state and audit races; do not recover certainty by guessing.
+
+**Gate:** lost ACK, colliding cache entry, retry of the same object generation,
+same-root and multi-root routing, concurrent PUTs and restarted clients.
+One logical fragment has correct node usage, no stray duplicate roots and
+readable identical bytes; retirement removes every legitimate object. Verify
+first-send optimization still respects D7 and retries never falsely assert NEW.
+
+
+<a id="w86"></a>
+
+### W86 · Durable PUT tickets — staged ownership and revocation integration
+
+**Class/state:** feature / safe reclamation; metadata implementation committed in `b3a11877`, staged for production integration. The [GC checkpoint](../status/gc-implementation-20261007.md#approved-unpublished-body-policy) records user approval of the narrow abandoned-upload policy; [D31](#d31--recorded-abandoned-upload-policy) indexes that record. This review creates no new approval and does not resolve D28's broader salvage question.
+
+**Evidence:** `include/efs/put_ticket.h`, `src/meta/put_ticket.c`, metadata publication hooks and `tests/test_put_ticket.c` exist. Admission is bounded at 128 tickets per lane-shard/session; PUBLISHED joins the mapping batch; reclamation requires authoritative global and shard revocation state, and retirement preserves a sequence floor. The helper explicitly requires colocated authoritative session/shard views. Production host encoding and mount/session/data-plane coordination do not yet carry the complete lifecycle. Source inspection is not a rerun of the checkpoint's restart tests.
+
+**Next/gate:** connect W72 mount sessions, versioned admission before every PUT, immutable object/digest validation, shard-local rejection floors, authoritative completed global revocation, durable storage fences, stable membership identities for captured member masks and all-configured-member deletion ACKs. Retain the ledger when any member is offline. Exercise lost admission/publication/deletion replies, coordinator/lane leader change, restart, late PUT and body revival; no live mapping can be collected. Gate integration with W43, W71 and W82 before activation.
+
+**Forbidden:** deletion from age, disconnect, missing receipt, a local fence or another group's asynchronously applied cached state; treating staged metadata tests as production activation; promising salvage of all write-returned bytes.
+
+
+<a id="w87"></a>
+
+### W87 · Buffered concurrent append loses records under broader load
+
+**Class/state:** correctness investigation; failure recorded in the Oct 7 [GC checkpoint](../status/gc-implementation-20261007.md#tests-and-limits). Fixture `/data1/efs/gc-buffered-3ohdte4d` reportedly passed focused GC checks but failed both broad POSIX concurrent-append cases with missing records. Ten isolated repeats subsequently passed; they do not erase the original failure. Raw remote fixture logs were not inspected in this round.
+
+**Next:** retain failing results, process/source hashes and reservation/publication traces; record the traced full buffered rerun's outcome. Distinguish append admission offsets, identity replay, byte ownership and publication before assigning a cause. W64 concerns durable failover replay; it is related coverage, not a proven explanation of this loaded buffered failure.
+
+**Gate:** full buffered single/peer POSIX plus repeated concurrent append under the original broader load, exact expected records/offsets/bytes, no missing/duplicate records, and a focused regression for the isolated cause. Retain a failing run even if focused repeats pass; record fixed-build identity and cold verification. Do not label buffered production acceptance complete from isolated repeats.
+
+
+<a id="w88"></a>
+
+### W88 · Legacy span replay loses idempotency after folded-history eviction
+
+**Class/state:** publication/retry correctness; isolated metadata reproduction Oct 7, round 6. D1 requires a folded span retry to be a no-op; I16 requires byte-identical retries not to repeat effects. This finding concerns the active legacy path, not the staged durable-result receipt/floor design.
+
+**Evidence:** `meta_apply.c:publish_inner` suppresses a legacy span replay while its generation/range or a folded len-zero tombstone remains in the eight-entry trailer. New spans evict oldest tombstones to make room. After eviction, the old same-epoch span can append again to the current base. `raft_host.c:host_pub_pack` checks `chunk_holds`, but a first span with `base_gen == 0` has no later base-generation check; `pack_publish_cmd` carries neither a durable publication receipt identity nor a retirement floor for this legacy path.
+
+The [retained fixture](../archive/round6-span-replay-repro.c) uses the actual metadata apply code over in-memory KV: publish eight one-byte spans, fold them, publish a later full image, append a disjoint new span (evicting the oldest folded identity), then retry the original span byte-for-byte. Result: OK and one live delta naming the old object over the later base. [Output](../archive/round6-span-replay-output.txt) fails the no-reintroduction assertion. This is a metadata-state failure, not a byte-level/FUSE/network reproduction; physical object availability and host packet acceptance require the next gate.
+
+**Next/gate:** use the staged durable identity/verdict/retirement primitives where appropriate, and carry their authority through production REPORT before claiming D1 replay safety. Distinguish a genuinely new write from an ambiguous retry after later writes. Test lost original ACK, history eviction, later overlapping full/span writes, old objects retained and GC/re-PUT, restart/leader change and exact bytes through the actual host/FUSE path. Retired identities must fail closed rather than resurrect effects; bounds must apply to admission and retained identity state.
+
+**Forbidden:** treating an evictable eight-entry trailer as durable replay authority; raising its size as a safety proof; introducing a chunk lock or silently weakening D1/I16. No new design approval or execution priority is created here.
+
+
+<a id="w89"></a>
+
+### W89 · W23 TSV field packing corrupts derived acceptance metrics
+
+**Class/state:** verification correctness; raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
+
+**Evidence:** [original samples](../../results/measure/20261005-040810-w23-stalled-compactor/samples.tsv), [node3 log](../../results/measure/20261005-040810-w23-stalled-compactor/s3.log), [corrected expansion](../archive/round6-w23-samples-corrected.tsv) and [recomputed peaks](../archive/round6-w23-peaks-corrected.txt). Node3 logs L0=22 / 3,367,253 bytes during the 04:08:29–04:08:56 park; corrected samples confirm these peaks. Node1 peaks at 4 / 105,281, node2 at 13 / 1,366,435. Recorded RSS peaks are 30,316 / 25,936 / 25,624 KiB. These are samples, not guaranteed continuous maxima. All sample lag peaks are zero; the 27-second RSS-threshold run does not prove a follower pressure bound.
+
+**Next/gate:** serialize separate fields and reject wrong field counts/types before reducing. Verify a synthetic distinctive row round-trips every header/metric, match sampled fields against raw logs, preserve missing values as missing rather than zero and rerun W23 under meaningful cap pressure. Correct future summaries; retain the original record and this withdrawal. No measurement script or result file was modified in this documentation round.
+
+**Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
 
 ## Appendix 5 — Naming
@@ -5098,15 +5006,17 @@ results dirs; move this plan's finished rows to project-history.
 Every design decision is checked against that bar — a component is wrong if
 it serializes work the hardware could have done in parallel.
 
-**On the name itself.** "extremfs" collides phonetically with **XtreemFS**
-(an existing open-source distributed FS; the XtreemFS® trademark is
-registered by Quobyte), and "EFS" is overwhelmingly associated with Amazon
-Elastic File System. Neither is a good public identity for a project meant
-to be found and attributed. The *idea* — never serialize what the hardware
-allows in parallel — is the identity; the public **name should be chosen to
-be distinctive and searchable**, and is deliberately left open here pending
-a proper trademark/search check. The project uses "efs" as the working name
-only.
+**On the name itself.** "extremfs" is close in spelling and sound to the
+existing [XtreemFS project](https://www.xtreemfs.org/), whose site attributes
+its trademark registration to Quobyte. "EFS" is also the name used for
+[Amazon Elastic File System](https://docs.aws.amazon.com/efs/latest/ug/).
+These primary-source identity checks were made Oct 7, 2026; they do not
+establish trademark clearance or quantify search-engine dominance.
+
+A distinctive, searchable public name remains a design goal, deliberately
+open pending a proper name/search check. This project continues to use "efs"
+as its working name; this review does not choose or approve a replacement.
+Earlier wording is [preserved](../archive/naming-wording-before-round5-20261007.md).
 
 
 ## Appendix 6 — Design rationale
@@ -5116,7 +5026,9 @@ only.
 This is the rationale document: why the architecture in
 [architecture.md](#architecture) has the shape it has, what is
 claimed and what is not, and what was deliberately rejected. The spec itself
-is normative; this file argues for it.
+is normative; this file argues for it. Accepted design reasoning is not an
+implementation or release certificate; the [public-path matrix](../status/spec-implementation.md)
+and named acceptance records define the current limits.
 
 Let's be precise about what is and isn't claimed. **Raft-per-shard over an
 embedded KV is not a new mechanism.** The claim is stronger than novelty: the
@@ -5129,7 +5041,7 @@ survive.
 
 | Constraint | Force it exerts | Design it eliminates |
 |---|---|---|
-| 2³² objects on 4 nodes | ~512 GiB+ of metadata cannot live in RAM | any fully-in-RAM table (today's) |
+| 2³² objects on 4 nodes | ~512 GiB+ of metadata cannot live in RAM | the former fully-in-RAM table |
 | immediate cross-client visibility | no authoritative cache may go stale | TTL / negative / attr caches as truth |
 | survive f nodes down, read *and* write | a write must commit without the dead nodes | single-coordinator 2PC, primary-backup without failover |
 | 3 → 64 nodes | work must spread, not funnel to one writer | a single cluster-wide metadata primary |
@@ -5160,7 +5072,9 @@ derivation is correct, not that it was copied.
   not majority intersection alone.
 - **Quorum durability** (I10/I11): a majority-acknowledged write survives any
   failure that leaves a majority. With RF = 2f+1 that is exactly the
-  configured f nodes. This is why "survive f nodes down" is a theorem here.
+  configured f nodes, provided the durable-ACK and storage assumptions are
+  actually satisfied. The production fragment barrier remains [W71](#w71);
+  Raft quorum math alone does not certify those writes.
 - **EFS-specific composition is *not* covered by Raft's proof.** RPC dedup,
   KV persistence ordering, cross-shard transaction logic, FUSE cache
   coherence, EC generation publication, chunk RMW, reconfiguration, and the
@@ -5174,20 +5088,36 @@ Let us be exact about the claim, because overclaiming here would be both
 wrong and unsupportable. **Every primitive in this design has existed:**
 Raft, distributed metadata, RDMA, erasure coding, immutable generations,
 ordered KV stores, directory sharding, deterministic simulation. Several
-systems get close to individual parts — WEKA (fully distributed data +
-metadata, no dedicated MDS tier, hash placement, strong POSIX, NVMe), DAOS
-(NVMe-native, low-latency fabric, distributed transactions, EC, versioned
-writes — though its POSIX layer still lacks hardlinks and distributed flock),
-VAST (distributed transactional metadata + EC + flash, but a shared-everything
-DASE model, not shared-nothing Raft shards), CephFS (client-direct data +
-dynamic metadata, but authority in a distinct MDS tier). IndexFS/GIGA+
-precede the threshold-spread huge-directory idea. FoundationDB is the
-canonical deterministic-simulation example. We are not claiming to have
-invented any of these.
+systems illustrate individual parts. Primary-source pointers checked Oct 7,
+2026 provide context, not an exhaustive prior-art search or comparative ranking:
+
+- [WEKA's current cluster overview](https://docs.weka.io/weka-system-overview/weka-containers-architecture-overview.md)
+  describes drive, compute, frontend and management processes distributed
+  across server containers. That description does not by itself prove every
+  earlier claim about hash placement or complete POSIX semantics.
+- [DAOS DFS/dfuse documentation](https://docs.daos.io/master/user/filesystem/)
+  describes its POSIX namespace/API and currently lists hard links and flock
+  among limitations. This is a versioned interface statement, not a claim that
+  EFS already implements all those semantics or that future DAOS releases cannot.
+- [VAST's architecture white paper](https://www.vastdata.com/whitepaper)
+  describes disaggregated shared-everything storage and shared metadata/
+  transaction state; it is a different architectural composition.
+- [CephFS metadata documentation](https://docs.ceph.com/en/latest/cephfs/mdcache/)
+  distinguishes client-direct RADOS data access from MDS-managed inode and
+  directory metadata. An MDS role need not imply dedicated physical hardware.
+- [GIGA+](https://www.pdl.cmu.edu/PDSI/gigaplus/index.html) and the
+  [IndexFS paper](https://www.pdl.cmu.edu/PDL-FTP/FS/IndexFS-SC14.pdf)
+  precede this design's incremental large-directory spreading.
+- [FoundationDB's testing documentation](https://apple.github.io/foundationdb/testing.html)
+  describes deterministic cluster simulation alongside live and hardware tests.
+  Simulation alone is not physical fault acceptance.
+
+Earlier unsourced comparison wording is [preserved](../archive/comparison-wording-before-round5-20261007.md).
+We are not claiming to have invented these mechanisms.
 
 **The claim is the composition and the governing principle.** What we have
-not found in a public system is this exact architecture presented as one open
-POSIX filesystem:
+sought is this combination as one open POSIX filesystem; the following is a
+design goal, not proof that no existing public system has the same composition:
 
 ```text
 POSIX namespace
@@ -5324,6 +5254,14 @@ namespace-as-database minimalism — is where the design earns an identity.
 
 *Source: `how-it-works/failure-tolerance.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol (derivation of the index's tolerance table).**
 
+**Implementation scope:** this page specifies the accepted design, not a
+current deployment guarantee. The [public-path review](../status/spec-implementation.md)
+records persistence, session, fixed-profile/repair and integrity limitations;
+consult those gates before claiming this contract is implemented.
+
+[Architecture](#architecture) · [Design rationale](#appendix-6--design-rationale) ·
+[Data protocol](#appendix-9--protocol--data-plane)
+
 The normative rule lives in
 [§2 of the spec](#architecture): **N ≥ max(2f+1, k+f), RF = 2f+1**.
 This document derives it, explains why there is no weaker mode, and
@@ -5363,14 +5301,20 @@ with the majority.
 The tempting merge — "per log index, the highest-term entry wins" — is
 unsound. Raft's log-prefix properties hold only *within logs produced
 through Raft*; they do not license constructing a new log by independently
-selecting entries per index. A legal situation:
+selecting entries per index. A legal sequence is an old-term uncommitted branch followed by a
+current-term quorum commit on another prefix (as in
+[Raft §5.4.2, Figure 8](https://raft.github.io/raft.pdf)). The older Y becomes
+committed when Z is committed in term 11; Y was not committed in term 9.
+For four voters A/B/C/D: B initially stores Y alone; A wins term 10 with
+C/D and stores X alone; B wins term 11 with C/D and commits Y→Z on B/C/D.
+A remains isolated. Permanent loss of C/D then leaves these two survivors:
 
 ```text
 survivor A:   index 5  term 10  X        (uncommitted branch)
-survivor B:   index 5  term 9   Y        (committed earlier)
-              index 6  term 11  Z        (appended by a term-11 leader
-                                          whose log contained Y at index 5,
-                                          elected by a majority excluding A)
+survivor B:   index 5  term 9   Y        (initially uncommitted)
+              index 6  term 11  Z        (quorum-committed in term 11,
+                                          committing Y with it; A stayed
+                                          isolated from that majority)
 ```
 
 The merge produces `X@5, Z@6` — a log that **never existed**. `Z` was
@@ -5524,6 +5468,17 @@ quietly lower the protection level of freshly written data.
 ## Appendix 8 — Protocol — cross-shard transactions
 
 *Source: `how-it-works/protocols/transactions.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
+
+**Implementation scope:** this is the accepted transaction protocol.
+Namespace and resize primitives exist; request-wide public data publication
+and observation remain [W77](#w77). Do not infer
+FUSE activation from the presence of metadata transaction helpers.
+Decision retirement and namespace predicate bounds remain
+[W83/W84](../status/spec-implementation.md); coordinator authority also
+depends on the read-freshness gate [W82](#w82).
+
+[Architecture](#architecture) · [Data protocol](#appendix-9--protocol--data-plane) ·
+[Directory protocol](#appendix-10--protocol--directory-placement--spreading) · [Sessions](#appendix-11--protocol--sessions-open-unlinked-locking)
 
 The operations that genuinely touch more than one shard (see the
 operation→participant matrix in
@@ -5711,7 +5666,10 @@ no serializable history even though each commits atomically.
   what happened — so it has its own explicit condition: reclaimable once
   every participant has acknowledged the decision durably, and no participant
   that could still be recovering remains. Until then it is retained,
-  bounded by the transaction rate rather than by the operation history.
+  bounded by unresolved/recoverable transactions rather than all completed
+  operation history, once that retirement protocol is implemented. The current
+  inspected implementation retains decisions without that protocol
+  ([W83](#w83)).
   Duplicate-suppression records have the matching bound in
   [sessions.md](#appendix-11--protocol--sessions-open-unlinked-locking).
 
@@ -5731,6 +5689,15 @@ efs uses each where it fits.
 ## Appendix 9 — Protocol — data plane
 
 *Source: `how-it-works/protocols/data.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
+
+**Implementation scope:** this page specifies the accepted design, not a
+current deployment guarantee. The [public-path review](../status/spec-implementation.md)
+records persistence, session, fixed-profile/repair and integrity limitations;
+consult those gates before claiming this contract is implemented.
+
+[Architecture](#architecture) · [Transactions](#appendix-8--protocol--cross-shard-transactions) ·
+[Sessions](#appendix-11--protocol--sessions-open-unlinked-locking) · [Failure tolerance](#appendix-7--failure-tolerance--derivation) ·
+[Performance](#appendix-12--performance--multi-raft-runtime--hot-path-contract)
 
 This is where "scales with raw hardware" is won or lost. The mechanism
 (client-direct RDMA, EC) is unchanged from the current implementation; what
@@ -5817,7 +5784,17 @@ generation** under the new profile, satisfy the new durability requirement,
 publish it atomically, then GC the old generation. An existing generation's
 coding interpretation is never mutated in place.
 
-**The write commit state machine (direct write).**
+Legacy folded-span replay is separately limited by
+[W88](#w88): trailer tombstones can be evicted
+before an ambiguous retry. Staged durable receipt/floor primitives are not
+proof that the production REPORT path carries them.
+
+**The publication state machine (a durability boundary).**
+
+This runs at synchronization/publication, not at every ordinary buffered
+`write()` return. Under the accepted consistency contract, `fsync`/last
+`flush` and supported synchronous writes wait for this boundary. Public
+implementation limitations are W71/W73 in the linked scope review.
 
 ```text
 1. allocate chunk generation G
@@ -5825,7 +5802,7 @@ coding interpretation is never mutated in place.
 3. obtain ALL k+f durable fragment ACKs         (EC durability, see below)
 4. Raft-commit the metadata publication of G  (chunk-map/size/mtime/ctime)
 5. apply the publication
-6. return write success
+6. return successful synchronization/publication
 ```
 
 Step 3 waits for **all** k+f fragments, not the fastest k: a generation
@@ -5838,8 +5815,8 @@ guarantee, and it is hidden by queue depth and pipelining
 ([performance.md](#appendix-12--performance--multi-raft-runtime--hot-path-contract)), never by weakening the durability
 definition.
 
-**"Durable ACK" is defined precisely, because the whole
-returned-write-is-durable semantic rests on it.** A durable fragment ACK
+**"Durable ACK" is defined precisely, because a successful
+durability boundary rests on it.** A durable fragment ACK
 means the storage target has completed the required **persistent-NVMe
 operation** for the fragment — an NVMe flush / FUA write, or a write into
 power-loss-protected (PLP) media — *not* that the RDMA WRITE completed.
@@ -6569,6 +6546,11 @@ ever actually tested.
 
 *Source: `how-it-works/protocols/directory.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
 
+**Implementation limits:** accepted ancestry/all-used-lane predicates exceed
+the current eight-record namespace guard bound ([W84](#w84)).
+ReadIndex-backed observations also require the fresh-authority gate
+[W82](#w82). Protocol requirements below remain binding.
+
 This is the placement decision everything else hangs off. The authoritative
 operation→participant matrix derived from these rules is
 [§6 of the spec](#architecture); this document is the placement
@@ -6682,15 +6664,18 @@ that same parent-row PUT — one Raft entry, no extra round. After spread the
 count is frozen; HASHED emptiness is the per-lane `dentry_seq` read set, not
 a distributed counter (the spec rejected that). Runtime override:
 `EFS_DIR_SPREAD_MIN` (tests). Pressure-triggered spread is specified; the
-bound is not a number in the spec and is not invented here. Draining
+bound is not a number in the spec and is not invented here. Source review
+found size-based admission and migration of already-SPLITTING directories,
+but no pressure-based automatic trigger ([W81](#w81)). Draining
 SPLITTING leftovers is the background migrator (in-memory queue, GC-thread
 pass on the host, opportunistic drain in the sim after a size-trigger
 flip). `raft-dir migrate` plus finish stay as the idempotent operator
 path.
 
 (a 100-entry directory with 100,000 clients creating and unlinking never
-crosses the size threshold but melts its leader — pressure-triggered spread
-catches it). Spread is one-way initially: once HASHED, a directory does not
+crosses the size threshold but can overload its leader — the required
+pressure trigger is intended to catch this case; current size-only admission
+does not establish that behavior). Spread is one-way initially: once HASHED, a directory does not
 collapse back. And crossing the trigger does not flip a bit — a 100M-entry
 directory cannot be re-partitioned atomically, and
 lookups/creates/unlinks/readdir must keep working *during* the move. The
@@ -6896,6 +6881,16 @@ ancestry predicate exists.
 ## Appendix 11 — Protocol — sessions, open-unlinked, locking
 
 *Source: `how-it-works/protocols/sessions.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
+
+**Implementation scope:** this page specifies the accepted design, not a
+current deployment guarantee. The [public-path review](../status/spec-implementation.md)
+records persistence, session, fixed-profile/repair and integrity limitations;
+consult those gates before claiming this contract is implemented. Session and
+revocation reads also depend on fresh quorum authority
+([W82](#w82)), not a cached completed read index.
+
+[Architecture](#architecture) · [Transactions](#appendix-8--protocol--cross-shard-transactions) ·
+[Data protocol](#appendix-9--protocol--data-plane)
 
 These four mechanisms share one foundation: a real client-session protocol.
 It is specified here together with everything built on it.
@@ -7292,6 +7287,12 @@ exactly:
 
 *Source: `how-it-works/performance.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
 
+**Scope:** the execution rules below are design requirements, not a claim
+that the current two-group/worker runtime implements every rule. See
+[W66 and public-path limits](../status/spec-implementation.md). Dated fcstor
+measurements do not identify the running NUC/xorinox topology or establish
+W71 durability; local engine studies are separate from FUSE/cluster results.
+
 The topology in [the spec](#architecture) makes linear scaling
 *possible*. This document is the contract that makes it *actual* — the
 difference between "the architecture scales" and "the implementation
@@ -7374,7 +7375,10 @@ hardware the groups were meant to exploit.
 ### Baselines and ceilings (current)
 
 Moved here verbatim from the work queue ([../status/README.md](#appendix-1--status--the-task-right-now-and-the-work-queue))
-on Oct 3 2026; the queue links here instead of carrying the tables.
+on Oct 3 2026; the queue links here instead of carrying the tables. These
+are dated fcstor reference measurements/configurations, not current universal
+hardware ceilings. Preserve each run's build, mode and error qualifications;
+newer local engine results later in this page do not replace cluster baselines.
 
 **What the hardware allows.** Every performance item is measured against
 this, not against last week's number. Cluster traffic rides `ibs1f0`
@@ -7395,9 +7399,11 @@ mutex, one leader, one thread, FUSE serialization, one WAL or one
 coordinator before a physical resource, *that is by definition an EFS bug*.
 By that rule the write path is still a bug, not a tuning task.
 
-Baselines, all honest (flush in the clock, reads after remount, `findmnt`
-verified `fuse.efs-fuse`). Historical context is in `docs/archive/project-history.md`; the table below
-links the retained measurement evidence.
+These dated runs included flush in the clock, remount-before-read and
+`findmnt` checks where recorded. They do not establish target power-loss
+durability ([W71](#w71)); the debug IO-500 run below
+explicitly includes an error. [Historical context](../archive/project-history.md)
+and retained raw measurements define each result's acceptance scope.
 
 | measurement | value | where |
 | --- | --- | --- |
@@ -7794,6 +7800,17 @@ perf/strace runs; O_SYNC does not establish SSD power-loss guarantees. See the
 [synchronous writer measurements](../../results/measure/20261007-sync-writer-investigation/SUMMARY.md).
 
 
+#### Latency-study qualification
+
+The short bounded writer studies above mixed initial population and replacement;
+per-run p99 averages are not pooled percentiles. The
+[corrected latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md)
+separates population from timing and retains individual observations. Preserve
+older numbers as historical measurements; use the corrected method for a new
+steady-state tail-latency gate. CPU samples and aggregate syscall time do not
+measure the fraction of wall time waiting.
+
+
 ## Appendix 13 — Development — modularity constraint
 
 *Source: `how-it-works/developing.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
@@ -7836,13 +7853,11 @@ requirement than "the code is organized," and it has concrete consequences:
 rest of the tree to change one component safely, the modularity has failed —
 regardless of how the directories are named.
 
-**Where we are (Oct 1 2026, honest).** The boundaries exist (Phase M is
-complete) and the state machines are pure enough that `tests/test_sim`
-runs them. The file-size rule is not met: of a 70k-line `src/`,
-`server/raft_host.c` is 12.1k lines, `client/write.c` 6.0k,
-`meta/meta_apply.c` 5.7k, `client/efs_fuse.c` 5.5k, `meta/metadata.c`
-3.8k. Splitting those by responsibility is a standing follow-on, taken
-when a change touches them, never as a drive-by.
+**Source-size snapshot (Oct 7, 2026).** The file-size target is not met:
+`server/raft_host.c` 13056 lines, `client/write.c` 7301 lines, `meta/meta_apply.c` 7709 lines, `client/efs_fuse.c` 7128 lines, `meta/metadata.c` 3884 lines.
+These counts describe the reviewed working tree, not a permanent module budget.
+Split by responsibility when the selected task touches a large module; this
+review does not authorize unrelated refactoring.
 
 **Boundaries** (aligned with the planes, so the architecture and the
 code structure are the same map):
@@ -7903,10 +7918,10 @@ extra steps, and the contributor who reads only one of them is misled. The
 documentation gate is therefore part of the build, not an editorial habit:
 
 ```text
-regenerate docs/architecture-full.md and fail on any diff
+regenerate docs/how-it-works/architecture-full.md and fail on any diff
     -> the generated review artifact can never be stale
 
-validate every internal link resolves
+validate internal links in normative sources, all active docs and root README
     -> the index-plus-satellite structure stays navigable
 
 validate every invariant reference (I1..I25) names a defined invariant
@@ -8037,6 +8052,20 @@ rediscover them (the other recurring ones are already in §3):
 - **`pgrep -x`, never `pgrep -f`** on this project's processes — the `-f`
   pattern matches your own ssh command line and kills your own session.
 
+### Keeping the agent handoff current
+
+Start with [the status index](#appendix-1--status--the-task-right-now-and-the-work-queue) and
+[the current handoff](#appendix-2--in-flight--the-current-handoff-block), then the selected work item's
+home and gates. Historical rollout results are not live cluster state.
+
+When documenting a bug, feature, enhancement or investigation, allocate an
+unused W identity and update the status index plus its detailed home together.
+Record decisions in the D register without confusing approved design with
+implemented code or accepted behavior. Keep implementation, local checks,
+cluster gates and closure separate. Archive superseded checkpoint narratives
+intact, repair links, and retain every unresolved gate in the active queue.
+Regenerate architecture artifacts and run the documentation gate after edits.
+
 
 ## Appendix 14 — Verification — simulator & code→signal cycle
 
@@ -8044,64 +8073,61 @@ rediscover them (the other recurring ones are already in §3):
 
 ### The simulator (build first, architecture-independent)
 
-The single highest-leverage tool, and it pays for itself regardless of the
-metadata design.
+Use it for reproducible logical protocol scenarios; public-path and hardware
+acceptance remain separate.
 
 **What it is.** A deterministic discrete-event simulator that runs N logical
 servers + M clients **in one process**. A seeded PRNG drives message order,
 drops, delays, duplicates, partitions, node crashes/restarts, and clock
-steps. The real metadata state machine (Raft groups, KV apply, op handlers,
-cross-shard transactions, membership) runs inside it against a **simulated
-network and simulated disk**, not sockets and NVMe.
+steps. It shares the Raft core and metadata apply logic with production,
+using simulator-specific operation handlers and orchestration against a
+**simulated network and simulated disk**. Production host admission and
+RPC/FUSE integration therefore need separate coverage.
 
-**Why it changes the dev cycle.** Today every correctness gate is a 13-node
-wipe + rsync + rebuild + ssh orchestration, and the signal is poor (99% of
-posixstress "failures" are 15s timeouts = saturation, not correctness).
-Distributed bugs are only findable end-to-end on physical hardware — the
-slowest, least reproducible place possible. In the simulator a full cluster
-scenario runs in milliseconds, a failure replays exactly from its seed, and
-you explore millions of interleavings overnight. The invariants of §4 of the
-spec are checked after every simulated step, so a bug is a seed + a violated
-invariant, not a log line on a live cluster.
+**Why it helps.** Seeded ordering and controlled fault injection make a
+logical protocol failure reproducible. Start at a focused model/unit gate,
+then verify public callbacks and real processes, and finally hardware-specific
+behavior. Timeouts, saturation and incorrect outcomes must be distinguished
+with evidence; none can be dismissed from duration alone. A finite passing
+scenario set does not prove every possible interleaving or invariant.
 
 **How it is built.** The metadata core is written to be **transport- and
 storage-agnostic**: it sends messages and reads/writes disk through
 interfaces. Two backends implement those interfaces: the real one (sockets +
 NVMe, what ships) and the simulated one (a message queue + a fault-injecting
-in-memory disk, what the simulator drives). The same compiled state machine
-runs in both, so "passes in simulation" is meaningful. (This is also why
+in-memory disk, what the simulator drives). Shared core/apply code makes
+simulation useful, but different orchestration can hide integration bugs.
+For example, `src/sim/sim_raft.c:read_begin_g` starts a fresh read round; the
+production host can reuse completed coverage (W82). (This is also why
 [development.md](#appendix-13--development--modularity-constraint) makes state-machine purity an architectural
 rule.)
 
-**Harness (Sep 2).** `include/efs/sim.h` + `src/sim/` + `tests/test_sim`
-drive a **fixed RF=3 Raft group** (servers 0..2) applying the §5 ordered-KV
-SM (`src/meta/meta_apply.c`) against mem store and loop transport. Same seed
-replays the same history hash. Metadata mutations are Raft log commands;
-reads are leader + ReadIndex (no clock leases). Crash keeps KV + Raft persist
-and restarts the SM from them. Faults that gate today: message drop,
-partition (including minority leader / lost quorum), crash+restart with the
-same disk, PUT-then-crash before publish (unpublished must not be readable),
-publish without all k+f fragments, silent fragment corruption (skipped, never
-decoded). Raft invariants gated in-sim: I1 (one leader per term), I2/I10
-(acknowledged create survives f=1 replica crash), I3 (higher term fences the
-old leader), I4 (partitioned leader cannot advance commitIndex). Op-IDs (I16)
-persist in the CREATE batch. Production RPCs do not carry op-IDs yet, and
-production `efsd` still uses the in-memory table. Sessions (I23) and
-open-unlinked leases (I19) are driven: `efs_session` is a pure SM over one
-KV, and the simulator runs the three-phase revocation barrier
-(`ACTIVE(E) → FENCING → FENCE/ACK → ACTIVE(E+1)`) plus last-link keep /
-reclaim. A fence-ACK withheld mid-barrier is a real event in `tests/test_sim`.
-Data-target PUTs are not fenced. Production `efsd` still uses the in-memory
-table. Cross-shard
-transactions (I17) are driven: `efs_txn` is a pure SM over one KV per
-participant, and the simulator runs MKDIR as a 2-shard PREPARE / DECISION /
-RESOLVE (visibility at the coordinator's durable decision; L5 abort after
-crash-during-prepare). Reconfiguration (I18) is driven: the simulator owns a control-plane
-Raft group for **desired** placement, and each metadata group moves **actual**
-membership through joint consensus (learners catch up before they vote). A
-membership-transition interrupt (drop the new majority mid-joint) is a real
-generator event in `tests/test_raft`. Production `efsd` still uses the
-in-memory table.
+### Current coverage and limits
+
+Production metadata runs the Raft host over the durable LSM store;
+namespace RPCs carry operation IDs, subject to the exhaustion gap in W76.
+Session metadata/coordinator and staged publication admission exist, while
+mount-wide integration remains W72. The [public-path review](../status/spec-implementation.md)
+records durability, integrity, repair/profile and activation limits.
+
+`tests/test_sim`, metadata/transaction/session tests and real-store tests
+exercise different backends and scenarios. `EFS_SIM_KV_DIR` and
+`EFS_SIM_RAFT_DIR` select disk-backed simulator stores; inspect actual test
+commands/results before claiming those backends ran. Simulated persistence,
+process restart on the same live OS and hardware power loss are different
+gates. In particular W71's fragment persistence gap is not closed by healthy
+POSIX or process-restart acceptance.
+
+The [fault suite](../../tests/faults/README.md) includes simulator and isolated
+process/FUSE layers; GAP/not_run is not PASS. Public writeback, memory, GC and
+cold-data gates remain in the [handoff](#appendix-2--in-flight--the-current-handoff-block). The final
+[NUC acceptance ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md)
+is a dated build record, not current process inventory or blanket fault coverage.
+
+Sep 2 and Step 9–10.5c implementation narratives are
+[archived](../archive/verification-checkpoints-20261007.md). Required events
+below are a coverage target, not a statement that every listed generator/event
+is implemented or has passed on real hardware.
 
 **Fault-injection events the generator must produce:**
 
@@ -8156,8 +8182,7 @@ per-inode lock record cap exceeded (must fail ENOLCK)
 
 **Independent checking.** Record complete operation histories and run an
 independent linearizability / transaction-history checker, rather than
-relying exclusively on handwritten invariants. (This is the FoundationDB
-methodology: deterministic whole-cluster single-process simulation, seeded
+relying exclusively on handwritten invariants. (This follows the documented [FoundationDB testing approach](https://apple.github.io/foundationdb/testing.html): deterministic whole-cluster single-process simulation, seeded
 replay, network/disk/machine fault injection, and the goal of finding
 correctness issues in simulation rather than production.)
 
@@ -8203,468 +8228,6 @@ implementation habit: it is only ever *tested* if the simulator can flip bits
 in a durable object, and an EC decoder without integrity checking fails that
 test by producing confidently wrong data rather than an error.
 
-**Step 9 in-sim (gated).** Fragments are FileID-scoped and named by a unique
-candidate generation (never G+1). Publication is `CAS(expected = committed
-base)` of that candidate plus a lane MAX in one KV batch; a CAS miss does
-not apply the MAX (I21). A publication naming a superseded `content_epoch`
-is rejected; data-target PUT is not (I22/I23). `test_sim` and
-`test_meta_apply` gate I13, I14, I15, I20, I21, I22 (epoch fence on lane-0
-files), and I25, plus rejection of duplicate-node / wrong-profile evidence.
-Not in this step: multi-chunk I24, truncate range-delete, O_APPEND, degraded
-`u` / profile-cutover barriers. Production `efsd` is unchanged.
-
-**Step 10 in-sim (gated).** A directory moves LOCAL → SPLITTING(e) → HASHED(e).
-During SPLITTING the hashed side wins: a tombstone is ENOENT and the
-migrator never resurrects it (I8). CREATE co-locates the file inode with
-the dentry shard. POSIX locks are a pure SM over KV: classic+OFD `fcntl`
-share one conflict domain, `flock` is independent; conflict → AGAIN, wait
-FIFO, same-inode cycle → DEADLK, cap → NOLCK. A session fence dequeues
-waiters as STALE and never grants them. `test_sim`, `test_lock`, and
-`test_meta_apply` gate I8 and those lock properties. Not in this step:
-hashed RMDIR/`dentry_seq`, directory-rename ancestry, `utimens` dir fence,
-pressure-based spread, partial-unlock split, production `efsd` wiring.
-
-**Step 10.5a in-sim (gated): the simulator runs on the durable KV.** Set
-`EFS_SIM_KV_DIR=<dir>` and every server's applied state lives in
-`efs_kv_lsm_open` instead of `kv_mem`, with no test changes — each sim
-instance gets its own store under that directory, because `kv_mem` hands
-every instance an empty one and reusing a directory would carry state across
-cases. The sim's memtable threshold is deliberately tiny (512 B) so the runs
-cross it: a threshold the sim never reaches would check every invariant
-against a memtable and never against a segment or a compaction result. The
-gate is all five sim suites OK with segments actually produced (51 L0 + 81
-L1 on the recorded run). This is the substitution that makes the durable
-store's correctness a property the existing invariant checkers prove, rather
-than a separate claim.
-
-`test_kv_lsm` covers what the sim cannot: semantics parity with `kv_mem`
-(including the short-buffer probe and batch atomicity), a **real** crash —
-the child `_exit`s without unwinding after a batch returned, so only an
-fsync that already happened can make the parent's reopen see the write — a
-torn WAL tail that must be discarded while its prefix survives, tombstones
-shadowing values across levels, and 4000 keys with a third deleted verified
-through auto-compaction and a reopen. One bug it caught: the compaction merge
-advanced the winning source before comparing the others against its key, so
-older duplicates survived their own tombstone. A scan-only test cannot see
-that — it needs the compacted output read back.
-
-**Step 10.5b in-sim (gated): the simulator runs on the durable Raft log.**
-Set `EFS_SIM_RAFT_DIR=<dir>` and every server's Raft persistent state lives
-in `efs_raft_disk_open` instead of `raft_mem`, with no test changes; set both
-variables and both backends are durable at once. Two things make this a real
-substitution rather than a link-time one. First, **all three of a server's
-groups share one log**, which is the production shape (thousands of groups
-per node multiplexing one fsync stream) and puts that sharing under test —
-a group whose records leaked into another's state would show up as a
-cross-group hard-state or log failure. Second, **a simulated restart really
-closes and reopens the log**, so every crash the simulator injects becomes a
-replay of what was on disk, under all the existing fault injection, rather
-than a store object that quietly kept its RAM.
-
-The gate is all five sim suites OK on the durable Raft store alone and on
-both durable stores together. It was verified **non-vacuous by negative
-control**: making replay silently drop ENTRY records fails `test_raft_store`
-(16 checks) and `test_sim` (3, in transaction recovery). A gate that cannot
-fail is not a gate, and for a store whose whole job is "what survives a
-restart" that is the only way to know the sim depends on it.
-
-`test_raft_store` covers what the sim cannot: answer-for-answer parity with
-`raft_mem` driven through one shared script (gap rejection, in-place slot
-overwrite, the short-buffer required-length report, snapshot-index term
-lookup, `NOT_FOUND` vs never-saved config), a **real** crash via
-`fork`+`_exit`, a torn tail that must be discarded *without* losing the good
-records behind it and must leave the file appendable, truncation surviving a
-reopen (a follower that loses a truncation gets conflicting entries back and
-diverges), and rotation preserving live state through a reopen. One bug it
-caught: replaying a *rotated* log applies the snapshot record before any
-entries exist, which the validation inherited from `raft_mem` rejected —
-correct for a live caller, wrong for replay, so the prefix drop is clamped on
-the replay path and strict on the callback.
-
-**Step 10.5c-1 in-sim (gated): single-shard reads and SETATTR over the
-applied KV.** READDIR walks LOCAL / SPLITTING / HASHED including the
-lane-0 alias (a hashed name that lives on the inode's own shard is not a
-second copy). SETATTR mode/owner is one Raft entry on the inode shard:
-ctime MAX-clamps, mtime does not move, a stale `expect_gen` is STALE.
-GETATTR is the §7.3 / §7.4 validated double collect — MAX over the inode
-row and the active write lanes (a file) or the `used_shards` dir lanes (a
-HASHED directory), including committed-but-unmaterialized reductions, then
-a recheck of `lane_seq` / pending txids / `content_epoch` / `mtime_gen` /
-`used_shards`; an unreachable coordinator is I9, not absence. A hashed
-create or unlink stamps its dir lane on the dentry shard and does not
-move the directory inode row's times. LOOKUP_PATH is a batched
-ancestor walk (resume from the terminal, I9 on a dangling dentry,
-INVAL through a non-directory). The simulator proposes SETATTR through
-Raft, serves GETATTR/READDIR via ReadIndex (file lanes or dir lanes), and hops LOOKUP_PATH with a
-ReadIndex per shard; a leader crash does not change a linearizable read.
-Gate: `test_meta_apply`, `test_sim`.
-
-**Step 10.5c-2 in-sim (gated): `utimens` inode fence.** Only utimens can
-set a time backwards, so it is the only op that bumps `mtime_gen` and
-pushes that generation onto every active write lane (file) or used dir
-lane (HASHED/SPLITTING directory). getattr ignores lane mtimes stamped
-under an older generation; a later write re-stamps at the new generation
-and is visible again. atime-only does not fence. chmod after utimens
-does not hide the explicit mtime (it does not bump `mtime_gen`). The
-simulator proposes the fence through Raft; a leader crash / restart does
-not resurrect a stale lane mtime. Gate: `test_meta_apply`, `test_sim`.
-
-**Step 10.5c-3 in-sim (gated): truncate range-delete.** SETATTR(size) is
-one apply batch over the inode row and active lanes: bump `content_epoch`,
-set `base_size`, fence each lane, range-delete chunk-map keys whose
-byte range starts at or past the new size, and optionally CAS-publish the
-straddling tail chunk in the same batch. A publish carrying the old epoch
-is STALE (I22). The simulator proposes truncate through Raft; crash /
-restart does not restore deleted chunks. Gate: `test_meta_apply`,
-`test_sim`. Not in this step: O_APPEND, production `efsd`.
-
-**Step 10.5c-4 in-sim (gated): O_APPEND.** Reservation is against the real
-EOF (`MAX` of `base_size`, active-lane ends, pending committed reductions,
-and the live watermark) — a private counter that ignores a prior pwrite
-is a correctness bug. An unresolved burst holds an append barrier:
-publish with `new_size` past the watermark is BUSY; getattr reports the
-contiguous resolved frontier, not lane `max_end`. Resolve is COMPLETED,
-ABORTED_HOLE, or FENCED_HOLE; a retried reserve of the same op-ID
-recovers the same offset (`opid.extra`, I16). The simulator proposes
-reserve and resolve through Raft; crash / restart keeps the reservation.
-Gate: `test_meta_apply`, `test_sim`. Not in this step: cross-shard
-rename/link/rmdir, production `efsd`.
-
-**Step 10.5c-5 in-sim (gated): LINK, UNLINK nlink>1, RMDIR, file RENAME.**
-LINK is dest dentry + inode `nlink++`. UNLINK last-link is one shard iff
-dentry and inode co-locate, else a 2-shard txn. RMDIR is a txn: LOCAL
-emptiness is one range check; HASHED emptiness is `dentry_seq` guards on
-used lanes (the participant cap stays 8). File RENAME is same-dir LOCAL
-one shard / cross-dir a txn; replace is not in this step. Directory
-rename is INVAL until `parent_version` is on the inode row. A dest dentry
-PUT CASes the current txn version so a reused name is not stuck at
-expected 0. The simulator proposes through Raft; I17 abort leaves no
-half-apply. Gate: `test_meta_apply`, `test_sim` (mem and durable). Not
-in this step: directory rename, production `efsd`.
-
-**Step 10.5c-6 in-sim (gated): directory rename with `parent_version`.**
-The inode row is 128 B and carries `parent` + `parent_version` (bumped on
-reparent). Ancestry of `dst_parent` is a read-set of pver sidecar guards,
-not exclusive on ancestor inodes. src in the chain is INVAL. Concurrent
-`rename(a→b/a)` ‖ `rename(b→a/b)` BUSYs the second on the first's
-exclusive pver PUT (I17). Cross-dir directory rename adjusts parent nlink;
-file rename does not. The participant cap stays 8. Replace is not in this
-step. Gate: `test_sim` (mem and durable). Not in this step: a new export,
-production `efsd`.
-
-**Step 10.5c-7 in-sim (gated): export ROOT is a Raft mkfs.** Boot no longer
-seeds the root with a local KV write. It elects, proposes
-`efs_meta_apply_init` (leader-stamped `now`), and apply is idempotent.
-getattr of ROOT is ReadIndex. 100% drop cannot create the export.
-Crash/restart keeps ROOT. Gate: `test_sim` (mem and durable). Not in
-this step: production `efsd` (that is 10.5c-9).
-
-**Step 10.5c-8 in-sim (gated): export salt at mkfs.** MKDIR scatter hashes
-with the per-export salt chosen at mkfs (`hash(parent, name, salt) &
-0xFFF`). Salt lives on the ROOT shard; a missing record reads as 0;
-idempotent mkfs does not change it. Crash/restart keeps salt and later
-mkdirs still scatter with it. Gate: `test_meta_apply`, `test_sim` (mem
-and durable).
-
-**Step 10.5c-9 (gated): production Raft host in `efsd`.** Env-gated
-`EFS_MD_RAFT=1` (no-op when unset). Two groups (odd/even shard parity),
-one `raft_disk` + one `kv_lsm` per node under `<storage>/mdraft/`, Raft
-messages on existing peer TCP, a tick thread, idempotent `raft-mkfs` on
-the ROOT group. Gate: `test_wire` (codec) and
-`tests/stress/raft_host_smoke.sh` on a scratch 4-node cluster (port 19820,
-`/tmp` storage; live cluster untouched) — elect, mkfs ROOT on every
-voter, kill -9 follower then leader, restart catch-up keeps ROOT.
-Not in this step: LOOKUP/GETATTR (that is 10.5c-10).
-
-**The flag is gone (Step 11, Sep 11 2026).** Every "When `EFS_MD_RAFT=1`"
-and "Flag off is a no-op" below records how that slice was gated while
-the old in-memory table still existed. The Raft+KV host now starts
-unconditionally and is the only metadata engine; the table those slices
-bypassed is deleted. The 19820 scratch cluster is retired;
-`tests/stress/raft_host_smoke.sh` starts and stops its own private
-cluster.
-
-**Step 10.5c-10 (gated): LOOKUP/GETATTR through ReadIndex + KV.** When
-`EFS_MD_RAFT=1`, `EFS_MSG_INODE_LOOKUP` / `GETATTR` skip the in-memory
-table: leader + ReadIndex, then `efs_meta_apply_getattr` /
-`efs_meta_apply_lookup` on the applied KV. A follower replies
-NOT_PRIMARY; a missing name is NOT_FOUND. Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — getattr of ROOT (dir, nlink=2) on
-the leader, NOT_PRIMARY on a follower, lookup miss, same after kill -9
-catch-up. Not in this step: CREATE (that is 10.5c-11).
-
-**Step 10.5c-11 (gated): file CREATE through Raft.** When `EFS_MD_RAFT=1`,
-`EFS_MSG_INODE_CREATE` proposes `EFS_MD_CMD_CREATE` (same encoding as
-the sim) on the dentry-shard group, waits `last_applied`, then LOOKUP +
-GETATTR. Duplicate is EXIST; `S_IFDIR` is INVAL (MKDIR is a 2-shard
-txn). `CREATE_SHARD` is INVAL (old fan-out). Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — create a file under ROOT, lookup +
-getattr, second create EXIST, name survives kill -9 catch-up.
-Not in this step: MKDIR (that is 10.5c-12).
-
-**Step 10.5c-12 (gated): MKDIR through Raft.** When `EFS_MD_RAFT=1`,
-`S_IFDIR` CREATE is a 2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE` /
-`RESOLVE`, same encoding as the sim) over parent dentry+row+dseq and
-child inode+alloc. The receiving node must lead every participant
-group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — mkdir under ROOT (retry names until
-accepted), lookup, ROOT nlink=3, name survives kill -9 catch-up.
-Not in this step: last-link UNLINK (that is 10.5c-13).
-
-**Step 10.5c-13 (gated): last-link file UNLINK through Raft.** When
-`EFS_MD_RAFT=1`, `EFS_MSG_INODE_UNLINK` proposes `EFS_MD_CMD_UNLINK`
-(same encoding as the sim) on the dentry-shard group, waits
-`last_applied`. Missing name is NOT_FOUND; `S_ISDIR` and nlink>1 are
-INVAL (RMDIR / hardlink unlink are 2-shard txns). `UNLINK_SHARD` is
-INVAL (old fan-out). Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — create+unlink a file under ROOT,
-lookup miss, second unlink NOT_FOUND, name stays gone after kill -9
-catch-up.
-Not in this step: SETATTR (that is 10.5c-14).
-
-**Step 10.5c-14 (gated): mode/owner SETATTR through Raft.** When
-`EFS_MD_RAFT=1`, `EFS_MSG_INODE_SETATTR` proposes `EFS_MD_CMD_SETATTR`
-(same encoding as the sim) on the inode-shard group, waits
-`last_applied`. Missing ino is NOT_FOUND (no propose); SIZE/MTIME/ATIME
-are INVAL (truncate / utimens later). Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — setattr mode 0600 on the created
-file, getattr confirms, miss ino NOT_FOUND, SIZE mask INVAL, mode
-survives kill -9 catch-up.
-Not in this step: RMDIR (that is 10.5c-15).
-
-**Step 10.5c-15 (gated): empty LOCAL RMDIR through Raft.** When
-`EFS_MD_RAFT=1`, directory UNLINK is a 2-shard txn (`EFS_MD_CMD_PREPARE`
-/ `DECIDE` / `RESOLVE`, same encoding as MKDIR) over parent dentry +
-parent nlink/dseq and child inode. HASHED/SPLITTING are INVAL/BUSY.
-The receiving node must lead every participant group; otherwise
-`NOT_PRIMARY`. Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — mkdir a dedicated name, rmdir,
-lookup miss, second rmdir NOT_FOUND, rmdir of a file INVAL, name
-stays gone after kill -9 catch-up.
-Not in this step: LINK (that is 10.5c-16).
-
-**Step 10.5c-16 (gated): LINK through Raft.** When `EFS_MD_RAFT=1`,
-`EFS_MSG_INODE_LINK` is a 2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE`
-/ `RESOLVE`) over dest dentry + dest parent mtime/dseq and source
-inode `nlink++`. LOCAL dest only; HASHED/SPLITTING are INVAL/BUSY.
-Directory src is INVAL. `LINK_SHARD` is INVAL (old fan-out). The
-receiving node must lead every participant group; otherwise
-`NOT_PRIMARY`. Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — link the created file under ROOT,
-both names, nlink=2, duplicate EXIST, miss NOT_FOUND, directory INVAL,
-extra name and nlink survive kill -9 catch-up.
-Not in this step: nlink>1 UNLINK (that is 10.5c-17).
-
-**Step 10.5c-17 (gated): nlink>1 UNLINK through Raft.** When
-`EFS_MD_RAFT=1`, file UNLINK with `nlink>1` (or last-link with
-dentry shard ≠ inode shard) is a 2-shard txn (`EFS_MD_CMD_PREPARE`
-/ `DECIDE` / `RESOLVE`) over dest dentry DEL + dest parent mtime/dseq
-and source inode `nlink--` (or inode DEL). LOCAL parent only;
-HASHED/SPLITTING are INVAL/BUSY. Last-link on one shard stays
-`EFS_MD_CMD_UNLINK`. The receiving node must lead every participant
-group; otherwise `NOT_PRIMARY`. Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — extra link of the created file,
-unlink that name, surviving nlink=2, second unlink NOT_FOUND, extra
-name stays gone after kill -9 catch-up.
-
-**Step 10.5c-18 (gated): utimens inode fence through Raft.** When
-`EFS_MD_RAFT=1`, SETATTR with only MTIME/ATIME is `EFS_MD_CMD_UTIMENS`
-on the inode shard: bump `mtime_gen`, assign mtime/atime. Mixed
-mode+time is INVAL; SIZE is INVAL. A fenced lane whose Raft group is
-not the inode group is INVAL this slice. Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — setattr mtime=1000000000 on the
-created file, getattr, mtime survives kill -9 catch-up.
-
-**Step 10.5c-19 (gated): same-dir LOCAL file RENAME through Raft.**
-When `EFS_MD_RAFT=1`, `RENAME_AT` of a file in a LOCAL directory is a
-2-shard txn (`EFS_MD_CMD_PREPARE` / `DECIDE` / `RESOLVE`) over src
-dentry DEL + dest dentry PUT + inode parent/ctime + parent mtime/dseq.
-Cross-dir, directories, HASHED/SPLITTING are INVAL/BUSY; dest exists
-is EXIST; `RENAME` (by ino) is INVAL. The receiving node must lead
-every participant group; otherwise `NOT_PRIMARY`. Restart restores
-`last_applied` without compacting (`efs_raft_restore_applied`) so
-CREATE is not replayed onto a KV that already renamed the name.
-Flag off is a no-op. Gate: `tests/stress/raft_host_smoke.sh` —
-`raft-smoke-n` → `raft-smoke-m`, old NOT_FOUND, new OK, old stays
-gone after kill -9 catch-up.
-
-**Step 10.5c-20 (gated): READDIR and LOOKUP_PATH through ReadIndex +
-KV.** When `EFS_MD_RAFT=1`, `INODE_READDIR` and `INODE_LOOKUP_PATH`
-are served from the applied KV (not the in-memory table). READDIR
-ReadIndexes the directory (and HASHED used dir-lane groups) then
-scans; SPLITTING is BUSY. LOOKUP_PATH walks hop-by-hop with a
-ReadIndex on each dentry shard. Flag off is a no-op. Gate:
-`tests/stress/raft_host_smoke.sh` — ROOT listing contains the
-created/renamed/link/mkdir names and not the unlinked ones;
-`/raft-smoke-f` and `/raft-smoke-m` resolve; listing survives
-kill -9 catch-up.
-Remaining: cross-group propose, then the rest of the mutations.
-Not in this step: cutting over the live `efs-test` table, step 11.
-
-**Step 10.5c-21 (gated): SETATTR SIZE / chunk-aligned truncate through
-Raft.** When `EFS_MD_RAFT=1`, `SETATTR` with only the SIZE bit proposes
-`EFS_MD_CMD_TRUNCATE` (`content_epoch++`, `base_size = S`). Chunk-
-aligned or zero only; unaligned sizes (need a tail candidate) and
-mixed SIZE+mode/time stay INVAL. Same-group lanes only — a fenced
-lane on another Raft group is INVAL this slice. Flag off is a no-op.
-Gate: `tests/stress/raft_host_smoke.sh` — empty `raft-smoke-f` to
-size 131072, getattr, size survives kill -9 catch-up (utimens after
-truncate still keeps mtime=1000000000).
-
-**10.5c-22 — chunk publish + GETCHUNKS from KV (same-group / lane 0).**
-`REPORT_CHUNKS` packs one `EFS_MD_CMD_PUBLISH` per rec (CAS + lane
-MAX). `GETCHUNKS` is ReadIndex + `efs_meta_apply_get_chunk`. First-use
-of a lane whose Raft group ≠ inode group is INVAL this slice (that is
-a 2-shard txn). Flag off is a no-op. Gate: same smoke — create
-`raft-smoke-p`, empty GETCHUNKS, publish chunk 0 size=131072,
-GETCHUNKS count=1, mapping and size survive kill -9 catch-up.
-
-**10.5c-23 — unaligned truncate tail CAS (same-group / lane 0).**
-SETATTR SIZE that is not chunk-aligned mints a tail candidate and
-CAS-publishes it in the same `EFS_MD_CMD_TRUNCATE` entry. A later
-size=0 range-deletes the map. Same-group lanes only. Flag off is a
-no-op. Gate: same smoke — after publish, size=1000 keeps ci=0,
-size=0 clears GETCHUNKS, crash keeps that.
-
-**10.5c-24 — cross-group propose (no new opcode).** A node that does
-not lead a participant group submits via non-empty `EFS_MSG_RAFT_MKFS`
-(`group` + cmd) or ReadIndex (`group` only). Followers wait apply.
-Unhosted CREATE/LOOKUP/GETATTR/UNLINK/LINK bounce to a dual-host
-(never self). RMDIR looks up the dentry first so an even-shard child
-bounces before resolve. READDIR emits a dentry stub for unhosted
-children. Directory RENAME is INVAL from `dent.type`. Flag off is a
-no-op. Gate: same smoke — mkdir of even-shard `raft-smoke-xg*` from
-raft_id 0, lookup/rmdir/link-dir/rename-dir/readdir, crash keeps
-that dir (ROOT nlink=4).
-
-**10.5c-25 — O_APPEND reserve (resolve on REPORT).** `INODE_APPEND`
-proposes `EFS_MD_CMD_APPEND_RSV` on the inode group (bounce if
-unhosted). Zero UUID skips the op-id window. Reply size is the
-watermark; getattr stays the frontier while nopen>0. After a
-covering `REPORT_CHUNKS` publish, OPEN reservations resolve
-COMPLETED (`EFS_MD_CMD_APPEND_RES`) so the next write past the
-watermark is not BUSY. Flag off is a no-op. Gate: same smoke —
-create `raft-smoke-a`, append 131072, getattr size=0, publish,
-getattr size=131072, crash keeps that size.
-Not in this step: cutting over the live `efs-test` table, step 11.
-
-**10.5c-26 — SYMLINK as CREATE + publish.** FUSE already creates
-`S_IFLNK` and stores the target as ordinary chunk bytes. Host
-CREATE packed that mode; publish/GETCHUNKS wrongly required
-`S_ISREG`. Both now accept files and symlinks (directories stay
-INVAL). No new opcode, no target column. Flag off is a no-op.
-Gate: same smoke — create `raft-smoke-s` mode=0120777, publish
-size=11, getattr+GETCHUNKS, duplicate EXIST, crash keeps mode
-and size.
-
-**10.5c-27 — same-dir LOCAL directory rename.** Host RENAME of a
-directory is no longer INVAL. Bounce from the dentry type before
-resolve (a scattered MKDIR dest on another group would otherwise
-be I9). pver sidecar GUARDs on dst_parent ancestry and an exclusive
-pver PUT on the renamed dir. Cross-dir and HASHED stay INVAL.
-LOOKUP_PATH bounces unhosted child-inode hops like LOOKUP. Flag
-off is a no-op. Gate: same smoke — mkdir `raft-smoke-rd`, rename
-to `raft-smoke-re`, old gone / new present, miss NOT_FOUND, exist
-EXIST, cross-dir INVAL, READDIR+LOOKUP_PATH, crash keeps the new
-name.
-
-**10.5c-28 — HASHED dest CREATE.** Empty LOCAL dir split via DIR
-begin / migrate / finish (`raft-dir` over existing `RAFT_MKFS`).
-First use of a hashed dentry shard on another group is a 2-shard
-txn (parent `used_shards` bit; dest dentry + co-located file inode
-+ dir-lane). SPLITTING dest is BUSY. Unhosted HASHED lanes bounce
-on LOOKUP/GETATTR/LOOKUP_PATH; ROOT READDIR stubs those children.
-Flag off is a no-op. Gate: same smoke — dedicated `raft-smoke-hd`,
-hashed-dentry file whose inode shard differs from the parent,
-LOOKUP_PATH, ROOT READDIR, crash keeps the dir and files.
-
-**10.5c-29 — HOLD open-unlinked leases.** `EFS_MSG_INODE_HOLD`
-proposes SESSION LEASE_OPEN/CLOSE on the inode shard (no new
-opcode; owner is the session stand-in). Last-link UNLINK with a
-lease keeps nlink=0 (I19); last close reclaims. Directories INVAL.
-Sessions/fencing are not hosted (FLOCK is 10.5c-30). Flag off is a no-op. Gate:
-same smoke — dedicated `raft-smoke-k`, open, unlink, getattr
-nlink=0, crash keeps the inode, close reclaims.
-
-**10.5c-30 — non-blocking FLOCK grant/release.** `EFS_MSG_INODE_FLOCK`
-proposes LOCK GRANT/RELEASE on the inode shard (no new opcode;
-whole-file FLOCK domain; owner is the session stand-in). Conflict
-is BUSY. Blocking wait queues, ranges, and F_GETLK are not hosted.
-Flag off is a no-op. Gate: same smoke — dedicated `raft-smoke-w`, EX
-owner=1, EX owner=2 BUSY, UN, EX owner=2, crash keeps the lock.
-
-**10.5c-31 — non-blocking whole-file fcntl.** Same
-`EFS_MSG_INODE_FLOCK` opcode with `EFS_FLOCK_FCNTL` (no new opcode;
-record-lock domain; classic process owner kind). Same-domain
-conflict is BUSY; flock on the same file is the other domain and
-does not conflict. Ranges, F_GETLK, and blocking waits are not
-hosted. Flag off is a no-op. Gate: same smoke — dedicated
-`raft-smoke-c`, EX owner=1, EX owner=2 BUSY, flock EX owner=2 OK,
-UN, EX owner=1 held through crash.
-
-**10.5c-32 — non-blocking fcntl byte ranges.** Same
-`EFS_MSG_INODE_FLOCK` opcode; optional `EFS_FLOCK_RANGE_LEN`
-suffix (two native uint64_t start,end, half-open). Absent suffix
-is whole-file. Struct size is unchanged. FLOCK domain rejects a
-non-whole-file range (INVAL). Adjacent ranges grant; overlap is
-BUSY. Blocking waits are not hosted. Flag off is a
-no-op. Gate: same smoke — dedicated `raft-smoke-t`, EX `[0,100)`
-owner=1, EX `[100,200)` owner=2 OK, EX `[50,150)` BUSY, inverted
-INVAL, flock-domain range INVAL, owner=2 `[100,200)` held through
-crash.
-
-**10.5c-33 — F_GETLK leader read.** Same `EFS_MSG_INODE_FLOCK`
-opcode with `EFS_FLOCK_GETLK` (no new opcode; no Raft entry).
-Reply packs the first conflicting record or F_UNLCK. Same-owner
-does not conflict. Flag off is INVAL. Gate: same smoke — on
-`raft-smoke-t`, GETLK `[50,150)` reports owner=1 `[0,100)`,
-own-range and free-range UNLCK, after crash GETLK `[100,200)`
-still reports owner=2.
-
-**10.5c-34 — blocking lock waits.** Same opcode with
-`EFS_FLOCK_WAIT`: a conflicting grant queues FIFO at the leader
-(leader memory, not Raft state) and the held RPC's reply is the
-grant. A queued waiter blocks a later conflicting request (no
-barging). Leader loss replies NOT_PRIMARY and the client
-re-issues. WAIT with UN/GETLK is INVAL; flag off is INVAL. Gate:
-same smoke — dedicated `raft-smoke-q`, a waiter pends behind a
-held EX, a queued SH does not barge past the EX waiter, release
-grants in FIFO order, and a waiter pending across the leader
-kill re-issues on the new leader and grants after the surviving
-holder's release.
-
-**10.5c-35a — session record + register + establish.** Production
-host applies `EFS_MD_SESS_CREATE` / `REGISTER` / `ESTABLISH`
-(same bytes as the sim). GET is a ReadIndex (sub=0, not a log
-command). No new opcode: mgmt `raft-session` reuses
-`EFS_MSG_RAFT_MKFS` submit. CREATE is idempotent. Gate: same
-smoke — create a uuid, register its session shard, establish,
-GET reports ACTIVE + touched, and the record survives crash.
-
-**10.5c-35b — real session identity on HOLD/FLOCK.** Optional
-`EFS_SESS_WIRE_LEN` suffix carries `(uuid, epoch)` on
-`efs_msg_inode_hold` / `efs_msg_inode_flock`; absent keeps the
-stand-in. The host runs `efs_session_accept` on the inode shard
-before proposing (wrong/not-established epoch → BUSY). mgmt
-`raft-hold` / `raft-flock` / `raft-fcntl` take `[uuid-hex epoch]`.
-Gate: same smoke — established uuid accepted, wrong epoch BUSY,
-stand-in path intact.
-
-**10.5c-35c — revocation barrier.** Production host applies
-`EFS_MD_SESS_BEGIN` / `FENCE_LOC` / `ACK` / `FINISH` /
-`LEASE_DROP`. mgmt `raft-session fence` is the coordinator (GET
-shard≥4096 reads a `touched_shards` word). FENCE_LOC dequeues
-waiters of that uuid/epoch (never granted). Gate: same smoke —
-waiter of epoch 1 BUSY after fence, epoch 1 rejected, epoch 2
-accepted after establish, ACTIVE epoch 2 after crash.
-
-**10.5c-35d — append-reservation reclaim on fence.** `LEASE_DROP`
-of epoch E resolves that session's OPEN reservations on the
-shard as `FENCED_HOLE`. Optional `(uuid, epoch)` suffix on
-`raft-append` tags the rsv; absent keeps the stand-in. Gate:
-same smoke — reserve 128 KiB under epoch 1, getattr stays 0,
-fence, getattr is 131072, old-epoch append BUSY.
-
 ### Shortening the code → signal cycle
 
 The bottleneck is not writing code — it is **how long a change takes to prove
@@ -8672,43 +8235,67 @@ itself**. Before the simulator (Step 10.5) that proof was a 13-node wipe +
 rsync + rebuild + ssh orchestration, and the signal was poor: most
 posixstress "failures" were 15 s timeouts (saturation, not correctness),
 and a single run was noise. The strategy is to **push each class of bug
-to the cheapest layer that can catch it**; `tests/test_sim` is that
-deterministic layer and is the correctness gate for every protocol change.
+to the cheapest layer that can catch it**, then exercise the relevant public
+and hardware paths. Select simulator tests for protocol changes, but do not
+substitute an unrelated simulation pass for their named acceptance gates.
 
 The layers, cheapest first:
 
 | Layer | Answers | Cost | Catches |
 |---|---|---|---|
-| **unit** (`make test`) | is this function right | ms | logic, encode/decode, pack/unpack |
-| **simulator** | is the *protocol* right under any interleaving / failure | ms | message-ordering, leader/fencing, recovery, the §4 invariants |
-| **synthetic bench** (`efs-bench --meta`) | is it fast, did it regress | seconds | throughput/latency regressions, op-storm cost |
+| **unit** (`make test`) | does the selected function/scenario satisfy its assertions | test/suite dependent | logic, encode/decode, pack/unpack |
+| **simulator** | does the protocol survive the selected seeded faults/interleavings | ms | message-ordering, leader/fencing, recovery, the §4 invariants |
+| **synthetic bench** (`efs-bench <seed:port> --meta` for RPCs; `--bench meta` for local KV/Raft) | is it fast, did it regress | seconds | throughput/latency regressions, op-storm cost |
 | **posix / posix2** | is it a correct filesystem (vs XFS) | minutes | semantic / peer-visibility gaps |
-| **13-node cluster** | does it perform on real hardware | slowest | perf ceilings, RDMA, NVMe — **not** correctness |
+| **isolated hardware cluster** | does it behave and perform on the actual storage/transport | slowest | performance ceilings plus hardware/public-path correctness (RDMA, NVMe) |
 
 A bug should be caught at the **lowest** layer that can see it. The
-simulator is the layer that is both fast and deterministic — unit tests
-cannot see a message race, the cluster cannot reproduce one.
+simulator controls logical message ordering; focused concurrent tests and
+real-process/hardware gates cover behavior outside its model.
 
 Deliberate moves that shorten the loop:
 
-- **Correctness moves down, performance stays up.** The cluster stops being
-  the correctness oracle; posix/posix2 confirm semantics; the cluster confirms
-  speed. A correctness bug should never need a 13-node wipe to find.
+- **Use focused correctness gates first.** Model/unit tests isolate logical
+  defects, POSIX/peer tests exercise mounted semantics, and isolated real
+  clusters check storage/transport failures as well as performance.
 - **Deterministic over flaky.** Replace fork-and-pray races with forced
   collisions (`threading.Barrier`) so a test either always collides or never
   runs — no more "passes isolated, fails under load."
 - **Fail fast, not timeout.** A violated invariant aborts at the step, not
   after a 15s `POSIX_TEST_SEC`. Saturation (a timeout) is reported separately
   from correctness (an assertion) so the two are never conflated again.
-- **Live attach over rebuild-and-reprobe.** ptrace is open on all 15 hosts —
-  `gdb -p` on a wedged `efsd` answers in seconds what an NDJSON-probe redeploy
-  answers in tens of minutes.
+- **Live attach over rebuild-and-reprobe.** Verify ptrace permissions and the process/build first;
+  `gdb -p` on a wedged `efsd` can expose its current wait without a redeploy.
 - **Bounded-context change.** Modularity
   ([development.md](#appendix-13--development--modularity-constraint)) keeps the unit of work small: a change
   loads one module + its interface header, not the whole tree. This is what
   makes both fast isolated tests and model-assisted editing tractable.
-- **Invariants as executable checks** (simulator assertions + `fsck`), not
-  prose — so "is this a bug" is decidable without a human reading a log.
+- **Executable invariants:** simulator assertions and independent checks
+  should capture the relevant property. A real-cluster fsck remains a
+  capability gap; mentioning it here does not establish an existing tool.
+
+
+### Authority and lifecycle review gates
+
+The Oct 7 round-5 isolated Raft reproduction ([W82](#w82))
+shows why a completed quorum index is not enough for a later authoritative
+read after leader isolation. Existing tests explicitly start a fresh round in
+one partition case; they do not cover the host's reuse of old completed
+coverage after the majority commits elsewhere. Preserve the failing review
+fixture and add that missing acceptance case when fixing the implementation.
+
+Transaction decision retirement ([W83](#w83)), namespace
+predicate limits ([W84](#w84)) and ambiguous PUT hint
+history ([W85](#w85)) have separate gates. The hint
+helper collision is reproduced; downstream multi-root/accounting behavior
+remains source concern. These review fixtures are not passing release gates.
+
+Round 6 reproduced [W88](#w88) in actual metadata apply
+over in-memory KV: an old legacy span retry becomes live after folded-history
+eviction and a later full image. Public-path byte/packet gates remain open.
+[W89](#w89) also invalidates the old W23 zero-L0
+summary: verify field counts/types and raw evidence before interpreting a
+measurement. Corrected historical samples are retained without replacing originals.
 
 
 ## Appendix 15 — Design history (review rounds)

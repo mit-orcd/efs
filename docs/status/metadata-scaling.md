@@ -1,7 +1,7 @@
-# Metadata scaling — implementation gap and enhancement plan
+# W66 — Metadata scaling implementation gap
 
 Recorded Oct 5 2026 following the user's question about 100–1,000 clients
-connecting to a metadata leader. Status: **open; documentation only**. No
+connecting to a metadata leader. Status: **open enhancement; documentation only**. W66 is indexed in the status queue. No
 running-cluster capacity measurement or topology change was made for this item.
 
 [Status queue](README.md#1a-the-work-queue) ·

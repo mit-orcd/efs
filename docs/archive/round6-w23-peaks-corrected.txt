@@ -1,0 +1,3 @@
+node1 peak_mt_bytes=4184596 peak_l0_bytes=105281 peak_n_l0=4 peak_n_l1=19 peak_rss_kb=30316 peak_lag_max=0 peak_pump_hold_max_us=1020065 peak_apply_sleep_n=48 peak_backpressure_n=0
+node2 peak_mt_bytes=4184596 peak_l0_bytes=1366435 peak_n_l0=13 peak_n_l1=19 peak_rss_kb=25936 peak_lag_max=0 peak_pump_hold_max_us=1569439 peak_apply_sleep_n=1 peak_backpressure_n=0
+node3 peak_mt_bytes=3758884 peak_l0_bytes=3367253 peak_n_l0=22 peak_n_l1=19 peak_rss_kb=25624 peak_lag_max=0 peak_pump_hold_max_us=139435 peak_apply_sleep_n=0 peak_backpressure_n=0

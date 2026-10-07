@@ -1,5 +1,12 @@
 # Client sessions, fencing, open-unlinked files, and POSIX locking
 
+**Implementation scope:** this page specifies the accepted design, not a
+current deployment guarantee. The [public-path review](../../status/spec-implementation.md)
+records persistence, session, fixed-profile/repair and integrity limitations;
+consult those gates before claiming this contract is implemented. Session and
+revocation reads also depend on fresh quorum authority
+([W82](../../backlog/work-items.md#w82)), not a cached completed read index.
+
 [Architecture](../architecture.md) · [Transactions](transactions.md) ·
 [Data protocol](data.md)
 

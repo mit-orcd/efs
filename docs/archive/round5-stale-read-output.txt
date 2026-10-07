@@ -1,0 +1,2 @@
+FAIL work/round5/stale-read-repro.c:1357: a later read must not reuse old authority after majority writes B
+old=0 old_term=1 old_value=A old_commit=2 old_role=2 covers=1; new=1 new_term=2 new_value=B new_commit=4

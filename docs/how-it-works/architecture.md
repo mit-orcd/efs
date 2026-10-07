@@ -1,5 +1,10 @@
 # Architecture
 
+**Implementation scope:** this page specifies the accepted design, not a
+current deployment guarantee. The [public-path review](../status/spec-implementation.md)
+records persistence, session, fixed-profile/repair and integrity limitations;
+consult those gates before claiming this contract is implemented.
+
 **New here, or looking for the next task? → [Project status](../status/README.md)**
 (what to work on now, which pages govern a given change, what "done" means).
 
@@ -629,6 +634,9 @@ Authoritative reads (LOOKUP/GETATTR/readdir) go to the **shard leader**,
 which establishes quorum-backed read authority (ReadIndex-style) and waits
 until its applied index covers the read before reading the KV. There are
 **no clock-based leader leases** (clocks are never correctness inputs, §2).
+Implementation acceptance requires a fresh authority round for each admitted
+request/batch: an old completed quorum cannot authorize indefinitely later
+reads. The isolated-core/source finding is [W82](../backlog/work-items.md#w82).
 Read authority is **amortized**: one quorum round serves a whole batch of
 requests — the read-side analog of publication batching (§7.3).
 

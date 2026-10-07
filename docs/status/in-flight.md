@@ -1,105 +1,117 @@
-# In flight — D25 writer integration
+# In flight — current agent handoff
 
-[Work queue + status](README.md) · [Decisions](decisions.md) ·
+[Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-## Oct 6 2026 — correctness before performance
+Reviewed Oct 7, 2026. Historical rollout facts are in the
+[30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md);
+previous handoff text is [archived](../archive/handoff-20261007.md).
+Do not use a historical cluster address, binary hash or mount as current state.
 
-The Oct 2 handoff is preserved in [project history](../archive/project-history.md).
-Its cluster-state claims are historical; establish current state before any
-live operation. Current acceptance targets the four-node NUC; live results are recorded per rollout.
+## Active correctness work
 
-Committed foundations: `bb18e40a` metadata/read views, `033a842a` FUSE memory
-and D27 recovery/stop, and `3d9bb6b2` POSIX acceptance gates. The current
-partial-writer change (`8727f682`) validates published merge bases under fresh lane
-authority in both flush paths; it does not activate logical truncation.
+**W61/W62/W63 — GC:** repairs are committed in `3a1b4a52`; the
+[implementation checkpoint](gc-implementation-20261007.md) records isolated
+NUC direct-store acceptance. Buffered broad concurrent append lost records
+(**W87**) despite later isolated repeats passing. Existing services and the
+xorinox incident stores are not established as rolled or reconciled. Preserve
+live references and keep the original [incident review](gc-reclamation-review.md).
+This round did not inspect the remote fixture logs.
 
-The user accepted [lane-local authority first](d25-admission-routing.md).
-Durable lane authority/bootstrap primitives and the lane-only read RPC are now
-staged; the older inode writer RPC remains for cold discovery and tests.
-Cold bootstrap RPC and missing-lane-only client admission fallback are implemented. Geometry-checked cache admission and immutable snapshots are staged; connect FUSE callers and typed publication next. The latest token checks are recorded in the
-[checkpoint](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
+**W86/D31 — PUT tickets:** checkpoint-recorded policy and metadata
+state machine committed in `b3a11877` exist, staged for integration; versioned wire/PUT admission, actual W72 sessions,
+distributed authoritative revocation and all-member storage fences/deletion
+remain. D28 salvage is separate. Do not activate collection from age or a
+local/cached fence.
 
-## Oct 7 — 30-round NUC correctness checkpoint
+**W43/D25 — staged, public logical truncate disabled.** Metadata histories,
+committed readers, internal resize coordination, lane authority/bootstrap,
+FileID-bound planning, durable publication, ordered ACK, I23 admission and
+mtime coherence are implemented and tested in recorded checkpoints. The
+[lane-local routing plan](d25-admission-routing.md) owns their detailed contract.
+Remaining sequence:
 
-The [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md)
-records each production commit and its NUC acceptance. Direct shard writes now
-retain existing extents and finalize exact completed lengths; delayed close
-errors are surfaced. Client changes reject failed truncate-prefix/flush work,
-propagate read authority failures, guard read and REPORT boundaries, validate
-readdir pagination, clean partial worker startup, and carry deadlines through
-writeback, pooled GET/PUT, connection checkout and network frames.
+1. Connect every FUSE write entry point and both flush paths to epoch-owned
+   admission and typed publication/retirement. Replace unlabelled dirty unions;
+   serialize pending publication and drain range exhaustion before copying.
+2. Carry captured authority epochs for spans and unconditional overwrites.
+   Fence races must retain bytes, return STALE and rebuild from authoritative views.
+3. Add bounded live-file materialization scheduling, durable progress and safe
+   lane/inode history retirement. Unlink sweep is a separate path.
+4. Enable logical resize only after unpublished overlapping writes across
+   shrink/extend, cold reads, restart, leader changes, history-full and bounded
+   apply gates pass. A legacy cache hit cannot grant current authority.
 
-Concurrent append loss recurred during round 20. The retained failure trace
-shows the first reservation beginning at offset 8. Round 21 serializes complete
-append replay entries and requires allocation results from the leader; the old
-cache reproduces wrong offsets in the regression. Passing later gates does not
-prove a sole cause or durable replay across leader changes. Append reservations
-still need a durable replay/failover design; their host-local cache is not such
-a design. This checkpoint does not activate D25 or close D27 strict timing.
-Hostname resolution, uncancellable accepted job ownership, live RDMA hardware,
-recorded fault/recovery and small-host RSS gates remain outstanding. Public
-logical truncate remains disabled. Mac buffered acceptance is deferred during
-maintenance.
+**D27/0a — implemented runtime, acceptance incomplete.** Sticky per-inode and
+per-description errors, retained snapshots, completed-cycle stall detection,
+WITHHOLD faults and controlled stop exist. Strict whole-call timing, remaining
+legacy PUT coverage, recorded fault/recovery/contention and small-host RSS
+acceptance remain owed. Accepted workers retain caller-owned completion state;
+a timeout must not free it. DNS resolution remains outside connection bounds.
+D28 salvage is undecided. Keep the D27 decision's fault-before-publication gates.
 
-The final rollout twice observed nuc n1 exceeding the devops stop script's
-ten-second SIGTERM wait and being killed with SIGKILL, after both clients had
-drained and unmounted cleanly. Capture its thread stacks/strace during the next
-controlled stop and fix the actual shutdown blocker. This is an open finding,
-not a graceful-daemon-shutdown acceptance claim.
+**W64 — append:** host-local replay races were fixed in `ec1500ec`; replay
+across leader changes is not durable merely because concurrent repeats pass.
+The round-20 first-record-loss trace remains evidence, not a proven sole cause.
 
-Next, in order:
+**W65 — shutdown:** nuc n1 exceeded the ten-second SIGTERM wait twice after
+clean client drains and was SIGKILLed by the rollout tooling. Capture userspace
+stacks during a controlled stop; do not label graceful daemon shutdown accepted.
 
-1. Writer authority, FileID-tagged GETCHUNKS, typed base/publication planning,
-   budgeted sidecar lifetime, admission-before-copy and immutable body snapshots
-   are implemented and tested. Optional state now participates in cache drop,
-   replacement/reclaim and REPORT acknowledgement. The active legacy cache also
-   preserves pending bytes across late-loader merges and holds the slot lock
-   through installation. [Current checkpoint](../../results/measure/20261006-cache-five-rounds/SUMMARY.md).
-   Full-overwrite ownership/reset is now atomic, its cache-hit fast path avoids
-   extra allocation, and pending publication blocks another snapshot. Clean
-   cache binding to expected FileID/authority is staged and tested; legacy dirty
-   bytes cannot acquire a new epoch. Write extent guards reject index/end wrap.
-   [Latest checkpoint](../../results/measure/20261006-admission-five-rounds/SUMMARY.md).
-   The [NUC ten-round checkpoint](../../results/measure/20261006-nuc-ten-rounds/SUMMARY.md)
-   adds durable bootstrap crash recovery, snapshot overlap protection, exact
-   same-mutation PUT ownership checks and lane-validated cache APIs. Legacy flush
-   refuses typed ownership before I/O. These APIs do not activate D25.
-   The [publication ten-round checkpoint](../../results/measure/20261006-publication-ten-rounds/SUMMARY.md)
-   binds captured FileID and exact CAS bases, reserves identity before PUT, and
-   supplies typed cache completion APIs. They remain staged. Before activation,
-   [durable publication submission/status and cache result handling](d25-admission-routing.md#durable-publication-results--implemented-staged)
-   now distinguish exact commit from terminal rejection and unknown. Legacy
-   aggregate STALE still cannot authorize dropping or rebasing ownership.
-   Acknowledged retirement now bounds each stream to 64 live receipts and
-   advances a durable replay floor atomically. RETIRED never releases ownership.
-   Ordered ACK retry ownership is now staged and NUC-tested (immutable,
-   bounded, oldest-consumed-first, metadata-budgeted). Before activation,
-   integrate it with both flush paths. I23 publication endpoint/apply gates,
-   authoritative ACTIVE/REGISTER establishment and reclaim eligibility are
-   now implemented; bounded abandoned-stream cleanup remains pending. Regular-file
-   mtime invalidation now uses a durable inode/active-lane transaction; bootstrap
-   installs the captured mtime generation.
-   Next connect every FUSE write entry point and both flush paths to these APIs;
-   replace the unlabelled union, serialize pending publications and drain range
-   exhaustion before copying bytes. No epoch-aware FUSE admission is active.
-   Test unpublished overlapping writes across shrink/extend and history
-   retirement; never re-age retained legacy writes or derive authority from a
-   cache hit.
-2. Carry captured epochs for spans and unconditional full overwrites, with
-   fence races returning STALE and rebuilding from a new authoritative view.
-3. Implement bounded live-file materialization scheduling, durable progress
-   and safe lane/inode history retirement; keep unlink sweep separate.
-4. Enable the logical resize coordinator only after those prerequisites pass
-   cold-read, concurrency, restart, history-full and bounded-apply gates.
-5. Complete D27 strict whole-call timing and remaining legacy PUT coverage;
-   run the recorded fault/recovery and small-host RSS acceptance gates.
+## Additional public-contract findings
 
-NUC rollout `128f6b7d` passed W36 20/20 first, full single/peer POSIX,
-26/26 persistence in each phase, full source-rebuilt units and ten concurrent
-8/8 repeats. These results supersede the earlier rollout gate status below.
+The [source review](spec-implementation.md) indexes W71–W77. In particular,
+W71's production fragment ACK lacks a persistence barrier; a successful
+healthy fsync/restart test does not establish power-loss durability. W75
+records missing integrity evidence and the parallel-read verification bypass.
+These are source findings, not a diagnosis of the GC incident or a new
+production acceptance result. The queue and detailed gates govern follow-up.
 
-NUC rollout 79983128 passed W36 `peer_rename_vs_unlink_src` 20/20 first.
-Xorinox b4a75492 passed the real two-client W36 gate 20/20 after guarded orphan cleanup. A later rollout must repeat that gate. W54 post-GC cold reads and W38 traced/cold verification remain owed.
-NUC unit/build acceptance used a private source directory. Live acceptance
-used both normal mounts after clean drains and a four-node rollout. Public logical truncate remains disabled.
+## Verification still owed
+
+- W54 post-GC cold-read and W38 traced/cold hardscan gates.
+- W56 xorinox rollout verification; W60 full-tree mixed reads on xorinox.
+- W67 sparse-pressure/failure/RSS and W68 real worker-retirement/RSS gates.
+- Mac buffered acceptance after maintenance; real RDMA hardware acceptance.
+- Repeat W36 rename-versus-unlink first on a new production rollout. The
+  recorded NUC `128f6b7d` and xorinox `b4a75492` 20/20 runs establish those
+  builds only; they do not automatically validate changed working sources.
+
+Read the [queue](README.md#1a-the-work-queue) for remaining investigations,
+measurement work and decisions. This handoff adds no deployment authorization.
+
+
+## Operator review findings
+
+[W78–W80](README.md#source-findings-awaiting-triage) record conditional stale
+PID-file signaling, misleading mkfs name syntax and zero-filled `efs-query`
+statistics. These are source findings with gates, not a new execution order.
+Use the corrected operations guide; query zeros are not GC completion evidence.
+W81 separately records the missing automatic directory pressure trigger; its
+size-based admission/migrator exists and the pressure policy still needs review.
+
+
+## Protocol review findings
+
+[W82–W85](README.md#source-findings-awaiting-triage) cover stale completed read
+coverage, missing transaction-decision retirement, namespace guard bounds
+and eviction of ambiguous PUT retry history. W82 has an isolated core
+reproduction and W85 an isolated helper reproduction; live RPC/FUSE and
+storage/accounting gates remain owed. W85's attempt-owned/locked placement-cache repair is now committed in
+`6d6056c3`; the GC checkpoint reports helper/concurrency and two-root tests.
+This review did not rerun those tests or establish release/restart acceptance. These findings do not assign a new work order or change accepted designs.
+
+## Contract/evidence review
+
+W23's first completed measurement exists; its zero-L0 interpretation is
+invalid due to W89's TSV field shift. Corrected samples show follower L0=22,
+but the pressure bound remains unproven. Current production apply defers flushing instead of waiting at the
+L0 threshold; its log line alone is not a pump-stall measurement. The follower
+memory/lag bound still needs a valid preconditioned run. W87 needs the full
+traced buffered append outcome and retained failing evidence. See the
+[round-6 ledger](../archive/contract-review-20261007-round6.md).
+
+**W88 — D1 legacy span replay:** isolated metadata reproduction shows a
+folded identity can be evicted and its old retry reintroduced over a later
+base. Actual host/FUSE byte and lost-ACK/restart gates remain open. Keep the
+durable identity/retirement primitives separate from bounded trailer hints.

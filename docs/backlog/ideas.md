@@ -30,7 +30,8 @@ elsewhere in the tree that describes `g_server->lock`, shard tabs,
 What is left is measured performance and harness work, ordered in
 [the status page §1a](../status/README.md). Design choices the spec did not make
 are listed there under "Decisions — taken and pending"; the taken ones
-(D1–D13, D18–D20, D24) are implemented, the pending ones are asks.
+are design approvals, with implementation and acceptance recorded separately;
+the pending ones remain asks.
 
 ## Parked: server-side `.stats` / `.find` refresh
 
@@ -90,25 +91,22 @@ and
 [W15](work-items.md#w15--client-copies-and-busy-waits-are-the-write-cpu)
 in work-items.md. Take them from there.
 
-## Parked: cross-group directory `utimens`
+## Directory `utimens` — implementation and gate scope
 
-`futimens` / `os.utime` on a directory returns `EINVAL` when that directory
-is not `EFS_META_LAYOUT_LOCAL` and one of its `used_shards` sits in the
-other Raft group. `host_utimens` bails with `EFS_ERR_INVAL` and the comment
-`cross-group lane fence later` (`src/server/raft_host.c`). The client maps
-that to `EINVAL`. A local directory and an ordinary file already succeed
-(`attr_utimens` / `attr_utimens_ns` are files only).
+The Sep 28 EINVAL observation and old source diagnosis are
+[preserved](../archive/parked-testing-checkpoint-20261007.md). They are not the
+current source behavior: `host_utimens` now sends the timestamp-generation
+fence to used lanes in the other group before publishing the inode update,
+forwarding to a host with both groups when necessary. Unit/model directory
+mtime-generation checks also exist. Source presence does not establish the
+full cross-group, two-client explicit-utimens acceptance gate.
 
-Seen from `ecopy` restamping directories under `/tmp/efs-mount/knouse/`
-(Sep 28): `futimens: Invalid argument` on directory paths. The copy
-continues; only those timestamps are skipped.
+The accepted directory-time row 0m/W57 evidence concerns parent timestamps
+on namespace mutations; do not reopen that closed row or treat it as blanket
+acceptance of every explicit directory-time operation. Reconcile named tests
+and build-specific results before declaring the distinct cases below passed.
 
-The spec already requires this ([architecture.md](../how-it-works/architecture.md) §7.4,
-directory `utimens`): `dir_mtime_gen` on the directory row, bumped only by
-`utimens`, distributed to the used lanes by the same bounded fence a file
-uses (≤65 authorities). Do not leave the `EINVAL` as the behavior.
-
-**POSIX tests, in the same change** (runner auto-registers `@test`):
+**Gate checklist (inspect current runner before adding tests):**
 
 - `posix_suite.py`: `utimens` on a directory that is still local (a handful
   of children). `mtime` and `atime` stick, including nanoseconds. Must not
@@ -126,9 +124,10 @@ the file `utimens` tests to make the directory case pass.
 
 ## Parked: tests still to write
 
-POSIX layers 1–3 exist (`tests/posix/posix_suite.py` 201 tests,
-`posix_2client.py` 63). They cover
-syscalls, peer visibility and same-file races. Not covered:
+POSIX layers 1–3 exist; test counts change with the build, so use runner
+listing and the recorded results rather than the old 201/63 inventory. They
+cover syscalls, peer visibility and same-file races. The following is a
+historical candidate-gate checklist, not proof that every test is still absent:
 
 - **Layer 4 fault injection** (`tests/faults/` is the start of it, not in
   `make test`; see `tests/faults/README.md`): crash after `fsync`; kill
@@ -147,11 +146,10 @@ syscalls, peer visibility and same-file races. Not covered:
   `utimens` once the directory has spread across both Raft groups
   (local-directory `utimens`, spread-directory `utimens` at
   `EFS_DIR_SPREAD_MIN`, and a second client observing those times). The
-  spread case is `EINVAL` today; the feature and these tests are one item
-  under "Parked: cross-group directory `utimens`". (Parent directory
-  mtime/ctime on create/unlink/rename/link left this list Oct 6 — it is
-  queue row 0m with tests in tree; a spread-directory mtime case is still
-  owed, see row 0m.)
+  old EINVAL diagnosis is superseded by the source update above; cross-group
+  explicit-utimens gate evidence must be checked separately. Parent directory
+  mtime/ctime acceptance on namespace mutations is recorded as closed row 0m,
+  including its retained single-client/peer results; it is not an open task here.
 - **Invariant harnesses:** an offline `fsck --verify-only` to run after
   randomized load and after every Layer 4 case; a 300k-file single-directory
   spread stress; a fence test for leftover clients; and a stuck-catchup joiner

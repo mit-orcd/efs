@@ -37,7 +37,7 @@ concurrent builds or destructive jobs in the same source/storage directory.
 
 ## Measurement and cleanup
 
-For durable FUSE write throughput, include the flush in timing (`dd conv=fsync`
+For publication-inclusive FUSE write throughput, include the flush in timing (`dd conv=fsync`
 or fio `--end_fsync=1`, without time-based overwrite loops). Direct I/O bypasses
 the kernel cache, not EFS's userspace cache. Cold-read measurements need remounts
 or independent clients. Raw buffered benchmark rates measure cache acceptance;
@@ -48,3 +48,7 @@ jobs, scratch and go/ready state. Check active jobs before cleaning shared
 locations. Detach FUSE before removing a mount directory. Preserve evidence for
 current failures and baselines according to `results/README.md`; a failed run
 must leave enough logs to diagnose it. Never erase another active run's files.
+
+A timed successful FUSE flush does not independently establish target
+persistence or hardware power-loss durability; [W71](../backlog/work-items.md#w71)
+records the inspected production-store gap.

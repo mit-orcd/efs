@@ -6,7 +6,9 @@
 This is the rationale document: why the architecture in
 [architecture.md](architecture.md) has the shape it has, what is
 claimed and what is not, and what was deliberately rejected. The spec itself
-is normative; this file argues for it.
+is normative; this file argues for it. Accepted design reasoning is not an
+implementation or release certificate; the [public-path matrix](../status/spec-implementation.md)
+and named acceptance records define the current limits.
 
 Let's be precise about what is and isn't claimed. **Raft-per-shard over an
 embedded KV is not a new mechanism.** The claim is stronger than novelty: the
@@ -19,7 +21,7 @@ survive.
 
 | Constraint | Force it exerts | Design it eliminates |
 |---|---|---|
-| 2³² objects on 4 nodes | ~512 GiB+ of metadata cannot live in RAM | any fully-in-RAM table (today's) |
+| 2³² objects on 4 nodes | ~512 GiB+ of metadata cannot live in RAM | the former fully-in-RAM table |
 | immediate cross-client visibility | no authoritative cache may go stale | TTL / negative / attr caches as truth |
 | survive f nodes down, read *and* write | a write must commit without the dead nodes | single-coordinator 2PC, primary-backup without failover |
 | 3 → 64 nodes | work must spread, not funnel to one writer | a single cluster-wide metadata primary |
@@ -50,7 +52,9 @@ derivation is correct, not that it was copied.
   not majority intersection alone.
 - **Quorum durability** (I10/I11): a majority-acknowledged write survives any
   failure that leaves a majority. With RF = 2f+1 that is exactly the
-  configured f nodes. This is why "survive f nodes down" is a theorem here.
+  configured f nodes, provided the durable-ACK and storage assumptions are
+  actually satisfied. The production fragment barrier remains [W71](../backlog/work-items.md#w71);
+  Raft quorum math alone does not certify those writes.
 - **EFS-specific composition is *not* covered by Raft's proof.** RPC dedup,
   KV persistence ordering, cross-shard transaction logic, FUSE cache
   coherence, EC generation publication, chunk RMW, reconfiguration, and the
@@ -64,20 +68,36 @@ Let us be exact about the claim, because overclaiming here would be both
 wrong and unsupportable. **Every primitive in this design has existed:**
 Raft, distributed metadata, RDMA, erasure coding, immutable generations,
 ordered KV stores, directory sharding, deterministic simulation. Several
-systems get close to individual parts — WEKA (fully distributed data +
-metadata, no dedicated MDS tier, hash placement, strong POSIX, NVMe), DAOS
-(NVMe-native, low-latency fabric, distributed transactions, EC, versioned
-writes — though its POSIX layer still lacks hardlinks and distributed flock),
-VAST (distributed transactional metadata + EC + flash, but a shared-everything
-DASE model, not shared-nothing Raft shards), CephFS (client-direct data +
-dynamic metadata, but authority in a distinct MDS tier). IndexFS/GIGA+
-precede the threshold-spread huge-directory idea. FoundationDB is the
-canonical deterministic-simulation example. We are not claiming to have
-invented any of these.
+systems illustrate individual parts. Primary-source pointers checked Oct 7,
+2026 provide context, not an exhaustive prior-art search or comparative ranking:
+
+- [WEKA's current cluster overview](https://docs.weka.io/weka-system-overview/weka-containers-architecture-overview.md)
+  describes drive, compute, frontend and management processes distributed
+  across server containers. That description does not by itself prove every
+  earlier claim about hash placement or complete POSIX semantics.
+- [DAOS DFS/dfuse documentation](https://docs.daos.io/master/user/filesystem/)
+  describes its POSIX namespace/API and currently lists hard links and flock
+  among limitations. This is a versioned interface statement, not a claim that
+  EFS already implements all those semantics or that future DAOS releases cannot.
+- [VAST's architecture white paper](https://www.vastdata.com/whitepaper)
+  describes disaggregated shared-everything storage and shared metadata/
+  transaction state; it is a different architectural composition.
+- [CephFS metadata documentation](https://docs.ceph.com/en/latest/cephfs/mdcache/)
+  distinguishes client-direct RADOS data access from MDS-managed inode and
+  directory metadata. An MDS role need not imply dedicated physical hardware.
+- [GIGA+](https://www.pdl.cmu.edu/PDSI/gigaplus/index.html) and the
+  [IndexFS paper](https://www.pdl.cmu.edu/PDL-FTP/FS/IndexFS-SC14.pdf)
+  precede this design's incremental large-directory spreading.
+- [FoundationDB's testing documentation](https://apple.github.io/foundationdb/testing.html)
+  describes deterministic cluster simulation alongside live and hardware tests.
+  Simulation alone is not physical fault acceptance.
+
+Earlier unsourced comparison wording is [preserved](../archive/comparison-wording-before-round5-20261007.md).
+We are not claiming to have invented these mechanisms.
 
 **The claim is the composition and the governing principle.** What we have
-not found in a public system is this exact architecture presented as one open
-POSIX filesystem:
+sought is this combination as one open POSIX filesystem; the following is a
+design goal, not proof that no existing public system has the same composition:
 
 ```text
 POSIX namespace

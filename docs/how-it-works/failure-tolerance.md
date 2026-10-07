@@ -1,5 +1,10 @@
 # Failure tolerance — derivation and operations
 
+**Implementation scope:** this page specifies the accepted design, not a
+current deployment guarantee. The [public-path review](../status/spec-implementation.md)
+records persistence, session, fixed-profile/repair and integrity limitations;
+consult those gates before claiming this contract is implemented.
+
 [Architecture](architecture.md) · [Design rationale](design-rationale.md) ·
 [Data protocol](protocols/data.md)
 
@@ -42,14 +47,20 @@ with the majority.
 The tempting merge — "per log index, the highest-term entry wins" — is
 unsound. Raft's log-prefix properties hold only *within logs produced
 through Raft*; they do not license constructing a new log by independently
-selecting entries per index. A legal situation:
+selecting entries per index. A legal sequence is an old-term uncommitted branch followed by a
+current-term quorum commit on another prefix (as in
+[Raft §5.4.2, Figure 8](https://raft.github.io/raft.pdf)). The older Y becomes
+committed when Z is committed in term 11; Y was not committed in term 9.
+For four voters A/B/C/D: B initially stores Y alone; A wins term 10 with
+C/D and stores X alone; B wins term 11 with C/D and commits Y→Z on B/C/D.
+A remains isolated. Permanent loss of C/D then leaves these two survivors:
 
 ```text
 survivor A:   index 5  term 10  X        (uncommitted branch)
-survivor B:   index 5  term 9   Y        (committed earlier)
-              index 6  term 11  Z        (appended by a term-11 leader
-                                          whose log contained Y at index 5,
-                                          elected by a majority excluding A)
+survivor B:   index 5  term 9   Y        (initially uncommitted)
+              index 6  term 11  Z        (quorum-committed in term 11,
+                                          committing Y with it; A stayed
+                                          isolated from that majority)
 ```
 
 The merge produces `X@5, Z@6` — a log that **never existed**. `Z` was

@@ -2,9 +2,11 @@
 
 A distributed filesystem in C, pre-alpha. Every 128 KiB file chunk is
 stored as **2 data fragments + 1 XOR parity** on three storage nodes; any
-two fragments rebuild the chunk, so the cluster keeps serving with **one
-node down**. Metadata is one Raft group per shard over an on-disk ordered
-KV store, hosted by the same servers. Clients mount it with FUSE; the
+two available valid fragments rebuild a chunk. Automatic fragment repair and
+configurable protection profiles remain open ([W74](docs/backlog/work-items.md#w74)).
+Metadata uses two physical Raft groups over an on-disk ordered KV store; the
+accepted many-group runtime is still an integration goal
+([public-path limits](docs/status/spec-implementation.md)). Clients mount it with FUSE; the
 transport is TCP or RDMA (InfiniBand), chosen at mount time.
 
 Goal: ≥ 2³² files, throughput that tracks the hardware, no software
@@ -18,22 +20,16 @@ serialization point — the normative spec is
   `fuse` module).
 - RDMA (optional): `libibverbs`/`librdmacm`; `EFS_TRANSPORT=tcp` works
   without.
-- **Client hosts: `fs.pipe-max-size` ≥ 8 MiB** (`efs-fuse` sets
-  `max_write` to 4 MiB and asks for `FUSE_CAP_SPLICE_READ`; below the cap
-  libfuse silently falls back to an extra copy per written byte):
-
-  ```bash
-  # /etc/sysctl.d/98-efs-pipe.conf
-  fs.pipe-max-size = 8388608
-  ```
-
-  then `sysctl -p /etc/sysctl.d/98-efs-pipe.conf`. Servers do not need it.
+- `FUSE_CAP_SPLICE_READ` is disabled by default. A larger
+  `fs.pipe-max-size` may be useful for opt-in splice measurements
+  (`EFS_FUSE_SPLICE_READ=1`), but 8 MiB is not a default-mount prerequisite;
+  the recorded splice profile found no gain.
 
 ## Build
 
 ```bash
 make            # efsd efs-fuse efs-mgmt efs-query efs-bench + unit tests
-make test       # runs the unit suites (test_sim is the protocol correctness gate)
+make test       # unit/model suites; not blanket live-cluster or power-loss acceptance
 make docs-check # the generated docs/how-it-works/architecture-full.md matches its sources
 ```
 
@@ -48,8 +44,8 @@ there.
 | `efsd` | storage + metadata server (one per node) |
 | `efs-fuse` | FUSE client |
 | `efs-mgmt` | cluster CLI: `status`, `mkfs`, `raft-status`, `add-node`, `add-storage`, `shrink-quota`, `raft-getchunks`, … |
-| `efs-query` | file / per-user totals |
-| `efs-bench` | metadata op-rate bench (`--meta`) |
+| `efs-query` | legacy query; currently returns placeholder zeros ([W80](docs/backlog/work-items.md#w80)) |
+| `efs-bench` | local storage/metadata engines (`--bench`) and seed-based RPC benchmarks |
 
 ## Quick start
 

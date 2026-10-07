@@ -1,5 +1,13 @@
 # Cross-shard transactions
 
+**Implementation scope:** this is the accepted transaction protocol.
+Namespace and resize primitives exist; request-wide public data publication
+and observation remain [W77](../../backlog/work-items.md#w77). Do not infer
+FUSE activation from the presence of metadata transaction helpers.
+Decision retirement and namespace predicate bounds remain
+[W83/W84](../../status/spec-implementation.md); coordinator authority also
+depends on the read-freshness gate [W82](../../backlog/work-items.md#w82).
+
 [Architecture](../architecture.md) · [Data protocol](data.md) ·
 [Directory protocol](directory.md) · [Sessions](sessions.md)
 
@@ -189,7 +197,10 @@ no serializable history even though each commits atomically.
   what happened — so it has its own explicit condition: reclaimable once
   every participant has acknowledged the decision durably, and no participant
   that could still be recovering remains. Until then it is retained,
-  bounded by the transaction rate rather than by the operation history.
+  bounded by unresolved/recoverable transactions rather than all completed
+  operation history, once that retirement protocol is implemented. The current
+  inspected implementation retains decisions without that protocol
+  ([W83](../../backlog/work-items.md#w83)).
   Duplicate-suppression records have the matching bound in
   [sessions.md](sessions.md).
 
