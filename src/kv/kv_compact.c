@@ -31,6 +31,11 @@
  * L0->L1 and L0->L0 merges stop. Removing the file releases it. */
 #if EFS_FAULTS
 #define KV_FAULT_COMPACT_FILE "/tmp/efs/fault"
+static const char *fault_compact_file(void)
+{
+    const char *v = getenv("EFS_FAULT_COMPACT_FILE");
+    return v && v[0] ? v : KV_FAULT_COMPACT_FILE;
+}
 static int fault_compact_stall_on(void)
 {
     const char *v = getenv("EFS_FAULT_COMPACT_STALL");
@@ -896,12 +901,12 @@ static void *compactor_main(void *arg)
         int rc;
 
 #if EFS_FAULTS
-        while (fault_stall && access(KV_FAULT_COMPACT_FILE, F_OK) == 0) {
+        while (fault_stall && access(fault_compact_file(), F_OK) == 0) {
             int stop;
 
             if (!fault_parked) {
                 fprintf(stderr, "kv-fault: compactor parked (%s)\n",
-                        KV_FAULT_COMPACT_FILE);
+                        fault_compact_file());
                 fault_parked = 1;
             }
             usleep(100 * 1000);
@@ -933,7 +938,7 @@ static void *compactor_main(void *arg)
                     ts.tv_nsec -= 1000000000;
                 }
                 pthread_cond_timedwait(&l->compact_cv, &l->mu, &ts);
-                if (access(KV_FAULT_COMPACT_FILE, F_OK) == 0)
+                if (access(fault_compact_file(), F_OK) == 0)
                     break;
                 continue;
             }
@@ -942,7 +947,7 @@ static void *compactor_main(void *arg)
         }
 #if EFS_FAULTS
         if (fault_stall && !l->compact_stop &&
-            access(KV_FAULT_COMPACT_FILE, F_OK) == 0) {
+            access(fault_compact_file(), F_OK) == 0) {
             pthread_mutex_unlock(&l->mu);
             continue;
         }

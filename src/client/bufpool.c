@@ -54,6 +54,11 @@ static void buf_init(void)
                          SLAB_BYTES, 4ull << 30);
     g_drain = budget_env("EFS_DCACHE_DRAIN_BYTES", 64ull << 20,
                           SLAB_BYTES, 1ull << 30);
+    const char *trace = getenv("EFS_BUF_BUDGET_TRACE");
+    if (trace && trace[0] && strcmp(trace,"0"))
+        fprintf(stderr,"buf-budget hard=%llu drain=%llu slab=%llu\n",
+                (unsigned long long)g_hard,(unsigned long long)g_drain,
+                (unsigned long long)SLAB_BYTES);
 }
 static uint64_t buf_charge(uint32_t len)
 {
