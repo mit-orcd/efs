@@ -4,6 +4,7 @@
 #include "efs/meta_cmd.h"
 #include "efs/kv_key.h"
 #include "efs/session.h"
+#include "efs/put_ticket.h"
 #include "efs/checksum.h"
 #include "efs/publication.h"
 #include "efs/dir_layout.h"
@@ -3897,7 +3898,7 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
     uint64_t committed = 0;
     uint64_t inode_gen, mtime_gen, row_base_size = 0, row_active = 0;
     struct lane_rec ln;
-    struct efs_kv_item it[5 + EFS_CHUNK_DELTA_MAX];
+    struct efs_kv_item it[6 + EFS_CHUNK_DELTA_MAX];
     uint32_t n = 0;
     uint32_t ch_wlen = CHUNK_VAL;
     uint32_t nd_old = 0;
@@ -4249,12 +4250,22 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
                 return rc;
         }
     }
+    uint8_t ticket_key[EFS_PUT_TICKET_KEY_LEN], ticket_val[EFS_PUT_TICKET_VAL_LEN];
+    if (p->ticketed) {
+        struct efs_put_ticket ticket;
+        rc = efs_put_ticket_from_pub(p, &ticket);
+        if (rc == EFS_OK)
+            rc = efs_put_ticket_publish_item(kv, &ticket, ticket_key, ticket_val, &it[n]);
+        if (rc != EFS_OK) return rc;
+        n++;
+    }
     if (receipt) it[n++] = *receipt;
     return meta_write_batch(kv, it, n);
 }
 
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 {
+    if (p && p->ticketed && (!p->durable_result || !p->fresh_object)) return EFS_ERR_INVAL;
     if(!p || !p->durable_result) return publish_inner(kv,p,NULL);
     uint8_t digest[EFS_HASH_SIZE],key[51],value[8+EFS_HASH_SIZE];int verdict;
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
@@ -4275,7 +4286,16 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     if(found==EFS_OK)return verdict;
     if(found!=EFS_ERR_NOT_FOUND)return found;
     be32(value+4,rc==EFS_OK?1:rc==EFS_ERR_STALE?2:3);
-    int written=meta_write_batch(kv,&receipt,1);
+    struct efs_kv_item completed[2] = {receipt}; unsigned completed_n = 1;
+    uint8_t tk[EFS_PUT_TICKET_KEY_LEN], tv[EFS_PUT_TICKET_VAL_LEN];
+    if (p->ticketed && rc == EFS_OK) {
+        struct efs_put_ticket ticket;
+        int trc = efs_put_ticket_from_pub(p, &ticket);
+        if (trc == EFS_OK) trc = efs_put_ticket_publish_item(kv, &ticket, tk, tv, &completed[1]);
+        if (trc != EFS_OK) return trc;
+        completed_n++;
+    }
+    int written=meta_write_batch(kv,completed,completed_n);
     return written==EFS_OK?rc:written;
 }
 

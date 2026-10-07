@@ -40,7 +40,7 @@ int efs_meta_apply_lane_sweep(struct efs_kv*k,efs_ino_t i,uint64_t g,uint8_t l){
 int efs_meta_apply_orphan_reclaim(struct efs_kv*k,efs_ino_t i,uint64_t g){(void)k;assert(i==42&&g==7);return verdict;}
 int efs_meta_apply_reap_done(struct efs_kv*k,efs_ino_t i,uint64_t g){(void)k;assert(i==42&&g==7);return verdict;}
 int efs_meta_apply_gc_ack(struct efs_kv*k,const struct efs_gc_ack_item*p,uint32_t n){(void)k;assert(n==1&&p->ino==42&&p->gen==7&&p->lane==3&&p->ci==8&&p->frag==2);return verdict;}
-''' + '\n'.join(function(n) for n in ('apply_lane_sweep_cmd','apply_reap_done_cmd','apply_orphan_reap_cmd','apply_gc_ack_cmd','host_bg_propose','host_gc_propose')) + '\nstatic int core_result(uint8_t opcode,int rc){uint8_t cmd[1]={opcode};int ret;\n'+apply+'\nreturn ret;}\n' + r''' 
+''' + '\n'.join(function(n) for n in ('apply_lane_sweep_cmd','apply_reap_done_cmd','apply_orphan_reap_cmd','apply_gc_ack_cmd','host_bg_propose','host_gc_propose')) + '\nstatic int core_result(uint8_t opcode,int rc){uint8_t cmd[1]={opcode};int ret;\n'+apply+'\nreturn ret;}\n' + r'''
 int main(void){
  struct server s={0};struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.s=&s,.r={1}};
  uint8_t cmd[25]={EFS_MD_CMD_LANE_SWEEP};cmd[8]=42;cmd[16]=7;cmd[17]=3;

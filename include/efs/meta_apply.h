@@ -308,6 +308,10 @@ struct efs_meta_pub {
     uint8_t lane_local;
     uint8_t fresh_object; /* a new PUT, even when checksums match an older object */
     struct efs_opid publication_id; /* mount/session + unique snapshot sequence */
+    struct efs_opid put_id; /* immutable PUT identity, separate from CAS retries */
+    uint32_t put_member_mask; /* staged: all configured members, not just EC placement */
+    uint32_t put_fragment_len; /* staged ticket manifest: actual fragment payload length */
+    uint8_t ticketed; /* staged: require ticket and publish ownership atomically */
     uint8_t durable_result; /* atomically record exact immutable publication result */
     /* delta_len > 0 appends an immutable span instead of CAS-replacing
      * the chunk image. expected_gen is still the base image's generation

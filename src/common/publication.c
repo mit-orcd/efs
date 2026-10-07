@@ -20,11 +20,20 @@ int efs_publication_digest(const struct efs_meta_pub *r, uint8_t out[EFS_HASH_SI
     if (!nonzero || !r->publication_id.seq || !r->publication_id.session_epoch)
         return EFS_ERR_INVAL;
     uint8_t buf[160 + EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE)], *p = buf;
-    put(&p, r->fresh_object ? 2 : 1, 4);
+    put(&p, r->ticketed ? 3 : r->fresh_object ? 2 : 1, 4);
     memcpy(p, r->publication_id.client_uuid, EFS_OPID_UUID_LEN);
     p += EFS_OPID_UUID_LEN;
     put(&p, r->publication_id.session_epoch, 4);
     put(&p, r->publication_id.seq, 8);
+    if (r->ticketed) {
+        unsigned valid = 0;
+        for (unsigned i = 0; i < EFS_OPID_UUID_LEN; i++) valid |= r->put_id.client_uuid[i];
+        if (!valid || !r->put_id.session_epoch || !r->put_id.seq || !r->put_fragment_len || !r->put_member_mask) return EFS_ERR_INVAL;
+        memcpy(p, r->put_id.client_uuid, EFS_OPID_UUID_LEN); p += EFS_OPID_UUID_LEN;
+        put(&p, r->put_id.session_epoch, 4); put(&p, r->put_id.seq, 8);
+        put(&p, r->put_fragment_len, 4);
+        put(&p, r->put_member_mask, 4);
+    }
     put(&p, r->ino, 8);
     put(&p, r->inode_gen, 8);
     put(&p, r->chunk_index, 4);
