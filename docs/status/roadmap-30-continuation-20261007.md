@@ -255,3 +255,12 @@ buffered/direct × one/two roots now rejects wrong-digest/truncated requests,
 then accepts and reads valid bytes; all corruption/query gates still pass. Logs
 `/private/tmp/efs-roadmap-put-config-baseline.log` and
 `/private/tmp/efs-roadmap-put-config-fixed.log`.
+
+## Round 25 — W70 truthful quota reduction reporting
+
+CLI success describes reduced running quota and keeps the compatible wire enum.
+NUC real-daemon buffered/direct × one/two-root gates observe 16→8 MiB quota,
+refuse below-usage shrink, preserve the quota on refusal and read unchanged
+bytes; no migration is advertised. Integrity and malformed PUT gates still pass.
+Log `/private/tmp/efs-roadmap-quota-cli.log`. Startup quota remains configuration,
+so this does not claim a persistent quota-setting feature.

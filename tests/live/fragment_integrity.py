@@ -36,7 +36,7 @@ for direct in (False, True):
                     sock.sendall(struct.pack('>IB',len(body)+1,kind)+body)
                     return exact(sock,struct.unpack('>I',exact(sock,4))[0])
             cmd=[str(source/'efsd'),'--node-id','1','--addr','127.0.0.1',
-                 '--port',str(port),'--direct-io' if direct else '--no-direct-io']
+                 '--port',str(port),'--quota','16M','--direct-io' if direct else '--no-direct-io']
             for index in range(roots):
                 root=Path(work)/f'root{index}';root.mkdir()
                 cmd += ['--storage',str(root)]
@@ -68,6 +68,17 @@ for direct in (False, True):
                         print(f'{direct=} {roots=} {label}: unavailable PASS',flush=True)
                     good()
                     print(f'{direct=} {roots=} rejected digest/truncated body cannot change fragment size PASS',flush=True)
+                    endpoint=f'127.0.0.1:{port}'
+                    shrink=subprocess.run([str(source/'efs-mgmt'),'shrink-quota',endpoint,'8M'],capture_output=True,text=True)
+                    assert shrink.returncode==0 and 'Reduced running quota' in shrink.stdout and 'migration' not in shrink.stdout,shrink
+                    status=subprocess.run([str(source/'efs-mgmt'),'status',endpoint],capture_output=True,text=True,check=True).stdout
+                    assert 'quota=8.00 MiB' in status,status
+                    refused=subprocess.run([str(source/'efs-mgmt'),'shrink-quota',endpoint,str(8*1024*1024-32768)],capture_output=True,text=True)
+                    assert refused.returncode!=0 and 'migration' not in refused.stdout,refused
+                    status=subprocess.run([str(source/'efs-mgmt'),'status',endpoint],capture_output=True,text=True,check=True).stdout
+                    assert 'quota=8.00 MiB' in status,status
+                    good()
+                    print(f'{direct=} {roots=} running quota reduced; below-usage reduction refused; bytes retained PASS',flush=True)
                     for flag in ([], ['--raw']):
                         query=subprocess.run([str(source/'efs-query'),*flag,f'127.0.0.1:{port}'],capture_output=True,text=True)
                         assert query.returncode==2 and not query.stdout and 'unavailable' in query.stderr,query

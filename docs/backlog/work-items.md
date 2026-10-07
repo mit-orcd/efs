@@ -2614,6 +2614,12 @@ It starts no migration worker, but returns the legacy IN_PROGRESS status.
 `cmd_shrink_quota()` in `src/mgmt/efs_mgmt.c` then prints "background migration
 started". The capability inventory already says evacuation/migration is absent.
 
+**Continuation repair (Oct 7):** the CLI reports the actual reduction of running
+quota and keeps the legacy success enum/wire format. NUC real-daemon buffered/
+direct × one/two-root gates reduce 16 MiB to 8 MiB, observe the new quota, refuse
+a reduction below stored usage, verify quota is unchanged on refusal and retain
+valid file bytes. No migration or restart persistence is claimed.
+
 **Change/gate:** make the successful CLI response describe the actual quota
 reduction and keep the wire response compatible or explicitly version it.
 Exercise accepted and rejected reductions, verify the updated running quota,

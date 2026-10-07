@@ -491,7 +491,7 @@ static int cmd_shrink_quota(int argc, char **argv)
 
     uint8_t status = ((uint8_t *)reply)[0];
     if (status == EFS_SHRINK_QUOTA_IN_PROGRESS)
-        printf("Shrinking quota on %s:%u by %s; background migration started\n",
+        printf("Reduced running quota on %s:%u by %s\n",
                host, port, argv[1]);
     else
         fprintf(stderr, "Shrink-quota failed\n");
