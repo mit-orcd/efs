@@ -247,6 +247,10 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
         return NULL;
     int n = pool_size();
 
+    int64_t admission_end = monotonic_ms() + 5000;
+    uint64_t outer = efs_client_rpc_deadline_ms();
+    if (outer && outer < (uint64_t)admission_end)
+        admission_end = (int64_t)outer;
     pthread_mutex_lock(&g_client.conn_lock[idx]);
     int64_t now = monotonic_ms();
     if (g_client.node_down_until_ms[idx] > now) {
@@ -260,6 +264,11 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
     }
 
     for (;;) {
+        now = monotonic_ms();
+        if (now >= admission_end) {
+            pthread_mutex_unlock(&g_client.conn_lock[idx]);
+            return NULL;
+        }
         int free_slot = -1;
         for (int s = 0; s < n; s++) {
             if (!g_client.conn_busy[idx][s]) {
@@ -273,20 +282,24 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
              * caller backs off/retries instead of deadlocking the mount. */
             struct timespec ts;
             clock_gettime(CLOCK_REALTIME, &ts);
-            ts.tv_sec += 5;
+            int64_t wait = admission_end - now;
+            if (wait > 50) wait = 50;
+            ts.tv_nsec += (long)wait * 1000000;
+            ts.tv_sec += ts.tv_nsec / 1000000000;
+            ts.tv_nsec %= 1000000000;
             int wrc = pthread_cond_timedwait(&g_client.conn_cv[idx],
                                              &g_client.conn_lock[idx], &ts);
-            if (wrc == ETIMEDOUT) {
+            if ((wrc && wrc != ETIMEDOUT) || monotonic_ms() >= admission_end) {
                 /* Silent until Sep 30 2026: 244 RPCs at exactly 5.0 s
                  * (and 10, 15) in one ecopy were this, not the network.
                  * Say so, rate-limited, with the pool size. */
-                static int n;
-                int k = __sync_fetch_and_add(&n, 1);
+                static int timeouts;
+                int k = __sync_fetch_and_add(&timeouts, 1);
 
                 pthread_mutex_unlock(&g_client.conn_lock[idx]);
                 if (k < 10 || (k % 100) == 0)
                     fprintf(stderr,
-                            "efs: conn pool node=%u exhausted for 5 s "
+                            "efs: conn pool node=%u checkout deadline reached "
                             "(pool=%d per node, EFS_CLIENT_CONNS_PER_NODE; "
                             "timeout #%d)\n",
                             (unsigned)node_id, n, k + 1);
@@ -340,6 +353,13 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
             /* We reserved this empty slot (busy=1, conn=NULL). Install
              * ours. Stealing a pointer another thread already returned
              * would double-checkout one QP (the old "keep existing" path). */
+            if (monotonic_ms() >= admission_end) {
+                efs_conn_destroy(nc);
+                g_client.conn_busy[idx][free_slot] = 0;
+                pthread_cond_signal(&g_client.conn_cv[idx]);
+                pthread_mutex_unlock(&g_client.conn_lock[idx]);
+                return NULL;
+            }
             g_client.conn[idx][free_slot] = nc;
             g_client.node_fail_streak[idx] = 0;
             g_client.node_down_until_ms[idx] = 0;
