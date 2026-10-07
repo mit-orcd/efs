@@ -1623,6 +1623,19 @@ revocation policy. PUT ticket metadata is committed in `b3a11877` and staged for
 storage-fence integration remains open. Xorinox rollout and substantial reclamation are confirmed in the checkpoint; complete backlog drainage and historical lost-ledger reconciliation are not.
 
 
+#### Xorinox's two GC errors — investigation comment (Oct 7)
+
+[Read-only investigation](../status/gc-errors-20261007.md): both are cumulative xefs3
+`reap_errors` from metadata/Raft proposals, first observed at 16:35 and 16:39
+UTC; physical-delete errors are zero. GC continued and both sampled leader
+queues are now empty. The deployed code omits the command/return code, so the
+exact causes are not recoverable. W63 follow-up: separate expected orphan BUSY
+deferrals from retry/hard failures, retain operation/inode/return-code diagnostics,
+and label portal errors as cumulative with node/class and recent activity.
+Preserve all lease/transaction checks and retry records. The known age-clock
+fix is implemented locally but still needs xorinox rollout; see the checkpoint.
+
+
 ## Appendix 2 — In flight — the current handoff block
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
@@ -4478,6 +4491,14 @@ signals (63–215 ms); handlers still drain before teardown.
 **Class:** correctness / resource exhaustion. **Status:** open; indexed Oct 7, 2026.
 
 **Evidence/current state:** Committed foundation 033a842a and later regressions implement body admission and retained-byte ownership. Targeted pressure/failure/RSS acceptance remains open.
+
+**Continuation acceptance (Oct 7):** NUC live eight-file concurrent sparse
+pressure gate uses 32 MiB body + 8 MiB drain budgets. 256 writes above 1 GiB
+with 1 MiB spacing complete without retries; observed peak client RSS is
+121,556 KiB. Cold remount verifies every range and zero holes; physical GC,
+restart quota/inventory and valid delayed-PUT gates pass. This is a workload
+measurement, not a general RSS ceiling. Failed-publication/recovery-reserve and
+extended append/pressure fault coverage remain open.
 
 **Home:** [current detail](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound).
 

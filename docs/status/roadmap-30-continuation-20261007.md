@@ -275,3 +275,13 @@ and subsequent physical GC/restart/valid-PUT gates pass. Log
 `/private/tmp/efs-roadmap-worker-retirement.log`; fixture
 `/data1/efs/gc-direct-zvlzgj9m/worker-retirement.json`. Default tracing is off.
 This measures process behavior in that workload, not a general RSS ceiling.
+
+## Round 27 — W67 bounded sparse pressure and cold-byte acceptance
+
+Added owned live eight-file/256-write concurrent sparse gate above 1 GiB offsets,
+1 MiB spacing, 32 MiB body + 8 MiB drain budgets. NUC direct: zero write retries,
+peak RSS 121,556 KiB; cold remount verifies all written ranges and zero holes.
+Fragments are physically removed, counters rise and the remaining GC/restart/
+quota/valid-PUT gates pass. Log `/private/tmp/efs-roadmap-sparse-pressure.log`;
+fixture `/data1/efs/gc-direct-znd5nw4n/sparse-pressure.json`. Failed-publication
+and extended pressure/recovery coverage remain open; no general RSS bound claim.

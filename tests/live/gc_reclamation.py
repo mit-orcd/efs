@@ -29,6 +29,7 @@ p.add_argument('--namespace', action='store_true')
 p.add_argument('--namespace-boundary', action='store_true')
 p.add_argument('--mount-label', default='default')
 p.add_argument('--workers', action='store_true')
+p.add_argument('--pressure', action='store_true')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
 source = Path(__file__).resolve().parents[2]
@@ -50,6 +51,7 @@ for path in sorted(inputs):
 (work/"manifest.json").write_text(json.dumps({"mode":a.mode,"roots":[str(x) for x in roots],"port":a.port,"source_tree_sha256":digest.hexdigest()},indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT='tcp')
 if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
+if a.pressure:env.update(EFS_DCACHE_BYTES=str(16<<20),EFS_DCACHE_HARD_BYTES=str(32<<20),EFS_DCACHE_DRAIN_BYTES=str(8<<20))
 servers=[]
 client=None
 peer=None
@@ -331,6 +333,55 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         for child in directory.iterdir():child.unlink()
         directory.rmdir()
         wait(lambda:not files(sample_ino),'worker fixture fragments reclaimed')
+    if a.pressure:
+        pressure=[];retries=[];samples=[]
+        def sparse_writer(index):
+            path=mount/f'sparse-pressure-{index}'
+            fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
+            retry_count=0;model=[]
+            try:
+                for slot in range(32):
+                    offset=(1<<30)+slot*(1<<20)
+                    data=bytes([(index*32+slot)%251+1])*4096
+                    deadline=time.monotonic()+30
+                    while True:
+                        try:
+                            assert os.pwrite(fd,data,offset)==len(data);break
+                        except OSError as error:
+                            assert error.errno in (11,12,16),error
+                            retry_count+=1
+                            assert time.monotonic()<deadline,'sparse admission made no progress'
+                            os.fsync(fd);time.sleep(.01)
+                    model.append((offset,data))
+                os.fsync(fd)
+                info=os.fstat(fd)
+                assert info.st_size==model[-1][0]+4096,info
+                return path,info.st_ino,model,retry_count
+            finally:os.close(fd)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            jobs=[pool.submit(sparse_writer,index) for index in range(8)]
+            while not all(job.done() for job in jobs):
+                text=(Path('/proc')/str(client.pid)/'status').read_text()
+                samples.append(int(re.search(r'VmRSS:\s+(\d+)',text).group(1)))
+                time.sleep(.05)
+            pressure=[job.result() for job in jobs]
+        assert samples and max(samples)<512*1024,samples
+        unmount();mount_client()
+        for path,ino_value,model,retry_count in pressure:
+            fd=os.open(path,os.O_RDONLY)
+            try:
+                for offset,data in model:assert os.pread(fd,len(data),offset)==data
+                assert os.pread(fd,4096,0)==bytes(4096)
+            finally:os.close(fd)
+        before_delete=totals(status())
+        for path,ino_value,model,retry_count in pressure:path.unlink()
+        wait(lambda:all(not files(item[1]) for item in pressure),'sparse-pressure fragments physically reclaimed')
+        after_delete=totals(status())
+        assert after_delete['removed_fragments']>before_delete['removed_fragments']
+        assert after_delete['reclaimed_payload_bytes']>before_delete['reclaimed_payload_bytes']
+        record={'hard_body_bytes':32<<20,'drain_bytes':8<<20,'files':8,'writes':256,'retry_count':sum(item[3] for item in pressure),'peak_rss_kib':max(samples),'before_delete':before_delete,'after_delete':after_delete}
+        (work/'sparse-pressure.json').write_text(json.dumps(record,indent=2))
+        print(f'sparse concurrent admission, cold bytes/holes and physical reclaim: peak_RSS_kib={max(samples)} retries={record["retry_count"]} PASS',flush=True)
     # Two peers repeatedly touch adjacent ranges until the span chain folds.
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
     peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

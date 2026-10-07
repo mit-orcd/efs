@@ -2564,6 +2564,14 @@ signals (63–215 ms); handlers still drain before teardown.
 
 **Evidence/current state:** Committed foundation 033a842a and later regressions implement body admission and retained-byte ownership. Targeted pressure/failure/RSS acceptance remains open.
 
+**Continuation acceptance (Oct 7):** NUC live eight-file concurrent sparse
+pressure gate uses 32 MiB body + 8 MiB drain budgets. 256 writes above 1 GiB
+with 1 MiB spacing complete without retries; observed peak client RSS is
+121,556 KiB. Cold remount verifies every range and zero holes; physical GC,
+restart quota/inventory and valid delayed-PUT gates pass. This is a workload
+measurement, not a general RSS ceiling. Failed-publication/recovery-reserve and
+extended append/pressure fault coverage remain open.
+
 **Home:** [current detail](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound).
 
 **Gate:** Sparse/append concurrent pressure, failed publication, cold-byte checks and small-host recovery-reserve/RSS gates.
