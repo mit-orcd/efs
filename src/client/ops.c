@@ -272,6 +272,8 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
             group_end = end_ci;
         uint32_t cur = start;
         while (cur < group_end) {
+            if (efs_client_rpc_past_deadline())
+                return EFS_ERR_BUSY;
             struct efs_chunk_rec recs[EFS_GETCHUNKS_MAX];
             uint32_t n = group_end - cur;
             if (n > EFS_GETCHUNKS_MAX)
@@ -345,6 +347,11 @@ static void *pull_fan_thread(void *arg)
             pthread_mutex_unlock(&f->mu);
             break;
         }
+        if (efs_client_rpc_past_deadline()) {
+            f->rc = EFS_ERR_BUSY;
+            pthread_mutex_unlock(&f->mu);
+            break;
+        }
         s = f->next;
         ge = (s | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
         if (ge > f->end)
@@ -374,6 +381,8 @@ static int pull_groups_parallel(efs_ino_t ino, uint32_t start_ci,
 
     if (start_ci >= end_ci)
         return EFS_OK;
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
     ngroups = ((end_ci - 1) >> EFS_CHUNK_GROUP_SHIFT) -
               (start_ci >> EFS_CHUNK_GROUP_SHIFT) + 1u;
     if (ngroups <= 1)

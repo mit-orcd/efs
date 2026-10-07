@@ -1,0 +1,80 @@
+append repeat 1
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (1.0s)
+wrote /data1/efs/logs/posix-20261007-035005.tsv
+results: /data1/efs/logs/posix-20261007-035005.tsv
+append repeat 2
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (7.8s)
+wrote /data1/efs/logs/posix-20261007-035007.tsv
+results: /data1/efs/logs/posix-20261007-035007.tsv
+append repeat 3
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (1.0s)
+wrote /data1/efs/logs/posix-20261007-035014.tsv
+results: /data1/efs/logs/posix-20261007-035014.tsv
+append repeat 4
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (1.1s)
+wrote /data1/efs/logs/posix-20261007-035016.tsv
+results: /data1/efs/logs/posix-20261007-035016.tsv
+append repeat 5
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (0.8s)
+wrote /data1/efs/logs/posix-20261007-035017.tsv
+results: /data1/efs/logs/posix-20261007-035017.tsv
+append repeat 6
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (8.1s)
+wrote /data1/efs/logs/posix-20261007-035017.tsv
+results: /data1/efs/logs/posix-20261007-035017.tsv
+append repeat 7
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (1.0s)
+wrote /data1/efs/logs/posix-20261007-035026.tsv
+results: /data1/efs/logs/posix-20261007-035026.tsv
+append repeat 8
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (8.0s)
+wrote /data1/efs/logs/posix-20261007-035027.tsv
+results: /data1/efs/logs/posix-20261007-035027.tsv
+append repeat 9
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (1.0s)
+wrote /data1/efs/logs/posix-20261007-035035.tsv
+results: /data1/efs/logs/posix-20261007-035035.tsv
+append repeat 10
+parallel 2 tests jobs=4 (serial 0 after)
+pass concurrent_appends_two_proc     
+pass concurrent_appends              
+============================================================
+POSIX suite: 2/2 pass, 0 fail, 0 skip, 0 notrun  (1.2s)
+wrote /data1/efs/logs/posix-20261007-035036.tsv
+results: /data1/efs/logs/posix-20261007-035036.tsv

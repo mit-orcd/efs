@@ -1,0 +1,7 @@
+Assertion failed: (((uint64_t *)values)[i]==i+1), function main, file t.c, line 28.
+Traceback (most recent call last):
+  File "/Users/mike/git/efs/tests/test_append_sequence.py", line 45, in <module>
+    subprocess.run([str(p.with_suffix(''))],check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-append-seq-he25askn/t']' died with <Signals.SIGABRT: 6>.

@@ -1,0 +1,39 @@
+mixed append repeat 1
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_appends_two_proc     
+pass concurrent_write_and_readdir    
+pass concurrent_overlap_write        
+pass concurrent_appends              
+pass concurrent_extend_high_then_low 
+pass concurrent_create_unlink_two_proc
+pass concurrent_creates_same_dir     
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (13.4s)
+wrote /data1/efs/logs/roadmap-08-mixed-1.tsv
+mixed append repeat 2
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_appends_two_proc     
+pass concurrent_write_and_readdir    
+pass concurrent_overlap_write        
+pass concurrent_appends              
+pass concurrent_extend_high_then_low 
+pass concurrent_create_unlink_two_proc
+pass concurrent_creates_same_dir     
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (13.6s)
+wrote /data1/efs/logs/roadmap-08-mixed-2.tsv
+mixed append repeat 3
+parallel 8 tests jobs=4 (serial 0 after)
+pass concurrent_writes_disjoint      
+pass concurrent_appends_two_proc     
+pass concurrent_write_and_readdir    
+pass concurrent_overlap_write        
+pass concurrent_appends              
+pass concurrent_extend_high_then_low 
+pass concurrent_create_unlink_two_proc
+pass concurrent_creates_same_dir     
+============================================================
+POSIX suite: 8/8 pass, 0 fail, 0 skip, 0 notrun  (14.2s)
+wrote /data1/efs/logs/roadmap-08-mixed-3.tsv

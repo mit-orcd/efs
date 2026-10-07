@@ -15,6 +15,8 @@ code='''#include <assert.h>
 #define PULL_FAN 16
 static __thread uint64_t deadline;
 static unsigned calls;
+static int expired;
+static int efs_client_rpc_past_deadline(void) { return expired; }
 static uint64_t efs_client_rpc_deadline_ms(void) { return deadline; }
 static void efs_client_rpc_set_deadline_ms(uint64_t d) { deadline=d; }
 struct pull_absent;
@@ -28,6 +30,11 @@ deadline=12345;assert(!pull_groups_parallel(1,0,64*64,NULL));
 assert(calls==64 && deadline==12345);
 struct pull_fan f={.ino=1,.next=0,.end=64,.deadline=12345,.mu=PTHREAD_MUTEX_INITIALIZER};
 deadline=999;pull_fan_thread(&f);assert(deadline==999);
+expired=1;unsigned before=calls;
+assert(pull_groups_parallel(1,0,1,NULL)==EFS_ERR_BUSY&&calls==before);
+assert(pull_groups_parallel(1,0,4096,NULL)==EFS_ERR_BUSY&&calls==before);
+f.next=0;f.rc=EFS_OK;pull_fan_thread(&f);
+assert(f.next==0&&f.rc==EFS_ERR_BUSY&&calls==before&&deadline==999);
 return 0;}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-pull-deadline-') as d:

@@ -2871,14 +2871,29 @@ static off_t append_end_offset(efs_ino_t ino)
  * cannot merge two GET+PUTs). Their close REPORT resolves nopen. On
  * success, drop cached copies of the tail so a later flush merges the
  * published peer. Does not fall back to an unreserved local end. */
+/* Append deduplication is session-wide, while append mutexes are per inode.
+ * Never reuse a sequence on concurrent files or after exhaustion. */
+static uint64_t append_next_sequence(void)
+{
+    uint64_t old = __atomic_load_n(&g_client.append_opid_seq, __ATOMIC_RELAXED);
+    for (;;) {
+        if (old == UINT64_MAX)
+            return 0;
+        uint64_t next = old + 1;
+        if (__atomic_compare_exchange_n(&g_client.append_opid_seq, &old, next,
+                                        1, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
+            return next;
+    }
+}
+
 static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
 {
     uint64_t ns = 0, start = 0, seq;
     int rc = EFS_ERR_BUSY;
 
-    seq = ++g_client.append_opid_seq;
+    seq = append_next_sequence();
     if (!seq)
-        seq = ++g_client.append_opid_seq;
+        return -EOVERFLOW;
     /* Foreign uuid is BUSY until their close REPORT. 2 ms × 15000 was
      * 500 reserve RPCs/s that stalled the live appender (B's 45 s SSH
      * timeout while A was still writing). Back off; cap ~20 s. */
