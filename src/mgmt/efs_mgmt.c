@@ -55,7 +55,7 @@ static void format_bytes(uint64_t bytes, char *buf, size_t len)
 /* Short STATUS probe so a dead peer does not stall status for EFS_IO_TIMEOUT_MS. */
 #define EFS_STATUS_PROBE_MS 2000
 
-static int probe_node_up(const char *nhost, uint16_t nport)
+static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_status_reply *status)
 {
     int pfd = efs_connect_tcp(nhost, nport);
     if (pfd < 0)
@@ -69,8 +69,10 @@ static int probe_node_up(const char *nhost, uint16_t nport)
     if (efs_send_msg(pfd, EFS_MSG_STATUS, NULL, 0) == 0 &&
         efs_recv_msg(pfd, &type, &preply, &preply_len) == 0 &&
         type == EFS_MSG_STATUS_REPLY &&
-        preply_len == sizeof(struct efs_msg_status_reply))
+        preply_len == sizeof(struct efs_msg_status_reply)) {
+        if (status) memcpy(status, preply, sizeof(*status));
         ok = 1;
+    }
     free(preply);
     close(pfd);
     return ok;
@@ -134,7 +136,12 @@ static int cmd_status(int argc, char **argv)
     uint32_t ncap = 0;
     for (uint32_t i = 0; i < list->node_count; i++) {
         /* Probe every advertised addr (may differ from the seed string we used). */
-        int up = probe_node_up(list->nodes[i].addr, list->nodes[i].port);
+        struct efs_msg_status_reply current;
+        int up = probe_node_up(list->nodes[i].addr, list->nodes[i].port, &current);
+        if (up) {
+            list->nodes[i].used = current.used;
+            list->nodes[i].quota = current.quota;
+        }
         if (up)
             up_nodes++;
         else
@@ -308,7 +315,7 @@ static int cmd_status(int argc, char **argv)
     {
         int any = 0;
         for (uint32_t i = 0; i < ncopy; i++) {
-            if (!probe_node_up(nodes_copy[i].addr, nodes_copy[i].port)) {
+            if (!probe_node_up(nodes_copy[i].addr, nodes_copy[i].port, NULL)) {
                 printf("  node %u: DOWN\n", nodes_copy[i].id);
                 continue;
             }
@@ -594,7 +601,7 @@ static int cmd_io_stats(int argc, char **argv)
     uint32_t reply_len = 0;
     struct efs_msg_io_stats_reply *r;
     static const char *names[EFS_IO_STATS_CLASSES] = {
-        "get_chunk", "put_chunk", "disk_write"
+        "get_chunk", "put_chunk", "disk_write", "disk_read", "gc_delete"
     };
     uint32_t i;
 
@@ -616,7 +623,8 @@ static int cmd_io_stats(int argc, char **argv)
     if (send_recv(fd, EFS_MSG_IO_STATS, NULL, 0, &reply_type, &reply,
                   &reply_len) != 0 ||
         reply_type != EFS_MSG_IO_STATS_REPLY ||
-        reply_len != sizeof(*r)) {
+        (reply_len != sizeof(*r) &&
+         reply_len != sizeof(uint64_t) + 3 * sizeof(struct efs_io_stats_class))) {
         fprintf(stderr, "Failed to get io-stats\n");
         free(reply);
         close(fd);
@@ -626,7 +634,8 @@ static int cmd_io_stats(int argc, char **argv)
     r = reply;
     printf("io-stats %s:%u uptime_s=%llu\n", host, port,
            (unsigned long long)(r->uptime_us / 1000000ull));
-    for (i = 0; i < EFS_IO_STATS_CLASSES; i++) {
+    uint32_t nclasses = (reply_len - sizeof(uint64_t)) / sizeof(struct efs_io_stats_class);
+    for (i = 0; i < nclasses; i++) {
         struct efs_io_stats_class *c = &r->cls[i];
         printf("  %-10s ops=%llu bytes=%llu errors=%llu us_sum=%llu avg_us=%llu "
                "p50_us=%llu max_us=%llu\n",

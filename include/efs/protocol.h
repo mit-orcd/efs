@@ -455,9 +455,10 @@ struct efs_msg_status_reply {
 };
 
 /* IO_STATS reply: one row per op class (0 = GET_CHUNK handler, 1 =
- * PUT_CHUNK handler, 2 = writer-pool disk write). Counters are cumulative
+ * PUT_CHUNK handler, 2 = writer-pool disk write, 3 = store read,
+ * 4 = GC delete RPC). Counters are cumulative
  * since efsd start; p50_us is the median of the last 64 latencies. */
-#define EFS_IO_STATS_CLASSES 3
+#define EFS_IO_STATS_CLASSES 5
 struct efs_io_stats_class {
     uint64_t ops;
     uint64_t bytes;

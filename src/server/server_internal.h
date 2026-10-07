@@ -246,6 +246,8 @@ void server_writer_set_npaths(uint32_t n);
 #define EFS_IOSTAT_GET        0 /* GET_CHUNK handler, conn thread */
 #define EFS_IOSTAT_PUT        1 /* PUT_CHUNK handler, conn thread */
 #define EFS_IOSTAT_DISK_WRITE 2 /* writer-pool disk write */
+#define EFS_IOSTAT_DISK_READ  3 /* filesystem-backed fragment read */
+#define EFS_IOSTAT_GC_DELETE  4 /* GC_FRAGMENT / GC_INODE RPC */
 uint64_t efs_iostats_now_us(void);
 void efs_iostats_add(int cls, uint64_t bytes, uint64_t us, int err);
 void efs_iostats_snapshot(struct efs_msg_io_stats_reply *out);

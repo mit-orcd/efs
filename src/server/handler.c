@@ -453,11 +453,14 @@ send_reply:
             break;
         }
         case EFS_MSG_GC_INODE: {
+            uint64_t start = efs_iostats_now_us();
             struct efs_msg_gc_inode_reply rep = {.rc=EFS_ERR_PROTO};
             if (payload_len == sizeof(struct efs_msg_gc_inode)) {
                 const struct efs_msg_gc_inode *req=payload;
                 rep.rc=server_gc_inode(g_server,req->export_id,req->ino,req->generation);
             }
+            efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start,
+                            rep.rc != EFS_OK && rep.rc != EFS_ERR_BUSY);
             efs_conn_send_msg(conn,EFS_MSG_GC_INODE_REPLY,&rep,sizeof(rep));
             break;
         }
@@ -468,6 +471,7 @@ send_reply:
             break;
         }
         case EFS_MSG_GC_FRAGMENT: {
+            uint64_t start = efs_iostats_now_us();
             /* Data-plane GC (spec L7): checksum-conditional fragment
              * delete. Idempotent — absent/deleted/mismatch-gone all reply
              * 0; only a real I/O failure asks the reaper to retry. No
@@ -502,6 +506,8 @@ send_reply:
                  * the dead bytes are already gone, so that is terminal
                  * success for the reaper, not a retry. */
                 rep.status = (grc == EFS_OK || grc == EFS_ERR_EXIST) ? 0 : 1;
+                efs_iostats_add(EFS_IOSTAT_GC_DELETE, 0, efs_iostats_now_us() - start,
+                                rep.status != 0);
                 efs_conn_send_msg(conn, EFS_MSG_GC_FRAGMENT_REPLY, &rep,
                                   sizeof(rep));
             }

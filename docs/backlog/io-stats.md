@@ -7,9 +7,10 @@ Source-reviewed Oct 7 (`src/server/iostats.c`, handler/writer paths,
 [Oct 4 development-cluster implementation and measurements](../archive/io-stats-acceptance-20261004.md)
 are retained separately; they are not acceptance of a later deployment.
 
-`efs-mgmt io-stats <node:port>` reads process-global GET, PUT and disk-write
+`efs-mgmt io-stats <node:port>` reads process-global GET, PUT, disk-write, disk-read and GC-delete
 classes without resetting them. The metadata pump also emits `iostats:` text
-approximately every five seconds after activity has begun. Counters are
+for the original GET/PUT/disk-write classes approximately every five seconds
+after activity has begun. Counters are
 relaxed-atomic diagnostic snapshots, not a coherent transaction or audit log.
 
 - `ops`, `bytes`, `errors`, `us_sum` and maximum latency accumulate until
@@ -32,3 +33,19 @@ cause of a slower repeat. Use matched untraced repetitions for acceptance.
 
 There is no per-export/path split, durable time-series history or client-side
 coverage here. GC diagnostics and `EFS_RPC_PROF` are separate mechanisms.
+
+Oct 7 follow-up adds filesystem-backed fragment reads and GC delete RPCs. A
+GC request may find an already absent fragment or return bounded-progress BUSY;
+it is not a count of physical removals. The portal labels these `rdsk` and `del`,
+with `ddsk` derived from GC's actual removed-fragment/payload counters. These
+application operations include page-cache service; they are not device IOPS.
+The extended I/O reply keeps the original three classes as a prefix; new mgmt
+accepts either length, while old mgmt needs upgrading for the five-class reply.
+A private NUC RPC test (`tests/live/io_stats_smoke.py`) checks successful/missing
+reads, duplicate GC requests and exactly one actual removal. Full NUC unit tests
+pass. This has not yet been rolled into the running xorinox daemons.
+
+`efs-mgmt status` now refreshes each reachable node's usage/quota from its STATUS
+reply before calculating logical capacity, matching FUSE statfs rather than
+cached membership usage. The portal independently samples the mounted export's
+statfs through `df`, so this chart fix also works with the existing daemons.

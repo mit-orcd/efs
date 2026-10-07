@@ -22,8 +22,11 @@ static int nvme_get(void *ctx, const struct efs_frag_id *id,
     if (id->export_id != n->ex->id)
         return EFS_ERR_INVAL;
     efs_tls_chunk_gen = id->chunk_generation;
+    uint64_t start = efs_iostats_now_us();
     rc = server_read_fragment_with_sum(n->s, n->ex, id->ino, id->chunk_index,
                                        id->fragment_index, buf, len, ck, ok);
+    efs_iostats_add(EFS_IOSTAT_DISK_READ, rc == EFS_OK ? *len : 0,
+                    efs_iostats_now_us() - start, rc != EFS_OK);
     efs_tls_chunk_gen = 0;
     return rc;
 }
