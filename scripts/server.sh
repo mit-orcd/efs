@@ -88,34 +88,9 @@ start_server_perf() {
 # Run from the project root so efsd is found.
 cd "$(dirname "$0")/.."
 
-kill_pid_graceful() {
-    local pid=$1
-    local label=${2:-process}
-    if ! kill -0 "$pid" 2>/dev/null; then
-        return 0
-    fi
-    echo "Stopping $label (PID $pid)"
-    kill "$pid" 2>/dev/null || true
-    for _ in $(seq 1 30); do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            return 0
-        fi
-        sleep 0.1
-    done
-    if kill -0 "$pid" 2>/dev/null; then
-        kill -9 "$pid" 2>/dev/null || true
-        sleep 0.2
-    fi
-}
-
 kill_from_pidfile() {
-    local file=$1
-    if [ -f "$file" ]; then
-        local old_pid
-        old_pid=$(cat "$file")
-        kill_pid_graceful "$old_pid" "efsd from $file"
-        rm -f "$file"
-    fi
+    local file=$1 storage=$2
+    python3 ./scripts/server_processes.py stop-file "$file" "$storage"
 }
 
 kill_port_holder() {
@@ -131,7 +106,7 @@ kill_port_holder() {
     fi
     for pid in $pids; do
         if [ -r "/proc/$pid/cmdline" ] && tr '\0' ' ' < "/proc/$pid/cmdline" | grep -q "efsd"; then
-            kill_pid_graceful "$pid" "efsd holding port $port"
+            python3 ./scripts/server_processes.py stop-port "$pid" "$port"
         fi
     done
 }
@@ -155,8 +130,8 @@ cmd_stop() {
     local storage=${target%:*}
     # Multi-path: PID lives under the first root.
     storage=${storage%%,*}
-    kill_from_pidfile "$storage/log/efsd.pid"
-    kill_from_pidfile "$storage/efsd.pid"
+    kill_from_pidfile "$storage/log/efsd.pid" "$storage"
+    kill_from_pidfile "$storage/efsd.pid" "$storage"
     echo "Stopped efsd for storage $storage (if any)"
     finish_perf_mark "$(perf_mark_storage "$storage")" || echo "WARNING: perf reports were not written" >&2
 }
@@ -221,8 +196,8 @@ done
 
 # New PID file location and legacy location at the storage root.
 PID_FILE="$FIRST_STORAGE/log/efsd.pid"
-kill_from_pidfile "$PID_FILE"
-kill_from_pidfile "$FIRST_STORAGE/efsd.pid"
+kill_from_pidfile "$PID_FILE" "$FIRST_STORAGE"
+kill_from_pidfile "$FIRST_STORAGE/efsd.pid" "$FIRST_STORAGE"
 kill_port_holder "$PORT"
 
 # Derive a stable node id from the address and port.
@@ -251,6 +226,7 @@ LOG_MARK=$(wc -l < "$LOG_FILE" 2>/dev/null || echo 0)
 "${ARGS[@]}" >> "$LOG_FILE" 2>&1 &
 NEW_PID=$!
 echo "$NEW_PID" > "$PID_FILE"
+python3 ./scripts/server_processes.py record "$PID_FILE" "$FIRST_STORAGE"
 
 echo "efsd started (PID $NEW_PID); logs: $LOG_FILE"
 echo "Stop with: $0 stop $FIRST_STORAGE   # or: $0 stop $ADDR_PORT"

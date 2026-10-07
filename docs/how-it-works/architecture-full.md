@@ -4760,10 +4760,15 @@ checked before signaling. A stale PID reused by another process can therefore
 cause an unrelated process to be terminated. This is conditional source
 reachability, not a reproduced incident; no processes were signaled in review.
 
-**Next:** validate numeric PID and process identity before signaling, bind the
-record to a process start identity, and handle stale records without killing
-an unrelated process. Coordinate the shutdown bound with W65 rather than
-assuming SIGTERM completion means data was drained.
+**Continuation repair (Oct 7):** `scripts/server_processes.py` validates numeric
+PIDs, the actual executable, requested storage/port, process start identity and
+boot identity. New PID files retain a sidecar identity record. Linux pidfd
+signaling plus a recheck prevents a PID-reuse race around retirement. Legacy
+numeric records require matching executable/storage. Graceful stop waits up to
+60 seconds and fails with the process retained rather than escalating to SIGKILL.
+NUC private wrapper fixtures prove invalid/unrelated/wrong-storage/stale-start
+records cannot kill another process and a matching daemon receives SIGTERM.
+Daemon-internal shutdown timing remains W65; no power-loss guarantee is inferred.
 
 **Gate:** isolated wrapper fixtures for absent/dead/nonnumeric/reused PID,
 matching daemon and unrelated live process; unrelated processes survive start

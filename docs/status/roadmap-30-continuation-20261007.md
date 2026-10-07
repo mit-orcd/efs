@@ -90,3 +90,13 @@ production-code saturation test occupies 512 slots, checks zero RPCs for all
 four operations, releases one slot and verifies a valid identity/watermark below
 outstanding requests. Log `/private/tmp/efs-roadmap-w76.log`. Live lost-reply and
 maximum-concurrency acceptance remain owed; ordinary FUSE limits are not changed.
+
+## Round 9 — W78 safe daemon retirement
+
+Server wrapper PID files are verified against actual executable, storage/port,
+start and boot identity. New records get an identity sidecar; pidfd signals the
+verified process after rechecking. No wrapper SIGKILL escalation remains; a
+60-second timeout retains the daemon and fails the operation. NUC private tests
+prove invalid/unrelated/stale-start/wrong-storage processes survive and a matching
+owned daemon is gracefully stopped. Log `/private/tmp/efs-roadmap-w78.log`.
+Daemon-internal teardown timing remains W65.
