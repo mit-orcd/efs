@@ -24,7 +24,7 @@ static int pull_chunks_range(efs_ino_t ino,uint32_t start,uint32_t end,struct pu
 (void)ino;(void)start;(void)end;(void)ab;
 assert(deadline==12345);__sync_fetch_and_add(&calls,1);return EFS_OK;
 }
-'''+s[a:b]+fn('pull_fan_thread')+fn('pull_groups_parallel')+'''
+'''+s[a:b]+fn('pull_group_end')+fn('pull_fan_thread')+fn('pull_groups_parallel')+'''
 int main(void) {
 deadline=12345;assert(!pull_groups_parallel(1,0,64*64,NULL));
 assert(calls==64 && deadline==12345);

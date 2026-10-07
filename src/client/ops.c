@@ -260,6 +260,12 @@ static void pull_absent_mark(struct pull_absent *ab, uint32_t lo, uint32_t hi)
                                 __ATOMIC_RELAXED);
 }
 
+static uint32_t pull_group_end(uint32_t start, uint32_t end)
+{
+    uint64_t next = ((uint64_t)start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1;
+    return next > end ? end : (uint32_t)next;
+}
+
 static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
                              struct pull_absent *ab)
 {
@@ -267,9 +273,7 @@ static int pull_chunks_range(efs_ino_t ino, uint32_t start_ci, uint32_t end_ci,
         return EFS_OK;
     uint32_t start = start_ci;
     while (start < end_ci) {
-        uint32_t group_end = (start | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
-        if (group_end > end_ci)
-            group_end = end_ci;
+        uint32_t group_end = pull_group_end(start, end_ci);
         uint32_t cur = start;
         while (cur < group_end) {
             if (efs_client_rpc_past_deadline())
@@ -353,9 +357,7 @@ static void *pull_fan_thread(void *arg)
             break;
         }
         s = f->next;
-        ge = (s | (EFS_CHUNK_GROUP_SIZE - 1u)) + 1u;
-        if (ge > f->end)
-            ge = f->end;
+        ge = pull_group_end(s, f->end);
         f->next = ge;
         pthread_mutex_unlock(&f->mu);
         rc = pull_chunks_range(f->ino, s, ge, f->ab);

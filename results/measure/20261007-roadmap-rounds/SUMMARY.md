@@ -17,4 +17,5 @@ implementation rounds.
 | 6 | Bound REPORT retry/slot waits, reject expired work, restore TLS and measure actual sleeps | retry/pressure regressions PASS; NUC fsync 4/4 and peer overlap 3/3 PASS | fbaf6046 |
 | 7 | Surface read metadata/PUT-window failures instead of false EOF or holes; define failure byte count | read admission regression PASS; NUC read-filter single/peer gates PASS | 5868ec73 |
 | 8 | Stop expired GETCHUNKS work; fix session-wide append sequence race found during full gate | initial full gate lost one append record; old counter fails concurrency regression; fixed NUC 216/217 + 64/64, three 8/8 concurrent repeats PASS | e5bb19c4 |
-| 9 | Bound GETCHUNKS retries and free failed receive payloads before releasing ownership | RPC fault regression PASS; NUC read and peer-overlap gates PASS | accompanying client commit |
+| 9 | Bound GETCHUNKS retries and free failed receive payloads before releasing ownership | RPC fault regression PASS; NUC read and peer-overlap gates PASS | 17be9144 |
+| 10 | Prevent chunk-group end from wrapping at the upper uint32 boundary | serial/fan boundary regression PASS on Mac and NUC; live sparse single/peer gates PASS | accompanying client commit |
