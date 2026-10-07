@@ -216,3 +216,13 @@ a nondirectory. NUC self-tests inject all three errors and check valid directory
 and regular-file cases; live peer mkdir visibility passes on the normal service.
 Log `/private/tmp/efs-roadmap-directory-probe.log`. This improves failure evidence
 and does not excuse or automatically retry the earlier peer failure.
+
+## Round 21 — service acceptance for safe daemon shutdown
+
+Isolated committed `e3d8e944` deployed to the normal NUC service, direct I/O.
+Full Linux units pass; POSIX 216/0/1 skip, peer 64/64, persistence 26/26 prepare
+and verify. This validates the reader/accept shutdown changes through an actual
+four-node stop/deploy/start and accepted file persistence cycle. No concurrent
+benchmark source was included. Logs `/private/tmp/efs-roadmap-cycle21-live.log`
+and `/private/tmp/efs-roadmap-cycle21-units.log`. RDMA/fault-time mutation
+shutdown acceptance and original incident causality remain open.
