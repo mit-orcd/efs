@@ -13,6 +13,15 @@ sends you to — not the whole spec.
 ---
 ## 1. The task right now
 
+**Writer investigation (Oct 7).** Isolated engine phases and opt-in wait timing
+are implemented; inline multi-root placement and bounded overwrite hints are
+fixed. The 108-configuration, three-repeat comparison started on xorinox, but
+SSH/ping became unavailable at the last retrieved 135/432 checkpoint. Check the
+existing process/results before restarting measurements. Device/sync probes,
+final profile analysis and Linux gates remain. See the
+[resume checkpoint](../../results/measure/20261007-writer-investigation/SUMMARY.md).
+
+
 **Benchmark review (Oct 7).** Cached KV segment lookup now uses validated record
 offsets and binary search; matched warm reads improved about 25%. Raw QD256
 release gates, allocation counters, invalid-profile labels, engine-data DWARF

@@ -1,0 +1,38 @@
+.Generating reports for 5 profiles, up to 2 parallel jobs
+[reports 1/5] 0: OK
+[reports 2/5] 1: OK
+[reports 3/5] 2: OK
+[reports 4/5] 3: OK
+[reports 5/5] 4: OK
+...Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /private/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/profile test y3t9y_dm/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: OK
+[reports 2/2] data-buffered-w0-qd1: OK
+Results and analysis: /private/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/profile test 192afea9/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Reports unavailable: missing: perf.data missing
+Generating reports for 0 profiles, up to 4 parallel jobs
+....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: FAIL
+[reports 2/2] data-buffered-w0-qd1: FAIL
+Results and analysis: /private/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/profile test alfsn9bg/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+....
+----------------------------------------------------------------------
+Ran 16 tests in 5.126s
+
+OK
+Results and analysis: /private/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/tmprh_bldym/ANALYSIS.md

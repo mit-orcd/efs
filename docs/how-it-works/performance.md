@@ -406,3 +406,39 @@ are ended and invalidate the run, and failed or zero-operation phases print
 `BENCH_FAIL`. No durability policy was relaxed to improve rates.
 
 [Review, matched measurements and validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md).
+
+### Isolated writer investigation
+
+Use `--data-rw split` to create separate write and read profiles. Read cases
+populate the bounded window before timing; both cases gate perf sampling around
+only their measured phase. `--data-full-paths` measures the selected roots together
+without repeating the prefix ladder. The engine workers use private release gates
+and report idle workers, release delay, actual writer count and per-root write
+counts. Bounded overwrites probe their existing root instead of claiming every
+operation creates a new fragment.
+
+For example, repeat this comparison three times on a quiet host:
+
+```sh
+./efs-bench.sh --modes data --data-rw split --data-full-paths --writers 0,2,auto --qds 1,16,64 --data-size 64M --time 3 --skip-ceiling --storage-root /data1/efs/bench --storage-root /home/efs/additional-work-dir/bench
+```
+
+Use `--writer-stats` for separate diagnostic runs. It enables production writer
+instrumentation only for the measured writes and prints `BENCH_WAIT` totals and
+maxima in microseconds: admission (submission to an accepted slot, including
+path selection and waiting for an empty slot), queue (accepted slot to service),
+service (the complete synchronous writer job), and resume (service completion
+to the caller returning). `lock_us` covers initial fallback-slot mutex acquisition;
+it is not a total for all locks or condition-variable waits. It overlaps admission.
+`fallback` counts jobs that entered the blocking slot path; `peak_active` counts
+submissions in flight, including those waiting for a slot, rather than disk queue
+occupancy. Divide totals by `jobs` for per-submission averages. Maxima are separate
+observations and must not be added together. CPU profiles and optional short
+strace/scheduler recordings complement these counters.
+
+Uninstrumented repeated runs establish throughput and tail latency; instrumented
+or traced runs identify waiting and must not be substituted for those baselines.
+Writer statistics are disabled by default in the daemon. The routing fix also
+initializes storage-root selection in inline mode, so new inline writes can use
+all configured roots; overwrites retain their existing root. No writer-count or
+sync/durability default changed.
