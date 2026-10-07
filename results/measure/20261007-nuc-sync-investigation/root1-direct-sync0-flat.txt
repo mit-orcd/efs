@@ -1,0 +1,89 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 111  of event 'cycles'
+# Event count (approx.): 1511945029
+#
+# Overhead  Shared Object      Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+     8.85%  [xfs]              [k] xfs_btree_get_leaf_keys                  -      -            
+     6.15%  [kernel.kallsyms]  [k] __memcpy                                 -      -            
+     5.30%  [xfs]              [k] xlog_cil_alloc_shadow_bufs.isra.0        -      -            
+     4.72%  [xfs]              [k] xfs_extent_busy_trim                     -      -            
+     4.37%  [kernel.kallsyms]  [k] _raw_spin_lock                           -      -            
+     3.18%  [xfs]              [k] xlog_prepare_iovec                       -      -            
+     3.12%  [kernel.kallsyms]  [k] kmem_cache_alloc_noprof                  -      -            
+     2.97%  [kernel.kallsyms]  [k] update_load_avg                          -      -            
+     2.88%  [xfs]              [k] xlog_grant_head_check                    -      -            
+     2.60%  [xfs]              [k] xfs_alloc_walk_iter                      -      -            
+     2.58%  [gpu_sched]        [k] cleanup_module                           -      -            
+     2.58%  [kernel.kallsyms]  [k] irqentry_enter                           -      -            
+     2.41%  [xfs]              [k] xfs_rmapbt_init_high_key_from_rec        -      -            
+     2.35%  [kernel.kallsyms]  [k] kmem_cache_free                          -      -            
+     2.33%  [kernel.kallsyms]  [k] _raw_spin_lock_irqsave                   -      -            
+     2.30%  [kernel.kallsyms]  [k] radix_tree_tag_clear                     -      -            
+     2.15%  [kernel.kallsyms]  [k] down_read                                -      -            
+     1.89%  [xfs]              [k] xfs_bmap_add_extent_hole_real            -      -            
+     1.81%  [xfs]              [k] xfs_buf_item_format                      -      -            
+     1.75%  [xfs]              [k] xfs_alloc_cur_check                      -      -            
+     1.65%  [kernel.kallsyms]  [k] __list_add_valid_or_report               -      -            
+     1.65%  [kernel.kallsyms]  [k] copy_from_kernel_nofault_allowed         -      -            
+     1.61%  [kernel.kallsyms]  [k] inode_permission                         -      -            
+     1.59%  [kernel.kallsyms]  [k] __memmove                                -      -            
+     1.50%  [kernel.kallsyms]  [k] iomap_dio_bio_iter                       -      -            
+     1.41%  [kernel.kallsyms]  [k] dequeue_entity                           -      -            
+     1.31%  [kernel.kallsyms]  [k] __x64_sys_futex                          -      -            
+     1.14%  [xfs]              [k] xfs_alloc_get_freelist                   -      -            
+     1.09%  [xfs]              [k] xfs_alloc_fix_freelist                   -      -            
+     0.95%  [xfs]              [k] xfs_btree_lookup                         -      -            
+     0.83%  [xfs]              [k] xfs_extent_busy_insert_list              -      -            
+     0.80%  [vdso]             [.] 0x00000000000008d8                       -      -            
+     0.78%  [xfs]              [k] xfs_vn_change_ok                         -      -            
+     0.75%  [xfs]              [k] xfs_group_get                            -      -            
+     0.73%  [xfs]              [k] xfs_inode_item_format                    -      -            
+     0.71%  libc.so.6          [.] __memmove_evex_unaligned_erms            -      -            
+     0.67%  [kernel.kallsyms]  [k] __get_user_8                             -      -            
+     0.67%  [kernel.kallsyms]  [k] clear_bhb_loop                           -      -            
+     0.67%  efs-bench          [.] server_write_fragment_with_sum           -      -            
+     0.67%  efs-bench          [.] submit_and_wait_inner                    -      -            
+     0.67%  libc.so.6          [.] __GI___pthread_mutex_unlock_usercnt      -      -            
+     0.67%  libc.so.6          [.] pthread_cond_signal@@GLIBC_2.3.2         -      -            
+     0.59%  [kernel.kallsyms]  [k] read_tsc                                 -      -            
+     0.57%  [xfs]              [k] xfs_btree_read_buf_block                 -      -            
+     0.55%  [kernel.kallsyms]  [k] dequeue_entities                         -      -            
+     0.48%  libc.so.6          [.] _pthread_cleanup_pop@GLIBC_2.2.5         -      -            
+     0.34%  [xfs]              [k] xfs_log_ticket_ungrant                   -      -            
+     0.33%  [kernel.kallsyms]  [k] __audit_syscall_exit                     -      -            
+     0.33%  [kernel.kallsyms]  [k] __x64_sys_openat                         -      -            
+     0.33%  [kernel.kallsyms]  [k] _raw_spin_unlock                         -      -            
+     0.33%  [kernel.kallsyms]  [k] cpus_share_cache                         -      -            
+     0.33%  [kernel.kallsyms]  [k] enqueue_hrtimer                          -      -            
+     0.33%  [kernel.kallsyms]  [k] finish_task_switch.isra.0                -      -            
+     0.33%  [kernel.kallsyms]  [k] futex_q_lock                             -      -            
+     0.33%  [kernel.kallsyms]  [k] futex_wait                               -      -            
+     0.33%  [kernel.kallsyms]  [k] futex_wake_mark                          -      -            
+     0.33%  [kernel.kallsyms]  [k] ima_match_policy                         -      -            
+     0.33%  [kernel.kallsyms]  [k] krealloc_noprof                          -      -            
+     0.33%  [kernel.kallsyms]  [k] mem_cgroup_handle_over_high              -      -            
+     0.33%  [kernel.kallsyms]  [k] open_last_lookups                        -      -            
+     0.33%  [kernel.kallsyms]  [k] perf_event_context_sched_out             -      -            
+     0.33%  [kernel.kallsyms]  [k] put_prev_task_fair                       -      -            
+     0.33%  [kernel.kallsyms]  [k] restore_regs_and_return_to_kernel        -      -            
+     0.33%  [kernel.kallsyms]  [k] syscall_trace_enter                      -      -            
+     0.33%  [kernel.kallsyms]  [k] vruntime_eligible                        -      -            
+     0.33%  [xfs]              [k] xfs_btree_get_rec                        -      -            
+     0.33%  [xfs]              [k] xfs_buf_lock                             -      -            
+     0.33%  [xfs]              [k] xfs_buf_read_map                         -      -            
+     0.33%  [xfs]              [k] xfs_rmapbt_diff_two_keys                 -      -            
+     0.33%  [xfs]              [k] xfs_trans_log_buf                        -      -            
+     0.33%  efs-bench          [.] writer_thread                            -      -            
+     0.33%  libc.so.6          [.] __GI___libc_open                         -      -            
+     0.33%  libc.so.6          [.] pthread_cond_timedwait@@GLIBC_2.3.2      -      -            
+
+
+#
+# (Tip: To see how parallelism changes over time, try: perf report -F time,latency,parallelism --time-quantum=1s)
+#

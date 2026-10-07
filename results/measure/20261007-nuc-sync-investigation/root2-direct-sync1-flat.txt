@@ -1,0 +1,45 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 32  of event 'cycles'
+# Event count (approx.): 191496358
+#
+# Overhead  Shared Object      Symbol                                    IPC   [IPC Coverage]
+# ........  .................  ........................................  ....................
+#
+     7.68%  [kernel.kallsyms]  [k] crc32_body                            -      -            
+     7.59%  [nvme]             [k] nvme_queue_rqs                        -      -            
+     6.93%  [xfs]              [k] xlog_cil_insert_items                 -      -            
+     5.46%  [kernel.kallsyms]  [k] kmem_cache_free                       -      -            
+     5.43%  [kernel.kallsyms]  [k] __virt_addr_valid                     -      -            
+     4.48%  [kernel.kallsyms]  [k] dma_direct_map_sg                     -      -            
+     3.98%  [kernel.kallsyms]  [k] __srcu_read_lock                      -      -            
+     3.07%  [kernel.kallsyms]  [k] __kmalloc_noprof                      -      -            
+     2.64%  [kernel.kallsyms]  [k] __cgroup_account_cputime_field        -      -            
+     2.64%  [kernel.kallsyms]  [k] __d_lookup_rcu                        -      -            
+     2.64%  [kernel.kallsyms]  [k] __perf_event_task_sched_out           -      -            
+     2.64%  [kernel.kallsyms]  [k] __rcu_read_lock                       -      -            
+     2.64%  [kernel.kallsyms]  [k] __rcu_read_unlock                     -      -            
+     2.64%  [kernel.kallsyms]  [k] _raw_spin_lock                        -      -            
+     2.64%  [kernel.kallsyms]  [k] call_function_single_prep_ipi         -      -            
+     2.64%  [kernel.kallsyms]  [k] crc32c                                -      -            
+     2.64%  [kernel.kallsyms]  [k] flush_workqueue_prep_pwqs             -      -            
+     2.64%  [kernel.kallsyms]  [k] get_random_u32                        -      -            
+     2.64%  [kernel.kallsyms]  [k] get_unused_fd_flags                   -      -            
+     2.64%  [kernel.kallsyms]  [k] kthread_blkcg                         -      -            
+     2.64%  [kernel.kallsyms]  [k] memset_orig                           -      -            
+     2.64%  [kernel.kallsyms]  [k] pick_next_task_fair                   -      -            
+     2.64%  [kernel.kallsyms]  [k] sched_balance_newidle                 -      -            
+     2.64%  [kernel.kallsyms]  [k] update_rt_rq_load_avg                 -      -            
+     2.64%  [xfs]              [k] xfs_btree_get_leaf_keys               -      -            
+     2.64%  [xfs]              [k] xfs_defer_finish_noroll               -      -            
+     2.64%  [xfs]              [k] xfs_group_get                         -      -            
+     2.64%  [xfs]              [k] xfs_rmapbt_init_key_from_rec          -      -            
+     2.64%  efs-bench          [.] server_write_fragment_to_path.isra.0  -      -            
+
+
+#
+# (Tip: To set sample time separation other than 100ms with --sort time use --time-quantum)
+#

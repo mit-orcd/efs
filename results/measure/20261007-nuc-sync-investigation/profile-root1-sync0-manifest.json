@@ -1,0 +1,126 @@
+{
+  "host": "nuc",
+  "event": "cycles",
+  "binary_sha256": "4c634faea10703d39340ce5bffaeef57b3924e09e795ca74e68c42d5014770ea",
+  "commit": "unknown",
+  "seed": null,
+  "created_utc": "20261007T060549.845786Z",
+  "options": {
+    "binary": "/tmp/efs-nuc-fair-20261007",
+    "output": "/tmp/efs-nuc-profile-fair-root1-sync0-20261007",
+    "storage_root": [
+      "/data1/efs/bench"
+    ],
+    "require_distinct_devices": false,
+    "io_write_layouts": "both",
+    "time": 1.5,
+    "io_sizes": [
+      4096,
+      65536,
+      1048576
+    ],
+    "io_sync": false,
+    "hash_sizes": [
+      4096,
+      65536,
+      131072,
+      1048576
+    ],
+    "threads": null,
+    "writers": [
+      "auto"
+    ],
+    "data_sync": false,
+    "data_rw": "write",
+    "data_full_paths": true,
+    "writer_stats": true,
+    "data_size": [
+      67108864
+    ],
+    "qds": [
+      16
+    ],
+    "modes": "data",
+    "seed": null,
+    "export": "efs-test",
+    "files": 5000,
+    "dirs": 64,
+    "store_size": [
+      268435456
+    ],
+    "chunk_base": 0,
+    "strace": true,
+    "strace_expr": "trace=openat,write,writev,ftruncate,fstat,fsync,close,futex",
+    "frequency": 99,
+    "event": "cycles",
+    "call_graph": "auto",
+    "report_jobs": 4,
+    "reports_only": null,
+    "no_perf": false,
+    "skip_ceiling": true,
+    "timeout": 60.0,
+    "dry_run": false,
+    "analyze": null
+  },
+  "cases": [
+    {
+      "name": "data-buffered-wauto-qd16-write",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd16-write",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ]
+    }
+  ],
+  "storage_devices": [
+    {
+      "path": "/data1/efs/bench",
+      "device_id": "8:0",
+      "free_bytes": 781510152192
+    }
+  ],
+  "affinity_cpus": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "perf_policy": {
+    "perf_event_paranoid": "-1",
+    "kptr_restrict": "0"
+  }
+}

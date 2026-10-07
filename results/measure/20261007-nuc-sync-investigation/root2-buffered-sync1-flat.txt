@@ -1,0 +1,47 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 32  of event 'cycles'
+# Event count (approx.): 212553127
+#
+# Overhead  Shared Object      Symbol                                     IPC   [IPC Coverage]
+# ........  .................  .........................................  ....................
+#
+     7.48%  libc.so.6          [.] pthread_mutex_unlock@@GLIBC_2.2.5      -      -            
+     5.73%  [kernel.kallsyms]  [k] _raw_spin_lock                         -      -            
+     4.97%  [xfs]              [k] xfs_attr_try_sf_addname                -      -            
+     4.55%  [xfs]              [k] xfs_inobt_first_free_inode             -      -            
+     4.53%  [xfs]              [k] xfs_trans_read_buf_map                 -      -            
+     4.27%  [xfs]              [k] xfs_trans_precommit_sort               -      -            
+     4.21%  [kernel.kallsyms]  [k] path_init                              -      -            
+     4.12%  [kernel.kallsyms]  [k] __update_load_avg_cfs_rq               -      -            
+     3.87%  [xfs]              [k] xfs_btree_insert                       -      -            
+     3.57%  [kernel.kallsyms]  [k] __memcpy                               -      -            
+     3.42%  [kernel.kallsyms]  [k] futex_wake_mark                        -      -            
+     3.21%  [xfs]              [k] xfs_alloc_cur_check                    -      -            
+     2.72%  [kernel.kallsyms]  [k] __srcu_read_lock                       -      -            
+     2.69%  [kernel.kallsyms]  [k] copy_page_from_iter_atomic             -      -            
+     2.64%  [kernel.kallsyms]  [k] update_load_avg                        -      -            
+     2.38%  [dm_mod]           [k] __send_empty_flush                     -      -            
+     2.38%  [gpu_sched]        [k] cleanup_module                         -      -            
+     2.38%  [kernel.kallsyms]  [k] bio_to_wbt_flags.part.0                -      -            
+     2.38%  [kernel.kallsyms]  [k] fault_in_readable                      -      -            
+     2.38%  [kernel.kallsyms]  [k] kmem_cache_alloc_noprof                -      -            
+     2.38%  [kernel.kallsyms]  [k] sched_balance_update_blocked_averages  -      -            
+     2.38%  [kernel.kallsyms]  [k] schedule                               -      -            
+     2.38%  [xfs]              [k] uuid_copy                              -      -            
+     2.38%  [xfs]              [k] xfs_buf_read_map                       -      -            
+     2.38%  [xfs]              [k] xfs_cil_prepare_item                   -      -            
+     2.38%  [xfs]              [k] xfs_icreate_dqalloc                    -      -            
+     2.38%  [xfs]              [k] xfs_iext_count_extend                  -      -            
+     2.38%  [xfs]              [k] xfs_iext_get_extent                    -      -            
+     2.38%  [xfs]              [k] xfs_trans_brelse                       -      -            
+     2.38%  [xfs]              [k] xfs_trans_buf_item_match               -      -            
+     2.38%  libc.so.6          [.] __GI___lll_lock_wake                   -      -            
+
+
+#
+# (Tip: To set sample time separation other than 100ms with --sort time use --time-quantum)
+#

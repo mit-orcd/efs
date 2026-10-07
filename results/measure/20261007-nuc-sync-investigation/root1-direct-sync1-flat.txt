@@ -1,0 +1,140 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 177  of event 'cycles'
+# Event count (approx.): 1171996741
+#
+# Overhead  Shared Object      Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+    12.16%  [kernel.kallsyms]  [k] crc32_body                               -      -            
+     2.15%  [kernel.kallsyms]  [k] __memmove                                -      -            
+     2.14%  [xfs]              [k] xfs_btree_get_leaf_keys                  -      -            
+     2.06%  [kernel.kallsyms]  [k] __memcpy                                 -      -            
+     1.99%  efs-bench          [.] shard_io_thread.part.0.constprop.0       -      -            
+     1.95%  [kernel.kallsyms]  [k] __list_del_entry_valid_or_report         -      -            
+     1.93%  [kernel.kallsyms]  [k] __blk_rq_map_sg                          -      -            
+     1.79%  [kernel.kallsyms]  [k] _raw_spin_lock                           -      -            
+     1.63%  [kernel.kallsyms]  [k] xas_load                                 -      -            
+     1.56%  [kernel.kallsyms]  [k] __d_lookup_rcu                           -      -            
+     1.53%  [xfs]              [k] xfs_buf_item_release                     -      -            
+     1.47%  [kernel.kallsyms]  [k] sbitmap_any_bit_set                      -      -            
+     1.38%  [xfs]              [k] xfs_alloc_get_rec                        -      -            
+     1.36%  [kernel.kallsyms]  [k] its_return_thunk                         -      -            
+     1.29%  [xfs]              [k] xfs_rmapbt_init_high_key_from_rec        -      -            
+     1.28%  [kernel.kallsyms]  [k] memset_orig                              -      -            
+     1.23%  [kernel.kallsyms]  [k] down_read                                -      -            
+     1.17%  [kernel.kallsyms]  [k] inode_to_bdi                             -      -            
+     1.12%  [libata]           [k] ata_std_qc_defer                         -      -            
+     1.12%  [xfs]              [k] _xfs_trans_bjoin                         -      -            
+     1.04%  [xfs]              [k] xfs_cil_prepare_item                     -      -            
+     1.02%  [xfs]              [k] xfs_group_get                            -      -            
+     1.02%  libc.so.6          [.] __GI___pthread_disable_asynccancel       -      -            
+     1.02%  [xfs]              [k] xfs_rmap_update_cancel_item              -      -            
+     1.00%  [kernel.kallsyms]  [k] up_read                                  -      -            
+     1.00%  [xfs]              [k] xfs_buf_item_init                        -      -            
+     0.97%  [xfs]              [k] xfs_inode_item_precommit                 -      -            
+     0.96%  [kernel.kallsyms]  [k] __memset                                 -      -            
+     0.91%  [xfs]              [k] xfs_defer_trans_roll                     -      -            
+     0.88%  [kernel.kallsyms]  [k] native_queued_spin_lock_slowpath         -      -            
+     0.86%  [kernel.kallsyms]  [k] futex_wait                               -      -            
+     0.86%  [kernel.kallsyms]  [k] __kmalloc_noprof                         -      -            
+     0.86%  [kernel.kallsyms]  [k] __rcu_read_unlock                        -      -            
+     0.86%  [kernel.kallsyms]  [k] bio_alloc_bioset                         -      -            
+     0.86%  [kernel.kallsyms]  [k] finish_task_switch.isra.0                -      -            
+     0.86%  [kernel.kallsyms]  [k] kmem_cache_free                          -      -            
+     0.86%  libc.so.6          [.] __GI___lll_lock_wake                     -      -            
+     0.83%  [kernel.kallsyms]  [k] call_function_single_prep_ipi            -      -            
+     0.80%  [xfs]              [k] xlog_force_lsn                           -      -            
+     0.78%  [kernel.kallsyms]  [k] __update_load_avg_cfs_rq                 -      -            
+     0.77%  libc.so.6          [.] pthread_cond_wait@@GLIBC_2.3.2           -      -            
+     0.76%  [kernel.kallsyms]  [k] select_idle_core.isra.0                  -      -            
+     0.71%  [kernel.kallsyms]  [k] __rcu_read_lock                          -      -            
+     0.71%  [kernel.kallsyms]  [k] set_root                                 -      -            
+     0.70%  [kernel.kallsyms]  [k] __update_load_avg_se                     -      -            
+     0.67%  [kernel.kallsyms]  [k] mod_objcg_state                          -      -            
+     0.65%  [xfs]              [k] xfs_next_bit                             -      -            
+     0.64%  [kernel.kallsyms]  [k] __flush_workqueue                        -      -            
+     0.64%  [kernel.kallsyms]  [k] syscall_trace_enter                      -      -            
+     0.59%  [kernel.kallsyms]  [k] _raw_spin_lock_irq                       -      -            
+     0.56%  [kernel.kallsyms]  [k] is_vmalloc_addr                          -      -            
+     0.55%  [kernel.kallsyms]  [k] __init_swait_queue_head                  -      -            
+     0.54%  [kernel.kallsyms]  [k] futex_wake_mark                          -      -            
+     0.53%  [kernel.kallsyms]  [k] try_get_folio                            -      -            
+     0.51%  [kernel.kallsyms]  [k] dequeue_entity                           -      -            
+     0.50%  [kernel.kallsyms]  [k] available_idle_cpu                       -      -            
+     0.49%  [kernel.kallsyms]  [k] dequeue_task                             -      -            
+     0.47%  [kernel.kallsyms]  [k] _raw_spin_lock_irqsave                   -      -            
+     0.43%  [gpu_sched]        [k] cleanup_module                           -      -            
+     0.43%  [kernel.kallsyms]  [k] ___slab_alloc                            -      -            
+     0.43%  [kernel.kallsyms]  [k] __blk_mq_do_dispatch_sched               -      -            
+     0.43%  [kernel.kallsyms]  [k] __intel_pmu_enable_all.isra.0            -      -            
+     0.43%  [kernel.kallsyms]  [k] __list_add_valid_or_report               -      -            
+     0.43%  [kernel.kallsyms]  [k] __pick_next_task                         -      -            
+     0.43%  [kernel.kallsyms]  [k] __wake_up_common                         -      -            
+     0.43%  [kernel.kallsyms]  [k] _find_next_zero_bit                      -      -            
+     0.43%  [kernel.kallsyms]  [k] _raw_spin_unlock                         -      -            
+     0.43%  [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore              -      -            
+     0.43%  [kernel.kallsyms]  [k] arch_exit_to_user_mode_prepare.isra.0    -      -            
+     0.43%  [kernel.kallsyms]  [k] bdev_count_inflight_rw.part.0            -      -            
+     0.43%  [kernel.kallsyms]  [k] blk_mq_submit_bio                        -      -            
+     0.43%  [kernel.kallsyms]  [k] charge_memcg                             -      -            
+     0.43%  [kernel.kallsyms]  [k] dd_has_work                              -      -            
+     0.43%  [kernel.kallsyms]  [k] dequeue_entities                         -      -            
+     0.43%  [kernel.kallsyms]  [k] futex_wait_setup                         -      -            
+     0.43%  [kernel.kallsyms]  [k] ima_inode_post_setattr                   -      -            
+     0.43%  [kernel.kallsyms]  [k] kfree                                    -      -            
+     0.43%  [kernel.kallsyms]  [k] kmem_cache_alloc_noprof                  -      -            
+     0.43%  [kernel.kallsyms]  [k] list_sort                                -      -            
+     0.43%  [kernel.kallsyms]  [k] lookup_fast                              -      -            
+     0.43%  [kernel.kallsyms]  [k] map_id_up                                -      -            
+     0.43%  [kernel.kallsyms]  [k] merge                                    -      -            
+     0.43%  [kernel.kallsyms]  [k] perf_ctx_enable                          -      -            
+     0.43%  [kernel.kallsyms]  [k] put_prev_task_fair                       -      -            
+     0.43%  [kernel.kallsyms]  [k] sched_balance_newidle                    -      -            
+     0.43%  [kernel.kallsyms]  [k] scsi_dispatch_cmd                        -      -            
+     0.43%  [kernel.kallsyms]  [k] scsi_queue_rq                            -      -            
+     0.43%  [kernel.kallsyms]  [k] syscall_exit_to_user_mode                -      -            
+     0.43%  [kernel.kallsyms]  [k] syscall_exit_to_user_mode_prepare        -      -            
+     0.43%  [kernel.kallsyms]  [k] task_h_load                              -      -            
+     0.43%  [kernel.kallsyms]  [k] tryinc_node_nr_active                    -      -            
+     0.43%  [kernel.kallsyms]  [k] up_write                                 -      -            
+     0.43%  [kernel.kallsyms]  [k] wake_up_q                                -      -            
+     0.43%  [kernel.kallsyms]  [k] xas_start                                -      -            
+     0.43%  [libata]           [k] __ata_scsi_queuecmd                      -      -            
+     0.43%  [vdso]             [.] 0x00000000000008e9                       -      -            
+     0.43%  [xfs]              [k] __xfs_btree_updkeys.isra.0               -      -            
+     0.43%  [xfs]              [k] __xfs_trans_commit                       -      -            
+     0.43%  [xfs]              [k] xfs_alloc_cur_check                      -      -            
+     0.43%  [xfs]              [k] xfs_bmapi_write                          -      -            
+     0.43%  [xfs]              [k] xfs_btree_delrec                         -      -            
+     0.43%  [xfs]              [k] xfs_btree_insert                         -      -            
+     0.43%  [xfs]              [k] xfs_btree_insrec                         -      -            
+     0.43%  [xfs]              [k] xfs_btree_log_recs                       -      -            
+     0.43%  [xfs]              [k] xfs_btree_lookup                         -      -            
+     0.43%  [xfs]              [k] xfs_btree_lookup_get_block               -      -            
+     0.43%  [xfs]              [k] xfs_btree_rec_offset                     -      -            
+     0.43%  [xfs]              [k] xfs_buf_item_pin                         -      -            
+     0.43%  [xfs]              [k] xfs_buf_item_size_segment.isra.0         -      -            
+     0.43%  [xfs]              [k] xfs_buf_lookup.constprop.0               -      -            
+     0.43%  [xfs]              [k] xfs_extent_busy_clear                    -      -            
+     0.43%  [xfs]              [k] xfs_group_hold                           -      -            
+     0.43%  [xfs]              [k] xfs_trans_brelse                         -      -            
+     0.43%  [xfs]              [k] xfs_trans_dirty_buf                      -      -            
+     0.43%  [xfs]              [k] xfs_trans_log_inode                      -      -            
+     0.43%  [xfs]              [k] xfs_trans_precommit_sort                 -      -            
+     0.43%  [xfs]              [k] xlog_cil_alloc_shadow_bufs.isra.0        -      -            
+     0.43%  [xfs]              [k] xlog_grant_head_check                    -      -            
+     0.43%  [xfs]              [k] xlog_pack_data                           -      -            
+     0.43%  efs-bench          [.] server_write_fragment_with_sum_sync      -      -            
+     0.43%  efs-bench          [.] slot_put                                 -      -            
+     0.43%  libc.so.6          [.] __GI___pthread_enable_asynccancel        -      -            
+     0.43%  libc.so.6          [.] __pthread_mutex_cond_lock                -      -            
+     0.43%  libc.so.6          [.] pthread_cond_signal@@GLIBC_2.3.2         -      -            
+
+
+#
+# (Tip: For parallelism histogram, try: perf report --hierarchy --sort latency,parallelism,comm,symbol)
+#

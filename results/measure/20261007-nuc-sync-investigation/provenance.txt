@@ -1,0 +1,15 @@
+NAME        TRAN   MODEL                     SIZE MOUNTPOINTS
+sda         sata   MK0800GEYKE             745.2G /data1
+nvme0n1     nvme   Samsung SSD 970 EVO 1TB 931.5G 
+├─nvme0n1p1 nvme                             600M /boot/efi
+├─nvme0n1p2 nvme                               2G /boot
+└─nvme0n1p3 nvme                           928.9G 
+  ├─rl-root                                   70G /
+  ├─rl-swap                                 15.6G 
+  └─rl-home                                843.4G /home
+TARGET SOURCE   FSTYPE OPTIONS
+/data1 /dev/sda xfs    rw,noatime,seclabel,attr2,inode64,logbufs=8,logbsize=256k,noquota
+TARGET SOURCE              FSTYPE OPTIONS
+/home  /dev/mapper/rl-home xfs    rw,relatime,seclabel,attr2,inode64,logbufs=8,logbsize=32k,noquota
+c10503f65cf8df7825af7e4fd0aa793b452a12529121aa98f45fb03132033a2f  /tmp/efs-nuc-before-20261007
+4c634faea10703d39340ce5bffaeef57b3924e09e795ca74e68c42d5014770ea  /tmp/efs-nuc-fair-20261007
