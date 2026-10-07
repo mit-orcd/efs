@@ -118,3 +118,11 @@ help advertises single-export behavior and excess arguments fail before RPC.
 NUC private real-daemon tests preserve namespace and committed salt through
 repeated calls to both aliases, then pass the GETATTR/LOOKUP partition gate.
 Log `/private/tmp/efs-roadmap-w79.log`.
+
+## Round 12 — W80 unavailable statistics cannot look like empty-store totals
+
+Server QUERY_STATS explicitly reports unsupported; efs-query exits 2 without
+invented totals for current/legacy replies and exits 1 for malformed status.
+NUC packet tests plus nonempty real exports pass normal/raw checks across
+buffered/direct and one/two-root modes; the integrity matrix still passes.
+Log `/private/tmp/efs-roadmap-w80.log`. Metadata-backed query totals remain open.

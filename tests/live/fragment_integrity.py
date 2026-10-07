@@ -61,6 +61,10 @@ for direct in (False, True):
                         assert reply==bytes([5,1]),(label,reply[:40])
                         print(f'{direct=} {roots=} {label}: unavailable PASS',flush=True)
                     good()
+                    for flag in ([], ['--raw']):
+                        query=subprocess.run([str(source/'efs-query'),*flag,f'127.0.0.1:{port}'],capture_output=True,text=True)
+                        assert query.returncode==2 and not query.stdout and 'unavailable' in query.stderr,query
+                    print(f'{direct=} {roots=} nonempty export query: unsupported, no false totals PASS',flush=True)
                     put.sum[0] ^= 1
                     assert rpc(6,bytes(put)+b'x'*65536)[:2] == bytes([7,1]), 'wrong caller digest accepted'
                     put.sum[0] ^= 1

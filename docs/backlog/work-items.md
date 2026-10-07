@@ -2904,10 +2904,13 @@ users as an ordinary successful result (also under `--raw`). The command
 therefore has no current source path to report real filesystem totals. This
 was source inspection, not execution against a live nonempty cluster.
 
-**Next:** explicitly report the unsupported/placeholder state or implement a
-verified metadata-backed query, with a defined consistency and accounting
-scope. Do not substitute physical node fragment usage for logical file/user
-statistics or claim `.stats` is an equivalent cluster-wide per-user query.
+**Continuation repair (Oct 7):** QUERY_STATS now sends an explicit one-byte
+unsupported status; old clients safely reject its length. New efs-query returns
+exit 2 with an unavailable explanation and no totals for that status or a legacy
+placeholder reply. Malformed statuses fail with exit 1. NUC nonempty private
+exports pass both normal/raw CLI checks in buffered/direct mode across one/two
+roots; protocol tests cover unsupported, legacy and malformed replies. Actual
+metadata-backed logical/per-user query integration remains unimplemented.
 
 **Gate:** a nonempty isolated export must not produce a successful empty-store
 claim in either output mode. If implemented, test create/write/unlink,

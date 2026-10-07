@@ -527,6 +527,10 @@ struct efs_user_stat {
     uint64_t bytes;
 };
 
+/* Current QUERY_STATS_REPLY is one byte: logical query integration is
+ * unavailable. Legacy struct replies are not authoritative statistics. */
+#define EFS_QUERY_STATS_UNSUPPORTED 1u
+
 struct efs_msg_query_stats_reply {
     uint64_t total_files;
     uint64_t total_bytes;

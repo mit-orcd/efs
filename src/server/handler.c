@@ -1057,11 +1057,8 @@ send_reply:
             break;
         }
         case EFS_MSG_QUERY_STATS: {
-            /* Whole-table stats query went away with the table. */
-            struct efs_msg_query_stats_reply r;
-            memset(&r, 0, sizeof(r));
-            efs_conn_send_msg(conn, EFS_MSG_QUERY_STATS_REPLY, &r,
-                              sizeof(r));
+            uint8_t status = EFS_QUERY_STATS_UNSUPPORTED;
+            efs_conn_send_msg(conn, EFS_MSG_QUERY_STATS_REPLY, &status, 1);
             break;
         }
         default:
