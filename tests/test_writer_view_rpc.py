@@ -6,12 +6,18 @@ root = Path(__file__).resolve().parents[1]
 text = (root / 'src/client/inode_rpc.c').read_text()
 start = text.index('int efs_client_rpc_writer_view(')
 function = text[start:text.index('\n}', start) + 2]
+helper_start = text.index('static int rpc_writer_retry_pause(unsigned attempt)\n{')
+helper = text[helper_start:text.index('\n}', helper_start) + 2]
 source = r'''
 #include "efs/protocol.h"
 #include "efs/kv_key.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <time.h>
+uint64_t efs_client_rpc_deadline_ms(void) { return 0; }
+static int deadline_expired;
+int efs_client_rpc_past_deadline(void) { return deadline_expired; }
 struct efs_conn { int unused; };
 static struct efs_conn connection;
 static struct efs_msg_inode_writer_view_reply replies[8];
@@ -55,9 +61,10 @@ static int rpc_status_to_efs(uint8_t status) {
     default: return EFS_ERR_NOT_PRIMARY;
     }
 }
-''' + function + r'''
+''' + helper + '\n' + function + r'''
 static void reset(void) {
     calls = releases = drops = sleeps = 0;
+    deadline_expired = 0;
     fail_send = fail_recv = bad_type = bad_length = 0; last_target = 0;
     for (unsigned i = 0; i < 8; ++i) {
         replies[i] = (struct efs_msg_inode_writer_view_reply){0};
@@ -89,6 +96,9 @@ int main(void) {
     reset(); out = saved; replies[0].status = EFS_INODE_RPC_STALE;
     assert(efs_client_rpc_writer_view(123, 456, 17, &out) == EFS_ERR_STALE);
     assert(!memcmp(&out, &saved, sizeof(out)));
+    reset(); out = saved; deadline_expired = 1;
+    assert(efs_client_rpc_writer_view(123, 456, 17, &out) == EFS_ERR_BUSY);
+    assert(!calls && !releases && !drops && !sleeps && !memcmp(&out, &saved, sizeof(out)));
     reset(); fail_send = 1;
     assert(efs_client_rpc_writer_view(123, 456, 17, &out) == EFS_ERR_NET);
     assert(drops == 1 && !releases && !calls);

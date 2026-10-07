@@ -11,6 +11,14 @@
 #include <sys/uio.h>
 #include <unistd.h>
 static int sync_opens, fail_sync, sync_calls;
+static int fail_close, close_calls;
+static int test_close(int fd)
+{
+    close_calls++;
+    int rc = close(fd);
+    if (fail_close) { errno = EIO; return -1; }
+    return rc;
+}
 static int test_open(const char *path, int flags, ...)
 {
     int mode = 0;
@@ -49,6 +57,7 @@ static ssize_t test_writev(int fd, const struct iovec *iov, int n)
     if (fail_write) { errno = EIO; return -1; }
     return writev(fd, iov, n);
 }
+#define close test_close
 #define EFS_BENCH_BUILD
 #define open test_open
 #define fsync test_fsync
@@ -57,6 +66,7 @@ static ssize_t test_writev(int fd, const struct iovec *iov, int n)
 #define write test_write
 #define writev test_writev
 #include "../src/server/store.c"
+#undef close
 #undef open
 #undef fsync
 #undef fstat
@@ -138,6 +148,14 @@ int main(void)
     a.sum = NULL; a.len = 0; shard_io_thread(&a); assert(a.result == EFS_OK); uint8_t zero_page[4096] = {0}; check(path, zero_page, sizeof(zero_page), NULL, 1);
     a.direct = 0; a.sync_write = 0; a.sum = sum; a.len = 1003;
     shard_io_thread(&a); assert(a.result == EFS_OK); check(path, aligned, a.len, sum, 0);
+    for (int direct = 0; direct < 2; direct++) {
+        a.direct = direct; a.len = direct ? 4096 : 1003;
+        fail_close = 1; close_calls = 0; shard_io_thread(&a);
+        assert(a.result == EFS_ERR_IO && close_calls == 1);
+        assert(fcntl(last_fd, F_GETFD) == -1 && errno == EBADF);
+        fail_close = 0; check(path, aligned, a.len, sum, direct);
+    }
+    a.direct = 0; a.len = 1003; shard_io_thread(&a); assert(a.result == EFS_OK);
     a.excl = 1; shard_io_thread(&a); assert(a.result == EFS_ERR_EXIST); check(path, aligned, a.len, sum, 0);
     unlink(path); a.excl = 0; a.no_create = 1; shard_io_thread(&a);
     assert(a.result == EFS_ERR_NOT_FOUND && access(path, F_OK) == -1);

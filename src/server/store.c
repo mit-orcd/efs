@@ -673,7 +673,11 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
     if (rc == 0 && sync_write && (!direct || resized)) {
         do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
     }
-    close(fd);
+    /* Close may report delayed storage errors even after a successful
+     * write. Never retry close: the descriptor may already be released. */
+    int close_rc = close(fd);
+    if (rc == 0)
+        rc = close_rc;
     return rc == 0 ? EFS_OK : EFS_ERR_IO;
 }
 

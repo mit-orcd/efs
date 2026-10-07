@@ -1,0 +1,4 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"d2724fed7e31-dirty"' -DEFS_VERSION='"v0.1.0-pre-alpha-138-gd2724fed-dirty"' -DEFS_GIT_BRANCH='"devel"' -DEFS_BUILD_TIME='"2026-10-07T08:47:54Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_overwrite tests/test_store_overwrite.c src/bench/writer.o libefs.a -lpthread -lm -ldl -libverbs
+store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+store: put O_DIRECT bounce copy (buf align=1 len=4096)
+store overwrite: exact buffered/direct/bounce tails, grow/shrink, zero, errors and create guards PASS
