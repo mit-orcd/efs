@@ -1120,6 +1120,8 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
     void *payload = NULL;
     efs_node_id_t target = 0;
     for (int attempt = 0; attempt < 16; attempt++) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
         efs_node_id_t nid = 0;
         int prof = rpc_prof_enabled();
         unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
@@ -1142,10 +1144,15 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
+            free(payload);
             efs_client_conn_drop(nid, conn);
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
+        if (efs_client_rpc_past_deadline()) {
+            free(payload);
+            return EFS_ERR_BUSY;
+        }
         rpc_prof_add(EFS_MSG_INODE_GETCHUNKS, t1 - t0, t2 - t1, t3 - t2, 0);
         if (rtype != EFS_MSG_INODE_GETCHUNKS_REPLY ||
             plen != sizeof(struct efs_msg_inode_getchunks_reply)) {
@@ -1166,8 +1173,8 @@ int efs_client_rpc_getchunks_fileid(efs_export_id_t export_id, efs_ino_t ino,
         free(payload);
         payload = NULL;
         r = NULL;
-        unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-        usleep(50000u << shift);
+        if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+            return EFS_ERR_BUSY;
     }
     if (!r) {
         free(payload);
