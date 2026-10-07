@@ -1034,33 +1034,49 @@ static int cmd_raft_dir(int argc, char **argv)
     }
 }
 
+/* Follow explicit non-applied redirects using advertised addresses, not an
+ * assumed port layout. Never retry an ambiguous transport failure. */
+static int sess_leader_address(const char *host, uint16_t port, int hint,
+                               char target[64], uint16_t *target_port)
+{
+    if (hint < 0 || hint >= EFS_MAX_NODES) return EFS_ERR_NOT_PRIMARY;
+    int fd=efs_connect_tcp(host,port);if(fd<0)return EFS_ERR_IO;
+    efs_set_recv_timeout(fd,EFS_IO_TIMEOUT_MS);efs_set_send_timeout(fd,EFS_IO_TIMEOUT_MS);
+    uint8_t type;void *payload=NULL;uint32_t len=0;
+    int rc=send_recv(fd,EFS_MSG_LIST_NODES,NULL,0,&type,&payload,&len);close(fd);
+    if(rc || type!=EFS_MSG_LIST_NODES_REPLY || len!=sizeof(struct efs_msg_list_nodes_reply)) {
+        free(payload);return EFS_ERR_IO;
+    }
+    const struct efs_msg_list_nodes_reply *list=payload;int found=0;
+    rc=EFS_ERR_NOT_PRIMARY;
+    if(list->node_count>EFS_MAX_NODES) {free(payload);return EFS_ERR_PROTO;}
+    for(uint32_t i=0;i<list->node_count;i++)if(list->nodes[i].id==(uint32_t)hint+1) {
+        if(found || !list->nodes[i].port || !list->nodes[i].addr[0] ||
+           !memchr(list->nodes[i].addr,0,sizeof(list->nodes[i].addr))) {rc=EFS_ERR_PROTO;break;}
+        snprintf(target,64,"%s",list->nodes[i].addr);*target_port=list->nodes[i].port;
+        found=1;rc=EFS_OK;
+    }
+    free(payload);return rc;
+}
 static int sess_rpc(const char *host, uint16_t port, const uint8_t *payload,
                     uint32_t plen, struct efs_msg_raft_mkfs_reply *out)
 {
-    int fd;
-    uint8_t reply_type;
-    void *reply = NULL;
-    uint32_t reply_len = 0;
-    struct efs_msg_raft_mkfs_reply *r;
-
-    memset(out, 0, sizeof(*out));
-    fd = efs_connect_tcp(host, port);
-    if (fd < 0)
-        return EFS_ERR_IO;
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_RAFT_MKFS, payload, plen, &reply_type,
-                  &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
-        reply_len != sizeof(*r)) {
-        free(reply);
-        close(fd);
-        return EFS_ERR_IO;
+    char target[64];snprintf(target,sizeof(target),"%s",host);uint16_t target_port=port;
+    memset(out,0,sizeof(*out));out->leader_hint=-1;
+    for(unsigned attempt=0;attempt<8;attempt++) {
+        int fd=efs_connect_tcp(target,target_port);
+        if(fd<0){out->rc=EFS_ERR_IO;return out->rc;}
+        efs_set_recv_timeout(fd,EFS_IO_TIMEOUT_MS);efs_set_send_timeout(fd,EFS_IO_TIMEOUT_MS);
+        uint8_t type;void *reply=NULL;uint32_t len=0;
+        int rc=send_recv(fd,EFS_MSG_RAFT_MKFS,payload,plen,&type,&reply,&len);close(fd);
+        if(rc || type!=EFS_MSG_RAFT_MKFS_REPLY || len!=sizeof(*out)) {
+            free(reply);out->rc=EFS_ERR_IO;return out->rc;
+        }
+        memcpy(out,reply,sizeof(*out));free(reply);
+        if(out->rc!=EFS_ERR_NOT_PRIMARY)return out->rc;
+        rc=sess_leader_address(host,port,out->leader_hint,target,&target_port);
+        if(rc!=EFS_OK){out->rc=rc;return rc;}
     }
-    close(fd);
-    r = reply;
-    *out = *r;
-    free(reply);
     return out->rc;
 }
 
@@ -1218,10 +1234,8 @@ static int cmd_raft_session(int argc, char **argv)
 {
     char host[64];
     uint16_t port;
-    int fd;
-    uint8_t reply_type, uuid[EFS_OPID_UUID_LEN], payload[1 + 26];
-    void *reply = NULL;
-    uint32_t reply_len = 0, plen, ssh, shard = 0, epoch = 1;
+    uint8_t uuid[EFS_OPID_UUID_LEN], payload[1 + 26];
+    uint32_t plen, ssh, shard = 0, epoch = 1;
     struct efs_msg_raft_mkfs_reply *r;
     const char *op;
     uint8_t sub = 0;
@@ -1301,24 +1315,10 @@ static int cmd_raft_session(int argc, char **argv)
         wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, shard);
         plen = 1 + 26;
     }
-    fd = efs_connect_tcp(host, port);
-    if (fd < 0) {
-        fprintf(stderr, "Cannot connect to %s:%u\n", host, port);
-        return 1;
-    }
-    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
-    efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
-    if (send_recv(fd, EFS_MSG_RAFT_MKFS, payload, plen, &reply_type,
-                  &reply, &reply_len) != 0 ||
-        reply_type != EFS_MSG_RAFT_MKFS_REPLY ||
-        reply_len != sizeof(*r)) {
-        fprintf(stderr, "Failed to raft-session\n");
-        free(reply);
-        close(fd);
-        return 1;
-    }
-    close(fd);
-    r = reply;
+    struct efs_msg_raft_mkfs_reply result;
+    int call_rc = sess_rpc(host, port, payload, plen, &result);
+    r = &result;
+    if (call_rc != EFS_OK) r->rc = call_rc;
     st = 0;
     if (r->rc == EFS_ERR_NOT_PRIMARY)
         st = 7;
@@ -1335,7 +1335,6 @@ static int cmd_raft_session(int argc, char **argv)
            (unsigned long long)r->index);
     {
         int rc = r->rc;
-        free(reply);
         return rc == EFS_OK ? 0 : 1;
     }
 }

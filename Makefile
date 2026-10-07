@@ -228,6 +228,7 @@ docs-check:
 	python3 docs/check-architecture.py
 
 test: all
+	python3 tests/test_mgmt_session_routing.py
 	python3 tests/test_session_admission.py
 	python3 tests/test_publication_host.py
 	python3 tests/test_publication_rpc.py
