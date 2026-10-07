@@ -100,3 +100,13 @@ verified process after rechecking. No wrapper SIGKILL escalation remains; a
 prove invalid/unrelated/stale-start/wrong-storage processes survive and a matching
 owned daemon is gracefully stopped. Log `/private/tmp/efs-roadmap-w78.log`.
 Daemon-internal teardown timing remains W65.
+
+## Round 10 — default regression coverage and combined NUC gate
+
+Registered W23 schema, client read verification, namespace opid admission and
+server ownership regressions in `make test`. Full Linux units pass through the
+new targets. The combined integrity/admission build passes four-node NUC direct
+service acceptance: POSIX 216/0/1 skip, peer 64/64, persistence 26/26 prepare and
+26/26 verify. No concurrent benchmark changes were deployed. Logs
+`/tmp/efs-roadmap-cycle10-units.log` on NUC and
+`/private/tmp/efs-roadmap-cycle09-live.log` on the driver.

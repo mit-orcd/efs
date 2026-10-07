@@ -259,6 +259,10 @@ docs-check:
 	python3 docs/check-architecture.py
 
 test: all
+	python3 tests/test_w23_samples.py
+	python3 tests/test_read_verify.py
+	python3 tests/test_opid_admission.py
+	python3 tests/test_server_processes.py
 	python3 tests/test_mgmt_session_routing.py
 	python3 tests/test_session_admission.py
 	python3 tests/test_publication_host.py
