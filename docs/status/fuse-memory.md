@@ -28,11 +28,11 @@ Keep dirty bytes pinned until the matching commit; never drop on retry count.
 
 ## Read/readdir reply buffers leak when FUSE workers exit
 
-**W68 — lifetime cleanup implemented; real-worker gate open.** A pthread-key
+**W68 — closed after NUC real-worker and injected-failure gates.** A pthread-key
 owner/destructor frees read/readdir reply storage on worker retirement.
 Local retirement and TLS/allocation-failure regressions passed. Unit success
 alone does not prove production RSS across repeated FUSE worker creation and
-retirement. Close only after that targeted Linux gate with retained logs.
+retirement. The targeted direct/buffered gates and allocation/TLS/growth variants now pass; see the [30-round gate ledger](gate-30-rounds-20261007.md) for retained evidence.
 
 ## W60 — demand reads under speculative pressure
 
@@ -58,3 +58,11 @@ whole-call timing and fault/RSS gates remain in [the handoff](in-flight.md).
 An installed client binary does not update an existing mount; verify its actual
 process and build. Controlled stop must drain while mounted and refuse teardown
 on unresolved data unless the user's explicit discard policy applies.
+
+## Effective-budget evidence correction (Oct 7)
+
+Earlier continuation runs requested a 32 MiB hard budget and an 8 MiB drain
+reserve. The drain was below the 32 MiB slab minimum and fell back to the
+64 MiB default: the effective bound was 32 + 64 MiB. New sparse/mixed gates
+request 32 + 32 MiB and assert the opt-in allocator trace. Recorded old bytes
+and RSS remain valid; they do not establish an 8 MiB reserve.

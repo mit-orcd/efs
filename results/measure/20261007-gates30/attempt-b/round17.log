@@ -1,0 +1,41 @@
+direct=False roots=1 hintless PUT retries preserve one object and quota charge PASS
+direct=False roots=1 rejected digest/truncated body cannot change fragment size PASS
+direct=False roots=1 running quota reduced; below-usage reduction refused; bytes retained PASS
+direct=False roots=1 nonempty export query: unsupported, no false totals PASS
+direct=False roots=1 wrong PUT digest: rejected, existing bytes retained PASS
+direct=False roots=1 payload flip: unavailable PASS
+direct=False roots=1 hintless retry after restart retains bytes and accounting PASS
+direct=False roots=1 missing digest: unavailable PASS
+direct=False roots=1 truncated digest: unavailable PASS
+direct=False roots=1 digest flip: unavailable PASS
+direct=False roots=2 hintless PUT retries preserve one object and quota charge PASS
+direct=False roots=2 rejected digest/truncated body cannot change fragment size PASS
+direct=False roots=2 running quota reduced; below-usage reduction refused; bytes retained PASS
+direct=False roots=2 nonempty export query: unsupported, no false totals PASS
+direct=False roots=2 wrong PUT digest: rejected, existing bytes retained PASS
+direct=False roots=2 payload flip: unavailable PASS
+direct=False roots=2 hintless retry after restart retains bytes and accounting PASS
+direct=False roots=2 missing digest: unavailable PASS
+direct=False roots=2 truncated digest: unavailable PASS
+direct=False roots=2 digest flip: unavailable PASS
+direct=True roots=1 hintless PUT retries preserve one object and quota charge PASS
+direct=True roots=1 rejected digest/truncated body cannot change fragment size PASS
+direct=True roots=1 running quota reduced; below-usage reduction refused; bytes retained PASS
+direct=True roots=1 nonempty export query: unsupported, no false totals PASS
+direct=True roots=1 wrong PUT digest: rejected, existing bytes retained PASS
+direct=True roots=1 payload flip: unavailable PASS
+direct=True roots=1 hintless retry after restart retains bytes and accounting PASS
+direct=True roots=1 missing digest: unavailable PASS
+direct=True roots=1 truncated digest: unavailable PASS
+direct=True roots=1 digest flip: unavailable PASS
+direct=True roots=2 hintless PUT retries preserve one object and quota charge PASS
+direct=True roots=2 rejected digest/truncated body cannot change fragment size PASS
+direct=True roots=2 running quota reduced; below-usage reduction refused; bytes retained PASS
+direct=True roots=2 nonempty export query: unsupported, no false totals PASS
+direct=True roots=2 wrong PUT digest: rejected, existing bytes retained PASS
+direct=True roots=2 payload flip: unavailable PASS
+direct=True roots=2 hintless retry after restart retains bytes and accounting PASS
+direct=True roots=2 missing digest: unavailable PASS
+direct=True roots=2 truncated digest: unavailable PASS
+direct=True roots=2 digest flip: unavailable PASS
+Fragment corruption: buffered/direct, one/two roots PASS

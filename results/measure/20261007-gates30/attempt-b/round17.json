@@ -1,0 +1,20 @@
+{
+  "round": 17,
+  "title": "W75/W85 RPC integrity, ambiguous PUT/restart/accounting",
+  "command": [
+    "python3",
+    "tests/live/fragment_integrity.py"
+  ],
+  "started_utc": "2026-10-07T20:47:14Z",
+  "test_sha256": {
+    "tests/live/fragment_integrity.py": "4c848ca98c6d24368285e21e678a0c44013163110fc0293f7bfe6a6d6b2faf3a"
+  },
+  "runner_sha256": "07ce1d102b2a02552ed529b791f90ec9968a4aef6b8b10984062749996b28f20",
+  "binary_sha256": {
+    "efsd": "879d3a92612ba73e673321c9780a4d418e67a281fbbe381e843833ddaf2e2483",
+    "efs-fuse": "c46bba7358ffad615e8a295065bbeb5c10ed12913397fd583c79737e9c709595",
+    "efs-mgmt": "f82a3f7eec8a83b53143eb5268a0fb7df97edca0f8b9b33dfa1a283b599ad8c4"
+  },
+  "exit_code": 0,
+  "elapsed_seconds": 1.0668654110049829
+}

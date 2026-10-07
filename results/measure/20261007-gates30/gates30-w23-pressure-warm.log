@@ -1,0 +1,79 @@
+Evidence directory: /data1/efs/gc-direct-g0akktiv
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=6378976129608834280
+client serving PASS
+warm follower caught up before pressure PASS
+owned follower compactor parked PASS
+parked follower catches up after release PASS
+finite compactor-pressure outcome {"baseline_rss_kib": 12416, "cold_rss_kib": 4328, "preconditioned_bytes": 536870912, "bound": "bytes-cap", "written_bytes": 4294967296, "samples": [{"written_bytes": 134217728, "rss_kib": 12632, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 268435456, "rss_kib": 12852, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 402653184, "rss_kib": 13080, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 536870912, "rss_kib": 13312, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 671088640, "rss_kib": 13516, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 805306368, "rss_kib": 13744, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 939524096, "rss_kib": 13964, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 1073741824, "rss_kib": 14180, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 1207959552, "rss_kib": 14396, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 1342177280, "rss_kib": 14616, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [426555, 0, 0, 0]}, {"written_bytes": 1476395008, "rss_kib": 14836, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 1610612736, "rss_kib": 15084, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 1744830464, "rss_kib": 15372, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 1879048192, "rss_kib": 15592, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 2013265920, "rss_kib": 15808, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 2147483648, "rss_kib": 16024, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 2281701376, "rss_kib": 16244, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 2415919104, "rss_kib": 16460, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 2550136832, "rss_kib": 16680, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 2684354560, "rss_kib": 16992, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 2818572288, "rss_kib": 17208, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 2952790016, "rss_kib": 17428, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 3087007744, "rss_kib": 17644, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 3221225472, "rss_kib": 17956, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 3355443200, "rss_kib": 18176, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 3489660928, "rss_kib": 18392, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [1492795, 0, 0, 0]}, {"written_bytes": 3623878656, "rss_kib": 18612, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [3198779, 0, 0, 0]}, {"written_bytes": 3758096384, "rss_kib": 18836, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [3198779, 0, 0, 0]}, {"written_bytes": 3892314112, "rss_kib": 19056, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [3198779, 0, 0, 0]}, {"written_bytes": 4026531840, "rss_kib": 19272, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [3198779, 0, 0, 0]}, {"written_bytes": 4160749568, "rss_kib": 19492, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [3198779, 0, 0, 0]}, {"written_bytes": 4294967296, "rss_kib": 19708, "lag": 0, "roles": ["-", "FOLLOWER"], "kv": [3198779, 0, 0, 0]}], "recovery_seconds": 0.0011901429970748723, "pressure_observed": false}
+peer mounted PASS
+Unmounting /data1/efs/gc-direct-g0akktiv/peer
+Retiring drained efs-fuse PID 3469056 for /data1/efs/gc-direct-g0akktiv/peer
+Unmounted /data1/efs/gc-direct-g0akktiv/peer
+two-peer adjacent writes and repeated folds complete
+fragment files present PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+fragment files present PASS
+GC runs while hardlink remains PASS
+hardlink protects stored fragments PASS
+GC runs while unlinked inode is open PASS
+open unlinked inode retains readable/writable fragments PASS
+last close physically reclaims fragments PASS
+GC passes, removal bytes and quota reflect last-close deletion PASS
+closed-unlinked inode allocated bytes: 15249408 -> 0 PASS
+fragment files present PASS
+valid late-PUT control accepted on live inode by every member PASS
+disk failure visible PASS
+failed fragment remains on disk pending retry PASS
+Unmounting /data1/efs/gc-direct-g0akktiv/mnt
+Retiring drained efs-fuse PID 3467015 for /data1/efs/gc-direct-g0akktiv/mnt
+Unmounted /data1/efs/gc-direct-g0akktiv/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+restart without client reclaims pending fragments PASS
+leader reap and fragment queues drain PASS
+client serving PASS
+cold two-peer fold and live-base reads after GC PASS
+fold fragments physically reclaimed PASS
+fragment files present PASS
+offline fourth member retains reap ledger PASS
+Unmounting /data1/efs/gc-direct-g0akktiv/mnt
+Retiring drained efs-fuse PID 3489181 for /data1/efs/gc-direct-g0akktiv/mnt
+Unmounted /data1/efs/gc-direct-g0akktiv/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+rejoined member completes reclamation PASS
+queues drain after member rejoins PASS
+client serving PASS
+sentinel physically reclaimed PASS
+all fixture GC records retired PASS
+Unmounting /data1/efs/gc-direct-g0akktiv/mnt
+Retiring drained efs-fuse PID 3490453 for /data1/efs/gc-direct-g0akktiv/mnt
+Unmounted /data1/efs/gc-direct-g0akktiv/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+physical inventory empty after restart PASS
+restart orphan and GC queues drained PASS
+restart quota zero and late PUT fenced on every member PASS
+physical fragment inventory empty after restart PASS
+GC reclamation direct PASS

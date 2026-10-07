@@ -1,0 +1,10 @@
+Evidence: /tmp/efs-read-freshness-ktl4aoyu
+listening True
+listening True
+listening True
+initial leader 0
+Traceback (most recent call last):
+  File "/data1/efs/gates30-src/tests/live/raft_read_freshness.py", line 143, in <module>
+    assert 'rc=0' in mgmt(old,'raft-mkfs')
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

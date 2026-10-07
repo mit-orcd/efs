@@ -1,0 +1,13 @@
+Evidence directory: /data1/efs/gc-direct-bly9ndg4
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=16011925813670430566
+client serving PASS
+peer mounted PASS
+Traceback (most recent call last):
+  File "/data1/efs/gates30-src/tests/live/gc_reclamation.py", line 541, in <module>
+    assert transitions,('no observed fold',fold_states)
+           ^^^^^^^^^^^
+AssertionError: ('no observed fold', [{'base_gen': 6946156035452893718, 'spans': 0, 'seq': 0}, {'base_gen': 8375518745083543048, 'spans': 0, 'seq': 0}, {'base_gen': 8375518745083543048, 'spans': 1, 'seq': 3}, {'base_gen': 3988865698237240897, 'spans': 1, 'seq': 3}, {'base_gen': 3988865698237240897, 'spans': 2, 'seq': 5}, {'base_gen': 16176298484422837564, 'spans': 2, 'seq': 5}, {'base_gen': 16176298484422837564, 'spans': 3, 'seq': 7}, {'base_gen': 17742544876321760967, 'spans': 3, 'seq': 7}, {'base_gen': 17742544876321760967, 'spans': 4, 'seq': 9}, {'base_gen': 15987993483508367236, 'spans': 4, 'seq': 9}, {'base_gen': 15987993483508367236, 'spans': 5, 'seq': 11}, {'base_gen': 7005343866122091218, 'spans': 5, 'seq': 11}, {'base_gen': 7005343866122091218, 'spans': 6, 'seq': 13}, {'base_gen': 1573622369112069201, 'spans': 6, 'seq': 13}, {'base_gen': 1573622369112069201, 'spans': 7, 'seq': 15}, {'base_gen': 3747366031046635231, 'spans': 7, 'seq': 15}, {'base_gen': 3747366031046635231, 'spans': 8, 'seq': 17}, {'base_gen': 12031260920114893176, 'spans': 8, 'seq': 17}, {'base_gen': 2116696894312322127, 'spans': 8, 'seq': 17}, {'base_gen': 15273314186787428866, 'spans': 8, 'seq': 17}, {'base_gen': 15809861018166720855, 'spans': 8, 'seq': 17}])

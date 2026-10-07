@@ -1,0 +1,40 @@
+ROUND 09: W60 bounded mixed demand/prefetch direct
+ROUND 09 exit=0 seconds=473.7
+ROUND 10: W60 bounded mixed demand/prefetch buffered
+ROUND 10 exit=0 seconds=326.9
+ROUND 11: D17 cold dense/sparse allocation direct
+ROUND 11 exit=0 seconds=61.4
+ROUND 12: D17 cold dense/sparse allocation buffered
+ROUND 12 exit=0 seconds=62.4
+ROUND 13: W68 real worker retirement direct
+ROUND 13 exit=0 seconds=67.8
+ROUND 14: W68 real worker retirement buffered
+ROUND 14 exit=0 seconds=67.7
+ROUND 15: W67 sparse bounded admission direct
+ROUND 15 exit=0 seconds=54.7
+ROUND 16: W67 sparse bounded admission buffered
+ROUND 16 exit=0 seconds=61.2
+ROUND 17: W75/W85 RPC integrity, ambiguous PUT/restart/accounting
+ROUND 17 exit=0 seconds=1.1
+ROUND 18: W75 parallel GET payload and metadata anchor
+ROUND 18 exit=0 seconds=0.1
+ROUND 19: W65 pooled/partial-reader signal shutdown
+ROUND 19 exit=0 seconds=2.9
+ROUND 20: W82 reachable stale leader partitions
+ROUND 20 exit=0 seconds=5.8
+ROUND 21: W76 lost committed namespace replies direct
+ROUND 21 exit=0 seconds=60.5
+ROUND 22: W76 lost committed namespace replies buffered
+ROUND 22 exit=0 seconds=61.4
+ROUND 23: W84 namespace bounds/deep/spread direct
+ROUND 23 exit=0 seconds=73.1
+ROUND 24: W84 namespace bounds/deep/spread buffered
+ROUND 24 exit=0 seconds=72.2
+ROUND 25: W85 hint eviction/concurrency production helper
+ROUND 25 exit=0 seconds=0.2
+ROUND 26: W27 phantom ownership and ambiguous REPORT helper
+ROUND 26 exit=0 seconds=0.1
+ROUND 27: W23/W89 strict pressure measurement schema
+ROUND 27 exit=0 seconds=0.1
+ROUND 28: Full Linux unit and architecture regressions
+ROUND 28 exit=2 seconds=8.4

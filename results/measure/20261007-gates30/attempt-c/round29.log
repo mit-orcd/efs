@@ -1,0 +1,58 @@
+Evidence directory: /data1/efs/gc-direct-_p4yy9af
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=7113059842608339847
+client serving PASS
+immediate post-mutation lookup/stat gate PASS
+root rename old-name miss, new inode and old-name reuse PASS
+Unmounting /data1/efs/gc-direct-_p4yy9af/mnt
+Retiring drained efs-fuse PID 3689581 for /data1/efs/gc-direct-_p4yy9af/mnt
+Unmounted /data1/efs/gc-direct-_p4yy9af/mnt
+client serving PASS
+cold non-writing client dense/sparse/empty allocation PASS
+twenty-ancestor rename preserves all guards and rejects cycle PASS
+Unmounting /data1/efs/gc-direct-_p4yy9af/mnt
+Retiring drained efs-fuse PID 3694010 for /data1/efs/gc-direct-_p4yy9af/mnt
+Unmounted /data1/efs/gc-direct-_p4yy9af/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-_p4yy9af/mnt
+Retiring drained efs-fuse PID 3694883 for /data1/efs/gc-direct-_p4yy9af/mnt
+Unmounted /data1/efs/gc-direct-_p4yy9af/mnt
+client serving PASS
+replacement inode: source=1267 old=259 observed=1267
+node 1 authoritative replacement inode PASS
+node 2 authoritative replacement inode PASS
+node 3 authoritative replacement inode PASS
+node 4 authoritative replacement inode PASS
+sixteen used-lane empty HASHED rmdir and replacement PASS
+Unmounting /data1/efs/gc-direct-_p4yy9af/mnt
+Retiring drained efs-fuse PID 3695261 for /data1/efs/gc-direct-_p4yy9af/mnt
+Unmounted /data1/efs/gc-direct-_p4yy9af/mnt
+client serving PASS
+namespace boundary prior GC drained PASS
+over-envelope rmdir rejects before PREPARE/DROP and preserves directory PASS
+fragment files present PASS
+fragment files present PASS
+Unmounting /data1/efs/gc-direct-_p4yy9af/mnt
+Retiring drained efs-fuse PID 3695658 for /data1/efs/gc-direct-_p4yy9af/mnt
+Unmounted /data1/efs/gc-direct-_p4yy9af/mnt
+client serving PASS
+one swapped fragment falls back to trusted parity PASS
+Unmounting /data1/efs/gc-direct-_p4yy9af/mnt
+Retiring drained efs-fuse PID 3697034 for /data1/efs/gc-direct-_p4yy9af/mnt
+Unmounted /data1/efs/gc-direct-_p4yy9af/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-_p4yy9af/mnt
+Retiring drained efs-fuse PID 3697234 for /data1/efs/gc-direct-_p4yy9af/mnt
+Unmounted /data1/efs/gc-direct-_p4yy9af/mnt
+client serving PASS
+integrity fixtures reclaimed PASS
+two swapped fragments fail read; restored bytes verify cold PASS
+fragment files present PASS
+Traceback (most recent call last):
+  File "/data1/efs/gates30-evidence-c/source/tests/live/gc_reclamation.py", line 646, in <module>
+    assert len(owners)<=2,owners
+           ^^^^^^^^^^^^^^
+AssertionError: {'0x7f33b4000b70': (196608, 0), '0x7f33a4000b70': (196608, 0), '0x7f33ac000b70': (196608, 0), '0x7f33c4000b70': (196608, 0), '0x7f33bc000b70': (196608, 0), '0x7f33cc000b70': (196608, 0), '0x7f3394000b70': (196608, 0), '0x7f339c000b70': (196608, 0), '0x7f338c000b70': (196608, 0), '0x7f3390000b70': (196608, 0), '0x7f3384000b70': (196608, 0), '0x7f337c000b70': (196608, 0), '0x7f3380000b70': (196608, 0), '0x7f3374000b70': (196608, 0), '0x7f3378000b70': (196608, 0), '0x7f3364000b70': (196608, 0), '0x7f33c8000b70': (196608, 0), '0x7f336c000b70': (196608, 0), '0x7f335c000b70': (196608, 0), '0x7f3360000b70': (196608, 0), '0x7f334c000b70': (196608, 0), '0x7f3354000b70': (196608, 0), '0x7f3350000b70': (196608, 0), '0x7f3344000b70': (196608, 0), '0x7f333c000b70': (196608, 0), '0x7f3340000b70': (196608, 0), '0x7f3334000b70': (196608, 0), '0x7f3338000b70': (196608, 0), '0x7f3324000b70': (196608, 0), '0x7f3330000b70': (196608, 0), '0x7f332c000b70': (196608, 0), '0x7f33b8000b70': (196608, 0), '0x7f33b0000b70': (196608, 0), '0x7f3328000b70': (196608, 0), '0x7f33a8000b70': (196608, 0), '0x7f33c0000b70': (196608, 0), '0x7f3320000b70': (196608, 0), '0x7f331c000b70': (196608, 0), '0x7f3310000b70': (196608, 0), '0x7f330c000b70': (196608, 0), '0x7f3314000b70': (196608, 0), '0x7f32f4000b70': (196608, 0), '0x7f32fc000b70': (196608, 0), '0x7f3304000b70': (196608, 0), '0x7f32ec000b70': (196608, 0), '0x7f32f0000b70': (196608, 0), '0x7f32e4000b70': (196608, 0), '0x7f32e8000b70': (196608, 0), '0x7f32dc000b70': (196608, 0), '0x7f32e0000b70': (196608, 0), '0x7f3370000b70': (196608, 0), '0x7f3368000b70': (196608, 0), '0x7f33a0000b70': (196608, 0), '0x7f3398000b70': (196608, 0), '0x7f3388000b70': (196608, 0), '0x7f3358000b70': (196608, 0), '0x7f32d4000b70': (196608, 0), '0x7f32d8000b70': (196608, 0)}

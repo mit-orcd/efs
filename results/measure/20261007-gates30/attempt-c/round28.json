@@ -1,0 +1,18 @@
+{
+  "round": 28,
+  "title": "Full Linux unit and architecture regressions",
+  "command": [
+    "make",
+    "test"
+  ],
+  "started_utc": "2026-10-07T20:55:25Z",
+  "test_sha256": {},
+  "runner_sha256": "2f71cd6ffa9d44468352a2171baa05f251c254bee2d5dd2fcc3a68ac810accab",
+  "binary_sha256": {
+    "efsd": "59e91ff534b3b94a3acd04ce91741256265c3be82e34e925880e2e8e06af2764",
+    "efs-fuse": "c46bba7358ffad615e8a295065bbeb5c10ed12913397fd583c79737e9c709595",
+    "efs-mgmt": "f82a3f7eec8a83b53143eb5268a0fb7df97edca0f8b9b33dfa1a283b599ad8c4"
+  },
+  "exit_code": 0,
+  "elapsed_seconds": 32.52631787600694
+}

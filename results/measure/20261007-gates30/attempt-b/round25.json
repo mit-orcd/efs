@@ -1,0 +1,20 @@
+{
+  "round": 25,
+  "title": "W85 hint eviction/concurrency production helper",
+  "command": [
+    "python3",
+    "tests/test_put_hint.py"
+  ],
+  "started_utc": "2026-10-07T20:51:52Z",
+  "test_sha256": {
+    "tests/test_put_hint.py": "f1f4b6a0916fd400fe2a2fd5008e38d546768bf3856c570c56cf75a8027f8996"
+  },
+  "runner_sha256": "07ce1d102b2a02552ed529b791f90ec9968a4aef6b8b10984062749996b28f20",
+  "binary_sha256": {
+    "efsd": "879d3a92612ba73e673321c9780a4d418e67a281fbbe381e843833ddaf2e2483",
+    "efs-fuse": "c46bba7358ffad615e8a295065bbeb5c10ed12913397fd583c79737e9c709595",
+    "efs-mgmt": "f82a3f7eec8a83b53143eb5268a0fb7df97edca0f8b9b33dfa1a283b599ad8c4"
+  },
+  "exit_code": 0,
+  "elapsed_seconds": 0.16404227999737486
+}

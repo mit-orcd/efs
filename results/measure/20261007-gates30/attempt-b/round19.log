@@ -1,0 +1,6 @@
+direct=False repeat=0 idle/partial/churning TCP shutdown 0.114s PASS
+direct=False repeat=1 idle/partial/churning TCP shutdown 0.215s PASS
+direct=False repeat=2 idle/partial/churning TCP shutdown 0.114s PASS
+direct=True repeat=0 idle/partial/churning TCP shutdown 0.064s PASS
+direct=True repeat=1 idle/partial/churning TCP shutdown 0.215s PASS
+direct=True repeat=2 idle/partial/churning TCP shutdown 0.064s PASS

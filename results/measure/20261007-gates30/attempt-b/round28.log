@@ -1,0 +1,114 @@
+python3 tests/test_w23_samples.py
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+OK
+python3 tests/test_read_verify.py
+parallel GET: valid zero/nonzero and corrupt zero/nonzero replies PASS
+python3 tests/test_opid_admission.py
+namespace opid saturation: four mutations send nothing, released admission keeps watermark, sequence overflow refused PASS
+python3 tests/test_server_processes.py
+Invalid PID record /tmp/efs-owner-moopyywg/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-moopyywg/store (if any)
+Invalid PID record /tmp/efs-owner-moopyywg/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-moopyywg/store (if any)
+Stale daemon identity for PID 3667221; process retained
+Stopped efsd for storage /tmp/efs-owner-moopyywg/store (if any)
+Stale daemon identity for PID 3667222; process retained
+Stopped efsd for storage /tmp/efs-owner-moopyywg/store (if any)
+Stale daemon identity for PID 3667222; process retained
+Stopped efsd for storage /tmp/efs-owner-moopyywg/other (if any)
+Stopping owned efsd PID 3667222 (storage /tmp/efs-owner-moopyywg/store)
+Stopped efsd for storage /tmp/efs-owner-moopyywg/store (if any)
+Stale daemon identity for PID 3667327; process retained
+Stale daemon identity for PID 3667221; process retained
+Stopping owned perf PID 3667327 (perf /tmp/efs-owner-moopyywg/efsd.data)
+perf wrapper: unrelated/wrong-output processes retained; owned recorder flushed with SIGINT PASS
+server wrapper: invalid/reused/wrong-storage/stale-start PIDs retained; matching daemon gracefully stopped PASS
+python3 tests/test_mgmt_session_routing.py
+management session routing: advertised leader, exact retries, bounded loop and ambiguous transport PASS
+python3 tests/test_session_admission.py
+session ESTABLISH: authoritative ACTIVE/REGISTER, fencing, routes and failed reads PASS
+python3 tests/test_publication_host.py
+publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS
+python3 tests/test_publication_rpc.py
+publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply PASS
+python3 tests/test_bench_cli.py
+benchmark CLI: ownership, parsing and scratch protection PASS
+python3 tests/test_bench_profile.py
+.Generating reports for 5 profiles, up to 2 parallel jobs
+[reports 1/5] 0: OK
+[reports 2/5] 1: OK
+[reports 3/5] 2: OK
+[reports 4/5] 3: OK
+[reports 5/5] 4: OK
+....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: FAIL
+[reports 2/2] data-buffered-w0-qd1: FAIL
+Results and analysis: /tmp/profile test 6fvi4anv/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: OK
+[reports 2/2] data-direct-w0-qd1: OK
+Results and analysis: /tmp/profile test indgmcy_/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Reports unavailable: missing: perf.data missing
+Generating reports for 0 profiles, up to 4 parallel jobs
+....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /tmp/profile test 9gp4k5ia/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+....
+----------------------------------------------------------------------
+Ran 17 tests in 2.712s
+
+OK
+Results and analysis: /tmp/tmpclieit2q/ANALYSIS.md
+python3 docs/check-architecture.py
+ok    regen-diff: architecture-full.md + architecture.html are current
+FAIL  links: every internal link resolves
+      how-it-works/performance.md:436: link target does not exist: ../../results/measure/20261006-bench-allocation-multiroot/SUMMARY.md
+      how-it-works/performance.md:460: link target does not exist: ../../results/measure/20261007-bench-hot-path-review/SUMMARY.md
+      how-it-works/performance.md:500: link target does not exist: ../../results/measure/20261007-writer-investigation/SUMMARY.md
+      how-it-works/performance.md:516: link target does not exist: ../../results/measure/20261007-sync-writer-investigation/SUMMARY.md
+      how-it-works/performance.md:523: link target does not exist: ../../results/measure/20261007-latency-validation/SUMMARY.md
+      how-it-works/verification.md:56: link target does not exist: ../../results/measure/20261007-roadmap-rounds/SUMMARY.md
+      status/README.md:35: link target does not exist: ../../results/measure/20261007-roadmap-rounds/SUMMARY.md
+      status/README.md:92: link target does not exist: ../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt
+      status/README.md:93: link target does not exist: ../../results/measure/20261005-045140-p3-benches/SUMMARY.txt
+      status/README.md:93: link target does not exist: ../../results/measure/20261007-latency-validation/SUMMARY.md
+      status/README.md:93: link target does not exist: ../../results/measure/20261007-bench-hot-path-review/SUMMARY.md
+      status/in-flight.md:7: link target does not exist: ../../results/measure/20261007-roadmap-rounds/SUMMARY.md
+      backlog/work-items.md:1741: link target does not exist: ../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt
+      backlog/work-items.md:1741: link target does not exist: ../../results/measure/20261005-014440-w23-stalled-compactor/SUMMARY.txt
+      backlog/work-items.md:2045: link target does not exist: ../../results/measure/20261006-xorinox-orphan-unlink/SUMMARY.md
+      backlog/work-items.md:2422: link target does not exist: ../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt
+      backlog/work-items.md:3237: link target does not exist: ../../results/measure/20261005-040810-w23-stalled-compactor/samples.tsv
+      backlog/work-items.md:3237: link target does not exist: ../../results/measure/20261005-040810-w23-stalled-compactor/s3.log
+      status/d25-admission-routing.md:80: link target does not exist: ../../results/measure/20261006-nuc-ten-rounds/SUMMARY.md
+      status/d25-admission-routing.md:89: link target does not exist: ../../results/measure/20261006-publication-ten-rounds/SUMMARY.md
+      status/d25-admission-routing.md:178: link target does not exist: ../../results/measure/20261006-publication-retirement/SUMMARY.md
+      status/fuse-memory.md:24: link target does not exist: ../../results/measure/20261007-roadmap-rounds/SUMMARY.md
+      status/fuse-memory.md:48: link target does not exist: ../../results/measure/20261006-d25-w60-ten-rounds/SUMMARY.md
+      status/roadmap-30-continuation-20261007.md:39: link target does not exist: ../../results/measure/20261007-gc-effects/direct-posix.json
+      status/roadmap-30-continuation-20261007.md:333: link target does not exist: ../../results/measure/20261007-roadmap-continuation/buffered-manifest.json
+      status/roadmap-followup-20261007.md:39: link target does not exist: ../../results/measure/20261007-w82/baseline-partition.txt
+      status/roadmap-followup-20261007.md:40: link target does not exist: ../../results/measure/20261007-w82/fixed-partition.txt
+      README.md:116: link target does not exist: results/README.md
+ok    invariant-refs: I-references name §4 invariants
+ok    op-matrix-sections: §6 names existing sections
+ok    single-home: normative tables / invariants / formulas defined once
+
+architecture doc gate: 1/5 checks failed
+make: *** [Makefile:272: test] Error 1

@@ -1,0 +1,12 @@
+Evidence directory: /data1/efs/gc-direct-vqrinsv9
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=11017348101580299344
+client serving PASS
+Traceback (most recent call last):
+  File "/data1/efs/gates30-src/tests/live/gc_reclamation.py", line 254, in <module>
+    assert all(value in (0,1,5,6) for value in replies),replies
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [11, 0]

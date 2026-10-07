@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data1/efs/gates30-src/tests/live/fragment_integrity.py", line 73, in <module>
+    usage_before=subprocess.run([str(source/'efs-mgmt'),'gc-status',endpoint],capture_output=True,text=True,check=True).stdout
+                                                                    ^^^^^^^^
+NameError: name 'endpoint' is not defined

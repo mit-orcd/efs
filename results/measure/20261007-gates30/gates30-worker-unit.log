@@ -1,0 +1,3 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"unknown"' -DEFS_VERSION='"unknown"' -DEFS_GIT_BRANCH='"unknown"' -DEFS_BUILD_TIME='"2026-10-07T20:20:00Z"' -DEFS_FAULTS=1 -Iinclude -Isrc/common -Ideps/blake3 -o tests/test_reply_buffers tests/test_reply_buffers.c -lpthread
+test_reply_buffers: OK (128 retired workers, reuse, growth, allocation/TLS failures)
+test_reply_buffers: key failure OK

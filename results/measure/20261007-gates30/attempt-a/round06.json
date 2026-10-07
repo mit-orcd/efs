@@ -1,0 +1,22 @@
+{
+  "round": 6,
+  "title": "W69 immediate local mutation stats buffered",
+  "command": [
+    "python3",
+    "tests/live/gc_reclamation.py",
+    "--mode",
+    "buffered",
+    "--port",
+    "20510",
+    "--memo"
+  ],
+  "started_utc": "2026-10-07T20:17:06Z",
+  "runner_sha256": "316d6f22764d10b1b932ee7292454e10d35736cbed375b7b7f4d0703ab8a5ded",
+  "binary_sha256": {
+    "efsd": "cee218082d7b987595b9c3c76ec38530d04ecfdc5faf4b1d9a99f66769be9429",
+    "efs-fuse": "a6257b5085d89cf8a593bfba645c2192d6c16ba5aa8ead3ba845d3a38137426b",
+    "efs-mgmt": "f82a3f7eec8a83b53143eb5268a0fb7df97edca0f8b9b33dfa1a283b599ad8c4"
+  },
+  "exit_code": 0,
+  "elapsed_seconds": 54.96981148200575
+}

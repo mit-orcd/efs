@@ -1,0 +1,16 @@
+ROUND 02: W54/W38 buffered fold and cold GC
+ROUND 02 exit=0 seconds=58.8
+ROUND 03: W59 sustained direct writes and cold bytes
+ROUND 03 exit=0 seconds=165.4
+ROUND 04: W59 sustained buffered writes and cold bytes
+ROUND 04 exit=0 seconds=163.7
+ROUND 05: W69 immediate local mutation stats direct
+ROUND 05 exit=0 seconds=47.5
+ROUND 06: W69 immediate local mutation stats buffered
+ROUND 06 exit=0 seconds=55.0
+ROUND 07: W56 root rename/name reuse direct
+ROUND 07 exit=0 seconds=71.5
+ROUND 08: W56 root rename/name reuse buffered
+ROUND 08 exit=0 seconds=73.0
+ROUND 09: W60 bounded mixed demand/prefetch direct
+ROUND 09 exit=1 seconds=345.7

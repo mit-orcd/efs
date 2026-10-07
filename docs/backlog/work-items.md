@@ -1905,6 +1905,11 @@ project-history.md "START-HERE closed items".**
 
 ## W54 · a fold's GC deletes the live base (queue row 0i)
 
+**Gate follow-up (Oct 7):** NUC direct/buffered authoritative chunk views
+observe eight fold transitions and verify cold bytes after physical GC/restart.
+Historical cold IOR-hard/hardscan and nine-host acceptance remain. See the
+[gate ledger](../status/gate-30-rounds-20261007.md).
+
 **Oct 5 implementation checkpoint — IN TREE, local gates pass; uncommitted,
 cluster gate pending.** `efs_meta_apply_publish` now skips GC for a superseded
 base or span (including replay tombstones) whose generation matches the new
@@ -2066,6 +2071,8 @@ next rollout. No cluster rollout or artifact cleanup in this follow-up.
 
 
 ## W42 · df / efs-mgmt status report the 3-node capacity model on any node count (queue row 2a)
+
+**Gate follow-up (Oct 7):** NUC full-node gate: one member limited to 64 KiB, 32 MiB write, cold remount bytes, physical deletion and restart all pass. This does not prove three-fragment protection debt/repair or the named 19810 capacity gate. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Current state, reviewed Oct 7.** Both FUSE statfs and management status
 use `efs_capacity_logical`. Final four-node NUC evidence reports 500 GiB
@@ -2560,6 +2567,12 @@ signals (63–215 ms); handlers still drain before teardown.
 
 ## W67 · Sparse dirty writes and bounded body admission (queue row mem1)
 
+**Budget evidence correction (Oct 7):** earlier 32 + 8 MiB requests actually
+used a 32 + 64 MiB bound because 8 MiB is below the drain's 32 MiB slab minimum.
+New direct/buffered sparse and mixed gates request and trace 32 + 32 MiB.
+Old byte/RSS evidence remains valid but does not prove an 8 MiB drain reserve.
+Failure/recovery-reserve exhaustion acceptance remains open.
+
 **Class:** correctness / resource exhaustion. **Status:** open; indexed Oct 7, 2026.
 
 **Evidence/current state:** Committed foundation 033a842a and later regressions implement body admission and retained-byte ownership. Targeted pressure/failure/RSS acceptance remains open.
@@ -2583,7 +2596,7 @@ extended append/pressure fault coverage remain open.
 
 ## W68 · Reply-buffer lifetime on FUSE worker retirement (queue row mem2)
 
-**Class:** resource lifetime bug. **Status:** open; indexed Oct 7, 2026.
+**Class:** resource lifetime bug. **Status:** closed on the NUC acceptance gate, Oct 7, 2026.
 
 **Evidence/current state:** Committed foundation 033a842a implements pthread-key reply owners; local retirement/failure tests pass.
 
@@ -2604,6 +2617,13 @@ owners. Real fault-injected RSS variants remain separate acceptance.
 
 **Forbidden:** Closing from mocked retirement tests alone.
 
+
+**Gate completion (Oct 7):** normal direct/buffered real-worker retirement
+and compile-only allocation/TLS/growth fault variants pass. Respectively
+282/318/283 injected failures, 165/155/161 surfaced ENOMEMs, zero surviving
+reply owners and 4156/2556/3792 KiB post-warm RSS spans. The key/failure units
+also pass, and normal binaries exclude fault strings. See the
+[30-round gate ledger](../status/gate-30-rounds-20261007.md).
 
 <a id="w69"></a>
 
@@ -2812,6 +2832,8 @@ an unreviewed on-disk format change or claiming repair from a decode fallback.
 
 ## W76 · Namespace opid capacity exhaustion silently removes retry identity (queue row spec6)
 
+**Gate follow-up (Oct 7):** NUC byte-identical CREATE/RENAME/UNLINK operation-identity replay passes across full owned-server crash/restart after committed reply loss. Maximum concurrency and failover acceptance remain. See [gate ledger](../status/gate-30-rounds-20261007.md).
+
 **Class:** conditional retry/idempotency correctness. **Status:** open source
 finding; reaching this limit on an ordinary mounted workload is not established.
 
@@ -3016,6 +3038,8 @@ report offered load, achieved rates, tails and memory on a named build.
 
 ## W82 · Completed read authority is reused by an isolated former leader
 
+**Gate follow-up (Oct 7):** NUC configuration partition gate found and fixed a synchronous solo-proposal replication send-limit omission (`0960bf5b`). The deterministic regression failed before the fix; after the fix, the isolated old leader refuses reads across a voter change and restoring three voters catches up and serves current metadata. Transaction/publication partition gates remain. See [gate ledger](../status/gate-30-rounds-20261007.md).
+
 **Class/state:** linearizable-read correctness; core-model reproduction Oct 7.
 `host_read_index` captures the local commit index and returns immediately when
 `host_view_covers` sees a completed read index covering it. `try_commit` can
@@ -3097,6 +3121,8 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 <a id="w84"></a>
 
 ## W84 · Namespace guard bounds reject supported deep/spread-directory work
+
+**Gate follow-up (Oct 7):** NUC direct/buffered captured-inode opposite directory-move races pass: 16 races per mode preserve acyclic ancestry and retry progress. Maximum participant/hop-bound acceptance remains. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Class/state:** namespace completeness / admission gap; source-reviewed Oct 7.
 `EFS_TXN_MAX_PART` is 64 for general transaction envelopes, but
