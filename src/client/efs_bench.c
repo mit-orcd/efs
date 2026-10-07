@@ -53,7 +53,7 @@ static void usage(const char *prog)
             "      [--workers W] [--size bytes] [--phases csv] [--keep] [--id n]\n"
             "      Metadata read+write phases (mkdir/create/stat/getattr/readdir/\n"
             "      setattr/rename/unlink). No caches; every op is a real RPC.\n"
-            "  I/O:   %s --bench io|io-blake3 --storage <scratch> --rw read|write\n"
+            "  I/O:   %s --bench io|io-blake3 --storage <scratch> --rw read|write [--preallocate]\n"
             "         [--io-size 64K] [--qd 16] [--window 64] [--direct-io] [--sync]\n"
             "  CPU:   %s --bench blake3 [--size 64K] [--threads N] [--time seconds]\n"
             "         [--oneshot|--stream] (no storage or cluster).\n"

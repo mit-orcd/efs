@@ -330,3 +330,55 @@ user on the Linux host (ownership/access is checked before starting):
 perf report. Older runs keep working with their `.stdout` report names.
 Kernel copy and page-pinning/IOMMU symbols now have explicit heuristic categories;
 use the raw symbols and callers to assess a proposed optimization.
+
+## Allocation cost and multiple storage locations
+
+Raw writes now default to paired allocating and preallocated-overwrite cases.
+`--io-write-layouts allocating|preallocated|both` selects the comparison. The
+preallocated case uses Linux `posix_fallocate`, writes every block with the
+expected nonzero pattern and flushes it before timing/perf enable. An unwritten
+allocated extent alone is insufficient: its first write still converts extents.
+There is no silent fallback on unsupported allocation. `allocation` and
+`prepared_blocks` identify the workload; setup and end-of-run verification/flush
+remain outside default timing. Use `--io-sync` for per-operation durability.
+Allocating writes retain their initial allocation work inside timing.
+
+Repeat `--storage-root` for distinct locations. The harness runs each root alone
+and then all roots together for raw I/O and engine data; combined raw cases need
+at least one worker per root, so QD1 is measured only on the individual roots.
+Total QD and working-set bytes remain fixed across geometries. Raw workers use
+round-robin roots. Engine data uses the production fragment-store/writer routing
+and its existing 1..N prefix ladder, exposing the extra routing/lookup cost as
+locations are added. Metadata has one KV location, so it runs on each root alone.
+CPU-only hashing is not duplicated per storage geometry.
+
+The manifest records resolved paths, filesystem device IDs and free space;
+findmnt output is retained per root. Symlink aliases of the same directory are
+rejected. Multiple directories on one filesystem trigger a warning; use
+`--require-distinct-devices` to require at least two distinct filesystem devices.
+Different filesystem IDs still do not prove independent physical media (LVM,
+RAID and shared controllers can couple them); inspect mount/device provenance.
+Analysis separates device groups and allocation layouts instead of pooling their
+best rates. Prefix-ladder data profiles combine their write/read/path phases.
+
+For example, create two writable scratch parents on the intended devices and run:
+
+```sh
+./efs-bench.sh --storage-root /data1/efs/bench-scratch --storage-root /data2/efs/bench-scratch --require-distinct-devices
+```
+
+The default includes raw I/O, I/O+BLAKE3, CPU BLAKE3, engine data and metadata,
+with sequential measurements and parallel report generation. Two roots expand
+the default to 502 cases, so allow for setup, flushing and reports. A shorter
+first pass keeps both allocation layouts and device comparisons:
+
+```sh
+./efs-bench.sh --modes io,io-blake3,data,meta --io-sizes 64K --qds 1,16 --writers 0,auto --storage-root /data1/efs/bench-scratch --storage-root /data2/efs/bench-scratch --require-distinct-devices
+```
+
+These are local storage benchmarks; they neither mount exports nor restart a
+cluster. Measure the engine's store/writer/KV hotspots before carrying a raw-I/O
+experiment into production. Registered-buffer/asynchronous I/O remains a separate
+experiment whose benefit must be measured against these ceilings.
+
+[Implementation and functional validation](../../results/measure/20261006-bench-allocation-multiroot/SUMMARY.md).

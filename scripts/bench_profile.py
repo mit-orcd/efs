@@ -65,6 +65,8 @@ def parser():
     p.add_argument('--output', type=Path, help='new result directory; refuses existing paths')
     p.add_argument('--storage-root', type=Path, action='append', default=[],
                    help='existing scratch parent on a storage device; repeat for multiple paths')
+    p.add_argument('--require-distinct-devices', action='store_true', help='require at least two storage roots on distinct filesystem devices')
+    p.add_argument('--io-write-layouts', choices=['both', 'allocating', 'preallocated'], default='both', help='compare initial allocation with a populated preallocated overwrite window')
     p.add_argument('--time', type=float, default=3, help='seconds per timed benchmark phase')
     p.add_argument('--io-sizes', type=sizes, default=sizes('4K,64K,1M'), help='raw I/O sizes, identical with/without BLAKE3')
     p.add_argument('--io-sync', action='store_true', help='include fdatasync in each raw write operation')
@@ -96,6 +98,8 @@ def parser():
 
 
 def cases_for(a, cpus):
+    if len(a.storage_root) > 24:
+        raise ValueError('maximum 24 storage roots, matching the engine limit')
     modes = a.modes.split(',')
     remote = ['net', 'store', 'read', 'remote-meta']
     if modes == ['all']:
@@ -133,10 +137,14 @@ def cases_for(a, cpus):
         if mode not in modes:
             continue
         for size, qd, direct, rw in itertools.product(a.io_sizes, a.qds, [False, True], ['write', 'read']):
-            add(f'{mode}-{rw}-{size}-qd{qd}-{"direct" if direct else "buffered"}', mode,
-                ['--bench', mode, '--rw', rw, '--io-size', str(size), '--qd', str(qd),
-                 '--window', str(a.data_size[0] // (size * qd)), '--time', duration,
-                 '--direct-io' if direct else '--no-direct-io'] + (['--sync'] if a.io_sync and rw == 'write' else []))
+            layouts = ['populated_read'] if rw == 'read' else (['allocating', 'preallocated'] if a.io_write_layouts == 'both' else [a.io_write_layouts])
+            for layout in layouts:
+                suffix = '-preallocated' if layout == 'preallocated' else ''
+                add(f'{mode}-{rw}-{size}-qd{qd}-{"direct" if direct else "buffered"}{suffix}', mode,
+                    ['--bench', mode, '--rw', rw, '--io-size', str(size), '--qd', str(qd),
+                     '--window', str(a.data_size[0] // (size * qd)), '--time', duration,
+                     '--direct-io' if direct else '--no-direct-io'] + (['--preallocate'] if layout == 'preallocated' else []) + (['--sync'] if a.io_sync and rw == 'write' else []),
+                    allocation=layout)
     if 'blake3' in modes:
         for size, nt, style in itertools.product(a.hash_sizes, threads, ['oneshot', 'stream']):
             add(f'blake3-{style}-{size}-t{nt}', 'blake3',
@@ -163,6 +171,24 @@ def cases_for(a, cpus):
     if 'remote-meta' in modes:
         add('meta-remote', 'remote-meta', common + ['--meta', '--export', a.export,
             '--files', str(a.files), '--dirs', str(a.dirs), '--phases', 'all'])
+    # Independent device baselines plus the engine's existing prefix ladder.
+    # Metadata has one KV root: compare it on each location, never claim striping.
+    if len(a.storage_root) > 1:
+        expanded = []
+        for case in cases:
+            if case['mode'] not in ['io', 'io-blake3', 'data', 'meta']:
+                expanded.append(case); continue
+            groups = [(f'root{i+1}', [i]) for i in range(len(a.storage_root))]
+            combined = case['mode'] != 'meta'
+            if case['mode'] in ['io', 'io-blake3']:
+                qd = int(case['args'][case['args'].index('--qd') + 1])
+                combined = qd >= len(a.storage_root)
+            if combined:
+                groups.append((f'roots{len(a.storage_root)}', list(range(len(a.storage_root)))))
+            for label, indices in groups:
+                expanded.append(dict(case, name=case['name'] + '-' + label,
+                                     storage_label=label, root_indices=indices))
+        cases = expanded
     return cases
 
 
@@ -344,6 +370,9 @@ def analyze(output):
     failures = [r for r in results if r['status'] not in ['PASS', 'REPORTS_PENDING']]
     if failures:
         text[4:4] = ['', f"**{len(failures)}/{len(results)} cases failed. Invalid baselines are excluded from comparisons; raw failed output is retained.**", '']
+    storage_info = [f"Storage root `{d['path']}`: filesystem device `{d['device_id']}`, initial free bytes {d['free_bytes']}." for d in manifest.get('storage_devices', [])]
+    if storage_info:
+        text[-2:-2] = storage_info + ['']
     effective_events = set()
     done = set()
     details = []
@@ -351,7 +380,7 @@ def analyze(output):
         done.add(r['name'])
         measurements = []
         for m in r.get('metrics', []):
-            tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd'] if k in m)
+            tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd', 'allocation'] if k in m)
             numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_us', 'avg_us', 'max_us'] if k in m)
             if baseline_valid(r) and numbers:
                 measurements.append(f'{tag} {numbers}'.strip())
@@ -397,14 +426,14 @@ def analyze(output):
                 if key not in hash_best or float(m['GiB_s']) > float(hash_best[key][1]['GiB_s']):
                     hash_best[key] = (r['name'], m)
             if m.get('kind') in ['data', 'io'] and 'GiB_s' in m:
-                key = ('direct' if 'direct' in r['name'] else 'buffered', m.get('rw'), m.get('paths'), m.get('checksum', 'engine'), m.get('io_bytes', '65536'))
+                key = ('direct' if 'direct' in r['name'] else 'buffered', m.get('rw'), m.get('paths'), m.get('checksum', 'engine'), m.get('io_bytes', '65536'), m.get('allocation', 'legacy'), r.get('storage_label', 'default'))
                 if key not in data_best or float(m['GiB_s']) > float(data_best[key][1]['GiB_s']):
                     data_best[key] = (r['name'], m)
     for key, (name, m) in hash_best.items():
         text.append(f"- BLAKE3 {key[0]}, {key[1]} bytes: best observed {m['GiB_s']} GiB/s at {m.get('threads')} thread(s), `{name}`.")
     for key, (name, m) in data_best.items():
         latency = f"p99 {m['p99_us']} us" if 'p99_us' in m else f"avg/max {m.get('avg_us', '?')}/{m.get('max_us', '?')} us"
-        text.append(f"- {key[0]} {key[1]}, {key[2]} path(s), {key[3]} checksum, {key[4]} bytes: best observed {m['GiB_s']} GiB/s, {latency}, `{name}`.")
+        text.append(f"- {key[0]} {key[1]}, {key[2]} path(s), {key[3]} checksum, {key[4]} bytes, {key[5]}, {key[6]}: best observed {m['GiB_s']} GiB/s, {latency}, `{name}`.")
     text += ['', 'These are best observations within this run, not production configuration recommendations.', '', '## CPU hot paths', '']
     text += details
     missing = [c['name'] for c in manifest['cases'] if c['name'] not in done]
@@ -483,6 +512,15 @@ def main(argv=None):
     roots = [p.resolve() for p in a.storage_root]
     if any(not p.is_dir() for p in roots):
         raise ValueError('--storage-root parents must already exist')
+    if len(set(roots)) != len(roots):
+        raise ValueError('storage roots must resolve to distinct directories')
+    storage_devices = [dict(path=str(p), device_id=f'{os.major(p.stat().st_dev)}:{os.minor(p.stat().st_dev)}', free_bytes=shutil.disk_usage(p).free) for p in roots]
+    if a.require_distinct_devices and (len(roots) < 2 or len({d['device_id'] for d in storage_devices}) != len(roots)):
+        raise ValueError('--require-distinct-devices needs at least two roots on distinct filesystem devices')
+    if len(roots) < 2:
+        print('Storage coverage: one location; supply --storage-root twice for multi-location comparisons', flush=True)
+    elif len({d['device_id'] for d in storage_devices}) < len(roots):
+        print('Storage coverage: some roots share a filesystem device; directory scaling is not independent-device scaling', flush=True)
     stamp = datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ')
     output = (a.output or ROOT / 'logs' / f'efs-bench-{stamp}').resolve()
     output.mkdir(parents=True, exist_ok=False)
@@ -499,6 +537,7 @@ def main(argv=None):
     manifest = dict(host=os.uname().nodename, event='none' if a.no_perf else a.event,
                     binary_sha256=hashlib.sha256(binary.read_bytes()).hexdigest(), commit=commit,
                     seed=a.seed, created_utc=stamp, options={k: str(v) if isinstance(v, Path) else v for k, v in vars(a).items()}, cases=cases)
+    manifest['storage_devices'] = storage_devices
     manifest['options']['storage_root'] = [str(p) for p in roots]
     manifest['affinity_cpus'] = sorted(os.sched_getaffinity(0)) if hasattr(os, 'sched_getaffinity') else None
     manifest['perf_policy'] = {}
@@ -526,13 +565,13 @@ def main(argv=None):
                                 output, 'perf-preflight', a.timeout)
             if preflight['returncode']:
                 raise ValueError(f'perf cannot record event {a.event}; see {output}/perf-preflight.stderr (try --event cpu-clock for a missing PMU)')
-        ceiling_done = False
+        ceiling_done = set()
         prime_ok = True
         for index, case in enumerate(cases, 1):
             print(f"[{index}/{len(cases)}] {case['name']}", flush=True)
             directory = output / case['name']
             directory.mkdir()
-            result = dict(name=case['name'], status='RUNNING', runs={})
+            result = dict(name=case['name'], status='RUNNING', runs={}, storage_label=case.get('storage_label', 'default'), root_indices=case.get('root_indices', list(range(len(roots)))))
             results.append(result)
             save_results(output, results)
             if case['mode'] == 'read' and not prime_ok:
@@ -543,7 +582,7 @@ def main(argv=None):
                 scratch = []
                 cmd = [profiled_binary] + case['args']
                 if case['mode'] in ['io', 'io-blake3', 'data', 'meta']:
-                    parents = roots or [output / 'scratch']
+                    parents = [roots[i] for i in case['root_indices']] if 'root_indices' in case else roots or [output / 'scratch']
                     for parent in parents:
                         parent.mkdir(exist_ok=True)
                         scratch.append(Path(tempfile.mkdtemp(prefix='efs-bench-', dir=parent)))
@@ -556,10 +595,10 @@ def main(argv=None):
                     # or samples mixed into engine CPU profiles.
                     if case['mode'] in ['io', 'io-blake3']:
                         pass
-                    elif a.skip_ceiling or ceiling_done or stage != 'baseline':
+                    elif a.skip_ceiling or tuple(case.get('root_indices', range(len(roots)))) in ceiling_done or stage != 'baseline':
                         cmd += ['--skip-ceiling']
                     else:
-                        ceiling_done = True
+                        ceiling_done.add(tuple(case.get('root_indices', range(len(roots)))))
                 stage_dir = directory if stage == 'baseline' else directory / stage
                 workload_cmd = cmd[:]
                 control_dir = None

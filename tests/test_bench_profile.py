@@ -24,7 +24,7 @@ class ProfileTests(unittest.TestCase):
                                       '--hash-sizes', '64K', '--io-sizes', '64K', '--qds', '1', '--writers', '0'])
         cases = bench.cases_for(a, 4)
         self.assertLess([c['name'] for c in cases].index('store-prime'), [c['name'] for c in cases].index('read'))
-        self.assertEqual(len(cases), 18)
+        self.assertEqual(len(cases), 22)
         a.seed = None
         with self.assertRaises(ValueError):
             bench.cases_for(a, 4)
@@ -32,13 +32,43 @@ class ProfileTests(unittest.TestCase):
     def test_raw_io_pairs_use_identical_geometry(self):
         a = bench.parser().parse_args(['--modes', 'io,io-blake3', '--io-sizes', '64K', '--qds', '2', '--data-size', '1M'])
         cases = bench.cases_for(a, 4)
-        self.assertEqual(len(cases), 8)
-        for c in cases[:4]:
+        self.assertEqual(len(cases), 12)
+        for c in cases[:6]:
             partner = next(p for p in cases if p['name'] == c['name'].replace('io-', 'io-blake3-', 1))
             self.assertEqual(c['args'][2:], partner['args'][2:])
         with self.assertRaises(ValueError):
             a.data_size = [4096]
             bench.cases_for(a, 4)
+
+    def test_multiroot_geometry_and_write_layouts(self):
+        a = bench.parser().parse_args(['--modes', 'io,io-blake3,data,meta', '--storage-root', '/disk-a',
+                                      '--storage-root', '/disk-b', '--io-sizes', '4K', '--qds', '1,2', '--writers', '0'])
+        cases = bench.cases_for(a, 4)
+        raw = [c for c in cases if c['mode'] == 'io']
+        for c in raw:
+            qd = int(c['args'][c['args'].index('--qd') + 1])
+            self.assertLessEqual(len(c['root_indices']), qd)
+            partner = next(p for p in cases if p['name'] == c['name'].replace('io-', 'io-blake3-', 1))
+            self.assertEqual(c['root_indices'], partner['root_indices'])
+            self.assertEqual(c['args'][2:], partner['args'][2:])
+        self.assertEqual({tuple(c['root_indices']) for c in raw}, {(0,), (1,), (0, 1)})
+        self.assertEqual({tuple(c['root_indices']) for c in cases if c['mode'] == 'meta'}, {(0,), (1,)})
+        self.assertTrue(any(c['mode'] == 'data' and c['root_indices'] == [0, 1] for c in cases))
+        a.io_write_layouts = 'preallocated'
+        raw = [c for c in bench.cases_for(a, 4) if c['mode'] == 'io']
+        self.assertTrue(all('--preallocate' in c['args'] for c in raw if c['allocation'] != 'populated_read'))
+
+    def test_distinct_filesystems_and_aliases_are_checked_before_runs(self):
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root); a = root / 'a'; b = root / 'b'; a.mkdir(); b.mkdir()
+            alias = root / 'alias'; alias.symlink_to(a, target_is_directory=True)
+            args = ['--binary', '/usr/bin/true', '--modes', 'meta', '--no-perf', '--output', str(root / 'output')]
+            with patch.object(bench.sys, 'platform', 'linux'):
+                with self.assertRaisesRegex(ValueError, 'distinct filesystem'):
+                    bench.main(args + ['--storage-root', str(a), '--storage-root', str(b), '--require-distinct-devices'])
+                with self.assertRaisesRegex(ValueError, 'distinct directories'):
+                    bench.main(args + ['--storage-root', str(a), '--storage-root', str(alias)])
+            self.assertFalse((root / 'output').exists())
 
     def test_timeout_stops_descendant_work(self):
         with tempfile.TemporaryDirectory() as root:

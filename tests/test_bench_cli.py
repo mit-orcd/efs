@@ -73,6 +73,23 @@ def main():
                 assert row['idle_workers'] == '0' and int(row['min_worker_ops']) > 0, out
                 assert row['latency'] == 'operation_cycle', out
                 assert not list(pathlib.Path(root).iterdir())
+    # Preallocation/population happen before timing; each root's caller data survives.
+    for kind in ['io', 'io-blake3']:
+        with tempfile.TemporaryDirectory(prefix='efs-preallocated-a-') as a, tempfile.TemporaryDirectory(prefix='efs-preallocated-b-') as b:
+            out = run('efs-bench', '--bench', kind, '--storage', a, '--storage', b,
+                      '--rw', 'write', '--preallocate', '--io-size', '4K', '--qd', '2', '--window', '3', '--time', '.05')
+            row = dict(re.findall(r'(\w+)=([^\s]+)', next(line for line in out.splitlines() if line.startswith('BENCH_OK '))))
+            assert row['allocation'] == 'overwrite_preallocated' and row['prepared_blocks'] == '6', out
+            assert row['paths'] == '2' and row['verified_blocks'] == '6' and row['errors'] == '0', out
+            assert not list(pathlib.Path(a).iterdir()) and not list(pathlib.Path(b).iterdir())
+            run('efs-bench', '--bench', kind, '--storage', a, '--rw', 'read', '--preallocate', ok=False)
+            run('efs-bench', '--bench', kind, '--storage', a, '--storage', b, '--qd', '1', ok=False)
+    with tempfile.TemporaryDirectory(prefix='efs-engine-a-') as a, tempfile.TemporaryDirectory(prefix='efs-engine-b-') as b:
+        out = run('efs-bench', '--bench', 'data', '--storage', a, '--storage', b,
+                  '--qd', '2', '--window', '1', '--time', '.05', '--writers', '2', '--skip-ceiling')
+        rows = [dict(re.findall(r'(\w+)=([^\s]+)', line)) for line in out.splitlines() if line.startswith('BENCH_OK ')]
+        assert {(row['paths'], row['rw']) for row in rows} == {('1', 'write'), ('1', 'read'), ('2', 'write'), ('2', 'read')}, out
+        assert all(row['errors'] == '0' for row in rows), out
     # Oversubscribe the CPU without spinning at the all-ready start gate.
     with tempfile.TemporaryDirectory(prefix='efs-io-many-workers-') as root:
         out = run('efs-bench', '--bench', 'io', '--storage', root, '--rw', 'write',

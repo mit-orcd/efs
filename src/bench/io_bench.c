@@ -127,10 +127,11 @@ static void usage(const char *prog)
 {
     fprintf(stderr, "Usage: %s --bench io|io-blake3 --storage <empty-root> [--storage root ...]\n"
         "  [--rw read|write] [--io-size 64K] [--qd 16] [--window 64]\n"
-        "  [--time 3] [--direct-io|--no-direct-io] [--sync]\n"
+        "  [--time 3] [--direct-io|--no-direct-io] [--sync] [--preallocate]\n"
         "Parallel raw pread/pwrite, one file per worker; no EFS store/network.\n"
         "io-blake3 hashes each write and verifies each read inside the timed loop.\n"
         "io does no timed hashing. --window bounds blocks per worker.\n"
+        "--preallocate allocates, populates and flushes the write window before timing.\n"
         "Read files are populated first; all written blocks are checked after timing.\n"
         "--sync includes fdatasync per successful write; default buffered writes\n"
         "measure page-cache acceptance. Direct I/O sizes must be 4 KiB aligned.\n", prog);
@@ -138,7 +139,7 @@ static void usage(const char *prog)
 int efs_bench_io_main(int argc, char **argv)
 {
     const char *roots[IO_MAX_ROOTS], *rw = "write";
-    int nroots = 0, qd = 16, hashing = 0, direct = 0, sync_writes = 0, have_kind = 0;
+    int nroots = 0, qd = 16, hashing = 0, direct = 0, sync_writes = 0, have_kind = 0, preallocate = 0;
     uint32_t size = 65536, window = 64;
     double duration = 3;
     for (int i = 1; i < argc; i++) {
@@ -146,6 +147,7 @@ int efs_bench_io_main(int argc, char **argv)
         if (!strcmp(opt, "--help")) { usage(argv[0]); return 0; }
         if (!strcmp(opt, "--direct-io")) { direct = 1; continue; }
         if (!strcmp(opt, "--no-direct-io")) { direct = 0; continue; }
+        if (!strcmp(opt, "--preallocate")) { preallocate = 1; continue; }
         if (!strcmp(opt, "--sync")) { sync_writes = 1; continue; }
         if (++i == argc) goto invalid;
         const char *v = argv[i];
@@ -177,7 +179,8 @@ int efs_bench_io_main(int argc, char **argv)
             else { if (n > UINT32_MAX || n * (uint64_t)size > INT64_MAX) goto invalid; window = (uint32_t)n; }
         } else goto invalid;
     }
-    if (!have_kind || !nroots || (sync_writes && !strcmp(rw, "read"))) goto invalid;
+    if (!have_kind || !nroots || qd < nroots || ((sync_writes || preallocate) && !strcmp(rw, "read")) ||
+        (uint64_t)size * window > INT64_MAX) goto invalid;
     /* Validate every root before creating any files. */
     for (int i = 0; i < nroots; i++) if (!empty_root(roots[i])) {
         fprintf(stderr, "io bench: scratch root not empty/accessible: %s\n", roots[i]); return 1;
@@ -197,6 +200,7 @@ int efs_bench_io_main(int argc, char **argv)
     phase = "worker preparation";
     for (int i = 0; i < qd; i++) {
         struct io_worker *a = &w[i];
+        phase = "worker preparation";
         a->reading = !strcmp(rw, "read"); a->hashing = hashing; a->sync_writes = sync_writes;
         a->size = size; a->window = window; a->pattern = (unsigned char)(i % 251 + 1);
         a->start = &gate;
@@ -207,8 +211,18 @@ int efs_bench_io_main(int argc, char **argv)
         if (alloc_rc) { saved_error = alloc_rc; goto done; }
         memset(a->buf, a->pattern, size);
         if (hashing) efs_hash(a->buf, size, a->sum);
-        if (a->reading) {
+        if (preallocate) {
+#ifdef __linux__
+            int prc = posix_fallocate(a->fd, 0, (off_t)size * window);
+#else
+            int prc = ENOTSUP;
+#endif
+            if (prc) { phase = "preallocation"; saved_error = prc; goto done; }
+        }
+        if (a->reading || preallocate) {
+            phase = "window population";
             for (uint32_t b = 0; b < window; b++) if (transfer(a->fd, a->buf, size, (off_t)b * size, 0)) { saved_error = errno; goto done; }
+            phase = "window flush";
             if (fdatasync(a->fd)) { saved_error = errno; goto done; }
         }
     }
@@ -245,7 +259,7 @@ int efs_bench_io_main(int argc, char **argv)
         if (a->ops > max_ops) max_ops = a->ops;
         if (a->error_no) fprintf(stderr, "io bench: worker=%d I/O failed: %s\n", i, strerror(a->error_no));
         if (a->max_ns > max_ns) max_ns = a->max_ns;
-        uint64_t resident = a->reading ? window : (a->ops < window ? a->ops : window);
+        uint64_t resident = a->reading || preallocate ? window : (a->ops < window ? a->ops : window);
         if (fdatasync(a->fd)) { errors++; fprintf(stderr, "io bench: worker=%d flush: %s\n", i, strerror(errno)); }
         for (uint64_t b = 0; b < resident; b++) {
             if (transfer(a->fd, a->buf, size, (off_t)b * size, 1)) { errors++; fprintf(stderr, "io bench: worker=%d verification read: %s\n", i, strerror(errno)); break; }
@@ -258,11 +272,12 @@ int efs_bench_io_main(int argc, char **argv)
     if (idle) fprintf(stderr, "io bench: %llu/%d workers completed no I/O before the deadline\n", (unsigned long long)idle, qd);
     printf("%s kind=io checksum=%s rw=%s paths=%d qd=%d io_bytes=%u window_per_slot=%u "
            "direct=%d sync=%d ops=%llu bytes=%llu wall_s=%.6f GiB_s=%.6f avg_us=%.3f max_us=%.3f "
-           "verified_blocks=%llu errors=%llu idle_workers=%llu min_worker_ops=%llu max_worker_ops=%llu latency=operation_cycle\n", errors ? "BENCH_FAIL" : "BENCH_OK", hashing ? "blake3" : "none", rw, nroots, qd, size, window,
+           "verified_blocks=%llu errors=%llu idle_workers=%llu min_worker_ops=%llu max_worker_ops=%llu latency=operation_cycle allocation=%s prepared_blocks=%llu\n", errors ? "BENCH_FAIL" : "BENCH_OK", hashing ? "blake3" : "none", rw, nroots, qd, size, window,
            direct, sync_writes, (unsigned long long)ops, (unsigned long long)(ops * size), wall,
            (double)ops * size / (1ull << 30) / wall, ops ? (double)ns / ops / 1000 : 0, (double)max_ns / 1000,
            (unsigned long long)verified, (unsigned long long)errors,
-           (unsigned long long)idle, (unsigned long long)min_ops, (unsigned long long)max_ops);
+           (unsigned long long)idle, (unsigned long long)min_ops, (unsigned long long)max_ops, preallocate ? "overwrite_preallocated" : !strcmp(rw,"read") ? "populated_read" : "allocating",
+           (unsigned long long)((preallocate || !strcmp(rw,"read")) ? (uint64_t)qd * window : 0));
     rc = errors ? 1 : 0;
     goto done;
 stop:
