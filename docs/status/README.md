@@ -13,13 +13,14 @@ sends you to — not the whole spec.
 ---
 ## 1. The task right now
 
-**Writer investigation (Oct 7).** Isolated engine phases and opt-in wait timing
-are implemented; inline multi-root placement and bounded overwrite hints are
-fixed. The 108-configuration, three-repeat comparison started on xorinox, but
-SSH/ping became unavailable at the last retrieved 135/432 checkpoint. Check the
-existing process/results before restarting measurements. Device/sync probes,
-final profile analysis and Linux gates remain. See the
-[resume checkpoint](../../results/measure/20261007-writer-investigation/SUMMARY.md).
+**Writer investigation (Oct 7), complete.** All 324 baseline repeats and 108
+isolated profiles passed. Inline multi-root placement is fixed. Buffered shard
+overwrites now preserve extents and enforce exact completed length: matched warm
+bounded writes improved about 4–8×, with lower p99. Direct I/O and durability
+barriers are unchanged. Linux unit/CLI/fault gates pass. Next performance work is
+fair writer admission; naive signal handoff was rejected for starvation. Live
+workload validation remains separate. See the
+[completed investigation](../../results/measure/20261007-writer-investigation/SUMMARY.md).
 
 
 **Benchmark review (Oct 7).** Cached KV segment lookup now uses validated record

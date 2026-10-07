@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 84605018795
+#
+# Overhead  Shared Object      Symbol                                     IPC   [IPC Coverage]
+# ........  .................  .........................................  ....................
+#
+    58.37%  efs-bench          [.] blake3_hash_many_avx512                -      -            
+    13.14%  [kernel.kallsyms]  [k] _copy_to_iter                          -      -            
+     1.11%  [kernel.kallsyms]  [k] __d_lookup_rcu                         -      -            
+     1.03%  [kernel.kallsyms]  [k] avc_lookup                             -      -            
+     0.95%  [kernel.kallsyms]  [k] selinux_inode_permission               -      -            
+     0.95%  [kernel.kallsyms]  [k] filemap_read                           -      -            
+     0.91%  [kernel.kallsyms]  [k] link_path_walk.part.0.constprop.0      -      -            
+     0.89%  [kernel.kallsyms]  [k] filemap_get_read_batch                 -      -            
+     0.80%  [kernel.kallsyms]  [k] __rcu_read_lock                        -      -            
+     0.77%  [kernel.kallsyms]  [k] step_into                              -      -            
+     0.65%  [kernel.kallsyms]  [k] copy_page_to_iter                      -      -            
+     0.61%  [kernel.kallsyms]  [k] inode_permission                       -      -            
+     0.54%  [xfs]              [k] xfs_file_read_iter                     -      -            
+     0.51%  [kernel.kallsyms]  [k] do_syscall_64                          -      -            
+     0.51%  [kernel.kallsyms]  [k] entry_SYSCALL_64                       -      -            
+     0.51%  [kernel.kallsyms]  [k] generic_permission                     -      -            
+     0.45%  [kernel.kallsyms]  [k] security_inode_permission              -      -            
+     0.39%  [kernel.kallsyms]  [k] arch_exit_to_user_mode_prepare.isra.0  -      -            
+     0.39%  efs-bench          [.] blake3_hash4_avx512                    -      -            
+     0.38%  [kernel.kallsyms]  [k] __inode_security_revalidate            -      -            
+     0.38%  [kernel.kallsyms]  [k] ima_match_policy                       -      -            
+     0.36%  [kernel.kallsyms]  [k] avc_has_perm_noaudit                   -      -            
+     0.33%  efs-bench          [.] server_read_fragment_with_sum          -      -            
+     0.33%  [xfs]              [k] xfs_file_buffered_read                 -      -            
+     0.33%  efs-bench          [.] blake3_compress_xof_avx512             -      -            
+     0.33%  efs-bench          [.] blake3_compress_subtree_wide           -      -            
+     0.32%  [kernel.kallsyms]  [k] do_open                                -      -            
+
+
+#
+# (Tip: See assembly instructions with percentage: perf annotate <symbol>)
+#

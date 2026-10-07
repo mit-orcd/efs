@@ -1,0 +1,74 @@
+[
+  {
+    "root": "/home/efs/additional-work-dir/bench",
+    "legacy": 1,
+    "repeat": 2,
+    "stdout": "COLD legacy=1 ops=1024 bytes=67108864 wall_s=0.004776 GiB_s=13.086624\n"
+  },
+  {
+    "root": "/data1/efs/bench",
+    "legacy": 1,
+    "repeat": 2,
+    "stdout": "COLD legacy=1 ops=1024 bytes=67108864 wall_s=0.003492 GiB_s=17.900600\n"
+  },
+  {
+    "root": "/home/efs/additional-work-dir/bench",
+    "legacy": 1,
+    "repeat": 1,
+    "stdout": "COLD legacy=1 ops=1024 bytes=67108864 wall_s=0.004129 GiB_s=15.137563\n"
+  },
+  {
+    "root": "/data1/efs/bench",
+    "legacy": 1,
+    "repeat": 1,
+    "stdout": "COLD legacy=1 ops=1024 bytes=67108864 wall_s=0.004367 GiB_s=14.312255\n"
+  },
+  {
+    "root": "/home/efs/additional-work-dir/bench",
+    "legacy": 0,
+    "repeat": 2,
+    "stdout": "COLD legacy=0 ops=1024 bytes=67108864 wall_s=0.004448 GiB_s=14.051063\n"
+  },
+  {
+    "root": "/home/efs/additional-work-dir/bench",
+    "legacy": 1,
+    "repeat": 0,
+    "stdout": "COLD legacy=1 ops=1024 bytes=67108864 wall_s=0.003464 GiB_s=18.044965\n"
+  },
+  {
+    "root": "/home/efs/additional-work-dir/bench",
+    "legacy": 0,
+    "repeat": 0,
+    "stdout": "COLD legacy=0 ops=1024 bytes=67108864 wall_s=0.003707 GiB_s=16.861564\n"
+  },
+  {
+    "root": "/data1/efs/bench",
+    "legacy": 0,
+    "repeat": 2,
+    "stdout": "COLD legacy=0 ops=1024 bytes=67108864 wall_s=0.004748 GiB_s=13.164785\n"
+  },
+  {
+    "root": "/data1/efs/bench",
+    "legacy": 0,
+    "repeat": 0,
+    "stdout": "COLD legacy=0 ops=1024 bytes=67108864 wall_s=0.004653 GiB_s=13.432212\n"
+  },
+  {
+    "root": "/home/efs/additional-work-dir/bench",
+    "legacy": 0,
+    "repeat": 1,
+    "stdout": "COLD legacy=0 ops=1024 bytes=67108864 wall_s=0.004900 GiB_s=12.755373\n"
+  },
+  {
+    "root": "/data1/efs/bench",
+    "legacy": 0,
+    "repeat": 1,
+    "stdout": "COLD legacy=0 ops=1024 bytes=67108864 wall_s=0.003292 GiB_s=18.983326\n"
+  },
+  {
+    "root": "/data1/efs/bench",
+    "legacy": 1,
+    "repeat": 0,
+    "stdout": "COLD legacy=1 ops=1024 bytes=67108864 wall_s=0.004371 GiB_s=14.297528\n"
+  }
+]

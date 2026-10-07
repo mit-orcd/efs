@@ -1,0 +1,62 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 107061112493
+#
+# Overhead  Shared Object         Symbol                                       IPC   [IPC Coverage]
+# ........  ....................  ...........................................  ....................
+#
+    40.27%  [kernel.kallsyms]     [k] copy_page_from_iter_atomic               -      -            
+     3.91%  [kernel.kallsyms]     [k] __d_lookup_rcu                           -      -            
+     2.40%  libc.so.6             [.] __memset_avx512_unaligned_erms           -      -            
+     2.33%  [kernel.kallsyms]     [k] __filemap_get_folio                      -      -            
+     1.96%  [kernel.kallsyms]     [k] selinux_inode_permission                 -      -            
+     1.87%  [kernel.kallsyms]     [k] filemap_get_entry                        -      -            
+     1.62%  [kernel.kallsyms]     [k] avc_has_perm_noaudit                     -      -            
+     1.37%  [kernel.kallsyms]     [k] iomap_iter                               -      -            
+     1.27%  [kernel.kallsyms]     [k] down_read                                -      -            
+     1.19%  [xfs]                 [k] xfs_inode_to_log_dinode                  -      -            
+     1.10%  [kernel.kallsyms]     [k] _raw_spin_lock                           -      -            
+     1.02%  [xfs]                 [k] xfs_break_layouts                        -      -            
+     0.99%  [kernel.kallsyms]     [k] filename_lookup                          -      -            
+     0.99%  [xfs]                 [k] xlog_cil_insert_items                    -      -            
+     0.90%  [kernel.kallsyms]     [k] generic_permission                       -      -            
+     0.88%  [kernel.kallsyms]     [k] link_path_walk.part.0.constprop.0        -      -            
+     0.73%  [kernel.kallsyms]     [k] step_into                                -      -            
+     0.62%  [kernel.kallsyms]     [k] iomap_write_iter                         -      -            
+     0.61%  [kernel.kallsyms]     [k] lockref_get_not_dead                     -      -            
+     0.59%  [kernel.kallsyms]     [k] syscall_exit_to_user_mode                -      -            
+     0.59%  [kernel.kallsyms]     [k] __rcu_read_lock                          -      -            
+     0.57%  [kernel.kallsyms]     [k] up_write                                 -      -            
+     0.57%  [kernel.kallsyms]     [k] do_dentry_open                           -      -            
+     0.52%  [kernel.kallsyms]     [k] __legitimize_mnt                         -      -            
+     0.51%  [kernel.kallsyms]     [k] mutex_lock                               -      -            
+     0.50%  [kernel.kallsyms]     [k] xas_load                                 -      -            
+     0.48%  [kernel.kallsyms]     [k] security_inode_permission                -      -            
+     0.48%  [xfs]                 [k] __xfs_trans_commit                       -      -            
+     0.47%  [xfs]                 [k] xlog_cil_alloc_shadow_bufs.isra.0        -      -            
+     0.47%  [kernel.kallsyms]     [k] vfs_write                                -      -            
+     0.43%  [kernel.kallsyms]     [k] inode_permission                         -      -            
+     0.43%  [kernel.kallsyms]     [k] inode_set_ctime_current                  -      -            
+     0.43%  [xfs]                 [k] xfs_buffered_write_iomap_begin           -      -            
+     0.43%  [kernel.kallsyms]     [k] ima_match_policy                         -      -            
+     0.41%  [kernel.kallsyms]     [k] entry_SYSCALL_64                         -      -            
+     0.38%  [kernel.kallsyms]     [k] iomap_write_end                          -      -            
+     0.38%  [xfs]                 [k] xfs_inode_item_format                    -      -            
+     0.38%  [xfs]                 [k] xfs_log_ticket_ungrant                   -      -            
+     0.37%  [kernel.kallsyms]     [k] kmem_cache_alloc_noprof                  -      -            
+     0.35%  [kernel.kallsyms]     [k] vfs_open                                 -      -            
+     0.34%  [xfs]                 [k] xfs_file_write_checks.constprop.0        -      -            
+     0.34%  efs-bench             [.] efs_iostats_add                          -      -            
+     0.34%  efs-bench             [.] server_write_fragment_with_sum           -      -            
+     0.33%  [xfs]                 [k] xfs_inode_item_precommit                 -      -            
+     0.33%  [kernel.kallsyms]     [k] folio_unlock                             -      -            
+     0.33%  efs-bench             [.] efs_ino_path_segments                    -      -            
+
+
+#
+# (Tip: List events using substring match: perf list <keyword>)
+#

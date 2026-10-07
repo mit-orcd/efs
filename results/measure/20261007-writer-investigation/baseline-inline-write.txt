@@ -1,0 +1,96 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles'
+# Event count (approx.): 24596780837
+#
+# Overhead  Shared Object      Symbol                                                IPC   [IPC Coverage]
+# ........  .................  ....................................................  ....................
+#
+     7.12%  [xfs]              [k] xfs_btree_get_leaf_keys                           -      -            
+     3.36%  [xfs]              [k] xfs_btree_lookup                                  -      -            
+     2.80%  [xfs]              [k] xfs_alloc_cur_check                               -      -            
+     2.60%  [kernel.kallsyms]  [k] _raw_spin_lock                                    -      -            
+     2.00%  [xfs]              [k] xfs_extent_busy_trim                              -      -            
+     1.99%  [xfs]              [k] xfs_defer_create_intents                          -      -            
+     1.75%  [kernel.kallsyms]  [k] copy_page_from_iter_atomic                        -      -            
+     1.74%  [xfs]              [k] xfs_buf_find_lock                                 -      -            
+     1.70%  [kernel.kallsyms]  [k] _raw_spin_lock_irqsave                            -      -            
+     1.68%  [xfs]              [k] xfs_rmapbt_diff_two_keys                          -      -            
+     1.53%  [xfs]              [k] xfs_cil_prepare_item                              -      -            
+     1.46%  [xfs]              [k] xfs_buf_read_map                                  -      -            
+     1.33%  [xfs]              [k] xfs_inode_item_precommit                          -      -            
+     1.33%  [xfs]              [k] xfs_buf_lookup.constprop.0                        -      -            
+     1.32%  [xfs]              [k] xfs_allocbt_init_key_from_rec                     -      -            
+     1.32%  [kernel.kallsyms]  [k] xas_start                                         -      -            
+     1.31%  [kernel.kallsyms]  [k] avc_lookup                                        -      -            
+     1.30%  [kernel.kallsyms]  [k] update_load_avg                                   -      -            
+     1.27%  [xfs]              [k] xfs_alloc_fix_freelist                            -      -            
+     1.24%  [kernel.kallsyms]  [k] kmem_cache_free                                   -      -            
+     1.23%  [kernel.kallsyms]  [k] __memcpy                                          -      -            
+     1.18%  [xfs]              [k] xfs_free_ag_extent                                -      -            
+     1.15%  [xfs]              [k] xfs_alloc_get_rec                                 -      -            
+     1.12%  [xfs]              [k] xfs_rmapbt_init_high_key_from_rec                 -      -            
+     1.12%  [kernel.kallsyms]  [k] __alloc_pages_noprof                              -      -            
+     1.06%  [kernel.kallsyms]  [k] crng_fast_key_erasure                             -      -            
+     1.04%  [xfs]              [k] xfs_dec_freecounter                               -      -            
+     1.02%  [xfs]              [k] xfs_rmapbt_key_diff                               -      -            
+     1.00%  [kernel.kallsyms]  [k] __lruvec_stat_mod_folio                           -      -            
+     0.99%  [kernel.kallsyms]  [k] kmem_cache_alloc_noprof                           -      -            
+     0.99%  [kernel.kallsyms]  [k] lockref_get_not_dead                              -      -            
+     0.98%  [xfs]              [k] xfs_ilock                                         -      -            
+     0.97%  [kernel.kallsyms]  [k] sched_balance_update_blocked_averages             -      -            
+     0.97%  [kernel.kallsyms]  [k] up_read                                           -      -            
+     0.97%  [xfs]              [k] __xfs_rmap_add                                    -      -            
+     0.96%  [xfs]              [k] xfs_defer_extent_free.constprop.0                 -      -            
+     0.93%  [kernel.kallsyms]  [k] list_sort                                         -      -            
+     0.92%  [kernel.kallsyms]  [k] iommu_v1_map_pages                                -      -            
+     0.92%  [xfs]              [k] xfs_iext_get_extent                               -      -            
+     0.91%  [kernel.kallsyms]  [k] xas_find                                          -      -            
+     0.91%  [kernel.kallsyms]  [k] up                                                -      -            
+     0.91%  [kernel.kallsyms]  [k] handle_edge_irq                                   -      -            
+     0.89%  [xfs]              [k] xfs_rui_init                                      -      -            
+     0.85%  [kernel.kallsyms]  [k] amd_pmu_v2_disable_all                            -      -            
+     0.84%  [kernel.kallsyms]  [k] __slab_free                                       -      -            
+     0.82%  [kernel.kallsyms]  [k] update_curr                                       -      -            
+     0.79%  [xfs]              [k] xfs_cntbt_key_diff                                -      -            
+     0.78%  [xfs]              [k] xfs_blockgc_set_iflag                             -      -            
+     0.76%  [xfs]              [k] xfs_rmap_update_create_intent                     -      -            
+     0.71%  [xfs]              [k] xfs_bmap_btalloc                                  -      -            
+     0.70%  [kernel.kallsyms]  [k] security_inode_permission                         -      -            
+     0.70%  [xfs]              [k] xfs_setattr_size                                  -      -            
+     0.69%  [xfs]              [k] xfs_buffered_write_iomap_begin                    -      -            
+     0.65%  [kernel.kallsyms]  [k] inode_maybe_inc_iversion                          -      -            
+     0.64%  [kernel.kallsyms]  [k] iommu_dma_map_sg                                  -      -            
+     0.63%  [kernel.kallsyms]  [k] blk_stat_add                                      -      -            
+     0.60%  [kernel.kallsyms]  [k] __update_load_avg_cfs_rq                          -      -            
+     0.60%  [xfs]              [k] xfs_trans_buf_set_type                            -      -            
+     0.59%  [xfs]              [k] xfs_trans_add_item                                -      -            
+     0.58%  [xfs]              [k] xfs_trans_read_buf_map                            -      -            
+     0.58%  [xfs]              [k] xfs_alloc_walk_iter                               -      -            
+     0.58%  [kernel.kallsyms]  [k] selinux_inode_permission                          -      -            
+     0.58%  [kernel.kallsyms]  [k] finish_task_switch.isra.0                         -      -            
+     0.58%  [kernel.kallsyms]  [k] __memset                                          -      -            
+     0.57%  [xfs]              [k] xfs_btree_insrec                                  -      -            
+     0.57%  [xfs]              [k] xfs_defer_save_resources                          -      -            
+     0.55%  [xfs]              [k] xfs_btree_lookup_get_block                        -      -            
+     0.51%  [xfs]              [k] xlog_cil_insert_items                             -      -            
+     0.46%  [xfs]              [k] xfs_inode_item_format                             -      -            
+     0.41%  [xfs]              [k] xfs_alloc_fixup_trees                             -      -            
+     0.38%  [xfs]              [k] xfs_trans_del_item                                -      -            
+     0.37%  [xfs]              [k] xlog_cil_commit                                   -      -            
+     0.37%  [kernel.kallsyms]  [k] down                                              -      -            
+     0.36%  [xfs]              [k] xfs_blockgc_clear_iflag                           -      -            
+     0.34%  [xfs]              [k] xfs_lookup_get_search_key                         -      -            
+     0.33%  [kernel.kallsyms]  [k] dequeue_entity                                    -      -            
+     0.33%  [kernel.kallsyms]  [k] step_into                                         -      -            
+     0.33%  [kernel.kallsyms]  [k] xas_load                                          -      -            
+     0.32%  [xfs]              [k] xfs_rmap_finish_one_cleanup                       -      -            
+     0.32%  [kernel.kallsyms]  [k] filemap_fdatawrite_wbc                            -      -            
+
+
+#
+# (Tip: Boolean options have negative forms, e.g.: perf report --no-children)
+#

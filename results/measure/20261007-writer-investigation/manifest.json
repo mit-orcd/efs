@@ -1,0 +1,2674 @@
+{
+  "binary_sha256": "fca3dfeda07fb6288414ddd82527bf3693c8d192e0ff07f33d08337ee88a667f",
+  "cases": [
+    {
+      "name": "data-buffered-w0-qd1-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd1-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd1-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd1-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd1-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd1-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd16-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd16-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd16-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd16-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd16-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd16-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd64-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd64-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd64-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd64-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd64-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w0-qd64-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd1-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd1-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd1-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd1-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd1-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd1-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd16-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd16-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd16-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd16-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd16-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd16-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd64-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd64-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd64-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd64-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd64-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-w2-qd64-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd1-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd1-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd1-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd1-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd1-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd1-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd16-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd16-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd16-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd16-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd16-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd16-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd64-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd64-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd64-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd64-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd64-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-buffered-wauto-qd64-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--no-direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd1-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd1-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd1-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd1-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd1-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd1-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd16-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd16-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd16-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd16-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd16-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd16-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd64-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd64-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd64-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd64-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd64-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd64-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "0",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd1-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd1-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd1-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd1-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd1-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd1-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd16-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd16-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd16-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd16-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd16-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd16-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd64-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd64-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd64-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd64-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd64-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-w2-qd64-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--writers",
+        "2",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd1-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd1-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd1-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd1-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd1-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd1-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "1",
+        "--window",
+        "1024",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd16-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd16-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd16-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd16-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd16-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd16-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "16",
+        "--window",
+        "64",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd64-write-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd64-write-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd64-write-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "write",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd64-read-root1",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root1",
+      "root_indices": [
+        0
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd64-read-root2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "root2",
+      "root_indices": [
+        1
+      ]
+    },
+    {
+      "name": "data-direct-wauto-qd64-read-roots2",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.5",
+        "--qd",
+        "64",
+        "--window",
+        "16",
+        "--rw",
+        "read",
+        "--direct-io",
+        "--full-paths",
+        "--writer-stats"
+      ],
+      "storage_label": "roots2",
+      "root_indices": [
+        0,
+        1
+      ]
+    }
+  ],
+  "time": 1.5,
+  "repeats": 3,
+  "seed": 3707,
+  "baseline_instrumentation": false,
+  "perf_instrumentation": true
+}

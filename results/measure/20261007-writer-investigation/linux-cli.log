@@ -1,0 +1,16 @@
+BENCH_OK kind=meta phase=kv-write ops=5 wall_s=0.033 ops_s=153.5 p50_us=5836 p99_us=9288 max_us=9288 MB_s=0.022 errors=0
+kv-compact: start l0=1 inputs=1 range=353 l0only=0
+kv-compact: end bytes=805 ms=23 l0=0 l1=1 rc=0
+BENCH_OK kind=meta phase=kv-flush-compact flush_s=0.023 compact_s=0.023 mt_bytes=0 l0_bytes=0 n_l0=0 n_l1=1 errors=0
+BENCH_OK kind=meta phase=kv-read ops=262281 wall_s=0.030 ops_s=8742673.5 p50_us=0 p99_us=1 max_us=19 MB_s=0.000 errors=0
+BENCH_OK kind=meta phase=raft-append-qd1 ops=6 wall_s=0.035 ops_s=170.5 p50_us=5789 p99_us=6505 max_us=6505 MB_s=0.042 errors=0
+BENCH_OK kind=meta phase=raft-append-batch32 batches=5 entries=160 wall_s=0.033 entries_s=4833.6 batch_p50_us=6647 batch_p99_us=6978 batch_max_us=6978 MB_s=1.180 errors=0
+BENCH_OK kind=meta phase=raft-reopen reopen_s=0.001 last_idx=166 entries=166 errors=0
+bench data paths=1..1 time_s=0.030 writers=2 direct_io=off frag_bytes=65536 selected_qd=2 window_per_slot=2 (0=append-only)
+BENCH_OK kind=data rw=write paths=1 qd=2 ops=4662 wall_s=0.030 ops_s=155246.8 p50_us=12 p99_us=18 max_us=658 GiB_s=9.476 errors=0 diskw_ops=4662 diskw_avg_us=7 idle_workers=0 max_start_us=34 writers=2
+BENCH_ROOT path=0 writes=4662
+ diskutil:
+BENCH_OK kind=data rw=read paths=1 qd=2 ops=4152 wall_s=0.030 ops_s=138208.7 p50_us=14 p99_us=34 max_us=75 GiB_s=8.436 errors=0 diskw_ops=0 diskw_avg_us=0 idle_workers=0 max_start_us=22 writers=2
+ diskutil:
+metadata durability fault: rejected PASS
+benchmark CLI: ownership, parsing and scratch protection PASS

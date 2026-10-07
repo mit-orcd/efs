@@ -1,0 +1,104 @@
+[
+  {
+    "name": "broadcast-buffered-qd64-w2-root1-r2",
+    "variant": "broadcast",
+    "repeat": 2,
+    "qd": 64,
+    "writers": "2",
+    "direct": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5665350090130232
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "64",
+        "ops": "23292",
+        "wall_s": "1.507",
+        "ops_s": "15452.6",
+        "p50_us": "2020",
+        "p99_us": "26935",
+        "max_us": "62011",
+        "GiB_s": "0.943",
+        "errors": "0",
+        "diskw_ops": "23292",
+        "diskw_avg_us": "104",
+        "idle_workers": "0",
+        "max_start_us": "102",
+        "writers": "2"
+      }
+    ]
+  },
+  {
+    "name": "signal-buffered-qd64-w2-root1-r1",
+    "variant": "signal",
+    "repeat": 1,
+    "qd": 64,
+    "writers": "2",
+    "direct": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5665462799952365
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "64",
+        "ops": "23675",
+        "wall_s": "1.505",
+        "ops_s": "15734.4",
+        "p50_us": "93",
+        "p99_us": "1063",
+        "max_us": "1502772",
+        "GiB_s": "0.960",
+        "errors": "0",
+        "diskw_ops": "23675",
+        "diskw_avg_us": "115",
+        "idle_workers": "0",
+        "max_start_us": "226",
+        "writers": "2"
+      }
+    ]
+  },
+  {
+    "name": "signal-buffered-qd64-w2-root1-r2",
+    "variant": "signal",
+    "repeat": 2,
+    "qd": 64,
+    "writers": "2",
+    "direct": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5662115490122233
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "64",
+        "ops": "28302",
+        "wall_s": "1.506",
+        "ops_s": "18792.2",
+        "p50_us": "89",
+        "p99_us": "507",
+        "max_us": "1504174",
+        "GiB_s": "1.147",
+        "errors": "0",
+        "diskw_ops": "28302",
+        "diskw_avg_us": "95",
+        "idle_workers": "0",
+        "max_start_us": "111",
+        "writers": "2"
+      }
+    ]
+  }
+]

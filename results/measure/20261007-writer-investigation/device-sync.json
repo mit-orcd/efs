@@ -1,0 +1,182 @@
+[
+  {
+    "root": 1,
+    "repeat": 1,
+    "shape": "create_rename_dirsync",
+    "ops": 256,
+    "mean_us": 920.9405078125,
+    "p50_us": 842.772,
+    "p99_us": 2238.802,
+    "max_us": 3295.513
+  },
+  {
+    "root": 1,
+    "repeat": 0,
+    "shape": "create_rename_dirsync",
+    "ops": 256,
+    "mean_us": 875.12059375,
+    "p50_us": 838.363,
+    "p99_us": 1425.787,
+    "max_us": 1611.131
+  },
+  {
+    "root": 1,
+    "repeat": 2,
+    "shape": "create_rename_dirsync",
+    "ops": 256,
+    "mean_us": 919.80474609375,
+    "p50_us": 871.817,
+    "p99_us": 1518.794,
+    "max_us": 1808.839
+  },
+  {
+    "root": 2,
+    "repeat": 1,
+    "shape": "overwrite_fdatasync",
+    "ops": 256,
+    "mean_us": 912.8057734375,
+    "p50_us": 901.865,
+    "p99_us": 1065.609,
+    "max_us": 1155.46
+  },
+  {
+    "root": 2,
+    "repeat": 0,
+    "shape": "append_fsync",
+    "ops": 256,
+    "mean_us": 5173.35926171875,
+    "p50_us": 5107.538,
+    "p99_us": 6992.884,
+    "max_us": 7232.652
+  },
+  {
+    "root": 2,
+    "repeat": 2,
+    "shape": "create_rename_dirsync",
+    "ops": 256,
+    "mean_us": 8739.37244140625,
+    "p50_us": 8727.832,
+    "p99_us": 10030.042,
+    "max_us": 10450.075
+  },
+  {
+    "root": 2,
+    "repeat": 1,
+    "shape": "create_rename_dirsync",
+    "ops": 256,
+    "mean_us": 8802.43843359375,
+    "p50_us": 8768.33,
+    "p99_us": 9392.783,
+    "max_us": 10338.171
+  },
+  {
+    "root": 2,
+    "repeat": 0,
+    "shape": "create_rename_dirsync",
+    "ops": 256,
+    "mean_us": 7201.582640625,
+    "p50_us": 8586.972,
+    "p99_us": 9384.728,
+    "max_us": 10387.195
+  },
+  {
+    "root": 2,
+    "repeat": 2,
+    "shape": "overwrite_fdatasync",
+    "ops": 256,
+    "mean_us": 706.27827734375,
+    "p50_us": 697.604,
+    "p99_us": 835.589,
+    "max_us": 935.96
+  },
+  {
+    "root": 1,
+    "repeat": 2,
+    "shape": "append_fsync",
+    "ops": 256,
+    "mean_us": 468.77823046875,
+    "p50_us": 429.281,
+    "p99_us": 720.989,
+    "max_us": 964.114
+  },
+  {
+    "root": 1,
+    "repeat": 2,
+    "shape": "overwrite_fdatasync",
+    "ops": 256,
+    "mean_us": 183.615921875,
+    "p50_us": 165.747,
+    "p99_us": 257.142,
+    "max_us": 287.109
+  },
+  {
+    "root": 2,
+    "repeat": 2,
+    "shape": "append_fsync",
+    "ops": 256,
+    "mean_us": 5725.1499609375,
+    "p50_us": 5755.629,
+    "p99_us": 7186.433,
+    "max_us": 8308.68
+  },
+  {
+    "root": 1,
+    "repeat": 1,
+    "shape": "overwrite_fdatasync",
+    "ops": 256,
+    "mean_us": 186.34623828125,
+    "p50_us": 169.033,
+    "p99_us": 269.526,
+    "max_us": 296.497
+  },
+  {
+    "root": 1,
+    "repeat": 0,
+    "shape": "overwrite_fdatasync",
+    "ops": 256,
+    "mean_us": 185.825765625,
+    "p50_us": 166.478,
+    "p99_us": 286.468,
+    "max_us": 362.093
+  },
+  {
+    "root": 1,
+    "repeat": 0,
+    "shape": "append_fsync",
+    "ops": 256,
+    "mean_us": 475.38029296875,
+    "p50_us": 439.22,
+    "p99_us": 651.746,
+    "max_us": 757.519
+  },
+  {
+    "root": 1,
+    "repeat": 1,
+    "shape": "append_fsync",
+    "ops": 256,
+    "mean_us": 502.2156015625,
+    "p50_us": 437.466,
+    "p99_us": 1105.624,
+    "max_us": 1130.141
+  },
+  {
+    "root": 2,
+    "repeat": 0,
+    "shape": "overwrite_fdatasync",
+    "ops": 256,
+    "mean_us": 905.682015625,
+    "p50_us": 902.897,
+    "p99_us": 955.517,
+    "max_us": 967.871
+  },
+  {
+    "root": 2,
+    "repeat": 1,
+    "shape": "append_fsync",
+    "ops": 256,
+    "mean_us": 5565.04528125,
+    "p50_us": 5745.528,
+    "p99_us": 6452.88,
+    "max_us": 6907.12
+  }
+]

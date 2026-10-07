@@ -442,3 +442,14 @@ Writer statistics are disabled by default in the daemon. The routing fix also
 initializes storage-root selection in inline mode, so new inline writes can use
 all configured roots; overwrites retain their existing root. No writer-count or
 sync/durability default changed.
+
+
+Completed xorinox measurements and acceptance are recorded in the
+[writer investigation](../../results/measure/20261007-writer-investigation/SUMMARY.md).
+Buffered shard overwrites preserve extents instead of truncating before writing;
+a successful write checks exact body/checksum length and truncates an old longer
+tail. Direct I/O and persistence barriers are unchanged. The matched warm bounded
+overwrite gain is about 4–8×; it is not physical-media or FUSE throughput.
+A single-waiter signal experiment caused starvation and was rejected. Fair
+admission needs reserved handoff and anti-bypass protection, including worst-wait
+and shutdown gates. Writer-count defaults remain unchanged.

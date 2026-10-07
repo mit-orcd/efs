@@ -1,98 +1,81 @@
-# Writer investigation — Oct 7 checkpoint
+# Writer investigation — completed Oct 7
 
-The complete comparison is not finished. SSH and ping to xorinox (10.0.0.72)
-stopped responding during the baseline batch, around 02:59 UTC. The last
-retrieved checkpoint was 135/432 measurements, all PASS. The remote process may
-still be running; check it before launching another batch. No cluster restart,
-production deployment, filesystem tuning or writer-count change was performed.
+The interrupted xorinox batch completed: 108 configurations, 324 randomized
+uninstrumented repeats and 108 separate DWARF profiles all passed. QD1/16/64,
+inline/two/automatic writers (12 automatic), buffered/direct reads and writes,
+and each storage root plus both were measured with 64 KiB fragments and a
+bounded 64 MiB window. Profiling excludes population, worker startup and cleanup.
+Source/binary provenance is in manifest.json; full source snapshot and reports
+remain under ignored logs/efs-writer-study-20261007 and remote /tmp study paths.
+No production deployment, cluster restart or filesystem tuning was performed.
 
-## Implemented and checked
+## Findings and production changes
 
-- Engine `--rw read|write|both`, with bounded read population outside timing and
-  acknowledged perf control around measured operations only.
-- `--full-paths` removes the prefix ladder for a combined-root comparison.
-- Private worker release gates, idle-worker checks, actual writer count, and
-  successful write counts per root.
-- Opt-in writer diagnostics: admission, accepted-slot wait, service, return-to-
-  caller delay, initial fallback mutex acquisition, blocking fallback count and
-  peak submissions in flight. Production defaults leave diagnostics disabled.
-- **Actual production fix:** inline writer mode previously returned before
-  initializing root-selection state. Its new writes could select root zero
-  even with multiple configured storage roots. Inline mode now initializes the
-  path count and lifecycle locks before returning. New writes spread across
-  roots; overwrites still reuse the existing root. The same source serves
-  `efsd` and `efs-bench`.
-- **Benchmark correctness fix:** bounded-window overwrites no longer claim a
-  new fragment. They probe the existing root, avoiding misleading duplicate
-  placement across roots.
+- **Fixed:** inline mode previously skipped root-selection initialization.
+  New inline writes now use all roots; overwrites retain their existing root.
+  This is shared production writer code, not just benchmark code.
+- **Fixed:** repeated buffered O_TRUNC overwrites discarded XFS extents and paid
+  allocation/btree costs. The actual shard writer now preserves buffered extents,
+  checks the completed length with fstat and truncates only a stale longer tail.
+  Failed length checks/truncation return IO. Shrink, grow, empty writes and checksum
+  lengths are tested. Direct I/O and existing durability barriers are unchanged.
+- **Worth fixing next:** two-writer admission contention. At QD64 it averaged
+  4.48 ms admission versus 113 µs service in one diagnostic. A separate gated
+  context-switch run recorded 59 switches/job versus 8 inline and 11 automatic.
+  Simply replacing broadcast with signal was rejected after 59/180 experiments:
+  maximum waits rose from ~62 ms to 1.5 seconds despite better median/p99.
+  Design fair FIFO admission with reserved handoff and anti-bypass protection;
+  validate worst waits, deadlines, shutdown and throughput before adoption.
+- **Operational follow-up:** root2 sync costs substantially more: append+fsync
+  averaged 5.49 ms versus 0.48 ms; create/rename/directory-fsync 8.25 versus 0.91 ms.
+  Root1 is HP FX900 Pro 4 TB XFS/noatime/logbsize256k; root2 is Kingston 1 TB
+  through rl-home XFS/relatime/logbsize32k. Hardware and filesystem differ;
+  these measurements cannot attribute the gap to one setting. Do not weaken sync.
+- **No rewrite justified:** cached reads spend ~52–58% of sampled CPU in existing
+  AVX512 BLAKE3 and ~13–18% in kernel copies. After the buffered fix, write CPU
+  shifts to copy_page_from_iter_atomic (~40%), rather than extent allocation.
 
-Linux builds of both binaries passed. The Linux routing/lifecycle test passed
-before its concurrency extension; the extended four-producer test passes
-locally, including inline/pool spread, overwrite identity, job counters,
-failed writes and failed pool startup. Profiler tests: 16 pass locally.
-Linux phase/diagnostic CLI checks and four real DWARF isolation-preflight cases
-passed. A short 30 ms full-QD smoke test exposed the new idle-worker gate;
-backend smoke now uses explicit QD2 and a bounded window. The Linux smoke then
-passed. Full Linux unit testing and the final expanded CLI test remain to run
-when access returns. Documentation checks pass.
+## Matched buffered overwrite acceptance
 
-## Preliminary observations — not final conclusions
+36 randomized three-second runs (three repeats each, 12 writers), all error-free.
+Means of throughput and per-run p99 below. These are warm bounded overwrite
+results, not physical-media bandwidth or FUSE/end-to-end throughput.
 
-The initial isolated two-writer/QD16/one-root buffered diagnostic recorded
-11,803 jobs: admission total 14,003,037 us (~1,186 us/job), accepted-slot delay
-82,011 us (~7 us/job), service 1,796,863 us (~152 us/job), and caller resume
-119,005 us (~10 us/job). This points primarily to waiting for writer capacity,
-not CPU hashing during reads. It does not by itself prove a scheduler defect
-or justify changing defaults. Root1 buffered QD64 partial uninstrumented samples
-showed ~0.99 GiB/s with two writers versus ~4.16 GiB/s with automatic writers;
-complete repeats and profiles are required before using this comparison.
+| Roots | QD | Before GiB/s | After GiB/s | Before p99 µs | After p99 µs |
+|---|---:|---:|---:|---:|---:|
+| root1 | 16 | 3.79 | 25.91 | 377 | 69 |
+| root1 | 64 | 4.10 | 16.31 | 9401 | 2407 |
+| root2 | 16 | 3.18 | 25.51 | 6305 | 69 |
+| root2 | 64 | 3.11 | 16.38 | 12957 | 2400 |
+| roots2 | 16 | 5.37 | 22.89 | 595 | 180 |
+| roots2 | 64 | 3.69 | 18.93 | 12957 | 4917 |
 
-Background QEMU guests were active. These are shared-host measurements, with
-load/device provenance captured, not a dedicated-host maximum-performance claim.
+Throughput improves about 4–8× and p99 improves across these configurations.
+Rare maximum-latency stalls remain: root2/QD16 mean max is 290 ms after versus
+260 ms before; one combined-root run reaches 641 ms. Background QEMU load was
+active and 26/108 original configurations had throughput CV above 15%.
+Do not claim every tail improves or a dedicated-host maximum.
 
-## Running matrix and remaining work
+A 12-run cold-create primitive control (16 callers, 1024 fresh files) completes
+in 3–5 ms in both variants; too short/noisy to establish a small effect. The
+fixture emulates legacy open flags and omits the new fstat; it is a control,
+not a literal old-binary end-to-end comparison. 42 raw device runs also pass.
 
-`study-run.py` uses 64 KiB fragments, a fixed 64 MiB bounded total window,
-QD1/16/64, inline/two/automatic writers, buffered/direct I/O, read/write
-separately, and root1/root2/both: 108 configurations. It runs three randomized
-uninstrumented baseline repeats per configuration, then 108 separate DWARF
-profiles with writer diagnostics. Profiles exclude read population, worker
-creation, cleanup and post-round latency sorting. The profiles have not yet
-been retrieved; no final throughput/tail-latency finding is claimed.
+Separate stats-on/off runs show about 5–7% overhead in stable two-writer cases;
+other comparisons are inconclusive under background stalls. Statistics remain
+disabled by default. perf sched was unavailable because tracefs is restricted;
+software context-switch counters and short strace were used without changing
+permissions. Traced/instrumented rates are not acceptance baselines.
 
-After that batch, `device-check.py` is **prepared but not executed**. It measures
-three randomized repeats of append+fsync, overwrite+fdatasync, and
-create+rename+directory-fsync on each device; then direct raw 64 KiB reads and
-preallocated writes at QD1/16/64, plus QD1 write+fdatasync. It also captures XFS
-geometry/device models and short optional strace and scheduler diagnostics.
-Those traced rates are not baseline performance measurements.
+## Validation and next help
 
-Still required: retrieve and assess all repeats/profiles; run the device and
-wait diagnostics; assess variance and instrumented overhead; identify any
-reproducible further bottleneck; validate any resulting change against both
-throughput and tail latency, retaining durability. The two-writer capacity
-limit alone is not grounds to rewrite the writer pool or change defaults.
+Final Linux full unit suite, actual-store overwrite/error/EINTR tests, CLI smoke
+and fault cases pass. Four final isolated buffered/direct write/read profiles
+and report generation pass. Sustained 32-producer routing tests pass on Linux
+and locally with ASan/UBSan. Existing profiler tests pass (16). Their fault-injection fixtures intentionally
+print report FAIL; the suite exits successfully and real profiles all pass.
 
-## Resume locations
-
-- Private source/build: `/tmp/efs-writer-study-20261007` on `xorinox_efs`.
-- Running batch: `/tmp/efs-writer-study-results-final-20261007`.
-- Progress log: `/tmp/efs-writer-study-run-final.log`.
-- Driver: `/tmp/efs-writer-study-run.py`; launch was foreground over SSH with
-  output redirected to the progress log. Check whether that process still lives.
-- Rejected earlier batch (before placement fixes):
-  `/tmp/efs-writer-study-results-20261007`; deliberately interrupted, never use
-  it as matched evidence for the corrected multi-root workload.
-- Device driver: `/tmp/efs-writer-device-check.py`; intended new output
-  `/tmp/efs-writer-study-device-20261007`.
-- Summary driver: `/tmp/efs-writer-study-summarize.py`; reads only the final batch.
-- Remote smoke/profile/routing logs: `/tmp/efs-writer-study-smoke-final.log`,
-  `/tmp/efs-writer-study-profile-tests.log`, `/tmp/efs-writer-routing-test.log`.
-
-The scripts in this checkpoint record exact private paths for reproducibility;
-they refuse existing output directories. If the old process exited, rerun only
-missing stages using its saved manifest/results, or use a fresh output directory
-and retain the interrupted results separately. Do not delete another process's
-scratch directory or overwrite its recordings. Preserve the copied matching
-binary with each perf dataset. The original local benchmark log was not modified
-by this investigation.
+Next useful user validation: deploy normally, run a real append/overwrite/read
+workload plus the POSIX suite on a quiet cluster, retaining RSS, throughput and
+latency logs. The present gain is specific to buffered overwrites; do not infer
+a direct-I/O or first-write gain. Fair writer admission remains separate work.
