@@ -24,6 +24,11 @@ def clients(proc=Path('/proc')):
             if len(args) > 1 and args[1] in (b'--stop', b'--resume', b'--version', b'--help'):
                 continue
             if len(args) < 4 or args[1].startswith(b'--'):
+                # Exit can clear cmdline after the first stat read. Confirm
+                # death or PID reuse before treating this as a live ambiguity.
+                current = (entry/'stat').read_text().rsplit(')', 1)[1].split()
+                if current[0] in ('Z', 'X') or current[19] != fields[19]:
+                    continue
                 raise RuntimeError(f'cannot identify mount for efs-fuse PID {entry.name}')
             mount = os.fsdecode(args[3])
             if not mount.startswith('/'):

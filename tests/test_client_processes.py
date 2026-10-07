@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from unittest.mock import patch
 root=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('clients',root/'scripts/client_processes.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
@@ -22,6 +23,15 @@ with tempfile.TemporaryDirectory(prefix='efs-processes-') as directory:
     try: m.clients(proc)
     except RuntimeError: pass
     else: raise AssertionError('ambiguous client must not be silently skipped')
+    # Deterministic exit between the first stat and cmdline reads.
+    original_read = Path.read_bytes
+    def exiting_cmdline(path):
+        if path == p/'cmdline':
+            (p/'stat').write_text('123 (efs-fuse) '+' '.join(['Z']+['0']*18+['99']))
+            return b''
+        return original_read(path)
+    with patch.object(Path, 'read_bytes', exiting_cmdline):
+        assert not m.clients(proc)
     (p/'comm').unlink();assert not m.clients(proc)
 if sys.platform.startswith('linux'):
     # Isolated synthetic daemon; never touch an actual cluster/client mount.
