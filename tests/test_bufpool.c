@@ -313,6 +313,17 @@ int main(void)
     writer_state_lifetime();
     writer_admission_copy();
     writer_body_snapshot();
+#if EFS_FAULTS
+    char fault_path[]="/tmp/efs-drain-budget-XXXXXX";
+    int fault_fd=mkstemp(fault_path);assert(fault_fd>=0);close(fault_fd);
+    assert(!setenv("EFS_FAULT_DRAIN_FILE",fault_path,1));
+    efs_buf_drain_enter();assert(!efs_buf_alloc(1));efs_buf_drain_leave();
+    assert(fault_drain_count==512 && g_live==(64ull<<20));
+    assert(!unlink(fault_path));
+    assert(!efs_buf_reserve(EFS_CHUNK_SIZE));
+    assert(!fault_drain_count && !g_live);efs_buf_unreserve();
+    unsetenv("EFS_FAULT_DRAIN_FILE");
+#endif
     puts("test_bufpool: OK (hard bound, reserve, failures, concurrency, metadata)");
     return 0;
 }

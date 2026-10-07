@@ -32,6 +32,9 @@ p.add_argument('--namespace-cycles',action='store_true',help='race opposite dire
 p.add_argument('--mount-label', default='default')
 p.add_argument('--workers', action='store_true')
 p.add_argument('--pressure', action='store_true')
+p.add_argument('--production-budgets',action='store_true',help='exercise default 256 MiB body and 64 MiB drain budgets')
+p.add_argument('--drain-pressure',action='store_true',help='physically exhaust recovery scratch while publication is withheld')
+p.add_argument('--memory-limit-bytes',type=int,help='require an inherited cgroup memory ceiling and verify no OOM events')
 p.add_argument('--publication-pressure',action='store_true',help='retain failed REPORT bodies until bounded admission refuses, then recover')
 p.add_argument('--namespace-max',action='store_true',help='exact ancestry limit, over-limit refusal and restart recovery')
 p.add_argument('--opid', action='store_true')
@@ -59,6 +62,15 @@ a = p.parse_args()
 if a.server_binary:a.server_binary=a.server_binary.resolve()
 if a.client_binary:a.client_binary=a.client_binary.resolve()
 source = Path(__file__).resolve().parents[2]
+if a.drain_pressure:assert a.publication_pressure and a.client_binary
+memory_group=None;memory_before=None
+if a.memory_limit_bytes:
+    relative=Path('/proc/self/cgroup').read_text().strip().split('0::',1)[1]
+    memory_group=Path('/sys/fs/cgroup')/relative.lstrip('/')
+    ceiling=(memory_group/'memory.max').read_text().strip()
+    assert ceiling!='max' and int(ceiling)==a.memory_limit_bytes,(memory_group,ceiling)
+    assert (memory_group/'memory.swap.max').read_text().strip()=='0'
+    memory_before=dict(line.split() for line in (memory_group/'memory.events').read_text().splitlines())
 parents = a.root or ['/data1/efs', '/data2/efs']
 assert len(parents) == 2
 for port in range(a.port, a.port+4):
@@ -88,10 +100,13 @@ if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
 if a.worker_fault:
     assert a.workers and a.client_binary,'worker faults require explicit fault client and --workers'
     env['EFS_FAULT_REPLY_BUFFER']=a.worker_fault
-if a.pressure or a.mixed_reads or a.publication_pressure:env.update(EFS_DCACHE_BYTES=str(16<<20),EFS_DCACHE_HARD_BYTES=str(32<<20),EFS_DCACHE_DRAIN_BYTES=str(32<<20),EFS_BUF_BUDGET_TRACE='1')
+hard_budget=(256 if a.production_budgets else 32)<<20
+drain_budget=(64 if a.production_budgets else 32)<<20
+if a.pressure or a.mixed_reads or a.publication_pressure:env.update(EFS_DCACHE_BYTES=str((128 if a.production_budgets else 16)<<20),EFS_DCACHE_HARD_BYTES=str(hard_budget),EFS_DCACHE_DRAIN_BYTES=str(drain_budget),EFS_BUF_BUDGET_TRACE='1')
 if a.publication_pressure:
     assert a.client_binary,'publication pressure requires explicit fault client'
     env['EFS_FAULT_REPORT_FILE']=str(work/'report-fault')
+    if a.drain_pressure:env['EFS_FAULT_DRAIN_FILE']=str(work/'drain-fault')
 if a.lookup_barrier:
     assert a.client_binary,'LOOKUP barrier requires fault client'
     env['EFS_FAULT_LOOKUP_BARRIER']=str(work)
@@ -469,7 +484,7 @@ try:
         (mount/'mixed-read-gate').rmdir()
         wait(drained,'bulk mixed-read deletions drained before fault fixture',600)
         budgets=re.findall(r'buf-budget hard=(\d+) drain=(\d+) slab=(\d+)',(work/'fuse.log').read_text())
-        assert budgets and all(tuple(map(int,b))==(32<<20,32<<20,32<<20) for b in budgets),budgets
+        assert budgets and all(tuple(map(int,b))==(hard_budget,drain_budget,32<<20) for b in budgets),budgets
     if a.allocation:
         models=[]
         for name,offset,size in (('dense',0,1<<20),('sparse',1<<30,4096),('empty',0,0)):
@@ -783,15 +798,19 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         fault=work/'report-fault';fault.write_text('WITHHOLD ALL\n')
         model=[];errors=[];samples=[];started=time.monotonic()
         try:
-            for slot in range(512):
+            for slot in range(4096 if a.production_budgets else 512):
                 data=bytes([slot%251+1])*4096
                 offset=slot*(1<<20)
                 try:
                     assert os.pwrite(fd,data,offset)==len(data)
                     model.append((offset,data))
+                    if a.drain_pressure and len(model)==32:(work/'drain-fault').touch()
                 except OSError as error:
                     assert error.errno in (5,11,12,16),error
-                    errors.append(error.errno);break
+                    errors.append(error.errno)
+                    text=Path(f'/proc/{client.pid}/status').read_text()
+                    samples.append(int(re.search(r'VmRSS:\s+(\d+)',text).group(1)))
+                    break
                 text=Path(f'/proc/{client.pid}/status').read_text()
                 samples.append(int(re.search(r'VmRSS:\s+(\d+)',text).group(1)))
             assert model and errors,'failed publication did not cause finite admission refusal'
@@ -805,17 +824,26 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
             assert charges,'bounded admission was not observed'
             assert all(int(live)+int(reserved)<=int(limit) and int(backing)<=int(limit) for live,reserved,backing,limit in charges),charges
             assert max(samples)<512*1024,samples
-        finally:fault.write_text('OFF\n')
+            if a.drain_pressure:
+                held=re.findall(r'buf-fault drain held=(\d+) live=(\d+) reserved=(\d+) backing=(\d+) limit=(\d+)',log)
+                assert held,'no real recovery scratch exhaustion observed'
+                assert any(int(live)+int(reserved)==int(limit) for count,live,reserved,backing,limit in held),held
+                assert all(int(count)>0 and int(backing)<=int(limit) for count,live,reserved,backing,limit in held),held
+        finally:
+            (work/'drain-fault').unlink(missing_ok=True)
+            fault.write_text('OFF\n')
         os.fsync(fd)
         assert os.fstat(fd).st_size==model[-1][0]+len(model[-1][1]),'refused write extended the file'
         os.close(fd)
+        # Admission must recover on this SAME mount, before cold remount.
+        recovered=mount/'publication-recovered';recovered.write_bytes(b'recovered')
+        with recovered.open('rb') as inp:os.fsync(inp.fileno())
         # New admission and a cold read must succeed after the failure releases.
         unmount();mount_client()
         with path.open('rb',buffering=0) as inp:
             for offset,data in model:inp.seek(offset);assert inp.read(len(data))==data
-        recovered=mount/'publication-recovered';recovered.write_bytes(b'recovered')
-        with recovered.open('rb') as inp:os.fsync(inp.fileno())
-        record={'accepted_writes':len(model),'errors':errors,'peak_rss_kib':max(samples),'pressure_charges':charges,'cold_bytes_verified':True}
+        assert recovered.read_bytes()==b'recovered'
+        record={'accepted_writes':len(model),'errors':errors,'peak_rss_kib':max(samples),'pressure_charges':charges,'cold_bytes_verified':True,'same_mount_admission_recovered':True,'drain_exhaustion':held if a.drain_pressure else None}
         (work/'publication-pressure.json').write_text(json.dumps(record,indent=2))
         path.unlink();recovered.unlink()
         wait(lambda:not files(ino_value),'failed-publication owned bodies cold verified and reclaimed',180)
@@ -867,8 +895,8 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         assert after_delete['removed_fragments']>before_delete['removed_fragments']
         assert after_delete['reclaimed_payload_bytes']>before_delete['reclaimed_payload_bytes']
         budgets=re.findall(r'buf-budget hard=(\d+) drain=(\d+) slab=(\d+)',(work/'fuse.log').read_text())
-        assert budgets and all(tuple(map(int,b))==(32<<20,32<<20,32<<20) for b in budgets),budgets
-        record={'hard_body_bytes':32<<20,'drain_bytes':32<<20,'effective_budget_trace':budgets,'files':8,'writes':256,'retry_count':sum(item[3] for item in pressure),'peak_rss_kib':max(samples),'before_delete':before_delete,'after_delete':after_delete}
+        assert budgets and all(tuple(map(int,b))==(hard_budget,drain_budget,32<<20) for b in budgets),budgets
+        record={'hard_body_bytes':hard_budget,'drain_bytes':drain_budget,'effective_budget_trace':budgets,'files':8,'writes':256,'retry_count':sum(item[3] for item in pressure),'peak_rss_kib':max(samples),'before_delete':before_delete,'after_delete':after_delete}
         (work/'sparse-pressure.json').write_text(json.dumps(record,indent=2))
         print(f'sparse concurrent admission, cold bytes/holes and physical reclaim: peak_RSS_kib={max(samples)} retries={record["retry_count"]} PASS',flush=True)
     if a.opid:
@@ -1131,6 +1159,13 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     print('restart quota zero and late PUT fenced on every member PASS',flush=True)
     (work/'final-status.json').write_text(json.dumps(final,indent=2))
     print('physical fragment inventory empty after restart PASS',flush=True)
+    if memory_group:
+        events=dict(line.split() for line in (memory_group/'memory.events').read_text().splitlines())
+        assert all(int(events[key])==int(memory_before[key]) for key in ('oom','oom_kill')),events
+        record={'limit_bytes':a.memory_limit_bytes,'peak_bytes':int((memory_group/'memory.peak').read_text()),'events_before':memory_before,'events_after':events,'scope':str(memory_group)}
+        assert record['peak_bytes']<=a.memory_limit_bytes,record
+        (work/'memory-envelope.json').write_text(json.dumps(record,indent=2))
+        print('small-memory whole-fixture envelope '+json.dumps(record)+' PASS',flush=True)
     print('GC reclamation '+a.mode+' PASS',flush=True)
 finally:
     if blocked and blocked.exists():

@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <errno.h>
+#include <unistd.h>
 #include "client_internal.h"
 
 #define BUF_SLAB_N 256
@@ -75,12 +76,19 @@ static int buf_in_slab(const void *p)
     return 0;
 }
 
+#if EFS_FAULTS
+static void fault_drain_update(void);
+#endif
+
 /* Request credit is reserved before append locking/server range reservation.
  * The caller must release it on every return. No waiting under cache locks. */
 int efs_buf_reserve_request(uint64_t bytes, uint64_t metadata)
 {
     int ok;
     pthread_once(&g_bp_once, buf_init);
+#if EFS_FAULTS
+    fault_drain_update();
+#endif
     if (g_credit_key_error)
         return EFS_ERR_NOMEM;
     if (!t_credit_owner) {
@@ -136,11 +144,54 @@ void efs_buf_budget_stats(uint64_t *live, uint64_t *reserved,
     pthread_mutex_unlock(&g_bp_mu);
 }
 
+#if EFS_FAULTS
+/* An owned recovery worker retains REAL charged scratch, rather than faking
+ * malloc failure. Only fault builds and an explicit owned file enable it. */
+static void *buf_alloc(uint32_t len, int speculative);
+static pthread_mutex_t fault_drain_mu = PTHREAD_MUTEX_INITIALIZER;
+static void *fault_drain_bodies[(5ull << 30) / EFS_CHUNK_SIZE];
+static unsigned fault_drain_count;
+static __thread int fault_drain_reentrant;
+static void fault_drain_update(void)
+{
+    const char *path = getenv("EFS_FAULT_DRAIN_FILE");
+    if (!path || !*path || fault_drain_reentrant) return;
+    pthread_mutex_lock(&fault_drain_mu);
+    fault_drain_reentrant = 1;
+    if (access(path, F_OK) != 0) {
+        if (fault_drain_count) {
+            unsigned released = fault_drain_count;
+            while (fault_drain_count)
+                efs_buf_free(fault_drain_bodies[--fault_drain_count], EFS_CHUNK_SIZE);
+            fprintf(stderr,"buf-fault drain released=%u\n",released);
+        }
+    } else if (t_drain && !fault_drain_count &&
+               g_hard + g_drain <= sizeof(fault_drain_bodies)/sizeof(void *) * EFS_CHUNK_SIZE) {
+        while (fault_drain_count < sizeof(fault_drain_bodies)/sizeof(void *)) {
+            void *body = buf_alloc(EFS_CHUNK_SIZE, 0);
+            if (!body) break;
+            memset(body,0xa5,EFS_CHUNK_SIZE); /* resident, not merely virtual */
+            fault_drain_bodies[fault_drain_count++] = body;
+        }
+        uint64_t live,reserved,backing,limit;
+        efs_buf_budget_stats(&live,&reserved,&backing,&limit);
+        fprintf(stderr,"buf-fault drain held=%u live=%llu reserved=%llu backing=%llu limit=%llu\n",
+                fault_drain_count,(unsigned long long)live,(unsigned long long)reserved,
+                (unsigned long long)backing,(unsigned long long)limit);
+    }
+    fault_drain_reentrant = 0;
+    pthread_mutex_unlock(&fault_drain_mu);
+}
+#endif
+
 static void *buf_alloc(uint32_t len, int speculative)
 {
     void *p = NULL;
     uint64_t charge = buf_charge(len), credit;
     pthread_once(&g_bp_once, buf_init);
+#if EFS_FAULTS
+    fault_drain_update();
+#endif
     pthread_mutex_lock(&g_bp_mu);
     credit = speculative || t_drain || !t_credit_owner ? 0 :
              (t_credit_owner->body < charge ? t_credit_owner->body : charge);
