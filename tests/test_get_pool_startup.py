@@ -24,7 +24,7 @@ static int mock_cd(pthread_cond_t*c){cd++;return pthread_cond_destroy(c);}
 static int mock_join(pthread_t t,void**p){joined++;return pthread_join(t,p);}
 static uint32_t data_chunk_size(void){return 131072;}
 void efs_buf_free(void*p,uint32_t n){(void)n;free(p);}
-static void *chunk_get_worker(void*p){(void)p;assert(0);return NULL;}
+static void *get_job_run(void*p){(void)p;assert(0);return NULL;}
 #define pthread_mutex_init mock_mi
 #define pthread_cond_init mock_ci
 #define pthread_create mock_create

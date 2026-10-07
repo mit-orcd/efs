@@ -14,11 +14,22 @@
 #include <pthread.h>
 #include <time.h>
 #include <poll.h>
+#include <errno.h>
 
 static uint32_t data_chunk_size(void)
 {
     uint32_t cs = g_client.export.chunk_size;
     return efs_chunk_size_valid(cs) ? cs : EFS_DEFAULT_CHUNK_SIZE;
+}
+
+static int read_retry_pause(unsigned delay_us)
+{
+    int delay_ms = (int)((delay_us + 999u) / 1000u);
+    int remaining = efs_net_remaining_ms(delay_ms);
+    if (!remaining)
+        return EFS_ERR_BUSY;
+    usleep((unsigned)remaining * 1000u);
+    return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
 }
 
 static uint32_t data_frag_size(void)
@@ -137,6 +148,9 @@ static void get_two_parallel(struct frag_get_job *jobs)
         clock_gettime(CLOCK_MONOTONIC, &ts);
         deadline = (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000 +
                    5000;
+        uint64_t parent = efs_client_rpc_deadline_ms();
+        if (parent && parent < (uint64_t)deadline)
+            deadline = (int64_t)parent;
         while (pending[0] || pending[1]) {
             struct pollfd pfds[2];
             int map[2];
@@ -297,6 +311,8 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
 
     int rc = EFS_ERR_DECODE;
     for (int attempt = 0; attempt < max_attempts; attempt++) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
         int have[EFS_NUM_FRAGMENTS] = {0, 0, 0};
         int good = 0;
 
@@ -373,8 +389,9 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
         }
         if (a < 0 || b < 0 || missing < 0) {
             /* Fewer than 2 good fragments — brief backoff before refetch. */
-            if (attempt + 1 < max_attempts)
-                usleep(100000u * (unsigned)(attempt + 1));
+            if (attempt + 1 < max_attempts &&
+                read_retry_pause(100000u * (unsigned)(attempt + 1)) != EFS_OK)
+                return EFS_ERR_BUSY;
             continue;
         }
         if (efs_decode_chunk(frags, chunk_size, a, b, missing, chunk_out,
@@ -558,13 +575,16 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
         return EFS_ERR_NET;
 
     for (int attempt = 1; attempt <= 3; attempt++) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
         struct efs_conn *conn = efs_client_conn_get(node_id);
         if (!conn) {
             /* Not a node failure: conn_get counts connect failures
              * itself, and a pool checkout timeout is load, not death
              * (see put_fragments). */
             if (attempt < 3) {
-                usleep(50000u * (unsigned)attempt);
+                if (read_retry_pause(50000u * (unsigned)attempt) != EFS_OK)
+                    return EFS_ERR_BUSY;
                 continue;
             }
             return EFS_ERR_NET;
@@ -600,7 +620,8 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
             efs_client_conn_drop(node_id, conn);
             efs_client_node_note_fail(node_id);
             if (attempt < 3) {
-                usleep(50000u * (unsigned)attempt);
+                if (read_retry_pause(50000u * (unsigned)attempt) != EFS_OK)
+                    return EFS_ERR_BUSY;
                 continue;
             }
             return EFS_ERR_NET;
@@ -1106,7 +1127,37 @@ struct chunk_get_job {
     int rc;
     uint8_t *chunk; /* data_chunk_size() bytes, owned by caller unless owned */
     struct get_batch *bp;
+    uint64_t deadline;
 };
+
+/* A pool batch owns its jobs until every accepted worker completes. Only
+ * queue admission is cancellable; never return while stack jobs are live. */
+static uint64_t get_budget_deadline(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t limit = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000 + 30000;
+    uint64_t parent = efs_client_rpc_deadline_ms();
+    return parent && parent < limit ? parent : limit;
+}
+
+static int get_wait_budget(pthread_cond_t *cv, pthread_mutex_t *mu)
+{
+    if (!efs_client_rpc_deadline_ms())
+        return pthread_cond_wait(cv, mu) == 0 ? EFS_OK : EFS_ERR_IO;
+    int remaining = efs_net_remaining_ms(50);
+    if (!remaining)
+        return EFS_ERR_BUSY;
+    struct timespec until;
+    clock_gettime(CLOCK_REALTIME, &until);
+    until.tv_nsec += (long)remaining * 1000000;
+    until.tv_sec += until.tv_nsec / 1000000000;
+    until.tv_nsec %= 1000000000;
+    int rc = pthread_cond_timedwait(cv, mu, &until);
+    if (rc && rc != ETIMEDOUT)
+        return EFS_ERR_IO;
+    return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
+}
 
 static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,
                            uint32_t len);
@@ -1130,6 +1181,10 @@ static void *chunk_get_worker(void *arg)
     pthread_mutex_unlock(&g_client.idx_mu);
     uint64_t cached_key = have_cached_view ? efs_chunk_read_key(&cached_view) : 0;
     acq = rdcache_acquire(job->ino, job->ci, job->chunk, chunk_size);
+    if (acq < 0) {
+        job->rc = acq;
+        return NULL;
+    }
     if (acq == 0) {
         efs_dcache_overlay(job->ino, job->ci, job->chunk, chunk_size);
         /* The cached image is the base. Spans published after it was
@@ -1213,6 +1268,22 @@ static void *chunk_get_worker(void *arg)
     return NULL;
 }
 
+static void *get_job_run(void *arg)
+{
+    struct chunk_get_job *job = arg;
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = job->deadline ? job->deadline : get_budget_deadline();
+    if (previous && previous < deadline)
+        deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    if (efs_client_rpc_past_deadline())
+        job->rc = EFS_ERR_BUSY;
+    else
+        chunk_get_worker(job);
+    efs_client_rpc_set_deadline_ms(previous);
+    return NULL;
+}
+
 #define GET_POOL_QDEPTH 32
 /* One synchronous chunk fetch per worker, so this is the client's
  * in-flight read cap: 32 × 128 KiB at ~0.9 ms per chunk was the 4.6 GB/s
@@ -1255,7 +1326,7 @@ static void *get_pool_thread(void *arg)
             pthread_cond_signal(&g_get_sh[si].cv);
         pthread_mutex_unlock(&g_get_sh[si].mu);
 
-        chunk_get_worker(job);
+        get_job_run(job);
 
         if (job->owned) {
             uint32_t cs = data_chunk_size();
@@ -1266,6 +1337,7 @@ static void *get_pool_thread(void *arg)
         }
 
         struct get_batch *bp = job->bp;
+        job->bp = NULL;
         if (bp) {
             pthread_mutex_lock(&bp->mu);
             if (--bp->remaining == 0)
@@ -1354,43 +1426,53 @@ void efs_client_read_pools_stop(void)
     pthread_mutex_unlock(&g_get_init);
 }
 
-static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
+static int get_pool_run_budgeted(struct chunk_get_job *jobs, uint32_t batch)
 {
     struct get_batch bp;
-    uint8_t used[GET_POOL_N];
-    uint32_t i;
-    int base;
-
-    if (batch == 0)
-        return 0;
     if (batch == 1 || get_pool_ensure() != 0) {
-        for (i = 0; i < batch; i++)
-            chunk_get_worker(&jobs[i]);
+        for (uint32_t i = 0; i < batch; i++)
+            get_job_run(&jobs[i]);
         return 0;
     }
-    pthread_mutex_init(&bp.mu, NULL);
-    pthread_cond_init(&bp.cv, NULL);
+    if (pthread_mutex_init(&bp.mu, NULL) != 0) {
+        for (uint32_t i = 0; i < batch; i++) jobs[i].rc = EFS_ERR_IO;
+        return 0;
+    }
+    if (pthread_cond_init(&bp.cv, NULL) != 0) {
+        pthread_mutex_destroy(&bp.mu);
+        for (uint32_t i = 0; i < batch; i++) jobs[i].rc = EFS_ERR_IO;
+        return 0;
+    }
     bp.remaining = (int)batch;
-    memset(used, 0, sizeof(used));
-    base = (int)__sync_fetch_and_add(&g_get_pool.rr, 1);
-    for (i = 0; i < batch; i++) {
-        int si = (int)(((unsigned)base + i) % (unsigned)g_get_pool.nworkers);
-        jobs[i].bp = &bp;
+    unsigned base = (unsigned)__sync_fetch_and_add(&g_get_pool.rr, 1);
+    for (uint32_t i = 0; i < batch; i++) {
+        unsigned si = (base + i) % (unsigned)g_get_pool.nworkers;
+        int rc = EFS_OK;
         pthread_mutex_lock(&g_get_sh[si].mu);
-        while (g_get_sh[si].count == GET_POOL_QDEPTH && !__atomic_load_n(&g_get_pool.shutdown, __ATOMIC_ACQUIRE))
-            pthread_cond_wait(&g_get_sh[si].cv, &g_get_sh[si].mu);
+        while (g_get_sh[si].count == GET_POOL_QDEPTH &&
+               !__atomic_load_n(&g_get_pool.shutdown, __ATOMIC_ACQUIRE)) {
+            rc = get_wait_budget(&g_get_sh[si].cv, &g_get_sh[si].mu);
+            if (rc != EFS_OK) break;
+        }
+        if (rc == EFS_OK && __atomic_load_n(&g_get_pool.shutdown, __ATOMIC_ACQUIRE))
+            rc = EFS_ERR_IO;
+        if (rc == EFS_OK && efs_client_rpc_past_deadline())
+            rc = EFS_ERR_BUSY;
+        if (rc != EFS_OK) {
+            pthread_mutex_unlock(&g_get_sh[si].mu);
+            jobs[i].rc = rc;
+            pthread_mutex_lock(&bp.mu);
+            --bp.remaining;
+            pthread_mutex_unlock(&bp.mu);
+            continue;
+        }
+        jobs[i].bp = &bp;
         g_get_sh[si].q[g_get_sh[si].tail] = &jobs[i];
         g_get_sh[si].tail = (g_get_sh[si].tail + 1) % GET_POOL_QDEPTH;
         g_get_sh[si].count++;
-        used[si] = 1;
+        /* Wake each accepted job before a later full queue can wait on it. */
+        pthread_cond_signal(&g_get_sh[si].cv);
         pthread_mutex_unlock(&g_get_sh[si].mu);
-    }
-    for (i = 0; i < (uint32_t)g_get_pool.nworkers; i++) {
-        if (!used[i])
-            continue;
-        pthread_mutex_lock(&g_get_sh[i].mu);
-        pthread_cond_signal(&g_get_sh[i].cv);
-        pthread_mutex_unlock(&g_get_sh[i].mu);
     }
     pthread_mutex_lock(&bp.mu);
     while (bp.remaining > 0)
@@ -1399,6 +1481,21 @@ static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
     pthread_mutex_destroy(&bp.mu);
     pthread_cond_destroy(&bp.cv);
     return 0;
+}
+
+static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
+{
+    if (!batch) return 0;
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = get_budget_deadline();
+    efs_client_rpc_set_deadline_ms(deadline);
+    for (uint32_t i = 0; i < batch; i++) {
+        jobs[i].deadline = deadline;
+        jobs[i].bp = NULL;
+    }
+    int rc = get_pool_run_budgeted(jobs, batch);
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
 }
 
 /* Non-blocking submit for prefetch. Skip when that worker's queue is
@@ -1415,6 +1512,7 @@ static int get_pool_try_submit(struct chunk_get_job *job)
         pthread_mutex_unlock(&g_get_sh[si].mu);
         return -1;
     }
+    job->deadline = get_budget_deadline();
     g_get_sh[si].q[g_get_sh[si].tail] = job;
     g_get_sh[si].tail = (g_get_sh[si].tail + 1) % GET_POOL_QDEPTH;
     g_get_sh[si].count++;
@@ -1476,8 +1574,10 @@ static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,
             return 0;
         }
         if (pend) {
-            pthread_cond_wait(&g_rdcache.cv[stripe], mu);
+            int rc = get_wait_budget(&g_rdcache.cv[stripe], mu);
             pthread_mutex_unlock(mu);
+            if (rc != EFS_OK)
+                return rc;
             continue;
         }
         /* Victim: a free way, else the LRU way that is not pending for
