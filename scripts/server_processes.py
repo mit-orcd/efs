@@ -25,6 +25,10 @@ def identity(pid):
 
 
 def owns(info,kind,value):
+    if kind=='perf':
+        if not info or Path(info['exe']).name != 'perf':return False
+        args=info['args']
+        return 'record' in args and any(args[index]=='-o' and os.path.realpath(args[index+1])==os.path.realpath(value) for index in range(len(args)-1))
     if not info or Path(info['exe']).name != 'efsd':
         return False
     args=info['args']
@@ -38,14 +42,14 @@ def numeric(value):
     return value.isascii() and value.isdigit() and int(value)>1
 
 
-def record(file,storage):
+def record(file,storage,kind='storage'):
     value=file.read_text().strip()
     if not numeric(value):
         raise RuntimeError('invalid daemon PID record')
     end=time.monotonic()+2
     while time.monotonic()<end:
         info=identity(int(value))
-        if owns(info,'storage',storage):
+        if owns(info,kind,storage):
             tmp=Path(str(file)+f'.identity.{os.getpid()}')
             tmp.write_text(json.dumps(info))
             tmp.replace(str(file)+'.identity')
@@ -69,8 +73,8 @@ def retire(pid,kind,value,expected=None,timeout=60):
         if identity(pid) != before:
             print(f'PID {pid} changed identity; process retained',flush=True)
             return
-        print(f'Stopping owned efsd PID {pid} ({kind} {value})',flush=True)
-        try:signal.pidfd_send_signal(fd,signal.SIGTERM)
+        print(f'Stopping owned {'perf' if kind=='perf' else 'efsd'} PID {pid} ({kind} {value})',flush=True)
+        try:signal.pidfd_send_signal(fd,signal.SIGINT if kind=='perf' else signal.SIGTERM)
         except ProcessLookupError:return
         poll=select.poll();poll.register(fd,select.POLLIN)
         if not poll.poll(int(timeout*1000)):
@@ -79,14 +83,14 @@ def retire(pid,kind,value,expected=None,timeout=60):
         os.close(fd)
 
 
-def stop_file(file,storage):
+def stop_file(file,storage,kind='storage'):
     if not file.exists():
         return
     value=file.read_text().strip()
     stamp=Path(str(file)+'.identity')
     expected=json.loads(stamp.read_text()) if stamp.exists() else None
     if numeric(value):
-        retire(int(value),'storage',storage,expected)
+        retire(int(value),kind,storage,expected)
     else:
         print(f'Invalid PID record {file}; no process signaled',flush=True)
     file.unlink(missing_ok=True)
@@ -96,11 +100,13 @@ def stop_file(file,storage):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     sub=parser.add_subparsers(dest='command',required=True)
-    for command in ('record','stop-file'):
+    for command in ('record','stop-file','record-perf','stop-perf'):
         item=sub.add_parser(command);item.add_argument('file',type=Path);item.add_argument('storage')
     item=sub.add_parser('stop-port');item.add_argument('pid');item.add_argument('port')
     args=parser.parse_args()
-    if args.command=='record':record(args.file,args.storage)
+    if args.command=='record-perf':record(args.file,args.storage,'perf')
+    elif args.command=='stop-perf':stop_file(args.file,args.storage,'perf')
+    elif args.command=='record':record(args.file,args.storage)
     elif args.command=='stop-file':stop_file(args.file,args.storage)
     elif numeric(args.pid) and args.port.isdigit() and 0<int(args.port)<65536:
         retire(int(args.pid),'port',args.port)

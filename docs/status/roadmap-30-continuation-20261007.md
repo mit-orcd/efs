@@ -126,3 +126,11 @@ invented totals for current/legacy replies and exits 1 for malformed status.
 NUC packet tests plus nonempty real exports pass normal/raw checks across
 buffered/direct and one/two-root modes; the integrity matrix still passes.
 Log `/private/tmp/efs-roadmap-w80.log`. Metadata-backed query totals remain open.
+
+## Round 13 — W78 recorder ownership and flush completion
+
+Perf stop uses the same pidfd identity protection as daemon retirement, matching
+its executable and output path before SIGINT. It waits for exit before writing
+reports and fails without escalation on timeout. NUC private fixtures retain
+unrelated and wrong-output processes and retire the owned recorder with SIGINT.
+Daemon ownership regressions still pass. Log `/private/tmp/efs-roadmap-w78-perf.log`.

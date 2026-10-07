@@ -42,6 +42,25 @@ with tempfile.TemporaryDirectory(prefix='efs-owner-') as work:
         wrapper();daemon.wait(5)
         assert daemon.returncode==-15 and not pidfile.exists()
         assert unrelated.poll() is None
+        perf_binary=directory/'perf'
+        subprocess.run(['cc',str(source),'-o',str(perf_binary)],check=True)
+        output=directory/'efsd.data';perf_pid=directory/'perf.pid'
+        recorder=subprocess.Popen([str(perf_binary),'record','-p',str(unrelated.pid),'-o',str(output)])
+        try:
+            perf_pid.write_text(str(recorder.pid))
+            subprocess.run(['python3',str(helper),'record-perf',str(perf_pid),str(output)],check=True)
+            subprocess.run(['python3',str(helper),'stop-perf',str(perf_pid),str(directory/'wrong.data')],check=True)
+            assert recorder.poll() is None,'wrong output killed recorder'
+            perf_pid.write_text(str(unrelated.pid))
+            subprocess.run(['python3',str(helper),'stop-perf',str(perf_pid),str(output)],check=True)
+            assert unrelated.poll() is None,'unrelated PID killed by perf cleanup'
+            perf_pid.write_text(str(recorder.pid))
+            subprocess.run(['python3',str(helper),'record-perf',str(perf_pid),str(output)],check=True)
+            subprocess.run(['python3',str(helper),'stop-perf',str(perf_pid),str(output)],check=True)
+            recorder.wait(5);assert recorder.returncode==-2
+            print('perf wrapper: unrelated/wrong-output processes retained; owned recorder flushed with SIGINT PASS')
+        finally:
+            if recorder.poll() is None:recorder.terminate();recorder.wait(5)
         print('server wrapper: invalid/reused/wrong-storage/stale-start PIDs retained; matching daemon gracefully stopped PASS')
     finally:
         for proc in (unrelated,daemon):

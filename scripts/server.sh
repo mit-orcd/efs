@@ -34,17 +34,7 @@ perf_mark_port() {
 finish_perf_dir() {
     local dir=$1 ppid i
     [ -n "$dir" ] && [ -d "$dir" ] || return 0
-    ppid=$(cat "$dir/perf.pid" 2>/dev/null || true)
-    if [ -n "$ppid" ] && kill -0 "$ppid" 2>/dev/null; then
-        kill -INT "$ppid" 2>/dev/null || true
-        for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-            kill -0 "$ppid" 2>/dev/null || break
-            sleep 1
-        done
-        if kill -0 "$ppid" 2>/dev/null; then
-            kill -TERM "$ppid" 2>/dev/null || true
-        fi
-    fi
+    python3 ./scripts/server_processes.py stop-perf "$dir/perf.pid" "$dir/efsd.data" || return 1
     if [ ! -s "$dir/efsd.data" ]; then
         echo "ERROR: no perf data at $dir/efsd.data (see $dir/perf.stderr)" >&2
         return 1
@@ -80,6 +70,7 @@ start_server_perf() {
     nohup perf record -F 499 -g -p "$pid" -o "$dir/efsd.data" \
         </dev/null >"$dir/perf.stdout" 2>"$dir/perf.stderr" &
     echo $! > "$dir/perf.pid"
+    python3 ./scripts/server_processes.py record-perf "$dir/perf.pid" "$dir/efsd.data" || return 1
     echo "$dir" > "$(perf_mark_storage "$storage")"
     echo "$dir" > "$(perf_mark_port "$port")"
     echo "perf record -F 499 -g -p $pid -> $dir/efsd.data"

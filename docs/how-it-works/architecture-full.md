@@ -4770,6 +4770,11 @@ NUC private wrapper fixtures prove invalid/unrelated/wrong-storage/stale-start
 records cannot kill another process and a matching daemon receives SIGTERM.
 Daemon-internal shutdown timing remains W65; no power-loss guarantee is inferred.
 
+Recorder cleanup also validates the perf executable, recorded output path and
+start/boot identity before pidfd SIGINT. NUC owned fixtures prove an unrelated
+PID and a recorder for a different output survive; the matching recorder exits
+via SIGINT. A timeout fails without escalation or racing report generation.
+
 **Gate:** isolated wrapper fixtures for absent/dead/nonnumeric/reused PID,
 matching daemon and unrelated live process; unrelated processes survive start
 and stop. Verify identity again around escalation to address PID reuse races.
