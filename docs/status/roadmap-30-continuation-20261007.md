@@ -245,3 +245,13 @@ without those mutations; the subsequent physical GC/restart/quota/valid-PUT
 fences pass. Logs `/private/tmp/efs-roadmap-namespace-boundary-baseline.log` and
 `/private/tmp/efs-roadmap-namespace-boundary-fixed.log`. Full-lane envelope
 completeness remains open; no predicate is omitted to force success.
+
+## Round 24 — W75 rejected PUT cannot reconfigure fragment size
+
+Validate bounded body shape and payload digest before learning export size;
+reuse the validation result rather than hashing twice. Baseline wrong-digest
+128 KiB PUT changed learned size and broke the next valid 64 KiB PUT. NUC
+buffered/direct × one/two roots now rejects wrong-digest/truncated requests,
+then accepts and reads valid bytes; all corruption/query gates still pass. Logs
+`/private/tmp/efs-roadmap-put-config-baseline.log` and
+`/private/tmp/efs-roadmap-put-config-fixed.log`.

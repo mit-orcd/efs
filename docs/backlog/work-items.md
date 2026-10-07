@@ -2881,6 +2881,13 @@ start/boot identity before pidfd SIGINT. NUC owned fixtures prove an unrelated
 PID and a recorder for a different output survive; the matching recorder exits
 via SIGINT. A timeout fails without escalation or racing report generation.
 
+Rejected PUT traffic no longer teaches export fragment size: bounded body shape
+and digest validation precede learning, with the same digest result reused for
+admission. Baseline invalid 128 KiB payload with a wrong digest changed the
+learned size and made a subsequent valid 64 KiB PUT fail. NUC wrong-digest and
+truncated-body probes now leave valid subsequent PUT/GET working across buffered/
+direct and one/two-root configurations; the corruption matrix still passes.
+
 **Gate:** isolated wrapper fixtures for absent/dead/nonnumeric/reused PID,
 matching daemon and unrelated live process; unrelated processes survive start
 and stop. Verify identity again around escalation to address PID reuse races.

@@ -49,6 +49,12 @@ for direct in (False, True):
                             with socket.create_connection(('127.0.0.1',port),.1):break
                         except OSError:time.sleep(.1)
                     else:raise AssertionError('startup timeout')
+                    malformed=Put(eid=1,ino=99,length=131072,gen=12345)
+                    rejected=rpc(6,bytes(malformed)+b'z'*131072)
+                    assert rejected[:2]==bytes([7,1]),rejected
+                    truncated=Put(eid=1,ino=99,length=262144,gen=12345)
+                    assert rpc(6,bytes(truncated)+b'z'*64)[:2]==bytes([7,1])
+                    # Rejected traffic cannot teach a different fragment size.
                     put=Put(eid=1,ino=99,length=65536,gen=12345)
                     put.sum[:]=bytes.fromhex('70ff942c316810ac5ffe7081fc049dba30713646b1d6d7272cd5948ad5579804')
                     assert rpc(6,bytes(put)+b'x'*65536)[:2] == bytes([7,0])
@@ -61,6 +67,7 @@ for direct in (False, True):
                         assert reply==bytes([5,1]),(label,reply[:40])
                         print(f'{direct=} {roots=} {label}: unavailable PASS',flush=True)
                     good()
+                    print(f'{direct=} {roots=} rejected digest/truncated body cannot change fragment size PASS',flush=True)
                     for flag in ([], ['--raw']):
                         query=subprocess.run([str(source/'efs-query'),*flag,f'127.0.0.1:{port}'],capture_output=True,text=True)
                         assert query.returncode==2 and not query.stdout and 'unavailable' in query.stderr,query

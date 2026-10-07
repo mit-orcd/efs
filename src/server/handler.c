@@ -400,6 +400,12 @@ send_reply:
                 uint64_t io_t0 = efs_iostats_now_us();
                 const uint8_t *data =
                     (const uint8_t *)payload + sizeof(struct efs_msg_put_chunk);
+                /* Do not learn layout from rejected traffic. Validate the
+                 * bounded body once before changing the export's size. */
+                int payload_valid = req->data_len <= payload_len - sizeof(*req) &&
+                    (efs_ino_is_meta_table(req->ino) ||
+                     efs_chunk_size_valid(req->data_len * 2u)) &&
+                    data_payload_valid(req->ino, data, req->data_len, req->checksum);
                 pthread_mutex_lock(&g_server->lock);
                 /* Auto-create so GET after restart (no PUT yet) and
                  * meta-page PUTs before the EFSR root both work. */
@@ -408,7 +414,7 @@ send_reply:
                                                           req->export_id);
                 /* Learn data chunk_size from first non-meta PUT when still
                  * default (peer may not have applied EFSR yet). */
-                if (ex && !efs_ino_is_meta_table(req->ino) &&
+                if (ex && payload_valid && !efs_ino_is_meta_table(req->ino) &&
                     req->data_len > 0 &&
                     (ex->chunk_size == 0 ||
                      ex->chunk_size == EFS_DEFAULT_CHUNK_SIZE) &&
@@ -423,7 +429,7 @@ send_reply:
                     uint32_t expect = server_frag_len(ex, req->ino);
                     if (req->data_len != expect ||
                         payload_len < sizeof(*req) + req->data_len ||
-                        !data_payload_valid(req->ino, data, expect, req->checksum)) {
+                        !payload_valid) {
                         reply = EFS_PUT_CHUNK_ERROR;
                     } else {
                         /* ACK after length + store. */
