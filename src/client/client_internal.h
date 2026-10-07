@@ -14,6 +14,7 @@
  * dcache/rdcache/flush churn stays out of malloc (arena bloat added ~17 GB
  * of RSS across 200+ threads). Free with the SAME len passed at alloc. */
 void *efs_buf_alloc(uint32_t len);
+void *efs_buf_alloc_prefetch(uint32_t len);
 void efs_buf_free(void *p, uint32_t len);
 #define EFS_DCACHE_ENTRY_BUDGET 1024u
 /* Local capacity contention returns BUSY; QUOTA is reserved for backend verdicts. */

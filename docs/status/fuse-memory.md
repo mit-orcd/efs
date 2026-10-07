@@ -219,3 +219,113 @@ cluster-script mocks prove no server stop after failed discovery/drain and
 remount preflight on an invisible client. Shell syntax checks pass. These
 changes are uncommitted and have not been deployed; live gateway retirement
 and remount remain owed.
+
+## Read-path ENOMEM storm: prefetch queue can park the whole body budget — xefsct1, Oct 6 2026
+
+**Status: root cause established by controlled A/B reproduction; no fix
+implemented.** Filed as
+[W60](../backlog/work-items.md#w60--a-concurrent-sequential-readers-prefetch-queue-can-park-the-entire-read-side-body-budget-demand-reads-then-fail-nomem-surfaced-as-eio-queue-row-0q)
+(queue row 0q). Distinct from the write-side admission items above: this one
+fails READS and surfaces to applications as EIO.
+
+### Evidence
+
+User workload on xefsct1 (2 vCPU test client, current-build mount pid
+1096475, `v0.1.0-pre-alpha-62-gb4a75492-dirty`):
+
+```
+rg --hidden --no-ignore --stats 'search text' /mnt/efs/
+```
+
+rg reported `Input/output error (os error 5)` for thousands of tiny files
+(clustered in `tiny_files*/folder_*/level_2/level_3/level_4/`), while the
+servers logged zero errors (`iostats ... errors=0` on all three nodes). The
+client log (`/mnt/efs-fuse-efs.log`) holds **19,112** `efs-fuse read: out of
+memory (efs_rc=-2)` lines between 21:58:16Z and 22:57:01Z — the kernel-side
+EIO is `efs_fuse_read_ino` mapping any `efs_client_read` error to -EIO while
+the log keeps the real code (`src/client/efs_fuse.c:2166`). Per-10-minute
+histogram: 950, 6433, 4879, 2085, 1665, 1704, 1396 — an onset ~40 min into
+the scan, then decay as rg moved on and the queue drained. No kernel OOM and
+no `staging table over EFS_CLIENT_META_MB` line in the window.
+
+### Root cause (code-backed)
+
+The shared client body pool (`src/client/bufpool.c`) caps demand reads at
+`EFS_DCACHE_HARD_BYTES` (default 256 MiB; the 64 MiB drain reserve is
+write/drain-only — `efs_buf_alloc` uses `g_hard` unless the caller holds a
+full reservation or is draining). Every buffer charges a minimum of one
+chunk (`buf_charge`, 128 KiB).
+
+A sequential reader arms prefetch after two in-order reads
+(`t_seq_run >= 2`, `src/client/read.c:1725-1732`). `prefetch_ahead`
+(`read.c:1508-1553`) allocates one pool buffer per queued chunk
+(`efs_buf_alloc` at :1536) and submits to the GET pool
+(`get_pool_try_submit`). The GET pool queues up to `GET_POOL_QDEPTH=32`
+jobs per shard × `GET_POOL_N=64` shards (`read.c:1194-1204`) = **2048
+queued jobs × 128 KiB = 256 MiB — the entire read-side body budget**.
+Prefetch allocation failure is silent (`return` at :1537-1539).
+
+Any read whose range is not chunk-aligned (every sub-chunk tiny file, every
+tail) needs a pool scratch buffer in the batch path (`read.c:1797`); at
+budget exhaustion it returns `EFS_ERR_NOMEM` (:1802) with **no trim, no
+wait, no retry** — unlike the write path, which trims the read cache,
+drains and retries (`fuse_write_admit`, `efs_fuse.c:2900-2978`, the only
+caller of `efs_rdcache_trim`). The error log line therefore blames the
+victim (demand read) while the culprit (queued prefetch buffers) is
+invisible.
+
+So a scan that mixes one large sequential file with many tiny files — rg
+over a tree holding the four ~10 GiB `00*.dat` files plus
+`tiny_files2..9` — lets its own prefetch starve its own tiny-file reads.
+
+### Reproduction (controlled A/B, Oct 6 2026, xefsct1)
+
+Throwaway second mount of the same cluster with
+`EFS_DCACHE_HARD_BYTES=33554432 EFS_DCACHE_DRAIN_BYTES=33554432` (64 MiB
+total = 512 chunk buffers):
+
+- tiny-file loop alone (`head -c 4` × 3000 files of `tiny_files9`):
+  **0/3000 failed**, zero NOMEM logged.
+- same loop while `cat 001.dat > /dev/null` ran concurrently:
+  **2000/2000 failed**, first failure on file #1; 2000 NOMEM lines logged.
+
+A 5-minute rerun of the user's full-root rg on the main mount (256 MiB
+budget) produced no new NOMEM — with the full budget, 2 rg threads need
+longer to pin the queue at cap; the original storm needed ~40 min.
+
+### Initial fix directions (Oct 6 evidence)
+
+- Read-path backpressure: on scratch-alloc failure, trim clean unpinned
+  rdcache bodies and wait briefly (bounded), mirroring `fuse_write_admit`,
+  instead of failing the read.
+- Prefetch admission watermark: best-effort prefetch must never consume the
+  last of the budget — skip when live+reserved exceeds, say, 75% of
+  `g_hard`, and/or cap queued prefetch bytes (queue slots × chunk size is
+  currently 100% of the read budget).
+- Distinct log lines for prefetch-drop vs demand-read failure; the current
+  single `read: out of memory` line hides the direction of the pressure.
+- Note `buf_charge` makes a 3-byte file cost a full 128 KiB slot; sub-chunk
+  bodies would raise the tiny-file ceiling ~4 orders of magnitude.
+
+### Gate when fixed
+
+The 64 MiB A/B above must flip to 0/2000 with the concurrent sequential
+read running, and a mixed `rg` over the full xorinox tree (including the
+10 GiB `00*.dat` files) must complete with zero `efs_rc=-2` lines.
+
+### Oct 6 implementation checkpoint
+
+W60 now uses atomic speculative admission at half the normal shared body
+budget for both queued prefetch and reproducible read-cache copies. Speculation
+cannot spend request reservations or drain capacity. Demand scratch first
+reclaims unpinned clean bodies, then retries for at most twenty 1 ms waits
+without index/cache locks. Pending fetches, reply pins and dirty bytes retain
+ownership. This does not promise success under exhaustion by demand/dirty
+owners; sub-chunk charging and a separate diagnostic counter remain follow-ups.
+
+Allocator watermark/reservation/drain tests, sixteen concurrent speculative
+allocators, and production demand recovery tests pass on the NUC. Existing
+cache ownership and publication/session regression tests pass. The live
+32 MiB mixed-read gate is pending: the first fixture write encountered a
+protocol error against older NUC servers (`79983128`); align builds before
+using that run as W60 evidence. Xorinox's full-tree gate remains owed.

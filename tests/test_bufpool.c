@@ -36,6 +36,23 @@ static void *churn(void *arg)
     }
     return NULL;
 }
+#ifdef __linux__
+static pthread_barrier_t speculative_barrier;
+static void *speculative_churn(void *unused)
+{
+    (void)unused;
+    void *bodies[128]; unsigned n=0;
+    while (n<128 && (bodies[n]=efs_buf_alloc_prefetch(1))) n++;
+    pthread_barrier_wait(&speculative_barrier);
+    pthread_mutex_lock(&g_bp_mu);
+    assert(g_live+g_reserved<=g_hard/2);
+    pthread_mutex_unlock(&g_bp_mu);
+    pthread_barrier_wait(&speculative_barrier);
+    for (unsigned i=0;i<n;i++) efs_buf_free(bodies[i],1);
+    return NULL;
+}
+
+#endif
 static void *abandon_credit(void *unused)
 {
     (void)unused;
@@ -229,11 +246,36 @@ int main(void)
     efs_buf_unreserve();
     for (int i=0;i<512;i++) efs_buf_free(p[i],EFS_CHUNK_SIZE);
     check(0);
+    /* W60: queued speculative bodies cannot exhaust demand capacity. */
+    for (int i=0; i<128; i++) {
+        p[i]=efs_buf_alloc_prefetch(1); assert(p[i]);
+    }
+    assert(!efs_buf_alloc_prefetch(1));
+    for (int i=128; i<256; i++) { p[i]=efs_buf_alloc(1); assert(p[i]); }
+    assert(!efs_buf_alloc(1));
+    for (int i=0; i<256; i++) efs_buf_free(p[i],1);
+    assert(!efs_buf_reserve(16ull<<20));
+    assert(!efs_buf_alloc_prefetch(1));
+    assert(t_credit_owner->body==(16ull<<20));
+    efs_buf_unreserve();
+    efs_buf_drain_enter();
+    void *spec=efs_buf_alloc_prefetch(1); assert(spec);
+    assert(g_live==EFS_CHUNK_SIZE);
+    efs_buf_free(spec,1);
+    efs_buf_drain_leave();
     pthread_t workers[16];
     for (int i = 0; i < 16; i++) assert(!pthread_create(&workers[i], NULL, churn, NULL));
     for (int i = 0; i < 16; i++) assert(!pthread_join(workers[i], NULL));
     check(0);
     assert(g_reserved == 0 && g_bp_n == 512);
+#ifdef __linux__
+    assert(!pthread_barrier_init(&speculative_barrier,NULL,16));
+    for (int i=0;i<16;i++) assert(!pthread_create(&workers[i],NULL,speculative_churn,NULL));
+    for (int i=0;i<16;i++) assert(!pthread_join(workers[i],NULL));
+    assert(!pthread_barrier_destroy(&speculative_barrier));
+    check(0);
+#endif
+
     pthread_t retired;
     assert(!pthread_create(&retired, NULL, abandon_credit, NULL));
     assert(!pthread_join(retired, NULL));

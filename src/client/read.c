@@ -732,6 +732,23 @@ void efs_rdcache_trim(void)
     }
 }
 
+/* Called only while constructing demand jobs, before taking index/cache
+ * locks or submitting the batch. Reclaim reproducible bodies first, then
+ * allow in-flight owners a bounded opportunity to release capacity. */
+static void *demand_read_alloc(uint32_t len)
+{
+    void *p = efs_buf_alloc(len);
+    if (p) return p;
+    efs_rdcache_trim();
+    for (unsigned attempt = 0; attempt < 20; attempt++) {
+        p = efs_buf_alloc(len);
+        if (p) return p;
+        struct timespec delay = { .tv_sec = 0, .tv_nsec = 1000000 };
+        nanosleep(&delay, NULL);
+    }
+    return NULL;
+}
+
 static struct rdcache_ent *rdcache_find(uint32_t s, efs_ino_t ino, uint32_t ci)
 {
     for (int w = 0; w < RDCACHE_WAYS; w++) {
@@ -982,7 +999,7 @@ static int rdcache_put_inner(efs_ino_t ino, uint32_t ci, const uint8_t *src,
         }
         if (!e->data) {
             /* Pool buffers are EFS_CHUNK_SIZE-capacity; allocate once per way. */
-            e->data = efs_buf_alloc(len);
+            e->data = efs_buf_alloc_prefetch(len);
             if (!e->data) {
                 /* Release the mark or its waiters never wake. */
                 if (e->pending) {
@@ -1533,7 +1550,7 @@ static void prefetch_ahead(efs_ino_t ino, uint32_t from_ci, uint64_t file_size)
         job = calloc(1, sizeof(*job));
         if (!job)
             return;
-        job->chunk = efs_buf_alloc(cs);
+        job->chunk = efs_buf_alloc_prefetch(cs);
         if (!job->chunk) {
             free(job);
             return;
@@ -1794,7 +1811,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                 jobs[batch].chunk = (uint8_t *)buf + (cstart - offset);
                 jobs[batch].ext = 1;
             } else {
-                jobs[batch].chunk = efs_buf_alloc(chunk_size);
+                jobs[batch].chunk = demand_read_alloc(chunk_size);
                 if (!jobs[batch].chunk) {
                     for (uint32_t j = 0; j < batch; j++)
                         if (!jobs[j].ext)

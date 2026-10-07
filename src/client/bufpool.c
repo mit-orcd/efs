@@ -131,19 +131,20 @@ void efs_buf_budget_stats(uint64_t *live, uint64_t *reserved,
     pthread_mutex_unlock(&g_bp_mu);
 }
 
-void *efs_buf_alloc(uint32_t len)
+static void *buf_alloc(uint32_t len, int speculative)
 {
     void *p = NULL;
     uint64_t charge = buf_charge(len), credit;
     pthread_once(&g_bp_once, buf_init);
     pthread_mutex_lock(&g_bp_mu);
-    credit = t_drain || !t_credit_owner ? 0 :
+    credit = speculative || t_drain || !t_credit_owner ? 0 :
              (t_credit_owner->body < charge ? t_credit_owner->body : charge);
     /* Drain scratch can temporarily put live bytes above the normal cap.
      * Fully reserved allocations already own capacity: honor that promise
      * under the combined bound, which drain allocations also respect.
      * Unreserved/partly reserved writes still cannot spend drain headroom. */
-    uint64_t limit = t_drain || credit == charge ? g_hard + g_drain : g_hard;
+    uint64_t limit = speculative ? g_hard / 2 :
+        (t_drain || credit == charge ? g_hard + g_drain : g_hard);
     if (charge - credit > limit ||
         g_live + g_reserved > limit - (charge - credit))
         goto out;
@@ -176,6 +177,12 @@ out:
     pthread_mutex_unlock(&g_bp_mu);
     return p;
 }
+
+/* Speculative/cache admission is atomic with allocation. It never spends
+ * request credit or drain capacity, and leaves half the normal budget for
+ * demand reads and writes, including when queued jobs retain their bodies. */
+void *efs_buf_alloc_prefetch(uint32_t len) { return buf_alloc(len, 1); }
+void *efs_buf_alloc(uint32_t len) { return buf_alloc(len, 0); }
 
 void efs_buf_free(void *p, uint32_t len)
 {
