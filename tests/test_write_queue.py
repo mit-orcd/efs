@@ -46,7 +46,7 @@ static void *worker(void *arg) {
     pthread_cond_broadcast(&g_wb.not_full);
     pthread_mutex_unlock(&g_wb.mu);
     usleep(30000); /* accepted job outlives admission deadline */
-    assert(job.buf[0]=='X');
+    assert(job.buf[0]=='X' && job.deadline==deadline);
     wb_job_release_buf(job.buf,job.free_base,job.buf_cap);
     pthread_mutex_lock(&g_wb.mu);
     *job.done_rc=EFS_OK; *job.done=1;
@@ -66,12 +66,15 @@ int main(void) {
     assert(efs_wb_enqueue_owned(1,0,1,malloc(1),NULL,0)==EFS_ERR_IO);
     assert(freed==2 && g_wb.count==2);
     g_wb.shutdown=0; g_wb.count=0; g_wb.queued_bytes=0;
+    deadline=stats_now_ms();
+    assert(efs_wb_enqueue_owned(1,0,1,malloc(1),NULL,0)==EFS_ERR_BUSY);
+    assert(freed==3&&!g_wb.count);
     char *copy=malloc(1); copy[0]='X';
     pthread_t t; assert(!pthread_create(&t,NULL,worker,NULL));
     deadline=stats_now_ms()+5;
     assert(efs_wb_enqueue_owned(1,0,1,copy,NULL,0)==EFS_OK);
     assert(!pthread_join(t,NULL));
-    assert(!g_wb.count && !g_wb.queued_bytes && freed==3);
+    assert(!g_wb.count && !g_wb.queued_bytes && freed==4);
     puts("write queue: timeout/shutdown ownership and accepted-job completion PASS");
 }
 '''

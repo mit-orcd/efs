@@ -2190,6 +2190,7 @@ struct efs_wb_job {
     /* Non-zero: buf/free_base came from the bounce pool (see bounce_release). */
     size_t buf_cap;
     uint64_t queued_ms;
+    uint64_t deadline;
     /* Caller waits for PUT quorum. Worker writes rc and signals done_cv
      * while holding g_wb.mu. */
     int *done;
@@ -2383,6 +2384,44 @@ static int wb_overlap_inflight(int self, efs_ino_t ino, uint64_t off, size_t len
     return 0;
 }
 
+/* Deadline-aware waits preserve accepted-job ownership until completion. */
+static int wb_wait_idle_budget(void)
+{
+    uint64_t deadline = efs_client_rpc_deadline_ms();
+    if (!deadline) {
+        pthread_cond_wait(&g_wb.idle, &g_wb.mu);
+        return EFS_OK;
+    }
+    uint64_t now = stats_now_ms();
+    if (now >= deadline)
+        return EFS_ERR_BUSY;
+    uint64_t wait = deadline - now;
+    if (wait > 50) wait = 50;
+    struct timespec until;
+    clock_gettime(CLOCK_REALTIME, &until);
+    until.tv_nsec += (long)wait * 1000000;
+    until.tv_sec += until.tv_nsec / 1000000000;
+    until.tv_nsec %= 1000000000;
+    pthread_cond_timedwait(&g_wb.idle, &g_wb.mu, &until);
+    return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
+}
+
+static int wb_lock_budget(pthread_mutex_t *mu)
+{
+    if (!efs_client_rpc_deadline_ms())
+        return pthread_mutex_lock(mu) == 0 ? EFS_OK : EFS_ERR_IO;
+    for (;;) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
+        int rc = pthread_mutex_trylock(mu);
+        if (!rc)
+            return EFS_OK;
+        if (rc != EBUSY)
+            return EFS_ERR_IO;
+        usleep(1000);
+    }
+}
+
 static void *efs_wb_thread(void *arg)
 {
     int wid = (int)(intptr_t)arg;
@@ -2395,6 +2434,9 @@ static void *efs_wb_thread(void *arg)
             return NULL;
         }
         struct efs_wb_job job = g_wb.q[g_wb.head];
+        uint64_t previous = efs_client_rpc_deadline_ms();
+        efs_client_rpc_set_deadline_ms(job.deadline);
+        int rc = EFS_OK;
         g_wb.head = (g_wb.head + 1) % EFS_WB_DEPTH;
         g_wb.count--;
         g_wb.queued_bytes -= job.size;
@@ -2425,10 +2467,17 @@ static void *efs_wb_thread(void *arg)
         uint64_t claim_off = job.offset;
         size_t claim_len = job.size;
         wb_claim_span(job.offset, job.size, claim_cs, &claim_off, &claim_len);
-        while (wb_overlap_inflight(wid, job.ino, claim_off, claim_len))
-            pthread_cond_wait(&g_wb.idle, &g_wb.mu);
-        g_wb.busy_off[wid] = claim_off;
-        g_wb.busy_len[wid] = claim_len;
+        while (wb_overlap_inflight(wid, job.ino, claim_off, claim_len)) {
+            rc = wb_wait_idle_budget();
+            if (rc != EFS_OK)
+                break;
+        }
+        if (efs_client_rpc_past_deadline())
+            rc = EFS_ERR_BUSY;
+        if (rc == EFS_OK) {
+            g_wb.busy_off[wid] = claim_off;
+            g_wb.busy_len[wid] = claim_len;
+        }
         pthread_mutex_unlock(&g_wb.mu);
 
         /* Partial-chunk RMW is not atomic. Full-chunk overwrites of
@@ -2438,17 +2487,22 @@ static void *efs_wb_thread(void *arg)
         int aligned = cs && job.size >= cs &&
                       (job.offset % cs) == 0 && (job.size % cs) == 0;
         pthread_mutex_t *ilock = NULL;
-        if (!aligned) {
+        if (rc == EFS_OK && !aligned) {
             ilock = efs_wb_ino_lock(job.ino);
-            pthread_mutex_lock(ilock);
+            rc = wb_lock_budget(ilock);
+            if (rc != EFS_OK)
+                ilock = NULL;
         }
-        lookup_memo_mutation_begin();
-        int rc = efs_client_write_no_replicate(job.ino, job.offset, job.size,
-                                               job.buf);
-        lookup_memo_mutation_end();
+        if (rc == EFS_OK) {
+            lookup_memo_mutation_begin();
+            rc = efs_client_write_no_replicate(job.ino, job.offset, job.size,
+                                              job.buf);
+            lookup_memo_mutation_end();
+        }
         if (ilock)
             pthread_mutex_unlock(ilock);
         wb_job_release_buf(job.buf, job.free_base, job.buf_cap);
+        efs_client_rpc_set_deadline_ms(previous);
 
         pthread_mutex_lock(&g_wb.mu);
         if (job.done) {
@@ -2584,6 +2638,14 @@ static int efs_wb_enqueue_owned(efs_ino_t ino, uint64_t offset, size_t size,
         wb_job_release_buf(copy, free_base, buf_cap);
         return EFS_ERR_IO;
     }
+    if (stats_now_ms() >= wait_end) {
+        ++g_wb.admission_timeouts;
+        pthread_mutex_unlock(&g_wb.mu);
+        pthread_cond_destroy(&done_cv);
+        wb_job_release_buf(copy, free_base, buf_cap);
+        return EFS_ERR_BUSY;
+    }
+    g_wb.q[g_wb.tail].deadline = outer ? outer : stats_now_ms() + 30000;
     g_wb.q[g_wb.tail].ino = ino;
     g_wb.q[g_wb.tail].offset = offset;
     g_wb.q[g_wb.tail].size = size;
