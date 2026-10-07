@@ -954,3 +954,11 @@ Linux units and durable recovery pass; the four-node NUC POSIX gate is
 mtime changes and subsequent fsynced writes. Both FUSE flush integrations and
 bounded abandoned-stream cleanup remain pending; D25 remains staged.
 [Evidence and scope](../../results/measure/20261006-d25-mtime-coherence/SUMMARY.md).
+
+
+## GC implementation checkpoint — Oct 7
+
+The [GC checkpoint](gc-implementation-20261007.md) records production repairs,
+NUC physical deletion/restart gates, and the approved discard-after-durable-
+revocation policy. PUT ticket metadata is staged; production session, wire and
+storage-fence integration remains open. Historical xorinox repair is unconfirmed.

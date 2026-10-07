@@ -25,6 +25,14 @@ revocation barrier, the lane's durable rejection floor, and durable data-plane
 fences on every configured member before physical deletion. Missing/offline
 members retain the ledger. Retirement must leave a replay floor.
 
+## Commits
+
+- `3a1b4a52`: production reclamation correctness, fresh object identities,
+  dead-inode fencing, diagnostics and physical delete gates.
+- `6d6056c3`: W85 PUT retry/root-hint accounting.
+- `b3a11877`: staged durable PUT tickets, atomic ownership, all-member ACK
+  ledger, retirement floors, tests and public-header rebuild dependencies.
+
 ## Implemented production GC repairs
 
 - W61: exact local/forwarded cleanup verdicts; KV I/O/resource failures retry apply
@@ -69,7 +77,13 @@ hashes and storage roots. Failed fixtures are retained for diagnosis.
 
 Direct fixture `/data1/efs/gc-direct-m_92r0h2`: **216/217 single-client tests pass
 (one mmap skip), 64/64 peer tests pass**, then physical inventory and quota are
-zero after restart and late PUTs are fenced. Full production-fix unit run passed.
+zero after restart and late PUTs are fenced. Full production-fix unit run passed. The final post-W85/post-ticket direct fixture
+`/data1/efs/gc-direct-yzlxfnne` also passed 216 single-client tests (one skip),
+64 peer tests and the empty-inventory/zero-quota/restart gates. The full unit
+suite passed with ticket metadata included, and the final ticket test also
+passed after additional capacity, acknowledgement-order and fault checks.
+An attempted ASan/UBSan run could not link because the NUC lacks its sanitizer
+runtime libraries; no sanitizer pass is claimed.
 Buffered fixture `/data1/efs/gc-buffered-3ohdte4d`: focused GC checks passed; broad
 POSIX run failed both concurrent-append cases (missing records). Ten isolated
 repetitions of those two cases passed. This does **not** clear the load-dependent
