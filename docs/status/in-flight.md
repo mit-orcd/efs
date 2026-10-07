@@ -45,7 +45,9 @@ Next, in order:
    aggregate STALE still cannot authorize dropping or rebasing ownership.
    Acknowledged retirement now bounds each stream to 64 live receipts and
    advances a durable replay floor atomically. RETIRED never releases ownership.
-   Before activation, integrate ordered ACK retry ownership and I23 session
+   Ordered ACK retry ownership is now staged and NUC-tested (immutable,
+   bounded, oldest-consumed-first, metadata-budgeted). Before activation,
+   integrate it with both flush paths and add I23 session
    fencing/admission before cleanup of abandoned streams/floors; finish coherent
    lane-local mtime invalidation.
    Next connect every FUSE write entry point and both flush paths to these APIs;

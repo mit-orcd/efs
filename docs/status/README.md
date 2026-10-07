@@ -861,3 +861,16 @@ recovery regressions pass. Public FUSE flush integration remains disabled.
 The per-stream bound is not a global bound: ordered client ACK retry ownership
 and I23 session admission/fencing before abandoned-stream cleanup remain required
 before activation. [Evidence and remaining gates](../../results/measure/20261006-publication-retirement/SUMMARY.md).
+
+## D25 ordered ACK / W60 checkpoint — Oct 6 2026
+
+W60 speculative admission and bounded demand scratch recovery are committed
+(`73ce8aaa`). Read-pressure and sixteen-thread budget tests pass on the NUC;
+live mixed-read acceptance is being rerun after aligning the four server
+builds. See [FUSE memory](fuse-memory.md).
+
+D25 now has staged, metadata-budgeted ordered receipt ACK ownership. It
+retains immutable intents across unknown/lost replies, prevents a newer
+receipt from fencing out older unsubmitted local intents, and applies
+backpressure at 64 entries. [Integration contract](d25-admission-routing.md#ordered-client-retirement-ownership--implemented-staged).
+Public FUSE write/flush activation remains gated on I23 and mtime coherence.

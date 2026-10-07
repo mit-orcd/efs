@@ -25,6 +25,9 @@ void efs_buf_drain_enter(void);
 void efs_buf_drain_leave(void);
 void efs_buf_budget_stats(uint64_t *live, uint64_t *reserved,
                            uint64_t *backing, uint64_t *limit);
+struct efs_publication_ack_queue;
+struct efs_publication_ack_queue *efs_client_publication_ack_alloc(void);
+int efs_client_publication_ack_free(struct efs_publication_ack_queue *);
 void *efs_buf_metadata_alloc(size_t size);
 void efs_buf_metadata_free(void *p, size_t size);
 void efs_rdcache_trim(void);

@@ -12,6 +12,7 @@ int efs_rdma_zc_region_add(void *p, size_t n) { (void)p; (void)n; return 0; }
 #define calloc test_calloc
 #include "../src/client/bufpool.c"
 #include "../src/client/writer_state.c"
+#include "../src/client/publication_ack_owner.c"
 #undef malloc
 #undef calloc
 
@@ -291,6 +292,15 @@ int main(void)
     assert(!efs_buf_metadata_alloc(1));
     for (int i = 0; i < 32; i++) efs_buf_metadata_free(m[i], 256u << 10);
     assert(g_metadata == 0);
+    uint64_t ack_before=g_metadata;
+    fail_calloc=1;assert(!efs_client_publication_ack_alloc());fail_calloc=0;
+    assert(g_metadata==ack_before);
+    struct efs_publication_ack_queue *ack=efs_client_publication_ack_alloc();
+    assert(ack && !ack->count && g_metadata==ack_before+sizeof(*ack));
+    ack->count=1;assert(efs_client_publication_ack_free(ack)==EFS_ERR_BUSY);
+    assert(g_metadata==ack_before+sizeof(*ack));
+    ack->count=0;assert(efs_client_publication_ack_free(ack)==EFS_OK);
+    assert(g_metadata==ack_before);
     writer_state_lifetime();
     writer_admission_copy();
     writer_body_snapshot();

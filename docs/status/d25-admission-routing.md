@@ -172,3 +172,26 @@ and sweep/history retirement. The staged adapter preserves the existing lane
 stamp rather than consulting the inode on every publish. No production activation
 or live cluster acceptance is claimed. See the
 [retirement validation checkpoint](../../results/measure/20261006-publication-retirement/SUMMARY.md).
+
+## Ordered client retirement ownership — implemented, staged
+
+A caller-serialized per-stream queue now retains each immutable request before
+submission. It validates canonical digests, requires increasing sequences and
+accepts only identical retries. Sixty-four occupied slots apply backpressure
+without altering ownership. A later consumed result cannot retire past an
+older unresolved local intent, including one not yet submitted to the server.
+Only the oldest consumed COMMITTED/REJECTED result is eligible for ACK; an
+exact RETIRED reply removes it. Unknown/transport errors, conflicting terminal
+results and mismatched digests retain the queue entry. Lost ACK replies retry
+the original request. Sequence high-water survives an empty queue.
+
+Client allocation charges the whole queue to the existing metadata hard bound;
+free refuses any retained receipt. Tests cover reordered completion, immutable
+retries, twenty full ring cycles, capacity refusal, metadata failure/lifetime,
+and actual KV publication/retirement with an older initially unsubmitted
+intent and a lost retirement reply. These primitives are not yet attached to
+public FUSE flushes. The integrating caller must register EVERY stream intent
+in order before sending any publication and mark consumed only after cache
+ownership has processed the matching terminal result. No process-crash
+recovery or abandoned-session cleanup is claimed. I23 admission/fencing,
+coherent mtime invalidation and both flush integrations remain prerequisites.
