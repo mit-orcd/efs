@@ -2319,6 +2319,12 @@ Public FUSE write/flush activation remains gated on I23 and mtime coherence.
 full Linux unit PASS; POSIX 216 pass / 0 fail / 1 skip; W36 20/20; verified
 W60 mixed read 0/2000 failures. D25 ACK integration remains staged.
 
+Final NUC rollout for this checkpoint: normal deploy/start/smoke **PASS** on
+clean code build `2a30c8eb960c`, four matching servers and both normal mounts.
+Post-deployment POSIX repeats 216 pass / 0 fail / 1 mmap skip. A cold ReadIndex
+startup false refusal was fixed by bounded serving-probe retries. Generated
+W60 fixtures and diagnostic mounts were cleaned up.
+
 
 ## Appendix 2 — In flight — the current handoff block
 

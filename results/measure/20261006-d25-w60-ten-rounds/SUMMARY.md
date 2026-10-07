@@ -80,3 +80,9 @@ exhaustion. Regression covers immediate/late readiness, exhausted probes,
 detachment before probing and detachment during successful stat. Existing
 stop-control tests remain passing. Generated test binaries/macOS artifacts
 are now ignored so they do not falsely label committed source as dirty.
+
+Final normal `deploy-and-restart.sh` cycle: **PASS**, with all four servers
+and both normal client mounts on clean code build `2a30c8eb960c`. The
+post-deployment POSIX run again passed **216 / 0 failures / 1 mmap skip**.
+Generated W60 fixtures were removed; diagnostic mounts were stopped; both
+normal mounts were restored. [Rollout acceptance log](rollout.log).
