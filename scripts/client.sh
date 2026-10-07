@@ -28,6 +28,22 @@ EOF
     exit 1
 }
 
+# FUSE_INIT can precede the first successful Raft ReadIndex after a restart.
+# Retry serving probes for at most ~32 s; retain the mount on failure.
+client_wait_serving() {
+    local mnt=$1 attempt
+    for attempt in {1..10}; do
+        # A detached mount must not pass via stat of its underlying directory.
+        mountpoint -q "$mnt" || return 1
+        if timeout 3 stat "$mnt" >/dev/null 2>&1; then
+            mountpoint -q "$mnt"
+            return $?
+        fi
+        [ "$attempt" = 10 ] || sleep 0.2
+    done
+    return 1
+}
+
 # Directory start wrote so stop can find the perf files for this mount.
 perf_mark() {
     echo "$(dirname "$1")/.efs-$(basename "$1").perfdir"
@@ -421,7 +437,7 @@ if [ "$rc" -ne 0 ]; then
 fi
 # Parent returned 0 after FUSE_INIT. Confirm a getattr actually works —
 # /proc/mounts can list the path a moment before the loop is reading.
-if ! timeout 3 stat "$MOUNT_PATH" >/dev/null 2>&1; then
+if ! client_wait_serving "$MOUNT_PATH"; then
     echo "ERROR: $MOUNT_PATH is not serving (see $LOG_FILE)" >&2
     tail -n 20 "$LOG_FILE" >&2 || true
     exit 1

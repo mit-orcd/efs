@@ -196,6 +196,7 @@ test-stop-control:
 	$(CC) $(CFLAGS) $(INCLUDES) -Isrc/client -pthread -o "$$stop_test" tests/test_stop_control.c; \
 	"$$stop_test"
 	python3 tests/test_client_stop.py
+	python3 tests/test_client_ready.py
 	python3 tests/test_client_processes.py
 
 test-wb-runtime:
@@ -213,6 +214,7 @@ test-wb-recovery:
 .PHONY: test-client-stop
 test-client-stop:
 	python3 tests/test_client_stop.py
+	python3 tests/test_client_ready.py
 	python3 tests/test_client_processes.py
 
 all: $(LIB) efsd efs-fuse efs-bench efs-mgmt efs-query tests

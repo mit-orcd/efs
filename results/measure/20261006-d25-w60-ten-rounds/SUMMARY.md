@@ -68,3 +68,15 @@ The queue is memory bounded, not a client crash-recovery journal.
 
 W60's NUC controlled gate passes; Xorinox full-root mixed `rg` remains owed.
 Prefetch-drop diagnostics and sub-chunk charging are follow-up enhancements.
+
+## Follow-up deployment regression
+
+The normal NUC deploy cycle exposed a false startup refusal: a single 3 s
+`stat` probe timed out during cold Raft ReadIndex recovery, while that request
+completed successfully at 4.8 s and the mount subsequently served. Client
+startup now retries ten bounded probes (at most about 32 s), checks that the
+mount exists before and after a successful probe, and retains the mount on
+exhaustion. Regression covers immediate/late readiness, exhausted probes,
+detachment before probing and detachment during successful stat. Existing
+stop-control tests remain passing. Generated test binaries/macOS artifacts
+are now ignored so they do not falsely label committed source as dirty.
