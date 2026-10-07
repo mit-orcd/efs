@@ -67,6 +67,16 @@ static void efs_net_init(void)
 
 static int connect_sockaddr(const struct sockaddr *addr, socklen_t addrlen)
 {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t end = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000 +
+                   EFS_CONNECT_TIMEOUT_SEC * 1000;
+    if (efs_net_deadline_ms() && efs_net_deadline_ms() < end)
+        end = efs_net_deadline_ms();
+    if (!efs_net_remaining_ms(INT_MAX)) {
+        errno = ETIMEDOUT;
+        return -1;
+    }
     int fd = socket(addr->sa_family, SOCK_STREAM | SOCK_CLOEXEC, 0);
     if (fd < 0)
         return -1;
@@ -74,45 +84,51 @@ static int connect_sockaddr(const struct sockaddr *addr, socklen_t addrlen)
     int yes = 1;
     setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
     efs_tcp_keepalive(fd);
-    /* Large buffers help IB/IPoIB bulk fragment PUT streams. */
     int buf = 4 * 1024 * 1024;
     setsockopt(fd, SOL_SOCKET, SO_SNDBUF, &buf, sizeof(buf));
     setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &buf, sizeof(buf));
 
     int flags = fcntl(fd, F_GETFL, 0);
-    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0) {
-        close(fd);
-        return -1;
-    }
-
+    if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+        goto failed;
     int rc = connect(fd, addr, addrlen);
-    if (rc < 0 && errno == EINPROGRESS) {
-        /* poll, never select: FD_SET and the kernel's result copy-out
-         * write past a 128-byte fd_set once fd >= 1024. A dual host with
-         * nine clients x 64 pooled conns crossed that; every new peer
-         * conn then smashed the connecting thread's saved registers
-         * (heartbeat_thread s=0x4000000000 = bit 38 = fd 1062, conn
-         * handlers returning to rip 0; Sep 30 2026 IO-500). */
-        struct pollfd pfd;
-        pfd.fd = fd;
-        pfd.events = POLLOUT;
-        pfd.revents = 0;
-        rc = poll(&pfd, 1, EFS_CONNECT_TIMEOUT_SEC * 1000);
-        if (rc > 0) {
+    if (rc < 0 && errno != EINPROGRESS)
+        goto failed;
+    if (rc < 0) {
+        /* poll supports descriptors above FD_SETSIZE. One deadline spans
+         * interrupted waits, and is capped by the enclosing RPC. */
+        struct pollfd pfd = {.fd = fd, .events = POLLOUT};
+        for (;;) {
+            clock_gettime(CLOCK_MONOTONIC, &ts);
+            uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+            if (now >= end) { errno = ETIMEDOUT; goto failed; }
+            rc = poll(&pfd, 1, (int)(end - now));
+            if (rc < 0 && errno == EINTR)
+                continue;
+            if (rc <= 0) {
+                if (!rc) errno = ETIMEDOUT;
+                goto failed;
+            }
             int so_error = 0;
             socklen_t len = sizeof(so_error);
-            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &len) == 0 &&
-                so_error == 0) {
-                fcntl(fd, F_SETFL, flags);
-                return fd;
-            }
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &len) < 0)
+                goto failed;
+            if (so_error) { errno = so_error; goto failed; }
+            break;
         }
-    } else if (rc == 0) {
-        fcntl(fd, F_SETFL, flags);
-        return fd;
     }
-
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    if ((uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000 >= end) {
+        errno = ETIMEDOUT;
+        goto failed;
+    }
+    if (fcntl(fd, F_SETFL, flags) < 0)
+        goto failed;
+    return fd;
+failed:;
+    int saved = errno;
     close(fd);
+    errno = saved;
     return -1;
 }
 

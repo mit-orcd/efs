@@ -23,4 +23,5 @@ implementation rounds.
 | 12 | Bound PUT dispatch, wake shard workers immediately, refuse shutdown admissions and recover failed pool startup | inline/full/shutdown/startup/one-slot regressions PASS; NUC concurrent and overlap gates PASS | 6d105c58 |
 | 13 | One connection checkout budget includes wakeups, parent deadline and late-connect rejection | real checkout regression PASS; NUC concurrent and overlap gates PASS | 54a36da8 |
 | 14 | Bind RPC scopes to absolute TCP receive deadlines, including slow-drip frames | network regression/wire/fd checks PASS; NUC full 216/217 and 64/64 peer PASS | e541c823 |
-| 15 | Absolute TCP send deadline bounds full and partial frames; Darwin nonblocking flags restored on return | TCP fault regression PASS on Mac and NUC; NUC concurrent 8/8 and overlap 3/3 PASS | accompanying network commit |
+| 15 | Absolute TCP send deadline bounds full and partial frames; Darwin nonblocking flags restored on return | TCP fault regression PASS on Mac and NUC; NUC concurrent 8/8 and overlap 3/3 PASS | 0be303d9 |
+| 16 | Bound TCP connection establishment across interrupted waits and reject late success; preserve connect/flag errors | connect fault regression PASS on Mac and NUC; live concurrent 8/8 and overlap 3/3 PASS; hostname resolution remains outside this bound | accompanying connect commit |
