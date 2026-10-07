@@ -2290,6 +2290,31 @@ static void path_hint_put(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
     pthread_mutex_unlock(&g_path_hint_mu);
 }
 
+/* A fault build can lose the first accepted reply for each fragment of one
+ * object and overwrite its hint slot before the real outer retry. */
+#if EFS_FAULTS
+static int put_reply_fault(efs_node_id_t nid, efs_ino_t ino, uint32_t ci,
+                            uint8_t fi)
+{
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static efs_ino_t target;
+    static uint32_t chunk, mask;
+    const char *enabled = getenv("EFS_FAULT_PUT_REPLY_COLLISION");
+    if (!enabled || strcmp(enabled, "1")) return 0;
+    pthread_mutex_lock(&mu);
+    if (!target) { target = ino; chunk = ci; }
+    int lose = target == ino && chunk == ci && !(mask & (1u << fi));
+    if (lose) mask |= 1u << fi;
+    pthread_mutex_unlock(&mu);
+    if (lose) {
+        path_hint_put(nid, ino + PATH_HINT_N, ci, fi, 0);
+        fprintf(stderr, "put-reply fault ino=%llu ci=%u fi=%u collision=1\n",
+                (unsigned long long)ino, ci, fi);
+    }
+    return lose;
+}
+#endif
+
 static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
                           efs_ino_t ino, uint32_t ci, uint8_t fi)
 {
@@ -2301,6 +2326,12 @@ static int put_recv_reply(efs_node_id_t nid, struct efs_conn *conn,
         return -1;
     }
     if (status == EFS_PUT_CHUNK_OK) {
+#if EFS_FAULTS
+        if (put_reply_fault(nid, ino, ci, fi)) {
+            efs_client_conn_drop(nid, conn);
+            return -1;
+        }
+#endif
         path_hint_put(nid, ino, ci, fi, path);
         efs_client_node_note_ok(nid);
         efs_client_conn_release(nid, conn);
@@ -2380,6 +2411,12 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
          * acknowledged root, even if the evictable hint cache lost it. */
         hdrs[i].path_hint = first_send ? EFS_PATH_HINT_NEW :
             path_hint_get(nodes[i], ino, chunk_index, (uint8_t)i);
+#if EFS_FAULTS
+        if (getenv("EFS_FAULT_PUT_REPLY_COLLISION"))
+            fprintf(stderr, "put-attempt ino=%llu ci=%u fi=%d gen=%llu first=%d hint=%u\n",
+                    (unsigned long long)ino, chunk_index, i,
+                    (unsigned long long)object_gen, first_send, hdrs[i].path_hint);
+#endif
     }
 
     /* Send on every live conn before waiting (overlap RTTs). */
@@ -2659,12 +2696,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
 /* If a stripe member is down (or failed the last attempt), put that
  * fragment on an unused live node. Four-node cluster, one down: the
  * remaining three still take a full 2+1 stripe. */
-static void reroute_down_fragments(efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
-                                   const int *failed)
+static void reroute_untried_fragments(efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
 {
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        int bad = (nodes[i] == 0) || efs_client_node_is_down(nodes[i]) ||
-                  (failed && failed[i] == 1);
+        int bad = (nodes[i] == 0) || efs_client_node_is_down(nodes[i]);
         if (!bad)
             continue;
         for (uint32_t n = 0; n < g_client.node_count; n++) {
@@ -2712,7 +2747,11 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
     int rc = EFS_ERR_NET;
     int failed[EFS_NUM_FRAGMENTS] = {0, 0, 0};
     for (int attempt = 1; attempt <= 4; attempt++) {
-        reroute_down_fragments(nodes, attempt == 1 ? NULL : failed);
+        /* A lost reply can follow a successful remote write. Relocating
+         * this generation would abandon that copy outside its publication.
+         * Only an object that has never been sent can change placement. */
+        if (attempt == 1)
+            reroute_untried_fragments(nodes);
         rc = put_fragments_parallel_once(ino, chunk_index, nodes, fragments,
                                          frag_len, checksums, failed, object_gen, attempt == 1);
         if (rc == EFS_OK || rc == EFS_ERR_QUOTA)
