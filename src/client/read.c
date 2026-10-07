@@ -1241,9 +1241,9 @@ static void *get_pool_thread(void *arg)
         int was_full;
 
         pthread_mutex_lock(&g_get_sh[si].mu);
-        while (g_get_sh[si].count == 0 && !g_get_pool.shutdown)
+        while (g_get_sh[si].count == 0 && !__atomic_load_n(&g_get_pool.shutdown, __ATOMIC_ACQUIRE))
             pthread_cond_wait(&g_get_sh[si].cv, &g_get_sh[si].mu);
-        if (g_get_pool.shutdown && g_get_sh[si].count == 0) {
+        if (__atomic_load_n(&g_get_pool.shutdown, __ATOMIC_ACQUIRE) && g_get_sh[si].count == 0) {
             pthread_mutex_unlock(&g_get_sh[si].mu);
             return NULL;
         }
@@ -1277,38 +1277,52 @@ static void *get_pool_thread(void *arg)
 
 static int get_pool_ensure(void)
 {
-    uint32_t i;
-    if (g_get_pool.ready)
+    if (__atomic_load_n(&g_get_pool.ready, __ATOMIC_ACQUIRE))
         return 0;
     pthread_mutex_lock(&g_get_init);
-    if (!g_get_pool.ready) {
-        uint32_t n = GET_POOL_N;
-        for (i = 0; i < n; i++) {
-            pthread_mutex_init(&g_get_sh[i].mu, NULL);
-            pthread_cond_init(&g_get_sh[i].cv, NULL);
-        }
-        for (i = 0; i < n; i++) {
-            if (pthread_create(&g_get_pool.tids[i], NULL, get_pool_thread,
-                               (void *)(intptr_t)i) != 0) {
-                uint32_t s, j;
-                g_get_pool.shutdown = 1;
-                for (s = 0; s < n; s++) {
-                    pthread_mutex_lock(&g_get_sh[s].mu);
-                    pthread_cond_broadcast(&g_get_sh[s].cv);
-                    pthread_mutex_unlock(&g_get_sh[s].mu);
-                }
-                for (j = 0; j < i; j++)
-                    pthread_join(g_get_pool.tids[j], NULL);
-                g_get_pool.shutdown = 0;
-                pthread_mutex_unlock(&g_get_init);
-                return -1;
-            }
-        }
-        g_get_pool.nworkers = (int)n;
-        g_get_pool.ready = 1;
+    if (__atomic_load_n(&g_get_pool.ready, __ATOMIC_ACQUIRE)) {
+        pthread_mutex_unlock(&g_get_init);
+        return 0;
     }
+    unsigned initialized = 0, started = 0;
+    __atomic_store_n(&g_get_pool.shutdown, 0, __ATOMIC_RELEASE);
+    for (unsigned i = 0; i < GET_POOL_N; i++) {
+        if (pthread_mutex_init(&g_get_sh[i].mu, NULL) != 0)
+            goto failed;
+        if (pthread_cond_init(&g_get_sh[i].cv, NULL) != 0) {
+            pthread_mutex_destroy(&g_get_sh[i].mu);
+            goto failed;
+        }
+        initialized++;
+    }
+    for (unsigned i = 0; i < GET_POOL_N; i++) {
+        if (pthread_create(&g_get_pool.tids[i], NULL, get_pool_thread,
+                           (void *)(intptr_t)i) != 0)
+            goto failed;
+        started++;
+    }
+    g_get_pool.nworkers = GET_POOL_N;
+    __atomic_store_n(&g_get_pool.ready, 1, __ATOMIC_RELEASE);
     pthread_mutex_unlock(&g_get_init);
     return 0;
+failed:
+    __atomic_store_n(&g_get_pool.shutdown, 1, __ATOMIC_RELEASE);
+    for (unsigned i = 0; i < initialized; i++) {
+        pthread_mutex_lock(&g_get_sh[i].mu);
+        pthread_cond_broadcast(&g_get_sh[i].cv);
+        pthread_mutex_unlock(&g_get_sh[i].mu);
+    }
+    for (unsigned i = 0; i < started; i++)
+        pthread_join(g_get_pool.tids[i], NULL);
+    for (unsigned i = 0; i < initialized; i++) {
+        pthread_cond_destroy(&g_get_sh[i].cv);
+        pthread_mutex_destroy(&g_get_sh[i].mu);
+    }
+    memset(g_get_sh, 0, sizeof(g_get_sh));
+    g_get_pool.nworkers = 0;
+    __atomic_store_n(&g_get_pool.shutdown, 0, __ATOMIC_RELEASE);
+    pthread_mutex_unlock(&g_get_init);
+    return -1;
 }
 
 /* Stop the read pool and join its workers. Thread exit runs the TLS
@@ -1316,19 +1330,28 @@ static int get_pool_ensure(void)
  * join leaks ~192 KiB per worker. Call only when no reads are in flight. */
 void efs_client_read_pools_stop(void)
 {
-    uint32_t i;
-    if (!g_get_pool.ready)
+    pthread_mutex_lock(&g_get_init);
+    if (!__atomic_load_n(&g_get_pool.ready, __ATOMIC_ACQUIRE)) {
+        pthread_mutex_unlock(&g_get_init);
         return;
-    g_get_pool.shutdown = 1;
-    for (i = 0; i < (uint32_t)g_get_pool.nworkers; i++) {
+    }
+    __atomic_store_n(&g_get_pool.ready, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&g_get_pool.shutdown, 1, __ATOMIC_RELEASE);
+    for (int i = 0; i < g_get_pool.nworkers; i++) {
         pthread_mutex_lock(&g_get_sh[i].mu);
         pthread_cond_broadcast(&g_get_sh[i].cv);
         pthread_mutex_unlock(&g_get_sh[i].mu);
     }
-    for (i = 0; i < (uint32_t)g_get_pool.nworkers; i++)
+    for (int i = 0; i < g_get_pool.nworkers; i++)
         pthread_join(g_get_pool.tids[i], NULL);
-    g_get_pool.ready = 0;
-    g_get_pool.shutdown = 0;
+    for (int i = 0; i < g_get_pool.nworkers; i++) {
+        pthread_cond_destroy(&g_get_sh[i].cv);
+        pthread_mutex_destroy(&g_get_sh[i].mu);
+    }
+    memset(g_get_sh, 0, sizeof(g_get_sh));
+    g_get_pool.nworkers = 0;
+    __atomic_store_n(&g_get_pool.shutdown, 0, __ATOMIC_RELEASE);
+    pthread_mutex_unlock(&g_get_init);
 }
 
 static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
@@ -1354,7 +1377,7 @@ static int get_pool_run(struct chunk_get_job *jobs, uint32_t batch)
         int si = (int)(((unsigned)base + i) % (unsigned)g_get_pool.nworkers);
         jobs[i].bp = &bp;
         pthread_mutex_lock(&g_get_sh[si].mu);
-        while (g_get_sh[si].count == GET_POOL_QDEPTH && !g_get_pool.shutdown)
+        while (g_get_sh[si].count == GET_POOL_QDEPTH && !__atomic_load_n(&g_get_pool.shutdown, __ATOMIC_ACQUIRE))
             pthread_cond_wait(&g_get_sh[si].cv, &g_get_sh[si].mu);
         g_get_sh[si].q[g_get_sh[si].tail] = &jobs[i];
         g_get_sh[si].tail = (g_get_sh[si].tail + 1) % GET_POOL_QDEPTH;
@@ -1388,7 +1411,7 @@ static int get_pool_try_submit(struct chunk_get_job *job)
     si = (int)((unsigned)__sync_fetch_and_add(&g_get_pool.rr, 1) %
                (unsigned)g_get_pool.nworkers);
     pthread_mutex_lock(&g_get_sh[si].mu);
-    if (g_get_pool.shutdown || g_get_sh[si].count >= GET_POOL_QDEPTH / 2) {
+    if (__atomic_load_n(&g_get_pool.shutdown, __ATOMIC_ACQUIRE) || g_get_sh[si].count >= GET_POOL_QDEPTH / 2) {
         pthread_mutex_unlock(&g_get_sh[si].mu);
         return -1;
     }
