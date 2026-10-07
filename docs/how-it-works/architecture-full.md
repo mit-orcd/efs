@@ -4646,6 +4646,15 @@ EFS_READ_VERIFY; the switch only affects `efs_client_get_fragment`, so it is
 not comprehensive client read verification. I25 specifies identity plus
 payload; automatic repair is separately absent under W74.
 
+**Continuation repair (Oct 7):** data GET now treats missing/truncated digest
+evidence as an unavailable fragment; it never substitutes a newly computed hash
+as proof. Recorded-digest mismatch rejection remains. NUC real-RPC corruption
+tests pass for payload flips, missing/truncated digests and digest flips in
+buffered/direct mode with one/two roots, preserving valid-object reads. The
+baseline serves missing-digest data successfully and fails this same gate.
+The existing metadata-table root-integrity path is separate and unchanged.
+Identity binding, PUT validation and complete client verification remain below.
+
 **Change/gate:** define a compatible, trusted identity-bound integrity format
 and fail-closed behavior for missing/corrupt integrity evidence; preserve
 explicit legacy-format handling rather than silently reclassifying bytes as

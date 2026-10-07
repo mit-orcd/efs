@@ -43,3 +43,12 @@ late-PUT fencing. The direct run exercised the new broad-POSIX counter assertion
 both modes exercised the last-close assertion. Prior W87 failure remains retained;
 one successful broad repeat does not establish its cause or close W87.
 The NUC devops driver adds `--gc` (private stores, no production data deletion).
+
+## Round 4 — W75 fail closed without recorded integrity evidence
+
+Data GET rejects missing/truncated checksum evidence instead of manufacturing a
+matching digest from untrusted bytes. Valid objects and existing mismatch checks
+remain covered. NUC real-RPC corruption tests pass for buffered/direct and one/two
+roots. The old production binary fails the same missing-digest assertion,
+confirming regression sensitivity. Logs `/private/tmp/efs-roadmap-w75-integrity.log`
+and `/private/tmp/efs-roadmap-w75-baseline.log`. Identity-bound format remains open.

@@ -343,6 +343,13 @@ void server_handle_conn(struct efs_conn *conn)
                         /* I25: a fragment whose payload hash does not match
                          * the recorded checksum is unavailable — never
                          * served. Repair is a control-plane job. */
+                        if (!sum_ok && !efs_ino_is_meta_table(req->ino)) {
+                            /* A fresh hash cannot prove untrusted stored bytes.
+                             * Legacy data without its digest is unavailable. */
+                            reply[0] = EFS_GET_CHUNK_NOT_FOUND;
+                            out_len = 1;
+                            goto send_reply;
+                        }
                         if (sum_ok && !efs_ino_is_meta_table(req->ino)) {
                             uint8_t vh[EFS_HASH_SIZE];
                             efs_hash(dptr, data_len, vh);
