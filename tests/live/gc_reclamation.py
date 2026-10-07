@@ -32,6 +32,8 @@ p.add_argument('--namespace-cycles',action='store_true',help='race opposite dire
 p.add_argument('--mount-label', default='default')
 p.add_argument('--workers', action='store_true')
 p.add_argument('--pressure', action='store_true')
+p.add_argument('--publication-pressure',action='store_true',help='retain failed REPORT bodies until bounded admission refuses, then recover')
+p.add_argument('--namespace-max',action='store_true',help='exact ancestry limit, over-limit refusal and restart recovery')
 p.add_argument('--opid', action='store_true')
 p.add_argument('--opid-restart',action='store_true',help='restart all owned servers between lost commit reply and replay')
 p.add_argument('--fold-audit', action='store_true', help='require authoritative fold transitions and cold bytes after GC')
@@ -84,7 +86,10 @@ if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
 if a.worker_fault:
     assert a.workers and a.client_binary,'worker faults require explicit fault client and --workers'
     env['EFS_FAULT_REPLY_BUFFER']=a.worker_fault
-if a.pressure or a.mixed_reads:env.update(EFS_DCACHE_BYTES=str(16<<20),EFS_DCACHE_HARD_BYTES=str(32<<20),EFS_DCACHE_DRAIN_BYTES=str(32<<20),EFS_BUF_BUDGET_TRACE='1')
+if a.pressure or a.mixed_reads or a.publication_pressure:env.update(EFS_DCACHE_BYTES=str(16<<20),EFS_DCACHE_HARD_BYTES=str(32<<20),EFS_DCACHE_DRAIN_BYTES=str(32<<20),EFS_BUF_BUDGET_TRACE='1')
+if a.publication_pressure:
+    assert a.client_binary,'publication pressure requires explicit fault client'
+    env['EFS_FAULT_REPORT_FILE']=str(work/'report-fault')
 if a.lookup_barrier:
     assert a.client_binary,'LOOKUP barrier requires fault client'
     env['EFS_FAULT_LOOKUP_BARRIER']=str(work)
@@ -593,6 +598,28 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
             assert after_admission-before_admission<8,(before_admission,after_admission,reply)
             print('over-envelope rmdir rejects before PREPARE/DROP and preserves directory PASS',flush=True)
 
+    if a.namespace_max:
+        # Find the actual participant envelope before the separate 64-hop cap.
+        folder=mount;chain=[];moving=mount/'max-moving';moving.mkdir()
+        last=moving;elapsed=None
+        for index in range(64):
+            folder=folder/f'max-{index}';folder.mkdir();chain.append(folder)
+            started=time.monotonic()
+            try:os.rename(last,folder/'moved')
+            except OSError as error:
+                assert error.errno in (11,16),error
+                elapsed=time.monotonic()-started;break
+            last=folder/'moved'
+        assert elapsed is not None and len(chain)>20
+        saved=last.stat().st_ino
+        assert elapsed<30 and not (folder/'moved').exists()
+        unmount();stop();start();mount_client()
+        assert last.stat().st_ino==saved
+        recovered=mount/'max-recovered';os.rename(last,recovered)
+        assert recovered.stat().st_ino==saved;os.rmdir(recovered)
+        for directory in reversed(chain):os.rmdir(directory)
+        (work/'namespace-max.json').write_text(json.dumps({'accepted_depth':len(chain)-1,'refused_depth':len(chain),'refusal_seconds':elapsed,'restart_verified':True},indent=2))
+        print(f'namespace actual envelope: depth={len(chain)-1} accepted, depth={len(chain)} refused in {elapsed:.3f}s, restart recovery PASS',flush=True)
     if a.integrity:
         # A swap preserves a valid local payload/digest pair but violates the
         # checksum recorded for this immutable object in committed metadata.
@@ -747,6 +774,48 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         for child in directory.iterdir():child.unlink()
         directory.rmdir()
         wait(lambda:not files(sample_ino),'worker fixture fragments reclaimed')
+    if a.publication_pressure:
+        path=mount/'failed-publication-pressure'
+        fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
+        ino_value=os.fstat(fd).st_ino
+        fault=work/'report-fault';fault.write_text('WITHHOLD ALL\n')
+        model=[];errors=[];samples=[];started=time.monotonic()
+        try:
+            for slot in range(512):
+                data=bytes([slot%251+1])*4096
+                offset=slot*(1<<20)
+                try:
+                    assert os.pwrite(fd,data,offset)==len(data)
+                    model.append((offset,data))
+                except OSError as error:
+                    assert error.errno in (5,11,12,16),error
+                    errors.append(error.errno);break
+                text=Path(f'/proc/{client.pid}/status').read_text()
+                samples.append(int(re.search(r'VmRSS:\s+(\d+)',text).group(1)))
+            assert model and errors,'failed publication did not cause finite admission refusal'
+            assert time.monotonic()-started<180
+            # Failed fsync must not claim success while records are withheld.
+            try:os.fsync(fd)
+            except OSError as error:errors.append(error.errno)
+            else:raise AssertionError('withheld publication falsely acknowledged fsync')
+            log=(work/'fuse.log').read_text()
+            charges=re.findall(r'dcache-pressure live=(\d+) reserved=(\d+) backing=(\d+) limit=(\d+)',log)
+            assert charges,'bounded admission was not observed'
+            assert all(int(live)+int(reserved)<=int(limit) and int(backing)<=int(limit) for live,reserved,backing,limit in charges),charges
+            assert max(samples)<512*1024,samples
+        finally:fault.write_text('OFF\n')
+        os.fsync(fd);os.close(fd)
+        # New admission and a cold read must succeed after the failure releases.
+        unmount();mount_client()
+        with path.open('rb',buffering=0) as inp:
+            for offset,data in model:inp.seek(offset);assert inp.read(len(data))==data
+        recovered=mount/'publication-recovered';recovered.write_bytes(b'recovered')
+        with recovered.open('rb') as inp:os.fsync(inp.fileno())
+        record={'accepted_writes':len(model),'errors':errors,'peak_rss_kib':max(samples),'pressure_charges':charges,'cold_bytes_verified':True}
+        (work/'publication-pressure.json').write_text(json.dumps(record,indent=2))
+        path.unlink();recovered.unlink()
+        wait(lambda:not files(ino_value),'failed-publication owned bodies cold verified and reclaimed',180)
+        print('failed publication finite admission, retained bytes and recovery '+json.dumps(record)+' PASS',flush=True)
     if a.pressure:
         pressure=[];retries=[];samples=[]
         def sparse_writer(index):

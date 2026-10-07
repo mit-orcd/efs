@@ -1576,7 +1576,8 @@ static int report_fault_withhold(efs_ino_t ino, uint32_t ci)
 {
     char line[128], pair[96];
     const char *target = getenv("EFS_FAULT_WITHHOLD");
-    FILE *file = fopen(EFS_FAULT_FILE, "r");
+    const char *path = getenv("EFS_FAULT_REPORT_FILE");
+    FILE *file = fopen(path && *path ? path : EFS_FAULT_FILE, "r");
     if (file) {
         target = NULL; /* OFF/empty file overrides the startup environment */
         if (fgets(line, sizeof(line), file) &&
@@ -1584,6 +1585,8 @@ static int report_fault_withhold(efs_ino_t ino, uint32_t ci)
             target = pair;
         fclose(file);
     }
+    if (target && !strcmp(target, "ALL"))
+        return 1;
     unsigned long long target_ino;
     unsigned target_ci;
     char trailing;
