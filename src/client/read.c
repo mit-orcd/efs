@@ -1635,7 +1635,9 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
     if (efs_client_pull_chunks_range(ino, (uint32_t)(offset / cs),
             (uint32_t)((offset + size - 1) / cs) + 1) != EFS_OK)
         return 0;
-    (void)efs_dcache_put_win_wait(ino);
+    int window_rc = efs_dcache_put_win_wait(ino);
+    if (window_rc < 0)
+        return window_rc;
     int n = (int)(size / cs);
     uint32_t ci0 = (uint32_t)(offset / cs);
     int got = 0;
