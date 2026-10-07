@@ -258,6 +258,7 @@ test: all
 	./tests/test_reply_buffers key-failure
 	./tests/test_bufpool
 	python3 tests/test_read_admission.py
+	python3 tests/test_read_failure_admission.py
 	python3 tests/test_client_memory.py
 	./tests/test_wire
 	./tests/test_data
@@ -335,6 +336,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	./tests/test_reply_buffers key-failure
 	./tests/test_bufpool
 	python3 tests/test_read_admission.py
+	python3 tests/test_read_failure_admission.py
 	python3 tests/test_client_memory.py
 
 $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h

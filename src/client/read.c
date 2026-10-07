@@ -1673,6 +1673,11 @@ int efs_client_read_refs(efs_ino_t ino, uint64_t offset, size_t size,
 
 int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size_t *out_len)
 {
+    if (!out_len || (!buf && size))
+        return EFS_ERR_INVAL;
+    *out_len = 0;
+    if (size && efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
     int want_pf;
     uint32_t chunk_size;
 
@@ -1694,7 +1699,10 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
          * + adopt + copy-out). A genuine unlink-open ghost fails the RPC
          * and falls through: unpublished dirty ranges only. have_base=1
          * past EOF is a shrink leftover; FOPEN_DIRECT_IO ignores i_size. */
-        if (efs_client_stat_ino(ino, &inode) != EFS_OK) {
+        int stat_rc = efs_client_stat_ino(ino, &inode);
+        if (stat_rc != EFS_OK) {
+            if (stat_rc != EFS_ERR_NOT_FOUND)
+                return stat_rc;
             uint32_t cs = data_chunk_size();
             if (cs && size > 0 &&
                 (offset / cs) == ((offset + size - 1) / cs)) {
@@ -1716,7 +1724,9 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
     /* A full-image PUT in flight for this inode has the chunk's body and
      * no map row yet; read it after the window closes (efs_dcache_put_win_wait).
      * One check per read; lock-free when no window is open anywhere. */
-    (void)efs_dcache_put_win_wait(ino);
+    int window_rc = efs_dcache_put_win_wait(ino);
+    if (window_rc < 0)
+        return window_rc;
     uint64_t file_size = inode.size;
 
     if (offset >= file_size) {

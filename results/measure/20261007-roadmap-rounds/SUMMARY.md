@@ -14,4 +14,5 @@ implementation rounds.
 | 3 | Writeback workers inherit budgets, bound overlap/stripe waits, reject expired admission and complete cleanup | worker/queue/memo regressions PASS; NUC concurrent 8/8 and peer overlap 3/3 PASS | c265b009 |
 | 4 | One FUSE write budget includes pressure drains and append locking in both entry points | write/cache/memo regressions PASS; NUC concurrent 8/8 and peer append 3/3 PASS | a846ce39 |
 | 5 | PUT-window read wait respects monotonic inherited budget | window regression PASS on Mac and NUC; live single/peer straddle 1/1 each PASS | cf54a4e9 |
-| 6 | Bound REPORT retry/slot waits, reject expired work, restore TLS and measure actual sleeps | retry/pressure regressions PASS; NUC fsync 4/4 and peer overlap 3/3 PASS | accompanying client commit |
+| 6 | Bound REPORT retry/slot waits, reject expired work, restore TLS and measure actual sleeps | retry/pressure regressions PASS; NUC fsync 4/4 and peer overlap 3/3 PASS | fbaf6046 |
+| 7 | Surface read metadata/PUT-window failures instead of false EOF or holes; define failure byte count | read admission regression PASS; NUC read-filter single/peer gates PASS | accompanying client commit |
