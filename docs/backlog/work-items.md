@@ -2095,6 +2095,16 @@ third fragment. Trace and validate protection debt/repair before closing W42.
 
 ## W27 · REPORT identity from the staging table (queue row 0b)
 
+**Closed on NUC acceptance (Oct 7):** both initial and STALE-rebuilt REPORTs
+share an explicit successful-local-PUT ownership predicate. The earlier claim
+that nonzero staging nodes still authorize publication was stale: `3a1b4a52`
+already removed it. `5d26932e` consolidates that guard, tests rejection despite
+nonzero observed nodes while retaining genuine dirty ownership, and makes the
+rate-limited miss counter race-free. The diagnostic now says rejection rather
+than claiming a staging mapping was published. A 2048-file fsync/close tree
+verifies cold with zero identity misses and passes physical GC/restart and full
+POSIX. See [next-five ledger](../status/next-five-gates-20261007.md).
+
 **Oct 6 drain follow-up:** `febc55e5` distinguishes a phantom span-only
 staging-row mark from actual local ownership before requeuing a missing PUT
 identity. The old zero-node branch requeued indefinitely and blocked clean
@@ -2629,6 +2639,14 @@ also pass, and normal binaries exclude fault strings. See the
 
 ## W69 · Lookup memo returns pre-mutation stats (queue row 0j)
 
+**Targeted correctness acceptance (Oct 7):** a fault-build real LOOKUP reply
+is held across local fchmod, then released; later stat returns the new mode
+instead of a stale memo. Direct/buffered checks, immediate mutation stats,
+POSIX and GC/restart pass. Cold GNU du allocation/elapsed samples are recorded.
+The historical, unidentified “Spark du” performance workload still needs its
+tool/input specified; this package remains open only for that measurement.
+See [next-five ledger](../status/next-five-gates-20261007.md).
+
 **Class:** correctness bug. **Status:** open; indexed Oct 7, 2026.
 
 **Evidence/current state:** Existing queue row 0j now has a W identity. Mutation serial/invalidation code exists; historical dates do not establish current targeted rollout acceptance.
@@ -2832,10 +2850,20 @@ an unreviewed on-disk format change or claiming repair from a decode fallback.
 
 ## W76 · Namespace opid capacity exhaustion silently removes retry identity (queue row spec6)
 
+**Closed on targeted acceptance (Oct 7):** 512 concurrent production
+identity owners have distinct slots/sequences. All four mutation callers send
+nothing at saturation and recover after release. These are extracted production
+allocator/caller tests with a send spy, not a claim that the default 32-worker
+FUSE mount reaches 512. Real CREATE/LINK/RENAME/UNLINK lost replies replay with
+identical identities and a single namespace effect across leader death and
+full-server restart. LINK leaves exactly one link after the original name is
+removed. Full POSIX and physical GC/restart pass.
+See [next-five ledger](../status/next-five-gates-20261007.md).
+
 **Gate follow-up (Oct 7):** NUC byte-identical CREATE/RENAME/UNLINK operation-identity replay passes across full owned-server crash/restart after committed reply loss. Maximum concurrency and failover acceptance remain. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
-**Class:** conditional retry/idempotency correctness. **Status:** open source
-finding; reaching this limit on an ordinary mounted workload is not established.
+**Class:** conditional retry/idempotency correctness. **Status:** closed after targeted acceptance; historical source
+finding below; reaching this limit on an ordinary mounted workload is not established.
 
 **Evidence:** `EFS_OPID_INFLIGHT` is 512 in `client_internal.h`.
 `inode_rpc.c:opid_begin` leaves its request identity zero and returns -1 when
@@ -3038,6 +3066,19 @@ report offered load, achieved rates, tails and memory on a named build.
 
 ## W82 · Completed read authority is reused by an isolated former leader
 
+**Closed on targeted authority acceptance (Oct 7):** the NUC partition gate
+now covers stored typed-publication receipts, cross-parent namespace transaction
+source/destination/inode views, sessions and voter shrink/restore. An isolated
+former leader remains reachable but refuses stale authority; the majority
+commits the move and serves the current receipt. The extracted production
+coordinator callback separately proves failed fresh authority returns IO before
+any decision-table lookup, never absence. There is no standalone public
+transaction-decision query RPC; the live gate exercises the namespace transaction
+path and the unit covers its internal decision callback. Existing Raft units
+cover delayed contexts/current-term completion. This closes stale-read reuse,
+not D25 activation or W72 session integration.
+See [next-five ledger](../status/next-five-gates-20261007.md).
+
 **Gate follow-up (Oct 7):** NUC configuration partition gate found and fixed a synchronous solo-proposal replication send-limit omission (`0960bf5b`). The deterministic regression failed before the fix; after the fix, the isolated old leader refuses reads across a voter change and restoring three voters catches up and serves current metadata. Transaction/publication partition gates remain. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Class/state:** linearizable-read correctness; core-model reproduction Oct 7.
@@ -3173,6 +3214,17 @@ status/errno and finite retry behavior. Do not weaken guards to pass the tests.
 <a id="w85"></a>
 
 ## W85 · Path-hint eviction can relabel an ambiguous PUT retry as first-send
+
+**Closed after an additional repair (Oct 7):** real lost-ACK/collision gates
+exposed same-generation rerouting to a different node, leaving the accepted
+original fragment outside the published mapping. `389a8baf` keeps an attempted
+object's placement stable; only before its first send may unavailable nodes
+be replaced. Untracked relocation is not safe ownership. Direct and buffered
+fault-client gates with two roots per node now retain the generation, retry with
+probe hints, have no duplicate fragment identities and quota charge equals the
+physical inventory. Cold bytes, client/server restart and final deletion pass;
+normal binaries exclude fault controls. First-send NEW optimization remains.
+See [next-five ledger](../status/next-five-gates-20261007.md).
 
 **Round-6 current source:** a concurrent repair, now committed as `6d6056c3`, owns first-send
 state in the PUT attempt and locks the root cache; cache misses on retry probe.

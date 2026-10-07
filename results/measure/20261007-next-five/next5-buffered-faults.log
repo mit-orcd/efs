@@ -1,0 +1,21 @@
+Evidence directory: /data1/efs/gc-buffered-c4c7aqkj
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=7606107325238437006
+client serving PASS
+immediate post-mutation lookup/stat gate PASS
+fragment files present PASS
+Unmounting /data1/efs/gc-buffered-c4c7aqkj/mnt
+Retiring drained efs-fuse PID 4062291 for /data1/efs/gc-buffered-c4c7aqkj/mnt
+Unmounted /data1/efs/gc-buffered-c4c7aqkj/mnt
+client serving PASS
+lookup barrier file reclaimed PASS
+actual LOOKUP reply spanning chmod cannot repopulate stale memo PASS
+fragment files present PASS
+Traceback (most recent call last):
+  File "/data1/efs/next5-buffered-src/tests/live/gc_reclamation.py", line 651, in <module>
+    assert len(faults)==3,faults
+           ^^^^^^^^^^^^^^
+AssertionError: [('4097', '0', '0'), ('4097', '0', '1'), ('4097', '0', '2'), ('139265', '3', '0'), ('139265', '3', '2'), ('139265', '3', '1')]

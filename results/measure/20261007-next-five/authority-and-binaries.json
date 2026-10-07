@@ -1,0 +1,36 @@
+{
+  "/data1/efs/next5-w82-publication.log": {
+    "publication-receipts.txt": "status=0 state=2 verdict=-14\nstatus=0 state=2 verdict=-14\nstatus=5 state=0 verdict=0\nstatus=5 state=0 verdict=0\nstatus=5 state=0 verdict=0\n",
+    "sessions.txt": "raft-session status=0 rc=0 primary=1 op=get ssh=1503 shard=1503 epoch=1 state=1 touched=0 index=8\n\nraft-session status=0 rc=0 primary=2 op=fence ssh=1503 shard=1 epoch=2 state=1 touched=1 index=26\n\nraft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=12\n\nraft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=12\n\nraft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=12\n",
+    "replies.txt": "raft-getattr status=0 primary=1 ino=1 mode=040755 nlink=2 size=0 mtime=1791408847\n\nraft-getattr status=0 primary=2 ino=1 mode=040700 nlink=2 size=0 mtime=1791408847\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n",
+    "lookups.txt": "raft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0\n\nraft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0\n\nraft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0\n",
+    "configuration.txt": "raft-change rc=0 group=0 voters=0x2 index=26 hint=1\n\nnode 2 root=1 salt=14807479530624537071 groups=2\n  group 0 hosted=1 role=LEADER leader=1 term=2 commit=28 applied=28 voters=0x2 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=2 term=2 commit=5 applied=5 voters=0x7 joint=0\n\nnode 3 root=1 salt=14807479530624537071 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=1 term=2 commit=27 applied=27 voters=0x7 joint=1\n  group 2 hosted=1 role=LEADER leader=2 term=2 commit=5 applied=5 voters=0x7 joint=0\n\nraft-lookup status=5 primary=1 parent=1 name=after-config ino=0 mode=00 nlink=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n"
+  },
+  "/data1/efs/next5-w82-all-views.log": {},
+  "/data1/efs/next5-w82-all-views-repeat.log": {
+    "transaction-views.txt": "raft-rename status=0 primary=2 old_parent=2479 old=txn-file new_parent=584 new=txn-moved ino=6575 mode=0100644 nlink=1\n\nraft-lookup status=0 primary=2 parent=584 name=txn-moved ino=6575 mode=0100644 nlink=1\n\nraft-lookup status=5 primary=1 parent=2479 name=txn-file ino=0 mode=00 nlink=0\n\nraft-lookup status=5 primary=1 parent=584 name=txn-moved ino=0 mode=00 nlink=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n",
+    "publication-receipts.txt": "status=0 state=2 verdict=-14\nstatus=0 state=2 verdict=-14\nstatus=5 state=0 verdict=0\nstatus=5 state=0 verdict=0\nstatus=5 state=0 verdict=0\n",
+    "sessions.txt": "raft-session status=0 rc=0 primary=1 op=get ssh=1503 shard=1503 epoch=1 state=1 touched=0 index=7\n\nraft-session status=0 rc=0 primary=2 op=fence ssh=1503 shard=1 epoch=2 state=1 touched=1 index=38\n\nraft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=18\n\nraft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=18\n\nraft-session status=3 rc=-13 primary=1 op=get ssh=1503 shard=1503 epoch=0 state=0 touched=0 index=18\n",
+    "replies.txt": "raft-getattr status=0 primary=1 ino=1 mode=040755 nlink=2 size=0 mtime=1791409186\n\nraft-getattr status=0 primary=2 ino=1 mode=040700 nlink=4 size=0 mtime=1791409187\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n",
+    "lookups.txt": "raft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0\n\nraft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0\n\nraft-lookup status=5 primary=1 parent=1 name=before-rename ino=0 mode=00 nlink=0\n",
+    "configuration.txt": "raft-change rc=0 group=0 voters=0x2 index=38 hint=1\n\nnode 2 root=1 salt=7927984185645717779 groups=2\n  group 0 hosted=1 role=LEADER leader=1 term=2 commit=40 applied=40 voters=0x2 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=2 term=2 commit=12 applied=12 voters=0x7 joint=0\n\nnode 3 root=1 salt=7927984185645717779 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=1 term=2 commit=39 applied=39 voters=0x7 joint=1\n  group 2 hosted=1 role=LEADER leader=2 term=2 commit=12 applied=12 voters=0x7 joint=0\n\nraft-lookup status=5 primary=1 parent=1 name=after-config ino=0 mode=00 nlink=0\n\nraft-getattr status=5 primary=1 ino=0 mode=00 nlink=0 size=0 mtime=0\n"
+  },
+  "next5-release-src": {
+    "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+    "efs-fuse": "6a0f8525711de646aca4f6c4e3e8416ce96a914e9531c1f2b3f1bc6b2a44381d",
+    "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b",
+    "libefs.a": "0d420e72c4a59c4240257ffbff6c3dfa55be7e94c6c9af2df7b2539969d1144d"
+  },
+  "next5-fixed-fault-src": {
+    "efsd": "17fda19bf4fcb97fa5753c83e88397bee866e90bd2f865e71aa93f6088b9b734",
+    "efs-fuse": "5c8fe6f2d151f107c9327b12676df1ea24b2e5afc04d8a9932894a4816ef3b61",
+    "efs-mgmt": "e5ce354959c86dec45f788e661189ee966714ed1d20ade4f67ca20e9e3483ab5",
+    "libefs.a": "58804dfd4e1739f5216540a92054a6d76680d40656fb1d879daf9237aba0b2e4"
+  },
+  "next5-direct-release-src": {
+    "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+    "efs-fuse": "6a0f8525711de646aca4f6c4e3e8416ce96a914e9531c1f2b3f1bc6b2a44381d",
+    "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b",
+    "libefs.a": "0d420e72c4a59c4240257ffbff6c3dfa55be7e94c6c9af2df7b2539969d1144d"
+  }
+}

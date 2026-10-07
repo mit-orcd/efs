@@ -1,0 +1,4 @@
+  File "/data1/efs/next5-src/tests/live/gc_reclamation.py", line 872
+    if a.opid_failover:unmount();stop();start();mount_client()
+    ^^
+SyntaxError: expected 'except' or 'finally' block

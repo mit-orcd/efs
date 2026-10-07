@@ -1,0 +1,82 @@
+Evidence directory: /data1/efs/gc-direct-t4i82135
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=7917721028804497592
+client serving PASS
+fragment files present PASS
+Unmounting /data1/efs/gc-direct-t4i82135/mnt
+Retiring drained efs-fuse PID 4017040 for /data1/efs/gc-direct-t4i82135/mnt
+Unmounted /data1/efs/gc-direct-t4i82135/mnt
+client serving PASS
+ambiguous PUT fixture reclaimed PASS
+actual FUSE accepted-reply loss/collision: retries probe same generation; cold bytes and reclaim PASS
+peer mounted PASS
+Unmounting /data1/efs/gc-direct-t4i82135/peer
+Retiring drained efs-fuse PID 4017484 for /data1/efs/gc-direct-t4i82135/peer
+Unmounted /data1/efs/gc-direct-t4i82135/peer
+two-peer adjacent writes and repeated folds complete
+fragment files present PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+fragment files present PASS
+GC runs while hardlink remains PASS
+hardlink protects stored fragments PASS
+GC runs while unlinked inode is open PASS
+open unlinked inode retains readable/writable fragments PASS
+last close physically reclaims fragments PASS
+GC passes, removal bytes and quota reflect last-close deletion PASS
+closed-unlinked inode allocated bytes: 15249408 -> 0 PASS
+fragment files present PASS
+valid late-PUT control accepted on live inode by every member PASS
+disk failure visible PASS
+failed fragment remains on disk pending retry PASS
+Unmounting /data1/efs/gc-direct-t4i82135/mnt
+Retiring drained efs-fuse PID 4017200 for /data1/efs/gc-direct-t4i82135/mnt
+Unmounted /data1/efs/gc-direct-t4i82135/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+restart without client reclaims pending fragments PASS
+leader reap and fragment queues drain PASS
+client serving PASS
+cold two-peer fold and live-base reads after GC PASS
+fold fragments physically reclaimed PASS
+fragment files present PASS
+offline fourth member retains reap ledger PASS
+Unmounting /data1/efs/gc-direct-t4i82135/mnt
+Retiring drained efs-fuse PID 4020565 for /data1/efs/gc-direct-t4i82135/mnt
+Unmounted /data1/efs/gc-direct-t4i82135/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+rejoined member completes reclamation PASS
+queues drain after member rejoins PASS
+client serving PASS
+sentinel physically reclaimed PASS
+all fixture GC records retired PASS
+Unmounting /data1/efs/gc-direct-t4i82135/mnt
+Retiring drained efs-fuse PID 4022092 for /data1/efs/gc-direct-t4i82135/mnt
+Unmounted /data1/efs/gc-direct-t4i82135/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+physical inventory empty after restart PASS
+restart orphan and GC queues drained PASS
+restart quota zero and late PUT fenced on every member PASS
+physical fragment inventory empty after restart PASS
+GC reclamation direct PASS

@@ -1,0 +1,18 @@
+Evidence directory: /data1/efs/gc-direct-_1nqapxz
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=4387656315562576630
+client serving PASS
+Traceback (most recent call last):
+  File "/data1/efs/next5-src/tests/live/gc_reclamation.py", line 646, in <module>
+    if a.put_reply_fault:
+                          
+  File "/data1/efs/next5-src/tests/live/gc_reclamation.py", line 209, in create
+    ino=os.fstat(fd).st_ino
+    ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/next5-src/tests/live/gc_reclamation.py", line 118, in wait
+    print(label+' PASS',flush=True);return
+^^^^^^^^^^^^^^^
+KeyboardInterrupt

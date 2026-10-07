@@ -1,0 +1,24 @@
+Evidence directory: /data1/efs/gc-direct-w3__j5xn
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=2099025396641300749
+client serving PASS
+fragment files present PASS
+Unmounting /data1/efs/gc-direct-w3__j5xn/mnt
+Retiring drained efs-fuse PID 4068620 for /data1/efs/gc-direct-w3__j5xn/mnt
+Unmounted /data1/efs/gc-direct-w3__j5xn/mnt
+client serving PASS
+lookup barrier file reclaimed PASS
+actual LOOKUP reply spanning chmod cannot repopulate stale memo PASS
+Unmounting /data1/efs/gc-direct-w3__j5xn/mnt
+Retiring drained efs-fuse PID 4068663 for /data1/efs/gc-direct-w3__j5xn/mnt
+Unmounted /data1/efs/gc-direct-w3__j5xn/mnt
+client serving PASS
+fragment files present PASS
+Traceback (most recent call last):
+  File "/data1/efs/next5-direct-fault-src/tests/live/gc_reclamation.py", line 667, in <module>
+    assert key not in identities,(key,path,identities.get(key))
+           ^^^^^^^^^^^^^^^^^^^^^
+AssertionError: (('0', '3.0.7396045034583860575'), PosixPath('/data2/efs/gc-direct-gelo7_0t/n4/storage0/data/exports/1/0000/0000/0000/0000/8193/0/3.0.7396045034583860575'), '/data2/efs/gc-direct-gelo7_0t/n3/storage0/data/exports/1/0000/0000/0000/0000/8193/0/3.0.7396045034583860575')

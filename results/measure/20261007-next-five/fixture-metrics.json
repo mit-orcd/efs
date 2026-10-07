@@ -1,0 +1,3492 @@
+{
+  "/data1/efs/gc-direct-_1nqapxz/manifest.json": {
+    "log": "/data1/efs/next5-w85-direct-repeat.log",
+    "data": {
+      "mode": "direct",
+      "roots": [
+        "/data1/efs/gc-direct-_1nqapxz/n1",
+        "/data1/efs/gc-direct-_1nqapxz/n2",
+        "/data2/efs/gc-direct-dfwsebq7/n3",
+        "/data2/efs/gc-direct-dfwsebq7/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-direct-_1nqapxz/n1",
+        "/data1/efs/gc-direct-_1nqapxz/n2",
+        "/home/efs/additional-work-dir/gc-direct-dfwsebq7/n3",
+        "/home/efs/additional-work-dir/gc-direct-dfwsebq7/n4"
+      ],
+      "port": 20700,
+      "gates": {
+        "mode": "direct",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": false,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": false,
+        "storage_roots": 2,
+        "put_reply_fault": true,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": "/data1/efs/next5-fault-src/efs-fuse",
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20700
+      },
+      "source_tree_sha256": "5e6a996fe60dd5c3c4d927560afb98eefb8db05b1a6b1c60de13bed480afb831",
+      "test_script_sha256": "ecad78cce6f5666a11cec316d44bff9caeae1d228cfe500144a547122dc1e718",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "e9ae2cdd1fa7305918141cc54ccae6d65d52cf3a6a29ac77856cf0180ef1c0e9",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-direct-xemhm_f5/manifest.json": {
+    "log": "/data1/efs/next5-w76-failover-repeat.log",
+    "data": {
+      "mode": "direct",
+      "roots": [
+        "/data1/efs/gc-direct-xemhm_f5/n1",
+        "/data1/efs/gc-direct-xemhm_f5/n2",
+        "/data2/efs/gc-direct-9yuee63n/n3",
+        "/data2/efs/gc-direct-9yuee63n/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-direct-xemhm_f5/n1",
+        "/data1/efs/gc-direct-xemhm_f5/n2",
+        "/home/efs/additional-work-dir/gc-direct-9yuee63n/n3",
+        "/home/efs/additional-work-dir/gc-direct-9yuee63n/n4"
+      ],
+      "port": 20710,
+      "gates": {
+        "mode": "direct",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": true,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": false,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": false,
+        "storage_roots": 1,
+        "put_reply_fault": false,
+        "opid_failover": true,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": null,
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20710
+      },
+      "source_tree_sha256": "5e6a996fe60dd5c3c4d927560afb98eefb8db05b1a6b1c60de13bed480afb831",
+      "test_script_sha256": "ecad78cce6f5666a11cec316d44bff9caeae1d228cfe500144a547122dc1e718",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "b8f722a08f2315234b143bc18d60c679a2be7d271ae0ef2f97ed6a1d741adf60",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-direct-xemhm_f5/namespace-lost-replies.json": {
+    "log": "/data1/efs/next5-w76-failover-repeat.log",
+    "data": {
+      "dropped_reply_types": [
+        45,
+        51,
+        87
+      ],
+      "replayed_types": [
+        45,
+        51,
+        87
+      ],
+      "unchanged_request_identity": true,
+      "crash_restart_between_commit_and_replay": false
+    }
+  },
+  "/data1/efs/gc-direct-xemhm_f5/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-w76-failover-repeat.log",
+    "data": {
+      "ino": 65537,
+      "before": {
+        "passes": 75,
+        "removed_fragments": 135,
+        "reclaimed_payload_bytes": 8847360,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 77,
+        "removed_fragments": 354,
+        "reclaimed_payload_bytes": 23199744,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-direct-xemhm_f5/final-status.json": {
+    "log": "/data1/efs/next5-w76-failover-repeat.log",
+    "data": [
+      [
+        {
+          "node": 1,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 996,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 2,
+          "stage": 0,
+          "group": 2,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 742,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 3,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 468,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 4,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 241,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ]
+    ]
+  },
+  "/data1/efs/gc-buffered-rdv95h69/manifest.json": {
+    "log": "/data1/efs/next5-w69-barrier.log",
+    "data": {
+      "mode": "buffered",
+      "roots": [
+        "/data1/efs/gc-buffered-rdv95h69/n1",
+        "/data1/efs/gc-buffered-rdv95h69/n2",
+        "/data2/efs/gc-buffered-e0mrkb1c/n3",
+        "/data2/efs/gc-buffered-e0mrkb1c/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-buffered-rdv95h69/n1",
+        "/data1/efs/gc-buffered-rdv95h69/n2",
+        "/home/efs/additional-work-dir/gc-buffered-e0mrkb1c/n3",
+        "/home/efs/additional-work-dir/gc-buffered-e0mrkb1c/n4"
+      ],
+      "port": 20720,
+      "gates": {
+        "mode": "buffered",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": false,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": true,
+        "storage_roots": 1,
+        "put_reply_fault": false,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": "/data1/efs/next5-fault-src/efs-fuse",
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20720
+      },
+      "source_tree_sha256": "c848f4cefdbdc8757fc46e8f25beb0fd749eb400fef0a9e3b7e4f6b0300fbcaa",
+      "test_script_sha256": "f8d5debf63a2537fb0e6cb666ff8debf9f002bc17eb2b497573f33f666ec7ec7",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "e9ae2cdd1fa7305918141cc54ccae6d65d52cf3a6a29ac77856cf0180ef1c0e9",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-buffered-rdv95h69/lookup-barrier.json": {
+    "log": "/data1/efs/next5-w69-barrier.log",
+    "data": {
+      "old_mode": 33184,
+      "new_mode": 33184
+    }
+  },
+  "/data1/efs/gc-buffered-rdv95h69/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-w69-barrier.log",
+    "data": {
+      "ino": 65537,
+      "before": {
+        "passes": 80,
+        "removed_fragments": 138,
+        "reclaimed_payload_bytes": 9043968,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 85,
+        "removed_fragments": 357,
+        "reclaimed_payload_bytes": 23396352,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-buffered-rdv95h69/final-status.json": {
+    "log": "/data1/efs/next5-w69-barrier.log",
+    "data": [
+      [
+        {
+          "node": 1,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 996,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 2,
+          "stage": 0,
+          "group": 2,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 748,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 3,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 490,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 4,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 236,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ]
+    ]
+  },
+  "/data1/efs/gc-direct-t4i82135/manifest.json": {
+    "log": "/data1/efs/next5-w85-direct-final.log",
+    "data": {
+      "mode": "direct",
+      "roots": [
+        "/data1/efs/gc-direct-t4i82135/n1",
+        "/data1/efs/gc-direct-t4i82135/n2",
+        "/data2/efs/gc-direct-9wdhcttw/n3",
+        "/data2/efs/gc-direct-9wdhcttw/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-direct-t4i82135/n1",
+        "/data1/efs/gc-direct-t4i82135/n2",
+        "/home/efs/additional-work-dir/gc-direct-9wdhcttw/n3",
+        "/home/efs/additional-work-dir/gc-direct-9wdhcttw/n4"
+      ],
+      "port": 20730,
+      "gates": {
+        "mode": "direct",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": false,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": false,
+        "storage_roots": 2,
+        "put_reply_fault": true,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": "/data1/efs/next5-fault-src/efs-fuse",
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20730
+      },
+      "source_tree_sha256": "c848f4cefdbdc8757fc46e8f25beb0fd749eb400fef0a9e3b7e4f6b0300fbcaa",
+      "test_script_sha256": "f8d5debf63a2537fb0e6cb666ff8debf9f002bc17eb2b497573f33f666ec7ec7",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "e9ae2cdd1fa7305918141cc54ccae6d65d52cf3a6a29ac77856cf0180ef1c0e9",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-direct-t4i82135/put-reply-collision.json": {
+    "log": "/data1/efs/next5-w85-direct-final.log",
+    "data": {
+      "faults": [
+        [
+          "4097",
+          "0",
+          "0"
+        ],
+        [
+          "4097",
+          "0",
+          "1"
+        ],
+        [
+          "4097",
+          "0",
+          "2"
+        ]
+      ],
+      "attempts": [
+        [
+          "0",
+          "13973267870971638145",
+          "1",
+          "4294967295"
+        ],
+        [
+          "1",
+          "13973267870971638145",
+          "1",
+          "4294967295"
+        ],
+        [
+          "2",
+          "13973267870971638145",
+          "1",
+          "4294967295"
+        ],
+        [
+          "0",
+          "13973267870971638145",
+          "0",
+          "0"
+        ],
+        [
+          "1",
+          "13973267870971638145",
+          "0",
+          "0"
+        ],
+        [
+          "2",
+          "13973267870971638145",
+          "0",
+          "0"
+        ]
+      ],
+      "unique_objects": 216
+    }
+  },
+  "/data1/efs/gc-direct-t4i82135/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-w85-direct-final.log",
+    "data": {
+      "ino": 65537,
+      "before": {
+        "passes": 80,
+        "removed_fragments": 351,
+        "reclaimed_payload_bytes": 23003136,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 83,
+        "removed_fragments": 570,
+        "reclaimed_payload_bytes": 37355520,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-direct-t4i82135/final-status.json": {
+    "log": "/data1/efs/next5-w85-direct-final.log",
+    "data": [
+      [
+        {
+          "node": 1,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 994,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 2,
+          "stage": 0,
+          "group": 2,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 746,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 3,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 467,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 4,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 216,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ]
+    ]
+  },
+  "/data1/efs/gc-direct-zwhhzab2/manifest.json": {
+    "log": "/data1/efs/next5-direct-combined.log",
+    "data": {
+      "mode": "direct",
+      "roots": [
+        "/data1/efs/gc-direct-zwhhzab2/n1",
+        "/data1/efs/gc-direct-zwhhzab2/n2",
+        "/data2/efs/gc-direct-n_6brsao/n3",
+        "/data2/efs/gc-direct-n_6brsao/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-direct-zwhhzab2/n1",
+        "/data1/efs/gc-direct-zwhhzab2/n2",
+        "/home/efs/additional-work-dir/gc-direct-n_6brsao/n3",
+        "/home/efs/additional-work-dir/gc-direct-n_6brsao/n4"
+      ],
+      "port": 20740,
+      "gates": {
+        "mode": "direct",
+        "root": [],
+        "posix": true,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": true,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": true,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": false,
+        "storage_roots": 1,
+        "put_reply_fault": false,
+        "opid_failover": true,
+        "report_audit": true,
+        "server_binary": null,
+        "client_binary": null,
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20740
+      },
+      "source_tree_sha256": "c848f4cefdbdc8757fc46e8f25beb0fd749eb400fef0a9e3b7e4f6b0300fbcaa",
+      "test_script_sha256": "104143bcc0ca210c8a767cbffd56fa60261994ad261600e29bcedf92dc67e2aa",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "13aac50dee05473a0699a22624acc5fd7042d9080aea4f34d031ca6e8045ce0d",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-direct-zwhhzab2/report-identity.json": {
+    "log": "/data1/efs/next5-direct-combined.log",
+    "data": {
+      "files": 2048,
+      "cold_bytes_verified": true,
+      "staging_identity_fallback_lines": []
+    }
+  },
+  "/data1/efs/gc-direct-zwhhzab2/memo-mutations.json": {
+    "log": "/data1/efs/next5-direct-combined.log",
+    "data": {
+      "files": 32,
+      "immediate_stat_checks": 192
+    }
+  },
+  "/data1/efs/gc-direct-zwhhzab2/namespace-lost-replies.json": {
+    "log": "/data1/efs/next5-direct-combined.log",
+    "data": {
+      "dropped_reply_types": [
+        45,
+        51,
+        65,
+        87
+      ],
+      "replayed_types": [
+        45,
+        51,
+        65,
+        87
+      ],
+      "unchanged_request_identity": true,
+      "crash_restart_between_commit_and_replay": false,
+      "leader_death_after_create_commit": true
+    }
+  },
+  "/data1/efs/gc-direct-zwhhzab2/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-direct-combined.log",
+    "data": {
+      "ino": 196609,
+      "before": {
+        "passes": 104,
+        "removed_fragments": 327,
+        "reclaimed_payload_bytes": 21430272,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 108,
+        "removed_fragments": 546,
+        "reclaimed_payload_bytes": 35782656,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-direct-zwhhzab2/posix-gc-effect.json": {
+    "log": "/data1/efs/next5-direct-combined.log",
+    "data": {
+      "before": {
+        "passes": 23,
+        "removed_fragments": 270,
+        "reclaimed_payload_bytes": 17694720,
+        "data_usage_bytes": 0
+      },
+      "after": {
+        "passes": 489,
+        "removed_fragments": 22350,
+        "reclaimed_payload_bytes": 1464729600,
+        "data_usage_bytes": 0
+      }
+    }
+  },
+  "/data1/efs/gc-direct-zwhhzab2/final-status.json": {
+    "log": "/data1/efs/next5-direct-combined.log",
+    "data": [
+      [
+        {
+          "node": 1,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 858,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 2,
+          "stage": 0,
+          "group": 2,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 666,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 3,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 426,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 4,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 177,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ]
+    ]
+  },
+  "/data1/efs/gc-buffered-c4c7aqkj/manifest.json": {
+    "log": "/data1/efs/next5-buffered-faults.log",
+    "data": {
+      "mode": "buffered",
+      "roots": [
+        "/data1/efs/gc-buffered-c4c7aqkj/n1",
+        "/data1/efs/gc-buffered-c4c7aqkj/n2",
+        "/data2/efs/gc-buffered-6yibsu2t/n3",
+        "/data2/efs/gc-buffered-6yibsu2t/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-buffered-c4c7aqkj/n1",
+        "/data1/efs/gc-buffered-c4c7aqkj/n2",
+        "/home/efs/additional-work-dir/gc-buffered-6yibsu2t/n3",
+        "/home/efs/additional-work-dir/gc-buffered-6yibsu2t/n4"
+      ],
+      "port": 20750,
+      "gates": {
+        "mode": "buffered",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": true,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": true,
+        "storage_roots": 2,
+        "put_reply_fault": true,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": "/data1/efs/next5-fault-src/efs-fuse",
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20750
+      },
+      "source_tree_sha256": "c848f4cefdbdc8757fc46e8f25beb0fd749eb400fef0a9e3b7e4f6b0300fbcaa",
+      "test_script_sha256": "104143bcc0ca210c8a767cbffd56fa60261994ad261600e29bcedf92dc67e2aa",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "29a6b98930bcda75347ec9ef3741e82c59f84d8031a585e03a10b5a6b5a1d2d5",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-buffered-c4c7aqkj/memo-mutations.json": {
+    "log": "/data1/efs/next5-buffered-faults.log",
+    "data": {
+      "files": 32,
+      "immediate_stat_checks": 192
+    }
+  },
+  "/data1/efs/gc-buffered-c4c7aqkj/lookup-barrier.json": {
+    "log": "/data1/efs/next5-buffered-faults.log",
+    "data": {
+      "old_mode": 33184,
+      "new_mode": 33184
+    }
+  },
+  "/data1/efs/gc-buffered-unqojyn2/manifest.json": {
+    "log": "/data1/efs/next5-buffered-faults-repeat.log",
+    "data": {
+      "mode": "buffered",
+      "roots": [
+        "/data1/efs/gc-buffered-unqojyn2/n1",
+        "/data1/efs/gc-buffered-unqojyn2/n2",
+        "/data2/efs/gc-buffered-oth7ifpt/n3",
+        "/data2/efs/gc-buffered-oth7ifpt/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-buffered-unqojyn2/n1",
+        "/data1/efs/gc-buffered-unqojyn2/n2",
+        "/home/efs/additional-work-dir/gc-buffered-oth7ifpt/n3",
+        "/home/efs/additional-work-dir/gc-buffered-oth7ifpt/n4"
+      ],
+      "port": 20750,
+      "gates": {
+        "mode": "buffered",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": true,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": true,
+        "storage_roots": 2,
+        "put_reply_fault": true,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": "/data1/efs/next5-fault-src/efs-fuse",
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20750
+      },
+      "source_tree_sha256": "c848f4cefdbdc8757fc46e8f25beb0fd749eb400fef0a9e3b7e4f6b0300fbcaa",
+      "test_script_sha256": "72b14b27ca0484791b7d61e3488121617dad1b7ec0e6b54b451fd21edbcc7b9a",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "29a6b98930bcda75347ec9ef3741e82c59f84d8031a585e03a10b5a6b5a1d2d5",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-buffered-unqojyn2/memo-mutations.json": {
+    "log": "/data1/efs/next5-buffered-faults-repeat.log",
+    "data": {
+      "files": 32,
+      "immediate_stat_checks": 192
+    }
+  },
+  "/data1/efs/gc-buffered-unqojyn2/lookup-barrier.json": {
+    "log": "/data1/efs/next5-buffered-faults-repeat.log",
+    "data": {
+      "old_mode": 33184,
+      "new_mode": 33184
+    }
+  },
+  "/data1/efs/gc-direct-w3__j5xn/manifest.json": {
+    "log": "/data1/efs/next5-direct-faults.log",
+    "data": {
+      "mode": "direct",
+      "roots": [
+        "/data1/efs/gc-direct-w3__j5xn/n1",
+        "/data1/efs/gc-direct-w3__j5xn/n2",
+        "/data2/efs/gc-direct-gelo7_0t/n3",
+        "/data2/efs/gc-direct-gelo7_0t/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-direct-w3__j5xn/n1",
+        "/data1/efs/gc-direct-w3__j5xn/n2",
+        "/home/efs/additional-work-dir/gc-direct-gelo7_0t/n3",
+        "/home/efs/additional-work-dir/gc-direct-gelo7_0t/n4"
+      ],
+      "port": 20760,
+      "gates": {
+        "mode": "direct",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": false,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": true,
+        "storage_roots": 2,
+        "put_reply_fault": true,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": "/data1/efs/next5-fault-src/efs-fuse",
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20760
+      },
+      "source_tree_sha256": "c848f4cefdbdc8757fc46e8f25beb0fd749eb400fef0a9e3b7e4f6b0300fbcaa",
+      "test_script_sha256": "72b14b27ca0484791b7d61e3488121617dad1b7ec0e6b54b451fd21edbcc7b9a",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "29a6b98930bcda75347ec9ef3741e82c59f84d8031a585e03a10b5a6b5a1d2d5",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-direct-w3__j5xn/lookup-barrier.json": {
+    "log": "/data1/efs/next5-direct-faults.log",
+    "data": {
+      "old_mode": 33184,
+      "new_mode": 33184
+    }
+  },
+  "/data1/efs/gc-direct-hqim5itk/manifest.json": {
+    "log": "/data1/efs/next5-direct-faults-fixed.log",
+    "data": {
+      "mode": "direct",
+      "roots": [
+        "/data1/efs/gc-direct-hqim5itk/n1",
+        "/data1/efs/gc-direct-hqim5itk/n2",
+        "/data2/efs/gc-direct-3qqb5504/n3",
+        "/data2/efs/gc-direct-3qqb5504/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-direct-hqim5itk/n1",
+        "/data1/efs/gc-direct-hqim5itk/n2",
+        "/home/efs/additional-work-dir/gc-direct-3qqb5504/n3",
+        "/home/efs/additional-work-dir/gc-direct-3qqb5504/n4"
+      ],
+      "port": 20760,
+      "gates": {
+        "mode": "direct",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": false,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": true,
+        "storage_roots": 2,
+        "put_reply_fault": true,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": "/data1/efs/next5-fixed-fault-src/efs-fuse",
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20760
+      },
+      "source_tree_sha256": "4756992caa3e638ca3bd8c13acbbbe2637d9e59d8d020bcfd1b4413c6544f554",
+      "test_script_sha256": "72b14b27ca0484791b7d61e3488121617dad1b7ec0e6b54b451fd21edbcc7b9a",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "5c8fe6f2d151f107c9327b12676df1ea24b2e5afc04d8a9932894a4816ef3b61",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-direct-hqim5itk/lookup-barrier.json": {
+    "log": "/data1/efs/next5-direct-faults-fixed.log",
+    "data": {
+      "old_mode": 33184,
+      "new_mode": 33184
+    }
+  },
+  "/data1/efs/gc-direct-hqim5itk/put-reply-collision.json": {
+    "log": "/data1/efs/next5-direct-faults-fixed.log",
+    "data": {
+      "faults": [
+        [
+          "8193",
+          "2",
+          "2"
+        ],
+        [
+          "8193",
+          "2",
+          "0"
+        ],
+        [
+          "8193",
+          "2",
+          "1"
+        ]
+      ],
+      "attempts": [
+        [
+          "0",
+          "3533509426571469281",
+          "1",
+          "4294967295"
+        ],
+        [
+          "1",
+          "3533509426571469281",
+          "1",
+          "4294967295"
+        ],
+        [
+          "2",
+          "3533509426571469281",
+          "1",
+          "4294967295"
+        ],
+        [
+          "0",
+          "3533509426571469281",
+          "0",
+          "0"
+        ],
+        [
+          "1",
+          "3533509426571469281",
+          "0",
+          "0"
+        ],
+        [
+          "2",
+          "3533509426571469281",
+          "0",
+          "0"
+        ]
+      ],
+      "unique_objects": 216,
+      "data_usage_bytes": 14155776
+    }
+  },
+  "/data1/efs/gc-direct-hqim5itk/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-direct-faults-fixed.log",
+    "data": {
+      "ino": 69633,
+      "before": {
+        "passes": 87,
+        "removed_fragments": 354,
+        "reclaimed_payload_bytes": 23199744,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 89,
+        "removed_fragments": 573,
+        "reclaimed_payload_bytes": 37552128,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-direct-hqim5itk/final-status.json": {
+    "log": "/data1/efs/next5-direct-faults-fixed.log",
+    "data": [
+      [
+        {
+          "node": 1,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 985,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 2,
+          "stage": 0,
+          "group": 2,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 729,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 3,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 450,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 4,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 210,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ]
+    ]
+  },
+  "/data1/efs/gc-buffered-2l25d0_o/manifest.json": {
+    "log": "/data1/efs/next5-buffered-faults-fixed.log",
+    "data": {
+      "mode": "buffered",
+      "roots": [
+        "/data1/efs/gc-buffered-2l25d0_o/n1",
+        "/data1/efs/gc-buffered-2l25d0_o/n2",
+        "/data2/efs/gc-buffered-fbsozapg/n3",
+        "/data2/efs/gc-buffered-fbsozapg/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-buffered-2l25d0_o/n1",
+        "/data1/efs/gc-buffered-2l25d0_o/n2",
+        "/home/efs/additional-work-dir/gc-buffered-fbsozapg/n3",
+        "/home/efs/additional-work-dir/gc-buffered-fbsozapg/n4"
+      ],
+      "port": 20760,
+      "gates": {
+        "mode": "buffered",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": true,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": true,
+        "storage_roots": 2,
+        "put_reply_fault": true,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": "/data1/efs/next5-fixed-fault-src/efs-fuse",
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20760
+      },
+      "source_tree_sha256": "4756992caa3e638ca3bd8c13acbbbe2637d9e59d8d020bcfd1b4413c6544f554",
+      "test_script_sha256": "72b14b27ca0484791b7d61e3488121617dad1b7ec0e6b54b451fd21edbcc7b9a",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "5c8fe6f2d151f107c9327b12676df1ea24b2e5afc04d8a9932894a4816ef3b61",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-buffered-2l25d0_o/memo-mutations.json": {
+    "log": "/data1/efs/next5-buffered-faults-fixed.log",
+    "data": {
+      "files": 32,
+      "immediate_stat_checks": 192
+    }
+  },
+  "/data1/efs/gc-buffered-2l25d0_o/lookup-barrier.json": {
+    "log": "/data1/efs/next5-buffered-faults-fixed.log",
+    "data": {
+      "old_mode": 33184,
+      "new_mode": 33184
+    }
+  },
+  "/data1/efs/gc-buffered-2l25d0_o/put-reply-collision.json": {
+    "log": "/data1/efs/next5-buffered-faults-fixed.log",
+    "data": {
+      "faults": [
+        [
+          "139265",
+          "2",
+          "1"
+        ],
+        [
+          "139265",
+          "2",
+          "2"
+        ],
+        [
+          "139265",
+          "2",
+          "0"
+        ]
+      ],
+      "attempts": [
+        [
+          "0",
+          "8952260807520389775",
+          "1",
+          "4294967295"
+        ],
+        [
+          "1",
+          "8952260807520389775",
+          "1",
+          "4294967295"
+        ],
+        [
+          "2",
+          "8952260807520389775",
+          "1",
+          "4294967295"
+        ],
+        [
+          "0",
+          "8952260807520389775",
+          "0",
+          "0"
+        ],
+        [
+          "1",
+          "8952260807520389775",
+          "0",
+          "0"
+        ],
+        [
+          "2",
+          "8952260807520389775",
+          "0",
+          "0"
+        ]
+      ],
+      "unique_objects": 216,
+      "data_usage_bytes": 14155776
+    }
+  },
+  "/data1/efs/gc-buffered-2l25d0_o/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-buffered-faults-fixed.log",
+    "data": {
+      "ino": 200705,
+      "before": {
+        "passes": 96,
+        "removed_fragments": 546,
+        "reclaimed_payload_bytes": 35782656,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 99,
+        "removed_fragments": 765,
+        "reclaimed_payload_bytes": 50135040,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-buffered-2l25d0_o/final-status.json": {
+    "log": "/data1/efs/next5-buffered-faults-fixed.log",
+    "data": [
+      [
+        {
+          "node": 1,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 992,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 2,
+          "stage": 0,
+          "group": 2,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 740,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 3,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 460,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 4,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 213,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ]
+    ]
+  },
+  "/data1/efs/gc-buffered-xlaxqn9o/manifest.json": {
+    "log": "/data1/efs/next5-release-buffered.log",
+    "data": {
+      "mode": "buffered",
+      "roots": [
+        "/data1/efs/gc-buffered-xlaxqn9o/n1",
+        "/data1/efs/gc-buffered-xlaxqn9o/n2",
+        "/data2/efs/gc-buffered-6rzx_v31/n3",
+        "/data2/efs/gc-buffered-6rzx_v31/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-buffered-xlaxqn9o/n1",
+        "/data1/efs/gc-buffered-xlaxqn9o/n2",
+        "/home/efs/additional-work-dir/gc-buffered-6rzx_v31/n3",
+        "/home/efs/additional-work-dir/gc-buffered-6rzx_v31/n4"
+      ],
+      "port": 20770,
+      "gates": {
+        "mode": "buffered",
+        "root": [],
+        "posix": true,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": true,
+        "opid_restart": true,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": true,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "lookup_barrier": false,
+        "storage_roots": 1,
+        "put_reply_fault": false,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": null,
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20770
+      },
+      "source_tree_sha256": "d361956c4afd768880e2a3113da867454a591441a52a43741caa913b698d41ff",
+      "test_script_sha256": "72b14b27ca0484791b7d61e3488121617dad1b7ec0e6b54b451fd21edbcc7b9a",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "6a0f8525711de646aca4f6c4e3e8416ce96a914e9531c1f2b3f1bc6b2a44381d",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-buffered-xlaxqn9o/memo-mutations.json": {
+    "log": "/data1/efs/next5-release-buffered.log",
+    "data": {
+      "files": 32,
+      "immediate_stat_checks": 192
+    }
+  },
+  "/data1/efs/gc-buffered-xlaxqn9o/namespace-lost-replies.json": {
+    "log": "/data1/efs/next5-release-buffered.log",
+    "data": {
+      "dropped_reply_types": [
+        45,
+        51,
+        65,
+        87
+      ],
+      "replayed_types": [
+        45,
+        51,
+        65,
+        87
+      ],
+      "unchanged_request_identity": true,
+      "crash_restart_between_commit_and_replay": true,
+      "leader_death_after_create_commit": false
+    }
+  },
+  "/data1/efs/gc-buffered-xlaxqn9o/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-release-buffered.log",
+    "data": {
+      "ino": 196609,
+      "before": {
+        "passes": 71,
+        "removed_fragments": 135,
+        "reclaimed_payload_bytes": 8847360,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 73,
+        "removed_fragments": 354,
+        "reclaimed_payload_bytes": 23199744,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-buffered-xlaxqn9o/posix-gc-effect.json": {
+    "log": "/data1/efs/next5-release-buffered.log",
+    "data": {
+      "before": {
+        "passes": 30,
+        "removed_fragments": 270,
+        "reclaimed_payload_bytes": 17694720,
+        "data_usage_bytes": 0
+      },
+      "after": {
+        "passes": 329,
+        "removed_fragments": 22275,
+        "reclaimed_payload_bytes": 1459814400,
+        "data_usage_bytes": 0
+      }
+    }
+  },
+  "/data1/efs/gc-buffered-xlaxqn9o/final-status.json": {
+    "log": "/data1/efs/next5-release-buffered.log",
+    "data": [
+      [
+        {
+          "node": 1,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 947,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 2,
+          "stage": 0,
+          "group": 2,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 621,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 3,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 349,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 4,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 177,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ]
+    ]
+  },
+  "/data1/efs/gc-direct-dd_ws433/manifest.json": {
+    "log": "/data1/efs/next5-release-direct.log",
+    "data": {
+      "mode": "direct",
+      "roots": [
+        "/data1/efs/gc-direct-dd_ws433/n1",
+        "/data1/efs/gc-direct-dd_ws433/n2",
+        "/data2/efs/gc-direct-1vnumb7a/n3",
+        "/data2/efs/gc-direct-1vnumb7a/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-direct-dd_ws433/n1",
+        "/data1/efs/gc-direct-dd_ws433/n2",
+        "/home/efs/additional-work-dir/gc-direct-1vnumb7a/n3",
+        "/home/efs/additional-work-dir/gc-direct-1vnumb7a/n4"
+      ],
+      "port": 20780,
+      "gates": {
+        "mode": "direct",
+        "root": [],
+        "posix": true,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": true,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": false,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "du_audit": true,
+        "lookup_barrier": false,
+        "storage_roots": 1,
+        "put_reply_fault": false,
+        "opid_failover": true,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": null,
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20780
+      },
+      "source_tree_sha256": "d361956c4afd768880e2a3113da867454a591441a52a43741caa913b698d41ff",
+      "test_script_sha256": "9422baf8b64114df73f7c255f892f76f9a8978bd2fe37b8c2de839b86fe12784",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "6a0f8525711de646aca4f6c4e3e8416ce96a914e9531c1f2b3f1bc6b2a44381d",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-direct-dd_ws433/du-audit.json": {
+    "log": "/data1/efs/next5-release-direct.log",
+    "data": {
+      "files": 128,
+      "allocated_bytes": 524288,
+      "elapsed_seconds": [
+        0.014322016999358311,
+        0.014101103995926678,
+        0.01392878798651509,
+        0.014125639980193228,
+        0.014050205994863063
+      ],
+      "tool": "GNU du; not the unidentified Spark workload"
+    }
+  },
+  "/data1/efs/gc-direct-dd_ws433/namespace-lost-replies.json": {
+    "log": "/data1/efs/next5-release-direct.log",
+    "data": {
+      "dropped_reply_types": [
+        45,
+        51,
+        65,
+        87
+      ],
+      "replayed_types": [
+        45,
+        51,
+        65,
+        87
+      ],
+      "unchanged_request_identity": true,
+      "crash_restart_between_commit_and_replay": false,
+      "leader_death_after_create_commit": true
+    }
+  },
+  "/data1/efs/gc-direct-dd_ws433/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-release-direct.log",
+    "data": {
+      "ino": 65537,
+      "before": {
+        "passes": 76,
+        "removed_fragments": 135,
+        "reclaimed_payload_bytes": 8847360,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 83,
+        "removed_fragments": 354,
+        "reclaimed_payload_bytes": 23199744,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-buffered-pwkt9p18/manifest.json": {
+    "log": "/data1/efs/next5-du-buffered.log",
+    "data": {
+      "mode": "buffered",
+      "roots": [
+        "/data1/efs/gc-buffered-pwkt9p18/n1",
+        "/data1/efs/gc-buffered-pwkt9p18/n2",
+        "/data2/efs/gc-buffered-_p50jah1/n3",
+        "/data2/efs/gc-buffered-_p50jah1/n4"
+      ],
+      "real_roots": [
+        "/data1/efs/gc-buffered-pwkt9p18/n1",
+        "/data1/efs/gc-buffered-pwkt9p18/n2",
+        "/home/efs/additional-work-dir/gc-buffered-_p50jah1/n3",
+        "/home/efs/additional-work-dir/gc-buffered-_p50jah1/n4"
+      ],
+      "port": 20800,
+      "gates": {
+        "mode": "buffered",
+        "root": [],
+        "posix": false,
+        "integrity": false,
+        "namespace": false,
+        "namespace_boundary": false,
+        "namespace_cycles": false,
+        "mount_label": "default",
+        "workers": false,
+        "pressure": false,
+        "opid": false,
+        "opid_restart": false,
+        "fold_audit": false,
+        "sequential": false,
+        "memo": false,
+        "rename_cache": false,
+        "mixed_reads": false,
+        "allocation": false,
+        "compactor_pressure": false,
+        "du_audit": true,
+        "lookup_barrier": false,
+        "storage_roots": 1,
+        "put_reply_fault": false,
+        "opid_failover": false,
+        "report_audit": false,
+        "server_binary": null,
+        "client_binary": null,
+        "worker_fault": null,
+        "idle_seconds": 0,
+        "full_node": false,
+        "port": 20800
+      },
+      "source_tree_sha256": "d361956c4afd768880e2a3113da867454a591441a52a43741caa913b698d41ff",
+      "test_script_sha256": "e9634dd03c6a3d38162009fa990e9907ece868991712efe619923cd33ae8851d",
+      "binary_sha256": {
+        "efsd": "73d25224c576969696a28ca9d65cd9326fa0ace484eda11e830bc7917cf03bbf",
+        "efs-fuse": "6a0f8525711de646aca4f6c4e3e8416ce96a914e9531c1f2b3f1bc6b2a44381d",
+        "efs-mgmt": "ba2bd0e4618f80defa99813c4a9eba56b15cf0a95b4b8441e88f20948c4f0c9b"
+      }
+    }
+  },
+  "/data1/efs/gc-buffered-pwkt9p18/du-audit.json": {
+    "log": "/data1/efs/next5-du-buffered.log",
+    "data": {
+      "files": 128,
+      "allocated_bytes": 524288,
+      "elapsed_seconds": [
+        0.012461306003388017,
+        0.013625797000713646,
+        0.013263030006783083,
+        0.013018739991821349,
+        0.012956474005477503
+      ],
+      "tool": "GNU du; not the unidentified Spark workload"
+    }
+  },
+  "/data1/efs/gc-buffered-pwkt9p18/last-close-gc-effect.json": {
+    "log": "/data1/efs/next5-du-buffered.log",
+    "data": {
+      "ino": 61441,
+      "before": {
+        "passes": 108,
+        "removed_fragments": 519,
+        "reclaimed_payload_bytes": 34013184,
+        "data_usage_bytes": 30474240
+      },
+      "after": {
+        "passes": 111,
+        "removed_fragments": 738,
+        "reclaimed_payload_bytes": 48365568,
+        "data_usage_bytes": 16121856
+      },
+      "remaining_target_fragments": 0
+    }
+  },
+  "/data1/efs/gc-buffered-pwkt9p18/final-status.json": {
+    "log": "/data1/efs/next5-du-buffered.log",
+    "data": [
+      [
+        {
+          "node": 1,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 991,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 2,
+          "stage": 0,
+          "group": 2,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 740,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 1,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 3,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 475,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ],
+      [
+        {
+          "node": 4,
+          "stage": 0,
+          "group": 0,
+          "exports": 0,
+          "passes": 4,
+          "elapsed_ms": 0,
+          "last_pass_age_ms": 225,
+          "last_delete_age_ms": 18446744073709551615
+        },
+        {
+          "data_usage_bytes": 0,
+          "removed_fragments": 0,
+          "unlinked_file_bytes": 0,
+          "reclaimed_payload_bytes": 0,
+          "delete_errors": 0,
+          "mismatches": 0,
+          "sweep_errors": 0,
+          "reap_errors": 0,
+          "ack_errors": 0,
+          "scan_errors": 0,
+          "missing_exports": 0
+        },
+        {
+          "group": 0,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "group": 2,
+          "sampled": 0,
+          "pending_estimate": 0,
+          "reap_seen": 0,
+          "orphan_seen": 0,
+          "capped": 0,
+          "first_reap_ino": 0,
+          "observed_age_ms": 18446744073709551615
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        },
+        {
+          "ops": 0,
+          "bytes": 0,
+          "errors": 0,
+          "us_sum": 0,
+          "avg_us": 0
+        }
+      ]
+    ]
+  }
+}

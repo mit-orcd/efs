@@ -1,0 +1,13 @@
+Evidence: /tmp/efs-read-freshness-gymn84sw
+listening True
+listening True
+listening True
+initial leader 0
+both groups formatted True
+PASS: both mkfs aliases preserve namespace/salt and explain ignored legacy label
+Traceback (most recent call last):
+  File "/data1/efs/next5-final-src/tests/live/raft_read_freshness.py", line 174, in <module>
+    assert 'status=0' in created,created
+           ^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Unknown command: raft-mkdir
+
