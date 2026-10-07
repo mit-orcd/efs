@@ -296,3 +296,18 @@ physical GC/restart/valid-PUT gates pass. Log
 `/private/tmp/efs-roadmap-namespace-lost-reply.log`; fixture
 `/data1/efs/gc-direct-uvt7yab1/namespace-lost-replies.json`. Maximum concurrency
 and restart/leadership-change replay remain separate gates.
+
+## Round 29 — final direct service integration and accepted-socket flags
+
+Accepted TCP sockets explicitly clear inherited O_NONBLOCK; only the listener
+polls without blocking. NUC owned shutdown tests inspect actual fd flags and
+pass all six buffered/direct worker-signal/partial-frame/churn cases (64–215 ms).
+Isolated `fa767098` + accepted-fd patch is deployed to the normal four-node NUC
+service with direct I/O: POSIX 216/0/1 skip, peer 64/64, persistence 26/26 in each
+phase. Full Linux units pass after correcting generated docs from the exact
+snapshot. An initial doc gate failed because a concurrent uncommitted status
+edit had entered generated artifacts without its source; snapshot regeneration
+fixes that while preserving the other edit. Logs
+`/private/tmp/efs-roadmap-accepted-flags.log`,
+`/private/tmp/efs-roadmap-cycle29-live.log`,
+`/private/tmp/efs-roadmap-cycle29-units-repeat.log`.

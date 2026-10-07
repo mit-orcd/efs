@@ -646,6 +646,15 @@ int main(int argc, char **argv)
             break;
         }
 
+        /* Some platforms inherit the listener's nonblocking flag. Handler
+         * framing expects blocking accepted sockets with explicit deadlines. */
+        int accepted_flags = fcntl(fd, F_GETFL, 0);
+        if (accepted_flags < 0 || fcntl(fd, F_SETFL,
+                                       accepted_flags & ~O_NONBLOCK) < 0) {
+            close(fd);
+            continue;
+        }
+
         int live = __sync_add_and_fetch(&g_live_conns, 1);
         if (live > EFS_SERVER_MAX_CONNS) {
             __sync_fetch_and_sub(&g_live_conns, 1);

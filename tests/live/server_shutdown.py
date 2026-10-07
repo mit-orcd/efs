@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Owned Linux daemon teardown gate: pooled readers and partial TCP frames."""
 import os
+import re
 from pathlib import Path
 import socket
 import subprocess
@@ -35,6 +36,18 @@ for direct in (False,True):
                     for index in range(48):
                         sock=socket.create_connection(('127.0.0.1',port),1);sockets.append(sock)
                         if index%2:sock.sendall(b'\x00\x00') # incomplete length frame
+                    # Only the listener may be nonblocking. Accepted framing
+                    # sockets must preserve blocking reads on every platform.
+                    time.sleep(.1)
+                    nonblocking=0;socket_count=0
+                    for fd_path in (Path('/proc')/str(proc.pid)/'fd').iterdir():
+                        try:
+                            if not os.readlink(fd_path).startswith('socket:'):continue
+                            text=(Path('/proc')/str(proc.pid)/'fdinfo'/fd_path.name).read_text()
+                            flags=int(re.search(r'flags:\s+([0-7]+)',text).group(1),8)
+                            socket_count+=1;nonblocking+=bool(flags & os.O_NONBLOCK)
+                        except FileNotFoundError:continue
+                    assert socket_count>=49 and nonblocking==1,(socket_count,nonblocking)
                     worker.start();time.sleep(.15)
                     if repeat==1:
                         # No new connection may accidentally wake accept. Deliver
