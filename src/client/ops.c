@@ -1301,7 +1301,11 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
         if (want > chunk_size)
             want = chunk_size;
         size_t got = 0;
-        (void)efs_client_read(ino, chunk_start, want, (char *)chunk, &got);
+        int rrc = efs_client_read(ino, chunk_start, want, (char *)chunk, &got);
+        if (rrc != EFS_OK || got < keep) {
+            efs_buf_free(chunk, chunk_size);
+            return rrc != EFS_OK ? rrc : EFS_ERR_IO;
+        }
         memset(chunk + keep, 0, chunk_size - keep);
         int wrc = efs_client_write(ino, chunk_start, chunk_size,
                                    (const char *)chunk);
@@ -1323,7 +1327,9 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
     /* Same ino as fsync: a process-wide REPORT waits on every other
      * file's recs (and holds report_mu). Under the posix suite that
      * stacked two 15 s truncates + a symlink EIO abort. */
-    (void)efs_client_report_dirty_ino(ino, 1);
+    int report_rc = efs_client_report_dirty_ino(ino, 1);
+    if (report_rc != EFS_OK)
+        return report_rc;
     uint64_t sec;
     uint32_t nsec;
     now_ns(&sec, &nsec);
