@@ -49,8 +49,17 @@ int main(void){
   s.nodes[0].used=123456;server_init_local_usage(&s);
   assert(s.nodes[0].used==0); /* crash snapshot cannot resurrect quota charges */
   struct efs_msg_gc_status_reply status;server_gc_status(&s,&status);
-  assert(status.version==1&&status.removed_fragments==removed+2&&status.delete_errors>0);
+  assert(status.version==2&&status.removed_fragments==removed+2&&status.delete_errors>0);
   assert(status.last_delete_age_ms<10000);
+  assert(status.io[0].ops && status.io[0].bytes && status.io[0].errors);
+  assert(status.io[1].ops && !status.io[1].bytes && status.io[1].errors);
+  assert(status.io[2].ops && !status.io[2].bytes && status.io[2].errors);
+  s.gc_pass_start_us=gc_clock_us();s.gc_last_pass_us=s.gc_pass_start_us;
+  s.gc_first_seen_us[0]=s.gc_pass_start_us;server_gc_status(&s,&status);
+  assert(status.pass_elapsed_ms<10000 && status.last_pass_age_ms<10000);
+  assert(status.first_seen_age_ms[0]<10000);
+  s.gc_last_pass_us=gc_clock_us()+1000;server_gc_status(&s,&status);
+  assert(status.last_pass_age_ms==0); /* concurrent newer clock sample */
  }
  assert(s.gc_removed_fragments==4&&s.gc_removed_payload_bytes==4*EFS_FRAGMENT_SIZE);
  assert(server_delete_fragment_if_sum(NULL,&ex,42,0,0,sum)==EFS_ERR_INVAL);

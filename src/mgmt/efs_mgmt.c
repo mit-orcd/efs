@@ -703,13 +703,15 @@ static int cmd_gc_status(int argc, char **argv)
     int rc = send_recv(fd, EFS_MSG_GC_STATUS, NULL, 0, &type, &payload, &len);
     close(fd);
     if (rc || type != EFS_MSG_GC_STATUS_REPLY ||
-        len != sizeof(struct efs_msg_gc_status_reply)) {
+        (len != sizeof(struct efs_msg_gc_status_reply) &&
+         len != offsetof(struct efs_msg_gc_status_reply, io))) {
         fprintf(stderr, "GC status unavailable (server upgrade may be required)\n");
         free(payload);
         return 1;
     }
     struct efs_msg_gc_status_reply *g = payload;
-    if (g->version != 1) {
+    if (!((g->version == 1 && len == offsetof(struct efs_msg_gc_status_reply, io)) ||
+          (g->version == 2 && len == sizeof(*g)))) {
         free(payload);
         return 1;
     }
@@ -738,6 +740,16 @@ static int cmd_gc_status(int argc, char **argv)
                (unsigned long long)g->reap_seen[i], (unsigned long long)g->orphan_seen[i], g->reap_capped[i],
                (unsigned long long)g->first_reap[i],
                (unsigned long long)g->first_seen_age_ms[i]);
+    if (g->version >= 2) {
+        const char *names[] = {"checksum_read", "unlink", "dir_sync"};
+        for (unsigned i = 0; i < EFS_GC_IO_CLASSES; i++) {
+            struct efs_gc_io_stats *c = &g->io[i];
+            printf("gc_io=%s ops=%llu bytes=%llu errors=%llu us_sum=%llu avg_us=%llu\n",
+                   names[i], (unsigned long long)c->ops, (unsigned long long)c->bytes,
+                   (unsigned long long)c->errors, (unsigned long long)c->us_sum,
+                   c->ops ? (unsigned long long)(c->us_sum / c->ops) : 0ull);
+        }
+    }
     free(payload);
     return 0;
 }

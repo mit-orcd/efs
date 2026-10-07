@@ -89,6 +89,7 @@ struct efsd_server {
     uint64_t gc_sweep_errors, gc_reap_errors, gc_ack_errors, gc_scan_errors;
     uint64_t gc_reap_seen[2], gc_orphan_seen[2], gc_pending[2], gc_first_reap[2], gc_first_seen_us[2];
     uint64_t gc_missing_exports;
+    struct efs_gc_io_stats gc_io[EFS_GC_IO_CLASSES];
     uint32_t gc_stage, gc_group, gc_sampled_mask, gc_reap_capped[2];
     int direct_io; /* use O_DIRECT for fragment reads/writes */
     int bench_sync; /* benchmark-only O_SYNC; daemon store builds ignore it */

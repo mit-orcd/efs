@@ -449,13 +449,14 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out)
 {
     memset(out, 0, sizeof(*out));
-    out->version = 1;
+    out->version = 2;
     out->node_id = s->id;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     uint64_t now = (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 #define GC_LOAD(f) __atomic_load_n(&s->gc_##f, __ATOMIC_RELAXED)
-#define GC_AGE(t) ((t) && now >= (t) ? (now - (t)) / 1000 : UINT64_MAX)
+/* A concurrent update can be newer than this snapshot's clock sample. */
+#define GC_AGE(t) ((t) ? (now >= (t) ? (now - (t)) / 1000 : 0) : UINT64_MAX)
     out->stage = GC_LOAD(stage);
     out->group = GC_LOAD(group);
     out->sampled_mask = GC_LOAD(sampled_mask);
@@ -484,6 +485,11 @@ void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out
         uint64_t first = __atomic_load_n(&s->gc_first_seen_us[i], __ATOMIC_RELAXED);
         out->first_seen_age_ms[i] = GC_AGE(first);
     }
+    for (unsigned i = 0; i < EFS_GC_IO_CLASSES; i++) {
+#define GC_IO_LOAD(f) out->io[i].f = __atomic_load_n(&s->gc_io[i].f, __ATOMIC_RELAXED)
+        GC_IO_LOAD(ops); GC_IO_LOAD(bytes); GC_IO_LOAD(errors); GC_IO_LOAD(us_sum);
+#undef GC_IO_LOAD
+    }
     pthread_mutex_lock(&s->lock);
     out->exports = s->export_count;
     struct efs_node *local = server_local_node(s);
@@ -491,6 +497,42 @@ void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out
     pthread_mutex_unlock(&s->lock);
 #undef GC_AGE
 #undef GC_LOAD
+}
+
+/* Measure completed GC syscalls, including failed attempts. This deliberately
+ * does not claim physical device traffic, metadata WAL I/O or fence-page I/O. */
+static uint64_t gc_clock_us(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+static void gc_io_add(struct efsd_server *s, unsigned cls, uint64_t start,
+                      uint64_t bytes, int error)
+{
+    __atomic_fetch_add(&s->gc_io[cls].bytes, bytes, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&s->gc_io[cls].us_sum, gc_clock_us() - start, __ATOMIC_RELAXED);
+    if (error) __atomic_fetch_add(&s->gc_io[cls].errors, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&s->gc_io[cls].ops, 1, __ATOMIC_RELAXED);
+}
+static int gc_sync_directory(struct efsd_server *s, int fd)
+{
+    uint64_t start = gc_clock_us();
+    int rc;
+    do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
+    int saved_errno = errno;
+    gc_io_add(s, 2, start, 0, rc < 0);
+    errno = saved_errno;
+    return rc;
+}
+static int gc_unlink_file(struct efsd_server *s, const char *path)
+{
+    uint64_t start = gc_clock_us();
+    int rc = unlink(path), saved_errno = errno;
+    /* An already absent object is an idempotent success, not an I/O error. */
+    gc_io_add(s, 1, start, 0, rc < 0 && saved_errno != ENOENT);
+    errno = saved_errno;
+    return rc;
 }
 
 /* PUT and checksum-test/unlink share an object lock. An immutable generation
@@ -537,7 +579,7 @@ static int fragment_payload_bytes(uint64_t bytes, uint64_t *payload)
 
 /* A GC ACK must not outlive the directory operation it retires. Repeat the
  * parent sync for an already-absent file after a failed sync/crash retry. */
-static int fragment_parent_sync(const char *path)
+static int fragment_parent_sync(struct efsd_server *s, const char *path)
 {
     char parent[8192];
     size_t len = strlen(path);
@@ -563,9 +605,7 @@ static int fragment_parent_sync(const char *path)
         } else *slash = '\0';
     }
     int rc;
-    do {
-        rc = fsync(fd);
-    } while (rc < 0 && errno == EINTR);
+    rc = gc_sync_directory(s, fd);
     int cr = close(fd);
     return rc == 0 && cr == 0 ? EFS_OK : EFS_ERR_IO;
 }
@@ -594,7 +634,7 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
         int fd = open(path, O_RDONLY);
         if (fd < 0) {
             if (errno == ENOENT) {
-                rc = fragment_parent_sync(path);
+                rc = fragment_parent_sync(s, path);
                 if (rc == EFS_OK)
                     continue;
             }
@@ -611,10 +651,15 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
             rc = EFS_ERR_IO;
             break;
         }
+        uint64_t read_start = gc_clock_us();
         ssize_t rn;
         do {
             rn = pread(fd, got, sizeof(got), (off_t)payload);
         } while (rn < 0 && errno == EINTR);
+        int read_errno = errno;
+        gc_io_add(s, 0, read_start, rn > 0 ? (uint64_t)rn : 0,
+                  rn != (ssize_t)sizeof(got));
+        errno = read_errno;
         int cr = close(fd); /* never retry close on a potentially released fd */
         if (rn != (ssize_t)sizeof(got) || cr != 0) {
             rc = EFS_ERR_IO;
@@ -625,9 +670,9 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
             __atomic_fetch_add(&s->gc_mismatches, 1, __ATOMIC_RELAXED);
             continue;
         }
-        if (unlink(path) != 0) {
+        if (gc_unlink_file(s, path) != 0) {
             if (errno == ENOENT) {
-                rc = fragment_parent_sync(path);
+                rc = fragment_parent_sync(s, path);
                 if (rc == EFS_OK)
                     continue;
             }
@@ -651,7 +696,7 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
             pthread_mutex_unlock(&s->lock);
             server_usage_mark_dirty(s);
         }
-        rc = fragment_parent_sync(path);
+        rc = fragment_parent_sync(s, path);
         if (rc != EFS_OK)
             break;
     }
@@ -796,15 +841,15 @@ static int inode_death_set(struct efsd_server *s, efs_export_id_t eid, efs_ino_t
     /* Repeat all parent syncs even after a previous rename succeeded but
      * its directory sync failed. Newly-created ancestors must survive too. */
     if (rc == EFS_OK)
-        rc = fragment_parent_sync(path);
+        rc = fragment_parent_sync(s, path);
     if (rc == EFS_OK) {
         char parent[8192];
         strcpy(parent, path);
         *strrchr(parent, '/') = '\0';
-        rc = fragment_parent_sync(parent);
+        rc = fragment_parent_sync(s, parent);
         *strrchr(parent, '/') = '\0';
         if (rc == EFS_OK)
-            rc = fragment_parent_sync(parent);
+            rc = fragment_parent_sync(s, parent);
     }
     pthread_mutex_unlock(mu);
     return rc;
@@ -815,7 +860,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
 {
     int dfd = open(path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     if (dfd < 0)
-        return errno == ENOENT ? fragment_parent_sync(path) : EFS_ERR_IO;
+        return errno == ENOENT ? fragment_parent_sync(s, path) : EFS_ERR_IO;
     DIR *dir = fdopendir(dfd);
     if (!dir) { close(dfd); return EFS_ERR_IO; }
     int rc = EFS_OK;
@@ -854,7 +899,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
                 rc = EFS_ERR_BUSY;
                 break;
             }
-            if (unlink(child)) {
+            if (gc_unlink_file(s, child)) {
                 if (errno == ENOENT)
                     continue;
                 rc = EFS_ERR_IO;
@@ -887,9 +932,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
     /* Sync even a partial pass; no successful RPC may retire an undurable
      * unlink. An absent-file retry also syncs the containing directory. */
     int fd = dirfd(dir), sr;
-    do {
-        sr = fsync(fd);
-    } while (sr < 0 && errno == EINTR);
+    sr = gc_sync_directory(s, fd);
     if (sr < 0)
         rc = EFS_ERR_IO;
     if (closedir(dir))
@@ -898,13 +941,13 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
         if (rmdir(path) && errno != ENOENT)
             rc = EFS_ERR_IO;
         if (rc == EFS_OK)
-            rc = fragment_parent_sync(path);
+            rc = fragment_parent_sync(s, path);
     }
     return rc;
 }
 /* The five inode path segments are scaffolding, not user directories.
  * Remove empty shared ancestors only; another live inode makes rmdir stop. */
-static int gc_dead_ancestors(const char *inode_path)
+static int gc_dead_ancestors(struct efsd_server *s, const char *inode_path)
 {
     char path[8192];
     if (strlen(inode_path) >= sizeof(path)) return EFS_ERR_IO;
@@ -917,7 +960,7 @@ static int gc_dead_ancestors(const char *inode_path)
             if (errno == ENOTEMPTY || errno == EEXIST) return EFS_OK;
             return EFS_ERR_IO;
         }
-        int rc = fragment_parent_sync(path);
+        int rc = fragment_parent_sync(s, path);
         if (rc != EFS_OK) return rc;
     }
     return EFS_OK;
@@ -938,7 +981,7 @@ int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
         format_ino_chunk_dir(path, sizeof(path), s->storage_paths[r], eid, ino, 0);
         *strrchr(path, '/') = '\0';
         rc = gc_dead_directory(s, path, &left, 0);
-        if (rc == EFS_OK) rc = gc_dead_ancestors(path);
+        if (rc == EFS_OK) rc = gc_dead_ancestors(s, path);
     }
     pthread_rwlock_unlock(mu);
     if (rc != EFS_OK && rc != EFS_ERR_BUSY)

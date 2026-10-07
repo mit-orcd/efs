@@ -141,3 +141,30 @@ reclaim helper is not a distributed coordinator.
   This checkpoint does not implement transaction-decision GC.
 - D25 live-file materialization/history retirement remains staged; the bounded
   dead-inode collector does not make legacy truncate/apply work fully bounded.
+
+## GC I/O visibility and xorinox rollout follow-up
+
+The xorinox rollout of `cb5e86de` completed using the cluster scripts with safe
+client drains, full unit tests and gateway/test-client remounts. An observed
+snapshot reclaimed 24.2 GiB of payload across the three nodes; physical free
+space increased from approximately 1.1–1.2 GB/node to 9.8–10.8 GB/node. Queues
+were still draining, and xefs3 had one reap error; this does not close historical
+lost-ledger reconciliation or activate PUT tickets. Raw rollout evidence is in
+`/private/tmp/efs-xorinox-gc-final.log` on the development Mac (temporary evidence,
+not a repository fixture).
+
+GC status version 2 adds cumulative completed-operation counts, bytes, errors
+and elapsed microseconds for checksum reads, file unlinks and directory fsyncs.
+Counts include retries; unlink bytes are zero and reclaimed payload is separate.
+These describe application syscalls, not block-device IOPS or all GC traffic:
+metadata WAL, directory scans and death-fence file reads/writes are outside these
+three classes. GC pass/marker ages now use the same monotonic clock as the status
+reader, fixing the rollout's invalid age fields. New efs-mgmt accepts both v1 and
+v2 replies; old tools require an upgrade for v2 daemons.
+
+The cluster portal places per-node GC totals, interval rates/latency, errors and
+leader-only queue samples beside peak IOPS. Rates reset after daemon replacement,
+counter reset or a failed probe; unsupported counters remain unavailable. The
+new telemetry has Linux fault-injection tests, a full NUC unit-suite pass, real
+v2 RPC/age checks and v1 compatibility checks against xorinox. These telemetry
+changes are not yet deployed on xorinox.

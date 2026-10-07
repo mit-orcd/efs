@@ -189,6 +189,13 @@ struct efs_msg_gc_inode_reply { int32_t rc; };
  * reap_capped means reap_seen is a lower bound. Ages are monotonic durations,
  * UINT64_MAX means never observed. File bytes are unlinked lengths, not a
  * promise that the filesystem has released blocks held by another open fd. */
+/* GC syscall counters, not device IOPS: buffered checksum reads can hit
+ * page cache; unlink bytes stay zero (reclaimed bytes are reported separately).
+ * Directory sync includes partial-pass and absent-file retries. */
+#define EFS_GC_IO_CLASSES 3
+struct efs_gc_io_stats {
+    uint64_t ops, bytes, errors, us_sum;
+};
 struct efs_msg_gc_status_reply {
     uint32_t version, node_id, stage, group;
     uint32_t sampled_mask, exports, reap_capped[2];
@@ -197,6 +204,8 @@ struct efs_msg_gc_status_reply {
     uint64_t delete_errors, mismatches, sweep_errors, reap_errors, ack_errors;
     uint64_t scan_errors, missing_exports;
     uint64_t pending[2], reap_seen[2], orphan_seen[2], first_reap[2], first_seen_age_ms[2];
+    /* Version 2 appends checksum_read, unlink, dir_sync in that order. */
+    struct efs_gc_io_stats io[EFS_GC_IO_CLASSES];
 };
 
 /* D25 read authority for write admission, including holes and new lanes.

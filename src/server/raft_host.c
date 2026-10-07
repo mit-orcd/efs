@@ -6390,7 +6390,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     uint64_t first = c.n ? c.ino[0] : 0;
     if (__atomic_load_n(&h->s->gc_first_reap[gi], __ATOMIC_RELAXED) != first) {
         __atomic_store_n(&h->s->gc_first_reap[gi], first, __ATOMIC_RELAXED);
-        __atomic_store_n(&h->s->gc_first_seen_us[gi], first ? now_us_() : 0, __ATOMIC_RELAXED);
+        __atomic_store_n(&h->s->gc_first_seen_us[gi], first ? efs_iostats_now_us() : 0, __ATOMIC_RELAXED);
     }
     for (i = 0; i < c.n && h->gc_running && h->running; i++) {
         uint8_t cmd[18];
@@ -6838,7 +6838,7 @@ static void *host_gc_thread(void *arg)
         uint64_t t0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
 
-        __atomic_store_n(&h->s->gc_pass_start_us, now_us_(), __ATOMIC_RELAXED);
+        __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
         host_snap_export_pass(h);
         __atomic_store_n(&h->s->gc_stage, 2, __ATOMIC_RELAXED);
@@ -6931,7 +6931,7 @@ static void *host_gc_thread(void *arg)
                     (unsigned long long)sc_all.keys,
                     (unsigned long long)sc_all.emitted,
                     (unsigned long long)sc_all.tombstones);
-        __atomic_store_n(&h->s->gc_last_pass_us, now_us_(), __ATOMIC_RELAXED);
+        __atomic_store_n(&h->s->gc_last_pass_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_fetch_add(&h->s->gc_passes, 1, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 0, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
