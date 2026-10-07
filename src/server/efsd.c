@@ -266,6 +266,39 @@ static int parse_host_port(const char *str, char *host, size_t host_len, uint16_
 
 /* Live handler threads (accept path). Used to cap concurrent conns. */
 static volatile int g_live_conns;
+/* Registered before thread creation, removed before close. Shutdown never
+ * operates on a stale descriptor that another thread may have reused. */
+static pthread_mutex_t g_conn_lock = PTHREAD_MUTEX_INITIALIZER;
+static int g_conn_fds[EFS_SERVER_MAX_CONNS]; /* fd + 1; zero means free */
+
+static int conn_register(int fd)
+{
+    int found = 0;
+    pthread_mutex_lock(&g_conn_lock);
+    for (unsigned i = 0; i < EFS_SERVER_MAX_CONNS; i++) {
+        if (!g_conn_fds[i]) { g_conn_fds[i] = fd + 1; found = 1; break; }
+    }
+    pthread_mutex_unlock(&g_conn_lock);
+    return found;
+}
+
+static void conn_unregister(int fd)
+{
+    pthread_mutex_lock(&g_conn_lock);
+    for (unsigned i = 0; i < EFS_SERVER_MAX_CONNS; i++) {
+        if (g_conn_fds[i] == fd + 1) { g_conn_fds[i] = 0; break; }
+    }
+    pthread_mutex_unlock(&g_conn_lock);
+}
+
+static void conn_wake_readers(void)
+{
+    pthread_mutex_lock(&g_conn_lock);
+    for (unsigned i = 0; i < EFS_SERVER_MAX_CONNS; i++)
+        if (g_conn_fds[i]) (void)shutdown(g_conn_fds[i] - 1, SHUT_RD);
+    pthread_mutex_unlock(&g_conn_lock);
+}
+
 
 static void *conn_thread(void *arg)
 {
@@ -278,11 +311,13 @@ static void *conn_thread(void *arg)
     efs_tcp_keepalive(fd);
     struct efs_conn *conn = efs_conn_wrap_tcp(fd, 1);
     if (!conn) {
+        conn_unregister(fd);
         close(fd);
         __sync_fetch_and_sub(&g_live_conns, 1);
         return NULL;
     }
     server_handle_conn(conn);
+    conn_unregister(fd);
     efs_conn_destroy(conn); /* QP (if upgraded) + fd */
     server_handler_tls_cleanup();
     __sync_fetch_and_sub(&g_live_conns, 1);
@@ -597,8 +632,14 @@ int main(int argc, char **argv)
             continue;
         }
 
+        if (!conn_register(fd)) {
+            __sync_fetch_and_sub(&g_live_conns, 1);
+            close(fd);
+            continue;
+        }
         pthread_t tid;
         if (efsd_pthread_create(&tid, conn_thread, (void *)(intptr_t)fd) != 0) {
+            conn_unregister(fd);
             __sync_fetch_and_sub(&g_live_conns, 1);
             close(fd);
         } else {
@@ -612,16 +653,17 @@ int main(int argc, char **argv)
     }
     stop_perf_recorder();
 
-    /* Drain live conn threads before tearing down server state. Detached
-     * handlers use g_server (lock, exports, peer pool); destroying it while
-     * they run is a UAF. Wait with a bounded timeout. */
-    for (int waited_ms = 0; g_live_conns > 0 && waited_ms < 15000; ) {
+    /* Idle pooled readers have no receive timeout. Wake them, then retain
+     * shared state until every handler and its TLS cleanup has completed.
+     * An operator timeout must retain the daemon, never force a live UAF. */
+    conn_wake_readers();
+    for (unsigned waited_ms = 0; __sync_add_and_fetch(&g_live_conns, 0) > 0; ) {
         usleep(50 * 1000);
         waited_ms += 50;
+        if (waited_ms % 15000 == 0)
+            fprintf(stderr, "shutdown: waiting for %d live handlers; state retained\n",
+                    __sync_add_and_fetch(&g_live_conns, 0));
     }
-    if (g_live_conns > 0)
-        fprintf(stderr, "shutdown: %d conn threads still live after drain "
-                "timeout; forcing teardown\n", g_live_conns);
 
     server_writer_pool_stop(&server);
     server_usage_flush_dirty(&server);

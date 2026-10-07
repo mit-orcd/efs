@@ -182,3 +182,13 @@ committed devops scripts and excluding concurrent benchmark work. Full Linux
 rows now point at current repairs and retain their unresolved gates. Logs
 `/private/tmp/efs-roadmap-cycle17-live.log` and
 `/private/tmp/efs-roadmap-cycle17-units.log`.
+
+## Round 18 — W65 wake idle readers and prevent teardown under handlers
+
+Track accepted descriptors before thread creation, unregister before close,
+wake read waits during stop and keep shared state until all handler/TLS cleanup
+finishes. Removed timeout-driven shared-state destruction. NUC owned daemon
+fixtures cover idle clients, partial request frames and descriptor churn: three
+repeats per I/O mode pass, about 64 ms stop latency. Log
+`/private/tmp/efs-roadmap-shutdown.log`. Mutation recovery/RDMA and attribution
+of the earlier stop incident remain owed; no timeout or SIGKILL is the repair.

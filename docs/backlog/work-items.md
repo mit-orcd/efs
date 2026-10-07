@@ -2518,6 +2518,16 @@ results dirs; move this plan's finished rows to project-history.
 
 **Evidence/current state:** The final NUC rollout observed n1 exceeding a ten-second SIGTERM wait twice after clean client drains; deployment tooling used SIGKILL. The blocking path is not identified.
 
+**Continuation repair (Oct 7):** accepted TCP handlers explicitly disable idle
+receive timeout. Shutdown previously waited fifteen seconds and then destroyed
+shared state under those detached handlers. A registered-fd set now wakes read
+waits with SHUT_RD, protects against descriptor reuse by unregistering before
+close, and drains handler/TLS cleanup before destroying shared state. Slow active
+handlers retain state; operator timeout is not permission for forced teardown.
+NUC owned fixtures with 49 idle/partial-frame sockets plus descriptor churn stop
+in about 64 ms across three buffered and three direct repeats. Active mutation
+recovery, RDMA peers and original incident attribution remain owed; W65 stays open.
+
 **Home:** [current detail](../status/in-flight.md).
 
 **Gate:** Capture userspace stacks during a controlled stop; remove the actual blocker and show bounded graceful shutdown without discarding accepted data.
