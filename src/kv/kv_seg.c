@@ -50,6 +50,8 @@ struct seg_cslot {
     uint32_t len;
     uint64_t off;
     uint8_t *blk;
+    uint32_t *entries; /* offsets of validated sorted records in blk */
+    uint32_t nentries;
     int valid;
 };
 
@@ -485,8 +487,10 @@ static void seg_free(struct kv_seg *s)
         return;
     seg_free_idx(s);
     free(s->last_key);
-    for (i = 0; i < KV_SEG_CACHE_SLOTS; i++)
+    for (i = 0; i < KV_SEG_CACHE_SLOTS; i++) {
         free(s->cslot[i].blk);
+        free(s->cslot[i].entries);
+    }
     if (s->fd >= 0)
         close(s->fd);
     free(s->path);
@@ -633,45 +637,57 @@ static int32_t block_for(struct kv_seg *s, const uint8_t *key, uint32_t klen)
     return ans;
 }
 
-/* Search one immutable block. A miss is cached by the caller too: the
- * next lookup of a nearby key (the next name in a directory) must not
- * pread this block again. */
-static int search_block(struct kv_seg *s, const uint8_t *blk, uint32_t len,
-                        uint32_t bi, const uint8_t *key, uint32_t klen,
-                        struct kv_buf *val, uint8_t *op)
+/* Index the variable-length records once when a block enters the bounded
+ * cache. Repeated point gets use binary search instead of comparing every
+ * preceding record. No format change or unbounded per-segment allocation.
+ * Validate the entire block before publishing it: malformed lengths/order are
+ * corruption, never a negative lookup or a partially usable cache entry. */
+static int index_block(const uint8_t *blk, uint32_t len,
+                       uint32_t **entries, uint32_t *count)
 {
-    uint32_t off = 0;
-    const uint8_t *tail = NULL;
-    uint32_t tail_kl = 0;
-    int saw_end = 1;
-    int rc = EFS_ERR_NOT_FOUND;
-
-    while (off + 9 <= len) {
-        uint8_t o = blk[off];
-        uint32_t kl = get_u32(blk + off + 1);
-        uint32_t vl = get_u32(blk + off + 5);
-        int c;
-
-        if (off + 9 + kl + vl > len)
-            break;
-        c = kv_key_cmp(blk + off + 9, kl, key, klen);
-        if (c == 0) {
-            *op = o;
-            rc = kv_buf_set(val, blk + off + 9 + kl, vl);
-            saw_end = 0;
-            break;
-        }
-        if (c > 0) {
-            saw_end = 0;
-            break;
-        }
-        tail = blk + off + 9;
-        tail_kl = kl;
-        off += 9 + kl + vl;
+    uint32_t off = 0, n = 0;
+    const uint8_t *prev = NULL; uint32_t prev_len = 0;
+    while (off < len) {
+        if (len - off < 9) return EFS_ERR_PROTO;
+        uint32_t kl = get_u32(blk + off + 1), vl = get_u32(blk + off + 5);
+        if (!kl || kl > KV_LSM_KLEN_MAX || vl > KV_LSM_VLEN_MAX ||
+            kl > len - off - 9 || vl > len - off - 9 - kl ||
+            (blk[off] != KV_OP_PUT && blk[off] != KV_OP_DEL) ||
+            (blk[off] == KV_OP_DEL && vl) ||
+            (prev && kv_key_cmp(prev, prev_len, blk + off + 9, kl) >= 0))
+            return EFS_ERR_PROTO;
+        prev = blk + off + 9; prev_len = kl;
+        off += 9 + kl + vl; ++n;
     }
-    if (saw_end && bi + 1 == s->nblocks)
-        seg_note_last(s, tail, tail_kl);
-    return rc;
+    if (!n) return EFS_ERR_PROTO;
+    uint32_t *idx = malloc((size_t)n * sizeof(*idx));
+    if (!idx) return EFS_ERR_NOMEM;
+    off = 0;
+    for (uint32_t i = 0; i < n; ++i) {
+        idx[i] = off;
+        off += 9 + get_u32(blk + off + 1) + get_u32(blk + off + 5);
+    }
+    *entries = idx; *count = n;
+    return EFS_OK;
+}
+
+static int search_block(const struct seg_cslot *c, const uint8_t *key,
+                         uint32_t klen, struct kv_buf *val, uint8_t *op)
+{
+    uint32_t lo = 0, hi = c->nentries;
+    while (lo < hi) {
+        uint32_t mid = lo + (hi - lo) / 2;
+        uint32_t off = c->entries[mid];
+        uint32_t kl = get_u32(c->blk + off + 1);
+        int cmp = kv_key_cmp(c->blk + off + 9, kl, key, klen);
+        if (cmp < 0) lo = mid + 1;
+        else if (cmp > 0) hi = mid;
+        else {
+            *op = c->blk[off];
+            return kv_buf_set(val, c->blk + off + 9 + kl, get_u32(c->blk + off + 5));
+        }
+    }
+    return EFS_ERR_NOT_FOUND;
 }
 
 int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
@@ -707,8 +723,7 @@ int kv_seg_probe(struct kv_seg *s, const uint8_t *key, uint32_t klen,
     c = &s->cslot[(uint32_t)bi % KV_SEG_CACHE_SLOTS];
     if (c->valid && c->bi == (uint32_t)bi && c->len == r->len &&
         c->off == r->off && c->blk)
-        return search_block(s, c->blk, c->len, (uint32_t)bi, key, klen, val,
-                            op);
+        return search_block(c, key, klen, val, op);
     io->fd = s->fd;
     io->off = r->off;
     io->len = r->len;
@@ -747,14 +762,31 @@ int kv_seg_install(struct kv_seg *s, const struct kv_seg_io *io, uint8_t *blk,
         free(blk);
         return EFS_ERR_AGAIN;
     }
+    uint32_t *entries = NULL, count = 0;
+    int rc = index_block(blk, io->len, &entries, &count);
+    if (rc == EFS_OK && kv_key_cmp(blk + 9, get_u32(blk + 1),
+                                   s->idx[io->bi].key, s->idx[io->bi].klen))
+        rc = EFS_ERR_PROTO;
+    if (rc == EFS_OK && io->bi + 1 < s->nblocks) {
+        uint32_t tail = entries[count - 1];
+        if (kv_key_cmp(blk + tail + 9, get_u32(blk + tail + 1),
+                        s->idx[io->bi + 1].key, s->idx[io->bi + 1].klen) >= 0)
+            rc = EFS_ERR_PROTO;
+    }
+    if (rc != EFS_OK) { free(entries); free(blk); return rc; }
     c = &s->cslot[io->bi % KV_SEG_CACHE_SLOTS];
-    free(c->blk);
+    free(c->blk); free(c->entries);
+    c->entries = entries; c->nentries = count;
     c->blk = blk;
     c->bi = io->bi;
     c->len = io->len;
     c->off = io->off;
     c->valid = 1;
-    return search_block(s, blk, io->len, io->bi, key, klen, val, op);
+    if (io->bi + 1 == s->nblocks) {
+        uint32_t tail = entries[count - 1];
+        seg_note_last(s, blk + tail + 9, get_u32(blk + tail + 1));
+    }
+    return search_block(c, key, klen, val, op);
 }
 
 int kv_seg_get(struct kv_seg *s, const uint8_t *key, uint32_t klen,

@@ -53,3 +53,5 @@ tests/faults/fault_sim
 __pycache__/
 
 /tests/test_mtime_barrier
+
+/tests/test_kv_seg_index
