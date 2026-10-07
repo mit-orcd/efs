@@ -36,7 +36,21 @@ for direct in (False,True):
                         sock=socket.create_connection(('127.0.0.1',port),1);sockets.append(sock)
                         if index%2:sock.sendall(b'\x00\x00') # incomplete length frame
                     worker.start();time.sleep(.15)
-                    before=time.monotonic();proc.terminate();proc.wait(5)
+                    if repeat==1:
+                        # No new connection may accidentally wake accept. Deliver
+                        # SIGTERM to a non-main task, as Linux may normally do.
+                        stop.set();worker.join(2);time.sleep(.1)
+                        tasks=[int(path.name) for path in (Path('/proc')/str(proc.pid)/'task').iterdir() if int(path.name)!=proc.pid]
+                        assert tasks,'no worker signal target'
+                        helper=Path(work)/'signal.c'
+                        helper.write_text('#define _GNU_SOURCE\n#include <unistd.h>\n#include <sys/syscall.h>\n#include <signal.h>\n#include <stdlib.h>\nint main(int c,char**v){if(c!=3)return 2;return syscall(SYS_tgkill,atoi(v[1]),atoi(v[2]),SIGTERM)<0;}\n')
+                        binary=Path(work)/'signal'
+                        subprocess.run(['cc',str(helper),'-o',str(binary)],check=True)
+                        before=time.monotonic()
+                        subprocess.run([str(binary),str(proc.pid),str(max(tasks))],check=True)
+                    else:
+                        before=time.monotonic();proc.terminate()
+                    proc.wait(5)
                     elapsed=time.monotonic()-before
                     assert proc.returncode==0,proc.returncode
                     assert 'forcing teardown' not in logpath.read_text()

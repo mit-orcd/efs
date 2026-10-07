@@ -4443,6 +4443,12 @@ NUC owned fixtures with 49 idle/partial-frame sockets plus descriptor churn stop
 in about 64 ms across three buffered and three direct repeats. Active mutation
 recovery, RDMA peers and original incident attribution remain owed; W65 stays open.
 
+A second owned fixture delivers SIGTERM specifically to a non-main task after
+connection churn stops: baseline main remains blocked in accept beyond five
+seconds. The listener now polls the stop flag every 250 ms and accepts without
+blocking. All six NUC buffered/direct repeats pass, including worker-delivered
+signals (63–215 ms); handlers still drain before teardown.
+
 **Home:** [current detail](#appendix-2--in-flight--the-current-handoff-block).
 
 **Gate:** Capture userspace stacks during a controlled stop; remove the actual blocker and show bounded graceful shutdown without discarding accepted data.

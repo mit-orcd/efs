@@ -9,6 +9,8 @@
 #include <unistd.h>
 #include <errno.h>
 #include <pthread.h>
+#include <poll.h>
+#include <fcntl.h>
 #include <signal.h>
 #include <execinfo.h>
 #include <sys/socket.h>
@@ -500,6 +502,16 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    /* SIGTERM may run on a handler rather than interrupt main's accept.
+     * Poll bounds flag observation; nonblocking accept cannot outwait it. */
+    int listen_flags = fcntl(server.listen_fd, F_GETFL, 0);
+    if (listen_flags < 0 || fcntl(server.listen_fd, F_SETFL,
+                                  listen_flags | O_NONBLOCK) < 0) {
+        perror("nonblocking listener");
+        close(server.listen_fd);
+        return 1;
+    }
+
     if (join_peer) {
         char host[64];
         uint16_t port;
@@ -596,10 +608,21 @@ int main(int argc, char **argv)
     }
 
     while (server.running) {
+        struct pollfd listener = { .fd = server.listen_fd, .events = POLLIN };
+        int ready = poll(&listener, 1, 250);
+        if (!server.running)
+            break;
+        if (ready < 0) {
+            if (errno == EINTR) continue;
+            perror("listener poll");
+            break;
+        }
+        if (!ready) continue;
         struct sockaddr_storage addr;
         socklen_t addrlen = sizeof(addr);
         int fd = accept(server.listen_fd, (struct sockaddr *)&addr, &addrlen);
         if (fd < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) continue;
             if (errno == EINTR) {
                 /* SIGINT/SIGTERM clear running. Leaving the loop is
                  * what runs stop_perf_recorder; staying here left efsd

@@ -192,3 +192,18 @@ fixtures cover idle clients, partial request frames and descriptor churn: three
 repeats per I/O mode pass, about 64 ms stop latency. Log
 `/private/tmp/efs-roadmap-shutdown.log`. Mutation recovery/RDMA and attribution
 of the earlier stop incident remain owed; no timeout or SIGKILL is the repair.
+
+## Round 19 — W65 stop flag observed when signal reaches a worker
+
+An owned tgkill fixture delivers SIGTERM to a non-main task with no new traffic.
+Baseline hangs beyond five seconds in main's accept. Nonblocking listener plus
+250 ms poll observes shutdown independently of which thread receives the signal.
+NUC three repeats per mode pass, including targeted worker signals, in 63–215 ms.
+Logs `/private/tmp/efs-roadmap-shutdown-worker-baseline.log` and
+`/private/tmp/efs-roadmap-shutdown-worker-fixed.log`.
+
+Serial buffered namespace/GC/POSIX acceptance also passes with the idle-reader
+repair: POSIX 216/0/1 skip, peer 64/64, valid PUT positive control and restart
+fencing, final physical inventory/usage zero. Log
+`/private/tmp/efs-roadmap-buffered-serial.log`. The earlier overlapping peer
+failure remains retained and is not causally explained by a passing repeat.
