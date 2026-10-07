@@ -427,9 +427,18 @@ int efs_conn_send_msg(struct efs_conn *c, uint8_t type, const void *payload,
 static int conn_rdma_frame(struct efs_conn *c, uint8_t *type,
                            const uint8_t **payload, uint32_t *payload_len)
 {
-    int wr = efs_rdma_recv_wait(c->rc, c->recv_timeout_ms > 0
-                                           ? c->recv_timeout_ms
-                                           : EFS_IO_TIMEOUT_MS);
+    int timeout = efs_net_remaining_ms(c->recv_timeout_ms > 0
+                                      ? c->recv_timeout_ms : EFS_IO_TIMEOUT_MS);
+    if (!timeout)
+        return EFS_ERR_BUSY;
+    int wr = efs_rdma_recv_wait(c->rc, timeout);
+    if (!efs_net_remaining_ms(INT_MAX)) {
+        /* A successful wait owns a pool frame even if the budget expired
+         * concurrently. Return that ownership before dropping the reply. */
+        if (wr == EFS_OK)
+            efs_rdma_recv_repost(c->rc);
+        return EFS_ERR_BUSY;
+    }
     /* A real byte on the TCP side-channel (reply larger than the RDMA
      * pool, or a request the server answered on TCP). Caller reads it
      * with the TCP recv. Anything else is a dead conn. */
