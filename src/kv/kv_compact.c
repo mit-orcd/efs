@@ -971,6 +971,12 @@ static void *compactor_main(void *arg)
         l->compact_busy = 1;
         rc = kv_compact_locked(l, 1);
         l->compact_busy = 0;
+        /* Writes deferred at the L0 byte cap remain in the memtable. Once
+         * the merge frees capacity, flush them even if no new write arrives.
+         * Otherwise an idle follower retains the oversized table/WAL forever. */
+        if (rc == EFS_OK && l->mt.bytes >=
+                (l->cfg.memtable_max ? l->cfg.memtable_max : KV_LSM_MEM_DEFAULT))
+            rc = kv_maybe_flush_locked(l);
         if (rc != EFS_OK && rc != EFS_ERR_BUSY)
             l->io_failed = 1;
         pthread_cond_broadcast(&l->cv);
