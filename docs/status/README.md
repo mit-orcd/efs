@@ -896,3 +896,14 @@ Linux units and live same-group/cross-group gates pass; NUC POSIX passes
 216 / 0 failures / 1 mmap skip. D25 remains staged. Next finish lane-local mtime
 coherence and FUSE integration, plus bounded abandoned-stream cleanup.
 [Evidence and scope](../../results/measure/20261006-d25-session-admission/SUMMARY.md).
+
+## D25 regular-file mtime coherence checkpoint — Oct 6 2026
+
+Regular-file mtime SETATTR now uses a durable inode/active-lane transaction.
+Cold bootstrap copies the current mtime generation; stale legacy REPORT stamps
+cannot resurrect pre-utimens mtime. Size/data and ctime are preserved. Full
+Linux units and durable recovery pass; the four-node NUC POSIX gate is
+216 pass / 0 fail / 1 mmap skip. A live multi-lane test verifies backwards
+mtime changes and subsequent fsynced writes. Both FUSE flush integrations and
+bounded abandoned-stream cleanup remain pending; D25 remains staged.
+[Evidence and scope](../../results/measure/20261006-d25-mtime-coherence/SUMMARY.md).
