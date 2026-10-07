@@ -737,10 +737,14 @@ void efs_rdcache_trim(void)
  * allow in-flight owners a bounded opportunity to release capacity. */
 static void *demand_read_alloc(uint32_t len)
 {
+    if (efs_client_rpc_past_deadline())
+        return NULL;
     void *p = efs_buf_alloc(len);
     if (p) return p;
     efs_rdcache_trim();
     for (unsigned attempt = 0; attempt < 20; attempt++) {
+        if (efs_client_rpc_past_deadline())
+            return NULL;
         p = efs_buf_alloc(len);
         if (p) return p;
         struct timespec delay = { .tv_sec = 0, .tv_nsec = 1000000 };
@@ -1826,7 +1830,7 @@ int efs_client_read(efs_ino_t ino, uint64_t offset, size_t size, char *buf, size
                     for (uint32_t j = 0; j < batch; j++)
                         if (!jobs[j].ext)
                             efs_buf_free(jobs[j].chunk, chunk_size);
-                    return EFS_ERR_NOMEM;
+                    return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_ERR_NOMEM;
                 }
             }
             jobs[batch].rc = EFS_ERR_IO;

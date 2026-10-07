@@ -12,6 +12,8 @@ source=r'''
 #include <time.h>
 #include <stdio.h>
 static unsigned calls,trimmed,waits,succeed;
+static unsigned expire_after;
+static int efs_client_rpc_past_deadline(void){return expire_after&&waits>=expire_after-1;}
 static int body;
 static void *efs_buf_alloc(uint32_t n) {assert(n==131072);calls++;return calls==succeed?&body:NULL;}
 static void efs_rdcache_trim(void) {trimmed++;}
@@ -20,12 +22,14 @@ static int test_sleep(const struct timespec *t, struct timespec *r) {
 }
 #define nanosleep test_sleep
 ''' + f + r'''
-static void reset(unsigned n){calls=trimmed=waits=0;succeed=n;}
+static void reset(unsigned n){calls=trimmed=waits=expire_after=0;succeed=n;}
 int main(void) {
  reset(1);assert(demand_read_alloc(131072)==&body && !trimmed && !waits);
  reset(2);assert(demand_read_alloc(131072)==&body && trimmed==1 && !waits);
  reset(5);assert(demand_read_alloc(131072)==&body && trimmed==1 && waits==3);
  reset(0);assert(!demand_read_alloc(131072) && calls==21 && trimmed==1 && waits==20);
+ reset(0);expire_after=1;assert(!demand_read_alloc(131072)&&!calls&&!trimmed&&!waits);
+ reset(0);expire_after=4;assert(!demand_read_alloc(131072)&&calls==4&&trimmed==1&&waits==3);
  puts("demand read: fast path, reclaim, delayed release and bounded exhaustion PASS");
 }
 '''
