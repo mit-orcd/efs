@@ -1,0 +1,12 @@
+{
+  "normal_client": {
+    "EFS_FAULT_REPORT_FILE": false,
+    "EFS_FAULT_PUT_REPLY_COLLISION": false
+  },
+  "normal_server": {
+    "kv-fault: compactor parked": false
+  },
+  "fault_client": {
+    "EFS_FAULT_REPORT_FILE": true
+  }
+}

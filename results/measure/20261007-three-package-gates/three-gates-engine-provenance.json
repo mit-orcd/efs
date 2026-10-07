@@ -1,0 +1,16 @@
+{
+  "before": {
+    "source_tree_sha256": "3e70ce29caee6675accc6a39c9e1991934095a65ff8de8a2fb2257ce69281d2d",
+    "binary_sha256": "9807b6820fde203e411e6804fa8970f8f25d6309145e57a89e5512c0a653ad12",
+    "experiment_sha256": "25a0e8f436ef9073d872816ba3fb8e4451cb794bbb7556c30edc3703ee158a96",
+    "source": "/data1/efs/three-gates-src",
+    "binary": "/data1/efs/three-gates-kv-before"
+  },
+  "final": {
+    "source_tree_sha256": "676e163a58cf5091a63d8232c1f7518e97bf102e0962b7a2de1132e10170900c",
+    "binary_sha256": "fef032c7c3c79868855a5c85c183fd9520f4587c65ca4032d4d49250c88daf9d",
+    "experiment_sha256": "322428b398eba85e46044bc0b2b06553789610947e53bb06e981bfa7f9040aa4",
+    "source": "/data1/efs/three-gates-kv-final-src",
+    "binary": "/data1/efs/three-gates-kv-final"
+  }
+}

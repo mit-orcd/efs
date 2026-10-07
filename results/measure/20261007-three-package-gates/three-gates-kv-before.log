@@ -1,0 +1,24 @@
+kv-fault: compactor parked (/data1/efs/three-gates-kv-before-fault)
+sample phase=baseline writes=0 rss_kib=10892 mt_bytes=0 l0_bytes=0 l0=0 l1=0 hot=0
+sample phase=fill writes=16 rss_kib=27480 mt_bytes=0 l0_bytes=134218000 l0=16 l1=0 hot=0
+sample phase=fill writes=32 rss_kib=27480 mt_bytes=0 l0_bytes=268436000 l0=32 l1=0 hot=0
+sample phase=fill writes=48 rss_kib=27480 mt_bytes=0 l0_bytes=402654000 l0=48 l1=0 hot=0
+sample phase=fill writes=64 rss_kib=27480 mt_bytes=0 l0_bytes=536872000 l0=64 l1=0 hot=0
+sample phase=fill writes=80 rss_kib=27480 mt_bytes=0 l0_bytes=671090000 l0=80 l1=0 hot=0
+sample phase=fill writes=96 rss_kib=27480 mt_bytes=0 l0_bytes=805308000 l0=96 l1=0 hot=0
+sample phase=fill writes=112 rss_kib=27480 mt_bytes=0 l0_bytes=939526000 l0=112 l1=0 hot=0
+sample phase=fill writes=128 rss_kib=27480 mt_bytes=0 l0_bytes=1073744000 l0=128 l1=0 hot=1
+sample phase=cap writes=128 rss_kib=27480 mt_bytes=0 l0_bytes=1073744000 l0=128 l1=0 hot=1
+kv-compact: backpressure n_l0=128
+sample phase=deferred writes=1 rss_kib=35544 mt_bytes=8388664 l0_bytes=1073744000 l0=128 l1=0 hot=1
+sample phase=deferred writes=2 rss_kib=43736 mt_bytes=16777328 l0_bytes=1073744000 l0=128 l1=0 hot=1
+sample phase=deferred writes=3 rss_kib=51928 mt_bytes=25165992 l0_bytes=1073744000 l0=128 l1=0 hot=1
+sample phase=deferred writes=4 rss_kib=60120 mt_bytes=33554656 l0_bytes=1073744000 l0=128 l1=0 hot=1
+sample phase=deferred writes=5 rss_kib=68312 mt_bytes=41943320 l0_bytes=1073744000 l0=128 l1=0 hot=1
+sample phase=deferred writes=6 rss_kib=76504 mt_bytes=50331984 l0_bytes=1073744000 l0=128 l1=0 hot=1
+sample phase=deferred writes=7 rss_kib=84696 mt_bytes=58720648 l0_bytes=1073744000 l0=128 l1=0 hot=1
+sample phase=deferred writes=8 rss_kib=92888 mt_bytes=67109312 l0_bytes=1073744000 l0=128 l1=0 hot=1
+kv-fault: compactor released
+kv-compact: start l0=128 inputs=128 range=256 l0only=0
+kv-compact: end bytes=1073744000 ms=2933 l0=0 l1=16 rc=0
+three-gates-kv-before: tests/measure/kv_pressure_recovery.c:44: main: Assertion `time(NULL)-start<120' failed.

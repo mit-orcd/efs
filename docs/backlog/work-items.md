@@ -1738,6 +1738,13 @@ use `EFS_STRACE_EXPR`.
 
 #### W23 — Server: the apply path blocks on L0 back-pressure, and compaction rewrites the table to absorb a few MiB
 
+**Acceptance update (Oct 7, three-package round):** an owned NUC engine reaches
+the actual 1 GiB L0 cap. Idle deferred-memtable recovery and unsafe concurrent
+WAL truncation are repaired and tested against their old-binary failures.
+The memtable still grows while the compactor remains parked; a universal
+follower memory/lag bound is not established. See the
+[round ledger](../status/three-package-gates-20261007.md).
+
 > **Current status (reviewed Oct 7, round 6):** D9–D13 implementation and Sep 29 rollout are historical acceptance. The follower memory/lag bound remains unproven. The first [completed Oct 5 measurement](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) wrote 4352 MiB and stopped after 27 seconds at the RSS threshold. The summary's zero-L0/no-effect interpretation is invalid: [W89](#w89) finds four KV values packed into one TSV field. Re-expanding the retained samples shows node3 reached 22 L0 files / 3,367,253 bytes, versus node1 4 / 105,281. Raw server logs confirm L0=22 during the park. The run still does not validate the pressure bound. The earlier [setup failure](../../results/measure/20261005-014440-w23-stalled-compactor/SUMMARY.txt) is superseded, not the only run.
 >
 > **Remaining action:** repair TSV serialization/validation and derived summaries, then force enough L0 pressure to test the bound, compare follower RSS with healthy leaders, and record lag/catch-up under the finite stop conditions below. D26 watermark/cursor acceptance is separate; it does not prove W23.
@@ -2205,6 +2212,13 @@ as accepted on that build. [Raw evidence](../archive/queue-review-20261007-round
 
 ## W59 · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains (queue row 0p)
 
+**Acceptance update (Oct 7, three-package round):** NUC direct/buffered
+withheld-publication gates reach finite refusal, preserve the refused write
+size, recover every accepted range on cold clients and drain physical GC.
+Effective 32+32 MiB budgets and allocator drain exhaustion are checked.
+Combined live reserve failure and small-host RSS acceptance remain owed.
+See the [round ledger](../status/three-package-gates-20261007.md).
+
 **W59 · `dd bs=1M count=1024 conv=fsync` on a FUSE mount died on the FIRST write with `No space left on device` (0 bytes) while the export showed 156 GiB free and every node disk 85 GiB free (Oct 6 2026, xorinox cluster, xefsct1). Not a capacity problem: the client maps its internal write-cache budget exhaustion to ENOSPC, and one of the two budgets — the fixed 8 MiB dcache metadata pool — never drains, so once it pins at its cap every subsequent write on that mount fails ENOSPC until remount.**
 
 **Local implementation (Oct 6, uncommitted; no deployment).** Admission now logs metadata live/reserved/cap/request plus the failing budget leg before reclaim. Under metadata pressure, scan linked heap entries under their shard locks and free only body-less, published entries eligible for reuse; stalled records, uncommitted object/sequence identities, pins, dirty-list members, reclaim claims and present-extra accounting remain protected. The existing 8 MiB cap stays enforced. Retry after read-cache and metadata trim, after each successful REPORT drain, and with eight 100 ms backoff waits for concurrent reservations/REPORTs to release capacity. Exhausted local admission returns EAGAIN; allocation failure returns ENOMEM. Local allocator admission now returns BUSY rather than QUOTA, separating it from backend verdicts; genuine backend QUOTA, including during pressure drain, remains ENOSPC. Code review corrects the original suggestion to remap every flush-returned QUOTA: the drain does not call request reservation, and its QUOTA originates from backend PUT/inode RPC verdicts. This bounds the additional admission backoff, not the duration of a blocking REPORT RPC.
@@ -2576,6 +2590,12 @@ signals (63–215 ms); handlers still drain before teardown.
 <a id="w67"></a>
 
 ## W67 · Sparse dirty writes and bounded body admission (queue row mem1)
+
+**Acceptance update (Oct 7, three-package round):** live withheld-publication
+pressure reaches finite refusal, retains accepted bytes and recovers on NUC
+direct/buffered clients with traced 32+32 MiB budgets. Allocator unit exhausts
+both capacities; live combined drain exhaustion and small-host RSS remain.
+See the [round ledger](../status/three-package-gates-20261007.md).
 
 **Budget evidence correction (Oct 7):** earlier 32 + 8 MiB requests actually
 used a 32 + 64 MiB bound because 8 MiB is below the drain's 32 MiB slab minimum.
@@ -3163,6 +3183,12 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 
 ## W84 · Namespace guard bounds reject supported deep/spread-directory work
 
+**Acceptance update (Oct 7, three-package round):** cycle/error distinction
+and one shared eight-second rename retry budget are repaired. Exact guard and
+participant helper boundaries pass; NUC direct maximum-envelope refusal and
+restart recovery pass. Fully spread-directory support and boundary leader
+failure remain open. See the [round ledger](../status/three-package-gates-20261007.md).
+
 **Gate follow-up (Oct 7):** NUC direct/buffered captured-inode opposite directory-move races pass: 16 races per mode preserve acyclic ancestry and retry progress. Maximum participant/hop-bound acceptance remains. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Class/state:** namespace completeness / admission gap; source-reviewed Oct 7.
@@ -3309,6 +3335,13 @@ The [retained fixture](../archive/round6-span-replay-repro.c) uses the actual me
 <a id="w89"></a>
 
 ## W89 · W23 TSV field packing corrupts derived acceptance metrics
+
+**Acceptance update (Oct 7, three-package round):** the unchanged production
+1 GiB L0 cap is reached in a NUC engine experiment. Deferred memtable idle
+drain and concurrent unapplied-WAL truncation defects are repaired with
+old-binary reproductions and crash/recovery tests. This does not establish
+a stalled Raft follower memory/lag bound. See the
+[round ledger](../status/three-package-gates-20261007.md).
 
 **Class/state:** verification correctness; raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
 

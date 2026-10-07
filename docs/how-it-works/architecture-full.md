@@ -1459,6 +1459,10 @@ this document is the invariant they are measured against.
 
 ### 1. The task right now
 
+The [three-package acceptance round](../status/three-package-gates-20261007.md) advances
+W59/W67, W84 and W23/W89 with pressure, boundary and recovery fixes. None of
+these three packages is fully closed; the grouped open count remains 47.
+
 The [next-five acceptance pass](../status/next-five-gates-20261007.md) closes W27, W76,
 W82 and W85. W69 correctness passes; its unidentified Spark performance
 measurement remains open. Current grouped open count: 47 packages.
@@ -1525,10 +1529,10 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
 | 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — found Oct 5 on the xorinox test cluster (write via the nfsd re-export from a macOS client); trigger not isolated | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
 | 0l | **W56** · root-level rename leaves a ghost name in the renaming client's local lookup | correctness | fixed in `f8fef814` — exact old directory-name cache eviction across parent/hash tabs; NUC full POSIX jobs=4/jobs=1 and two-client suites PASS Oct 6; xorinox roll still owed | [full text](#w56--root-level-rename-leaves-a-ghost-name-in-the-renaming-clients-local-lookup-queue-row-0l) |
-| mem1 | **W67** · sparse dirty writes and bounded body admission | correctness / resource exhaustion | NUC eight-file sparse pressure passes cold bytes/holes and physical GC; current effective budgets are traced at 32+32 MiB; earlier 32+8 claims actually used 32+64; failure/recovery-reserve gates remain | [evidence, fix shape and gates](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound) |
+| mem1 | **W67** · sparse dirty writes and bounded body admission | correctness / resource exhaustion | NUC eight-file sparse pressure passes cold bytes/holes and physical GC; current effective budgets are traced at 32+32 MiB; earlier 32+8 claims actually used 32+64; live failed-publication/refusal/cold recovery passes; allocator reserve exhaustion passes; combined live reserve and small-host RSS gates remain | [evidence, fix shape and gates](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound) |
 | mem2 | **W68** · reply-buffer worker lifetime | resource lifetime | Closed: NUC direct/buffered real worker retirement, allocation/TLS/growth fault RSS and key-failure gates pass | [evidence, fix shape and gates](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit) |
 | 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | analyzed Oct 6 (xorinox, build `3d3f17c2-dirty`): the file exists (created 05:17:31.319Z, size 0), the retry was answered BUSY (rc=-13, 05:17:31.733Z), no server logged EEXIST; suspect the retry path — an opid replay must return the recorded verdict (I16), not EEXIST; BUSY on unique-name creates is new with the dirty D25 intent probes | [full text](#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
-| 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | code present; dated Oct 6 checkpoint — metadata diagnostics + protected published-entry reclaim; local admission returns EAGAIN/ENOMEM; 8 MiB cap retained; metadata saturation + admitted-writer/drain reservation regressions and ASan/UBSan PASS; follow-up 251 MiB ENOMEM reproduced locally and reservation fix added; remount + sustained-write and posix jobs=1 gates owed | [full text](#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
+| 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | NUC sustained writes/jobs=1 POSIX and direct/buffered withheld publication/cold recovery pass; allocator normal/drain exhaustion passes; combined live reserve failure and small-host RSS remain | [full text](#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; Xorinox full-tree gate owed | [evidence and remaining gates](../status/fuse-memory.md) |
 | 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w61) |
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w62) |
@@ -1546,7 +1550,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 16 | **W53** · W41's create/close-storm p99 regression — keep or revert | investigation | investigate — evidence only, then the user decides | [full text](#w53--w41s-createclose-storm-tail-under-concurrent-big-writers--investigate-plan-row-16) |
 | E | **D17** · `st_blocks` = 0 for files this client did not write | performance | in tree + gated (dev cluster, Oct 4): lane-stamp present count, summed at getattr, client takes max with its local table; non-writing-client du gate recorded; ecrawl false-positive gate owed; allocation comes from present chunks rather than size alone | [D17](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; live-table idle-hour and raft-tail GC_ACK-share gates owed | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d31) |
-| P2.3 | **W23** · stalled-compactor test | performance | test + hook in tree; measured Oct 5Z (dev cluster): 4352 MiB/27 s RSS stop; original zero-L0 summary invalid due W89 TSV field shift; corrected samples show follower L0=22; valid pressure bound still owed | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
+| P2.3 | **W23** · stalled-compactor test | performance | strict W89 samples pass; NUC engine reaches production 1 GiB L0 cap; deferred idle drain and unapplied WAL-tail durability repaired; universal follower memory/lag bound remains open | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
 | P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](../status/metadata-scaling.md) |
@@ -1573,7 +1577,7 @@ positions do not assign an execution order or override the active handoff.
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
-| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | 64-participant envelope and cross-group HASHED unlink repair; NUC 20-ancestor/16-lane gates pass; maximum bounds/failover remain open | [evidence and gate](#w84) |
+| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | 64-participant envelope and cross-group HASHED unlink repair; NUC boundary/refusal/restart gates and exact helper limits pass; shared 8-second rename budget; full 64-lane support and boundary leader-failure acceptance remain open | [evidence and gate](#w84) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine committed `b3a11877`, staged for integration; production admission, sessions and all-member collection not active | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
@@ -3669,6 +3673,13 @@ use `EFS_STRACE_EXPR`.
 
 ##### W23 — Server: the apply path blocks on L0 back-pressure, and compaction rewrites the table to absorb a few MiB
 
+**Acceptance update (Oct 7, three-package round):** an owned NUC engine reaches
+the actual 1 GiB L0 cap. Idle deferred-memtable recovery and unsafe concurrent
+WAL truncation are repaired and tested against their old-binary failures.
+The memtable still grows while the compactor remains parked; a universal
+follower memory/lag bound is not established. See the
+[round ledger](../status/three-package-gates-20261007.md).
+
 > **Current status (reviewed Oct 7, round 6):** D9–D13 implementation and Sep 29 rollout are historical acceptance. The follower memory/lag bound remains unproven. The first [completed Oct 5 measurement](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) wrote 4352 MiB and stopped after 27 seconds at the RSS threshold. The summary's zero-L0/no-effect interpretation is invalid: [W89](#w89) finds four KV values packed into one TSV field. Re-expanding the retained samples shows node3 reached 22 L0 files / 3,367,253 bytes, versus node1 4 / 105,281. Raw server logs confirm L0=22 during the park. The run still does not validate the pressure bound. The earlier [setup failure](../../results/measure/20261005-014440-w23-stalled-compactor/SUMMARY.txt) is superseded, not the only run.
 >
 > **Remaining action:** repair TSV serialization/validation and derived summaries, then force enough L0 pressure to test the bound, compare follower RSS with healthy leaders, and record lag/catch-up under the finite stop conditions below. D26 watermark/cursor acceptance is separate; it does not prove W23.
@@ -4136,6 +4147,13 @@ as accepted on that build. [Raw evidence](../archive/queue-review-20261007-round
 
 ### W59 · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains (queue row 0p)
 
+**Acceptance update (Oct 7, three-package round):** NUC direct/buffered
+withheld-publication gates reach finite refusal, preserve the refused write
+size, recover every accepted range on cold clients and drain physical GC.
+Effective 32+32 MiB budgets and allocator drain exhaustion are checked.
+Combined live reserve failure and small-host RSS acceptance remain owed.
+See the [round ledger](../status/three-package-gates-20261007.md).
+
 **W59 · `dd bs=1M count=1024 conv=fsync` on a FUSE mount died on the FIRST write with `No space left on device` (0 bytes) while the export showed 156 GiB free and every node disk 85 GiB free (Oct 6 2026, xorinox cluster, xefsct1). Not a capacity problem: the client maps its internal write-cache budget exhaustion to ENOSPC, and one of the two budgets — the fixed 8 MiB dcache metadata pool — never drains, so once it pins at its cap every subsequent write on that mount fails ENOSPC until remount.**
 
 **Local implementation (Oct 6, uncommitted; no deployment).** Admission now logs metadata live/reserved/cap/request plus the failing budget leg before reclaim. Under metadata pressure, scan linked heap entries under their shard locks and free only body-less, published entries eligible for reuse; stalled records, uncommitted object/sequence identities, pins, dirty-list members, reclaim claims and present-extra accounting remain protected. The existing 8 MiB cap stays enforced. Retry after read-cache and metadata trim, after each successful REPORT drain, and with eight 100 ms backoff waits for concurrent reservations/REPORTs to release capacity. Exhausted local admission returns EAGAIN; allocation failure returns ENOMEM. Local allocator admission now returns BUSY rather than QUOTA, separating it from backend verdicts; genuine backend QUOTA, including during pressure drain, remains ENOSPC. Code review corrects the original suggestion to remap every flush-returned QUOTA: the drain does not call request reservation, and its QUOTA originates from backend PUT/inode RPC verdicts. This bounds the additional admission backoff, not the duration of a blocking REPORT RPC.
@@ -4507,6 +4525,12 @@ signals (63–215 ms); handlers still drain before teardown.
 <a id="w67"></a>
 
 ### W67 · Sparse dirty writes and bounded body admission (queue row mem1)
+
+**Acceptance update (Oct 7, three-package round):** live withheld-publication
+pressure reaches finite refusal, retains accepted bytes and recovers on NUC
+direct/buffered clients with traced 32+32 MiB budgets. Allocator unit exhausts
+both capacities; live combined drain exhaustion and small-host RSS remain.
+See the [round ledger](../status/three-package-gates-20261007.md).
 
 **Budget evidence correction (Oct 7):** earlier 32 + 8 MiB requests actually
 used a 32 + 64 MiB bound because 8 MiB is below the drain's 32 MiB slab minimum.
@@ -5094,6 +5118,12 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 
 ### W84 · Namespace guard bounds reject supported deep/spread-directory work
 
+**Acceptance update (Oct 7, three-package round):** cycle/error distinction
+and one shared eight-second rename retry budget are repaired. Exact guard and
+participant helper boundaries pass; NUC direct maximum-envelope refusal and
+restart recovery pass. Fully spread-directory support and boundary leader
+failure remain open. See the [round ledger](../status/three-package-gates-20261007.md).
+
 **Gate follow-up (Oct 7):** NUC direct/buffered captured-inode opposite directory-move races pass: 16 races per mode preserve acyclic ancestry and retry progress. Maximum participant/hop-bound acceptance remains. See [gate ledger](../status/gate-30-rounds-20261007.md).
 
 **Class/state:** namespace completeness / admission gap; source-reviewed Oct 7.
@@ -5240,6 +5270,13 @@ The [retained fixture](../archive/round6-span-replay-repro.c) uses the actual me
 <a id="w89"></a>
 
 ### W89 · W23 TSV field packing corrupts derived acceptance metrics
+
+**Acceptance update (Oct 7, three-package round):** the unchanged production
+1 GiB L0 cap is reached in a NUC engine experiment. Deferred memtable idle
+drain and concurrent unapplied-WAL truncation defects are repaired with
+old-binary reproductions and crash/recovery tests. This does not establish
+a stalled Raft follower memory/lag bound. See the
+[round ledger](../status/three-package-gates-20261007.md).
 
 **Class/state:** verification correctness; raw-evidence/source confirmation Oct 7, round 6. `tests/measure/w23_stalled_compactor.sh:sampler` inserts `${ko}` as one tab field even though it contains four space-separated KV values. Rows have nine fields under a twelve-field header; the peak reducer assumes twelve, shifting L0/RSS/lag/pump/error columns. The retained Oct 5 SUMMARY falsely reports n_l0 zero and assigns RSS values to l0_bytes. Its “stall never bit” interpretation is withdrawn.
 

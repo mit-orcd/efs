@@ -1,0 +1,35 @@
+{
+  "/data1/efs/gc-direct-fwpdhoo1": [
+    "three-gates-w84-fixed-direct.log"
+  ],
+  "/data1/efs/gc-direct-rx279es2": [
+    "three-gates-pressure-final-direct-repeat.log"
+  ],
+  "/data1/efs/gc-direct-93p28ekk": [
+    "three-gates-w84-direct.log"
+  ],
+  "/data1/efs/gc-buffered-i32nxyti": [
+    "three-gates-buffered-repeat.log"
+  ],
+  "/data1/efs/gc-direct-at09owg5": [
+    "three-gates-pressure-final-direct.log"
+  ],
+  "/data1/efs/gc-buffered-h_qtya3s": [
+    "three-gates-buffered-repeat2.log"
+  ],
+  "/data1/efs/gc-buffered-ugx8rcys": [
+    "three-gates-w59-buffered.log"
+  ],
+  "/data1/efs/gc-buffered-6xc0n_8k": [
+    "three-gates-final-buffered.log"
+  ],
+  "/data1/efs/gc-direct-0yygeojj": [
+    "three-gates-w59-direct.log"
+  ],
+  "/data1/efs/gc-buffered-bxvz72fb": [
+    "three-gates-pressure-final-buffered.log"
+  ],
+  "/data1/efs/gc-direct-r3cgmwhq": [
+    "three-gates-final-direct.log"
+  ]
+}

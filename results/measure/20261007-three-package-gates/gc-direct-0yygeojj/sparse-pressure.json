@@ -1,0 +1,37 @@
+{
+  "hard_body_bytes": 33554432,
+  "drain_bytes": 33554432,
+  "effective_budget_trace": [
+    [
+      "33554432",
+      "33554432",
+      "33554432"
+    ],
+    [
+      "33554432",
+      "33554432",
+      "33554432"
+    ],
+    [
+      "33554432",
+      "33554432",
+      "33554432"
+    ]
+  ],
+  "files": 8,
+  "writes": 256,
+  "retry_count": 0,
+  "peak_rss_kib": 123140,
+  "before_delete": {
+    "passes": 105,
+    "removed_fragments": 7353,
+    "reclaimed_payload_bytes": 481886208,
+    "data_usage_bytes": 50331648
+  },
+  "after_delete": {
+    "passes": 110,
+    "removed_fragments": 8121,
+    "reclaimed_payload_bytes": 532217856,
+    "data_usage_bytes": 0
+  }
+}

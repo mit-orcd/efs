@@ -1,0 +1,106 @@
+python3 tests/test_w23_samples.py
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+OK
+python3 tests/test_read_verify.py
+parallel GET: valid zero/nonzero and corrupt zero/nonzero replies PASS
+python3 tests/test_opid_admission.py
+512 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS
+namespace opid saturation: four mutations send nothing, released admission keeps watermark, sequence overflow refused PASS
+python3 tests/test_server_processes.py
+Invalid PID record /tmp/efs-owner-fwg7wsfz/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-fwg7wsfz/store (if any)
+Invalid PID record /tmp/efs-owner-fwg7wsfz/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-fwg7wsfz/store (if any)
+Stale daemon identity for PID 224838; process retained
+Stopped efsd for storage /tmp/efs-owner-fwg7wsfz/store (if any)
+Stale daemon identity for PID 224839; process retained
+Stopped efsd for storage /tmp/efs-owner-fwg7wsfz/store (if any)
+Stale daemon identity for PID 224839; process retained
+Stopped efsd for storage /tmp/efs-owner-fwg7wsfz/other (if any)
+Stopping owned efsd PID 224839 (storage /tmp/efs-owner-fwg7wsfz/store)
+Stopped efsd for storage /tmp/efs-owner-fwg7wsfz/store (if any)
+Stale daemon identity for PID 224899; process retained
+Stale daemon identity for PID 224838; process retained
+Stopping owned perf PID 224899 (perf /tmp/efs-owner-fwg7wsfz/efsd.data)
+perf wrapper: unrelated/wrong-output processes retained; owned recorder flushed with SIGINT PASS
+server wrapper: invalid/reused/wrong-storage/stale-start PIDs retained; matching daemon gracefully stopped PASS
+python3 tests/test_mgmt_session_routing.py
+management session routing: advertised leader, exact retries, bounded loop and ambiguous transport PASS
+python3 tests/test_session_admission.py
+session ESTABLISH: authoritative ACTIVE/REGISTER, fencing, routes and failed reads PASS
+python3 tests/test_publication_host.py
+publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS
+python3 tests/test_txn_read_authority.py
+transaction coordinator: failed quorum authority never becomes decision absence PASS
+python3 tests/test_publication_rpc.py
+publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply PASS
+python3 tests/test_bench_cli.py
+benchmark CLI: ownership, parsing and scratch protection PASS
+python3 tests/test_bench_profile.py
+.Generating reports for 5 profiles, up to 2 parallel jobs
+[reports 1/5] 0: OK
+[reports 2/5] 1: OK
+[reports 3/5] 2: OK
+[reports 4/5] 3: OK
+[reports 5/5] 4: OK
+....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: FAIL
+[reports 2/2] data-buffered-w0-qd1: FAIL
+Results and analysis: /tmp/profile test 29y_2u7v/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: OK
+[reports 2/2] data-buffered-w0-qd1: OK
+Results and analysis: /tmp/profile test 9rpxh0qc/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Reports unavailable: missing: perf.data missing
+Generating reports for 0 profiles, up to 4 parallel jobs
+.....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /tmp/profile test zdqp6ssd/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+....
+----------------------------------------------------------------------
+Ran 18 tests in 2.676s
+
+OK
+Results and analysis: /tmp/tmp7dxfjr9g/ANALYSIS.md
+python3 tests/test_storage_principles.py
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 1.508s
+
+OK
+python3 docs/check-architecture.py
+ok    regen-diff: architecture-full.md + architecture.html are current
+ok    links: every internal link resolves
+ok    invariant-refs: I-references name §4 invariants
+ok    op-matrix-sections: §6 names existing sections
+ok    single-home: normative tables / invariants / formulas defined once
+
+architecture doc gate: all 5 checks passed
+make test-fence-read
+make[1]: Entering directory '/data1/efs/three-gates-unit-src'
+python3 tests/test_fence_read.py
+fence reads: mixed ages, dead-object skips, refresh failure, view keys and wire validation PASS
+make[1]: Leaving directory '/data1/efs/three-gates-unit-src'
+make test-fence-view
+make[1]: Entering directory '/data1/efs/three-gates-unit-src'
+./tests/test_fence_view
+./tests/test_fence_view: ./tests/test_fence_view: cannot execute binary file
+make[1]: *** [Makefile:201: test-fence-view] Error 126
+make[1]: Leaving directory '/data1/efs/three-gates-unit-src'
+make: *** [Makefile:278: test] Error 2

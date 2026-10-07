@@ -1,0 +1,58 @@
+{
+  "mode": "direct",
+  "roots": [
+    "/data1/efs/gc-direct-0yygeojj/n1",
+    "/data1/efs/gc-direct-0yygeojj/n2",
+    "/data2/efs/gc-direct-on9n_i16/n3",
+    "/data2/efs/gc-direct-on9n_i16/n4"
+  ],
+  "real_roots": [
+    "/data1/efs/gc-direct-0yygeojj/n1",
+    "/data1/efs/gc-direct-0yygeojj/n2",
+    "/home/efs/additional-work-dir/gc-direct-on9n_i16/n3",
+    "/home/efs/additional-work-dir/gc-direct-on9n_i16/n4"
+  ],
+  "port": 20730,
+  "gates": {
+    "mode": "direct",
+    "root": [],
+    "posix": false,
+    "integrity": false,
+    "namespace": false,
+    "namespace_boundary": false,
+    "namespace_cycles": false,
+    "mount_label": "default",
+    "workers": false,
+    "pressure": true,
+    "publication_pressure": true,
+    "namespace_max": false,
+    "opid": false,
+    "opid_restart": false,
+    "fold_audit": false,
+    "sequential": false,
+    "memo": false,
+    "rename_cache": false,
+    "mixed_reads": false,
+    "allocation": false,
+    "compactor_pressure": false,
+    "du_audit": false,
+    "lookup_barrier": false,
+    "storage_roots": 1,
+    "put_reply_fault": false,
+    "opid_failover": false,
+    "report_audit": false,
+    "server_binary": null,
+    "client_binary": "/data1/efs/three-gates-client-fault",
+    "worker_fault": null,
+    "idle_seconds": 0,
+    "full_node": false,
+    "port": 20730
+  },
+  "source_tree_sha256": "3e70ce29caee6675accc6a39c9e1991934095a65ff8de8a2fb2257ce69281d2d",
+  "test_script_sha256": "c696ab22adf6bcb408fbc0a07b8a9036579b3d02f5a01ccbe2901f13560e38b5",
+  "binary_sha256": {
+    "efsd": "7d0e04a65c573ca44dbbd13f3363232be19e8dfca17e3937ff6816de355a02fb",
+    "efs-fuse": "726cb52446da0f2811ccc6ecc1e57600f0f06fe59b290a9229418b405c39066a",
+    "efs-mgmt": "1bba957a97e6ee5ba0ccfccc406ef29fdadb2636a1e50534f4b3bd1b6a4301e7"
+  }
+}

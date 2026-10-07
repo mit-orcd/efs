@@ -1,0 +1,17 @@
+Evidence directory: /data1/efs/gc-direct-at09owg5
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=4948391222989920388
+Traceback (most recent call last):
+  File "/data1/efs/three-gates-pressure-final-src/tests/live/gc_reclamation.py", line 258, in <module>
+    mount_client()
+  File "/data1/efs/three-gates-pressure-final-src/tests/live/gc_reclamation.py", line 163, in mount_client
+    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=env,stdout=log,stderr=log)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib64/python3.12/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'efs-fuse'

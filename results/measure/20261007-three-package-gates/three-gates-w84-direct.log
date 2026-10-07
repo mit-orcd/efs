@@ -1,0 +1,98 @@
+Evidence directory: /data1/efs/gc-direct-93p28ekk
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=6097000655962856926
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 178595 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 178713 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 178850 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 178893 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 178936 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179109 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179188 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179231 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179274 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179483 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179526 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179569 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179612 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179854 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179897 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 179940 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+opposite directory moves preserve acyclic ancestry and make progress PASS
+twenty-ancestor rename preserves all guards and rejects cycle PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 180004 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 180197 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+replacement inode: source=2837 old=3717 observed=2837
+node 1 authoritative replacement inode PASS
+node 2 authoritative replacement inode PASS
+node 3 authoritative replacement inode PASS
+node 4 authoritative replacement inode PASS
+sixteen used-lane empty HASHED rmdir and replacement PASS
+Unmounting /data1/efs/gc-direct-93p28ekk/mnt
+Retiring drained efs-fuse PID 180408 for /data1/efs/gc-direct-93p28ekk/mnt
+Unmounted /data1/efs/gc-direct-93p28ekk/mnt
+client serving PASS
+namespace boundary prior GC drained PASS
+over-envelope rmdir rejects before PREPARE/DROP and preserves directory PASS
+Traceback (most recent call last):
+  File "/data1/efs/three-gates-src/tests/live/gc_reclamation.py", line 607, in <module>
+    os.rename(moving,folder/'moved');assert (folder/'moved').is_dir()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 16] Device or resource busy: '/data1/efs/gc-direct-93p28ekk/mnt/max-moving' -> '/data1/efs/gc-direct-93p28ekk/mnt/max-0/max-1/max-2/max-3/max-4/max-5/max-6/max-7/max-8/max-9/max-10/max-11/max-12/max-13/max-14/max-15/max-16/max-17/max-18/max-19/max-20/max-21/max-22/max-23/max-24/max-25/max-26/max-27/max-28/max-29/max-30/max-31/max-32/max-33/max-34/max-35/max-36/max-37/max-38/max-39/max-40/max-41/max-42/max-43/max-44/max-45/max-46/max-47/max-48/max-49/max-50/max-51/max-52/max-53/max-54/max-55/max-56/max-57/max-58/max-59/max-60/max-61/max-62/moved'

@@ -1,0 +1,17 @@
+{
+  "accepted_writes": 245,
+  "errors": [
+    5,
+    5
+  ],
+  "peak_rss_kib": 89816,
+  "pressure_charges": [
+    [
+      "32112640",
+      "0",
+      "33554432",
+      "67108864"
+    ]
+  ],
+  "cold_bytes_verified": true
+}

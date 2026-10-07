@@ -1,0 +1,14 @@
+{
+  "final_direct_namespace": 0,
+  "final_buffered_namespace": 0,
+  "final_direct_publication_pressure": 0,
+  "final_buffered_publication_pressure": 0,
+  "clean_linux_make_test": 0,
+  "wal_old": 1,
+  "wal_repaired": 0,
+  "kv_idle_old": 134,
+  "kv_idle_repaired": 0,
+  "kv_steady_repaired": 0,
+  "kv_final_with_wal_repair": 0,
+  "process_owner_exit_tests": 0
+}

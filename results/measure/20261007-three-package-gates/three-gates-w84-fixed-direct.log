@@ -1,0 +1,81 @@
+Evidence directory: /data1/efs/gc-direct-fwpdhoo1
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=7054397336748677182
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+concurrent directory guard retry makes progress PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+concurrent directory guard retry makes progress PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+opposite directory moves preserve acyclic ancestry and make progress PASS
+twenty-ancestor rename preserves all guards and rejects cycle PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+replacement inode: source=1246 old=2286 observed=1246
+node 1 authoritative replacement inode PASS
+node 2 authoritative replacement inode PASS
+node 3 authoritative replacement inode PASS
+node 4 authoritative replacement inode PASS
+sixteen used-lane empty HASHED rmdir and replacement PASS
+Unmounting /data1/efs/gc-direct-fwpdhoo1/mnt
+Unmounted /data1/efs/gc-direct-fwpdhoo1/mnt
+client serving PASS
+namespace boundary prior GC drained PASS
+over-envelope rmdir rejects before PREPARE/DROP and preserves directory PASS
+Traceback (most recent call last):
+  File "/data1/efs/three-gates-fixed-src/tests/live/gc_reclamation.py", line 615, in <module>
+    assert elapsed<30 and not (folder/'moved').exists()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError
