@@ -6723,9 +6723,9 @@ static void *put_pool_thread(void *arg)
         int was_full;
 
         pthread_mutex_lock(&g_put_sh[si].mu);
-        while (g_put_sh[si].count == 0 && !g_put_pool.shutdown)
+        while (g_put_sh[si].count == 0 && !__atomic_load_n(&g_put_pool.shutdown, __ATOMIC_ACQUIRE))
             pthread_cond_wait(&g_put_sh[si].cv, &g_put_sh[si].mu);
-        if (g_put_pool.shutdown && g_put_sh[si].count == 0) {
+        if (__atomic_load_n(&g_put_pool.shutdown, __ATOMIC_ACQUIRE) && g_put_sh[si].count == 0) {
             pthread_mutex_unlock(&g_put_sh[si].mu);
             return NULL;
         }
@@ -6758,10 +6758,11 @@ static pthread_mutex_t g_put_init = PTHREAD_MUTEX_INITIALIZER;
 static int put_pool_ensure(void)
 {
     uint32_t i;
-    if (g_put_pool.ready)
+    if (__atomic_load_n(&g_put_pool.ready, __ATOMIC_ACQUIRE))
         return 0;
     pthread_mutex_lock(&g_put_init);
-    if (!g_put_pool.ready) {
+    if (!__atomic_load_n(&g_put_pool.ready, __ATOMIC_ACQUIRE)) {
+        __atomic_store_n(&g_put_pool.shutdown, 0, __ATOMIC_RELEASE);
         uint32_t n = EFS_WRITE_PIPELINE;
         for (i = 0; i < n; i++) {
             pthread_mutex_init(&g_put_sh[i].mu, NULL);
@@ -6771,7 +6772,7 @@ static int put_pool_ensure(void)
             if (pthread_create(&g_put_pool.tids[i], NULL, put_pool_thread,
                                (void *)(intptr_t)i) != 0) {
                 uint32_t s, j;
-                g_put_pool.shutdown = 1;
+                __atomic_store_n(&g_put_pool.shutdown, 1, __ATOMIC_RELEASE);
                 for (s = 0; s < n; s++) {
                     pthread_mutex_lock(&g_put_sh[s].mu);
                     pthread_cond_broadcast(&g_put_sh[s].cv);
@@ -6780,12 +6781,16 @@ static int put_pool_ensure(void)
                 for (j = 0; j < i; j++)
                     pthread_join(g_put_pool.tids[j], NULL);
                 g_put_pool.shutdown = 0;
+                for (s = 0; s < n; s++) {
+                    pthread_cond_destroy(&g_put_sh[s].cv);
+                    pthread_mutex_destroy(&g_put_sh[s].mu);
+                }
                 pthread_mutex_unlock(&g_put_init);
                 return -1;
             }
         }
         g_put_pool.nworkers = (int)n;
-        g_put_pool.ready = 1;
+        __atomic_store_n(&g_put_pool.ready, 1, __ATOMIC_RELEASE);
     }
     pthread_mutex_unlock(&g_put_init);
     return 0;
@@ -6794,49 +6799,72 @@ static int put_pool_ensure(void)
 static int put_pool_run(struct chunk_put_job *jobs, uint32_t batch)
 {
     struct put_batch bp;
-    uint8_t used[EFS_WRITE_PIPELINE];
+    uint64_t previous = efs_client_rpc_deadline_ms();
     uint32_t i;
-    int base;
-
-    if (batch == 0)
+    if (!batch)
         return 0;
+    uint64_t deadline = previous ? previous : report_clock_ms() + 30000;
+    efs_client_rpc_set_deadline_ms(deadline);
     if (batch == 1 || put_pool_ensure() != 0) {
-        for (i = 0; i < batch; i++)
-            chunk_put_worker(&jobs[i]);
+        for (i = 0; i < batch; i++) {
+            if (efs_client_rpc_past_deadline())
+                jobs[i].rc = EFS_ERR_BUSY;
+            else
+                chunk_put_worker(&jobs[i]);
+        }
+        efs_client_rpc_set_deadline_ms(previous);
         return 0;
     }
     pthread_mutex_init(&bp.mu, NULL);
     pthread_cond_init(&bp.cv, NULL);
     bp.remaining = (int)batch;
-    memset(used, 0, sizeof(used));
-    base = (int)__sync_fetch_and_add(&g_put_pool.rr, 1);
+    int base = (int)__sync_fetch_and_add(&g_put_pool.rr, 1);
     for (i = 0; i < batch; i++) {
         int si = (int)(((unsigned)base + i) % (unsigned)g_put_pool.nworkers);
         jobs[i].bp = &bp;
-        jobs[i].deadline = efs_client_rpc_deadline_ms();
+        jobs[i].deadline = deadline;
         pthread_mutex_lock(&g_put_sh[si].mu);
-        while (g_put_sh[si].count == PUT_POOL_QDEPTH && !g_put_pool.shutdown)
-            pthread_cond_wait(&g_put_sh[si].cv, &g_put_sh[si].mu);
+        while (g_put_sh[si].count == PUT_POOL_QDEPTH &&
+               !__atomic_load_n(&g_put_pool.shutdown, __ATOMIC_ACQUIRE) &&
+               !efs_client_rpc_past_deadline()) {
+            uint64_t now = report_clock_ms();
+            if (now >= deadline)
+                break;
+            uint64_t wait = deadline - now;
+            if (wait > 50) wait = 50;
+            struct timespec until;
+            clock_gettime(CLOCK_REALTIME, &until);
+            until.tv_nsec += (long)wait * 1000000;
+            until.tv_sec += until.tv_nsec / 1000000000;
+            until.tv_nsec %= 1000000000;
+            pthread_cond_timedwait(&g_put_sh[si].cv, &g_put_sh[si].mu, &until);
+        }
+        int shutdown = __atomic_load_n(&g_put_pool.shutdown, __ATOMIC_ACQUIRE);
+        if (shutdown || efs_client_rpc_past_deadline()) {
+            pthread_mutex_unlock(&g_put_sh[si].mu);
+            jobs[i].rc = shutdown ? EFS_ERR_IO : EFS_ERR_BUSY;
+            jobs[i].bp = NULL;
+            pthread_mutex_lock(&bp.mu);
+            --bp.remaining;
+            pthread_mutex_unlock(&bp.mu);
+            continue;
+        }
         g_put_sh[si].q[g_put_sh[si].tail] = &jobs[i];
         g_put_sh[si].tail = (g_put_sh[si].tail + 1) % PUT_POOL_QDEPTH;
         g_put_sh[si].count++;
-        used[si] = 1;
+        /* Wake immediately: waiting for all dispatches can deadlock when
+         * concurrent producers fill shards before any batch signals them. */
+        pthread_cond_signal(&g_put_sh[si].cv);
         pthread_mutex_unlock(&g_put_sh[si].mu);
     }
-    for (i = 0; i < (uint32_t)g_put_pool.nworkers; i++) {
-        if (!used[i])
-            continue;
-        pthread_mutex_lock(&g_put_sh[i].mu);
-        pthread_cond_signal(&g_put_sh[i].cv);
-        pthread_mutex_unlock(&g_put_sh[i].mu);
-    }
-
+    /* Accepted jobs own stack references until their exact completion. */
     pthread_mutex_lock(&bp.mu);
     while (bp.remaining > 0)
         pthread_cond_wait(&bp.cv, &bp.mu);
     pthread_mutex_unlock(&bp.mu);
     pthread_mutex_destroy(&bp.mu);
     pthread_cond_destroy(&bp.cv);
+    efs_client_rpc_set_deadline_ms(previous);
     return 0;
 }
 
