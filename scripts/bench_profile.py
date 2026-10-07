@@ -392,7 +392,7 @@ def analyze(output):
             'CPU sample shares show where execution was sampled, not wall-time spent waiting or proof of an I/O bottleneck.',
             'Profiles filter to efs-bench threads; fio ceiling child processes are excluded. Source annotations need matching debug/source files.',
             'Raw I/O profiles capture only the parallel timed loop; setup, read population and post-run validation are excluded by perf-control acknowledgement.',
-            'Data profiles combine write and read phases (and path-count ladder when multiple roots are supplied).', '',
+            'Data profiles follow --data-rw: both combines phases, split/read/write isolate them. The path-count ladder is omitted with --data-full-paths.', '',
             '| Case | Result | Baseline measurements | Hottest sampled symbols |', '|---|---|---|---|']
     failures = [r for r in results if r['status'] not in ['PASS', 'REPORTS_PENDING']]
     if failures:

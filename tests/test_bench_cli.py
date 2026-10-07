@@ -131,7 +131,7 @@ def main():
                     assert not waits, out
     with tempfile.TemporaryDirectory(prefix='efs-engine-roots-a-') as a, tempfile.TemporaryDirectory(prefix='efs-engine-roots-b-') as b:
         out = run('efs-bench', '--bench', 'data', '--storage', a, '--storage', b,
-                  '--qd', '2', '--window', '2', '--time', '.1', '--writers', '0',
+                  '--qd', '2', '--window', '32', '--time', '.1', '--writers', '0',
                   '--rw', 'write', '--full-paths', '--skip-ceiling')
         roots = [dict(re.findall(r'(\w+)=([^\s]+)', line)) for line in out.splitlines()
                  if line.startswith('BENCH_ROOT ')]
