@@ -71,14 +71,23 @@ static int parts_ok(const struct efs_txn_parts *p)
     return 1;
 }
 
-static int pack_parts(uint8_t *out, const struct efs_txn_parts *p)
+static int pack_parts(uint8_t *out, uint32_t cap,
+                       const struct efs_txn_parts *p)
 {
-    uint8_t i;
+    if (!out || !p)
+        return EFS_ERR_INVAL;
+    uint32_t count = p->n;
+    if (!count || count > EFS_TXN_MAX_PART)
+        return EFS_ERR_INVAL;
+    uint32_t need = 1u + count * 4u;
+    if (cap < need)
+        return EFS_ERR_INVAL;
 
-    out[0] = p->n;
-    for (i = 0; i < p->n; i++)
-        be32(out + 1 + (uint32_t)i * 4u, p->shard[i]);
-    return 1 + (int)p->n * 4;
+    /* Validate before writing, and use the checked count throughout. */
+    out[0] = (uint8_t)count;
+    for (uint32_t i = 0; i < count; i++)
+        be32(out + 1u + i * 4u, p->shard[i]);
+    return (int)need;
 }
 
 static int unpack_parts(const uint8_t *in, uint32_t n, struct efs_txn_parts *p,
@@ -283,7 +292,9 @@ static int pack_excl(uint8_t *out, uint32_t cap, uint32_t *n,
     off = 16u + (uint32_t)pn + 1u + 8u + 1u + 4u + vlen;
     if (off > cap)
         return EFS_ERR_INVAL;
-    pack_parts(out + 16, p);
+    pn = pack_parts(out + 16, cap - 16u, p);
+    if (pn < 0)
+        return pn;
     memcpy(out, t->bytes, 16);
     out[16 + (uint32_t)pn] = EFS_TXN_EXCL;
     be64(out + 16 + (uint32_t)pn + 1, expected);
@@ -579,7 +590,9 @@ int efs_txn_prepare_guard(struct efs_kv *kv, const struct efs_txid *t,
     if (rc != EFS_OK)
         return rc;
     memcpy(packed, t->bytes, 16);
-    pn = pack_parts(packed + 16, p);
+    pn = pack_parts(packed + 16, EFS_TXN_PARTS_BYTES, p);
+    if (pn < 0)
+        return pn;
     be64(packed + 16 + pn, observed_ver);
     return efs_kv_put(kv, gk, gl, packed, (uint32_t)(16 + pn + 8));
 }
@@ -692,7 +705,9 @@ static int prepare_reduce_rec(struct efs_kv *kv, const struct efs_txid *t,
     if (rc != EFS_OK)
         return rc;
     memcpy(packed, t->bytes, 16);
-    pn = pack_parts(packed + 16, p);
+    pn = pack_parts(packed + 16, EFS_TXN_PARTS_BYTES, p);
+    if (pn < 0)
+        return pn;
     memcpy(packed + 16 + pn, pay, plen);
     return efs_kv_put(kv, rk, rl, packed, (uint32_t)(16 + pn) + plen);
 }

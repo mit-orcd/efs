@@ -299,6 +299,7 @@ test: all
 	./tests/test_raft
 	./tests/test_sim
 	./tests/test_txn
+	python3 tests/test_txn_parts_bounds.py
 	./tests/test_session
 	./tests/test_erasure
 	./tests/test_placement
