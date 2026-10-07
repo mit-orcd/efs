@@ -1,0 +1,56 @@
+# posix-persist host=nuc mnt=/data1/efs/mnt phase=prepare 2026-10-07T09:04:14Z
+# select	small_file
+# select	closed_but_not_fsynced
+# select	fsynced_file
+# select	multichunk_file
+# select	chunk_boundary_write
+# select	overwrite_middle
+# select	appended_file
+# select	sparse_file
+# select	truncate_shrink
+# select	truncate_extend
+# select	empty_file
+# select	dd_written_file
+# select	many_files_in_one_dir
+# select	deep_tree
+# select	strange_names
+# select	renamed_file
+# select	renamed_across_dirs
+# select	unlinked_file
+# select	removed_dir
+# select	hardlinks
+# select	hardlink_after_unlink
+# select	symlinks
+# select	file_mode
+# select	dir_mode
+# select	size_and_mtime
+# select	large_file_size_only
+test	result	detail
+small_file	PASS	
+closed_but_not_fsynced	PASS	
+fsynced_file	PASS	
+multichunk_file	PASS	
+chunk_boundary_write	PASS	
+overwrite_middle	PASS	
+appended_file	PASS	
+sparse_file	PASS	
+truncate_shrink	PASS	
+truncate_extend	PASS	
+empty_file	PASS	
+dd_written_file	PASS	
+many_files_in_one_dir	PASS	
+deep_tree	PASS	
+strange_names	PASS	
+renamed_file	PASS	
+renamed_across_dirs	PASS	
+unlinked_file	PASS	
+removed_dir	PASS	
+hardlinks	PASS	
+hardlink_after_unlink	PASS	
+symlinks	PASS	
+file_mode	PASS	
+dir_mode	PASS	
+size_and_mtime	PASS	
+large_file_size_only	PASS	
+# summary pass=26 fail=0 skip=0 total=26 dur=22.4
+# complete

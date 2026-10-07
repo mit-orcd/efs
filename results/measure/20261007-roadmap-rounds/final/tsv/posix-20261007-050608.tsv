@@ -1,0 +1,20 @@
+# posix-suite host=nuc mnt=/data1/efs/mnt 2026-10-07T09:06:19Z
+# select	concurrent_creates_same_dir
+# select	concurrent_appends
+# select	concurrent_appends_two_proc
+# select	concurrent_writes_disjoint
+# select	concurrent_create_unlink_two_proc
+# select	concurrent_write_and_readdir
+# select	concurrent_overlap_write
+# select	concurrent_extend_high_then_low
+test	result	detail
+concurrent_creates_same_dir	PASS	
+concurrent_appends	PASS	
+concurrent_appends_two_proc	PASS	
+concurrent_writes_disjoint	PASS	
+concurrent_create_unlink_two_proc	PASS	
+concurrent_write_and_readdir	PASS	
+concurrent_overlap_write	PASS	
+concurrent_extend_high_then_low	PASS	
+# summary pass=8 fail=0 skip=0 notrun=0 total=8 dur=10.5
+# complete

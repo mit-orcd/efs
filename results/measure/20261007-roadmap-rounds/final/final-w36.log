@@ -1,0 +1,145 @@
+224011 /data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io
+224034 /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432
+224065 /data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432
+224263 /data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432
+W36 repeat 1/20
+prepared /data1/efs/mnt/posix-2c-20261007-050014 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.3s)
+wrote /data1/efs/logs/posix2c-20261007-050014.tsv
+results: /data1/efs/logs/posix2c-20261007-050014.tsv
+W36 repeat 2/20
+prepared /data1/efs/mnt/posix-2c-20261007-050016 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.4s)
+wrote /data1/efs/logs/posix2c-20261007-050016.tsv
+results: /data1/efs/logs/posix2c-20261007-050016.tsv
+W36 repeat 3/20
+prepared /data1/efs/mnt/posix-2c-20261007-050019 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (2.6s)
+wrote /data1/efs/logs/posix2c-20261007-050019.tsv
+results: /data1/efs/logs/posix2c-20261007-050019.tsv
+W36 repeat 4/20
+prepared /data1/efs/mnt/posix-2c-20261007-050024 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.8s)
+wrote /data1/efs/logs/posix2c-20261007-050024.tsv
+results: /data1/efs/logs/posix2c-20261007-050024.tsv
+W36 repeat 5/20
+prepared /data1/efs/mnt/posix-2c-20261007-050028 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.8s)
+wrote /data1/efs/logs/posix2c-20261007-050028.tsv
+results: /data1/efs/logs/posix2c-20261007-050028.tsv
+W36 repeat 6/20
+prepared /data1/efs/mnt/posix-2c-20261007-050031 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.8s)
+wrote /data1/efs/logs/posix2c-20261007-050031.tsv
+results: /data1/efs/logs/posix2c-20261007-050031.tsv
+W36 repeat 7/20
+prepared /data1/efs/mnt/posix-2c-20261007-050035 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (2.6s)
+wrote /data1/efs/logs/posix2c-20261007-050035.tsv
+results: /data1/efs/logs/posix2c-20261007-050035.tsv
+W36 repeat 8/20
+prepared /data1/efs/mnt/posix-2c-20261007-050040 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.9s)
+wrote /data1/efs/logs/posix2c-20261007-050040.tsv
+results: /data1/efs/logs/posix2c-20261007-050040.tsv
+W36 repeat 9/20
+prepared /data1/efs/mnt/posix-2c-20261007-050043 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.4s)
+wrote /data1/efs/logs/posix2c-20261007-050043.tsv
+results: /data1/efs/logs/posix2c-20261007-050043.tsv
+W36 repeat 10/20
+prepared /data1/efs/mnt/posix-2c-20261007-050046 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.9s)
+wrote /data1/efs/logs/posix2c-20261007-050046.tsv
+results: /data1/efs/logs/posix2c-20261007-050046.tsv
+W36 repeat 11/20
+prepared /data1/efs/mnt/posix-2c-20261007-050049 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.1s)
+wrote /data1/efs/logs/posix2c-20261007-050049.tsv
+results: /data1/efs/logs/posix2c-20261007-050049.tsv
+W36 repeat 12/20
+prepared /data1/efs/mnt/posix-2c-20261007-050051 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (2.6s)
+wrote /data1/efs/logs/posix2c-20261007-050051.tsv
+results: /data1/efs/logs/posix2c-20261007-050051.tsv
+W36 repeat 13/20
+prepared /data1/efs/mnt/posix-2c-20261007-050056 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.4s)
+wrote /data1/efs/logs/posix2c-20261007-050056.tsv
+results: /data1/efs/logs/posix2c-20261007-050056.tsv
+W36 repeat 14/20
+prepared /data1/efs/mnt/posix-2c-20261007-050059 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (2.6s)
+wrote /data1/efs/logs/posix2c-20261007-050059.tsv
+results: /data1/efs/logs/posix2c-20261007-050059.tsv
+W36 repeat 15/20
+prepared /data1/efs/mnt/posix-2c-20261007-050104 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.3s)
+wrote /data1/efs/logs/posix2c-20261007-050104.tsv
+results: /data1/efs/logs/posix2c-20261007-050104.tsv
+W36 repeat 16/20
+prepared /data1/efs/mnt/posix-2c-20261007-050106 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.3s)
+wrote /data1/efs/logs/posix2c-20261007-050106.tsv
+results: /data1/efs/logs/posix2c-20261007-050106.tsv
+W36 repeat 17/20
+prepared /data1/efs/mnt/posix-2c-20261007-050109 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (2.7s)
+wrote /data1/efs/logs/posix2c-20261007-050109.tsv
+results: /data1/efs/logs/posix2c-20261007-050109.tsv
+W36 repeat 18/20
+prepared /data1/efs/mnt/posix-2c-20261007-050114 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (2.7s)
+wrote /data1/efs/logs/posix2c-20261007-050114.tsv
+results: /data1/efs/logs/posix2c-20261007-050114.tsv
+W36 repeat 19/20
+prepared /data1/efs/mnt/posix-2c-20261007-050118 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (2.6s)
+wrote /data1/efs/logs/posix2c-20261007-050118.tsv
+results: /data1/efs/logs/posix2c-20261007-050118.tsv
+W36 repeat 20/20
+prepared /data1/efs/mnt/posix-2c-20261007-050123 (64 testdirs)
+pass peer_rename_vs_unlink_src       
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.8s)
+wrote /data1/efs/logs/posix2c-20261007-050123.tsv
+results: /data1/efs/logs/posix2c-20261007-050123.tsv
+W36 20/20 PASS

@@ -23,11 +23,21 @@ operations), eight perf captures and eight separate straces; see the
 The user authorized production direct extent retention on Oct 7. Direct and
 buffered paths now enforce exact completed length without truncating before
 each overwrite. NUC direct-I/O gates passed: 216/217 single-client (one mmap skip),
-64/64 two-client, and 12/12 cold-remount durability checks. See the
+64/64 two-client, and 26/26 cold-remount durability checks. See the
 [rollout checkpoint](../../results/measure/20261007-direct-rollout/SUMMARY.md).
 The mac gate is deferred during maintenance; the user corrected its intended
-mode to buffered I/O. Roadmap implementation now targets 30 rounds, each
-validated on NUC; see the [round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
+mode to buffered I/O. Thirty roadmap implementation rounds are committed and
+individually validated on NUC; see the [round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
+Final NUC direct-I/O acceptance: full source rebuild/unit suite PASS,
+216/217 single-client (one mmap skip), 64/64 two-client, 26/26 persistence
+prepare and cold-remount verify, and W36 rename-versus-unlink 20/20. Ten concurrent-suite repeats passed 8/8 each.
+Truncate error handling, read authority/extent checks, REPORT/readdir boundary
+validation, worker startup/cleanup and inherited network/queue deadlines are
+hardened. Append replay-cache concurrency and authoritative replies are fixed;
+durable append replay across leader changes remains open. D25 is staged and
+D27 strict timing/fault/RSS gates remain owed. The final rollout also found nuc
+n1 exceeding the ten-second daemon stop wait; investigate its shutdown blocker.
+See [in flight](in-flight.md) for remaining integration work.
 
 **Writer investigation (Oct 7), complete.** All 324 baseline repeats and 108
 isolated profiles passed. Inline multi-root placement is fixed. Buffered shard

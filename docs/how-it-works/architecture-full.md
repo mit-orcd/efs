@@ -1468,11 +1468,21 @@ operations), eight perf captures and eight separate straces; see the
 The user authorized production direct extent retention on Oct 7. Direct and
 buffered paths now enforce exact completed length without truncating before
 each overwrite. NUC direct-I/O gates passed: 216/217 single-client (one mmap skip),
-64/64 two-client, and 12/12 cold-remount durability checks. See the
+64/64 two-client, and 26/26 cold-remount durability checks. See the
 [rollout checkpoint](../../results/measure/20261007-direct-rollout/SUMMARY.md).
 The mac gate is deferred during maintenance; the user corrected its intended
-mode to buffered I/O. Roadmap implementation now targets 30 rounds, each
-validated on NUC; see the [round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
+mode to buffered I/O. Thirty roadmap implementation rounds are committed and
+individually validated on NUC; see the [round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
+Final NUC direct-I/O acceptance: full source rebuild/unit suite PASS,
+216/217 single-client (one mmap skip), 64/64 two-client, 26/26 persistence
+prepare and cold-remount verify, and W36 rename-versus-unlink 20/20. Ten concurrent-suite repeats passed 8/8 each.
+Truncate error handling, read authority/extent checks, REPORT/readdir boundary
+validation, worker startup/cleanup and inherited network/queue deadlines are
+hardened. Append replay-cache concurrency and authoritative replies are fixed;
+durable append replay across leader changes remains open. D25 is staged and
+D27 strict timing/fault/RSS gates remain owed. The final rollout also found nuc
+n1 exceeding the ten-second daemon stop wait; investigate its shutdown blocker.
+See [in flight](#appendix-2--in-flight--the-current-handoff-block) for remaining integration work.
 
 **Writer investigation (Oct 7), complete.** All 324 baseline repeats and 108
 isolated profiles passed. Inline multi-root placement is fixed. Buffered shard
@@ -2412,6 +2422,34 @@ staged; the older inode writer RPC remains for cold discovery and tests.
 Cold bootstrap RPC and missing-lane-only client admission fallback are implemented. Geometry-checked cache admission and immutable snapshots are staged; connect FUSE callers and typed publication next. The latest token checks are recorded in the
 [checkpoint](../../results/measure/20261006-writer-token-checkpoint/SUMMARY.md).
 
+### Oct 7 — 30-round NUC correctness checkpoint
+
+The [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md)
+records each production commit and its NUC acceptance. Direct shard writes now
+retain existing extents and finalize exact completed lengths; delayed close
+errors are surfaced. Client changes reject failed truncate-prefix/flush work,
+propagate read authority failures, guard read and REPORT boundaries, validate
+readdir pagination, clean partial worker startup, and carry deadlines through
+writeback, pooled GET/PUT, connection checkout and network frames.
+
+Concurrent append loss recurred during round 20. The retained failure trace
+shows the first reservation beginning at offset 8. Round 21 serializes complete
+append replay entries and requires allocation results from the leader; the old
+cache reproduces wrong offsets in the regression. Passing later gates does not
+prove a sole cause or durable replay across leader changes. Append reservations
+still need a durable replay/failover design; their host-local cache is not such
+a design. This checkpoint does not activate D25 or close D27 strict timing.
+Hostname resolution, uncancellable accepted job ownership, live RDMA hardware,
+recorded fault/recovery and small-host RSS gates remain outstanding. Public
+logical truncate remains disabled. Mac buffered acceptance is deferred during
+maintenance.
+
+The final rollout twice observed nuc n1 exceeding the devops stop script's
+ten-second SIGTERM wait and being killed with SIGKILL, after both clients had
+drained and unmounted cleanly. Capture its thread stacks/strace during the next
+controlled stop and fix the actual shutdown blocker. This is an open finding,
+not a graceful-daemon-shutdown acceptance claim.
+
 Next, in order:
 
 1. Writer authority, FileID-tagged GETCHUNKS, typed base/publication planning,
@@ -2458,6 +2496,10 @@ Next, in order:
    cold-read, concurrency, restart, history-full and bounded-apply gates.
 5. Complete D27 strict whole-call timing and remaining legacy PUT coverage;
    run the recorded fault/recovery and small-host RSS acceptance gates.
+
+NUC rollout `128f6b7d` passed W36 20/20 first, full single/peer POSIX,
+26/26 persistence in each phase, full source-rebuilt units and ten concurrent
+8/8 repeats. These results supersede the earlier rollout gate status below.
 
 NUC rollout 79983128 passed W36 `peer_rename_vs_unlink_src` 20/20 first.
 Xorinox b4a75492 passed the real two-client W36 gate 20/20 after guarded orphan cleanup. A later rollout must repeat that gate. W54 post-GC cold reads and W38 traced/cold verification remain owed.

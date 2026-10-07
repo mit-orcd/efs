@@ -1,0 +1,34 @@
+efsd v0.1.0-pre-alpha-142-g128f6b7d-dirty (branch devel, built 2026-10-07T09:01:47Z on nuc)
+efs-fuse v0.1.0-pre-alpha-142-g128f6b7d-dirty (branch devel, built 2026-10-07T09:01:47Z on nuc)
+0a16aed938e2c1eff31a80f5394fd64b2b6f563aaac88e613b902d25ed75f544  efsd
+1d29e20814a94c7b7588598dd63b943a331060cb8bf3efe3867145ba31bafb9c  efs-fuse
+224011 /data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io
+224034 /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432
+224065 /data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432
+224263 /data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432
+n1 up (pid 224011, 127.0.0.1:17432)
+n2 up (pid 224034, 127.0.0.1:17433)
+n3 up (pid 224065, 127.0.0.1:17434)
+n4 up (pid 224263, 127.0.0.1:17435)
+mount: /data1/efs/mnt
+mount: /data1/efs/mnt2
+Cluster nodes (4):
+  node 1: 127.0.0.1:17432  up  used=1.88 GiB  quota=187.50 GiB (1.0%)  storage(1):
+      /data1/efs/n1
+  node 2: 127.0.0.1:17433  up  used=42.12 MiB  quota=187.50 GiB (0.0%)  storage(1):
+      /data1/efs/n2
+  node 3: 127.0.0.1:17434  up  used=68.50 MiB  quota=187.50 GiB (0.0%)  storage(1):
+      /data2/efs/n3
+  node 4: 127.0.0.1:17435  up  used=48.12 MiB  quota=187.50 GiB (0.0%)  storage(1):
+      /data2/efs/n4
+Usable (2+1 logical): used=1.36 GiB  free=498.64 GiB  capacity=500.00 GiB (0.3%)
+Cluster state: OK (4 up, 0 down)
+Versions: efsd v0.1.0-pre-alpha-142-g128f6b7d (branch devel, built 2026-10-07T08:59:50Z) — 4/4 identical
+Node 127.0.0.1:17432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
+  node 4: idle
+Filesystem      Size  Used Avail Use% Mounted on
+efs-fuse        500G  1.5G  499G   1% /data1/efs/mnt
