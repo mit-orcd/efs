@@ -389,6 +389,7 @@ existing local correctness fix; none of these items is closed by this triage.
 | 0n | **W57** · cross-directory rename never refreshes the dst parent's attrs on the renaming client | correctness | fixed in `f8fef814` — refresh both parent attrs after rename and adopt authoritative directory attrs; NUC full POSIX jobs=4/jobs=1 and two-client suites PASS Oct 6 | [full text](../backlog/work-items.md#w57--cross-directory-rename-never-refreshes-the-dst-parents-attrs-on-the-renaming-client-queue-row-0n) |
 | 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | analyzed Oct 6 (xorinox, build `3d3f17c2-dirty`): the file exists (created 05:17:31.319Z, size 0), the retry was answered BUSY (rc=-13, 05:17:31.733Z), no server logged EEXIST; suspect the retry path — an opid replay must return the recorded verdict (I16), not EEXIST; BUSY on unique-name creates is new with the dirty D25 intent probes | [full text](../backlog/work-items.md#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
 | 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | IN TREE Oct 6, uncommitted — metadata diagnostics + protected published-entry reclaim; local admission returns EAGAIN/ENOMEM; 8 MiB cap retained; metadata saturation + admitted-writer/drain reservation regressions and ASan/UBSan PASS; follow-up 251 MiB ENOMEM reproduced locally and reservation fix added; remount + sustained-write and posix jobs=1 gates owed | [full text](../backlog/work-items.md#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
+| 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; Xorinox full-tree gate owed | [evidence and remaining gates](fuse-memory.md) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | IN TREE Oct 5, uncommitted — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced IOR-hard + cold hardscan gate pending | [full text](../backlog/work-items.md#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 0c | **W36** · rename-vs-unlink of one source both succeed, dangling dentry | correctness | exact-source PREP guards committed earlier; `75b06624` also returns simple UNLINK apply verdict; NUC rename-vs-unlink 20/20 and full two-client 64/64 PASS again on 79983128 Oct 6; xorinox b4a75492 current-build race gate 20/20 PASS; historical dangling b repaired by guarded Raft unlink; du/dua clean | [full text](../backlog/work-items.md#w36--rename-vs-unlink-of-one-source-both-succeed-dangling-dentry-queue-row-0c) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | in tree — verify on 19810; one-QUOTA-member PUT question open | [full text](../backlog/work-items.md#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
@@ -866,11 +867,15 @@ before activation. [Evidence and remaining gates](../../results/measure/20261006
 
 W60 speculative admission and bounded demand scratch recovery are committed
 (`73ce8aaa`). Read-pressure and sixteen-thread budget tests pass on the NUC;
-live mixed-read acceptance is being rerun after aligning the four server
-builds. See [FUSE memory](fuse-memory.md).
+live NUC A/B passes: baseline 2000/2000 failures, fixed 0/2000 with zero
+read-NOMEM lines after aligning all four server builds. See [FUSE memory](fuse-memory.md).
 
 D25 now has staged, metadata-budgeted ordered receipt ACK ownership. It
 retains immutable intents across unknown/lost replies, prevents a newer
 receipt from fencing out older unsubmitted local intents, and applies
 backpressure at 64 entries. [Integration contract](d25-admission-routing.md#ordered-client-retirement-ownership--implemented-staged).
 Public FUSE write/flush activation remains gated on I23 and mtime coherence.
+
+[Ten-round implementation and NUC acceptance checkpoint](../../results/measure/20261006-d25-w60-ten-rounds/SUMMARY.md):
+full Linux unit PASS; POSIX 216 pass / 0 fail / 1 skip; W36 20/20; verified
+W60 mixed read 0/2000 failures. D25 ACK integration remains staged.

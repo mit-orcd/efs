@@ -2179,6 +2179,15 @@ nonzero-node staging-identity fallback remains; this is not a complete W27 close
 **Forbidden.** Raising `EFS_DCACHE_HARD_BYTES` (or shrinking the GET queue) as "the fix" — that moves the onset, the starvation remains; disabling or serializing prefetch (it carries sequential throughput — DIO arrives as 128 KiB requests, see the Oct 1 read review); an unbounded retry spin on the demand path.
 
 
+**Implementation and NUC gate (Oct 6).** `73ce8aaa` adds atomic half-budget
+speculative/cache-body admission and clean-cache trim plus bounded demand
+retry. Same four-node NUC cluster, same 32 MiB normal + 32 MiB drain budget,
+same 512 MiB sequential fixture and 2000 tiny files: pre-fix read/allocator
+code **2000/2000 failed**, fixed code **0/2000 failed**, zero read-NOMEM log
+lines. Concurrent admission, credit/drain protection and pending/pin ownership
+regressions pass. Xorinox full-tree acceptance and optional diagnostics/
+sub-chunk charging remain follow-ups.
+
 #### Plan after the Oct 1 22:00Z review — what runs without a decision, what is asked
 
 Tie-break for every row, in this order: **no lost or misreported bytes

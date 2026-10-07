@@ -62,6 +62,7 @@ static pthread_mutex_t cache_mu=PTHREAD_MUTEX_INITIALIZER;
 static uint32_t rdcache_slot(efs_ino_t ino,uint32_t ci) {(void)ino;(void)ci;return 0;}
 static pthread_mutex_t *rdcache_mu(uint32_t s) {(void)s;return &cache_mu;}
 void *efs_buf_alloc(uint32_t len) {return malloc(len);}
+void *efs_buf_alloc_prefetch(uint32_t len) {return efs_buf_alloc(len);}
 void efs_buf_free(void *p,uint32_t len) {(void)len;free(p);}
 '''+function('rdcache_map_gen')+'\n'+function('rdcache_put_inner')+r'''
 int main(void) {

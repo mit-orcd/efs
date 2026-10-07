@@ -1,0 +1,6 @@
+{"sequential_bytes": 1579810816, "sequential_errors": [], "failures": 2000, "first_failures": [[0, "[Errno 5] Input/output error"], [1, "[Errno 5] Input/output error"], [2, "[Errno 5] Input/output error"], [3, "[Errno 5] Input/output error"], [4, "[Errno 5] Input/output error"]], "elapsed": 2.07136562600499, "reader_stopped": true}
+Traceback (most recent call last):
+  File "/tmp/efs-w60-live.py", line 38, in <module>
+    assert not failed and not stats['sequential_errors'] and not t.is_alive()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

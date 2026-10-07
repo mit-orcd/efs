@@ -329,3 +329,24 @@ cache ownership and publication/session regression tests pass. The live
 32 MiB mixed-read gate is pending: the first fixture write encountered a
 protocol error against older NUC servers (`79983128`); align builds before
 using that run as W60 evidence. Xorinox's full-tree gate remains owed.
+
+### NUC live A/B — Oct 6, PASS
+
+All four servers were aligned to `73ce8aaa-dirty` before this comparison.
+A baseline client rebuilt with only `read.c`/`bufpool.c` reverted to pre-W60
+code failed **2000/2000** tiny reads while reading a 512 MiB file repeatedly
+(1,579,810,816 sequential bytes during the test; 2000 read-NOMEM log lines).
+The fixed client on the same cluster/fixture/budget passed **2000/2000**
+(1,781,792,768 sequential bytes; zero read-NOMEM lines). Both sequential
+readers exited normally without errors. The normal budget was 32 MiB with
+a separate 32 MiB drain reserve; no limit was raised.
+
+The reusable [live gate](../../tests/live/read_pressure.py) additionally
+checks deterministic sequential data and tiny-file contents. Full-root
+Xorinox `rg` acceptance remains owed; this NUC gate does not claim it.
+
+Verified-content NUC rerun: **0/2000 failures**, 27,414,757,376 sequential
+bytes verified without error, both worker and harness completed normally.
+Full NUC POSIX passed (216 pass / 0 fail / 1 unsupported-mmap skip), W36
+passed 20/20 and the full Linux unit suite passed. See the
+[ten-round checkpoint](../../results/measure/20261006-d25-w60-ten-rounds/SUMMARY.md).

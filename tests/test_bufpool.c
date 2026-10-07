@@ -301,6 +301,15 @@ int main(void)
     assert(g_metadata==ack_before+sizeof(*ack));
     ack->count=0;assert(efs_client_publication_ack_free(ack)==EFS_OK);
     assert(g_metadata==ack_before);
+    assert(!efs_buf_reserve_request(0,sizeof(*ack)));
+    ack=efs_client_publication_ack_alloc();assert(ack && !g_meta_reserved);
+    efs_buf_unreserve();assert(efs_client_publication_ack_free(ack)==EFS_OK);
+    struct efs_publication_ack_queue *queues[1024];unsigned nq=0;
+    while (nq<1024 && (queues[nq]=efs_client_publication_ack_alloc())) nq++;
+    assert(nq && nq<1024 && g_metadata<=8ull<<20);
+    assert(!efs_client_publication_ack_alloc());
+    for (unsigned i=0;i<nq;i++) assert(efs_client_publication_ack_free(queues[i])==EFS_OK);
+    assert(g_metadata==ack_before);
     writer_state_lifetime();
     writer_admission_copy();
     writer_body_snapshot();
