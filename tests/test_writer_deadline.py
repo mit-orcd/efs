@@ -3,7 +3,7 @@
 from pathlib import Path
 import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
-s=(root/'src/client/inode_rpc.c').read_text();start=s.index('static int rpc_writer_retry_pause(')
+s=(root/'src/client/inode_rpc.c').read_text();start=s.index('static int rpc_writer_retry_pause(unsigned attempt)\n{')
 function=s[start:s.index('\n}',start)+2]
 source=r'''
 #include "efs/common.h"

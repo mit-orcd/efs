@@ -34,7 +34,7 @@ static void rpc_prof_add(int type,unsigned long long a,unsigned long long b,unsi
 static int rpc_status_to_efs(uint8_t status) {return status==EFS_INODE_RPC_OK?EFS_OK:EFS_ERR_BUSY;}
 int efs_conn_send_msg(struct efs_conn *c,uint8_t type,const void *p,uint32_t n) {(void)c;assert(type==EFS_MSG_INODE_GETCHUNKS&&n==sizeof(struct efs_msg_inode_getchunks));const struct efs_msg_inode_getchunks *r=p;assert(r->ino==123&&r->generation==456&&r->start==0&&r->max==2);return 0;}
 int efs_conn_recv_msg(struct efs_conn *c,uint8_t *type,void **p,uint32_t *n) {(void)c;calls++;struct efs_msg_inode_getchunks_reply *r=calloc(1,sizeof(*r));assert(r);r->ino=123;r->generation=456;r->status=busy?EFS_INODE_RPC_BUSY:EFS_INODE_RPC_OK;*p=r;*n=sizeof(*r);*type=bad_type?EFS_MSG_VERSION_REPLY:EFS_MSG_INODE_GETCHUNKS_REPLY;if(expire_recv)now=deadline;return fail_recv;}
-'''+fn('static int rpc_writer_retry_pause(')+fn('int efs_client_rpc_getchunks_fileid(')+r'''
+'''+fn('static int rpc_writer_retry_pause(unsigned attempt)\n{')+fn('int efs_client_rpc_getchunks_fileid(')+r'''
 static void reset(void) {calls=sleeps=freed=drops=releases=0;busy=fail_recv=bad_type=expire_recv=0;now=1000;deadline=0;}
 static int run(uint32_t *count,uint64_t *gen) {struct efs_chunk_rec r[2];return efs_client_rpc_getchunks_fileid(1,123,456,0,r,count,gen);}
 int main(void) {

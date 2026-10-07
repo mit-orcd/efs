@@ -3501,6 +3501,12 @@ static int host_propose(struct efs_raft_host *h, uint8_t group,
      * RPC; no host lock is held across it. The command is already fully
      * formed and the Raft log + apply-side validation order it against
      * any op that lands meanwhile. */
+    /* APPEND's reserved offset is absent from the generic submit reply.
+     * A follower's local apply result is not the leader's allocation: its
+     * cross-group physical EOF can have advanced independently. Retry the
+     * inode RPC on the leader, including a role change after admission. */
+    if (cmd && clen && cmd[0] == EFS_MD_CMD_APPEND_RSV)
+        return EFS_ERR_NOT_PRIMARY;
     rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);
     if (rc != EFS_OK)
         return rc;
@@ -4299,13 +4305,16 @@ static int host_append_replay_get(struct efs_raft_host *h, efs_ino_t ino,
     memcpy(&token, uuid, sizeof(token));
     if (!token)
         return -1;
+    pthread_mutex_lock(&h->mu);
     for (i = 0; i < 512; i++) {
         if (h->ap_rep[i].seq == seq && h->ap_rep[i].ino == ino &&
             h->ap_rep[i].token == token) {
             *off_out = h->ap_rep[i].off;
+            pthread_mutex_unlock(&h->mu);
             return 0;
         }
     }
+    pthread_mutex_unlock(&h->mu);
     return -1;
 }
 
@@ -4321,11 +4330,13 @@ static void host_append_replay_put(struct efs_raft_host *h, efs_ino_t ino,
     memcpy(&token, uuid, sizeof(token));
     if (!token)
         return;
+    pthread_mutex_lock(&h->mu);
     i = h->ap_rep_i++ & 511u;
     h->ap_rep[i].token = token;
     h->ap_rep[i].seq = seq;
     h->ap_rep[i].ino = ino;
     h->ap_rep[i].off = off;
+    pthread_mutex_unlock(&h->mu);
 }
 
 static int pack_append_res_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
@@ -10640,6 +10651,21 @@ void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
  * the rsv. Optional sess_uuid tags the reservation so a later fence
  * resolves it as FENCED_HOLE (10.5c-35d). Absent keeps the zero-UUID
  * stand-in. */
+static int host_append_primary(struct efs_raft_host *h, uint8_t group,
+                                struct efs_msg_inode_reply *out)
+{
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r = group_raft(h, group);
+    int primary = r && efs_raft_role(r) == EFS_RAFT_LEADER;
+    int hint = r ? efs_raft_leader(r) : -1;
+    pthread_mutex_unlock(&h->mu);
+    if (!primary) {
+        out->status = EFS_INODE_RPC_NOT_PRIMARY;
+        out->primary_id = hint >= 0 ? (efs_node_id_t)(hint + 1) : 0;
+    }
+    return primary;
+}
+
 void server_raft_host_append(efs_ino_t ino, uint64_t len,
                              const uint8_t *sess_uuid, uint32_t sess_epoch,
                              uint64_t op_seq, struct efs_msg_inode_reply *out)
@@ -10665,6 +10691,8 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
         host_fwd_append(h, ino, len, sess_uuid, sess_epoch, op_seq, out, &ig, 1);
         return;
     }
+    if (!host_append_primary(h, ig, out))
+        return;
     if (sess_uuid && op_seq &&
         host_append_replay_get(h, ino, sess_uuid, op_seq, &reserved) == 0) {
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);

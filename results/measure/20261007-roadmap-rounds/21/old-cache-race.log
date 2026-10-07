@@ -1,0 +1,7 @@
+Assertion failed: (out==seq*8), function worker, file t.c, line 73.
+Assertion failed: (out==seq*8), Assertion failed: (out==seq*8), Traceback (most recent call last):
+  File "/Users/mike/git/efs/tests/test_append_host_authority.py", line 41, in <module>
+    subprocess.run([str(p.with_suffix(''))],check=True,timeout=20)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/var/folders/__/gqz6xzln2ts0zbbbqvjchr2c0000gn/T/efs-append-host-blur3eoq/t']' died with <Signals.SIGABRT: 6>.

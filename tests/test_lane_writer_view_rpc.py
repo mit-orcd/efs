@@ -6,7 +6,7 @@ root = Path(__file__).resolve().parents[1]
 text = (root / 'src/client/inode_rpc.c').read_text()
 start = text.index('int efs_client_rpc_lane_writer_view(')
 function = text[start:text.index('\n}', start) + 2]
-helper_start = text.index('static int rpc_writer_retry_pause(')
+helper_start = text.index('static int rpc_writer_retry_pause(unsigned attempt)\n{')
 helper = text[helper_start:text.index('\n}', helper_start) + 2]
 source = r'''
 #include "efs/protocol.h"

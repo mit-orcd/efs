@@ -5,7 +5,8 @@ import os,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 w=(root/'src/client/write.c').read_text()
 a=w.index('#if defined(EFS_FAULTS) && EFS_FAULTS\n#ifndef EFS_FAULT_FILE')
-b=w.index('static int report_dirty_ino_run(',a)
+# Exclude retry/deadline helpers unrelated to the fault-injection test.
+b=w.index('static int report_retry_pause(',a)
 source=r'''
 #include "efs/protocol.h"
 #include <assert.h>
