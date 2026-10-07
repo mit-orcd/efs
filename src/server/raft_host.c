@@ -8509,11 +8509,15 @@ static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
             return rc;
         g[*ng].shard = sh;
         (*ng)++;
-        if (cur == EFS_ROOT_INO || cur == r.parent)
+        if (cur == EFS_ROOT_INO)
             return EFS_OK;
+        if (cur == r.parent)
+            return EFS_ERR_INVAL;
         cur = r.parent;
     }
-    return EFS_ERR_INVAL;
+    /* We did not reach the root: capacity exhaustion is not proof of a
+     * cycle. INVAL is reserved for an observed ancestor == src above. */
+    return EFS_ERR_BUSY;
 }
 
 struct host_idx_ref {

@@ -1404,7 +1404,17 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
     efs_client_stage_pin(ino);
     efs_client_stage_pin(old_parent);
     efs_client_stage_pin(new_parent);
+    /* One budget covers nested RPC retries. Eight separate 10-second RPC
+     * budgets made a permanent namespace envelope refusal stall for >80s. */
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = (uint64_t)ts.tv_sec * 1000ull +
+                        (uint64_t)ts.tv_nsec / 1000000ull + 8000ull;
+    if (previous && previous < deadline) deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
     for (t = 0; t < 8; t++) {
+        if (efs_client_rpc_past_deadline()) break;
         rc = efs_client_rpc_rename_at(g_client.export_id, old_parent, old_name,
                                       new_parent, new_name, &out);
         if (rc != EFS_ERR_BUSY && rc != EFS_ERR_NET &&
@@ -1412,6 +1422,7 @@ int efs_client_rename_at(efs_ino_t ino, efs_ino_t old_parent, const char *old_na
             break;
         usleep(2000u << (unsigned)(t < 4 ? t : 4));
     }
+    efs_client_rpc_set_deadline_ms(previous);
     if (rc != EFS_OK) {
         /* Rare and otherwise invisible: FUSE collapses this to EIO. */
         fprintf(stderr, "efs: rename_at %llu/%s -> %llu/%s rc=%d after %d tries\n",
