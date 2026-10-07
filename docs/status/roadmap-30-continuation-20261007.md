@@ -156,3 +156,19 @@ The direct fixture passes physical GC, failure retry, offline-member protection,
 restart zero inventory/quota and late-PUT checks. Log
 `/private/tmp/efs-roadmap-w84-cross-group.log`. Maximum envelope/depth, concurrent
 cycle and namespace failover coverage remain open; W84 is partially repaired.
+
+## Round 16 — GC fence gate uses a valid delayed PUT
+
+Receiver hash validation made the former all-zero-digest delayed PUT an invalid
+probe: rejection could happen before the GC fence. The gate now sends a valid
+65536-byte payload/digest pair, first requiring acceptance on the live inode by
+every member. After deletion and restart the identical request is rejected by
+every member and creates no fragment. NUC direct namespace/integrity/GC fixture
+passes, including positive control, physical reclamation, quota zero and restart.
+Log `/private/tmp/efs-roadmap-gc-valid-put-repeat.log`. Earlier invalid-digest
+late-PUT results alone are not fence evidence.
+
+The buffered namespace/broad repeat passed single POSIX 216/0/1 skip but failed
+peer POSIX 10/64, beginning with shared-pwrite EBUSY; subsequent directory probes
+failed. Retained `/private/tmp/efs-roadmap-w84-buffered-posix.log`. It overlaps
+other NUC work and needs a serial traced repeat; do not count it as acceptance.

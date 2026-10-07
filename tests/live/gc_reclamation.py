@@ -124,6 +124,27 @@ def files(ino):
         found += [x for x in folder.glob('*/*') if x.is_file() and '.sum' not in x.name]
     return found
 
+class Put(ctypes.Structure):
+    _fields_=[('eid',ctypes.c_uint32),('ino',ctypes.c_uint64),('ci',ctypes.c_uint32),('fi',ctypes.c_uint32),('sum',ctypes.c_uint8*32),('length',ctypes.c_uint32),('gen',ctypes.c_uint64),('hint',ctypes.c_uint32)]
+
+def recv_exact(sock,n):
+    body=b''
+    while len(body)<n:
+        part=sock.recv(n-len(body))
+        assert part,'short reply'
+        body+=part
+    return body
+
+def valid_put(node,ino):
+    req=Put(eid=1,ino=ino,ci=0,fi=0,length=65536,gen=987654321)
+    # BLAKE3 of exactly 65536 'x' bytes; same vector as fragment_integrity.py.
+    req.sum[:]=bytes.fromhex('70ff942c316810ac5ffe7081fc049dba30713646b1d6d7272cd5948ad5579804')
+    payload=bytes(req)+b'x'*65536
+    with socket.create_connection(('127.0.0.1',a.port+node),timeout=5) as sock:
+        sock.sendall(struct.pack('>IB',len(payload)+1,6)+payload)
+        length=struct.unpack('>I',recv_exact(sock,4))[0]
+        return recv_exact(sock,length)
+
 def create(name, body=None):
     path=mount/name
     fd=os.open(path,os.O_RDWR|os.O_CREAT|os.O_EXCL,0o600)
@@ -305,6 +326,10 @@ int main(void){unsigned seen[64]={0},n=0;char name[32];for(unsigned i=0;n<16;i++
     print(f'closed-unlinked inode allocated bytes: {before} -> 0 PASS',flush=True)
     # A failed disk read must retain the durable GC record, not ACK it away.
     path,fd,ino=create('fault');os.close(fd)
+    for node in range(4):
+        reply=valid_put(node,ino)
+        assert len(reply) in (2,3) and reply[:2]==bytes([7,0]),reply
+    print('valid late-PUT control accepted on live inode by every member PASS',flush=True)
     blocked=files(ino)[0];blocked.chmod(0);blocked.parent.chmod(0o500)
     errors=sum(n[1]['delete_errors'] for n in status())
     os.unlink(path)
@@ -366,23 +391,9 @@ int main(void){unsigned seen[64]={0},n=0;char name[32];for(unsigned i=0;n<16;i++
     assert all(node[1]['data_usage_bytes']==0 for node in final),final
     # A delayed valid-sized PUT must not resurrect the retired inode after
     # restart. The wire uses native C headers inside its big-endian framing.
-    class Put(ctypes.Structure):
-        _fields_=[('eid',ctypes.c_uint32),('ino',ctypes.c_uint64),('ci',ctypes.c_uint32),('fi',ctypes.c_uint32),('sum',ctypes.c_uint8*32),('length',ctypes.c_uint32),('gen',ctypes.c_uint64),('hint',ctypes.c_uint32)]
-    def recv_exact(sock,n):
-        body=b''
-        while len(body)<n:
-            part=sock.recv(n-len(body))
-            assert part,'short reply'
-            body+=part
-        return body
     for i in range(4):
-        req=Put(eid=1,ino=ino,ci=0,fi=0,length=65536,gen=987654321)
-        payload=bytes(req)+bytes(65536)
-        with socket.create_connection(('127.0.0.1',a.port+i),timeout=5) as sock:
-            sock.sendall(struct.pack('>IB',len(payload)+1,6)+payload)
-            length=struct.unpack('>I',recv_exact(sock,4))[0]
-            reply=recv_exact(sock,length)
-            assert reply[0]==7 and reply[1]==1,reply
+        reply=valid_put(i,ino)
+        assert len(reply) in (2,3) and reply[:2]==bytes([7,1]),reply
     assert not files(ino)
     print('restart quota zero and late PUT fenced on every member PASS',flush=True)
     (work/'final-status.json').write_text(json.dumps(final,indent=2))
