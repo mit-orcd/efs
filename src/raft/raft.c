@@ -1658,6 +1658,9 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
         return rc;
     if (index_out)
         *index_out = ix;
+    /* This synchronous append is covered even while the current quorum is
+     * solo. Later learners must receive its committed tail before promotion. */
+    send_idx_cover(r, ix);
     if (solo(r)) {
         uint64_t last_i = 0, last_t = 0;
         last_log(r, &last_i, &last_t);
@@ -1667,7 +1670,6 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
             return rc;
         return maybe_append_cold(r);
     }
-    send_idx_cover(r, ix);
     return broadcast_ae(r);
 }
 

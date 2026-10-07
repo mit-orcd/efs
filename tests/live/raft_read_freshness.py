@@ -6,6 +6,7 @@ TCP relays. Management probes connect directly, so the isolated leader remains
 reachable to clients while all of its peer connections are cut in both directions.
 """
 import concurrent.futures
+import argparse
 import os
 from pathlib import Path
 import re
@@ -17,6 +18,9 @@ import threading
 import time
 
 source = Path(__file__).resolve().parents[2]
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--configuration',action='store_true',help='change group voters while the old leader is isolated')
+args=parser.parse_args()
 base, proxy_base, count = 21340, 21400, 3
 isolated = None
 stop = threading.Event()
@@ -136,7 +140,12 @@ try:
             except OSError: return None
         wait(listening,'listening')
     old = wait(leader,'initial leader')
-    assert 'rc=0' in mgmt(old,'raft-mkfs')
+    def formatted():
+        reply=mgmt(old,'raft-mkfs')
+        if 'rc=0' in reply:return True
+        assert re.search(r'rc=-(13|15)\b',reply),reply
+        return None
+    wait(formatted,'both groups formatted')
     assert 'status=0' in mgmt(old,'raft-setattr',1,1,'0755')
     assert 'status=0' in mgmt(old,'raft-create',1,'before-rename')
     assert 'status=0' in mgmt(old,'raft-lookup',1,'before-rename')
@@ -189,7 +198,24 @@ try:
     (work/'lookups.txt').write_text('\n'.join(lookups))
     print('PASS: majority changed root mode; eight isolated-leader GETATTRs refused stale authority',flush=True)
     print('PASS: isolated former leader refuses stale LOOKUP after majority rename',flush=True)
+    if args.configuration:
+        # The engine accepts odd voter sets. This owned fixture transitions
+        # three voters to the majority leader alone; no service is reconfigured.
+        voters=1<<new
+        changed=mgmt(new,'raft-change',0,hex(voters))
+        assert 'rc=0' in changed,changed
+        wait(lambda:True if re.search(r'group 0 hosted=1 .*voters=0x'+format(voters,'x')+r' joint=0',mgmt(new,'raft-status')) else None,'new voter configuration committed')
+        majority_status=[mgmt(node,'raft-status') for node in range(count) if node!=old]
+        assert 'status=0' in mgmt(new,'raft-create',1,'after-config')
+        rejected=[mgmt(old,'raft-lookup',1,'after-config'),mgmt(old,'raft-getattr',1)]
+        assert all(re.search(r'status=(5|7)\b',reply) for reply in rejected),rejected
+        (work/'configuration.txt').write_text('\n'.join([changed,*majority_status,*rejected]))
+        print('PASS: isolated former leader rejects reads across committed voter change',flush=True)
     isolated = None
+    if args.configuration:
+        restored=mgmt(new,'raft-change',0,'0x7')
+        assert 'rc=0' in restored,restored
+        wait(lambda:True if re.search(r'group 0 hosted=1 .*voters=0x7 joint=0',mgmt(new,'raft-status')) else None,'original voter set restored through catch-up')
     wait(lambda: True if 'status=0' in mgmt(old,'raft-lookup',1,'after-rename') else None,'healed renamed lookup')
     wait(lambda: True if 'epoch=2 state=1' in mgmt(old,'raft-session','get',session_uuid) else None,'healed fenced session')
     wait(lambda: True if 'mode=040700' in mgmt(old,'raft-getattr',1) else None,'healed forwarded read')

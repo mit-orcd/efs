@@ -629,6 +629,41 @@ static int wait_voters(struct net *n, uint32_t want, int ticks)
     return -1;
 }
 
+static void test_solo_durable_cap_then_grow(void)
+{
+    struct net n;
+    struct efs_raft_store *st[3];
+    struct app app[3];
+    struct efs_raft_cfg cfg;
+    struct efs_raft_msg rejected;
+    uint8_t cmd = 'Q';
+    uint64_t idx = 0;
+    int lid;
+
+    boot_n(&n, st, app, &cfg, 3, 0x1);
+    CHECK(elect(&n, 30) == 1, "solo election");
+    lid = leader_id(&n);
+    CHECK(lid == 0, "configured solo leader");
+    efs_raft_arm_durable(n.r[lid]);
+    CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK,
+          "solo synchronous append");
+    CHECK(efs_raft_applied(n.r[lid]) >= idx, "solo entry committed");
+    n.drop[1] = n.drop[2] = 1;
+    n.keep_on = 1; n.keep_to = 1;
+    CHECK(efs_raft_change(n.r[lid], 0x7) == EFS_ERR_BUSY,
+          "new learners must catch up first");
+    memset(&rejected, 0, sizeof(rejected));
+    rejected.type = EFS_RAFT_MSG_AE_REP;
+    rejected.from = 1; rejected.to = lid;
+    rejected.term = efs_raft_term(n.r[lid]);
+    rejected.match_index = idx - 1;
+    CHECK(efs_raft_recv(n.r[lid], &rejected) == EFS_OK, "learner requests tail");
+    CHECK(n.keep && n.keep->prev_index + n.keep->nentries >= idx,
+          "committed solo tail is included in learner batch");
+    n.keep_on = 0; msg_free_deep(n.keep); n.keep = NULL;
+    free_n(&n, st, 3);
+}
+
 static void test_grow_3_to_5(void)
 {
     struct net n;
@@ -1370,6 +1405,7 @@ int main(void)
     test_i3_i4_and_restart();
     test_snapshot();
     test_grow_3_to_5();
+    test_solo_durable_cap_then_grow();
     test_i18_joint_quorum();
     test_stale_boot_id();
     test_ae_reply_match_stops_at_prev();
