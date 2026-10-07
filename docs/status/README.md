@@ -22,7 +22,12 @@ operations), eight perf captures and eight separate straces; see the
 [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md).
 The user authorized production direct extent retention on Oct 7. Direct and
 buffered paths now enforce exact completed length without truncating before
-each overwrite. Direct-I/O POSIX gates on nuc and mac are in progress.
+each overwrite. NUC direct-I/O gates passed: 216/217 single-client (one mmap skip),
+64/64 two-client, and 12/12 cold-remount durability checks. See the
+[rollout checkpoint](../../results/measure/20261007-direct-rollout/SUMMARY.md).
+The mac gate is deferred during maintenance; the user corrected its intended
+mode to buffered I/O. Roadmap implementation now targets 30 rounds, each
+validated on NUC; see the [round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
 
 **Writer investigation (Oct 7), complete.** All 324 baseline repeats and 108
 isolated profiles passed. Inline multi-root placement is fixed. Buffered shard
