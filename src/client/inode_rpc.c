@@ -461,6 +461,8 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
                               int recv_ms);
 
 /* Send to the owner of `shard`. Retry NOT_PRIMARY. */
+static int rpc_writer_retry_pause(unsigned attempt);
+
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
                                uint32_t reply_len, uint32_t copy_cap,
@@ -472,6 +474,8 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
     int saw_busy = 0;
     unsigned long long t_start = rpc_prof_now_us();
     for (int attempt = 0; attempt < 16; attempt++) {
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
         unsigned long long t0 = prof ? rpc_prof_now_us() : 0;
@@ -489,10 +493,10 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
              * budget as BUSY; a hard NET only after it is used up
              * (dir_many_files EIO on a single recv failure). */
             if (attempt + 1 < 16) {
-                unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=send\n",
                         type, attempt);
-                usleep((useconds_t)(50000ull << shift));
+                if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                    return EFS_ERR_BUSY;
                 continue;
             }
             return EFS_ERR_NET;
@@ -504,17 +508,22 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
+            free(payload);
             efs_client_conn_drop(nid, conn);
             if (attempt + 1 < 16) {
-                unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d\n",
                         type, attempt, rc);
-                usleep((useconds_t)(50000ull << shift));
+                if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                    return EFS_ERR_BUSY;
                 continue;
             }
             return EFS_ERR_NET;
         }
         efs_client_conn_release(nid, conn);
+        if (efs_client_rpc_past_deadline()) {
+            free(payload);
+            return EFS_ERR_BUSY;
+        }
         if (rtype != expect || plen < reply_len) {
             fprintf(stderr, "inode-rpc: proto type=%u rtype=%u plen=%u "
                     "reply_len=%u nid=%u\n",
@@ -548,9 +557,10 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             }
             /* Extra-shard owner is still assembling pages after restart.
              * Same target — do not flip to another node. */
-            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            unsigned long long sleep_us = 50000ull << shift;
-            usleep((useconds_t)sleep_us);
+            unsigned long long sleep_start = rpc_prof_now_us();
+            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
@@ -564,9 +574,10 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
              * REPORT_CHUNKS owns its STALE (W1 refetch+overlay) — never
              * retried here. */
             saw_busy = 1;
-            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            unsigned long long sleep_us = 50000ull << shift;
-            usleep((useconds_t)sleep_us);
+            unsigned long long sleep_start = rpc_prof_now_us();
+            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
@@ -586,8 +597,7 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
          * ENOENT/EIO at every caller (stat_ino maps any rc to NOT_FOUND),
          * e.g. GETATTR of a just-made dir right after a leader freeze. */
         if (r->primary_id == 0 || r->primary_id == nid) {
-            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            unsigned long long sleep_us = 50000ull << shift;
+            unsigned long long sleep_start = rpc_prof_now_us();
             saw_busy = 1;
             target = 0;
             skip = nid;
@@ -598,7 +608,10 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                  0, __ATOMIC_RELAXED);
             fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=no-hint from=%u\n",
                     type, attempt, nid);
-            usleep((useconds_t)sleep_us);
+            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2,
+                         rpc_prof_now_us() - sleep_start);
             continue;
         }
         target = r->primary_id;
@@ -1484,7 +1497,7 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         struct efs_conn *conn;
         unsigned long long t0;
         if (rpc_past_deadline())
-            return saw_busy ? EFS_ERR_BUSY : EFS_ERR_IO;
+            return EFS_ERR_BUSY;
         t0 = prof ? rpc_prof_now_us() : 0;
         if (target != 0) {
             conn = efs_client_conn_get(target);
@@ -1497,8 +1510,8 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             if (conn)
                 efs_client_conn_drop(nid, conn);
             if (attempt + 1 < 16) {
-                unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-                usleep((useconds_t)(50000ull << shift));
+                if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                    return EFS_ERR_BUSY;
                 continue;
             }
             return EFS_ERR_NET;
@@ -1512,14 +1525,15 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
+            free(payload);
             efs_client_conn_drop(nid, conn);
             if (attempt + 1 < 16) {
-                unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
                 fprintf(stderr, "inode-rpc: retry type=%u attempt=%d why=recv rc=%d "
                         "req_len=%u recv_ms=%d\n",
                         type, attempt, rc, req_len,
                         recv_ms > 0 ? recv_ms : EFS_IO_TIMEOUT_MS);
-                usleep((useconds_t)(50000ull << shift));
+                if (rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                    return EFS_ERR_BUSY;
                 continue;
             }
             return EFS_ERR_NET;
@@ -1527,6 +1541,10 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         if (recv_ms > 0)
             efs_conn_set_recv_timeout(conn, 0); /* pooled conn: default again */
         efs_client_conn_release(nid, conn);
+        if (efs_client_rpc_past_deadline()) {
+            free(payload);
+            return EFS_ERR_BUSY;
+        }
         if (rtype != expect || plen < reply_len) {
             fprintf(stderr, "inode-rpc: proto type=%u rtype=%u plen=%u "
                     "reply_len=%u nid=%u\n",
@@ -1541,9 +1559,10 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             saw_busy = 1;
             skip = nid;
             target = 0;
-            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            unsigned long long sleep_us = 50000ull << shift;
-            usleep((useconds_t)sleep_us);
+            unsigned long long sleep_start = rpc_prof_now_us();
+            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
@@ -1552,9 +1571,10 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
              * dentry / witness race committed nothing; re-run it.
              * REPORT_CHUNKS owns its STALE (W1). */
             saw_busy = 1;
-            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            unsigned long long sleep_us = 50000ull << shift;
-            usleep((useconds_t)sleep_us);
+            unsigned long long sleep_start = rpc_prof_now_us();
+            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }
@@ -1566,11 +1586,12 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
         if (r->primary_id == 0 || r->primary_id == nid) {
             /* Hintless NOT_PRIMARY = election in progress; transient,
              * back off like BUSY (see rpc_send_recv_shard). */
-            unsigned shift = (unsigned)(attempt < 4 ? attempt : 4);
-            unsigned long long sleep_us = 50000ull << shift;
+            unsigned long long sleep_start = rpc_prof_now_us();
             saw_busy = 1;
             target = 0;
-            usleep((useconds_t)sleep_us);
+            if (attempt == 15 || rpc_writer_retry_pause((unsigned)attempt) != EFS_OK)
+                return EFS_ERR_BUSY;
+            unsigned long long sleep_us = rpc_prof_now_us() - sleep_start;
             rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, sleep_us);
             continue;
         }

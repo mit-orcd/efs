@@ -222,6 +222,7 @@ test-wb-runtime:
 	python3 tests/test_pull_deadline.py
 	python3 tests/test_pull_group_boundary.py
 	python3 tests/test_getchunks_budget.py
+	python3 tests/test_metadata_retry_budget.py
 
 test-wb-recovery:
 	@set -e; wb_test=$$(mktemp /tmp/efs-test-wb-recovery.XXXXXX); \
