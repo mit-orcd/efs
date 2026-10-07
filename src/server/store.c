@@ -649,11 +649,32 @@ struct shard_io_arg {
     int result;
 };
 
+/* Preserve buffered extents for same-size rewrites, while retaining the exact payload
+ * and checksum-tail length for shrinking writes. Never acknowledge failure
+ * to establish that length. This does not add or remove a durability barrier. */
+static int finish_shard_write(int fd, size_t bytes)
+{
+    struct stat st;
+    int rc;
+    do {
+        rc = fstat(fd, &st);
+    } while (rc < 0 && errno == EINTR);
+    /* A completed write already extends the file to its new end. Avoid
+     * another inode-size transaction unless an older, longer tail remains. */
+    if (rc == 0 && st.st_size != (off_t)bytes) {
+        do {
+            rc = ftruncate(fd, (off_t)bytes);
+        } while (rc < 0 && errno == EINTR);
+    }
+    close(fd);
+    return rc == 0 ? EFS_OK : EFS_ERR_IO;
+}
+
 static void *shard_io_thread(void *arg)
 {
     struct shard_io_arg *a = arg;
     if (a->is_write) {
-        int flags = O_WRONLY | O_TRUNC;
+        int flags = O_WRONLY | (a->direct ? O_TRUNC : 0);
         if (!a->no_create)
             flags |= O_CREAT;
         if (a->excl)
@@ -745,11 +766,12 @@ static void *shard_io_thread(void *arg)
                         { .iov_base = tail_tls, .iov_len = 4096 },
                     };
                     int rc = writev_all(fd, iov, 2);
-                    close(fd);
                     if (rc != 0) {
+                        close(fd);
                         a->result = EFS_ERR_IO;
                         return NULL;
                     }
+                    close(fd);
                     a->result = EFS_OK;
                     return NULL;
                 }
@@ -810,6 +832,7 @@ static void *shard_io_thread(void *arg)
                     a->result = EFS_ERR_IO;
                     return NULL;
                 }
+                written += EFS_HASH_SIZE;
             }
             /* Do not fsync per shard PUT. A single FUSE dd MiB becomes
              * ~24 fragment PUTs × 4 disks = ~96 fsyncs and caps single-stream
@@ -817,8 +840,12 @@ static void *shard_io_thread(void *arg)
              * cache until process exit / umount (same model as many parallel
              * FS clients); add an explicit fsync RPC later if needed. */
         }
-        close(fd);
-        a->result = EFS_OK;
+        if (a->direct) {
+            close(fd);
+            a->result = EFS_OK;
+        } else {
+            a->result = finish_shard_write(fd, written);
+        }
     } else {
         uint32_t got = 0;
         a->result = read_file_bytes(a->path, a->buf, a->len, &got,

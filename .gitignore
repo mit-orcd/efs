@@ -57,3 +57,5 @@ __pycache__/
 /tests/test_kv_seg_index
 
 /tests/test_writer_routing
+
+/tests/test_store_overwrite
