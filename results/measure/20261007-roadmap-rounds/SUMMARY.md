@@ -22,4 +22,5 @@ implementation rounds.
 | 11 | Stop STALE replay fanout after budget expiry without replacing earlier errors | replay/classifier regressions PASS; NUC concurrent and peer-overlap gates PASS | 098e1a3f |
 | 12 | Bound PUT dispatch, wake shard workers immediately, refuse shutdown admissions and recover failed pool startup | inline/full/shutdown/startup/one-slot regressions PASS; NUC concurrent and overlap gates PASS | 6d105c58 |
 | 13 | One connection checkout budget includes wakeups, parent deadline and late-connect rejection | real checkout regression PASS; NUC concurrent and overlap gates PASS | 54a36da8 |
-| 14 | Bind RPC scopes to absolute TCP receive deadlines, including slow-drip frames | network regression/wire/fd checks PASS; NUC full 216/217 and 64/64 peer PASS | accompanying client commit |
+| 14 | Bind RPC scopes to absolute TCP receive deadlines, including slow-drip frames | network regression/wire/fd checks PASS; NUC full 216/217 and 64/64 peer PASS | e541c823 |
+| 15 | Absolute TCP send deadline bounds full and partial frames; Darwin nonblocking flags restored on return | TCP fault regression PASS on Mac and NUC; NUC concurrent 8/8 and overlap 3/3 PASS | accompanying network commit |

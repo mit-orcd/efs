@@ -11,15 +11,43 @@
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <limits.h>
+#include <fcntl.h>
 
-static int send_iov(int fd, struct iovec *iov, int niov)
+static int send_iov_run(int fd, struct iovec *iov, int niov)
 {
     int i = 0;
     while (i < niov) {
-        ssize_t n = writev(fd, &iov[i], niov - i);
+        int bounded = efs_net_deadline_ms() != 0;
+        if (bounded && !efs_net_remaining_ms(INT_MAX)) {
+            errno = ETIMEDOUT;
+            return EFS_ERR_NET;
+        }
+        ssize_t n;
+        if (bounded) {
+            struct msghdr msg;
+            memset(&msg, 0, sizeof(msg));
+            msg.msg_iov = &iov[i];
+            msg.msg_iovlen = niov - i;
+            n = sendmsg(fd, &msg, MSG_DONTWAIT);
+        } else {
+            n = writev(fd, &iov[i], niov - i);
+        }
         if (n < 0) {
             if (errno == EINTR)
                 continue;
+            if (bounded && (errno == EAGAIN || errno == EWOULDBLOCK)) {
+                int remaining = efs_net_remaining_ms(INT_MAX);
+                if (!remaining) {
+                    errno = ETIMEDOUT;
+                    return EFS_ERR_NET;
+                }
+                struct pollfd pfd = {.fd = fd, .events = POLLOUT};
+                int ready = poll(&pfd, 1, remaining);
+                if (ready > 0 || (ready < 0 && errno == EINTR))
+                    continue;
+                if (!ready) errno = ETIMEDOUT;
+            }
             return EFS_ERR_NET;
         }
         if (n == 0)
@@ -35,6 +63,28 @@ static int send_iov(int fd, struct iovec *iov, int niov)
         }
     }
     return EFS_OK;
+}
+
+static int send_iov(int fd, struct iovec *iov, int niov)
+{
+#ifdef __APPLE__
+    /* Darwin may wait inside sendmsg despite MSG_DONTWAIT. The checked-out
+     * connection is exclusive; restore its flags before returning ownership. */
+    int flags = -1;
+    if (efs_net_deadline_ms()) {
+        flags = fcntl(fd, F_GETFL);
+        if (flags < 0 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) < 0)
+            return EFS_ERR_NET;
+    }
+    int rc = send_iov_run(fd, iov, niov);
+    int saved = errno;
+    if (flags >= 0 && fcntl(fd, F_SETFL, flags) < 0)
+        return EFS_ERR_NET;
+    errno = saved;
+    return rc;
+#else
+    return send_iov_run(fd, iov, niov);
+#endif
 }
 
 int efs_send_msg_parts(int fd, uint8_t type,
