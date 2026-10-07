@@ -151,6 +151,11 @@ try:
     print('PASS: both mkfs aliases preserve namespace/salt and explain ignored legacy label',flush=True)
     before = mgmt(old,'raft-getattr',1)
     assert 'status=0' in before and 'mode=040755' in before, before
+    session_uuid = '00000000000000000000000000000002' # odd FNV shard, group 0
+    session_before = mgmt(old,'raft-session','create',session_uuid,1)
+    assert 'status=0' in session_before,session_before
+    session_before=mgmt(old,'raft-session','get',session_uuid)
+    assert 'status=0' in session_before and 'epoch=1 state=1' in session_before,session_before
     isolated = old
     with lock:
         for client, peer, src, dst in list(connections):
@@ -168,6 +173,12 @@ try:
     assert leader() == old or 'group 0 hosted=1 role=LEADER ' in mgmt(old,'raft-status')
     current = mgmt(new,'raft-getattr',1)
     assert 'status=0' in current and 'mode=040700' in current, current
+    fenced = mgmt(new,'raft-session','fence',session_uuid)
+    assert 'status=0' in fenced and 'epoch=2 state=1' in fenced,fenced
+    session_replies = [mgmt(old,'raft-session','get',session_uuid) for _ in range(3)]
+    assert all(re.search(r'rc=-(13|15)\b', reply) and 'status=0' not in reply for reply in session_replies),session_replies
+    (work/'sessions.txt').write_text('\n'.join([session_before,fenced,*session_replies]))
+    print('PASS: isolated former leader refuses old session epoch after majority fence',flush=True)
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         replies = list(pool.map(lambda _: mgmt(old,'raft-getattr',1),range(8)))
     (work/'replies.txt').write_text('\n'.join([before,current,*replies]))
@@ -180,6 +191,7 @@ try:
     print('PASS: isolated former leader refuses stale LOOKUP after majority rename',flush=True)
     isolated = None
     wait(lambda: True if 'status=0' in mgmt(old,'raft-lookup',1,'after-rename') else None,'healed renamed lookup')
+    wait(lambda: True if 'epoch=2 state=1' in mgmt(old,'raft-session','get',session_uuid) else None,'healed fenced session')
     wait(lambda: True if 'mode=040700' in mgmt(old,'raft-getattr',1) else None,'healed forwarded read')
 finally:
     isolated = None

@@ -134,3 +134,13 @@ its executable and output path before SIGINT. It waits for exit before writing
 reports and fails without escalation on timeout. NUC private fixtures retain
 unrelated and wrong-output processes and retire the owned recorder with SIGINT.
 Daemon ownership regressions still pass. Log `/private/tmp/efs-roadmap-w78-perf.log`.
+
+## Round 14 — W82 session epoch partition acceptance
+
+The owned real-daemon partition fixture now fences a group-0 session from epoch
+1 to 2 on the majority. Three reachable isolated-leader session GETs must return
+BUSY/NOT_PRIMARY; after healing they observe epoch 2. Existing GETATTR/LOOKUP and
+mkfs compatibility gates still pass on NUC. Log
+`/private/tmp/efs-roadmap-w82-session-repeat.log`. Transaction/publication views
+and configuration-change coverage remain open; production session activation is
+not implied by this primitive gate.

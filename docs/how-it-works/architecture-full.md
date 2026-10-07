@@ -4906,8 +4906,10 @@ keeping client RPC reachable: majority changes root mode, eight concurrent old
 leader GETATTRs fail, then healed reads return the new mode. The continuation also tests majority-side
 rename followed by stale old-leader LOOKUP, verifies explicit BUSY/NOT_PRIMARY
 replies and that the old daemon remains alive and believes it is leader, then
-checks the renamed lookup after healing. Transaction/session/publication views
-and configuration-change partition scenarios remain owed.
+checks the renamed lookup after healing. Session coverage creates epoch 1,
+fences it to epoch 2 on the majority, verifies the isolated leader refuses GET
+with BUSY/NOT_PRIMARY, and verifies epoch 2 after healing. Transaction/publication
+views and configuration-change partition scenarios remain owed.
 
 **Gate:** old leader serves A, majority commits B after isolation, then a new
 read at the old leader must fail/retry, never return A as authoritative.
