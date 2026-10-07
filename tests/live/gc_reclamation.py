@@ -56,6 +56,8 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if a.server_binary:a.server_binary=a.server_binary.resolve()
+if a.client_binary:a.client_binary=a.client_binary.resolve()
 source = Path(__file__).resolve().parents[2]
 parents = a.root or ['/data1/efs', '/data2/efs']
 assert len(parents) == 2
@@ -804,7 +806,9 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
             assert all(int(live)+int(reserved)<=int(limit) and int(backing)<=int(limit) for live,reserved,backing,limit in charges),charges
             assert max(samples)<512*1024,samples
         finally:fault.write_text('OFF\n')
-        os.fsync(fd);os.close(fd)
+        os.fsync(fd)
+        assert os.fstat(fd).st_size==model[-1][0]+len(model[-1][1]),'refused write extended the file'
+        os.close(fd)
         # New admission and a cold read must succeed after the failure releases.
         unmount();mount_client()
         with path.open('rb',buffering=0) as inp:
