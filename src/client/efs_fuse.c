@@ -3893,39 +3893,47 @@ static int efs_fuse_utimens_ino(fuse_ino_t ino, const struct timespec tv[2])
     return 0;
 }
 
-static int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
+static int efs_fuse_truncate_run(fuse_ino_t ino, off_t size,
                                  struct fuse_file_info *fi)
 {
     int vk = virt_kind(ino);
+    if (size < 0)
+        return -EINVAL;
     if (vk == 2)
         return -EISDIR;
     if (vk)
         return -EACCES;
+    if (efs_client_rpc_past_deadline())
+        return -EAGAIN;
     if (!fi || !fi->fh) {
         struct efs_inode row;
-        if (efs_client_stat_ino((efs_ino_t)ino, &row) != EFS_OK)
-            return -ENOENT;
+        int rc = efs_client_stat_ino((efs_ino_t)ino, &row);
+        if (rc != EFS_OK)
+            return efs_rc_to_errno(rc);
         if (efs_mode_is_dir(row.mode))
             return -EISDIR;
         const struct fuse_ctx *ctx = ll_ctx();
         if (ctx && check_access(&row, ctx->uid, ctx->gid, W_OK) != 0)
             return -EACCES;
     }
-    {
-        struct timespec ts;
-        uint64_t now;
-        int trc;
+    int rc = efs_dcache_flush_ino((efs_ino_t)ino);
+    if (rc == EFS_OK)
+        rc = efs_client_truncate((efs_ino_t)ino, (uint64_t)size);
+    return efs_rc_to_errno(rc);
+}
 
-        clock_gettime(CLOCK_MONOTONIC, &ts);
-        now = (uint64_t)ts.tv_sec * 1000ull +
-              (uint64_t)ts.tv_nsec / 1000000ull;
-        /* One budget for flush + REPORT + SETATTR, not 8 s per RPC. */
-        efs_client_rpc_set_deadline_ms(now + 8000ull);
-        (void)efs_dcache_flush_ino((efs_ino_t)ino);
-        trc = efs_client_truncate((efs_ino_t)ino, (uint64_t)size);
-        efs_client_rpc_set_deadline_ms(0);
-        return efs_rc_to_errno(trc);
-    }
+static int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
+                                 struct fuse_file_info *fi)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = stats_now_ms() + 8000;
+    if (previous && previous < deadline)
+        deadline = previous;
+    /* Include access discovery and flushing without extending a caller budget. */
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc = efs_fuse_truncate_run(ino, size, fi);
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
 }
 
 static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)

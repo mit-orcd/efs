@@ -9,3 +9,4 @@ implementation rounds.
 
 | Round | Production change | Tests | Commit |
 |---|---|---|---|
+| 1 | Truncate refuses failed flush; preserves inherited deadline and access errors | production regression PASS; NUC full POSIX 216/217, 64/64 peer, 12/12 persistence | accompanying client commit |
