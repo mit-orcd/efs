@@ -682,7 +682,11 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
 /* Retired is a replay barrier, not evidence of commit or rejection. */
 #define EFS_META_PUBLICATION_RETIRED 1
 #define EFS_META_PUBLICATION_MAX_RECEIPTS 64u
+/* Durable publication submit/retire require an established, unfenced session
+ * on the lane shard; apply checks admission before receipts or mutation. */
 int efs_meta_apply_publication_retire(struct efs_kv *, const struct efs_meta_pub *);
+/* Internal durable inspection, NOT session admission. External callers must
+ * gate the session under authoritative lane ReadIndex before returning it. */
 int efs_meta_publication_result(struct efs_kv *, const struct efs_meta_pub *, int *verdict);
 /* Which rule STALEd the last efs_meta_apply_publish on this thread. */
 enum {

@@ -47,8 +47,9 @@ Next, in order:
    advances a durable replay floor atomically. RETIRED never releases ownership.
    Ordered ACK retry ownership is now staged and NUC-tested (immutable,
    bounded, oldest-consumed-first, metadata-budgeted). Before activation,
-   integrate it with both flush paths and add I23 session
-   fencing/admission before cleanup of abandoned streams/floors; finish coherent
+   integrate it with both flush paths. I23 publication endpoint/apply gates,
+   authoritative ACTIVE/REGISTER establishment and reclaim eligibility are
+   now implemented; bounded abandoned-stream cleanup remains pending. Finish coherent
    lane-local mtime invalidation.
    Next connect every FUSE write entry point and both flush paths to these APIs;
    replace the unlabelled union, serialize pending publications and drain range

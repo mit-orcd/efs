@@ -3799,11 +3799,24 @@ static int publication_scan(struct efs_kv *kv,const struct efs_meta_pub *p,
     int rc=efs_kv_scan_prefix(kv,key,43,publication_scan_cb,scan);
     return rc==EFS_OK || rc==1 ? scan->rc : rc;
 }
+/* Durable publication streams are admitted on their lane shard. This check
+ * runs inside serialized Raft apply, after any earlier FENCE_LOC command, so
+ * an endpoint admission check cannot authorize a publish across a fence race.
+ * Session rejection is not a terminal publication receipt. */
+static int publication_session_accept(struct efs_kv *kv,
+                                       const struct efs_meta_pub *p)
+{
+    return efs_session_accept(kv,
+        efs_kv_lane_shard(p->ino,p->chunk_index % EFS_META_LANES),
+        p->publication_id.client_uuid,p->publication_id.session_epoch);
+}
+
 int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pub *p)
 {
     int verdict; uint64_t floor; uint8_t digest[EFS_HASH_SIZE];
     if(!kv || !p)return EFS_ERR_INVAL;
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
+    rc=publication_session_accept(kv,p);if(rc!=EFS_OK)return rc;
     rc=publication_floor(kv,p,&floor);if(rc!=EFS_OK)return rc;
     if(p->publication_id.seq<=floor)return EFS_OK; /* lost ACK reply */
     rc=efs_meta_publication_result(kv,p,&verdict);if(rc!=EFS_OK)return rc;
@@ -4207,6 +4220,7 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     if(!p || !p->durable_result) return publish_inner(kv,p,NULL);
     uint8_t digest[EFS_HASH_SIZE],key[51],value[8+EFS_HASH_SIZE];int verdict;
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
+    rc=publication_session_accept(kv,p);if(rc!=EFS_OK)return rc;
     rc=efs_meta_publication_result(kv,p,&verdict);
     if(rc==EFS_OK)return verdict==EFS_META_PUBLICATION_RETIRED?EFS_ERR_STALE:verdict;
     if(rc!=EFS_ERR_NOT_FOUND)return rc;

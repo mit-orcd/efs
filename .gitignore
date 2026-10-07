@@ -13,6 +13,7 @@ build.log
 libefs.a
 
 # tests (built binaries; keep sources and scripts)
+tests/test_publication_session
 tests/test_publication_ack
 tests/test_publication_recovery
 tests/test_lane_bootstrap_recovery

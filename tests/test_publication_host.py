@@ -12,6 +12,7 @@ source=r'''
 #include "efs/kv_key.h"
 #include "efs/raft.h"
 #include "efs/meta_cmd.h"
+#include "efs/session.h"
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
@@ -27,6 +28,8 @@ static uint64_t rd64be(const uint8_t *p){uint64_t n=0;for(unsigned i=0;i<8;i++)n
 struct efs_raft_host {int running,n;struct efs_kv *kv;};
 static struct efs_raft_host host={.running=1,.n=3},*g_host=&host;
 static int owns=1,stored,stored_verdict,wait_rc,read_rc,store_on_propose=1;
+static int session_rc, fence_after_propose;
+static unsigned gates;
 static unsigned proposals,reads,forwards;static uint8_t group;
 int efs_chunk_size_valid(uint32_t s){return s==EFS_MIN_CHUNK_SIZE;}
 void efs_hash(const void *p,size_t n,uint8_t out[EFS_HASH_SIZE])
@@ -37,8 +40,10 @@ static int host_pick_peer(struct efs_raft_host *h,const uint8_t *g,int n,int ski
 {(void)h;(void)skip;assert(n==1 && *g==group);return 1;}
 static int host_read_index(struct efs_raft_host *h,uint8_t g,int *hint)
 {(void)h;assert(g==group);*hint=1;reads++;return read_rc;}
+int efs_session_accept(struct efs_kv *kv,uint32_t shard,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch)
+{(void)kv;assert(shard==efs_kv_lane_shard(123,17) && uuid[0]==1 && epoch==1);gates++;return session_rc;}
 static void set_inode_rc(struct efs_msg_inode_reply *r,int rc,int hint)
-{r->status=rc==EFS_OK?EFS_INODE_RPC_OK:rc==EFS_ERR_NOT_FOUND?EFS_INODE_RPC_NOT_FOUND:EFS_INODE_RPC_BUSY;
+{r->status=rc==EFS_OK?EFS_INODE_RPC_OK:rc==EFS_ERR_NOT_FOUND?EFS_INODE_RPC_NOT_FOUND:rc==EFS_ERR_STALE?EFS_INODE_RPC_STALE:EFS_INODE_RPC_BUSY;
 r->primary_id=hint>=0?(uint32_t)(hint+1):0;}
 static int host_inode_rpc_peer(struct efs_raft_host *h,int rid,uint8_t t,const void *q,
  uint32_t n,uint8_t rt,void *out,uint32_t on)
@@ -60,7 +65,7 @@ int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pu
 int efs_meta_apply_publish_stale_why(void){return 0;}
 ''' + pack + '\n' + apply + r'''
 static int host_propose_wait(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uint32_t n,int *hint)
-{(void)h;(void)hint;assert(g==group && (cmd[0]==EFS_MD_CMD_PUBLICATION || cmd[0]==EFS_MD_CMD_PUBLICATION_RETIRE) && n==HOST_PUBLICATION_LEN);proposals++;if(store_on_propose)assert(apply_one_publish(h,cmd,1)==EFS_OK);stored=store_on_propose;return wait_rc;}
+{(void)h;(void)hint;assert(g==group && (cmd[0]==EFS_MD_CMD_PUBLICATION || cmd[0]==EFS_MD_CMD_PUBLICATION_RETIRE) && n==HOST_PUBLICATION_LEN);proposals++;if(store_on_propose)assert(apply_one_publish(h,cmd,1)==EFS_OK);stored=store_on_propose;if(fence_after_propose)session_rc=EFS_ERR_STALE;return wait_rc;}
 ''' +fn+r'''
 int main(void)
 {
@@ -91,6 +96,17 @@ int main(void)
  stored=1;store_on_propose=1;
  server_raft_host_publication(&req,2,&out);assert(out.state==EFS_PUBLICATION_RETIRED && out.verdict==EFS_META_PUBLICATION_RETIRED);
  unsigned saved=proposals;server_raft_host_publication(&req,0,&out);assert(out.state==EFS_PUBLICATION_RETIRED && proposals==saved);
+ /* Fenced clients cannot recover/submit/retire even existing receipts. */
+ saved=proposals;session_rc=EFS_ERR_STALE;
+ for(int mode=0;mode<3;mode++) {
+  server_raft_host_publication(&req,mode,&out);
+  assert(out.rpc.status==EFS_INODE_RPC_STALE && out.state==EFS_PUBLICATION_UNKNOWN && proposals==saved);
+ }
+ session_rc=EFS_ERR_BUSY;server_raft_host_publication(&req,0,&out);
+ assert(out.rpc.status==EFS_INODE_RPC_BUSY && out.state==EFS_PUBLICATION_UNKNOWN && proposals==saved);
+ session_rc=EFS_OK;stored=0;fence_after_propose=1;
+ server_raft_host_publication(&req,0,&out);
+ assert(out.rpc.status==EFS_INODE_RPC_STALE && out.state==EFS_PUBLICATION_UNKNOWN && proposals==saved+1 && gates);
  puts("publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS");
 }
 '''

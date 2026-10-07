@@ -7152,6 +7152,38 @@ static int host_session_get(struct efs_raft_host *h, const uint8_t *cmd,
     return EFS_OK;
 }
 
+/* ESTABLISH must follow authoritative ACTIVE + REGISTER on the session
+ * owner. This is a one-time admission check, not a global lookup per write.
+ * If fencing starts after this read, REGISTER is already in its frozen set;
+ * ordered FENCE_LOC then rejects a delayed old-epoch ESTABLISH on the lane. */
+static int host_session_establish_admit(struct efs_raft_host *h,
+    const uint8_t *cmd, uint32_t clen, uint8_t group, int *hint)
+{
+    if (clen != HOST_SESS_REG_LEN) return EFS_ERR_INVAL;
+    uint32_t epoch=rd32be(cmd+18), shard=rd32be(cmd+22);
+    if (!epoch || shard>=EFS_SESSION_BITS || group!=efs_raft_shard_group(shard))
+        return EFS_ERR_INVAL;
+    uint8_t query[HOST_SESS_HDR_LEN+4];
+    memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;
+    wr32be(query+18,shard);
+    uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(cmd+2));
+    uint64_t salt=0;int rc;
+    if (host_hosts(h,owner)) rc=host_session_get(h,query,sizeof(query),owner,hint,&salt);
+    else {
+        struct efs_msg_raft_mkfs_reply reply;
+        memset(&reply,0,sizeof(reply));
+        rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);
+        if (rc==EFS_OK) salt=reply.salt;
+    }
+    if (rc!=EFS_OK) return rc;
+    uint32_t current=(uint32_t)salt;
+    uint8_t state=(uint8_t)(salt>>32);
+    if (state==EFS_SESSION_FENCING) return epoch==current ? EFS_ERR_BUSY : EFS_ERR_STALE;
+    if (state!=EFS_SESSION_ACTIVE) return EFS_ERR_PROTO;
+    if (epoch!=current) return EFS_ERR_STALE;
+    return (salt & (1ull<<40)) ? EFS_OK : EFS_ERR_BUSY;
+}
+
 static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
                             const uint8_t *cmd, uint32_t clen, int *hint);
 
@@ -7251,6 +7283,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                 out->leader_hint = v.leader;
             return;
         }
+    }
+    if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION &&
+        cmd[1] == EFS_MD_SESS_ESTABLISH) {
+        rc = host_session_establish_admit(h, cmd, clen, group, &hint);
+        if (rc != EFS_OK) { out->rc = rc; return; }
     }
     if (clen == 0) {
         rc = host_read_index(h, group, &hint);
@@ -12279,7 +12316,8 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
        efs_publication_from_rec(&req->rec,req->size,&p)!=EFS_OK)return;
     p.publication_id=req->id;
     if(efs_publication_digest(&p,out->digest)!=EFS_OK)return;
-    uint8_t group=efs_raft_shard_group(efs_kv_lane_shard(p.ino,p.chunk_index%EFS_META_LANES));
+    uint32_t shard=efs_kv_lane_shard(p.ino,p.chunk_index%EFS_META_LANES);
+    uint8_t group=efs_raft_shard_group(shard);
     if(!host_hosts(h,group)) {
         int skip=-1;out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;
         for(int tries=0;tries<h->n;tries++) {
@@ -12292,6 +12330,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
         return;
     }
     int rc=host_read_index(h,group,&hint);
+    if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,req->id.client_uuid,req->id.session_epoch);
     if(rc==EFS_OK)rc=efs_meta_publication_result(h->kv,&p,&verdict);
     if((rc==EFS_ERR_NOT_FOUND && !query_only) ||
        (rc==EFS_OK && query_only==2 && verdict!=EFS_META_PUBLICATION_RETIRED)) {
@@ -12311,6 +12350,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
          * Resolve this intent from durable state after an authoritative read. */
         if(rc==EFS_OK || rc==EFS_ERR_STALE || rc==EFS_ERR_BUSY) {
             rc=host_read_index(h,group,&hint);
+            if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,req->id.client_uuid,req->id.session_epoch);
             if(rc==EFS_OK)rc=efs_meta_publication_result(h->kv,&p,&verdict);
         }
     }

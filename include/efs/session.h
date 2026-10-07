@@ -49,6 +49,13 @@ int efs_session_barrier_done(struct efs_kv *kv,
                              const uint8_t uuid[EFS_OPID_UUID_LEN],
                              uint32_t old_epoch);
 
+/* Receipt/floor reclamation requires BOTH the completed global barrier and
+ * a durable local rejection floor above old_epoch. Caller must obtain
+ * authoritative views of the session and target shard; this is not a remote
+ * coordinator and must never be used on a replica with only cached state. */
+int efs_session_reclaimable(struct efs_kv *kv, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t old_epoch);
+
 int efs_session_establish(struct efs_kv *kv, uint32_t shard,
                           const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,

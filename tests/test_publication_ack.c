@@ -1,4 +1,6 @@
 #include "efs/publication_ack.h"
+#include "efs/session.h"
+#include "efs/kv_key.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -111,6 +113,10 @@ static void durable_order(void)
     struct efs_publication_ack_queue q={0};
     assert(efs_publication_ack_admit(&q,&a)==EFS_OK);
     assert(efs_publication_ack_admit(&q,&b)==EFS_OK);
+    assert(efs_session_create(kv,a.id.client_uuid,1)==EFS_OK);
+    uint32_t shard=efs_kv_lane_shard(ino,0);
+    assert(efs_session_register(kv,a.id.client_uuid,1,shard)==EFS_OK);
+    assert(efs_session_establish(kv,shard,a.id.client_uuid,1)==EFS_OK);
     struct efs_meta_pub pb=intent(&b);assert(efs_meta_apply_publish(kv,&pb)==EFS_OK);
     struct efs_msg_publication_reply rb=reply(&b,EFS_PUBLICATION_COMMITTED,EFS_OK);
     assert(efs_publication_ack_consumed(&q,11,&rb)==EFS_OK);

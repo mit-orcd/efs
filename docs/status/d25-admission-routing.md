@@ -195,3 +195,33 @@ in order before sending any publication and mark consumed only after cache
 ownership has processed the matching terminal result. No process-crash
 recovery or abandoned-session cleanup is claimed. I23 admission/fencing,
 coherent mtime invalidation and both flush integrations remain prerequisites.
+
+## I23 publication session admission — implemented, staged
+
+PUBLICATION, PUBLICATION_STATUS and PUBLICATION_RETIRE now check lane-local
+session admission under authoritative ReadIndex, including after resolving a
+proposal outcome. Missing establishment returns BUSY; a durable local fence
+returns transport STALE with UNKNOWN publication state. Neither authorizes
+consuming/rebasing accepted bytes. Submit and retirement also gate inside
+serialized Raft apply before any receipt lookup/mutation, closing a race with
+an earlier FENCE_LOC command. Legacy REPORT remains separate.
+
+Production ESTABLISH now verifies authoritative ACTIVE epoch and REGISTERed
+shard membership on the session owner before proposing to the target shard.
+It denies missing registration and FENCING/new-epoch admission. This owner
+lookup happens at establishment, not on every publication. REGISTER precedes
+the check, so a later BEGIN freezes that shard into its fence set; a delayed
+old ESTABLISH is rejected by the ordered durable local floor.
+
+`efs_session_reclaimable` requires both completed global barrier and a durable
+local rejection floor above the abandoned epoch. Its caller must establish
+authoritative session/target-shard views. It grants eligibility only; it does
+not delete receipts or floors. They remain retained. No timeout-only cleanup,
+epoch re-aging, automatic FUSE activation or abandoned-stream sweeper is added.
+
+The NUC regression covers missing admission, ordered fencing, retained exact
+receipts, rejection of both submit/retire after fencing, unknown client results,
+restart after FENCE_LOC before global ACK, and subsequent epoch admission.
+Automatic lane session admission belongs with the pending FUSE integration.
+Next finish coherent lane-local mtime invalidation, then integrate both flush
+paths and bounded abandoned-stream cleanup under the barrier.

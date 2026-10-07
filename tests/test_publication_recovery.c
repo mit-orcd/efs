@@ -2,6 +2,7 @@
 #include "efs/publication.h"
 #include "efs/kv_lsm.h"
 #include "efs/kv_key.h"
+#include "efs/session.h"
 #include <assert.h>
 #include <dirent.h>
 #include <stdio.h>
@@ -19,6 +20,14 @@ static struct efs_meta_pub publication(efs_ino_t ino,uint64_t gen,uint64_t base,
     for(unsigned i=0;i<EFS_NUM_FRAGMENTS;i++){p.ch.nodes[i]=i+1;p.ch.checksums[i][0]=(uint8_t)object;}
     return p;
 }
+static void admit(struct efs_kv *kv,efs_ino_t ino)
+{
+    uint8_t uuid[EFS_OPID_UUID_LEN]={1};
+    uint32_t shard=efs_kv_lane_shard(ino,0);
+    assert(efs_session_create(kv,uuid,1)==EFS_OK);
+    assert(efs_session_register(kv,uuid,1,shard)==EFS_OK);
+    assert(efs_session_establish(kv,shard,uuid,1)==EFS_OK);
+}
 static int result(struct efs_kv *kv,const struct efs_meta_pub *p,int *verdict)
 {
     uint8_t digest[EFS_HASH_SIZE];assert(efs_publication_digest(p,digest)==EFS_OK);
@@ -26,6 +35,7 @@ static int result(struct efs_kv *kv,const struct efs_meta_pub *p,int *verdict)
 }
 static void exercise(struct efs_kv *kv,efs_ino_t ino,uint64_t gen)
 {
+    admit(kv,ino);
     struct efs_meta_pub first=publication(ino,gen,0,10),loser=publication(ino,gen,0,11);
     struct efs_meta_pub next=publication(ino,gen,10,12);int v=123;
     assert(result(kv,&first,&v)==EFS_ERR_NOT_FOUND && v==123);
@@ -57,6 +67,7 @@ static int fault_batch(void *ctx,const struct efs_kv_item *items,uint32_t n)
 {(void)ctx;(void)items;(void)n;return EFS_ERR_IO;}
 static void identical_span_operations(struct efs_kv *kv,efs_ino_t ino,uint64_t gen)
 {
+    admit(kv,ino);
     struct efs_meta_pub span=publication(ino,gen,0,21);span.delta_len=16;
     assert(efs_meta_apply_publish(kv,&span)==EFS_OK);
     struct efs_meta_delta deltas[EFS_CHUNK_DELTA_MAX];uint32_t n;uint64_t newest;
@@ -75,6 +86,7 @@ static void failures(void)
     struct efs_meta_row row;assert(efs_meta_apply_init(kv,1)==EFS_OK);
     assert(efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"fault",&ino)==EFS_OK);
     assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);
+    admit(kv,ino);
     struct efs_meta_pub p=publication(ino,row.generation,0,10);int v;
     struct efs_kv_ops ops=*kv->ops;ops.batch=fault_batch;
     struct efs_kv failing={&ops,kv->ctx};
@@ -122,6 +134,7 @@ static void bounded_receipts(void)
     assert(efs_meta_apply_init(kv,1)==EFS_OK);
     assert(efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"bounded",&ino)==EFS_OK);
     assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);
+    admit(kv,ino);
     struct efs_meta_pub first=publication(ino,row.generation,0,10);
     assert(efs_meta_apply_publish(kv,&first)==EFS_OK);
     for(unsigned i=1;i<EFS_META_PUBLICATION_MAX_RECEIPTS;i++) {
