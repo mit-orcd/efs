@@ -6,8 +6,9 @@
 
 ## 1. The task right now
 
-Follow-up round 1: W82 request-scoped read authority; see the
-[round ledger](roadmap-followup-20261007.md) for implementation and NUC gates.
+The requested 30-round continuation is in progress; see the
+[continuation ledger](roadmap-30-continuation-20261007.md) for committed fixes,
+NUC acceptance and retained failures.
 
 Reviewed Oct 7, 2026, final round, from HEAD `b3a11877` through the
 `75f6a42e` GC checkpoint / `7582df59` generated-artifact update and existing
@@ -33,7 +34,11 @@ from their dated runs, not a live cluster inventory.
 - **W64/W65:** durable append failover replay and slow daemon shutdown are
   unresolved findings from the [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
 
-Latest NUC follow-up acceptance: isolated `5ee9ab6b` + W82 round changes,
+Latest continuation service acceptance: isolated `7bf2275d`, direct I/O, full
+Linux units, POSIX 216/0/1 skip, peer 64/64, persistence 26/26 in each phase.
+Logs and partial/failure evidence are recorded in the continuation ledger.
+
+Earlier NUC follow-up acceptance: isolated `5ee9ab6b` + W82 round changes,
 direct I/O, units, POSIX 216/0/1 skip, peer POSIX 64/64 and persistence
 26/26 in both phases. See the [ledger](roadmap-followup-20261007.md).
 
@@ -105,18 +110,18 @@ positions do not assign an execution order or override the active handoff.
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | payload-only hashes; missing checksum can be replaced with a freshly computed digest | [evidence and gate](../backlog/work-items.md#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | open — 512-slot exhaustion omits identity; default-mount reachability unverified | [evidence and gate](../backlog/work-items.md#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](../backlog/work-items.md#w77) |
-| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | open — stale/reused PID can signal an unrelated process; no runtime reproduction performed | [evidence and gate](../backlog/work-items.md#w78) |
-| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | open — advertised extra name is silently ignored; initialization remains idempotent | [evidence and gate](../backlog/work-items.md#w79) |
-| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | open — server QUERY_STATS returns an all-zero placeholder; not evidence of an empty store | [evidence and gate](../backlog/work-items.md#w80) |
+| op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | identity-checked pidfd daemon/recorder retirement implemented; NUC ownership fixtures pass; daemon shutdown remains W65 | [evidence and gate](../backlog/work-items.md#w78) |
+| op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | legacy label explicitly reported as ignored; extra arguments rejected; NUC repeated mkfs preserves salt/namespace | [evidence and gate](../backlog/work-items.md#w79) |
+| op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | unsupported status and CLI nonzero exit replace invented zero totals; NUC RPC/CLI gates pass; actual totals remain unimplemented | [evidence and gate](../backlog/work-items.md#w80) |
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](../backlog/work-items.md#w81) |
-| proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | fresh-round/ack correlation implemented; NUC live partition GETATTR gate passes; broader RPC/configuration gates owed | [evidence and gate](../backlog/work-items.md#w82) |
+| proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | fresh-round/ack correlation implemented; NUC partition GETATTR/LOOKUP/session epoch gates pass; transaction/publication/configuration gates owed | [evidence and gate](../backlog/work-items.md#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](../backlog/work-items.md#w83) |
-| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | ancestry and used-lane guard limits return BUSY; live gate not run | [evidence and gate](../backlog/work-items.md#w84) |
+| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | 64-participant envelope and cross-group HASHED unlink repair; NUC 20-ancestor/16-lane gates pass; maximum bounds/failover remain open | [evidence and gate](../backlog/work-items.md#w84) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | baseline helper collision reproduced; repair committed `6d6056c3`; checkpoint reports helper/concurrency and two-root accounting tests; independent release/restart acceptance not established here | [evidence and gate](../backlog/work-items.md#w85) |
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine committed `b3a11877`, staged for integration; production admission, sessions and all-member collection not active | [evidence and gate](../backlog/work-items.md#w86) · [D31](decisions.md#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](../backlog/work-items.md#w87) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | isolated metadata reproduction; actual host/FUSE byte gate owed | [evidence and gate](../backlog/work-items.md#w88) |
-| measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | raw samples/logs confirm invalid summary; corrected expansion retained; harness fix and valid bound owed | [evidence and gate](../backlog/work-items.md#w89) |
+| measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | TSV schema/reduction repaired; NUC regressions pass; new pressure run and valid bound remain owed | [evidence and gate](../backlog/work-items.md#w89) |
 
 The [specification/public-path review](spec-implementation.md) separates accepted
 contracts from current capabilities (W71–W77). These findings add no deployment

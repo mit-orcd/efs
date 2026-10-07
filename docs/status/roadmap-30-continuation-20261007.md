@@ -172,3 +172,13 @@ The buffered namespace/broad repeat passed single POSIX 216/0/1 skip but failed
 peer POSIX 10/64, beginning with shared-pwrite EBUSY; subsequent directory probes
 failed. Retained `/private/tmp/efs-roadmap-w84-buffered-posix.log`. It overlaps
 other NUC work and needs a serial traced repeat; do not count it as acceptance.
+
+## Round 17 — committed-source service integration and queue reconciliation
+
+Deployed isolated `7bf2275d` to the four-node NUC service with direct I/O, using
+committed devops scripts and excluding concurrent benchmark work. Full Linux
+`make test` passes. POSIX 216/0/1 skip, peer 64/64, persistence prepare/verify
+26/26 each; four daemons healthy, logical 500 GiB status and df agree. Queue
+rows now point at current repairs and retain their unresolved gates. Logs
+`/private/tmp/efs-roadmap-cycle17-live.log` and
+`/private/tmp/efs-roadmap-cycle17-units.log`.
