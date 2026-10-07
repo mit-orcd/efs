@@ -2952,9 +2952,11 @@ NUC unit regressions reject delayed replies from completed rounds and revoke
 read authority on higher terms. The private real-daemon
 `tests/live/raft_read_freshness.py` cuts peer traffic in both directions while
 keeping client RPC reachable: majority changes root mode, eight concurrent old
-leader GETATTRs fail, then healed reads return the new mode. This is narrower
-than the full gate below; LOOKUP, transaction/session/publication views and
-configuration-change partition scenarios remain owed.
+leader GETATTRs fail, then healed reads return the new mode. The continuation also tests majority-side
+rename followed by stale old-leader LOOKUP, verifies explicit BUSY/NOT_PRIMARY
+replies and that the old daemon remains alive and believes it is leader, then
+checks the renamed lookup after healing. Transaction/session/publication views
+and configuration-change partition scenarios remain owed.
 
 **Gate:** old leader serves A, majority commits B after isolation, then a new
 read at the old leader must fail/retry, never return A as authoritative.

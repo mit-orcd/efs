@@ -138,6 +138,8 @@ try:
     old = wait(leader,'initial leader')
     assert 'rc=0' in mgmt(old,'raft-mkfs')
     assert 'status=0' in mgmt(old,'raft-setattr',1,1,'0755')
+    assert 'status=0' in mgmt(old,'raft-create',1,'before-rename')
+    assert 'status=0' in mgmt(old,'raft-lookup',1,'before-rename')
     before = mgmt(old,'raft-getattr',1)
     assert 'status=0' in before and 'mode=040755' in before, before
     isolated = old
@@ -151,14 +153,24 @@ try:
     changed = mgmt(new,'raft-setattr',1,1,'0700')
     print('majority setattr:', changed, flush=True)
     assert 'status=0' in changed, changed
+    renamed = mgmt(new,'raft-rename',1,'before-rename',1,'after-rename')
+    assert 'status=0' in renamed, renamed
+    assert 'status=0' in mgmt(new,'raft-lookup',1,'after-rename')
+    assert leader() == old or 'group 0 hosted=1 role=LEADER ' in mgmt(old,'raft-status')
     current = mgmt(new,'raft-getattr',1)
     assert 'status=0' in current and 'mode=040700' in current, current
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         replies = list(pool.map(lambda _: mgmt(old,'raft-getattr',1),range(8)))
     (work/'replies.txt').write_text('\n'.join([before,current,*replies]))
-    assert all('status=0' not in reply for reply in replies), replies
+    assert all(re.search(r'status=(5|7)\b', reply) for reply in replies), replies
+    lookups = [mgmt(old,'raft-lookup',1,'before-rename') for _ in range(3)]
+    assert all(re.search(r'status=(5|7)\b', reply) for reply in lookups), lookups
+    assert 'group 0 hosted=1 role=LEADER ' in mgmt(old,'raft-status'), 'old daemon must remain alive and leader'
+    (work/'lookups.txt').write_text('\n'.join(lookups))
     print('PASS: majority changed root mode; eight isolated-leader GETATTRs refused stale authority',flush=True)
+    print('PASS: isolated former leader refuses stale LOOKUP after majority rename',flush=True)
     isolated = None
+    wait(lambda: True if 'status=0' in mgmt(old,'raft-lookup',1,'after-rename') else None,'healed renamed lookup')
     wait(lambda: True if 'mode=040700' in mgmt(old,'raft-getattr',1) else None,'healed forwarded read')
 finally:
     isolated = None
