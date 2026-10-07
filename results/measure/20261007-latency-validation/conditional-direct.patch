@@ -1,0 +1,56 @@
+--- a/src/server/store.c
++++ b/src/server/store.c
+@@ -669,6 +669,24 @@
+     }
+     if (rc == 0 && sync_write) {
+         do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
++    }
++    close(fd);
++    return rc == 0 ? EFS_OK : EFS_ERR_IO;
++}
++
++/* Experimental direct extent retention, matching the earlier candidate.
++ * O_SYNC diagnostics also persist the final length operation. */
++static int finish_direct_candidate(int fd, size_t bytes, int sync_write)
++{
++    struct stat st;
++    int rc;
++    do { rc = fstat(fd, &st); } while (rc < 0 && errno == EINTR);
++    if (rc == 0 && st.st_size != (off_t)bytes) {
++        do { rc = ftruncate(fd, (off_t)bytes); } while (rc < 0 && errno == EINTR);
++        /* O_SYNC already persisted the completed writes. Only a subsequent
++         * length change needs a separate barrier. */
++        if (rc == 0 && sync_write)
++            do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
+     }
+     close(fd);
+     return rc == 0 ? EFS_OK : EFS_ERR_IO;
+@@ -678,7 +696,7 @@
+ {
+     struct shard_io_arg *a = arg;
+     if (a->is_write) {
+-        int flags = O_WRONLY | (a->direct ? O_TRUNC : 0);
++        int flags = O_WRONLY;
+ #ifdef EFS_BENCH_BUILD
+         if (a->sync_write) flags |= O_SYNC;
+ #endif
+@@ -778,8 +796,7 @@
+                         a->result = EFS_ERR_IO;
+                         return NULL;
+                     }
+-                    close(fd);
+-                    a->result = EFS_OK;
++                    a->result = finish_direct_candidate(fd, (size_t)a->len + 4096, a->sync_write);
+                     return NULL;
+                 }
+                 wbuf = a->buf;
+@@ -848,8 +865,7 @@
+              * FS clients); add an explicit fsync RPC later if needed. */
+         }
+         if (a->direct) {
+-            close(fd);
+-            a->result = EFS_OK;
++            a->result = finish_direct_candidate(fd, written, a->sync_write);
+         } else {
+             a->result = finish_shard_write(fd, written, a->sync_write);
+         }

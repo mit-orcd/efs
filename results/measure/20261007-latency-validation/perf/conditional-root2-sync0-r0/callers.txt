@@ -1,0 +1,2045 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 20882572063
+#
+# Children      Self  Symbol                                            IPC   [IPC Coverage]
+# ........  ........  ................................................  ....................
+#
+    79.93%     0.39%  [k] entry_SYSCALL_64_after_hwframe                -      -            
+            |          
+            |--30.15%--__GI___writev
+            |          writev_all (inlined)
+            |          shard_io_thread.part.0.constprop.0
+            |          shard_io_thread (inlined)
+            |          server_write_fragment_to_path.isra.0
+            |          
+            |--17.74%--__GI___libc_open
+            |          shard_io_thread.part.0.constprop.0
+            |          shard_io_thread (inlined)
+            |          server_write_fragment_to_path.isra.0
+            |          
+            |--17.24%--__futex_abstimed_wait_common
+            |          |          
+            |          |--10.67%--pthread_cond_wait@@GLIBC_2.3.2
+            |          |          |          
+            |          |          |--5.41%--writer_thread
+            |          |          |          start_thread
+            |          |          |          clone3
+            |          |          |          
+            |          |           --5.26%--slot_run_locked (inlined)
+            |          |                     slot_handoff (inlined)
+            |          |                     submit_and_wait_inner
+            |          |                     submit_and_wait (inlined)
+            |          |                     server_write_fragment_with_sum
+            |          |                     nvme_put
+            |          |                     efs_store_put (inlined)
+            |          |                     slot_put (inlined)
+            |          |                     slot_main
+            |          |                     start_thread
+            |          |                     clone3
+            |          |          
+            |           --6.57%--pthread_cond_timedwait@@GLIBC_2.3.2
+            |                     slot_handoff (inlined)
+            |                     submit_and_wait_inner
+            |                     submit_and_wait (inlined)
+            |                     server_write_fragment_with_sum
+            |                     nvme_put
+            |                     efs_store_put (inlined)
+            |                     slot_put (inlined)
+            |                     slot_main
+            |                     start_thread
+            |                     clone3
+            |          
+            |--8.33%--pthread_cond_signal@@GLIBC_2.3.2
+            |          |          
+            |          |--5.46%--slot_run_locked (inlined)
+            |          |          slot_handoff (inlined)
+            |          |          submit_and_wait_inner
+            |          |          submit_and_wait (inlined)
+            |          |          server_write_fragment_with_sum
+            |          |          nvme_put
+            |          |          efs_store_put (inlined)
+            |          |          slot_put (inlined)
+            |          |          slot_main
+            |          |          start_thread
+            |          |          clone3
+            |          |          
+            |           --2.87%--writer_thread
+            |                     start_thread
+            |                     clone3
+            |          
+            |--2.50%--__GI___lll_lock_wake
+            |          __GI___pthread_mutex_unlock_usercnt
+            |          |          
+            |          |--0.98%--writer_thread
+            |          |          start_thread
+            |          |          clone3
+            |          |          
+            |          |--0.85%--pthread_cond_wait@@GLIBC_2.3.2
+            |          |          slot_run_locked (inlined)
+            |          |          slot_handoff (inlined)
+            |          |          submit_and_wait_inner
+            |          |          submit_and_wait (inlined)
+            |          |          server_write_fragment_with_sum
+            |          |          nvme_put
+            |          |          efs_store_put (inlined)
+            |          |          slot_put (inlined)
+            |          |          slot_main
+            |          |          start_thread
+            |          |          clone3
+            |          |          
+            |           --0.67%--slot_handoff (inlined)
+            |                     submit_and_wait_inner
+            |                     submit_and_wait (inlined)
+            |                     server_write_fragment_with_sum
+            |                     nvme_put
+            |                     efs_store_put (inlined)
+            |                     slot_put (inlined)
+            |                     slot_main
+            |                     start_thread
+            |                     clone3
+            |          
+            |--2.43%--__close
+            |          finish_direct_candidate
+            |          shard_io_thread.part.0.constprop.0
+            |          shard_io_thread (inlined)
+            |          server_write_fragment_to_path.isra.0
+            |          
+             --1.45%--__fstat64
+                       finish_direct_candidate
+                       shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+    79.54%     0.65%  [k] do_syscall_64                                 -      -            
+            |
+            ---entry_SYSCALL_64_after_hwframe
+               |          
+               |--30.15%--__GI___writev
+               |          writev_all (inlined)
+               |          shard_io_thread.part.0.constprop.0
+               |          shard_io_thread (inlined)
+               |          server_write_fragment_to_path.isra.0
+               |          
+               |--17.64%--__GI___libc_open
+               |          shard_io_thread.part.0.constprop.0
+               |          shard_io_thread (inlined)
+               |          server_write_fragment_to_path.isra.0
+               |          
+               |--17.19%--__futex_abstimed_wait_common
+               |          |          
+               |          |--10.62%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          |          
+               |          |          |--5.41%--writer_thread
+               |          |          |          start_thread
+               |          |          |          clone3
+               |          |          |          
+               |          |           --5.21%--slot_run_locked (inlined)
+               |          |                     slot_handoff (inlined)
+               |          |                     submit_and_wait_inner
+               |          |                     submit_and_wait (inlined)
+               |          |                     server_write_fragment_with_sum
+               |          |                     nvme_put
+               |          |                     efs_store_put (inlined)
+               |          |                     slot_put (inlined)
+               |          |                     slot_main
+               |          |                     start_thread
+               |          |                     clone3
+               |          |          
+               |           --6.57%--pthread_cond_timedwait@@GLIBC_2.3.2
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+               |--8.25%--pthread_cond_signal@@GLIBC_2.3.2
+               |          |          
+               |          |--5.38%--slot_run_locked (inlined)
+               |          |          slot_handoff (inlined)
+               |          |          submit_and_wait_inner
+               |          |          submit_and_wait (inlined)
+               |          |          server_write_fragment_with_sum
+               |          |          nvme_put
+               |          |          efs_store_put (inlined)
+               |          |          slot_put (inlined)
+               |          |          slot_main
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |           --2.87%--writer_thread
+               |                     start_thread
+               |                     clone3
+               |          
+               |--2.43%--__close
+               |          finish_direct_candidate
+               |          shard_io_thread.part.0.constprop.0
+               |          shard_io_thread (inlined)
+               |          server_write_fragment_to_path.isra.0
+               |          
+               |--2.43%--__GI___lll_lock_wake
+               |          __GI___pthread_mutex_unlock_usercnt
+               |          |          
+               |          |--0.94%--writer_thread
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |          |--0.85%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          slot_run_locked (inlined)
+               |          |          slot_handoff (inlined)
+               |          |          submit_and_wait_inner
+               |          |          submit_and_wait (inlined)
+               |          |          server_write_fragment_with_sum
+               |          |          nvme_put
+               |          |          efs_store_put (inlined)
+               |          |          slot_put (inlined)
+               |          |          slot_main
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |           --0.64%--slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --1.45%--__fstat64
+                          finish_direct_candidate
+                          shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+    56.77%     0.17%  [.] server_write_fragment_to_path.isra.0          -      -            
+    56.09%     0.00%  [.] shard_io_thread (inlined)                     -      -            
+            |
+            ---server_write_fragment_to_path.isra.0
+
+    56.09%     0.46%  [.] shard_io_thread.part.0.constprop.0            -      -            
+            |          
+             --55.95%--shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+    41.54%     0.00%  [.] clone3                                        -      -            
+    41.54%     0.00%  [.] start_thread                                  -      -            
+            |
+            ---clone3
+
+    32.36%     0.00%  [.] writev_all (inlined)                          -      -            
+            |
+            ---shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    32.22%     0.17%  [.] __GI___writev                                 -      -            
+            |          
+             --32.03%--writev_all (inlined)
+                       shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+    29.57%     0.28%  [k] do_writev                                     -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    29.03%     0.44%  [k] vfs_writev                                    -      -            
+            |
+            ---do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    28.36%     0.32%  [k] do_iter_readv_writev                          -      -            
+            |
+            ---vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    28.04%     0.39%  [k] xfs_file_write_iter                           -      -            
+            |
+            ---do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    27.64%     0.00%  [k] xfs_file_dio_write_aligned.constprop.0        -      -            
+            |
+            ---xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    26.97%     0.37%  [.] slot_main                                     -      -            
+            |          
+             --26.61%--slot_main
+                       start_thread
+                       clone3
+
+    26.52%     0.00%  [.] slot_put (inlined)                            -      -            
+            |
+            ---slot_main
+               start_thread
+               clone3
+
+    26.35%     0.17%  [.] nvme_put                                      -      -            
+            |          
+             --26.30%--efs_store_put (inlined)
+                       slot_put (inlined)
+                       slot_main
+                       start_thread
+                       clone3
+
+    26.30%     0.00%  [.] efs_store_put (inlined)                       -      -            
+            |
+            ---slot_put (inlined)
+               slot_main
+               start_thread
+               clone3
+
+    26.19%     0.22%  [.] server_write_fragment_with_sum                -      -            
+            |          
+             --26.15%--server_write_fragment_with_sum
+                       nvme_put
+                       |          
+                        --26.10%--efs_store_put (inlined)
+                                  slot_put (inlined)
+                                  slot_main
+                                  start_thread
+                                  clone3
+
+    26.00%     0.00%  [.] submit_and_wait (inlined)                     -      -            
+            |
+            ---server_write_fragment_with_sum
+               nvme_put
+               efs_store_put (inlined)
+               slot_put (inlined)
+               slot_main
+               start_thread
+               clone3
+
+    25.98%     1.07%  [.] submit_and_wait_inner                         -      -            
+            |          
+             --25.29%--submit_and_wait_inner
+                       |          
+                        --25.27%--submit_and_wait (inlined)
+                                  server_write_fragment_with_sum
+                                  nvme_put
+                                  efs_store_put (inlined)
+                                  slot_put (inlined)
+                                  slot_main
+                                  start_thread
+                                  clone3
+
+    25.58%     0.00%  [.] slot_handoff (inlined)                        -      -            
+            |
+            ---submit_and_wait_inner
+               |          
+                --25.56%--submit_and_wait (inlined)
+                          server_write_fragment_with_sum
+                          nvme_put
+                          efs_store_put (inlined)
+                          slot_put (inlined)
+                          slot_main
+                          start_thread
+                          clone3
+
+    23.66%     0.23%  [k] __x64_sys_futex                               -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+               |--14.20%--__futex_abstimed_wait_common
+               |          |          
+               |          |--8.57%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          |          
+               |          |          |--4.53%--writer_thread
+               |          |          |          start_thread
+               |          |          |          clone3
+               |          |          |          
+               |          |           --4.04%--slot_run_locked (inlined)
+               |          |                     slot_handoff (inlined)
+               |          |                     submit_and_wait_inner
+               |          |                     submit_and_wait (inlined)
+               |          |                     server_write_fragment_with_sum
+               |          |                     nvme_put
+               |          |                     efs_store_put (inlined)
+               |          |                     slot_put (inlined)
+               |          |                     slot_main
+               |          |                     start_thread
+               |          |                     clone3
+               |          |          
+               |           --5.63%--pthread_cond_timedwait@@GLIBC_2.3.2
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+               |--7.81%--pthread_cond_signal@@GLIBC_2.3.2
+               |          |          
+               |          |--5.05%--slot_run_locked (inlined)
+               |          |          slot_handoff (inlined)
+               |          |          submit_and_wait_inner
+               |          |          submit_and_wait (inlined)
+               |          |          server_write_fragment_with_sum
+               |          |          nvme_put
+               |          |          efs_store_put (inlined)
+               |          |          slot_put (inlined)
+               |          |          slot_main
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |           --2.76%--writer_thread
+               |                     start_thread
+               |                     clone3
+               |          
+                --1.66%--__GI___lll_lock_wake
+                          __GI___pthread_mutex_unlock_usercnt
+                          |          
+                          |--0.65%--pthread_cond_wait@@GLIBC_2.3.2
+                          |          slot_run_locked (inlined)
+                          |          slot_handoff (inlined)
+                          |          submit_and_wait_inner
+                          |          submit_and_wait (inlined)
+                          |          server_write_fragment_with_sum
+                          |          nvme_put
+                          |          efs_store_put (inlined)
+                          |          slot_put (inlined)
+                          |          slot_main
+                          |          start_thread
+                          |          clone3
+                          |          
+                           --0.56%--writer_thread
+                                     start_thread
+                                     clone3
+
+    23.23%     0.36%  [k] do_futex                                      -      -            
+            |
+            ---__x64_sys_futex
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+               |--13.82%--__futex_abstimed_wait_common
+               |          |          
+               |          |--8.38%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          |          
+               |          |          |--4.48%--writer_thread
+               |          |          |          start_thread
+               |          |          |          clone3
+               |          |          |          
+               |          |           --3.91%--slot_run_locked (inlined)
+               |          |                     slot_handoff (inlined)
+               |          |                     submit_and_wait_inner
+               |          |                     submit_and_wait (inlined)
+               |          |                     server_write_fragment_with_sum
+               |          |                     nvme_put
+               |          |                     efs_store_put (inlined)
+               |          |                     slot_put (inlined)
+               |          |                     slot_main
+               |          |                     start_thread
+               |          |                     clone3
+               |          |          
+               |           --5.43%--pthread_cond_timedwait@@GLIBC_2.3.2
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+               |--7.77%--pthread_cond_signal@@GLIBC_2.3.2
+               |          |          
+               |          |--5.01%--slot_run_locked (inlined)
+               |          |          slot_handoff (inlined)
+               |          |          submit_and_wait_inner
+               |          |          submit_and_wait (inlined)
+               |          |          server_write_fragment_with_sum
+               |          |          nvme_put
+               |          |          efs_store_put (inlined)
+               |          |          slot_put (inlined)
+               |          |          slot_main
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |           --2.76%--writer_thread
+               |                     start_thread
+               |                     clone3
+               |          
+                --1.64%--__GI___lll_lock_wake
+                          __GI___pthread_mutex_unlock_usercnt
+                          |          
+                          |--0.65%--pthread_cond_wait@@GLIBC_2.3.2
+                          |          slot_run_locked (inlined)
+                          |          slot_handoff (inlined)
+                          |          submit_and_wait_inner
+                          |          submit_and_wait (inlined)
+                          |          server_write_fragment_with_sum
+                          |          nvme_put
+                          |          efs_store_put (inlined)
+                          |          slot_put (inlined)
+                          |          slot_main
+                          |          start_thread
+                          |          clone3
+                          |          
+                           --0.55%--writer_thread
+                                     start_thread
+                                     clone3
+
+    22.28%     0.09%  [k] iomap_dio_rw                                  -      -            
+            |
+            ---xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    22.19%     1.31%  [k] __iomap_dio_rw                                -      -            
+            |
+            ---iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    19.51%     0.35%  [.] __futex_abstimed_wait_common                  -      -            
+            |          
+            |--12.37%--pthread_cond_wait@@GLIBC_2.3.2
+            |          |          
+            |          |--6.27%--writer_thread
+            |          |          start_thread
+            |          |          clone3
+            |          |          
+            |           --6.10%--slot_run_locked (inlined)
+            |                     slot_handoff (inlined)
+            |                     submit_and_wait_inner
+            |                     submit_and_wait (inlined)
+            |                     server_write_fragment_with_sum
+            |                     nvme_put
+            |                     efs_store_put (inlined)
+            |                     slot_put (inlined)
+            |                     slot_main
+            |                     start_thread
+            |                     clone3
+            |          
+             --7.14%--pthread_cond_timedwait@@GLIBC_2.3.2
+                       |          
+                        --7.13%--slot_handoff (inlined)
+                                  submit_and_wait_inner
+                                  submit_and_wait (inlined)
+                                  server_write_fragment_with_sum
+                                  nvme_put
+                                  efs_store_put (inlined)
+                                  slot_put (inlined)
+                                  slot_main
+                                  start_thread
+                                  clone3
+
+    18.68%     0.24%  [.] __GI___libc_open                              -      -            
+            |          
+             --18.48%--shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+    17.53%     0.21%  [k] __x64_sys_openat                              -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    17.33%     0.02%  [k] do_sys_openat2                                -      -            
+            |
+            ---__x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    16.02%     0.21%  [k] do_filp_open                                  -      -            
+            |
+            ---do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    15.81%     0.05%  [k] path_openat                                   -      -            
+            |
+            ---do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    15.77%     1.72%  [.] pthread_cond_wait@@GLIBC_2.3.2                -      -            
+            |          
+            |--8.36%--slot_run_locked (inlined)
+            |          slot_handoff (inlined)
+            |          submit_and_wait_inner
+            |          submit_and_wait (inlined)
+            |          server_write_fragment_with_sum
+            |          nvme_put
+            |          efs_store_put (inlined)
+            |          slot_put (inlined)
+            |          slot_main
+            |          start_thread
+            |          clone3
+            |          
+             --7.41%--writer_thread
+                       start_thread
+                       clone3
+
+    15.11%     0.00%  [.] slot_run_locked (inlined)                     -      -            
+            |
+            ---slot_handoff (inlined)
+               submit_and_wait_inner
+               |          
+                --15.08%--submit_and_wait (inlined)
+                          server_write_fragment_with_sum
+                          nvme_put
+                          efs_store_put (inlined)
+                          slot_put (inlined)
+                          slot_main
+                          start_thread
+                          clone3
+
+    14.57%     0.98%  [.] writer_thread                                 -      -            
+            |
+            ---start_thread
+               clone3
+
+    13.90%     0.18%  [k] schedule                                      -      -            
+            |          
+            |--9.53%--futex_do_wait
+            |          __futex_wait
+            |          futex_wait
+            |          do_futex
+            |          __x64_sys_futex
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __futex_abstimed_wait_common
+            |          |          
+            |          |--6.06%--pthread_cond_wait@@GLIBC_2.3.2
+            |          |          |          
+            |          |          |--3.38%--writer_thread
+            |          |          |          start_thread
+            |          |          |          clone3
+            |          |          |          
+            |          |           --2.67%--slot_run_locked (inlined)
+            |          |                     slot_handoff (inlined)
+            |          |                     submit_and_wait_inner
+            |          |                     submit_and_wait (inlined)
+            |          |                     server_write_fragment_with_sum
+            |          |                     nvme_put
+            |          |                     efs_store_put (inlined)
+            |          |                     slot_put (inlined)
+            |          |                     slot_main
+            |          |                     start_thread
+            |          |                     clone3
+            |          |          
+            |           --3.47%--pthread_cond_timedwait@@GLIBC_2.3.2
+            |                     slot_handoff (inlined)
+            |                     submit_and_wait_inner
+            |                     submit_and_wait (inlined)
+            |                     server_write_fragment_with_sum
+            |                     nvme_put
+            |                     efs_store_put (inlined)
+            |                     slot_put (inlined)
+            |                     slot_main
+            |                     start_thread
+            |                     clone3
+            |          
+             --4.37%--schedule_timeout
+                       io_schedule_timeout
+                       __iomap_dio_rw
+                       iomap_dio_rw
+                       xfs_file_dio_write_aligned.constprop.0
+                       xfs_file_write_iter
+                       do_iter_readv_writev
+                       vfs_writev
+                       do_writev
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___writev
+                       writev_all (inlined)
+                       shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+    13.72%     0.32%  [k] __schedule                                    -      -            
+            |
+            ---schedule
+               |          
+               |--9.35%--futex_do_wait
+               |          __futex_wait
+               |          futex_wait
+               |          do_futex
+               |          __x64_sys_futex
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __futex_abstimed_wait_common
+               |          |          
+               |          |--5.88%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          |          
+               |          |          |--3.37%--writer_thread
+               |          |          |          start_thread
+               |          |          |          clone3
+               |          |          |          
+               |          |           --2.51%--slot_run_locked (inlined)
+               |          |                     slot_handoff (inlined)
+               |          |                     submit_and_wait_inner
+               |          |                     submit_and_wait (inlined)
+               |          |                     server_write_fragment_with_sum
+               |          |                     nvme_put
+               |          |                     efs_store_put (inlined)
+               |          |                     slot_put (inlined)
+               |          |                     slot_main
+               |          |                     start_thread
+               |          |                     clone3
+               |          |          
+               |           --3.47%--pthread_cond_timedwait@@GLIBC_2.3.2
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --4.37%--schedule_timeout
+                          io_schedule_timeout
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          xfs_file_dio_write_aligned.constprop.0
+                          xfs_file_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___writev
+                          writev_all (inlined)
+                          shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+    13.72%     0.65%  [k] futex_wait                                    -      -            
+            |
+            ---do_futex
+               __x64_sys_futex
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __futex_abstimed_wait_common
+               |          
+               |--8.28%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          
+               |          |--4.48%--writer_thread
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |           --3.81%--slot_run_locked (inlined)
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --5.43%--pthread_cond_timedwait@@GLIBC_2.3.2
+                          slot_handoff (inlined)
+                          submit_and_wait_inner
+                          submit_and_wait (inlined)
+                          server_write_fragment_with_sum
+                          nvme_put
+                          efs_store_put (inlined)
+                          slot_put (inlined)
+                          slot_main
+                          start_thread
+                          clone3
+
+    12.52%     0.34%  [k] __futex_wait                                  -      -            
+            |
+            ---futex_wait
+               do_futex
+               __x64_sys_futex
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __futex_abstimed_wait_common
+               |          
+               |--7.79%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          
+               |          |--4.21%--writer_thread
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |           --3.58%--slot_run_locked (inlined)
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --4.73%--pthread_cond_timedwait@@GLIBC_2.3.2
+                          slot_handoff (inlined)
+                          submit_and_wait_inner
+                          submit_and_wait (inlined)
+                          server_write_fragment_with_sum
+                          nvme_put
+                          efs_store_put (inlined)
+                          slot_put (inlined)
+                          slot_main
+                          start_thread
+                          clone3
+
+    10.67%     0.17%  [k] iomap_dio_bio_iter                            -      -            
+            |
+            ---__iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+    10.37%     0.43%  [k] futex_do_wait                                 -      -            
+            |
+            ---__futex_wait
+               futex_wait
+               do_futex
+               __x64_sys_futex
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __futex_abstimed_wait_common
+               |          
+               |--6.46%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          
+               |          |--3.69%--writer_thread
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |           --2.77%--slot_run_locked (inlined)
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --3.91%--pthread_cond_timedwait@@GLIBC_2.3.2
+                          slot_handoff (inlined)
+                          submit_and_wait_inner
+                          submit_and_wait (inlined)
+                          server_write_fragment_with_sum
+                          nvme_put
+                          efs_store_put (inlined)
+                          slot_put (inlined)
+                          slot_main
+                          start_thread
+                          clone3
+
+    10.10%     0.82%  [k] link_path_walk.part.0.constprop.0             -      -            
+            |
+            ---path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     9.91%     1.11%  [.] pthread_cond_signal@@GLIBC_2.3.2              -      -            
+            |          
+            |--6.49%--slot_run_locked (inlined)
+            |          slot_handoff (inlined)
+            |          submit_and_wait_inner
+            |          |          
+            |           --6.47%--submit_and_wait (inlined)
+            |                     server_write_fragment_with_sum
+            |                     nvme_put
+            |                     efs_store_put (inlined)
+            |                     slot_put (inlined)
+            |                     slot_main
+            |                     start_thread
+            |                     clone3
+            |          
+             --3.30%--writer_thread
+                       start_thread
+                       clone3
+
+     9.15%     1.47%  [k] futex_wake                                    -      -            
+            |
+            ---do_futex
+               __x64_sys_futex
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+               |--7.68%--pthread_cond_signal@@GLIBC_2.3.2
+               |          |          
+               |          |--4.97%--slot_run_locked (inlined)
+               |          |          slot_handoff (inlined)
+               |          |          submit_and_wait_inner
+               |          |          submit_and_wait (inlined)
+               |          |          server_write_fragment_with_sum
+               |          |          nvme_put
+               |          |          efs_store_put (inlined)
+               |          |          slot_put (inlined)
+               |          |          slot_main
+               |          |          start_thread
+               |          |          clone3
+               |          |          
+               |           --2.71%--writer_thread
+               |                     start_thread
+               |                     clone3
+               |          
+                --1.47%--__GI___lll_lock_wake
+                          __GI___pthread_mutex_unlock_usercnt
+                          |          
+                           --0.61%--pthread_cond_wait@@GLIBC_2.3.2
+                                     slot_run_locked (inlined)
+                                     slot_handoff (inlined)
+                                     submit_and_wait_inner
+                                     submit_and_wait (inlined)
+                                     server_write_fragment_with_sum
+                                     nvme_put
+                                     efs_store_put (inlined)
+                                     slot_put (inlined)
+                                     slot_main
+                                     start_thread
+                                     clone3
+
+     8.10%     0.60%  [.] pthread_cond_timedwait@@GLIBC_2.3.2           -      -            
+            |          
+             --8.09%--slot_handoff (inlined)
+                       submit_and_wait_inner
+                       submit_and_wait (inlined)
+                       server_write_fragment_with_sum
+                       nvme_put
+                       efs_store_put (inlined)
+                       slot_put (inlined)
+                       slot_main
+                       start_thread
+                       clone3
+
+     7.59%     0.38%  [k] try_to_block_task.constprop.0.isra.0          -      -            
+            |
+            ---__schedule
+               schedule
+               |          
+               |--5.14%--futex_do_wait
+               |          __futex_wait
+               |          futex_wait
+               |          do_futex
+               |          __x64_sys_futex
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __futex_abstimed_wait_common
+               |          |          
+               |          |--3.15%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          |          
+               |          |          |--1.96%--writer_thread
+               |          |          |          start_thread
+               |          |          |          clone3
+               |          |          |          
+               |          |           --1.18%--slot_run_locked (inlined)
+               |          |                     slot_handoff (inlined)
+               |          |                     submit_and_wait_inner
+               |          |                     submit_and_wait (inlined)
+               |          |                     server_write_fragment_with_sum
+               |          |                     nvme_put
+               |          |                     efs_store_put (inlined)
+               |          |                     slot_put (inlined)
+               |          |                     slot_main
+               |          |                     start_thread
+               |          |                     clone3
+               |          |          
+               |           --1.99%--pthread_cond_timedwait@@GLIBC_2.3.2
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --2.45%--schedule_timeout
+                          io_schedule_timeout
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          xfs_file_dio_write_aligned.constprop.0
+                          xfs_file_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___writev
+                          writev_all (inlined)
+                          shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+     7.13%     0.11%  [k] dequeue_task_fair                             -      -            
+            |
+            ---try_to_block_task.constprop.0.isra.0
+               __schedule
+               schedule
+               |          
+               |--4.94%--futex_do_wait
+               |          __futex_wait
+               |          futex_wait
+               |          do_futex
+               |          __x64_sys_futex
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __futex_abstimed_wait_common
+               |          |          
+               |          |--3.09%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          |          
+               |          |          |--1.91%--writer_thread
+               |          |          |          start_thread
+               |          |          |          clone3
+               |          |          |          
+               |          |           --1.18%--slot_run_locked (inlined)
+               |          |                     slot_handoff (inlined)
+               |          |                     submit_and_wait_inner
+               |          |                     submit_and_wait (inlined)
+               |          |                     server_write_fragment_with_sum
+               |          |                     nvme_put
+               |          |                     efs_store_put (inlined)
+               |          |                     slot_put (inlined)
+               |          |                     slot_main
+               |          |                     start_thread
+               |          |                     clone3
+               |          |          
+               |           --1.85%--pthread_cond_timedwait@@GLIBC_2.3.2
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --2.19%--schedule_timeout
+                          io_schedule_timeout
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          xfs_file_dio_write_aligned.constprop.0
+                          xfs_file_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___writev
+                          writev_all (inlined)
+                          shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+     6.95%     0.89%  [k] dequeue_entities                              -      -            
+            |
+            ---dequeue_task_fair
+               try_to_block_task.constprop.0.isra.0
+               __schedule
+               schedule
+               |          
+               |--4.87%--futex_do_wait
+               |          __futex_wait
+               |          futex_wait
+               |          do_futex
+               |          __x64_sys_futex
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __futex_abstimed_wait_common
+               |          |          
+               |          |--3.08%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          |          
+               |          |          |--1.91%--writer_thread
+               |          |          |          start_thread
+               |          |          |          clone3
+               |          |          |          
+               |          |           --1.17%--slot_run_locked (inlined)
+               |          |                     slot_handoff (inlined)
+               |          |                     submit_and_wait_inner
+               |          |                     submit_and_wait (inlined)
+               |          |                     server_write_fragment_with_sum
+               |          |                     nvme_put
+               |          |                     efs_store_put (inlined)
+               |          |                     slot_put (inlined)
+               |          |                     slot_main
+               |          |                     start_thread
+               |          |                     clone3
+               |          |          
+               |           --1.79%--pthread_cond_timedwait@@GLIBC_2.3.2
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --2.08%--schedule_timeout
+                          io_schedule_timeout
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          xfs_file_dio_write_aligned.constprop.0
+                          xfs_file_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___writev
+                          writev_all (inlined)
+                          shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+     6.15%     0.03%  [k] bio_iov_iter_get_pages                        -      -            
+            |
+            ---iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     6.07%     0.54%  [k] __bio_iov_iter_get_pages                      -      -            
+            |
+            ---bio_iov_iter_get_pages
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     6.04%     1.00%  [k] dequeue_entity                                -      -            
+            |
+            ---dequeue_entities
+               dequeue_task_fair
+               try_to_block_task.constprop.0.isra.0
+               __schedule
+               schedule
+               |          
+               |--4.29%--futex_do_wait
+               |          __futex_wait
+               |          futex_wait
+               |          do_futex
+               |          __x64_sys_futex
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __futex_abstimed_wait_common
+               |          |          
+               |          |--2.63%--pthread_cond_wait@@GLIBC_2.3.2
+               |          |          |          
+               |          |          |--1.63%--writer_thread
+               |          |          |          start_thread
+               |          |          |          clone3
+               |          |          |          
+               |          |           --1.01%--slot_run_locked (inlined)
+               |          |                     slot_handoff (inlined)
+               |          |                     submit_and_wait_inner
+               |          |                     submit_and_wait (inlined)
+               |          |                     server_write_fragment_with_sum
+               |          |                     nvme_put
+               |          |                     efs_store_put (inlined)
+               |          |                     slot_put (inlined)
+               |          |                     slot_main
+               |          |                     start_thread
+               |          |                     clone3
+               |          |          
+               |           --1.66%--pthread_cond_timedwait@@GLIBC_2.3.2
+               |                     slot_handoff (inlined)
+               |                     submit_and_wait_inner
+               |                     submit_and_wait (inlined)
+               |                     server_write_fragment_with_sum
+               |                     nvme_put
+               |                     efs_store_put (inlined)
+               |                     slot_put (inlined)
+               |                     slot_main
+               |                     start_thread
+               |                     clone3
+               |          
+                --1.75%--schedule_timeout
+                          io_schedule_timeout
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          xfs_file_dio_write_aligned.constprop.0
+                          xfs_file_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___writev
+                          writev_all (inlined)
+                          shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+     5.17%     0.00%  [k] iov_iter_extract_pages                        -      -            
+            |
+            ---__bio_iov_iter_get_pages
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     5.10%     0.38%  [k] gup_fast_fallback                             -      -            
+            |
+            ---iov_iter_extract_pages
+               __bio_iov_iter_get_pages
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.91%     0.02%  [k] io_schedule_timeout                           -      -            
+            |
+            ---__iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.88%     0.09%  [k] schedule_timeout                              -      -            
+            |
+            ---io_schedule_timeout
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.71%     0.00%  [k] gup_fast_pgd_range                            -      -            
+            |
+            ---gup_fast_fallback
+               iov_iter_extract_pages
+               __bio_iov_iter_get_pages
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.71%     1.30%  [k] gup_fast_pte_range                            -      -            
+            |
+            ---gup_fast_pgd_range
+               gup_fast_fallback
+               iov_iter_extract_pages
+               __bio_iov_iter_get_pages
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.67%     0.12%  [k] xfs_file_write_checks.constprop.0             -      -            
+            |
+            ---xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.58%     0.00%  [.] finish_direct_candidate                       -      -            
+            |
+            ---shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.49%     0.00%  [k] kiocb_modified                                -      -            
+            |
+            ---xfs_file_write_checks.constprop.0
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.33%     0.05%  [k] xfs_vn_update_time                            -      -            
+            |
+            ---kiocb_modified
+               xfs_file_write_checks.constprop.0
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     4.25%     1.07%  [.] __GI___pthread_mutex_unlock_usercnt           -      -            
+            |          
+            |--1.63%--writer_thread
+            |          start_thread
+            |          clone3
+            |          
+            |--1.28%--slot_handoff (inlined)
+            |          submit_and_wait_inner
+            |          submit_and_wait (inlined)
+            |          server_write_fragment_with_sum
+            |          nvme_put
+            |          efs_store_put (inlined)
+            |          slot_put (inlined)
+            |          slot_main
+            |          start_thread
+            |          clone3
+            |          
+             --1.26%--pthread_cond_wait@@GLIBC_2.3.2
+                       |          
+                        --1.16%--slot_run_locked (inlined)
+                                  slot_handoff (inlined)
+                                  submit_and_wait_inner
+                                  submit_and_wait (inlined)
+                                  server_write_fragment_with_sum
+                                  nvme_put
+                                  efs_store_put (inlined)
+                                  slot_put (inlined)
+                                  slot_main
+                                  start_thread
+                                  clone3
+
+     4.06%     0.12%  [k] lookup_fast                                   -      -            
+            |          
+            |--3.22%--walk_component
+            |          link_path_walk.part.0.constprop.0
+            |          path_openat
+            |          do_filp_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __GI___libc_open
+            |          shard_io_thread.part.0.constprop.0
+            |          shard_io_thread (inlined)
+            |          server_write_fragment_to_path.isra.0
+            |          
+             --0.84%--open_last_lookups
+                       path_openat
+                       do_filp_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___libc_open
+                       shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+     3.79%     1.62%  [k] __d_lookup                                    -      -            
+            |
+            ---lookup_fast
+               |          
+               |--2.95%--walk_component
+               |          link_path_walk.part.0.constprop.0
+               |          path_openat
+               |          do_filp_open
+               |          do_sys_openat2
+               |          __x64_sys_openat
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __GI___libc_open
+               |          shard_io_thread.part.0.constprop.0
+               |          shard_io_thread (inlined)
+               |          server_write_fragment_to_path.isra.0
+               |          
+                --0.84%--open_last_lookups
+                          path_openat
+                          do_filp_open
+                          do_sys_openat2
+                          __x64_sys_openat
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___libc_open
+                          shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+     3.78%     0.24%  [.] __GI___lll_lock_wake                          -      -            
+            |          
+             --3.18%--__GI___pthread_mutex_unlock_usercnt
+                       |          
+                       |--1.16%--writer_thread
+                       |          start_thread
+                       |          clone3
+                       |          
+                       |--1.05%--pthread_cond_wait@@GLIBC_2.3.2
+                       |          slot_run_locked (inlined)
+                       |          slot_handoff (inlined)
+                       |          submit_and_wait_inner
+                       |          submit_and_wait (inlined)
+                       |          server_write_fragment_with_sum
+                       |          nvme_put
+                       |          efs_store_put (inlined)
+                       |          slot_put (inlined)
+                       |          slot_main
+                       |          start_thread
+                       |          clone3
+                       |          
+                        --0.96%--slot_handoff (inlined)
+                                  submit_and_wait_inner
+                                  submit_and_wait (inlined)
+                                  server_write_fragment_with_sum
+                                  nvme_put
+                                  efs_store_put (inlined)
+                                  slot_put (inlined)
+                                  slot_main
+                                  start_thread
+                                  clone3
+
+     3.61%     0.10%  [k] wake_up_q                                     -      -            
+            |
+            ---futex_wake
+               do_futex
+               __x64_sys_futex
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --3.57%--pthread_cond_signal@@GLIBC_2.3.2
+                          |          
+                          |--2.34%--slot_run_locked (inlined)
+                          |          slot_handoff (inlined)
+                          |          submit_and_wait_inner
+                          |          submit_and_wait (inlined)
+                          |          server_write_fragment_with_sum
+                          |          nvme_put
+                          |          efs_store_put (inlined)
+                          |          slot_put (inlined)
+                          |          slot_main
+                          |          start_thread
+                          |          clone3
+                          |          
+                           --1.23%--writer_thread
+                                     start_thread
+                                     clone3
+
+     3.61%     0.45%  [k] syscall_exit_to_user_mode                     -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --2.38%--__futex_abstimed_wait_common
+                          |          
+                          |--1.69%--pthread_cond_wait@@GLIBC_2.3.2
+                          |          |          
+                          |          |--1.08%--slot_run_locked (inlined)
+                          |          |          slot_handoff (inlined)
+                          |          |          submit_and_wait_inner
+                          |          |          submit_and_wait (inlined)
+                          |          |          server_write_fragment_with_sum
+                          |          |          nvme_put
+                          |          |          efs_store_put (inlined)
+                          |          |          slot_put (inlined)
+                          |          |          slot_main
+                          |          |          start_thread
+                          |          |          clone3
+                          |          |          
+                          |           --0.61%--writer_thread
+                          |                     start_thread
+                          |                     clone3
+                          |          
+                           --0.69%--pthread_cond_timedwait@@GLIBC_2.3.2
+                                     slot_handoff (inlined)
+                                     submit_and_wait_inner
+                                     submit_and_wait (inlined)
+                                     server_write_fragment_with_sum
+                                     nvme_put
+                                     efs_store_put (inlined)
+                                     slot_put (inlined)
+                                     slot_main
+                                     start_thread
+                                     clone3
+
+     3.60%     0.11%  [k] blk_finish_plug                               -      -            
+            |
+            ---__iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.50%     0.42%  [k] try_to_wake_up                                -      -            
+            |
+            ---wake_up_q
+               futex_wake
+               do_futex
+               __x64_sys_futex
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               pthread_cond_signal@@GLIBC_2.3.2
+               |          
+               |--2.28%--slot_run_locked (inlined)
+               |          slot_handoff (inlined)
+               |          submit_and_wait_inner
+               |          submit_and_wait (inlined)
+               |          server_write_fragment_with_sum
+               |          nvme_put
+               |          efs_store_put (inlined)
+               |          slot_put (inlined)
+               |          slot_main
+               |          start_thread
+               |          clone3
+               |          
+                --1.22%--writer_thread
+                          start_thread
+                          clone3
+
+     3.49%     0.08%  [k] __blk_flush_plug                              -      -            
+            |
+            ---blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.44%     3.44%  [k] _raw_spin_lock                                -      -            
+            |          
+             --1.81%--__d_lookup
+                       lookup_fast
+                       |          
+                        --1.68%--walk_component
+                                  link_path_walk.part.0.constprop.0
+                                  path_openat
+                                  do_filp_open
+                                  do_sys_openat2
+                                  __x64_sys_openat
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  __GI___libc_open
+                                  shard_io_thread.part.0.constprop.0
+                                  shard_io_thread (inlined)
+                                  server_write_fragment_to_path.isra.0
+
+     3.44%     0.19%  [k] walk_component                                -      -            
+            |
+            ---link_path_walk.part.0.constprop.0
+               path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.41%     0.00%  [k] blk_mq_flush_plug_list                        -      -            
+            |
+            ---__blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.41%     0.00%  [k] blk_mq_dispatch_queue_requests                -      -            
+            |
+            ---blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.41%     0.27%  [k] nvme_queue_rqs                                -      -            
+            |
+            ---blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.28%     0.21%  [k] __submit_bio_noacct                           -      -            
+            |
+            ---iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.10%     0.00%  [k] do_open                                       -      -            
+            |
+            ---path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.10%     0.00%  [k] nvme_prep_rq.part.0                           -      -            
+            |
+            ---nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.07%     0.24%  [k] __submit_bio                                  -      -            
+            |
+            ---__submit_bio_noacct
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     3.01%     0.45%  [k] step_into                                     -      -            
+            |          
+             --2.94%--link_path_walk.part.0.constprop.0
+                       path_openat
+                       do_filp_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___libc_open
+                       shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+     2.93%     0.15%  [k] nvme_map_data                                 -      -            
+            |
+            ---nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     2.90%     1.14%  [k] try_grab_folio_fast                           -      -            
+            |
+            ---gup_fast_pte_range
+               gup_fast_pgd_range
+               gup_fast_fallback
+               iov_iter_extract_pages
+               __bio_iov_iter_get_pages
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     2.83%     0.14%  [.] __close                                       -      -            
+            |
+            ---finish_direct_candidate
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     2.77%     0.15%  [k] security_inode_permission                     -      -            
+            |          
+             --2.44%--link_path_walk.part.0.constprop.0
+                       path_openat
+                       do_filp_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___libc_open
+                       shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+     2.48%     0.56%  [k] selinux_inode_permission                      -      -            
+            |
+            ---security_inode_permission
+               |          
+                --2.18%--link_path_walk.part.0.constprop.0
+                          path_openat
+                          do_filp_open
+                          do_sys_openat2
+                          __x64_sys_openat
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __GI___libc_open
+                          shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+     2.26%     0.12%  [k] __x64_sys_close                               -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __close
+               finish_direct_candidate
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     2.01%     0.00%  [k] xfs_trans_commit                              -      -            
+            |
+            ---xfs_vn_update_time
+               kiocb_modified
+               xfs_file_write_checks.constprop.0
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+     2.01%     0.16%  [k] __xfs_trans_commit                            -      -            
+            |
+            ---xfs_trans_commit
+               xfs_vn_update_time
+               kiocb_modified
+               xfs_file_write_checks.constprop.0
+               xfs_file_dio_write_aligned.constprop.0
+               xfs_file_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___writev
+               writev_all (inlined)
+               shard_io_thread.part.0.constprop.0
+               shard_io_thread (inlined)
+               server_write_fragment_to_path.isra.0
+
+
+
+#
+# (Tip: To collect Processor Trace with samples use perf record -e '{intel_pt//,cycles}' ; perf script --call-trace or --insn-trace --xed -F +ipc (remove --xed if no xed))
+#

@@ -1,0 +1,127 @@
+ Percent |	Source code & Disassembly of efs-bench for cycles (7 samples, percent: local period)
+----------------------------------------------------------------------------------------------------
+         : 0      0x416350 <run_job>:
+   12.43 :   416350:        pushq   %rbp
+    0.00 :   416351:        movq    %rsp, %rbp
+    0.00 :   416354:        pushq   %r15
+    0.00 :   416356:        pushq   %r14
+    0.00 :   416358:        pushq   %r13
+    0.00 :   41635a:        pushq   %r12
+    0.00 :   41635c:        movq    %rdi, %r12
+    0.00 :   41635f:        pushq   %r10
+    0.00 :   416361:        pushq   %rbx
+    0.00 :   416362:        subq    $0x30, %rsp
+    0.00 :   416366:        movl    0x50(%rdi), %esi
+    0.00 :   416369:        testl   %esi, %esi
+    0.00 :   41636b:        jne     0x4164f0 <run_job+0x1a0>
+    0.00 :   416371:        movq    $-0x700c8, %rax
+    0.00 :   416378:        cmpl    $0x3, (%r12)
+    0.00 :   41637d:        movl    %fs:-0x700bc, %r15d
+    0.00 :   416386:        movl    %fs:-0x72118, %r13d
+    0.00 :   41638f:        movq    %fs:(%rax), %r14
+    0.00 :   416393:        je      0x416490 <run_job+0x140>
+    0.00 :   416399:        movl    $0x0, %fs:-0x700bc
+    0.00 :   4163a5:        movl    %r13d, %eax
+    0.00 :   4163a8:        testl   %eax, %eax
+    0.00 :   4163aa:        js      0x416520 <run_job+0x1d0>
+    0.00 :   4163b0:        movq    0x30(%r12), %rax
+    0.00 :   4163b5:        movq    $-0x700c8, %rbx
+    0.00 :   4163bc:        movq    %rax, %fs:(%rbx)
+    0.00 :   4163c0:        callq   0x417560 <efs_iostats_now_us>
+    0.00 :   4163c5:        cmpl    $0x3, (%r12)
+    0.00 :   4163ca:        movq    %rax, -0x58(%rbp)
+    0.00 :   4163ce:        jne     0x416560 <run_job+0x210>
+    0.00 :   4163d4:        movq    0x48(%r12), %rax
+    0.00 :   4163d9:        movl    0x40(%r12), %r11d
+    0.00 :   4163de:        movq    0x38(%r12), %r9
+    0.00 :   4163e3:        movl    0x24(%r12), %r8d
+    0.00 :   4163e8:        movl    0x20(%r12), %ecx
+    0.00 :   4163ed:        movq    0x18(%r12), %rdx
+    0.00 :   4163f2:        movq    0x10(%r12), %rsi
+    0.00 :   4163f7:        movq    0x8(%r12), %rdi
+    0.00 :   4163fc:        testq   %rax, %rax
+    0.00 :   4163ff:        je      0x416510 <run_job+0x1c0>
+    0.00 :   416405:        pushq   %rax
+    0.00 :   416406:        pushq   %r11
+    0.00 :   416408:        callq   0x4156c0 <server_write_fragment_with_sum_sync>
+    0.00 :   41640d:        popq    %rdx
+   28.26 :   41640e:        movl    %eax, %ebx
+    0.00 :   416410:        popq    %rcx
+    0.00 :   416411:        xorl    %ecx, %ecx
+    0.00 :   416413:        testl   %eax, %eax
+    0.00 :   416415:        setne   %cl
+    0.00 :   416418:        movl    %ecx, -0x5c(%rbp)
+   24.16 :   41641b:        callq   0x417560 <efs_iostats_now_us>
+    0.00 :   416420:        movq    -0x58(%rbp), %rdx
+    0.00 :   416424:        movl    0x40(%r12), %esi
+    0.00 :   416429:        movl    $0x2, %edi
+    0.00 :   41642e:        movl    -0x5c(%rbp), %ecx
+    0.00 :   416431:        subq    %rdx, %rax
+    0.00 :   416434:        movq    %rax, %rdx
+    0.00 :   416437:        callq   0x4175a0 <efs_iostats_add>
+    0.00 :   41643c:        movl    0x50(%r12), %eax
+    0.00 :   416441:        testl   %eax, %eax
+    0.00 :   416443:        jne     0x416500 <run_job+0x1b0>
+    0.00 :   416449:        movl    %fs:-0x72118, %eax
+    0.00 :   416451:        movl    %r15d, %fs:-0x700bc
+    0.00 :   41645a:        movl    %r13d, %fs:-0x72118
+    0.00 :   416463:        movl    %eax, %fs:-0x72120
+    0.00 :   41646b:        movq    $-0x700c8, %rax
+    0.00 :   416472:        movq    %r14, %fs:(%rax)
+    0.00 :   416476:        leaq    -0x30(%rbp), %rsp
+    0.00 :   41647a:        movl    %ebx, %eax
+    0.00 :   41647c:        popq    %rbx
+    0.00 :   41647d:        popq    %r10
+    0.00 :   41647f:        popq    %r12
+    0.00 :   416481:        popq    %r13
+    0.00 :   416483:        popq    %r14
+    0.00 :   416485:        popq    %r15
+    0.00 :   416487:        popq    %rbp
+    0.00 :   416488:        retq
+    0.00 :   416489:        nopl    (%rax)
+    0.00 :   416490:        cmpq    $0x0, 0x48(%r12)
+    0.00 :   416496:        je      0x416399 <run_job+0x49>
+    0.00 :   41649c:        movl    0x40(%r12), %edi
+    0.00 :   4164a1:        testl   %edi, %edi
+    0.00 :   4164a3:        je      0x416399 <run_job+0x49>
+    0.00 :   4164a9:        leaq    -0x50(%rbp), %rsi
+    0.00 :   4164ad:        callq   0x4362f0 <efs_hash_zero_fragment_len>
+    0.00 :   4164b2:        movq    0x48(%r12), %rax
+    0.00 :   4164b7:        vmovdqu8        (%rax), %ymm0
+   35.14 :   4164bd:        xorl    %eax, %eax
+    0.00 :   4164bf:        vpxorq  -0x50(%rbp), %ymm0, %ymm0
+    0.00 :   4164c9:        vptest  %ymm0, %ymm0
+    0.00 :   4164ce:        sete    %al
+    0.00 :   4164d1:        movl    %eax, %fs:-0x700bc
+    0.00 :   4164d9:        movl    %fs:-0x72118, %eax
+    0.00 :   4164e1:        vzeroupper
+    0.00 :   4164e4:        jmp     0x4163a8 <run_job+0x58>
+    0.00 :   4164e9:        nopl    (%rax)
+    0.00 :   4164f0:        callq   0x417560 <efs_iostats_now_us>
+    0.00 :   4164f5:        movq    %rax, 0x68(%r12)
+    0.00 :   4164fa:        jmp     0x416371 <run_job+0x21>
+    0.00 :   4164ff:        nop
+    0.00 :   416500:        callq   0x417560 <efs_iostats_now_us>
+    0.00 :   416505:        movq    %rax, 0x70(%r12)
+    0.00 :   41650a:        jmp     0x416449 <run_job+0xf9>
+    0.00 :   41650f:        nop
+    0.00 :   416510:        subq    $0x8, %rsp
+    0.00 :   416514:        pushq   %r11
+    0.00 :   416516:        callq   0x414e00 <server_write_fragment_sync>
+    0.00 :   41651b:        jmp     0x41640d <run_job+0xbd>
+    0.00 :   416520:        movl    0x20(%r12), %ecx
+    0.00 :   416525:        movq    0x18(%r12), %rdx
+    0.00 :   41652a:        movq    0x10(%r12), %rsi
+    0.00 :   41652f:        movq    0x8(%r12), %rdi
+    0.00 :   416534:        movl    0x24(%r12), %r8d
+    0.00 :   416539:        callq   0x411e00 <server_find_fragment_root>
+    0.00 :   41653e:        movq    %r12, %rdi
+    0.00 :   416541:        movl    %eax, %esi
+    0.00 :   416543:        callq   0x416200 <pick_write_path>
+    0.00 :   416548:        movl    %eax, %fs:-0x72118
+    0.00 :   416550:        vzeroupper
+    0.00 :   416553:        jmp     0x4163b0 <run_job+0x60>
+    0.00 :   416558:        nopl    (%rax,%rax)
+    0.00 :   416560:        movl    $0x1, %ecx
+    0.00 :   416565:        movl    $0xfffffffb, %ebx
+    0.00 :   41656a:        jmp     0x416418 <run_job+0xc8>

@@ -1,0 +1,26 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles'
+# Event count (approx.): 13604041812
+#
+# Overhead      Pid:Command    Symbol                                         IPC   [IPC Coverage]
+# ........  .................  .............................................  ....................
+#
+     0.92%  3861415:efs-bench  [.] __GI___pthread_enable_asynccancel          -      -            
+     0.77%  3861417:efs-bench  [k] __d_lookup_rcu                             -      -            
+     0.71%  3861416:efs-bench  [k] _raw_spin_lock                             -      -            
+     0.67%  3861415:efs-bench  [k] blk_map_iter_next                          -      -            
+     0.60%  3861415:efs-bench  [k] try_get_folio                              -      -            
+     0.58%  3861414:efs-bench  [k] _find_next_zero_bit                        -      -            
+     0.55%  3861415:efs-bench  [k] __inode_security_revalidate                -      -            
+     0.54%  3861416:efs-bench  [k] __d_lookup_rcu                             -      -            
+     0.51%  3861414:efs-bench  [k] __iomap_dio_rw                             -      -            
+
+
+#
+# (Tip: To set sampling period of individual events use perf record -e cpu/cpu-cycles,period=100001/,cpu/branches,period=10001/ ...)
+#

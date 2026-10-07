@@ -1,0 +1,4 @@
+2632931 efsd            /data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --no-direct-io
+2633051 efsd            /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --no-direct-io --join 127.0.0.1:17432
+2633074 efsd            /data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --no-direct-io --join 127.0.0.1:17432
+2633112 efsd            /data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --no-direct-io --join 127.0.0.1:17432

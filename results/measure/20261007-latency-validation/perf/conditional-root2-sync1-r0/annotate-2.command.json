@@ -1,0 +1,10 @@
+[
+  "perf",
+  "annotate",
+  "-i",
+  "/tmp/efs-nuc-latency-20261007/perf/conditional-root2-sync1-r0/perf.data",
+  "--stdio",
+  "--source",
+  "--symbol",
+  "slot_main"
+]

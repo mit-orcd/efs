@@ -1,5 +1,7 @@
 # Benchmark-only synchronous writes — Oct 7
 
+**Measurement caveat (Oct 7):** these short bounded-write runs mixed initial file creation and replacement. Per-run p99 averages below are historical summaries, not pooled p99. The [corrected latency study](../20261007-latency-validation/SUMMARY.md) separates population from timing and retains every observation. Do not use these older tail figures as steady-state acceptance evidence.
+
 `efs-bench --bench data --sync` opens fragment files with O_SYNC. The profiler
 passes it via `--data-sync` and labels synchronous cases. Production store
 objects are compiled without EFS_BENCH_BUILD and ignore this option/field;

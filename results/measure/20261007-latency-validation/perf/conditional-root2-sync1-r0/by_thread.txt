@@ -1,0 +1,24 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 870  of event 'cycles'
+# Event count (approx.): 3629072894
+#
+# Overhead      Pid:Command    Symbol                                            IPC   [IPC Coverage]
+# ........  .................  ................................................  ....................
+#
+     1.03%  3867862:efs-bench  [k] _raw_spin_lock                                -      -            
+     0.77%  3867860:efs-bench  [k] sched_balance_update_blocked_averages         -      -            
+     0.70%  3867859:efs-bench  [k] sched_balance_newidle                         -      -            
+     0.70%  3867860:efs-bench  [k] _raw_spin_lock                                -      -            
+     0.67%  3867861:efs-bench  [k] try_grab_folio_fast                           -      -            
+     0.58%  3867860:efs-bench  [.] server_write_fragment_with_sum_sync           -      -            
+     0.55%  3867860:efs-bench  [k] update_curr                                   -      -            
+
+
+#
+# (Tip: Save output of perf stat using: perf stat record <target workload>)
+#

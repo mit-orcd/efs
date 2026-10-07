@@ -1,0 +1,37 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 12K of event 'cycles'
+# Event count (approx.): 114939511227
+#
+# Overhead      Pid:Command    Symbol                                               IPC   [IPC Coverage]
+# ........  .................  ...................................................  ....................
+#
+     1.43%  3857018:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     1.41%  3857017:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     1.33%  3857017:efs-bench  [k] xfs_extent_busy_trim                             -      -            
+     1.25%  3857019:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     1.23%  3857020:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     1.21%  3857020:efs-bench  [k] xfs_extent_busy_trim                             -      -            
+     1.10%  3857018:efs-bench  [k] xfs_extent_busy_trim                             -      -            
+     1.08%  3857019:efs-bench  [k] xfs_extent_busy_trim                             -      -            
+     0.93%  3857020:efs-bench  [k] __memmove                                        -      -            
+     0.89%  3857019:efs-bench  [k] __memmove                                        -      -            
+     0.77%  3857020:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.76%  3857019:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.73%  3857018:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.73%  3857017:efs-bench  [k] __memmove                                        -      -            
+     0.68%  3857018:efs-bench  [k] __memmove                                        -      -            
+     0.64%  3857017:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.58%  3857017:efs-bench  [k] __memcpy                                         -      -            
+     0.57%  3857019:efs-bench  [k] xfs_rmapbt_init_high_key_from_rec                -      -            
+     0.52%  3857018:efs-bench  [k] xfs_rmapbt_init_high_key_from_rec                -      -            
+     0.50%  3857018:efs-bench  [k] __memcpy                                         -      -            
+
+
+#
+# (Tip: Show current config key-value pairs: perf config --list)
+#

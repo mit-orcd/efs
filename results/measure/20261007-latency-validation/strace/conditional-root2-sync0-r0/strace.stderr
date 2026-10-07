@@ -1,0 +1,3 @@
+store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+BENCH_PHASE begin
+BENCH_PHASE end

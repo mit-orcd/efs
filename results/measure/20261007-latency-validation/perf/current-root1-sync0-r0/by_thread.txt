@@ -1,0 +1,35 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 3K of event 'cycles'
+# Event count (approx.): 38576551513
+#
+# Overhead      Pid:Command    Symbol                                               IPC   [IPC Coverage]
+# ........  .................  ...................................................  ....................
+#
+     1.91%  3852653:efs-bench  [k] xfs_extent_busy_trim                             -      -            
+     1.62%  3852652:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     1.61%  3852653:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     1.53%  3852655:efs-bench  [k] xfs_extent_busy_trim                             -      -            
+     1.52%  3852652:efs-bench  [k] xfs_extent_busy_trim                             -      -            
+     1.43%  3852655:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     1.26%  3852654:efs-bench  [k] xfs_extent_busy_trim                             -      -            
+     1.24%  3852654:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     1.09%  3852653:efs-bench  [k] __memmove                                        -      -            
+     1.05%  3852654:efs-bench  [k] __memmove                                        -      -            
+     0.99%  3852655:efs-bench  [k] __memmove                                        -      -            
+     0.99%  3852652:efs-bench  [k] __memmove                                        -      -            
+     0.78%  3852655:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.76%  3852653:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.64%  3852652:efs-bench  [k] xfs_rmapbt_init_high_key_from_rec                -      -            
+     0.54%  3852652:efs-bench  [k] xfs_btree_rec_offset                             -      -            
+     0.52%  3852652:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.52%  3852653:efs-bench  [k] xfs_btree_lookup                                 -      -            
+
+
+#
+# (Tip: To show context switches in perf report sample context add --switch-events to perf record.)
+#

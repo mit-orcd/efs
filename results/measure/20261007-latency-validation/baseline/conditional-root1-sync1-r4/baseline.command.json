@@ -1,0 +1,21 @@
+[
+  "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+  "--bench",
+  "data",
+  "--rw",
+  "write",
+  "--write-mode",
+  "overwrite",
+  "--qd",
+  "16",
+  "--window",
+  "64",
+  "--time",
+  "30",
+  "--direct-io",
+  "--full-paths",
+  "--skip-ceiling",
+  "--storage",
+  "/data1/efs/bench/efs-latency-ajor0vb7",
+  "--sync"
+]

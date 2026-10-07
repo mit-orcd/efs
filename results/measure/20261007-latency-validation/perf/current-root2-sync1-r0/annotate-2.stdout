@@ -1,0 +1,494 @@
+ Percent |	Source code & Disassembly of efs-bench for cycles (6 samples, percent: local period)
+----------------------------------------------------------------------------------------------------
+         : 0      0x415680 <server_write_fragment_with_sum_sync>:
+    0.00 :   415680:        pushq   %rbp
+    0.00 :   415681:        movq    %rsp, %rbp
+    0.00 :   415684:        pushq   %r15
+    0.00 :   415686:        movl    %ecx, %r15d
+    0.00 :   415689:        pushq   %r14
+    0.00 :   41568b:        movq    %rsi, %r14
+    0.00 :   41568e:        pushq   %r13
+    0.00 :   415690:        movq    %rdi, %r13
+    0.00 :   415693:        pushq   %r12
+    0.00 :   415695:        pushq   %rbx
+    0.00 :   415696:        movq    %rdx, %rbx
+    0.00 :   415699:        subq    $0x2078, %rsp
+    0.00 :   4156a0:        movl    %r8d, -0x2054(%rbp)
+    0.00 :   4156a7:        movq    $-0x72118, %rax
+    0.00 :   4156ae:        movl    0x180c8(%rdi), %edi
+    0.00 :   4156b4:        movq    %r9, -0x2068(%rbp)
+    0.00 :   4156bb:        movl    %fs:(%rax), %r12d
+    0.00 :   4156bf:        testl   %r12d, %r12d
+    0.00 :   4156c2:        js      0x4156d7 <server_write_fragment_with_sum_sync+0x57>
+    0.00 :   4156c4:        testl   %edi, %edi
+    0.00 :   4156c6:        movl    $0x1, %eax
+    0.00 :   4156cb:        cmovnel %edi, %eax
+    0.00 :   4156ce:        cmpl    %eax, %r12d
+    0.00 :   4156d1:        jb      0x4158c0 <server_write_fragment_with_sum_sync+0x240>
+    0.00 :   4156d7:        cmpl    $0x1, %edi
+    0.00 :   4156da:        jbe     0x4157a8 <server_write_fragment_with_sum_sync+0x128>
+    0.00 :   4156e0:        movl    %r15d, %eax
+    0.00 :   4156e3:        xorl    %edx, %edx
+    0.00 :   4156e5:        divl    %edi
+    0.00 :   4156e7:        movl    %edx, %edx
+    0.00 :   4156e9:        movq    %rdx, %r12
+    0.00 :   4156ec:        shlq    $0xc, %rdx
+    0.00 :   4156f0:        addq    $0xc8, %rdx
+    0.00 :   4156f7:        leaq    -0x2030(%rbp), %rax
+    0.00 :   4156fe:        movl    (%r14), %ecx
+    0.00 :   415701:        movq    %rbx, %r8
+    0.00 :   415704:        addq    %r13, %rdx
+    0.00 :   415707:        movq    %rax, %rdi
+    0.00 :   41570a:        movl    %r15d, %r9d
+    0.00 :   41570d:        movl    $0x2000, %esi
+    0.00 :   415712:        movq    %rax, -0x2060(%rbp)
+    0.00 :   415719:        callq   0x40fc40 <format_ino_chunk_dir>
+    0.00 :   41571e:        movl    %r15d, %edi
+    0.00 :   415721:        vmovq   %rbx, %xmm2
+    0.00 :   415726:        movq    %rdi, -0x2070(%rbp)
+    0.00 :   41572d:        movl    -0x2054(%rbp), %edi
+    0.00 :   415733:        movq    %rdi, -0x2078(%rbp)
+    0.00 :   41573a:        movq    %fs:-0x700c8, %r8
+    0.00 :   415743:        vpinsrq $0x1, %r8, %xmm2, %xmm0
+    0.00 :   415749:        testl   %eax, %eax
+    0.00 :   41574b:        jle     0x415760 <server_write_fragment_with_sum_sync+0xe0>
+    0.00 :   41574d:        movslq  %eax, %r11
+    0.00 :   415750:        leaq    0x30(%r11), %rax
+    0.00 :   415754:        cmpq    $0x2000, %rax
+    0.00 :   41575a:        jbe     0x4158db <server_write_fragment_with_sum_sync+0x25b>
+    0.00 :   415760:        cmpl    $0xff, %r12d
+    0.00 :   415767:        jbe     0x415818 <server_write_fragment_with_sum_sync+0x198>
+    0.00 :   41576d:        subq    $0x8, %rsp
+    0.00 :   415771:        movq    -0x2060(%rbp), %r9
+    0.00 :   415778:        movl    0x10(%rbp), %r8d
+    0.00 :   41577c:        movq    %rbx, %rdx
+    0.00 :   41577f:        pushq   0x18(%rbp)
+    0.00 :   415782:        movq    -0x2068(%rbp), %rcx
+    0.00 :   415789:        movq    %r14, %rsi
+    0.00 :   41578c:        movq    %r13, %rdi
+    0.00 :   41578f:        callq   0x411730 <server_write_fragment_to_path.isra.0>
+    0.00 :   415794:        leaq    -0x28(%rbp), %rsp
+   17.15 :   415798:        popq    %rbx
+    8.10 :   415799:        popq    %r12
+    0.00 :   41579b:        popq    %r13
+    0.00 :   41579d:        popq    %r14
+    0.00 :   41579f:        popq    %r15
+    0.00 :   4157a1:        popq    %rbp
+   48.33 :   4157a2:        retq
+    0.00 :   4157a3:        nopl    (%rax,%rax)
+    0.00 :   4157a8:        leaq    -0x2030(%rbp), %rax
+    0.00 :   4157af:        movl    (%r14), %ecx
+    0.00 :   4157b2:        movq    %rbx, %r8
+    0.00 :   4157b5:        leaq    0xc8(%r13), %rdx
+    0.00 :   4157bc:        movq    %rax, %rdi
+    0.00 :   4157bf:        movl    %r15d, %r9d
+    0.00 :   4157c2:        movl    $0x2000, %esi
+    0.00 :   4157c7:        movq    %rax, -0x2060(%rbp)
+    0.00 :   4157ce:        callq   0x40fc40 <format_ino_chunk_dir>
+    0.00 :   4157d3:        movl    %r15d, %edi
+    0.00 :   4157d6:        vmovq   %rbx, %xmm4
+    0.00 :   4157db:        movq    %rdi, -0x2070(%rbp)
+    0.00 :   4157e2:        movl    -0x2054(%rbp), %edi
+    0.00 :   4157e8:        movq    %rdi, -0x2078(%rbp)
+    0.00 :   4157ef:        movq    %fs:-0x700c8, %r8
+    0.00 :   4157f8:        vpinsrq $0x1, %r8, %xmm4, %xmm0
+    0.00 :   4157fe:        testl   %eax, %eax
+    0.00 :   415800:        jle     0x415815 <server_write_fragment_with_sum_sync+0x195>
+    0.00 :   415802:        movslq  %eax, %r11
+    0.00 :   415805:        leaq    0x30(%r11), %rax
+    0.00 :   415809:        cmpq    $0x2000, %rax
+    0.00 :   41580f:        jbe     0x4158d8 <server_write_fragment_with_sum_sync+0x258>
+    0.00 :   415815:        xorl    %r12d, %r12d
+    0.00 :   415818:        movq    -0x2070(%rbp), %rdi
+    0.00 :   41581f:        movabsq $-0x40a7b892e31b1a47, %rax
+    0.00 :   415829:        movabsq $-0x61c8864680b583eb, %rcx
+    0.00 :   415833:        movl    (%r14), %edx
+    0.00 :   415836:        imulq   %rbx, %rcx
+    0.00 :   41583a:        movabsq $0x2545f4914f6cdd1d, %rsi
+    0.00 :   415844:        vmovd   %r15d, %xmm3
+    0.00 :   415849:        imulq   %rax, %rdi
+    0.00 :   41584d:        movq    %rdi, %rax
+    0.00 :   415850:        xorq    %rcx, %rax
+    0.00 :   415853:        movq    -0x2078(%rbp), %rcx
+    0.00 :   41585a:        addq    %rcx, %rcx
+    0.00 :   41585d:        xorq    %rax, %rcx
+    0.00 :   415860:        movl    %edx, %eax
+    0.00 :   415862:        imulq   %rsi, %rax
+    0.00 :   415866:        xorq    %rcx, %rax
+    0.00 :   415869:        movq    %rax, %rcx
+    0.00 :   41586c:        shrq    $0x1d, %rcx
+    0.00 :   415870:        xorq    %rcx, %rax
+    0.00 :   415873:        movzwl  %ax, %eax
+    0.00 :   415876:        leaq    (%rax,%rax,4), %rax
+    0.00 :   41587a:        shlq    $0x3, %rax
+    0.00 :   41587e:        vmovdqu %xmm0, 0x502648(%rax)
+    0.00 :   415886:        vpinsrd $0x1, -0x2054(%rbp), %xmm3, %xmm0
+    0.00 :   415890:        movb    $0x0, 0x502661(%rax)
+    0.00 :   415897:        movl    %edx, 0x502640(%rax)
+    0.00 :   41589d:        movb    %r12b, 0x502660(%rax)
+    0.00 :   4158a4:        vmovq   %xmm0, 0x502658(%rax)
+    0.00 :   4158ac:        movb    $0x1, 0x502661(%rax)
+    0.00 :   4158b3:        jmp     0x41576d <server_write_fragment_with_sum_sync+0xed>
+    0.00 :   4158b8:        nopl    (%rax,%rax)
+    0.00 :   4158c0:        movslq  %r12d, %rdx
+    0.00 :   4158c3:        shlq    $0xc, %rdx
+    0.00 :   4158c7:        addq    $0xc8, %rdx
+    0.00 :   4158ce:        jmp     0x4156f7 <server_write_fragment_with_sum_sync+0x77>
+    0.00 :   4158d3:        nopl    (%rax,%rax)
+    0.00 :   4158d8:        xorl    %r12d, %r12d
+    0.00 :   4158db:        movq    -0x2060(%rbp), %rax
+    0.00 :   4158e2:        movq    -0x2070(%rbp), %rsi
+    0.00 :   4158e9:        movl    $0x1, %ecx
+    0.00 :   4158ee:        leaq    -0x2051(%rbp), %rdi
+    0.00 :   4158f5:        movabsq $-0x3333333333333333, %r9
+    0.00 :   4158ff:        vmovq   %rbx, %xmm5
+    0.00 :   415904:        addq    %r11, %rax
+    0.00 :   415907:        movq    %rax, -0x2088(%rbp)
+    0.00 :   41590e:        leaq    0x1(%rax), %r10
+    0.00 :   415912:        movb    $0x2f, (%rax)
+    0.00 :   415915:        nopw    %cs:(%rax,%rax)
+    0.00 :   415920:        nopw    %cs:(%rax,%rax)
+    0.00 :   41592b:        nopw    %cs:(%rax,%rax)
+    0.00 :   415936:        nopw    %cs:(%rax,%rax)
+    0.00 :   415940:        movq    %rsi, %rax
+    0.00 :   415943:        mulq    %r9
+    0.00 :   415946:        shrq    $0x3, %rdx
+    0.00 :   41594a:        leaq    (%rdx,%rdx,4), %rax
+    0.00 :   41594e:        leaq    (%rax,%rax), %rbx
+    0.00 :   415952:        movq    %rsi, %rax
+    0.00 :   415955:        subq    %rbx, %rax
+   18.32 :   415958:        addl    $0x30, %eax
+    0.00 :   41595b:        movb    %al, (%rdi,%rcx)
+    0.00 :   41595e:        movq    %rsi, %rax
+    0.00 :   415961:        movq    %rdx, %rsi
+    0.00 :   415964:        movq    %rcx, %rdx
+    0.00 :   415967:        incq    %rcx
+    0.00 :   41596a:        cmpq    $0x9, %rax
+    0.00 :   41596e:        ja      0x415940 <server_write_fragment_with_sum_sync+0x2c0>
+    0.00 :   415970:        leal    -0x1(%rdx), %esi
+    0.00 :   415973:        vmovq   %xmm5, %rbx
+    0.00 :   415978:        movl    %edx, %eax
+    0.00 :   41597a:        cmpl    $0xe, %esi
+    0.00 :   41597d:        jle     0x415e30 <server_write_fragment_with_sum_sync+0x7b0>
+    0.00 :   415983:        movslq  %edx, %rax
+    0.00 :   415986:        vmovdqu8        -0x2060(%rbp,%rax), %xmm1
+    0.00 :   415991:        vpshufb 0x9c906(%rip), %xmm1, %xmm1  # 0x4b22a0 <_fini+0x5b90>
+    0.00 :   41599a:        vmovdqu8        %xmm1, -0x202f(%rbp,%r11)
+    0.00 :   4159a5:        cmpl    $0x10, %edx
+    0.00 :   4159a8:        je      0x415a5d <server_write_fragment_with_sum_sync+0x3dd>
+    0.00 :   4159ae:        movq    -0x2088(%rbp), %rax
+    0.00 :   4159b5:        leaq    0x11(%rax), %rcx
+    0.00 :   4159b9:        leal    -0x10(%rdx), %eax
+    0.00 :   4159bc:        nopl    (%rax)
+    0.00 :   4159c0:        leal    -0x1(%rax), %edx
+    0.00 :   4159c3:        movslq  %edx, %r9
+    0.00 :   4159c6:        movzbl  -0x2050(%rbp,%r9), %r9d
+    0.00 :   4159cf:        movb    %r9b, (%rcx)
+    0.00 :   4159d2:        testl   %edx, %edx
+    0.00 :   4159d4:        je      0x415a5d <server_write_fragment_with_sum_sync+0x3dd>
+    0.00 :   4159da:        leal    -0x2(%rax), %edx
+    0.00 :   4159dd:        movslq  %edx, %r9
+    0.00 :   4159e0:        movzbl  -0x2050(%rbp,%r9), %r9d
+    0.00 :   4159e9:        movb    %r9b, 0x1(%rcx)
+    0.00 :   4159ed:        testl   %edx, %edx
+    0.00 :   4159ef:        je      0x415a5d <server_write_fragment_with_sum_sync+0x3dd>
+    0.00 :   4159f1:        leal    -0x3(%rax), %edx
+    0.00 :   4159f4:        movslq  %edx, %r9
+    0.00 :   4159f7:        movzbl  -0x2050(%rbp,%r9), %r9d
+    0.00 :   415a00:        movb    %r9b, 0x2(%rcx)
+    0.00 :   415a04:        testl   %edx, %edx
+    0.00 :   415a06:        je      0x415a5d <server_write_fragment_with_sum_sync+0x3dd>
+    0.00 :   415a08:        leal    -0x4(%rax), %edx
+    0.00 :   415a0b:        movslq  %edx, %r9
+    0.00 :   415a0e:        movzbl  -0x2050(%rbp,%r9), %r9d
+    0.00 :   415a17:        movb    %r9b, 0x3(%rcx)
+    0.00 :   415a1b:        testl   %edx, %edx
+    0.00 :   415a1d:        je      0x415a5d <server_write_fragment_with_sum_sync+0x3dd>
+    0.00 :   415a1f:        leal    -0x5(%rax), %edx
+    0.00 :   415a22:        movslq  %edx, %r9
+    0.00 :   415a25:        movzbl  -0x2050(%rbp,%r9), %r9d
+    0.00 :   415a2e:        movb    %r9b, 0x4(%rcx)
+    0.00 :   415a32:        testl   %edx, %edx
+    0.00 :   415a34:        je      0x415a5d <server_write_fragment_with_sum_sync+0x3dd>
+    0.00 :   415a36:        leal    -0x6(%rax), %edx
+    0.00 :   415a39:        movslq  %edx, %r9
+    0.00 :   415a3c:        movzbl  -0x2050(%rbp,%r9), %r9d
+    0.00 :   415a45:        movb    %r9b, 0x5(%rcx)
+    0.00 :   415a49:        testl   %edx, %edx
+    0.00 :   415a4b:        je      0x415a5d <server_write_fragment_with_sum_sync+0x3dd>
+    0.00 :   415a4d:        subl    $0x7, %eax
+    0.00 :   415a50:        cltq
+    0.00 :   415a52:        movzbl  -0x2050(%rbp,%rax), %eax
+    0.00 :   415a5a:        movb    %al, 0x6(%rcx)
+    0.00 :   415a5d:        movslq  %esi, %rax
+    0.00 :   415a60:        movq    -0x2078(%rbp), %rcx
+    0.00 :   415a67:        movl    $0x1, %r9d
+    0.00 :   415a6d:        leaq    (%r10,%rax), %r11
+    0.00 :   415a71:        movq    %rax, -0x2090(%rbp)
+    0.00 :   415a78:        movabsq $-0x3333333333333333, %r10
+    0.00 :   415a82:        leaq    0x2(%r11), %rax
+    0.00 :   415a86:        movb    $0x2e, 0x1(%r11)
+    0.00 :   415a8b:        movq    %rax, -0x2080(%rbp)
+    0.00 :   415a92:        nopw    %cs:(%rax,%rax)
+    0.00 :   415a9d:        nopw    %cs:(%rax,%rax)
+    0.00 :   415aa8:        nopw    %cs:(%rax,%rax)
+    0.00 :   415ab3:        nopw    %cs:(%rax,%rax)
+    0.00 :   415abe:        nop
+    0.00 :   415ac0:        movq    %rcx, %rax
+    0.00 :   415ac3:        mulq    %r10
+    0.00 :   415ac6:        movq    %rcx, %rax
+    0.00 :   415ac9:        shrq    $0x3, %rdx
+    0.00 :   415acd:        leaq    (%rdx,%rdx,4), %rsi
+    0.00 :   415ad1:        addq    %rsi, %rsi
+    0.00 :   415ad4:        subq    %rsi, %rax
+    0.00 :   415ad7:        movq    %rcx, %rsi
+    0.00 :   415ada:        movq    %rdx, %rcx
+    0.00 :   415add:        addl    $0x30, %eax
+    0.00 :   415ae0:        movb    %al, (%rdi,%r9)
+    0.00 :   415ae4:        movq    %r9, %rax
+    0.00 :   415ae7:        leaq    0x1(%r9), %r9
+    0.00 :   415aeb:        cmpq    $0x9, %rsi
+    0.00 :   415aef:        ja      0x415ac0 <server_write_fragment_with_sum_sync+0x440>
+    0.00 :   415af1:        leal    -0x1(%rax), %r10d
+    0.00 :   415af5:        movslq  %eax, %rdx
+    0.00 :   415af8:        cmpl    $0x6, %r10d
+    0.00 :   415afc:        jle     0x415ef0 <server_write_fragment_with_sum_sync+0x870>
+    0.00 :   415b02:        movq    -0x2090(%rbp), %rcx
+    0.00 :   415b09:        movq    -0x2088(%rbp), %rsi
+    0.00 :   415b10:        addq    %rcx, %rsi
+    0.00 :   415b13:        leaq    0x3(%rsi), %r9
+    0.00 :   415b17:        leaq    (%r9,%rax), %rcx
+    0.00 :   415b1b:        movq    %r9, -0x2098(%rbp)
+    0.00 :   415b22:        leaq    -0x2050(%rbp), %r9
+    0.00 :   415b29:        movq    %rcx, -0x20a0(%rbp)
+    0.00 :   415b30:        movq    %rdx, %rcx
+    0.00 :   415b33:        subq    %rax, %rcx
+    0.00 :   415b36:        addq    %r9, %rcx
+    0.00 :   415b39:        movq    -0x20a0(%rbp), %r9
+    0.00 :   415b40:        cmpq    %r9, %rcx
+    0.00 :   415b43:        jae     0x415b5c <server_write_fragment_with_sum_sync+0x4dc>
+    0.00 :   415b45:        leaq    -0x2050(%rbp), %rcx
+    0.00 :   415b4c:        addq    %rdx, %rcx
+    0.00 :   415b4f:        cmpq    %rcx, -0x2098(%rbp)
+    0.00 :   415b56:        jb      0x415ef0 <server_write_fragment_with_sum_sync+0x870>
+    0.00 :   415b5c:        cmpl    $0xe, %r10d
+    0.00 :   415b60:        jle     0x415e78 <server_write_fragment_with_sum_sync+0x7f8>
+    0.00 :   415b66:        vmovdqu8        -0x2060(%rbp,%rdx), %xmm1
+    0.00 :   415b71:        addq    $0x12, %r11
+    0.00 :   415b75:        leal    -0x10(%rax), %edx
+    0.00 :   415b78:        vpshufb 0x9c71f(%rip), %xmm1, %xmm1  # 0x4b22a0 <_fini+0x5b90>
+    0.00 :   415b81:        vmovdqu8        %xmm1, 0x3(%rsi)
+    0.00 :   415b8b:        cmpl    $0x10, %eax
+    0.00 :   415b8e:        je      0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415b94:        leal    -0x1(%rdx), %eax
+    0.00 :   415b97:        movslq  %eax, %rcx
+    0.00 :   415b9a:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415ba2:        movb    %cl, (%r11)
+    0.00 :   415ba5:        testl   %eax, %eax
+    0.00 :   415ba7:        je      0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415bad:        leal    -0x2(%rdx), %eax
+    0.00 :   415bb0:        movslq  %eax, %rcx
+    0.00 :   415bb3:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415bbb:        movb    %cl, 0x1(%r11)
+    0.00 :   415bbf:        testl   %eax, %eax
+    0.00 :   415bc1:        je      0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415bc3:        leal    -0x3(%rdx), %eax
+    0.00 :   415bc6:        movslq  %eax, %rcx
+    0.00 :   415bc9:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415bd1:        movb    %cl, 0x2(%r11)
+    0.00 :   415bd5:        testl   %eax, %eax
+    0.00 :   415bd7:        je      0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415bd9:        leal    -0x4(%rdx), %eax
+    0.00 :   415bdc:        movslq  %eax, %rcx
+    0.00 :   415bdf:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415be7:        movb    %cl, 0x3(%r11)
+    0.00 :   415beb:        testl   %eax, %eax
+    0.00 :   415bed:        je      0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415bef:        leal    -0x5(%rdx), %eax
+    0.00 :   415bf2:        movslq  %eax, %rcx
+    0.00 :   415bf5:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415bfd:        movb    %cl, 0x4(%r11)
+    0.00 :   415c01:        testl   %eax, %eax
+    0.00 :   415c03:        je      0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415c05:        leal    -0x6(%rdx), %eax
+    0.00 :   415c08:        movslq  %eax, %rcx
+    0.00 :   415c0b:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415c13:        movb    %cl, 0x5(%r11)
+    0.00 :   415c17:        testl   %eax, %eax
+    0.00 :   415c19:        je      0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415c1b:        subl    $0x7, %edx
+    0.00 :   415c1e:        movslq  %edx, %rdx
+    0.00 :   415c21:        movzbl  -0x2050(%rbp,%rdx), %eax
+    0.00 :   415c29:        movb    %al, 0x6(%r11)
+    0.00 :   415c2d:        movq    -0x2080(%rbp), %r9
+    0.00 :   415c34:        movslq  %r10d, %r10
+    0.00 :   415c37:        addq    %r10, %r9
+    0.00 :   415c3a:        leaq    0x1(%r9), %rax
+    0.00 :   415c3e:        testq   %r8, %r8
+    0.00 :   415c41:        je      0x415d47 <server_write_fragment_with_sum_sync+0x6c7>
+    0.00 :   415c47:        leaq    0x2(%r9), %rax
+    0.00 :   415c4b:        movb    $0x2e, 0x1(%r9)
+    0.00 :   415c50:        movl    $0x1, %ecx
+    0.00 :   415c55:        movabsq $-0x3333333333333333, %rsi
+    0.00 :   415c5f:        movq    %rax, -0x2080(%rbp)
+    0.00 :   415c66:        nopw    %cs:(%rax,%rax)
+    0.00 :   415c71:        nopw    %cs:(%rax,%rax)
+    0.00 :   415c7c:        nopl    (%rax)
+    0.00 :   415c80:        movq    %r8, %rax
+    0.00 :   415c83:        mulq    %rsi
+    0.00 :   415c86:        movq    %r8, %rax
+    0.00 :   415c89:        shrq    $0x3, %rdx
+    0.00 :   415c8d:        leaq    (%rdx,%rdx,4), %r11
+    0.00 :   415c91:        addq    %r11, %r11
+    0.00 :   415c94:        subq    %r11, %rax
+    0.00 :   415c97:        addl    $0x30, %eax
+    0.00 :   415c9a:        movb    %al, (%rdi,%rcx)
+    0.00 :   415c9d:        movq    %r8, %rax
+    0.00 :   415ca0:        movq    %rdx, %r8
+    0.00 :   415ca3:        movq    %rcx, %rdx
+    0.00 :   415ca6:        leaq    0x1(%rcx), %rcx
+    0.00 :   415caa:        cmpq    $0x9, %rax
+    0.00 :   415cae:        ja      0x415c80 <server_write_fragment_with_sum_sync+0x600>
+    0.00 :   415cb0:        leal    -0x1(%rdx), %r11d
+    0.00 :   415cb4:        movslq  %edx, %rax
+    0.00 :   415cb7:        cmpl    $0x6, %r11d
+    0.00 :   415cbb:        jle     0x415cfd <server_write_fragment_with_sum_sync+0x67d>
+    0.00 :   415cbd:        movq    -0x2090(%rbp), %rsi
+    0.00 :   415cc4:        movq    -0x2088(%rbp), %rcx
+    0.00 :   415ccb:        addq    %rsi, %rcx
+    0.00 :   415cce:        movq    %rax, %rsi
+    0.00 :   415cd1:        addq    %r10, %rcx
+    0.00 :   415cd4:        subq    %rdx, %rsi
+    0.00 :   415cd7:        leaq    -0x2050(%rbp), %r10
+    0.00 :   415cde:        leaq    0x5(%rcx), %r8
+    0.00 :   415ce2:        addq    %r10, %rsi
+    0.00 :   415ce5:        leaq    (%rdx,%r8), %r10
+    0.00 :   415ce9:        cmpq    %r10, %rsi
+    0.00 :   415cec:        jae     0x415d50 <server_write_fragment_with_sum_sync+0x6d0>
+    0.00 :   415cee:        leaq    -0x2050(%rbp), %rsi
+    0.00 :   415cf5:        addq    %rax, %rsi
+    0.00 :   415cf8:        cmpq    %rsi, %r8
+    0.00 :   415cfb:        jae     0x415d50 <server_write_fragment_with_sum_sync+0x6d0>
+    0.00 :   415cfd:        leaq    0x2(%r9,%rax), %rcx
+    0.00 :   415d02:        nopw    %cs:(%rax,%rax)
+    0.00 :   415d0d:        nopw    %cs:(%rax,%rax)
+    0.00 :   415d18:        nopl    (%rax,%rax)
+    0.00 :   415d20:        movzbl  (%rdi,%rax), %esi
+    0.00 :   415d24:        movq    %rcx, %rdx
+    0.00 :   415d27:        subq    %rax, %rdx
+    0.00 :   415d2a:        decq    %rax
+    0.00 :   415d2d:        movb    %sil, (%rdx)
+    0.00 :   415d30:        testl   %eax, %eax
+    0.00 :   415d32:        jne     0x415d20 <server_write_fragment_with_sum_sync+0x6a0>
+    0.00 :   415d34:        nopl    (%rax)
+    0.00 :   415d38:        movq    -0x2080(%rbp), %rdi
+    0.00 :   415d3f:        movslq  %r11d, %rax
+    0.00 :   415d42:        leaq    0x1(%rdi,%rax), %rax
+    0.00 :   415d47:        movb    $0x0, (%rax)
+    8.10 :   415d4a:        jmp     0x415760 <server_write_fragment_with_sum_sync+0xe0>
+    0.00 :   415d4f:        nop
+    0.00 :   415d50:        cmpl    $0xe, %r11d
+    0.00 :   415d54:        jle     0x415eb2 <server_write_fragment_with_sum_sync+0x832>
+    0.00 :   415d5a:        vmovdqu8        -0x2060(%rbp,%rax), %xmm1
+    0.00 :   415d65:        addq    $0x12, %r9
+    0.00 :   415d69:        leal    -0x10(%rdx), %eax
+    0.00 :   415d6c:        vpshufb 0x9c52b(%rip), %xmm1, %xmm1  # 0x4b22a0 <_fini+0x5b90>
+    0.00 :   415d75:        vmovdqu8        %xmm1, 0x5(%rcx)
+    0.00 :   415d7f:        cmpl    $0x10, %edx
+    0.00 :   415d82:        je      0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415d84:        leal    -0x1(%rax), %edx
+    0.00 :   415d87:        movslq  %edx, %rcx
+    0.00 :   415d8a:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415d92:        movb    %cl, (%r9)
+    0.00 :   415d95:        testl   %edx, %edx
+    0.00 :   415d97:        je      0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415d99:        leal    -0x2(%rax), %edx
+    0.00 :   415d9c:        movslq  %edx, %rcx
+    0.00 :   415d9f:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415da7:        movb    %cl, 0x1(%r9)
+    0.00 :   415dab:        testl   %edx, %edx
+    0.00 :   415dad:        je      0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415daf:        leal    -0x3(%rax), %edx
+    0.00 :   415db2:        movslq  %edx, %rcx
+    0.00 :   415db5:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415dbd:        movb    %cl, 0x2(%r9)
+    0.00 :   415dc1:        testl   %edx, %edx
+    0.00 :   415dc3:        je      0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415dc9:        leal    -0x4(%rax), %edx
+    0.00 :   415dcc:        movslq  %edx, %rcx
+    0.00 :   415dcf:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415dd7:        movb    %cl, 0x3(%r9)
+    0.00 :   415ddb:        testl   %edx, %edx
+    0.00 :   415ddd:        je      0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415de3:        leal    -0x5(%rax), %edx
+    0.00 :   415de6:        movslq  %edx, %rcx
+    0.00 :   415de9:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415df1:        movb    %cl, 0x4(%r9)
+    0.00 :   415df5:        testl   %edx, %edx
+    0.00 :   415df7:        je      0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415dfd:        leal    -0x6(%rax), %edx
+    0.00 :   415e00:        movslq  %edx, %rcx
+    0.00 :   415e03:        movzbl  -0x2050(%rbp,%rcx), %ecx
+    0.00 :   415e0b:        movb    %cl, 0x5(%r9)
+    0.00 :   415e0f:        testl   %edx, %edx
+    0.00 :   415e11:        je      0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415e17:        subl    $0x7, %eax
+    0.00 :   415e1a:        cltq
+    0.00 :   415e1c:        movzbl  -0x2050(%rbp,%rax), %eax
+    0.00 :   415e24:        movb    %al, 0x6(%r9)
+    0.00 :   415e28:        jmp     0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415e2d:        nopl    (%rax)
+    0.00 :   415e30:        cmpl    $0x6, %esi
+    0.00 :   415e33:        jbe     0x415f19 <server_write_fragment_with_sum_sync+0x899>
+    0.00 :   415e39:        movslq  %edx, %rax
+    0.00 :   415e3c:        movl    %edx, %r9d
+    0.00 :   415e3f:        vmovq   -0x2058(%rbp,%rax), %xmm1
+    0.00 :   415e48:        andl    $-0x8, %r9d
+    0.00 :   415e4c:        movl    %edx, %eax
+    0.00 :   415e4e:        movl    %r9d, %ecx
+    0.00 :   415e51:        subl    %r9d, %eax
+    0.00 :   415e54:        vpshufb 0x9c453(%rip), %xmm1, %xmm1  # 0x4b22b0 <_fini+0x5ba0>
+    0.00 :   415e5d:        addq    %r10, %rcx
+    0.00 :   415e60:        andl    $0x7, %edx
+    0.00 :   415e63:        vmovq   %xmm1, -0x202f(%rbp,%r11)
+    0.00 :   415e6d:        jne     0x4159c0 <server_write_fragment_with_sum_sync+0x340>
+    0.00 :   415e73:        jmp     0x415a5d <server_write_fragment_with_sum_sync+0x3dd>
+    0.00 :   415e78:        vmovq   -0x2058(%rbp,%rdx), %xmm1
+    0.00 :   415e81:        movl    %eax, %ecx
+    0.00 :   415e83:        movl    %eax, %edx
+    0.00 :   415e85:        andl    $-0x8, %ecx
+    0.00 :   415e88:        vpshufb 0x9c41f(%rip), %xmm1, %xmm1  # 0x4b22b0 <_fini+0x5ba0>
+    0.00 :   415e91:        movl    %ecx, %r11d
+    0.00 :   415e94:        subl    %ecx, %edx
+    0.00 :   415e96:        vmovq   %xmm1, 0x3(%rsi)
+    0.00 :   415e9b:        movq    -0x2080(%rbp), %rsi
+    0.00 :   415ea2:        addq    %rsi, %r11
+    0.00 :   415ea5:        testb   $0x7, %al
+    0.00 :   415ea7:        jne     0x415b94 <server_write_fragment_with_sum_sync+0x514>
+    0.00 :   415ead:        jmp     0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415eb2:        vmovq   -0x2058(%rbp,%rax), %xmm1
+    0.00 :   415ebb:        movq    -0x2080(%rbp), %rax
+    0.00 :   415ec2:        vpshufb 0x9c3e5(%rip), %xmm1, %xmm1  # 0x4b22b0 <_fini+0x5ba0>
+    0.00 :   415ecb:        vmovq   %xmm1, 0x5(%rcx)
+    0.00 :   415ed0:        movl    %edx, %ecx
+    0.00 :   415ed2:        andl    $-0x8, %ecx
+    0.00 :   415ed5:        movl    %ecx, %r9d
+    0.00 :   415ed8:        addq    %rax, %r9
+    0.00 :   415edb:        movl    %edx, %eax
+    0.00 :   415edd:        subl    %ecx, %eax
+    0.00 :   415edf:        andl    $0x7, %edx
+    0.00 :   415ee2:        jne     0x415d84 <server_write_fragment_with_sum_sync+0x704>
+    0.00 :   415ee8:        jmp     0x415d38 <server_write_fragment_with_sum_sync+0x6b8>
+    0.00 :   415eed:        nopl    (%rax)
+    0.00 :   415ef0:        leaq    0x2(%r11,%rdx), %rcx
+    0.00 :   415ef5:        nopw    %cs:(%rax,%rax)
+    0.00 :   415f00:        movzbl  (%rdi,%rdx), %esi
+    0.00 :   415f04:        movq    %rcx, %rax
+    0.00 :   415f07:        subq    %rdx, %rax
+    0.00 :   415f0a:        decq    %rdx
+    0.00 :   415f0d:        movb    %sil, (%rax)
+    0.00 :   415f10:        testl   %edx, %edx
+    0.00 :   415f12:        jne     0x415f00 <server_write_fragment_with_sum_sync+0x880>
+    0.00 :   415f14:        jmp     0x415c2d <server_write_fragment_with_sum_sync+0x5ad>
+    0.00 :   415f19:        movq    %r10, %rcx
+    0.00 :   415f1c:        jmp     0x4159c0 <server_write_fragment_with_sum_sync+0x340>

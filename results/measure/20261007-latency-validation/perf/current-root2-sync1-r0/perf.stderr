@@ -1,0 +1,6 @@
+Events disabled
+store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+Events enabled
+Events disabled
+[ perf record: Woken up 37 times to write data ]
+[ perf record: Captured and wrote 9.720 MB /tmp/efs-nuc-latency-20261007/perf/current-root2-sync1-r0/perf.data (1182 samples) ]

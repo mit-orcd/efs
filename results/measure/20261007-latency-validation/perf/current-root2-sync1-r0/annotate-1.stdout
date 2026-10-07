@@ -1,0 +1,479 @@
+ Percent |	Source code & Disassembly of efs-bench for cycles (8 samples, percent: local period)
+----------------------------------------------------------------------------------------------------
+         : 0      0x410890 <shard_io_thread.part.0.constprop.0>:
+   29.49 :   410890:        pushq   %rbp
+    0.00 :   410891:        movq    %rsp, %rbp
+    0.00 :   410894:        pushq   %r15
+    0.00 :   410896:        pushq   %r14
+    0.00 :   410898:        pushq   %r13
+    0.00 :   41089a:        pushq   %r12
+    0.00 :   41089c:        pushq   %rbx
+    0.00 :   41089d:        movq    %rdi, %rbx
+    0.00 :   4108a0:        andq    $-0x20, %rsp
+    0.00 :   4108a4:        subq    $0xa0, %rsp
+    0.00 :   4108ab:        movl    0x2020(%rdi), %edx
+    0.00 :   4108b1:        testl   %edx, %edx
+    0.00 :   4108b3:        je      0x410ac8 <shard_io_thread.part.0.constprop.0+0x238>
+    0.00 :   4108b9:        movl    $0x4241, (%rsp)
+    0.00 :   4108c0:        movl    $0x4201, %r15d
+    0.00 :   4108c6:        movl    $0x4281, %r14d
+    0.00 :   4108cc:        movl    $0x281, %r13d
+    0.00 :   4108d2:        movl    $0x42c1, 0x4(%rsp)
+    0.00 :   4108da:        movl    $0x105201, %r10d
+    0.00 :   4108e0:        movl    $0x105281, %r9d
+    0.00 :   4108e6:        movl    $0x101281, %r8d
+    0.00 :   4108ec:        movl    $0x2c1, 0x8(%rsp)
+    0.00 :   4108f4:        movl    $0x105241, %esi
+    0.00 :   4108f9:        movl    $0x1052c1, %r12d
+    0.00 :   4108ff:        movl    $0x1012c1, %eax
+    0.00 :   410904:        movl    $0x241, 0xc(%rsp)
+    0.00 :   41090c:        movl    $0x101241, %ecx
+    0.00 :   410911:        movl    $0x101201, %edi
+    0.00 :   410916:        movl    $0x201, %r11d
+    0.00 :   41091c:        cmpl    $0x0, (%rbx)
+    0.00 :   41091f:        jne     0x41093d <shard_io_thread.part.0.constprop.0+0xad>
+    0.00 :   410921:        movl    (%rsp), %esi
+    0.00 :   410924:        movl    0x4(%rsp), %r12d
+    0.00 :   410929:        movl    %r15d, %r10d
+    0.00 :   41092c:        movl    %r14d, %r9d
+    0.00 :   41092f:        movl    0x8(%rsp), %eax
+    0.00 :   410933:        movl    0xc(%rsp), %ecx
+    0.00 :   410937:        movl    %r13d, %r8d
+    0.00 :   41093a:        movl    %r11d, %edi
+    0.00 :   41093d:        movl    0x2024(%rbx), %r11d
+    0.00 :   410944:        testl   %r11d, %r11d
+    0.00 :   410947:        je      0x410954 <shard_io_thread.part.0.constprop.0+0xc4>
+    0.00 :   410949:        movl    %r10d, %esi
+    0.00 :   41094c:        movl    %r9d, %r12d
+    0.00 :   41094f:        movl    %r8d, %eax
+    0.00 :   410952:        movl    %edi, %ecx
+    0.00 :   410954:        movl    0x2028(%rbx), %r10d
+    0.00 :   41095b:        testl   %r10d, %r10d
+    0.00 :   41095e:        jne     0x410965 <shard_io_thread.part.0.constprop.0+0xd5>
+    0.00 :   410960:        movl    %esi, %r12d
+    0.00 :   410963:        movl    %ecx, %eax
+    0.00 :   410965:        testl   %edx, %edx
+    0.00 :   410967:        leaq    0x10(%rbx), %r14
+    0.00 :   41096b:        movl    $0x1a4, %edx
+    0.00 :   410970:        cmovel  %eax, %r12d
+    0.00 :   410974:        movq    %r14, %rdi
+    0.00 :   410977:        xorl    %eax, %eax
+    0.00 :   410979:        movl    %r12d, %esi
+    0.00 :   41097c:        callq   0x403a40 <_init+0xa40>
+    0.00 :   410981:        movl    %eax, %r13d
+    0.00 :   410984:        testl   %eax, %eax
+    0.00 :   410986:        js      0x410c70 <shard_io_thread.part.0.constprop.0+0x3e0>
+    0.00 :   41098c:        movl    0x2020(%rbx), %edi
+    0.00 :   410992:        movl    0x2018(%rbx), %eax
+    0.00 :   410998:        testl   %edi, %edi
+    0.00 :   41099a:        je      0x410b30 <shard_io_thread.part.0.constprop.0+0x2a0>
+    0.00 :   4109a0:        leal    0xfff(%rax), %r12d
+    0.00 :   4109a7:        movl    $0x1000, %edx
+    0.00 :   4109ac:        andl    $0xfffff000, %r12d
+    0.00 :   4109b3:        cmpl    %edx, %r12d
+    0.00 :   4109b6:        cmovbl  %edx, %r12d
+    0.00 :   4109ba:        cmpq    $0x0, 0x2030(%rbx)
+    0.00 :   4109c2:        je      0x410ec0 <shard_io_thread.part.0.constprop.0+0x630>
+    0.00 :   4109c8:        addl    $0x1000, %eax
+    0.00 :   4109cd:        cmpl    %eax, %r12d
+    0.00 :   4109d0:        cmovbl  %eax, %r12d
+    0.00 :   4109d4:        movq    0x2010(%rbx), %r15
+    0.00 :   4109db:        testl   $0xfff, %r15d
+    0.00 :   4109e2:        jne     0x410b90 <shard_io_thread.part.0.constprop.0+0x300>
+    0.00 :   4109e8:        movl    0x2018(%rbx), %eax
+    0.00 :   4109ee:        testl   %eax, %eax
+    0.00 :   4109f0:        je      0x410b90 <shard_io_thread.part.0.constprop.0+0x300>
+    0.00 :   4109f6:        testl   $0xfff, %eax
+    0.00 :   4109fb:        jne     0x410b90 <shard_io_thread.part.0.constprop.0+0x300>
+    0.00 :   410a01:        movq    0x2030(%rbx), %rax
+    0.00 :   410a08:        testq   %rax, %rax
+    0.00 :   410a0b:        je      0x411021 <shard_io_thread.part.0.constprop.0+0x791>
+    0.00 :   410a11:        movq    %fs:-0x720d0, %r12
+   18.12 :   410a1a:        testq   %r12, %r12
+    0.00 :   410a1d:        je      0x41106f <shard_io_thread.part.0.constprop.0+0x7df>
+    0.00 :   410a23:        vmovdqu8        (%rax), %ymm0
+    0.00 :   410a29:        xorl    %esi, %esi
+    0.00 :   410a2b:        leaq    0x20(%r12), %rdi
+    0.00 :   410a30:        movl    $0xfe0, %edx
+    0.00 :   410a35:        vmovdqu8        %ymm0, (%r12)
+   25.46 :   410a3c:        vzeroupper
+    0.00 :   410a3f:        callq   0x4030d0 <_init+0xd0>
+    0.00 :   410a44:        movl    0xf1b5a(%rip), %ecx  # 0x5025a4 <once_zc.1>
+    0.00 :   410a4a:        testl   %ecx, %ecx
+    0.00 :   410a4c:        je      0x411037 <shard_io_thread.part.0.constprop.0+0x7a7>
+    0.00 :   410a52:        movq    0x2010(%rbx), %rax
+    0.00 :   410a59:        movq    $0x1000, 0x28(%rsp)
+    0.00 :   410a62:        movl    $0x2, %r14d
+    0.00 :   410a68:        movq    %r12, 0x20(%rsp)
+    0.00 :   410a6d:        leaq    0x10(%rsp), %r12
+    0.00 :   410a72:        movq    %rax, 0x10(%rsp)
+    0.00 :   410a77:        movl    0x2018(%rbx), %eax
+    0.00 :   410a7d:        movq    %rax, 0x18(%rsp)
+    0.00 :   410a82:        nopw    (%rax,%rax)
+    0.00 :   410a88:        movl    %r14d, %edx
+    0.00 :   410a8b:        movq    %r12, %rsi
+    0.00 :   410a8e:        movl    %r13d, %edi
+    0.00 :   410a91:        callq   0x403810 <_init+0x810>
+    6.62 :   410a96:        testq   %rax, %rax
+    0.00 :   410a99:        jg      0x410f88 <shard_io_thread.part.0.constprop.0+0x6f8>
+    0.00 :   410a9f:        je      0x410aab <shard_io_thread.part.0.constprop.0+0x21b>
+    0.00 :   410aa1:        callq   0x403700 <_init+0x700>
+    0.00 :   410aa6:        cmpl    $0x4, (%rax)
+    0.00 :   410aa9:        je      0x410a88 <shard_io_thread.part.0.constprop.0+0x1f8>
+    0.00 :   410aab:        movl    %r13d, %edi
+    0.00 :   410aae:        callq   0x403140 <_init+0x140>
+    0.00 :   410ab3:        movl    $0xffffffff, %eax
+    0.00 :   410ab8:        movl    %eax, 0x2038(%rbx)
+    0.00 :   410abe:        jmp     0x410b7e <shard_io_thread.part.0.constprop.0+0x2ee>
+    0.00 :   410ac3:        nopl    (%rax,%rax)
+    0.00 :   410ac8:        movl    $0x4041, (%rsp)
+    0.00 :   410acf:        movl    $0x4001, %r15d
+    0.00 :   410ad5:        movl    $0x4081, %r14d
+    0.00 :   410adb:        movl    $0x81, %r13d
+    0.00 :   410ae1:        movl    $0x40c1, 0x4(%rsp)
+    0.00 :   410ae9:        movl    $0x105001, %r10d
+    0.00 :   410aef:        movl    $0x105081, %r9d
+    0.00 :   410af5:        movl    $0x101081, %r8d
+    0.00 :   410afb:        movl    $0xc1, 0x8(%rsp)
+    0.00 :   410b03:        movl    $0x105041, %esi
+    0.00 :   410b08:        movl    $0x1050c1, %r12d
+    0.00 :   410b0e:        movl    $0x1010c1, %eax
+    0.00 :   410b13:        movl    $0x41, 0xc(%rsp)
+    0.00 :   410b1b:        movl    $0x101041, %ecx
+    0.00 :   410b20:        movl    $0x101001, %edi
+    0.00 :   410b25:        movl    $0x1, %r11d
+    0.00 :   410b2b:        jmp     0x41091c <shard_io_thread.part.0.constprop.0+0x8c>
+    0.00 :   410b30:        xorl    %r12d, %r12d
+    0.00 :   410b33:        movq    %rax, %rdx
+    0.00 :   410b36:        testq   %rax, %rax
+    0.00 :   410b39:        jne     0x410b52 <shard_io_thread.part.0.constprop.0+0x2c2>
+    0.00 :   410b3b:        jmp     0x410cc3 <shard_io_thread.part.0.constprop.0+0x433>
+    0.00 :   410b40:        movl    0x2018(%rbx), %edx
+    0.00 :   410b46:        addq    %rax, %r12
+    0.00 :   410b49:        cmpq    %rdx, %r12
+    0.00 :   410b4c:        jae     0x410e68 <shard_io_thread.part.0.constprop.0+0x5d8>
+    0.00 :   410b52:        movq    0x2010(%rbx), %rsi
+    0.00 :   410b59:        subq    %r12, %rdx
+    0.00 :   410b5c:        movl    %r13d, %edi
+    0.00 :   410b5f:        addq    %r12, %rsi
+    0.00 :   410b62:        callq   0x4039b0 <_init+0x9b0>
+    0.00 :   410b67:        testq   %rax, %rax
+    0.00 :   410b6a:        jg      0x410b40 <shard_io_thread.part.0.constprop.0+0x2b0>
+    0.00 :   410b6c:        movl    %r13d, %edi
+    0.00 :   410b6f:        callq   0x403140 <_init+0x140>
+    0.00 :   410b74:        movl    $0xffffffff, 0x2038(%rbx)
+    0.00 :   410b7e:        leaq    -0x28(%rbp), %rsp
+    0.00 :   410b82:        popq    %rbx
+    0.00 :   410b83:        popq    %r12
+    0.00 :   410b85:        popq    %r13
+    0.00 :   410b87:        popq    %r14
+    0.00 :   410b89:        popq    %r15
+    0.00 :   410b8b:        popq    %rbp
+   10.07 :   410b8c:        retq
+    0.00 :   410b8d:        nopl    (%rax)
+    0.00 :   410b90:        movl    %r12d, %r14d
+    0.00 :   410b93:        cmpl    %r12d, %fs:-0x720e0
+    0.00 :   410b9c:        jb      0x410dd0 <shard_io_thread.part.0.constprop.0+0x540>
+    0.00 :   410ba2:        cmpq    $0x0, 0x2030(%rbx)
+    0.00 :   410baa:        je      0x410bba <shard_io_thread.part.0.constprop.0+0x32a>
+    0.00 :   410bac:        movl    0xf19ee(%rip), %edx  # 0x5025a0 <once_bounce.0>
+    0.00 :   410bb2:        testl   %edx, %edx
+    0.00 :   410bb4:        je      0x410e20 <shard_io_thread.part.0.constprop.0+0x590>
+    0.00 :   410bba:        movq    0x2010(%rbx), %rsi
+    0.00 :   410bc1:        movl    0x2018(%rbx), %edx
+    0.00 :   410bc7:        movq    %fs:-0x720d8, %rdi
+    0.00 :   410bd0:        callq   0x403a20 <_init+0xa20>
+    0.00 :   410bd5:        movl    0x2018(%rbx), %eax
+    0.00 :   410bdb:        cmpl    %r12d, %eax
+    0.00 :   410bde:        jb      0x410d88 <shard_io_thread.part.0.constprop.0+0x4f8>
+    0.00 :   410be4:        movq    0x2030(%rbx), %rax
+    0.00 :   410beb:        movq    %fs:-0x720d8, %r15
+    0.00 :   410bf4:        testq   %rax, %rax
+    0.00 :   410bf7:        je      0x410c0f <shard_io_thread.part.0.constprop.0+0x37f>
+    0.00 :   410bf9:        vmovdqu8        (%rax), %ymm0
+    0.00 :   410bff:        movl    0x2018(%rbx), %eax
+    0.00 :   410c05:        vmovdqu8        %ymm0, (%r15,%rax)
+    0.00 :   410c0c:        vzeroupper
+    0.00 :   410c0f:        xorl    %r12d, %r12d
+    0.00 :   410c12:        nopw    (%rax,%rax)
+    0.00 :   410c18:        movq    %r14, %rdx
+    0.00 :   410c1b:        leaq    (%r15,%r12), %rsi
+    0.00 :   410c1f:        movl    %r13d, %edi
+    0.00 :   410c22:        subq    %r12, %rdx
+    0.00 :   410c25:        callq   0x4039b0 <_init+0x9b0>
+    0.00 :   410c2a:        testq   %rax, %rax
+    0.00 :   410c2d:        jle     0x410b6c <shard_io_thread.part.0.constprop.0+0x2dc>
+    0.00 :   410c33:        addq    %rax, %r12
+    0.00 :   410c36:        cmpq    %r14, %r12
+    0.00 :   410c39:        jb      0x410c18 <shard_io_thread.part.0.constprop.0+0x388>
+    0.00 :   410c3b:        movl    0x2020(%rbx), %eax
+    0.00 :   410c41:        testl   %eax, %eax
+    0.00 :   410c43:        je      0x410cd8 <shard_io_thread.part.0.constprop.0+0x448>
+    0.00 :   410c49:        movl    %r13d, %edi
+    0.00 :   410c4c:        callq   0x403140 <_init+0x140>
+    0.00 :   410c51:        movl    $0x0, 0x2038(%rbx)
+    0.00 :   410c5b:        leaq    -0x28(%rbp), %rsp
+    0.00 :   410c5f:        popq    %rbx
+    0.00 :   410c60:        popq    %r12
+    0.00 :   410c62:        popq    %r13
+    0.00 :   410c64:        popq    %r14
+    0.00 :   410c66:        popq    %r15
+    0.00 :   410c68:        popq    %rbp
+    0.00 :   410c69:        retq
+    0.00 :   410c6a:        nopw    (%rax,%rax)
+    0.00 :   410c70:        callq   0x403700 <_init+0x700>
+    0.00 :   410c75:        movl    (%rax), %eax
+    0.00 :   410c77:        cmpl    $0x11, %eax
+    0.00 :   410c7a:        je      0x410ea0 <shard_io_thread.part.0.constprop.0+0x610>
+    0.00 :   410c80:        cmpl    $0x2, %eax
+    0.00 :   410c83:        jne     0x410b74 <shard_io_thread.part.0.constprop.0+0x2e4>
+    0.00 :   410c89:        movl    0x2024(%rbx), %r8d
+    0.00 :   410c90:        testl   %r8d, %r8d
+    0.00 :   410c93:        jne     0x410fd0 <shard_io_thread.part.0.constprop.0+0x740>
+    0.00 :   410c99:        movq    %r14, %rdi
+    0.00 :   410c9c:        callq   0x410750 <make_dir_for_file>
+    0.00 :   410ca1:        movl    $0x1a4, %edx
+    0.00 :   410ca6:        movl    %r12d, %esi
+    0.00 :   410ca9:        movq    %r14, %rdi
+    0.00 :   410cac:        xorl    %eax, %eax
+    0.00 :   410cae:        callq   0x403a40 <_init+0xa40>
+    0.00 :   410cb3:        movl    %eax, %r13d
+    0.00 :   410cb6:        testl   %eax, %eax
+    0.00 :   410cb8:        jns     0x41098c <shard_io_thread.part.0.constprop.0+0xfc>
+    0.00 :   410cbe:        jmp     0x410b74 <shard_io_thread.part.0.constprop.0+0x2e4>
+    0.00 :   410cc3:        movq    0x2030(%rbx), %rsi
+    0.00 :   410cca:        testq   %rsi, %rsi
+    0.00 :   410ccd:        jne     0x410e78 <shard_io_thread.part.0.constprop.0+0x5e8>
+    0.00 :   410cd3:        nopl    (%rax,%rax)
+    0.00 :   410cd8:        movl    (%rbx), %edx
+    0.00 :   410cda:        leaq    0x10(%rsp), %r15
+    0.00 :   410cdf:        movl    %edx, %r14d
+    0.00 :   410ce2:        jmp     0x410cf6 <shard_io_thread.part.0.constprop.0+0x466>
+    0.00 :   410ce4:        nopl    (%rax)
+    0.00 :   410ce8:        callq   0x403700 <_init+0x700>
+    0.00 :   410ced:        cmpl    $0x4, (%rax)
+    0.00 :   410cf0:        jne     0x410f58 <shard_io_thread.part.0.constprop.0+0x6c8>
+    0.00 :   410cf6:        movq    %r15, %rsi
+    0.00 :   410cf9:        movl    %r13d, %edi
+    0.00 :   410cfc:        callq   0x4031e0 <_init+0x1e0>
+    0.00 :   410d01:        testl   %eax, %eax
+    0.00 :   410d03:        js      0x410ce8 <shard_io_thread.part.0.constprop.0+0x458>
+    0.00 :   410d05:        jne     0x410f58 <shard_io_thread.part.0.constprop.0+0x6c8>
+    0.00 :   410d0b:        cmpq    %r12, 0x40(%rsp)
+    0.00 :   410d10:        je      0x410fdf <shard_io_thread.part.0.constprop.0+0x74f>
+    0.00 :   410d16:        movl    %r14d, %r15d
+    0.00 :   410d19:        jmp     0x410d2a <shard_io_thread.part.0.constprop.0+0x49a>
+    0.00 :   410d1b:        nopl    (%rax,%rax)
+    0.00 :   410d20:        callq   0x403700 <_init+0x700>
+    0.00 :   410d25:        cmpl    $0x4, (%rax)
+    0.00 :   410d28:        jne     0x410d61 <shard_io_thread.part.0.constprop.0+0x4d1>
+    0.00 :   410d2a:        movq    %r12, %rsi
+    0.00 :   410d2d:        movl    %r13d, %edi
+    0.00 :   410d30:        callq   0x4038b0 <_init+0x8b0>
+    0.00 :   410d35:        movl    %eax, %r14d
+    0.00 :   410d38:        testl   %eax, %eax
+    0.00 :   410d3a:        js      0x410d20 <shard_io_thread.part.0.constprop.0+0x490>
+    0.00 :   410d3c:        jne     0x410d61 <shard_io_thread.part.0.constprop.0+0x4d1>
+    0.00 :   410d3e:        testl   %r15d, %r15d
+    0.00 :   410d41:        jne     0x410d52 <shard_io_thread.part.0.constprop.0+0x4c2>
+    0.00 :   410d43:        jmp     0x410d61 <shard_io_thread.part.0.constprop.0+0x4d1>
+    0.00 :   410d45:        nopl    (%rax)
+    0.00 :   410d48:        callq   0x403700 <_init+0x700>
+    0.00 :   410d4d:        cmpl    $0x4, (%rax)
+    0.00 :   410d50:        jne     0x410d61 <shard_io_thread.part.0.constprop.0+0x4d1>
+    0.00 :   410d52:        movl    %r13d, %edi
+    0.00 :   410d55:        callq   0x4034d0 <_init+0x4d0>
+    0.00 :   410d5a:        movl    %eax, %r14d
+    0.00 :   410d5d:        testl   %eax, %eax
+    0.00 :   410d5f:        js      0x410d48 <shard_io_thread.part.0.constprop.0+0x4b8>
+    0.00 :   410d61:        movl    %r13d, %edi
+    0.00 :   410d64:        callq   0x403140 <_init+0x140>
+    0.00 :   410d69:        negl    %r14d
+    0.00 :   410d6c:        sbbl    %edx, %edx
+    0.00 :   410d6e:        movl    %edx, 0x2038(%rbx)
+    0.00 :   410d74:        leaq    -0x28(%rbp), %rsp
+    0.00 :   410d78:        popq    %rbx
+    0.00 :   410d79:        popq    %r12
+    0.00 :   410d7b:        popq    %r13
+    0.00 :   410d7d:        popq    %r14
+    0.00 :   410d7f:        popq    %r15
+    0.00 :   410d81:        popq    %rbp
+    0.00 :   410d82:        retq
+    0.00 :   410d83:        nopl    (%rax,%rax)
+    0.00 :   410d88:        movl    %r12d, %edx
+    0.00 :   410d8b:        movl    %eax, %edi
+    0.00 :   410d8d:        xorl    %esi, %esi
+    0.00 :   410d8f:        subl    %eax, %edx
+    0.00 :   410d91:        addq    %fs:-0x720d8, %rdi
+    0.00 :   410d9a:        callq   0x4030d0 <_init+0xd0>
+    0.00 :   410d9f:        jmp     0x410be4 <shard_io_thread.part.0.constprop.0+0x354>
+    0.00 :   410da4:        nopl    (%rax)
+    0.00 :   410da8:        cmpl    $0xfff, %fs:-0x720e0
+    0.00 :   410db4:        movl    $0x1000, %r14d
+    0.00 :   410dba:        movl    $0x1000, %r12d
+    0.00 :   410dc0:        ja      0x410bba <shard_io_thread.part.0.constprop.0+0x32a>
+    0.00 :   410dc6:        nopw    %cs:(%rax,%rax)
+    0.00 :   410dd0:        movq    %fs:-0x720d8, %rdi
+    0.00 :   410dd9:        callq   0x4033f0 <_init+0x3f0>
+    0.00 :   410dde:        movq    %fs:0x0, %rax
+    0.00 :   410de7:        movq    $0x0, %fs:-0x720d8
+    0.00 :   410df4:        movq    %r14, %rdx
+    0.00 :   410df7:        movl    $0x1000, %esi
+    0.00 :   410dfc:        leaq    -0x720d8(%rax), %rdi
+    0.00 :   410e03:        callq   0x403110 <_init+0x110>
+    0.00 :   410e08:        testl   %eax, %eax
+    0.00 :   410e0a:        jne     0x410ffe <shard_io_thread.part.0.constprop.0+0x76e>
+    0.00 :   410e10:        movl    %r12d, %fs:-0x720e0
+    0.00 :   410e19:        jmp     0x410ba2 <shard_io_thread.part.0.constprop.0+0x312>
+    0.00 :   410e1e:        nop
+    0.00 :   410e20:        xorl    %eax, %eax
+    0.00 :   410e22:        movl    $0x1, %edx
+    0.00 :   410e27:        lock
+    0.00 :   410e28:        cmpxchgl        %edx, 0xf1771(%rip)  # 0x5025a0 <once_bounce.0>
+    0.00 :   410e2f:        movl    0x2018(%rbx), %ecx
+    0.00 :   410e35:        movq    0x2010(%rbx), %rsi
+    0.00 :   410e3c:        jne     0x410bc1 <shard_io_thread.part.0.constprop.0+0x331>
+    0.00 :   410e42:        movl    %esi, %edx
+    0.00 :   410e44:        movq    0xf1735(%rip), %rdi  # 0x502580 <stderr@GLIBC_2.2.5>
+    0.00 :   410e4b:        movl    $0x4af6c0, %esi
+    0.00 :   410e50:        xorl    %eax, %eax
+    0.00 :   410e52:        andl    $0xfff, %edx
+    0.00 :   410e58:        callq   0x403970 <_init+0x970>
+    0.00 :   410e5d:        jmp     0x410bba <shard_io_thread.part.0.constprop.0+0x32a>
+    0.00 :   410e62:        nopw    (%rax,%rax)
+    0.00 :   410e68:        movq    0x2030(%rbx), %rsi
+    0.00 :   410e6f:        testq   %rsi, %rsi
+    0.00 :   410e72:        je      0x410c3b <shard_io_thread.part.0.constprop.0+0x3ab>
+    0.00 :   410e78:        movl    $0x20, %edx
+    0.00 :   410e7d:        movl    %r13d, %edi
+    0.00 :   410e80:        addq    $0x20, %r12
+    0.00 :   410e84:        callq   0x4039b0 <_init+0x9b0>
+    0.00 :   410e89:        cmpq    $0x20, %rax
+    0.00 :   410e8d:        je      0x410c3b <shard_io_thread.part.0.constprop.0+0x3ab>
+    0.00 :   410e93:        jmp     0x410b6c <shard_io_thread.part.0.constprop.0+0x2dc>
+    0.00 :   410e98:        nopl    (%rax,%rax)
+    0.00 :   410ea0:        movl    0x2028(%rbx), %r9d
+    0.00 :   410ea7:        testl   %r9d, %r9d
+    0.00 :   410eaa:        je      0x410b74 <shard_io_thread.part.0.constprop.0+0x2e4>
+    0.00 :   410eb0:        movl    $0xfffffffc, 0x2038(%rbx)
+    0.00 :   410eba:        jmp     0x410b7e <shard_io_thread.part.0.constprop.0+0x2ee>
+    0.00 :   410ebf:        nop
+    0.00 :   410ec0:        testl   %eax, %eax
+    0.00 :   410ec2:        je      0x410da8 <shard_io_thread.part.0.constprop.0+0x518>
+    0.00 :   410ec8:        movq    $-0x700bc, %rdx
+    0.00 :   410ecf:        movl    %fs:(%rdx), %esi
+    0.00 :   410ed2:        testl   %esi, %esi
+    0.00 :   410ed4:        je      0x410f6a <shard_io_thread.part.0.constprop.0+0x6da>
+    0.00 :   410eda:        movl    $0x5025c0, %edi
+    0.00 :   410edf:        movl    %r12d, %r14d
+    0.00 :   410ee2:        callq   0x403920 <_init+0x920>
+    0.00 :   410ee7:        movq    0xf16c2(%rip), %r15  # 0x5025b0 <zero_dio.3>
+    0.00 :   410eee:        testq   %r15, %r15
+    0.00 :   410ef1:        je      0x410efc <shard_io_thread.part.0.constprop.0+0x66c>
+    0.00 :   410ef3:        cmpl    %r12d, 0xf16ae(%rip)  # 0x5025a8 <zero_dio_alloc.2>
+    0.00 :   410efa:        jae     0x410f44 <shard_io_thread.part.0.constprop.0+0x6b4>
+    0.00 :   410efc:        movq    $0x0, 0x10(%rsp)
+    0.00 :   410f05:        leaq    0x10(%rsp), %r15
+    0.00 :   410f0a:        movq    %r14, %rdx
+    0.00 :   410f0d:        movl    $0x1000, %esi
+    0.00 :   410f12:        movq    %r15, %rdi
+    0.00 :   410f15:        callq   0x403110 <_init+0x110>
+    0.00 :   410f1a:        testl   %eax, %eax
+    0.00 :   410f1c:        jne     0x4110a7 <shard_io_thread.part.0.constprop.0+0x817>
+    0.00 :   410f22:        movq    0x10(%rsp), %rdi
+    0.00 :   410f27:        movq    %r14, %rdx
+    0.00 :   410f2a:        xorl    %esi, %esi
+    0.00 :   410f2c:        callq   0x4030d0 <_init+0xd0>
+    0.00 :   410f31:        movq    0x10(%rsp), %r15
+    0.00 :   410f36:        movl    %r12d, 0xf166b(%rip)  # 0x5025a8 <zero_dio_alloc.2>
+    0.00 :   410f3d:        movq    %r15, 0xf166c(%rip)  # 0x5025b0 <zero_dio.3>
+    0.00 :   410f44:        movl    $0x5025c0, %edi
+    0.00 :   410f49:        callq   0x4039f0 <_init+0x9f0>
+    0.00 :   410f4e:        jmp     0x410c0f <shard_io_thread.part.0.constprop.0+0x37f>
+    0.00 :   410f53:        nopl    (%rax,%rax)
+    0.00 :   410f58:        movl    %r13d, %edi
+    0.00 :   410f5b:        callq   0x403140 <_init+0x140>
+    0.00 :   410f60:        movl    $0xffffffff, %edx
+    0.00 :   410f65:        jmp     0x410d6e <shard_io_thread.part.0.constprop.0+0x4de>
+    0.00 :   410f6a:        movq    0x2010(%rbx), %rdi
+    0.00 :   410f71:        movl    %eax, %esi
+    0.00 :   410f73:        callq   0x4363a0 <efs_bytes_are_zero>
+    0.00 :   410f78:        testl   %eax, %eax
+    0.00 :   410f7a:        jne     0x410eda <shard_io_thread.part.0.constprop.0+0x64a>
+    0.00 :   410f80:        jmp     0x4109d4 <shard_io_thread.part.0.constprop.0+0x144>
+    0.00 :   410f85:        nopl    (%rax)
+   10.25 :   410f88:        movq    0x8(%r12), %rdx
+    0.00 :   410f8d:        cmpq    %rdx, %rax
+    0.00 :   410f90:        jb      0x4110c8 <shard_io_thread.part.0.constprop.0+0x838>
+    0.00 :   410f96:        movq    %rax, %rcx
+    0.00 :   410f99:        subq    %rdx, %rcx
+    0.00 :   410f9c:        cmpl    $0x1, %r14d
+    0.00 :   410fa0:        je      0x410fa9 <shard_io_thread.part.0.constprop.0+0x719>
+    0.00 :   410fa2:        cmpq    0x18(%r12), %rcx
+    0.00 :   410fa7:        jb      0x410fb8 <shard_io_thread.part.0.constprop.0+0x728>
+    0.00 :   410fa9:        movl    %r13d, %edi
+    0.00 :   410fac:        callq   0x403140 <_init+0x140>
+    0.00 :   410fb1:        xorl    %eax, %eax
+    0.00 :   410fb3:        jmp     0x410ab8 <shard_io_thread.part.0.constprop.0+0x228>
+    0.00 :   410fb8:        addq    $0x10, %r12
+    0.00 :   410fbc:        testq   %rcx, %rcx
+    0.00 :   410fbf:        jne     0x411029 <shard_io_thread.part.0.constprop.0+0x799>
+    0.00 :   410fc1:        movl    $0x1, %r14d
+    0.00 :   410fc7:        jmp     0x410a88 <shard_io_thread.part.0.constprop.0+0x1f8>
+    0.00 :   410fcc:        nopl    (%rax)
+    0.00 :   410fd0:        movl    $0xfffffffd, 0x2038(%rbx)
+    0.00 :   410fda:        jmp     0x410b7e <shard_io_thread.part.0.constprop.0+0x2ee>
+    0.00 :   410fdf:        testl   %r14d, %r14d
+    0.00 :   410fe2:        movl    %r14d, 0xc(%rsp)
+    0.00 :   410fe7:        jne     0x410d52 <shard_io_thread.part.0.constprop.0+0x4c2>
+    0.00 :   410fed:        movl    %r13d, %edi
+    0.00 :   410ff0:        callq   0x403140 <_init+0x140>
+    0.00 :   410ff5:        movl    0xc(%rsp), %edx
+    0.00 :   410ff9:        jmp     0x410d6e <shard_io_thread.part.0.constprop.0+0x4de>
+    0.00 :   410ffe:        movl    $0x0, %fs:-0x720e0
+    0.00 :   41100a:        movl    %r13d, %edi
+    0.00 :   41100d:        callq   0x403140 <_init+0x140>
+    0.00 :   411012:        movl    $0xfffffffe, 0x2038(%rbx)
+    0.00 :   41101c:        jmp     0x410b7e <shard_io_thread.part.0.constprop.0+0x2ee>
+    0.00 :   411021:        movl    %r12d, %r14d
+    0.00 :   411024:        jmp     0x410c0f <shard_io_thread.part.0.constprop.0+0x37f>
+    0.00 :   411029:        subq    %rax, %rdx
+    0.00 :   41102c:        addq    %rcx, (%r12)
+    0.00 :   411030:        addq    %rdx, 0x8(%r12)
+    0.00 :   411035:        jmp     0x410fc1 <shard_io_thread.part.0.constprop.0+0x731>
+    0.00 :   411037:        xorl    %eax, %eax
+    0.00 :   411039:        movl    $0x1, %edx
+    0.00 :   41103e:        lock
+    0.00 :   41103f:        cmpxchgl        %edx, 0xf155e(%rip)  # 0x5025a4 <once_zc.1>
+    0.00 :   411046:        movl    0x2018(%rbx), %edx
+    0.00 :   41104c:        jne     0x411061 <shard_io_thread.part.0.constprop.0+0x7d1>
+    0.00 :   41104e:        movq    0xf152b(%rip), %rdi  # 0x502580 <stderr@GLIBC_2.2.5>
+    0.00 :   411055:        movl    $0x4af680, %esi
+    0.00 :   41105a:        xorl    %eax, %eax
+    0.00 :   41105c:        callq   0x403970 <_init+0x970>
+    0.00 :   411061:        movq    %fs:-0x720d0, %r12
+    0.00 :   41106a:        jmp     0x410a52 <shard_io_thread.part.0.constprop.0+0x1c2>
+    0.00 :   41106f:        movq    %fs:0x0, %rax
+    0.00 :   411078:        movl    $0x1000, %edx
+    0.00 :   41107d:        movl    $0x1000, %esi
+    0.00 :   411082:        leaq    -0x720d0(%rax), %rdi
+    0.00 :   411089:        callq   0x403110 <_init+0x110>
+    0.00 :   41108e:        testl   %eax, %eax
+    0.00 :   411090:        jne     0x4110d6 <shard_io_thread.part.0.constprop.0+0x846>
+    0.00 :   411092:        movq    0x2030(%rbx), %rax
+    0.00 :   411099:        movq    %fs:-0x720d0, %r12
+    0.00 :   4110a2:        jmp     0x410a23 <shard_io_thread.part.0.constprop.0+0x193>
+    0.00 :   4110a7:        movl    $0x5025c0, %edi
+    0.00 :   4110ac:        callq   0x4039f0 <_init+0x9f0>
+    0.00 :   4110b1:        movl    %r13d, %edi
+    0.00 :   4110b4:        callq   0x403140 <_init+0x140>
+    0.00 :   4110b9:        movl    $0xfffffffe, 0x2038(%rbx)
+    0.00 :   4110c3:        jmp     0x410b7e <shard_io_thread.part.0.constprop.0+0x2ee>
+    0.00 :   4110c8:        addq    %rax, (%r12)
+    0.00 :   4110cc:        subq    %rax, 0x8(%r12)
+    0.00 :   4110d1:        jmp     0x410a88 <shard_io_thread.part.0.constprop.0+0x1f8>
+    0.00 :   4110d6:        movq    $0x0, %fs:-0x720d0
+    0.00 :   4110e3:        movl    %r13d, %edi
+    0.00 :   4110e6:        callq   0x403140 <_init+0x140>
+    0.00 :   4110eb:        movl    $0xfffffffe, %eax
+    0.00 :   4110f0:        jmp     0x410ab8 <shard_io_thread.part.0.constprop.0+0x228>

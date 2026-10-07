@@ -1,0 +1,28 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 19922810793
+#
+# Overhead      Pid:Command    Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+     0.82%  3863689:efs-bench  [k] crc32_body                               -      -            
+     0.70%  3863686:efs-bench  [k] _raw_spin_lock                           -      -            
+     0.68%  3863686:efs-bench  [k] crc32_body                               -      -            
+     0.63%  3863689:efs-bench  [k] _raw_spin_lock                           -      -            
+     0.60%  3863689:efs-bench  [k] __d_lookup_rcu                           -      -            
+     0.59%  3863689:efs-bench  [k] __iomap_dio_rw                           -      -            
+     0.54%  3863688:efs-bench  [k] crc32_body                               -      -            
+     0.53%  3863688:efs-bench  [k] __d_lookup_rcu                           -      -            
+     0.52%  3863688:efs-bench  [k] _raw_spin_lock                           -      -            
+     0.51%  3863687:efs-bench  [k] _raw_spin_lock                           -      -            
+     0.50%  3863687:efs-bench  [k] __iomap_dio_rw                           -      -            
+
+
+#
+# (Tip: If you prefer Intel style assembly, try: perf annotate -M intel)
+#

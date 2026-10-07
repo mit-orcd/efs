@@ -1,0 +1,7536 @@
+[
+  {
+    "name": "current-root1-sync0-r2",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": false,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-p76leaxy"
+    ],
+    "load_start": [
+      0.29443359375,
+      0.40478515625,
+      0.6669921875
+    ],
+    "start": 1791354937.731161,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.207548175007105
+    },
+    "end": 1791354967.938955,
+    "load_end": [
+      17.9072265625,
+      4.8388671875,
+      2.14306640625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "202049",
+        "wall_s": "30.003",
+        "ops_s": "6734.3",
+        "p50_us": "1999",
+        "p99_us": "7103",
+        "max_us": "29393",
+        "GiB_s": "0.411",
+        "errors": "0",
+        "diskw_ops": "202049",
+        "diskw_avg_us": "581",
+        "idle_workers": "0",
+        "max_start_us": "78",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "202049",
+        "latency_valid": "1",
+        "p99_lower_us": "7072",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "excluded": "Candidate CLI smoke check overlapped startup of this run; replaced after all diagnostic workloads."
+  },
+  {
+    "name": "current-root1-sync0-r3",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": false,
+    "repeat": 3,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-1rr4ehsn"
+    ],
+    "load_start": [
+      17.9072265625,
+      4.8388671875,
+      2.14306640625
+    ],
+    "start": 1791354967.9403958,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.3561635040096
+    },
+    "end": 1791354998.2966561,
+    "load_end": [
+      12.49462890625,
+      4.7734375,
+      2.208984375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "201951",
+        "wall_s": "30.004",
+        "ops_s": "6730.9",
+        "p50_us": "1831",
+        "p99_us": "7359",
+        "max_us": "31211",
+        "GiB_s": "0.411",
+        "errors": "0",
+        "diskw_ops": "201951",
+        "diskw_avg_us": "581",
+        "idle_workers": "0",
+        "max_start_us": "37",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "201951",
+        "latency_valid": "1",
+        "p99_lower_us": "7328",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync1-r1",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": true,
+    "repeat": 1,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-8qaf0lv3",
+      "--sync"
+    ],
+    "load_start": [
+      12.49462890625,
+      4.7734375,
+      2.208984375
+    ],
+    "start": 1791354998.2973373,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.459417928999756
+    },
+    "end": 1791355028.7568686,
+    "load_end": [
+      9.41259765625,
+      4.7626953125,
+      2.2890625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "146998",
+        "wall_s": "30.004",
+        "ops_s": "4899.2",
+        "p50_us": "3119",
+        "p99_us": "7103",
+        "max_us": "29817",
+        "GiB_s": "0.299",
+        "errors": "0",
+        "diskw_ops": "146998",
+        "diskw_avg_us": "803",
+        "idle_workers": "0",
+        "max_start_us": "122",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "146998",
+        "latency_valid": "1",
+        "p99_lower_us": "7072",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync0-r1",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": false,
+    "repeat": 1,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-c9tddgv5"
+    ],
+    "load_start": [
+      9.41259765625,
+      4.7626953125,
+      2.2890625
+    ],
+    "start": 1791355028.7585845,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.11324082101055
+    },
+    "end": 1791355058.8721097,
+    "load_end": [
+      7.359375,
+      4.70556640625,
+      2.35009765625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "878449",
+        "wall_s": "30.001",
+        "ops_s": "29280.4",
+        "p50_us": "379",
+        "p99_us": "2287",
+        "max_us": "799403",
+        "GiB_s": "1.787",
+        "errors": "0",
+        "diskw_ops": "878449",
+        "diskw_avg_us": "127",
+        "idle_workers": "0",
+        "max_start_us": "41",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "878449",
+        "latency_valid": "1",
+        "p99_lower_us": "2272",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync0-r4",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": false,
+    "repeat": 4,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-q64k6yuj"
+    ],
+    "load_start": [
+      7.359375,
+      4.70556640625,
+      2.35009765625
+    ],
+    "start": 1791355058.873861,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.256410804999177
+    },
+    "end": 1791355089.1305964,
+    "load_end": [
+      6.17236328125,
+      4.67041015625,
+      2.41455078125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "521083",
+        "wall_s": "30.001",
+        "ops_s": "17368.7",
+        "p50_us": "811",
+        "p99_us": "2335",
+        "max_us": "30537",
+        "GiB_s": "1.060",
+        "errors": "0",
+        "diskw_ops": "521083",
+        "diskw_avg_us": "221",
+        "idle_workers": "0",
+        "max_start_us": "53",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "521083",
+        "latency_valid": "1",
+        "p99_lower_us": "2320",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync0-r0",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-9vro5pxi"
+    ],
+    "load_start": [
+      6.17236328125,
+      4.67041015625,
+      2.41455078125
+    ],
+    "start": 1791355089.1325033,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.25568645799649
+    },
+    "end": 1791355119.3884397,
+    "load_end": [
+      5.3955078125,
+      4.6220703125,
+      2.47216796875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "197263",
+        "wall_s": "30.003",
+        "ops_s": "6574.7",
+        "p50_us": "2351",
+        "p99_us": "5151",
+        "max_us": "27193",
+        "GiB_s": "0.401",
+        "errors": "0",
+        "diskw_ops": "197263",
+        "diskw_avg_us": "595",
+        "idle_workers": "0",
+        "max_start_us": "35",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "197263",
+        "latency_valid": "1",
+        "p99_lower_us": "5120",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync0-r1",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": false,
+    "repeat": 1,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-m3z4urez"
+    ],
+    "load_start": [
+      5.3955078125,
+      4.6220703125,
+      2.47216796875
+    ],
+    "start": 1791355119.3905537,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.205946065005264
+    },
+    "end": 1791355149.5967584,
+    "load_end": [
+      4.8447265625,
+      4.56103515625,
+      2.52197265625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "201524",
+        "wall_s": "30.003",
+        "ops_s": "6716.9",
+        "p50_us": "2399",
+        "p99_us": "4415",
+        "max_us": "26179",
+        "GiB_s": "0.410",
+        "errors": "0",
+        "diskw_ops": "201524",
+        "diskw_avg_us": "582",
+        "idle_workers": "0",
+        "max_start_us": "50",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "201524",
+        "latency_valid": "1",
+        "p99_lower_us": "4384",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync1-r2",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": true,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-sm_pn006",
+      "--sync"
+    ],
+    "load_start": [
+      4.8447265625,
+      4.56103515625,
+      2.52197265625
+    ],
+    "start": 1791355149.5984929,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.30665654799668
+    },
+    "end": 1791355179.905362,
+    "load_end": [
+      4.76171875,
+      4.5703125,
+      2.591796875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "178752",
+        "wall_s": "30.004",
+        "ops_s": "5957.7",
+        "p50_us": "2015",
+        "p99_us": "6687",
+        "max_us": "28544",
+        "GiB_s": "0.364",
+        "errors": "0",
+        "diskw_ops": "178752",
+        "diskw_avg_us": "651",
+        "idle_workers": "0",
+        "max_start_us": "45",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "178752",
+        "latency_valid": "1",
+        "p99_lower_us": "6656",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync0-r3",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": false,
+    "repeat": 3,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-cgh83dra"
+    ],
+    "load_start": [
+      4.76171875,
+      4.5703125,
+      2.591796875
+    ],
+    "start": 1791355179.9078536,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.115237860998604
+    },
+    "end": 1791355210.0233872,
+    "load_end": [
+      4.57568359375,
+      4.5458984375,
+      2.64892578125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "837057",
+        "wall_s": "30.001",
+        "ops_s": "27900.6",
+        "p50_us": "441",
+        "p99_us": "2095",
+        "max_us": "43996",
+        "GiB_s": "1.703",
+        "errors": "0",
+        "diskw_ops": "837057",
+        "diskw_avg_us": "131",
+        "idle_workers": "0",
+        "max_start_us": "99",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "837057",
+        "latency_valid": "1",
+        "p99_lower_us": "2080",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync1-r4",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": true,
+    "repeat": 4,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-vx4jx405",
+      "--sync"
+    ],
+    "load_start": [
+      4.57568359375,
+      4.5458984375,
+      2.64892578125
+    ],
+    "start": 1791355210.0256917,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.25908890798746
+    },
+    "end": 1791355240.2850263,
+    "load_end": [
+      4.3212890625,
+      4.49169921875,
+      2.69287109375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "150405",
+        "wall_s": "30.003",
+        "ops_s": "5013.0",
+        "p50_us": "3215",
+        "p99_us": "5503",
+        "max_us": "30713",
+        "GiB_s": "0.306",
+        "errors": "0",
+        "diskw_ops": "150405",
+        "diskw_avg_us": "783",
+        "idle_workers": "0",
+        "max_start_us": "71",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "150405",
+        "latency_valid": "1",
+        "p99_lower_us": "5472",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync0-r1",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": false,
+    "repeat": 1,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-fuimyo37"
+    ],
+    "load_start": [
+      4.3212890625,
+      4.49169921875,
+      2.69287109375
+    ],
+    "start": 1791355240.2860112,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.107922755996697
+    },
+    "end": 1791355270.394067,
+    "load_end": [
+      4.3896484375,
+      4.4921875,
+      2.751953125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "930116",
+        "wall_s": "30.001",
+        "ops_s": "31002.8",
+        "p50_us": "425",
+        "p99_us": "1527",
+        "max_us": "9972",
+        "GiB_s": "1.892",
+        "errors": "0",
+        "diskw_ops": "930116",
+        "diskw_avg_us": "120",
+        "idle_workers": "0",
+        "max_start_us": "77",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "930116",
+        "latency_valid": "1",
+        "p99_lower_us": "1520",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync0-r0",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-6ci4z3mf"
+    ],
+    "load_start": [
+      4.3896484375,
+      4.4921875,
+      2.751953125
+    ],
+    "start": 1791355270.396322,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.110292077006306
+    },
+    "end": 1791355300.5068653,
+    "load_end": [
+      4.37841796875,
+      4.47705078125,
+      2.8037109375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "403446",
+        "wall_s": "30.001",
+        "ops_s": "13447.5",
+        "p50_us": "931",
+        "p99_us": "4511",
+        "max_us": "167252",
+        "GiB_s": "0.821",
+        "errors": "0",
+        "diskw_ops": "403446",
+        "diskw_avg_us": "285",
+        "idle_workers": "0",
+        "max_start_us": "96",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "403446",
+        "latency_valid": "1",
+        "p99_lower_us": "4480",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync1-r0",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-r_73c17z",
+      "--sync"
+    ],
+    "load_start": [
+      4.37841796875,
+      4.47705078125,
+      2.8037109375
+    ],
+    "start": 1791355300.5087667,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.26093075699464
+    },
+    "end": 1791355330.7698944,
+    "load_end": [
+      4.58837890625,
+      4.51318359375,
+      2.86962890625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "151362",
+        "wall_s": "30.004",
+        "ops_s": "5044.7",
+        "p50_us": "3087",
+        "p99_us": "6111",
+        "max_us": "29230",
+        "GiB_s": "0.308",
+        "errors": "0",
+        "diskw_ops": "151362",
+        "diskw_avg_us": "778",
+        "idle_workers": "0",
+        "max_start_us": "30",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "151362",
+        "latency_valid": "1",
+        "p99_lower_us": "6080",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync1-r2",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": true,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-yw7ayew9",
+      "--sync"
+    ],
+    "load_start": [
+      4.58837890625,
+      4.51318359375,
+      2.86962890625
+    ],
+    "start": 1791355330.7719736,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 32.08451306699135
+    },
+    "end": 1791355362.856715,
+    "load_end": [
+      4.587890625,
+      4.5322265625,
+      2.93896484375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "16805",
+        "wall_s": "30.028",
+        "ops_s": "559.6",
+        "p50_us": "27775",
+        "p99_us": "44031",
+        "max_us": "61393",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "16805",
+        "diskw_avg_us": "7057",
+        "idle_workers": "0",
+        "max_start_us": "127",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "16805",
+        "latency_valid": "1",
+        "p99_lower_us": "43776",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync1-r4",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": true,
+    "repeat": 4,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-ajor0vb7",
+      "--sync"
+    ],
+    "load_start": [
+      4.587890625,
+      4.5322265625,
+      2.93896484375
+    ],
+    "start": 1791355362.8594398,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.307259495006292
+    },
+    "end": 1791355393.1669474,
+    "load_end": [
+      4.43505859375,
+      4.49755859375,
+      2.9794921875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "178412",
+        "wall_s": "30.002",
+        "ops_s": "5946.6",
+        "p50_us": "2639",
+        "p99_us": "4191",
+        "max_us": "25903",
+        "GiB_s": "0.363",
+        "errors": "0",
+        "diskw_ops": "178412",
+        "diskw_avg_us": "651",
+        "idle_workers": "0",
+        "max_start_us": "41",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "178412",
+        "latency_valid": "1",
+        "p99_lower_us": "4160",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync1-r4",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": true,
+    "repeat": 4,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-7wrh4fhw",
+      "--sync"
+    ],
+    "load_start": [
+      4.43505859375,
+      4.49755859375,
+      2.9794921875
+    ],
+    "start": 1791355393.1699827,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.88135863900243
+    },
+    "end": 1791355425.0516276,
+    "load_end": [
+      4.37353515625,
+      4.48046875,
+      3.0234375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "18936",
+        "wall_s": "30.037",
+        "ops_s": "630.4",
+        "p50_us": "24319",
+        "p99_us": "54783",
+        "max_us": "82457",
+        "GiB_s": "0.038",
+        "errors": "0",
+        "diskw_ops": "18936",
+        "diskw_avg_us": "6270",
+        "idle_workers": "0",
+        "max_start_us": "99",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "18936",
+        "latency_valid": "1",
+        "p99_lower_us": "54528",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync1-r3",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": true,
+    "repeat": 3,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-qzq750kl",
+      "--sync"
+    ],
+    "load_start": [
+      4.37353515625,
+      4.48046875,
+      3.0234375
+    ],
+    "start": 1791355425.0527742,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.880459649997647
+    },
+    "end": 1791355456.9333415,
+    "load_end": [
+      4.41064453125,
+      4.47509765625,
+      3.0771484375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "18981",
+        "wall_s": "30.032",
+        "ops_s": "632.0",
+        "p50_us": "23039",
+        "p99_us": "60927",
+        "max_us": "79109",
+        "GiB_s": "0.039",
+        "errors": "0",
+        "diskw_ops": "18981",
+        "diskw_avg_us": "6255",
+        "idle_workers": "0",
+        "max_start_us": "79",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "18981",
+        "latency_valid": "1",
+        "p99_lower_us": "60672",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync0-r4",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": false,
+    "repeat": 4,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-qmffoeid"
+    ],
+    "load_start": [
+      4.41064453125,
+      4.47509765625,
+      3.0771484375
+    ],
+    "start": 1791355456.9365346,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.206384008997702
+    },
+    "end": 1791355487.1432056,
+    "load_end": [
+      4.37890625,
+      4.46142578125,
+      3.11865234375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "200989",
+        "wall_s": "30.003",
+        "ops_s": "6699.0",
+        "p50_us": "2127",
+        "p99_us": "5247",
+        "max_us": "27914",
+        "GiB_s": "0.409",
+        "errors": "0",
+        "diskw_ops": "200989",
+        "diskw_avg_us": "584",
+        "idle_workers": "0",
+        "max_start_us": "64",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "200989",
+        "latency_valid": "1",
+        "p99_lower_us": "5216",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync1-r3",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": true,
+    "repeat": 3,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-kfg0xhr2",
+      "--sync"
+    ],
+    "load_start": [
+      4.37890625,
+      4.46142578125,
+      3.11865234375
+    ],
+    "start": 1791355487.1448479,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.882251296992763
+    },
+    "end": 1791355519.0272436,
+    "load_end": [
+      4.22802734375,
+      4.416015625,
+      3.14794921875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "16582",
+        "wall_s": "30.025",
+        "ops_s": "552.3",
+        "p50_us": "28671",
+        "p99_us": "40447",
+        "max_us": "46067",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "16582",
+        "diskw_avg_us": "7148",
+        "idle_workers": "0",
+        "max_start_us": "143",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "16582",
+        "latency_valid": "1",
+        "p99_lower_us": "40192",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync0-r4",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": false,
+    "repeat": 4,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-36rt5zwn"
+    ],
+    "load_start": [
+      4.22802734375,
+      4.416015625,
+      3.14794921875
+    ],
+    "start": 1791355519.0303206,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.208818989005522
+    },
+    "end": 1791355549.239391,
+    "load_end": [
+      4.24755859375,
+      4.40625,
+      3.1875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "199953",
+        "wall_s": "30.003",
+        "ops_s": "6664.5",
+        "p50_us": "1983",
+        "p99_us": "6783",
+        "max_us": "65738",
+        "GiB_s": "0.407",
+        "errors": "0",
+        "diskw_ops": "199953",
+        "diskw_avg_us": "586",
+        "idle_workers": "0",
+        "max_start_us": "53",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "199953",
+        "latency_valid": "1",
+        "p99_lower_us": "6752",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync0-r3",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": false,
+    "repeat": 3,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-rkkxo8db"
+    ],
+    "load_start": [
+      4.24755859375,
+      4.40625,
+      3.1875
+    ],
+    "start": 1791355549.240995,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.109108122007456
+    },
+    "end": 1791355579.3502495,
+    "load_end": [
+      4.22314453125,
+      4.3828125,
+      3.21923828125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "1042864",
+        "wall_s": "30.001",
+        "ops_s": "34761.3",
+        "p50_us": "373",
+        "p99_us": "1295",
+        "max_us": "6987",
+        "GiB_s": "2.122",
+        "errors": "0",
+        "diskw_ops": "1042864",
+        "diskw_avg_us": "105",
+        "idle_workers": "0",
+        "max_start_us": "53",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "1042864",
+        "latency_valid": "1",
+        "p99_lower_us": "1288",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync1-r0",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-8x3oyiv9",
+      "--sync"
+    ],
+    "load_start": [
+      4.22314453125,
+      4.3828125,
+      3.21923828125
+    ],
+    "start": 1791355579.3537593,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.933867156985798
+    },
+    "end": 1791355611.287984,
+    "load_end": [
+      4.2021484375,
+      4.361328125,
+      3.2509765625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "16732",
+        "wall_s": "30.027",
+        "ops_s": "557.2",
+        "p50_us": "28287",
+        "p99_us": "40191",
+        "max_us": "51894",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "16732",
+        "diskw_avg_us": "7087",
+        "idle_workers": "0",
+        "max_start_us": "184",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "16732",
+        "latency_valid": "1",
+        "p99_lower_us": "39936",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync1-r1",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": true,
+    "repeat": 1,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-laxfmfn3",
+      "--sync"
+    ],
+    "load_start": [
+      4.2021484375,
+      4.361328125,
+      3.2509765625
+    ],
+    "start": 1791355611.2917354,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.88196362600138
+    },
+    "end": 1791355643.1739664,
+    "load_end": [
+      4.31103515625,
+      4.36865234375,
+      3.29638671875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "18770",
+        "wall_s": "30.035",
+        "ops_s": "624.9",
+        "p50_us": "23423",
+        "p99_us": "66047",
+        "max_us": "92584",
+        "GiB_s": "0.038",
+        "errors": "0",
+        "diskw_ops": "18770",
+        "diskw_avg_us": "6325",
+        "idle_workers": "0",
+        "max_start_us": "187",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "18770",
+        "latency_valid": "1",
+        "p99_lower_us": "65536",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync1-r1",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": true,
+    "repeat": 1,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-3orregn8",
+      "--sync"
+    ],
+    "load_start": [
+      4.31103515625,
+      4.36865234375,
+      3.29638671875
+    ],
+    "start": 1791355643.1762552,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.308369083999423
+    },
+    "end": 1791355673.4847782,
+    "load_end": [
+      4.3759765625,
+      4.38037109375,
+      3.3359375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "169455",
+        "wall_s": "30.004",
+        "ops_s": "5647.8",
+        "p50_us": "2607",
+        "p99_us": "6367",
+        "max_us": "29059",
+        "GiB_s": "0.345",
+        "errors": "0",
+        "diskw_ops": "169455",
+        "diskw_avg_us": "687",
+        "idle_workers": "0",
+        "max_start_us": "42",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "169455",
+        "latency_valid": "1",
+        "p99_lower_us": "6336",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync1-r2",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": true,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-7oveeivc",
+      "--sync"
+    ],
+    "load_start": [
+      4.3759765625,
+      4.38037109375,
+      3.3359375
+    ],
+    "start": 1791355673.4885292,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.311260424001375
+    },
+    "end": 1791355703.8000512,
+    "load_end": [
+      4.2265625,
+      4.3427734375,
+      3.359375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "145053",
+        "wall_s": "30.004",
+        "ops_s": "4834.4",
+        "p50_us": "2463",
+        "p99_us": "8639",
+        "max_us": "30094",
+        "GiB_s": "0.295",
+        "errors": "0",
+        "diskw_ops": "145053",
+        "diskw_avg_us": "812",
+        "idle_workers": "0",
+        "max_start_us": "85",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "145053",
+        "latency_valid": "1",
+        "p99_lower_us": "8576",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync0-r2",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": false,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-15paue2w"
+    ],
+    "load_start": [
+      4.2265625,
+      4.3427734375,
+      3.359375
+    ],
+    "start": 1791355703.8037784,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.11090535800031
+    },
+    "end": 1791355733.9149563,
+    "load_end": [
+      4.21630859375,
+      4.32568359375,
+      3.38623046875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "1021282",
+        "wall_s": "30.001",
+        "ops_s": "34041.6",
+        "p50_us": "377",
+        "p99_us": "1359",
+        "max_us": "7847",
+        "GiB_s": "2.078",
+        "errors": "0",
+        "diskw_ops": "1021282",
+        "diskw_avg_us": "107",
+        "idle_workers": "0",
+        "max_start_us": "66",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "1021282",
+        "latency_valid": "1",
+        "p99_lower_us": "1352",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync1-r2",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": true,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-0k9qq56z",
+      "--sync"
+    ],
+    "load_start": [
+      4.21630859375,
+      4.32568359375,
+      3.38623046875
+    ],
+    "start": 1791355733.9186938,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.881618649000302
+    },
+    "end": 1791355765.8005629,
+    "load_end": [
+      4.29052734375,
+      4.32666015625,
+      3.41748046875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "18753",
+        "wall_s": "30.031",
+        "ops_s": "624.5",
+        "p50_us": "23423",
+        "p99_us": "62463",
+        "max_us": "83221",
+        "GiB_s": "0.038",
+        "errors": "0",
+        "diskw_ops": "18753",
+        "diskw_avg_us": "6331",
+        "idle_workers": "0",
+        "max_start_us": "253",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "18753",
+        "latency_valid": "1",
+        "p99_lower_us": "62208",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync0-r3",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": false,
+    "repeat": 3,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-jrlbgfp4"
+    ],
+    "load_start": [
+      4.29052734375,
+      4.32666015625,
+      3.41748046875
+    ],
+    "start": 1791355765.8048532,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.20644390799862
+    },
+    "end": 1791355796.0116632,
+    "load_end": [
+      4.16552734375,
+      4.29345703125,
+      3.4375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "200739",
+        "wall_s": "30.003",
+        "ops_s": "6690.7",
+        "p50_us": "2143",
+        "p99_us": "5023",
+        "max_us": "28238",
+        "GiB_s": "0.408",
+        "errors": "0",
+        "diskw_ops": "200739",
+        "diskw_avg_us": "584",
+        "idle_workers": "0",
+        "max_start_us": "67",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "200739",
+        "latency_valid": "1",
+        "p99_lower_us": "4992",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync1-r0",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-fuimxxud",
+      "--sync"
+    ],
+    "load_start": [
+      4.16552734375,
+      4.29345703125,
+      3.4375
+    ],
+    "start": 1791355796.013444,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.930825681993156
+    },
+    "end": 1791355827.9444008,
+    "load_end": [
+      4.1396484375,
+      4.27490234375,
+      3.46533203125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "18869",
+        "wall_s": "30.037",
+        "ops_s": "628.2",
+        "p50_us": "20351",
+        "p99_us": "66047",
+        "max_us": "79217",
+        "GiB_s": "0.038",
+        "errors": "0",
+        "diskw_ops": "18869",
+        "diskw_avg_us": "6295",
+        "idle_workers": "0",
+        "max_start_us": "235",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "18869",
+        "latency_valid": "1",
+        "p99_lower_us": "65536",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync1-r3",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": true,
+    "repeat": 3,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-35r48d80",
+      "--sync"
+    ],
+    "load_start": [
+      4.1396484375,
+      4.27490234375,
+      3.46533203125
+    ],
+    "start": 1791355827.9482138,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.309256905005896
+    },
+    "end": 1791355858.2576997,
+    "load_end": [
+      4.19921875,
+      4.279296875,
+      3.49365234375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "177744",
+        "wall_s": "30.002",
+        "ops_s": "5924.3",
+        "p50_us": "2591",
+        "p99_us": "4927",
+        "max_us": "27233",
+        "GiB_s": "0.362",
+        "errors": "0",
+        "diskw_ops": "177744",
+        "diskw_avg_us": "653",
+        "idle_workers": "0",
+        "max_start_us": "63",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "177744",
+        "latency_valid": "1",
+        "p99_lower_us": "4896",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync0-r0",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-azhu79lx"
+    ],
+    "load_start": [
+      4.19921875,
+      4.279296875,
+      3.49365234375
+    ],
+    "start": 1791355858.2618873,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.111798265992547
+    },
+    "end": 1791355888.3739474,
+    "load_end": [
+      4.25537109375,
+      4.2841796875,
+      3.52197265625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "1031262",
+        "wall_s": "30.001",
+        "ops_s": "34374.0",
+        "p50_us": "391",
+        "p99_us": "1279",
+        "max_us": "8227",
+        "GiB_s": "2.098",
+        "errors": "0",
+        "diskw_ops": "1031262",
+        "diskw_avg_us": "105",
+        "idle_workers": "0",
+        "max_start_us": "80",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "1031262",
+        "latency_valid": "1",
+        "p99_lower_us": "1272",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync0-r2",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": false,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-f_wupg6t"
+    ],
+    "load_start": [
+      4.25537109375,
+      4.2841796875,
+      3.52197265625
+    ],
+    "start": 1791355888.3784344,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.11596799099061
+    },
+    "end": 1791355918.4948273,
+    "load_end": [
+      4.49169921875,
+      4.33740234375,
+      3.5654296875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "546615",
+        "wall_s": "30.002",
+        "ops_s": "18219.1",
+        "p50_us": "587",
+        "p99_us": "3375",
+        "max_us": "180428",
+        "GiB_s": "1.112",
+        "errors": "0",
+        "diskw_ops": "546615",
+        "diskw_avg_us": "206",
+        "idle_workers": "0",
+        "max_start_us": "61",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "546615",
+        "latency_valid": "1",
+        "p99_lower_us": "3360",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync1-r1",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": true,
+    "repeat": 1,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-tj3fdzi1",
+      "--sync"
+    ],
+    "load_start": [
+      4.49169921875,
+      4.33740234375,
+      3.5654296875
+    ],
+    "start": 1791355918.4977095,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 32.13584734899632
+    },
+    "end": 1791355950.6337287,
+    "load_end": [
+      4.61865234375,
+      4.3857421875,
+      3.60693359375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "17034",
+        "wall_s": "30.026",
+        "ops_s": "567.3",
+        "p50_us": "27775",
+        "p99_us": "39423",
+        "max_us": "45485",
+        "GiB_s": "0.035",
+        "errors": "0",
+        "diskw_ops": "17034",
+        "diskw_avg_us": "6960",
+        "idle_workers": "0",
+        "max_start_us": "150",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "17034",
+        "latency_valid": "1",
+        "p99_lower_us": "39168",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync0-r1",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": false,
+    "repeat": 1,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-bvx2ldq6"
+    ],
+    "load_start": [
+      4.61865234375,
+      4.3857421875,
+      3.60693359375
+    ],
+    "start": 1791355950.6358402,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.209216236005886
+    },
+    "end": 1791355980.8451858,
+    "load_end": [
+      4.3740234375,
+      4.34716796875,
+      3.62158203125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "199664",
+        "wall_s": "30.003",
+        "ops_s": "6654.9",
+        "p50_us": "1879",
+        "p99_us": "7039",
+        "max_us": "45734",
+        "GiB_s": "0.406",
+        "errors": "0",
+        "diskw_ops": "199664",
+        "diskw_avg_us": "587",
+        "idle_workers": "0",
+        "max_start_us": "48",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "199664",
+        "latency_valid": "1",
+        "p99_lower_us": "7008",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync0-r0",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-vslecxui"
+    ],
+    "load_start": [
+      4.3740234375,
+      4.34716796875,
+      3.62158203125
+    ],
+    "start": 1791355980.8489528,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.21031527800369
+    },
+    "end": 1791356011.059554,
+    "load_end": [
+      4.2255859375,
+      4.3125,
+      3.63623046875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "199226",
+        "wall_s": "30.003",
+        "ops_s": "6640.3",
+        "p50_us": "1695",
+        "p99_us": "7519",
+        "max_us": "74275",
+        "GiB_s": "0.405",
+        "errors": "0",
+        "diskw_ops": "199226",
+        "diskw_avg_us": "587",
+        "idle_workers": "0",
+        "max_start_us": "61",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "199226",
+        "latency_valid": "1",
+        "p99_lower_us": "7488",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync0-r2",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": false,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-26u0s3o8"
+    ],
+    "load_start": [
+      4.2255859375,
+      4.3125,
+      3.63623046875
+    ],
+    "start": 1791356011.0621154,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.207857701010653
+    },
+    "end": 1791356041.2701287,
+    "load_end": [
+      4.27392578125,
+      4.314453125,
+      3.6591796875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "200114",
+        "wall_s": "30.004",
+        "ops_s": "6669.5",
+        "p50_us": "1991",
+        "p99_us": "7295",
+        "max_us": "32550",
+        "GiB_s": "0.407",
+        "errors": "0",
+        "diskw_ops": "200114",
+        "diskw_avg_us": "585",
+        "idle_workers": "0",
+        "max_start_us": "48",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "200114",
+        "latency_valid": "1",
+        "p99_lower_us": "7264",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync1-r4",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 2,
+    "sync": true,
+    "repeat": 4,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-00p_eq7z",
+      "--sync"
+    ],
+    "load_start": [
+      4.27392578125,
+      4.314453125,
+      3.6591796875
+    ],
+    "start": 1791356041.2727783,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.832397935009794
+    },
+    "end": 1791356073.1053352,
+    "load_end": [
+      4.28076171875,
+      4.310546875,
+      3.68359375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "16712",
+        "wall_s": "30.030",
+        "ops_s": "556.5",
+        "p50_us": "28927",
+        "p99_us": "42495",
+        "max_us": "50633",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "16712",
+        "diskw_avg_us": "7099",
+        "idle_workers": "0",
+        "max_start_us": "147",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "16712",
+        "latency_valid": "1",
+        "p99_lower_us": "42240",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync1-r3",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": true,
+    "repeat": 3,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-6rzltxh_",
+      "--sync"
+    ],
+    "load_start": [
+      4.28076171875,
+      4.310546875,
+      3.68359375
+    ],
+    "start": 1791356073.1086924,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.26233745701029
+    },
+    "end": 1791356103.371221,
+    "load_end": [
+      4.24951171875,
+      4.29638671875,
+      3.70068359375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "146040",
+        "wall_s": "30.004",
+        "ops_s": "4867.4",
+        "p50_us": "3167",
+        "p99_us": "6559",
+        "max_us": "30351",
+        "GiB_s": "0.297",
+        "errors": "0",
+        "diskw_ops": "146040",
+        "diskw_avg_us": "805",
+        "idle_workers": "0",
+        "max_start_us": "84",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "146040",
+        "latency_valid": "1",
+        "p99_lower_us": "6528",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync0-r4",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 2,
+    "sync": false,
+    "repeat": 4,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-htamwbgs"
+    ],
+    "load_start": [
+      4.24951171875,
+      4.29638671875,
+      3.70068359375
+    ],
+    "start": 1791356103.3733647,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.122135703990352
+    },
+    "end": 1791356133.4956434,
+    "load_end": [
+      4.54638671875,
+      4.36376953125,
+      3.74365234375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "755460",
+        "wall_s": "30.002",
+        "ops_s": "25180.6",
+        "p50_us": "503",
+        "p99_us": "1919",
+        "max_us": "152103",
+        "GiB_s": "1.537",
+        "errors": "0",
+        "diskw_ops": "755460",
+        "diskw_avg_us": "140",
+        "idle_workers": "0",
+        "max_start_us": "79",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "755460",
+        "latency_valid": "1",
+        "p99_lower_us": "1912",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync1-r0",
+    "phase": "baseline",
+    "variant": "conditional",
+    "root": 1,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-f2rjpfbm",
+      "--sync"
+    ],
+    "load_start": [
+      4.54638671875,
+      4.36376953125,
+      3.74365234375
+    ],
+    "start": 1791356133.4989798,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.30942104800488
+    },
+    "end": 1791356163.8085918,
+    "load_end": [
+      4.2626953125,
+      4.31201171875,
+      3.74658203125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "176498",
+        "wall_s": "30.003",
+        "ops_s": "5882.7",
+        "p50_us": "2655",
+        "p99_us": "4895",
+        "max_us": "26547",
+        "GiB_s": "0.359",
+        "errors": "0",
+        "diskw_ops": "176498",
+        "diskw_avg_us": "657",
+        "idle_workers": "0",
+        "max_start_us": "50",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "176498",
+        "latency_valid": "1",
+        "p99_lower_us": "4864",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync0-r0",
+    "phase": "perf",
+    "variant": "current",
+    "root": 1,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-yzrqgdis"
+    ],
+    "load_start": [
+      4.2626953125,
+      4.31201171875,
+      3.74658203125
+    ],
+    "start": 1791356163.8139987,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.36432849400444
+    },
+    "end": 1791356195.1786475,
+    "load_end": [
+      4.45458984375,
+      4.34716796875,
+      3.77685546875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "191424",
+        "wall_s": "30.006",
+        "ops_s": "6379.6",
+        "p50_us": "1967",
+        "p99_us": "7679",
+        "max_us": "41372",
+        "GiB_s": "0.389",
+        "errors": "0",
+        "diskw_ops": "191424",
+        "diskw_avg_us": "606",
+        "idle_workers": "0",
+        "max_start_us": "92",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "191424",
+        "latency_valid": "1",
+        "p99_lower_us": "7648",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "reports_valid": true,
+    "symbols": [
+      {
+        "percent": 6.21,
+        "dso": "[xfs]",
+        "symbol": "xfs_extent_busy_trim"
+      },
+      {
+        "percent": 5.9,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_get_leaf_keys"
+      },
+      {
+        "percent": 4.13,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memmove"
+      },
+      {
+        "percent": 2.68,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock"
+      },
+      {
+        "percent": 2.0,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_init_high_key_from_rec"
+      },
+      {
+        "percent": 1.81,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memcpy"
+      },
+      {
+        "percent": 1.57,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_lookup"
+      },
+      {
+        "percent": 1.47,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock_irqsave"
+      },
+      {
+        "percent": 1.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_alloc_noprof"
+      },
+      {
+        "percent": 1.3,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_rec_offset"
+      },
+      {
+        "percent": 1.07,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_free"
+      },
+      {
+        "percent": 1.04,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_insert_items"
+      },
+      {
+        "percent": 0.92,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__iomap_dio_rw"
+      },
+      {
+        "percent": 0.9,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_lookup.constprop.0"
+      },
+      {
+        "percent": 0.77,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__d_lookup_rcu"
+      },
+      {
+        "percent": 0.75,
+        "dso": "[gpu_sched]",
+        "symbol": "cleanup_module"
+      },
+      {
+        "percent": 0.72,
+        "dso": "[xfs]",
+        "symbol": "xfs_alloc_cur_check"
+      },
+      {
+        "percent": 0.72,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_diff_two_keys"
+      },
+      {
+        "percent": 0.69,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_wait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.69,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64"
+      },
+      {
+        "percent": 0.67,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_signal@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.64,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "its_return_thunk"
+      },
+      {
+        "percent": 0.63,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_alloc_shadow_bufs.isra.0"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_increment"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[xfs]",
+        "symbol": "xfs_extent_busy_insert_list"
+      },
+      {
+        "percent": 0.53,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmap_update_log_item.isra.0"
+      },
+      {
+        "percent": 0.53,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_enable_asynccancel"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__inode_security_revalidate"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_unlock"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_buf_item_match"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_get_folio"
+      },
+      {
+        "percent": 0.49,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_pte_range"
+      },
+      {
+        "percent": 0.47,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_init_key_from_rec"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_syscall_64"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[xfs]",
+        "symbol": "xfs_group_put"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[xfs]",
+        "symbol": "xfs_alloc_get_rec"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_get_map"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_to_wake_up"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "clear_bhb_loop"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_map_iter_next"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_lock"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avc_lookup"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[xfs]",
+        "symbol": "xfs_group_get"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "available_idle_cpu"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__kmalloc_noprof"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_hash"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_unlock"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_item_log"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_item_format"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[xfs]",
+        "symbol": "_xfs_trans_bjoin"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_load_avg"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[xfs]",
+        "symbol": "xfs_alloc_walk_iter"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "restore_fpregs_from_fpstate"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entity"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "intel_pmu_disable_all"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "link_path_walk.part.0.constprop.0"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_precommit_sort"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__futex_wait"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_return_via_sysret"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_del_item"
+      }
+    ]
+  },
+  {
+    "name": "current-root1-sync1-r0",
+    "phase": "perf",
+    "variant": "current",
+    "root": 1,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-bzum9vfe",
+      "--sync"
+    ],
+    "load_start": [
+      4.45458984375,
+      4.34716796875,
+      3.77685546875
+    ],
+    "start": 1791356195.183981,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.366763219004497
+    },
+    "end": 1791356226.5511045,
+    "load_end": [
+      4.31396484375,
+      4.33740234375,
+      3.79736328125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "140642",
+        "wall_s": "30.004",
+        "ops_s": "4687.5",
+        "p50_us": "2639",
+        "p99_us": "9279",
+        "max_us": "29565",
+        "GiB_s": "0.286",
+        "errors": "0",
+        "diskw_ops": "140642",
+        "diskw_avg_us": "831",
+        "idle_workers": "0",
+        "max_start_us": "143",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "140642",
+        "latency_valid": "1",
+        "p99_lower_us": "9216",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "reports_valid": true,
+    "symbols": [
+      {
+        "percent": 9.73,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "crc32_body"
+      },
+      {
+        "percent": 3.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock"
+      },
+      {
+        "percent": 2.87,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_get_leaf_keys"
+      },
+      {
+        "percent": 1.71,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_lookup"
+      },
+      {
+        "percent": 1.63,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memmove"
+      },
+      {
+        "percent": 1.45,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_lookup.constprop.0"
+      },
+      {
+        "percent": 1.27,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock_irqsave"
+      },
+      {
+        "percent": 1.09,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_alloc_noprof"
+      },
+      {
+        "percent": 1.04,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memcpy"
+      },
+      {
+        "percent": 0.98,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_init_high_key_from_rec"
+      },
+      {
+        "percent": 0.9,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_load_avg"
+      },
+      {
+        "percent": 0.88,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_insert_items"
+      },
+      {
+        "percent": 0.8,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_free"
+      },
+      {
+        "percent": 0.72,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "down_read"
+      },
+      {
+        "percent": 0.69,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64"
+      },
+      {
+        "percent": 0.67,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "clear_bhb_loop"
+      },
+      {
+        "percent": 0.64,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__d_lookup_rcu"
+      },
+      {
+        "percent": 0.62,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_log_inode"
+      },
+      {
+        "percent": 0.62,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_get_folio"
+      },
+      {
+        "percent": 0.6,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_map_iter_next"
+      },
+      {
+        "percent": 0.6,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kfree"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[xfs]",
+        "symbol": "_xfs_trans_bjoin"
+      },
+      {
+        "percent": 0.56,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__kmalloc_noprof"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_se"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "its_return_thunk"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sched_balance_update_blocked_averages"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "intel_pmu_disable_all"
+      },
+      {
+        "percent": 0.52,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_enable_asynccancel"
+      },
+      {
+        "percent": 0.51,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_signal@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.49,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_alloc_shadow_bufs.isra.0"
+      },
+      {
+        "percent": 0.48,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sbitmap_find_bit"
+      },
+      {
+        "percent": 0.47,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "restore_fpregs_from_fpstate"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[xfs]",
+        "symbol": "xfs_group_get"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__schedule"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "flush_workqueue_prep_pwqs"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_grab_folio_fast"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_get_map"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_return_via_sysret"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "memset_orig"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_min_vruntime"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_unlock"
+      },
+      {
+        "percent": 0.4,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_dirty_buf"
+      },
+      {
+        "percent": 0.39,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_mutex_unlock_usercnt"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_rec_offset"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entities"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_del_item"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_diff_two_keys"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[xfs]",
+        "symbol": "xlog_pack_data"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_cfs_rq"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__intel_pmu_enable_all.isra.0"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entity"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__bio_iov_iter_get_pages"
+      },
+      {
+        "percent": 0.36,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_wait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "finish_task_switch.isra.0"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_item_release"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__iomap_dio_rw"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "list_sort"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "xas_load"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "llist_add_batch"
+      },
+      {
+        "percent": 0.34,
+        "dso": "libc.so.6",
+        "symbol": "__memset_evex_unaligned_erms"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_item_format"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "___slab_alloc"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "get_futex_key"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_hash"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_lock"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dd_insert_requests"
+      }
+    ]
+  },
+  {
+    "name": "current-root2-sync0-r0",
+    "phase": "perf",
+    "variant": "current",
+    "root": 2,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-fnux59q3"
+    ],
+    "load_start": [
+      4.31396484375,
+      4.33740234375,
+      3.79736328125
+    ],
+    "start": 1791356226.556383,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 32.424481524998555
+    },
+    "end": 1791356258.9809668,
+    "load_end": [
+      4.68896484375,
+      4.43212890625,
+      3.84716796875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "505379",
+        "wall_s": "30.002",
+        "ops_s": "16844.8",
+        "p50_us": "675",
+        "p99_us": "3855",
+        "max_us": "124152",
+        "GiB_s": "1.028",
+        "errors": "0",
+        "diskw_ops": "505379",
+        "diskw_avg_us": "213",
+        "idle_workers": "0",
+        "max_start_us": "167",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "505379",
+        "latency_valid": "1",
+        "p99_lower_us": "3840",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "reports_valid": true,
+    "symbols": [
+      {
+        "percent": 5.33,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_get_leaf_keys"
+      },
+      {
+        "percent": 4.73,
+        "dso": "[xfs]",
+        "symbol": "xfs_extent_busy_trim"
+      },
+      {
+        "percent": 3.23,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memmove"
+      },
+      {
+        "percent": 3.14,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock"
+      },
+      {
+        "percent": 1.91,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memcpy"
+      },
+      {
+        "percent": 1.89,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_init_high_key_from_rec"
+      },
+      {
+        "percent": 1.55,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_insert_items"
+      },
+      {
+        "percent": 1.51,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_lookup"
+      },
+      {
+        "percent": 1.41,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_lookup.constprop.0"
+      },
+      {
+        "percent": 1.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock_irqsave"
+      },
+      {
+        "percent": 1.23,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_alloc_noprof"
+      },
+      {
+        "percent": 1.22,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_rec_offset"
+      },
+      {
+        "percent": 0.89,
+        "dso": "[xfs]",
+        "symbol": "_xfs_trans_bjoin"
+      },
+      {
+        "percent": 0.85,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_free"
+      },
+      {
+        "percent": 0.72,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_diff_two_keys"
+      },
+      {
+        "percent": 0.7,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "down_read"
+      },
+      {
+        "percent": 0.67,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_alloc_shadow_bufs.isra.0"
+      },
+      {
+        "percent": 0.64,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_del_item"
+      },
+      {
+        "percent": 0.63,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_lock"
+      },
+      {
+        "percent": 0.63,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_dirty_buf"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_grab_folio_fast"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[xfs]",
+        "symbol": "xfs_group_get"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_buf_item_match"
+      },
+      {
+        "percent": 0.57,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_get_map"
+      },
+      {
+        "percent": 0.56,
+        "dso": "[xfs]",
+        "symbol": "xfs_extent_busy_insert_list"
+      },
+      {
+        "percent": 0.55,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_wait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "its_return_thunk"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_get_folio"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[xfs]",
+        "symbol": "xfs_group_put"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "clear_bhb_loop"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_load_avg"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__d_lookup"
+      },
+      {
+        "percent": 0.47,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "list_sort"
+      },
+      {
+        "percent": 0.46,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_enable_asynccancel"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entity"
+      },
+      {
+        "percent": 0.46,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_signal@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[gpu_sched]",
+        "symbol": "cleanup_module"
+      },
+      {
+        "percent": 0.43,
+        "dso": "efs-bench",
+        "symbol": "submit_and_wait_inner"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "memset_orig"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_increment"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_item_format"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr"
+      },
+      {
+        "percent": 0.4,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_unlock"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_ptr_to_daddr"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__kmalloc_noprof"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_map_iter_next"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[xfs]",
+        "symbol": "xfs_alloc_get_rec"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "finish_task_switch.isra.0"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_pte_range"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "restore_fpregs_from_fpstate"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[xfs]",
+        "symbol": "xlog_prepare_iovec"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_init_key_from_rec"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "lockref_put_return"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "llist_add_batch"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_precommit_sort"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_return_via_sysret"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "up_read"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[xfs]",
+        "symbol": "__xfs_trans_commit"
+      }
+    ]
+  },
+  {
+    "name": "current-root2-sync1-r0",
+    "phase": "perf",
+    "variant": "current",
+    "root": 2,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-mo420abh",
+      "--sync"
+    ],
+    "load_start": [
+      4.68896484375,
+      4.43212890625,
+      3.84716796875
+    ],
+    "start": 1791356258.986749,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 33.33648675499717
+    },
+    "end": 1791356292.3234692,
+    "load_end": [
+      4.70556640625,
+      4.45068359375,
+      3.87451171875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "18305",
+        "wall_s": "30.042",
+        "ops_s": "609.3",
+        "p50_us": "21247",
+        "p99_us": "69631",
+        "max_us": "97482",
+        "GiB_s": "0.037",
+        "errors": "0",
+        "diskw_ops": "18305",
+        "diskw_avg_us": "6478",
+        "idle_workers": "0",
+        "max_start_us": "209",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "18305",
+        "latency_valid": "1",
+        "p99_lower_us": "69120",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "reports_valid": true,
+    "symbols": [
+      {
+        "percent": 5.7,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "crc32_body"
+      },
+      {
+        "percent": 2.49,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_alloc_noprof"
+      },
+      {
+        "percent": 2.29,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_get_leaf_keys"
+      },
+      {
+        "percent": 2.06,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock"
+      },
+      {
+        "percent": 1.79,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sched_balance_update_blocked_averages"
+      },
+      {
+        "percent": 1.24,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_grab_folio_fast"
+      },
+      {
+        "percent": 1.14,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_lookup"
+      },
+      {
+        "percent": 1.07,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avc_lookup"
+      },
+      {
+        "percent": 1.03,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memcpy"
+      },
+      {
+        "percent": 1.03,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_insert_items"
+      },
+      {
+        "percent": 0.97,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memmove"
+      },
+      {
+        "percent": 0.96,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_lookup.constprop.0"
+      },
+      {
+        "percent": 0.93,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_free"
+      },
+      {
+        "percent": 0.73,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kfree"
+      },
+      {
+        "percent": 0.71,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kick_pool"
+      },
+      {
+        "percent": 0.7,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock_irqsave"
+      },
+      {
+        "percent": 0.69,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "flush_workqueue_prep_pwqs"
+      },
+      {
+        "percent": 0.67,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_rec_offset"
+      },
+      {
+        "percent": 0.66,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "memset_orig"
+      },
+      {
+        "percent": 0.65,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sched_balance_newidle"
+      },
+      {
+        "percent": 0.65,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__x64_sys_futex"
+      },
+      {
+        "percent": 0.64,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_load_avg"
+      },
+      {
+        "percent": 0.62,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_cfs_rq"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "call_function_single_prep_ipi"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_unlock"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[xfs]",
+        "symbol": "xfs_rmapbt_init_high_key_from_rec"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[xfs]",
+        "symbol": "xlog_force_lsn"
+      },
+      {
+        "percent": 0.59,
+        "dso": "efs-bench",
+        "symbol": "shard_io_thread.part.0.constprop.0"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_get_map"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[xfs]",
+        "symbol": "_xfs_trans_bjoin"
+      },
+      {
+        "percent": 0.56,
+        "dso": "[xfs]",
+        "symbol": "__xfs_bunmapi"
+      },
+      {
+        "percent": 0.53,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr"
+      },
+      {
+        "percent": 0.53,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_mq_submit_bio"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entities"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__srcu_read_lock"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_pte_range"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "link_path_walk.part.0.constprop.0"
+      },
+      {
+        "percent": 0.49,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "ttwu_queue_wakelist"
+      },
+      {
+        "percent": 0.49,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "bio_associate_blkg_from_css"
+      },
+      {
+        "percent": 0.49,
+        "dso": "efs-bench",
+        "symbol": "server_write_fragment_with_sum_sync"
+      },
+      {
+        "percent": 0.48,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "clear_bhb_loop"
+      },
+      {
+        "percent": 0.47,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "native_sched_clock"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[xfs]",
+        "symbol": "xfs_bmap_del_extent_real"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_syscall_64"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_futex"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[xfs]",
+        "symbol": "xfs_btree_insrec"
+      },
+      {
+        "percent": 0.44,
+        "dso": "libc.so.6",
+        "symbol": "__strlen_evex"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "mempool_alloc_noprof"
+      },
+      {
+        "percent": 0.43,
+        "dso": "efs-bench",
+        "symbol": "slot_main"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__iomap_dio_rw"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "up_read"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake"
+      },
+      {
+        "percent": 0.41,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_wait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__futex_hash"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "schedule"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "perf_ctx_disable"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "set_task_cpu"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_return_via_sysret"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_log_inode"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[xfs]",
+        "symbol": "xlog_prepare_iovec"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__bio_iov_iter_get_pages"
+      },
+      {
+        "percent": 0.36,
+        "dso": "libc.so.6",
+        "symbol": "__pthread_mutex_cond_lock"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_buf_item_match"
+      },
+      {
+        "percent": 0.36,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_signal@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__bpf_tramp_enter"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avg_vruntime"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[xfs]",
+        "symbol": "xfs_group_put"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__pick_eevdf"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "radix_tree_tag_clear"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "its_return_thunk"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "invalidate_inode_pages2_range"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_account_io_start"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "finish_task_switch.isra.0"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__submit_bio"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__memcg_slab_free_hook"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_find_lock"
+      },
+      {
+        "percent": 0.32,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_mutex_unlock_usercnt"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_other_load_avgs"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "available_idle_cpu"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_del_item"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "generic_write_check_limits"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[xfs]",
+        "symbol": "xfs_buf_item_format"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "iov_iter_advance"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__kmalloc_noprof"
+      }
+    ]
+  },
+  {
+    "name": "conditional-root1-sync0-r0",
+    "phase": "perf",
+    "variant": "conditional",
+    "root": 1,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-6448h6vh"
+    ],
+    "load_start": [
+      4.70556640625,
+      4.45068359375,
+      3.87451171875
+    ],
+    "start": 1791356292.329281,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.361826666005072
+    },
+    "end": 1791356323.6913784,
+    "load_end": [
+      4.84130859375,
+      4.517578125,
+      3.91650390625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "199605",
+        "wall_s": "30.003",
+        "ops_s": "6652.8",
+        "p50_us": "2255",
+        "p99_us": "5439",
+        "max_us": "28337",
+        "GiB_s": "0.406",
+        "errors": "0",
+        "diskw_ops": "199605",
+        "diskw_avg_us": "583",
+        "idle_workers": "0",
+        "max_start_us": "55",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "199605",
+        "latency_valid": "1",
+        "p99_lower_us": "5408",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "reports_valid": true,
+    "symbols": [
+      {
+        "percent": 2.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock"
+      },
+      {
+        "percent": 2.23,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_enable_asynccancel"
+      },
+      {
+        "percent": 2.2,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__d_lookup_rcu"
+      },
+      {
+        "percent": 1.68,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_grab_folio_fast"
+      },
+      {
+        "percent": 1.49,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_map_iter_next"
+      },
+      {
+        "percent": 1.49,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_get_folio"
+      },
+      {
+        "percent": 1.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__iomap_dio_rw"
+      },
+      {
+        "percent": 1.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64"
+      },
+      {
+        "percent": 1.28,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_wait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 1.28,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "clear_bhb_loop"
+      },
+      {
+        "percent": 1.13,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_signal@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 1.11,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake"
+      },
+      {
+        "percent": 1.05,
+        "dso": "efs-bench",
+        "symbol": "submit_and_wait_inner"
+      },
+      {
+        "percent": 1.0,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__bio_iov_iter_get_pages"
+      },
+      {
+        "percent": 1.0,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock_irqsave"
+      },
+      {
+        "percent": 0.95,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_mutex_unlock_usercnt"
+      },
+      {
+        "percent": 0.93,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_return_via_sysret"
+      },
+      {
+        "percent": 0.92,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "finish_task_switch.isra.0"
+      },
+      {
+        "percent": 0.88,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entity"
+      },
+      {
+        "percent": 0.86,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__x64_sys_futex"
+      },
+      {
+        "percent": 0.84,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_find_next_zero_bit"
+      },
+      {
+        "percent": 0.83,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__inode_security_revalidate"
+      },
+      {
+        "percent": 0.81,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_to_wake_up"
+      },
+      {
+        "percent": 0.79,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "llist_add_batch"
+      },
+      {
+        "percent": 0.79,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_timedwait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.77,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "bio_split_rw_at"
+      },
+      {
+        "percent": 0.75,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_alloc_noprof"
+      },
+      {
+        "percent": 0.74,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "restore_fpregs_from_fpstate"
+      },
+      {
+        "percent": 0.73,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_hash"
+      },
+      {
+        "percent": 0.72,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__futex_hash"
+      },
+      {
+        "percent": 0.7,
+        "dso": "efs-bench",
+        "symbol": "writer_thread"
+      },
+      {
+        "percent": 0.67,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_se"
+      },
+      {
+        "percent": 0.66,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "available_idle_cpu"
+      },
+      {
+        "percent": 0.66,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr"
+      },
+      {
+        "percent": 0.63,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entities"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "arch_exit_to_user_mode_prepare.isra.0"
+      },
+      {
+        "percent": 0.59,
+        "dso": "efs-bench",
+        "symbol": "run_job"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "intel_pmu_disable_all"
+      },
+      {
+        "percent": 0.58,
+        "dso": "efs-bench",
+        "symbol": "slot_main"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_ref_get"
+      },
+      {
+        "percent": 0.57,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dma_direct_map_sg"
+      },
+      {
+        "percent": 0.57,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dd_insert_requests"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__schedule"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_syscall_64"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avg_vruntime"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__audit_syscall_entry"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__futex_wait"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avc_lookup"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_unlock"
+      },
+      {
+        "percent": 0.53,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_log_inode"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sbitmap_find_bit"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "its_return_thunk"
+      },
+      {
+        "percent": 0.48,
+        "dso": "efs-bench",
+        "symbol": "shard_io_thread.part.0.constprop.0"
+      },
+      {
+        "percent": 0.48,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "selinux_inode_permission"
+      },
+      {
+        "percent": 0.48,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64_after_hwframe"
+      },
+      {
+        "percent": 0.47,
+        "dso": "libc.so.6",
+        "symbol": "__memset_evex_unaligned_erms"
+      },
+      {
+        "percent": 0.46,
+        "dso": "efs-bench",
+        "symbol": "server_write_fragment_with_sum_sync"
+      },
+      {
+        "percent": 0.45,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_disable_asynccancel"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[libahci]",
+        "symbol": "ahci_qc_prep"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "vfs_writev"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_lock"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_cfs_rq"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_iter_readv_writev"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "cpuacct_charge"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake_mark"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "schedule"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "down_read"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_mq_submit_bio"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[xfs]",
+        "symbol": "xfs_file_open"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_exit_to_user_mode"
+      },
+      {
+        "percent": 0.4,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_futex"
+      },
+      {
+        "percent": 0.4,
+        "dso": "libc.so.6",
+        "symbol": "__futex_abstimed_wait_common"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_trace_enter"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "mod_node_page_state"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__get_user_8"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[xfs]",
+        "symbol": "xfs_file_write_iter"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__audit_syscall_exit"
+      },
+      {
+        "percent": 0.38,
+        "dso": "libc.so.6",
+        "symbol": "pthread_mutex_trylock@@GLIBC_2.34"
+      },
+      {
+        "percent": 0.38,
+        "dso": "libc.so.6",
+        "symbol": "__close"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "iomap_dio_bio_iter"
+      },
+      {
+        "percent": 0.38,
+        "dso": "efs-bench",
+        "symbol": "format_ino_chunk_dir"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "x64_sys_call"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_min_vruntime"
+      },
+      {
+        "percent": 0.37,
+        "dso": "efs-bench",
+        "symbol": "efs_iostats_add"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[xfs]",
+        "symbol": "xfs_vn_getattr"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[xfs]",
+        "symbol": "xfs_dio_write_end_io"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "get_futex_key"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "bpf_get_current_cgroup_id"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__blk_mq_do_dispatch_sched"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_alloc_shadow_bufs.isra.0"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "wake_q_add_safe"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wait"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "inode_permission"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_insert_items"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "fdget_raw"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__intel_pmu_enable_all.isra.0"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[vdso]",
+        "symbol": "0x00000000000008d8"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "generic_permission"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_load_avg"
+      }
+    ]
+  },
+  {
+    "name": "conditional-root1-sync1-r0",
+    "phase": "perf",
+    "variant": "conditional",
+    "root": 1,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-ur5gqo4y",
+      "--sync"
+    ],
+    "load_start": [
+      4.84130859375,
+      4.517578125,
+      3.91650390625
+    ],
+    "start": 1791356323.6976433,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.413547233009012
+    },
+    "end": 1791356355.1114602,
+    "load_end": [
+      5.06005859375,
+      4.60986328125,
+      3.9677734375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "174829",
+        "wall_s": "30.003",
+        "ops_s": "5827.0",
+        "p50_us": "2703",
+        "p99_us": "5503",
+        "max_us": "25960",
+        "GiB_s": "0.356",
+        "errors": "0",
+        "diskw_ops": "174829",
+        "diskw_avg_us": "657",
+        "idle_workers": "0",
+        "max_start_us": "59",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "174829",
+        "latency_valid": "1",
+        "p99_lower_us": "5472",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "reports_valid": true,
+    "symbols": [
+      {
+        "percent": 3.24,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock"
+      },
+      {
+        "percent": 2.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "crc32_body"
+      },
+      {
+        "percent": 2.08,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64"
+      },
+      {
+        "percent": 1.77,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_load_avg"
+      },
+      {
+        "percent": 1.76,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__d_lookup_rcu"
+      },
+      {
+        "percent": 1.56,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "available_idle_cpu"
+      },
+      {
+        "percent": 1.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__iomap_dio_rw"
+      },
+      {
+        "percent": 1.4,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sched_balance_update_blocked_averages"
+      },
+      {
+        "percent": 1.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "restore_fpregs_from_fpstate"
+      },
+      {
+        "percent": 1.21,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "task_h_load"
+      },
+      {
+        "percent": 1.1,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_grab_folio_fast"
+      },
+      {
+        "percent": 1.05,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr"
+      },
+      {
+        "percent": 1.05,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "clear_bhb_loop"
+      },
+      {
+        "percent": 1.04,
+        "dso": "libc.so.6",
+        "symbol": "__memset_evex_unaligned_erms"
+      },
+      {
+        "percent": 0.87,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "finish_task_switch.isra.0"
+      },
+      {
+        "percent": 0.87,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_wait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.85,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake"
+      },
+      {
+        "percent": 0.83,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_enable_asynccancel"
+      },
+      {
+        "percent": 0.82,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_cfs_rq"
+      },
+      {
+        "percent": 0.82,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock_irqsave"
+      },
+      {
+        "percent": 0.81,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "llist_add_batch"
+      },
+      {
+        "percent": 0.8,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_get_folio"
+      },
+      {
+        "percent": 0.77,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_signal@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.75,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entities"
+      },
+      {
+        "percent": 0.75,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entity"
+      },
+      {
+        "percent": 0.72,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__schedule"
+      },
+      {
+        "percent": 0.7,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_se"
+      },
+      {
+        "percent": 0.69,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "intel_pmu_disable_all"
+      },
+      {
+        "percent": 0.67,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_alloc_noprof"
+      },
+      {
+        "percent": 0.65,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_map_iter_next"
+      },
+      {
+        "percent": 0.62,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sbitmap_find_bit"
+      },
+      {
+        "percent": 0.62,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avc_lookup"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__inode_security_revalidate"
+      },
+      {
+        "percent": 0.6,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avg_vruntime"
+      },
+      {
+        "percent": 0.59,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "native_queued_spin_lock_slowpath"
+      },
+      {
+        "percent": 0.57,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "its_return_thunk"
+      },
+      {
+        "percent": 0.56,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_pte_range"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_q_lock"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_exit_to_user_mode"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[libahci]",
+        "symbol": "ahci_qc_prep"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dma_direct_map_sg"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "arch_exit_to_user_mode_prepare.isra.0"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "generic_permission"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_syscall_64"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wait"
+      },
+      {
+        "percent": 0.48,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__bio_iov_iter_get_pages"
+      },
+      {
+        "percent": 0.48,
+        "dso": "efs-bench",
+        "symbol": "submit_and_wait_inner"
+      },
+      {
+        "percent": 0.47,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "selinux_inode_permission"
+      },
+      {
+        "percent": 0.46,
+        "dso": "efs-bench",
+        "symbol": "slot_main"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "get_futex_key"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__get_user_8"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[xfs]",
+        "symbol": "xlog_cil_insert_items"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "iomap_dio_bio_iter"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sched_balance_newidle"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr_se"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "switch_fpu_return"
+      },
+      {
+        "percent": 0.43,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_timedwait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.41,
+        "dso": "efs-bench",
+        "symbol": "server_write_fragment_with_sum_sync"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_ref_get"
+      },
+      {
+        "percent": 0.4,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "call_function_single_prep_ipi"
+      },
+      {
+        "percent": 0.4,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_idle_core"
+      },
+      {
+        "percent": 0.4,
+        "dso": "[xfs]",
+        "symbol": "xfs_file_write_iter"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_return_via_sysret"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__audit_syscall_exit"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[xfs]",
+        "symbol": "xfs_vn_getattr"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "mutex_lock"
+      },
+      {
+        "percent": 0.37,
+        "dso": "libc.so.6",
+        "symbol": "__futex_abstimed_wait_common"
+      },
+      {
+        "percent": 0.37,
+        "dso": "efs-bench",
+        "symbol": "server_write_fragment_to_path.isra.0"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__calc_delta.constprop.0"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "native_sched_clock"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_hash"
+      },
+      {
+        "percent": 0.35,
+        "dso": "efs-bench",
+        "symbol": "efs_iostats_add"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_lock"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "up_write"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[xfs]",
+        "symbol": "xfs_file_open"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "mem_cgroup_handle_over_high"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "select_idle_core.isra.0"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__bio_add_page"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_futex"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_exit_work"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_min_vruntime"
+      },
+      {
+        "percent": 0.32,
+        "dso": "libc.so.6",
+        "symbol": "pthread_mutex_trylock@@GLIBC_2.34"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__futex_wait"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__audit_syscall_entry"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_mq_submit_bio"
+      },
+      {
+        "percent": 0.31,
+        "dso": "efs-bench",
+        "symbol": "run_job"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[xfs]",
+        "symbol": "xfs_log_reserve"
+      },
+      {
+        "percent": 0.3,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_disable_asynccancel"
+      },
+      {
+        "percent": 0.3,
+        "dso": "efs-bench",
+        "symbol": "format_ino_chunk_dir"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_fallback"
+      },
+      {
+        "percent": 0.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "flush_workqueue_prep_pwqs"
+      }
+    ]
+  },
+  {
+    "name": "conditional-root2-sync0-r0",
+    "phase": "perf",
+    "variant": "conditional",
+    "root": 2,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-lh09xb20"
+    ],
+    "load_start": [
+      5.06005859375,
+      4.60986328125,
+      3.9677734375
+    ],
+    "start": 1791356355.1171649,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 31.412953799008392
+    },
+    "end": 1791356386.5303621,
+    "load_end": [
+      4.65087890625,
+      4.55126953125,
+      3.97021484375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "299696",
+        "wall_s": "30.002",
+        "ops_s": "9989.1",
+        "p50_us": "1319",
+        "p99_us": "4959",
+        "max_us": "32724",
+        "GiB_s": "0.610",
+        "errors": "0",
+        "diskw_ops": "299696",
+        "diskw_avg_us": "383",
+        "idle_workers": "0",
+        "max_start_us": "54",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "299696",
+        "latency_valid": "1",
+        "p99_lower_us": "4928",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "reports_valid": true,
+    "symbols": [
+      {
+        "percent": 3.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock"
+      },
+      {
+        "percent": 1.81,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_enable_asynccancel"
+      },
+      {
+        "percent": 1.79,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64"
+      },
+      {
+        "percent": 1.72,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_wait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 1.62,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__d_lookup"
+      },
+      {
+        "percent": 1.57,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "clear_bhb_loop"
+      },
+      {
+        "percent": 1.56,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_get_folio"
+      },
+      {
+        "percent": 1.47,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake"
+      },
+      {
+        "percent": 1.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__iomap_dio_rw"
+      },
+      {
+        "percent": 1.3,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_pte_range"
+      },
+      {
+        "percent": 1.16,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avc_lookup"
+      },
+      {
+        "percent": 1.14,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_grab_folio_fast"
+      },
+      {
+        "percent": 1.11,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_signal@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 1.07,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_mutex_unlock_usercnt"
+      },
+      {
+        "percent": 1.07,
+        "dso": "efs-bench",
+        "symbol": "submit_and_wait_inner"
+      },
+      {
+        "percent": 1.01,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_hash"
+      },
+      {
+        "percent": 1.0,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entity"
+      },
+      {
+        "percent": 1.0,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_alloc_noprof"
+      },
+      {
+        "percent": 0.99,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_cfs_rq"
+      },
+      {
+        "percent": 0.98,
+        "dso": "efs-bench",
+        "symbol": "writer_thread"
+      },
+      {
+        "percent": 0.95,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "intel_pmu_disable_all"
+      },
+      {
+        "percent": 0.9,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_lock"
+      },
+      {
+        "percent": 0.89,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entities"
+      },
+      {
+        "percent": 0.84,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "lockref_put_return"
+      },
+      {
+        "percent": 0.82,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "link_path_walk.part.0.constprop.0"
+      },
+      {
+        "percent": 0.81,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_return_via_sysret"
+      },
+      {
+        "percent": 0.8,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "available_idle_cpu"
+      },
+      {
+        "percent": 0.77,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "llist_add_batch"
+      },
+      {
+        "percent": 0.77,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_map_iter_next"
+      },
+      {
+        "percent": 0.68,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__futex_unqueue"
+      },
+      {
+        "percent": 0.65,
+        "dso": "libc.so.6",
+        "symbol": "__memset_evex_unaligned_erms"
+      },
+      {
+        "percent": 0.65,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wait"
+      },
+      {
+        "percent": 0.65,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_syscall_64"
+      },
+      {
+        "percent": 0.63,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_load_avg"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake_mark"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[xfs]",
+        "symbol": "xfs_trans_log_inode"
+      },
+      {
+        "percent": 0.6,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "finish_task_switch.isra.0"
+      },
+      {
+        "percent": 0.6,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_timedwait@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.56,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "selinux_inode_permission"
+      },
+      {
+        "percent": 0.56,
+        "dso": "libc.so.6",
+        "symbol": "__pthread_mutex_cond_lock"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock_irqsave"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__bio_iov_iter_get_pages"
+      },
+      {
+        "percent": 0.53,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "its_return_thunk"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_q_lock"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "restore_fpregs_from_fpstate"
+      },
+      {
+        "percent": 0.5,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_disable_asynccancel"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "iomap_iter"
+      },
+      {
+        "percent": 0.47,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sched_balance_newidle"
+      },
+      {
+        "percent": 0.47,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_min_vruntime"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avg_vruntime"
+      },
+      {
+        "percent": 0.46,
+        "dso": "efs-bench",
+        "symbol": "shard_io_thread.part.0.constprop.0"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "bio_split_rw_at"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "step_into"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "ttwu_queue_wakelist"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_exit_to_user_mode"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__blk_rq_map_sg"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "vfs_writev"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_free"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__calc_delta.constprop.0"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_unlock"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_do_wait"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "up_read"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "down_read"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "call_function_single_prep_ipi"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__inode_security_revalidate"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_ref_get"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_to_wake_up"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "cpuacct_charge"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[xfs]",
+        "symbol": "xfs_file_write_iter"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64_after_hwframe"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "mem_cgroup_handle_over_high"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_to_block_task.constprop.0.isra.0"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dma_direct_map_phys"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_fallback"
+      },
+      {
+        "percent": 0.37,
+        "dso": "efs-bench",
+        "symbol": "slot_main"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "bpf_get_current_cgroup_id"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_futex"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "memset_orig"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "arch_exit_to_user_mode_prepare.isra.0"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_mq_sched_bio_merge"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "perf_ctx_disable"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[xfs]",
+        "symbol": "xfs_log_reserve"
+      },
+      {
+        "percent": 0.35,
+        "dso": "libc.so.6",
+        "symbol": "__futex_abstimed_wait_common"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avc_has_perm_noaudit"
+      },
+      {
+        "percent": 0.35,
+        "dso": "libc.so.6",
+        "symbol": "clock_gettime@@GLIBC_2.17"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "generic_permission"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "x64_sys_call"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__futex_wait"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_se"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__schedule"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__audit_syscall_entry"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_iter_readv_writev"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dma_direct_map_sg"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "switch_fpu_return"
+      },
+      {
+        "percent": 0.31,
+        "dso": "efs-bench",
+        "symbol": "server_write_fragment_with_sum_sync"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64_safe_stack"
+      },
+      {
+        "percent": 0.31,
+        "dso": "efs-bench",
+        "symbol": "efs_iostats_add"
+      }
+    ]
+  },
+  {
+    "name": "conditional-root2-sync1-r0",
+    "phase": "perf",
+    "variant": "conditional",
+    "root": 2,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-wpoh3n1b",
+      "--sync"
+    ],
+    "load_start": [
+      4.65087890625,
+      4.55126953125,
+      3.97021484375
+    ],
+    "start": 1791356386.5362768,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 33.38863770601165
+    },
+    "end": 1791356419.9251792,
+    "load_end": [
+      4.27880859375,
+      4.4599609375,
+      3.96240234375
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "16692",
+        "wall_s": "30.030",
+        "ops_s": "555.8",
+        "p50_us": "28543",
+        "p99_us": "41727",
+        "max_us": "50569",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "16692",
+        "diskw_avg_us": "7095",
+        "idle_workers": "0",
+        "max_start_us": "134",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "16692",
+        "latency_valid": "1",
+        "p99_lower_us": "41472",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true,
+    "reports_valid": true,
+    "symbols": [
+      {
+        "percent": 2.86,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock"
+      },
+      {
+        "percent": 2.26,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sched_balance_update_blocked_averages"
+      },
+      {
+        "percent": 1.57,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "clear_bhb_loop"
+      },
+      {
+        "percent": 1.18,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_cfs_rq"
+      },
+      {
+        "percent": 1.17,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "try_grab_folio_fast"
+      },
+      {
+        "percent": 1.11,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "sched_balance_newidle"
+      },
+      {
+        "percent": 1.1,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_disable_asynccancel"
+      },
+      {
+        "percent": 1.08,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_load_avg"
+      },
+      {
+        "percent": 1.08,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entities"
+      },
+      {
+        "percent": 1.07,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "kmem_cache_alloc_noprof"
+      },
+      {
+        "percent": 1.06,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr"
+      },
+      {
+        "percent": 1.04,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avc_lookup"
+      },
+      {
+        "percent": 1.0,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__update_load_avg_se"
+      },
+      {
+        "percent": 0.92,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "x64_sys_call"
+      },
+      {
+        "percent": 0.91,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__d_lookup"
+      },
+      {
+        "percent": 0.89,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "crc32_body"
+      },
+      {
+        "percent": 0.89,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "syscall_return_via_sysret"
+      },
+      {
+        "percent": 0.86,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__legitimize_mnt"
+      },
+      {
+        "percent": 0.81,
+        "dso": "efs-bench",
+        "symbol": "server_write_fragment_with_sum_sync"
+      },
+      {
+        "percent": 0.76,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "native_sched_clock"
+      },
+      {
+        "percent": 0.76,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "entry_SYSCALL_64"
+      },
+      {
+        "percent": 0.74,
+        "dso": "[xfs]",
+        "symbol": "xlog_force_lsn"
+      },
+      {
+        "percent": 0.71,
+        "dso": "efs-bench",
+        "symbol": "slot_main"
+      },
+      {
+        "percent": 0.71,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__inode_security_revalidate"
+      },
+      {
+        "percent": 0.7,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "submit_bio_noacct"
+      },
+      {
+        "percent": 0.68,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "avg_vruntime"
+      },
+      {
+        "percent": 0.66,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "restore_fpregs_from_fpstate"
+      },
+      {
+        "percent": 0.66,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_map_iter_next"
+      },
+      {
+        "percent": 0.66,
+        "dso": "libc.so.6",
+        "symbol": "__memset_evex_unaligned_erms"
+      },
+      {
+        "percent": 0.65,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "native_queued_spin_lock_slowpath"
+      },
+      {
+        "percent": 0.62,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__iomap_dio_rw"
+      },
+      {
+        "percent": 0.62,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__rcu_read_unlock"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__queue_work"
+      },
+      {
+        "percent": 0.61,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_pte_range"
+      },
+      {
+        "percent": 0.61,
+        "dso": "libc.so.6",
+        "symbol": "pthread_mutex_unlock@@GLIBC_2.2.5"
+      },
+      {
+        "percent": 0.6,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "bio_associate_blkg_from_css"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "flush_workqueue_prep_pwqs"
+      },
+      {
+        "percent": 0.58,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake"
+      },
+      {
+        "percent": 0.57,
+        "dso": "[xfs]",
+        "symbol": "xfs_file_fsync"
+      },
+      {
+        "percent": 0.56,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_raw_spin_lock_irqsave"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__get_user_8"
+      },
+      {
+        "percent": 0.55,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "prandom_u32_state"
+      },
+      {
+        "percent": 0.54,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "schedule_timeout"
+      },
+      {
+        "percent": 0.53,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__audit_syscall_exit"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "lock_timer_base"
+      },
+      {
+        "percent": 0.52,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__srcu_read_lock"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[xfs]",
+        "symbol": "xfs_file_write_iter"
+      },
+      {
+        "percent": 0.51,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_entity"
+      },
+      {
+        "percent": 0.5,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_curr_se"
+      },
+      {
+        "percent": 0.49,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "intel_pmu_disable_all"
+      },
+      {
+        "percent": 0.49,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_pgd_range"
+      },
+      {
+        "percent": 0.49,
+        "dso": "libc.so.6",
+        "symbol": "__futex_abstimed_wait_common"
+      },
+      {
+        "percent": 0.48,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "select_task_rq_fair"
+      },
+      {
+        "percent": 0.48,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__bio_iov_iter_get_pages"
+      },
+      {
+        "percent": 0.47,
+        "dso": "efs-bench",
+        "symbol": "nvme_put"
+      },
+      {
+        "percent": 0.46,
+        "dso": "libc.so.6",
+        "symbol": "__GI___writev"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__calc_delta.constprop.0"
+      },
+      {
+        "percent": 0.46,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "schedule"
+      },
+      {
+        "percent": 0.45,
+        "dso": "[xfs]",
+        "symbol": "xfs_log_force_seq"
+      },
+      {
+        "percent": 0.45,
+        "dso": "efs-bench",
+        "symbol": "shard_io_thread.part.0.constprop.0"
+      },
+      {
+        "percent": 0.44,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "finish_task_switch.isra.0"
+      },
+      {
+        "percent": 0.44,
+        "dso": "libc.so.6",
+        "symbol": "clock_gettime@@GLIBC_2.17"
+      },
+      {
+        "percent": 0.43,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "perf_ctx_disable"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_dl_rq_load_avg"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "available_idle_cpu"
+      },
+      {
+        "percent": 0.42,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "current_time"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_syscall_64"
+      },
+      {
+        "percent": 0.41,
+        "dso": "efs-bench",
+        "symbol": "run_job"
+      },
+      {
+        "percent": 0.41,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "up_read"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__pick_next_task"
+      },
+      {
+        "percent": 0.39,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "_find_next_zero_bit"
+      },
+      {
+        "percent": 0.39,
+        "dso": "libc.so.6",
+        "symbol": "__GI___pthread_mutex_unlock_usercnt"
+      },
+      {
+        "percent": 0.38,
+        "dso": "libc.so.6",
+        "symbol": "pthread_cond_signal@@GLIBC_2.3.2"
+      },
+      {
+        "percent": 0.38,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "wake_up_q"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_mq_submit_bio"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "inode_permission"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "wake_up_var"
+      },
+      {
+        "percent": 0.37,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "___pte_offset_map"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "futex_wake_mark"
+      },
+      {
+        "percent": 0.36,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "mem_cgroup_handle_over_high"
+      },
+      {
+        "percent": 0.36,
+        "dso": "efs-bench",
+        "symbol": "format_ino_chunk_dir"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "gup_fast_fallback"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "ima_match_policy"
+      },
+      {
+        "percent": 0.35,
+        "dso": "efs-bench",
+        "symbol": "writer_thread"
+      },
+      {
+        "percent": 0.35,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dma_pool_alloc"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "file_check_and_advance_wb_err"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[dm_mod]",
+        "symbol": "dm_table_find_target"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "timerqueue_add"
+      },
+      {
+        "percent": 0.34,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dequeue_task_fair"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "from_kgid"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__submit_bio"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "do_dentry_open"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__schedule"
+      },
+      {
+        "percent": 0.33,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "selinux_inode_permission"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_rt_rq_load_avg"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "update_min_vruntime"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "set_task_cpu"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "dma_direct_map_phys"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "blk_account_io_start"
+      },
+      {
+        "percent": 0.32,
+        "dso": "[vdso]",
+        "symbol": "__vdso_clock_gettime"
+      },
+      {
+        "percent": 0.32,
+        "dso": "libc.so.6",
+        "symbol": "__close"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "bio_integrity_prep"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "rw_verify_area"
+      },
+      {
+        "percent": 0.31,
+        "dso": "[kernel.kallsyms]",
+        "symbol": "__import_iovec"
+      }
+    ]
+  },
+  {
+    "name": "current-root1-sync0-r0",
+    "phase": "strace",
+    "variant": "current",
+    "root": 1,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "5",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-f8kmv1e2"
+    ],
+    "load_start": [
+      4.27880859375,
+      4.4599609375,
+      3.96240234375
+    ],
+    "start": 1791356419.9316275,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 5.423254509005346
+    },
+    "end": 1791356425.3551168,
+    "load_end": [
+      4.17626953125,
+      4.435546875,
+      3.95703125
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "17938",
+        "wall_s": "5.007",
+        "ops_s": "3582.4",
+        "p50_us": "2191",
+        "p99_us": "15103",
+        "max_us": "30856",
+        "GiB_s": "0.219",
+        "errors": "0",
+        "diskw_ops": "17938",
+        "diskw_avg_us": "633",
+        "idle_workers": "0",
+        "max_start_us": "1407",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "17938",
+        "latency_valid": "1",
+        "p99_lower_us": "15040",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync1-r0",
+    "phase": "strace",
+    "variant": "current",
+    "root": 1,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "5",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-cek6gmf6",
+      "--sync"
+    ],
+    "load_start": [
+      4.17626953125,
+      4.435546875,
+      3.95703125
+    ],
+    "start": 1791356425.3608572,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 5.473359369003447
+    },
+    "end": 1791356430.8346066,
+    "load_end": [
+      4.001953125,
+      4.39501953125,
+      3.9462890625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "15223",
+        "wall_s": "5.007",
+        "ops_s": "3040.0",
+        "p50_us": "2175",
+        "p99_us": "20223",
+        "max_us": "33937",
+        "GiB_s": "0.186",
+        "errors": "0",
+        "diskw_ops": "15223",
+        "diskw_avg_us": "876",
+        "idle_workers": "0",
+        "max_start_us": "1118",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "15223",
+        "latency_valid": "1",
+        "p99_lower_us": "20096",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync0-r0",
+    "phase": "strace",
+    "variant": "current",
+    "root": 2,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "5",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-f00nu1z1"
+    ],
+    "load_start": [
+      4.001953125,
+      4.39501953125,
+      3.9462890625
+    ],
+    "start": 1791356430.837346,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 5.42264783999417
+    },
+    "end": 1791356436.2601237,
+    "load_end": [
+      3.84130859375,
+      4.35498046875,
+      3.935546875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "18625",
+        "wall_s": "5.006",
+        "ops_s": "3720.8",
+        "p50_us": "1967",
+        "p99_us": "17151",
+        "max_us": "87674",
+        "GiB_s": "0.227",
+        "errors": "0",
+        "diskw_ops": "18625",
+        "diskw_avg_us": "541",
+        "idle_workers": "0",
+        "max_start_us": "1684",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "18625",
+        "latency_valid": "1",
+        "p99_lower_us": "17024",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root2-sync1-r0",
+    "phase": "strace",
+    "variant": "current",
+    "root": 2,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "5",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-ofor2p_j",
+      "--sync"
+    ],
+    "load_start": [
+      3.84130859375,
+      4.35498046875,
+      3.935546875
+    ],
+    "start": 1791356436.2652347,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 7.0760348180047
+    },
+    "end": 1791356443.3414721,
+    "load_end": [
+      3.78564453125,
+      4.326171875,
+      3.9306640625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "3043",
+        "wall_s": "5.025",
+        "ops_s": "605.6",
+        "p50_us": "26111",
+        "p99_us": "41983",
+        "max_us": "52351",
+        "GiB_s": "0.037",
+        "errors": "0",
+        "diskw_ops": "3043",
+        "diskw_avg_us": "6379",
+        "idle_workers": "0",
+        "max_start_us": "1072",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "3043",
+        "latency_valid": "1",
+        "p99_lower_us": "41728",
+        "latency_quality": "low_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync0-r0",
+    "phase": "strace",
+    "variant": "conditional",
+    "root": 1,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "5",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-0711s9xt"
+    ],
+    "load_start": [
+      3.78564453125,
+      4.326171875,
+      3.9306640625
+    ],
+    "start": 1791356443.3440871,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 5.422209743002895
+    },
+    "end": 1791356448.766523,
+    "load_end": [
+      3.642578125,
+      4.287109375,
+      3.919921875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "18079",
+        "wall_s": "5.007",
+        "ops_s": "3611.0",
+        "p50_us": "2047",
+        "p99_us": "15551",
+        "max_us": "29839",
+        "GiB_s": "0.220",
+        "errors": "0",
+        "diskw_ops": "18079",
+        "diskw_avg_us": "647",
+        "idle_workers": "0",
+        "max_start_us": "1373",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "18079",
+        "latency_valid": "1",
+        "p99_lower_us": "15488",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root1-sync1-r0",
+    "phase": "strace",
+    "variant": "conditional",
+    "root": 1,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "5",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-np8j4vfv",
+      "--sync"
+    ],
+    "load_start": [
+      3.642578125,
+      4.287109375,
+      3.919921875
+    ],
+    "start": 1791356448.7693534,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 5.472433699003886
+    },
+    "end": 1791356454.2419527,
+    "load_end": [
+      3.5107421875,
+      4.2490234375,
+      3.9091796875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "15528",
+        "wall_s": "5.007",
+        "ops_s": "3101.3",
+        "p50_us": "2543",
+        "p99_us": "19071",
+        "max_us": "35325",
+        "GiB_s": "0.189",
+        "errors": "0",
+        "diskw_ops": "15528",
+        "diskw_avg_us": "799",
+        "idle_workers": "0",
+        "max_start_us": "1070",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "15528",
+        "latency_valid": "1",
+        "p99_lower_us": "18944",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync0-r0",
+    "phase": "strace",
+    "variant": "conditional",
+    "root": 2,
+    "sync": false,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "5",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-1jauqtid"
+    ],
+    "load_start": [
+      3.5107421875,
+      4.2490234375,
+      3.9091796875
+    ],
+    "start": 1791356454.244768,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 5.372110393989715
+    },
+    "end": 1791356459.6169996,
+    "load_end": [
+      3.55029296875,
+      4.24462890625,
+      3.90966796875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "19239",
+        "wall_s": "5.005",
+        "ops_s": "3843.9",
+        "p50_us": "1831",
+        "p99_us": "15487",
+        "max_us": "21639",
+        "GiB_s": "0.235",
+        "errors": "0",
+        "diskw_ops": "19239",
+        "diskw_avg_us": "493",
+        "idle_workers": "0",
+        "max_start_us": "2495",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "19239",
+        "latency_valid": "1",
+        "p99_lower_us": "15424",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "conditional-root2-sync1-r0",
+    "phase": "strace",
+    "variant": "conditional",
+    "root": 2,
+    "sync": true,
+    "repeat": 0,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "5",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data2/efs/bench/efs-latency-tbwjp0mi",
+      "--sync"
+    ],
+    "load_start": [
+      3.55029296875,
+      4.24462890625,
+      3.90966796875
+    ],
+    "start": 1791356459.6203344,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 7.025952721000067
+    },
+    "end": 1791356466.6464293,
+    "load_end": [
+      3.37890625,
+      4.18603515625,
+      3.89404296875
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "2832",
+        "wall_s": "5.024",
+        "ops_s": "563.7",
+        "p50_us": "27903",
+        "p99_us": "38655",
+        "max_us": "47284",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "2832",
+        "diskw_avg_us": "6881",
+        "idle_workers": "0",
+        "max_start_us": "772",
+        "writers": "4",
+        "sync": "on",
+        "latency": "store_call",
+        "lat_samples": "2832",
+        "latency_valid": "1",
+        "p99_lower_us": "38400",
+        "latency_quality": "low_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  },
+  {
+    "name": "current-root1-sync0-r2-replacement",
+    "phase": "baseline",
+    "variant": "current",
+    "root": 1,
+    "sync": false,
+    "repeat": 2,
+    "command": [
+      "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "--bench",
+      "data",
+      "--rw",
+      "write",
+      "--write-mode",
+      "overwrite",
+      "--qd",
+      "16",
+      "--window",
+      "64",
+      "--time",
+      "30",
+      "--direct-io",
+      "--full-paths",
+      "--skip-ceiling",
+      "--storage",
+      "/data1/efs/bench/efs-latency-cqc6ua7q"
+    ],
+    "load_start": [
+      2.1708984375,
+      3.79931640625,
+      3.77490234375
+    ],
+    "start": 1791356501.9412994,
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 30.20976415699988
+    },
+    "end": 1791356532.1512818,
+    "load_end": [
+      2.9658203125,
+      3.8359375,
+      3.7890625
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "199209",
+        "wall_s": "30.003",
+        "ops_s": "6639.5",
+        "p50_us": "1687",
+        "p99_us": "7295",
+        "max_us": "32604",
+        "GiB_s": "0.405",
+        "errors": "0",
+        "diskw_ops": "199209",
+        "diskw_avg_us": "588",
+        "idle_workers": "0",
+        "max_start_us": "79",
+        "writers": "4",
+        "sync": "off",
+        "latency": "store_call",
+        "lat_samples": "199209",
+        "latency_valid": "1",
+        "p99_lower_us": "7264",
+        "latency_quality": "sufficient_samples",
+        "write_mode": "overwrite"
+      }
+    ],
+    "valid": true
+  }
+]

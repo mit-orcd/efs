@@ -1458,6 +1458,16 @@ sends you to — not the whole spec.
 ---
 ### 1. The task right now
 
+**Latency measurement correction (Oct 7).** Engine benchmark collection now
+counts all operations, exposes histogram percentile bounds and exact observed
+maxima, and populates bounded windows outside timing. Earlier short engine
+write runs mixed creation and replacement; their per-run p99 averages are not
+pooled p99 or steady-state acceptance evidence. Nuc validation completed 40 accepted 30-second runs (11.77 million measured
+operations), eight perf captures and eight separate straces; see the
+[latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md).
+The direct-I/O candidate remains experimental; production adoption needs
+consistent throughput and tail-latency evidence.
+
 **Writer investigation (Oct 7), complete.** All 324 baseline repeats and 108
 isolated profiles passed. Inline multi-root placement is fixed. Buffered shard
 overwrites now preserve extents and enforce exact completed length: matched warm

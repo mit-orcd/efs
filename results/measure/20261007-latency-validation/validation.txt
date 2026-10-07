@@ -1,0 +1,13 @@
+Measurement source: 8f24defb78c47d1f171ddaac48ded1cee53ee080
+Local collector unit test: PASS. AddressSanitizer + UndefinedBehaviorSanitizer: PASS.
+Nuc build: PASS, -O3 -g -fno-omit-frame-pointer -march=native.
+Nuc collector unit test: PASS. Nuc test_bench_cli.py --smoke: PASS.
+Nuc profiling harness regression suite: 17/17 PASS. Local suite: 17/17 PASS.
+Candidate benchmark CLI: PASS. Candidate storage algorithm unchanged from c54dfbda evidence.
+Current benchmark source fingerprints match local source for benchmark, histogram, perf control, store, NVMe binding, writer, I/O stats, and server internal header.
+Synthetic trace parser: resumed calls, complete-call wall time and boundary exclusion PASS.
+Architecture documentation gate: 5/5 PASS.
+Final: 40 accepted runs, 11,767,159 operations, minimum 16,582 per run, no errors/idle workers or coverage mismatches.
+Eight perf reports: valid, no lost samples, no impossible callchain addresses.
+Eight straces: all timed writev counts match completed operations; no unparsed or pending calls.
+Recorded benchmark start/end timestamps: no overlap between timing, perf or strace workloads.

@@ -1,5 +1,7 @@
 # Nuc experimental direct-I/O storage comparison — Oct 7
 
+**Measurement caveat (Oct 7):** these short bounded-write runs mixed initial file creation and replacement. Per-run p99 averages below are historical summaries, not pooled p99. The [corrected latency study](../20261007-latency-validation/SUMMARY.md) separates population from timing and retains every observation. Do not use these older tail figures as steady-state acceptance evidence.
+
 40 randomized untraced writes, five repeats each: current/candidate × SATA/NVMe
 × O_SYNC on/off. QD16, auto FOUR writers, 64 KiB fragments, 64 MiB overwrite
 window, 1.5-second phases. Both binaries use the same fair admission and current

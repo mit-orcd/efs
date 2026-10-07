@@ -1,0 +1,17 @@
+[
+  {
+    "symbol": "submit_and_wait_inner",
+    "returncode": 0,
+    "elapsed_s": 0.465377284999704
+  },
+  {
+    "symbol": "writer_thread",
+    "returncode": 0,
+    "elapsed_s": 0.4152458580065286
+  },
+  {
+    "symbol": "shard_io_thread.part.0.constprop.0",
+    "returncode": 0,
+    "elapsed_s": 0.46475595601077657
+  }
+]

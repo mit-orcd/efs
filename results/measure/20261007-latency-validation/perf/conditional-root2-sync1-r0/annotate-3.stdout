@@ -1,0 +1,63 @@
+ Percent |	Source code & Disassembly of efs-bench for cycles (4 samples, percent: local period)
+----------------------------------------------------------------------------------------------------
+         : 0      0x416060 <nvme_put>:
+    0.00 :   416060:        testq   %rdi, %rdi
+    0.00 :   416063:        je      0x416100 <nvme_put+0xa0>
+    0.00 :   416069:        movq    (%rdi), %r10
+    0.00 :   41606c:        testq   %r10, %r10
+    0.00 :   41606f:        je      0x416100 <nvme_put+0xa0>
+    0.00 :   416075:        movq    %rsi, %rax
+    0.00 :   416078:        movq    0x8(%rdi), %rsi
+    0.00 :   41607c:        testq   %rax, %rax
+    0.00 :   41607f:        je      0x416100 <nvme_put+0xa0>
+    0.00 :   416081:        testq   %rsi, %rsi
+    0.00 :   416084:        je      0x416100 <nvme_put+0xa0>
+    0.00 :   416086:        movq    %rdx, %r9
+    0.00 :   416089:        movq    %r8, %rdx
+    0.00 :   41608c:        testl   %ecx, %ecx
+    0.00 :   41608e:        je      0x416095 <nvme_put+0x35>
+    0.00 :   416090:        testq   %r9, %r9
+    0.00 :   416093:        je      0x416100 <nvme_put+0xa0>
+    0.00 :   416095:        pushq   %rbp
+    0.00 :   416096:        movq    %rsp, %rbp
+    0.00 :   416099:        pushq   %rbx
+    0.00 :   41609a:        subq    $0x8, %rsp
+    0.00 :   41609e:        movl    (%rsi), %ebx
+    0.00 :   4160a0:        cmpl    %ebx, (%rax)
+    0.00 :   4160a2:        jne     0x416110 <nvme_put+0xb0>
+    0.00 :   4160a4:        movq    0x18(%rax), %rdi
+    0.00 :   4160a8:        movq    $-0x700c8, %rbx
+    0.00 :   4160af:        movq    %rdi, %fs:(%rbx)
+    0.00 :   4160b3:        movl    0x24(%rax), %r8d
+    0.00 :   4160b7:        movl    0x20(%rax), %edi
+    0.00 :   4160ba:        movq    0x8(%rax), %rax
+    0.00 :   4160be:        testq   %rdx, %rdx
+    0.00 :   4160c1:        je      0x4160e8 <nvme_put+0x88>
+    0.00 :   4160c3:        pushq   %rdx
+    0.00 :   4160c4:        movq    %rax, %rdx
+    0.00 :   4160c7:        pushq   %rcx
+    0.00 :   4160c8:        movl    %edi, %ecx
+    0.00 :   4160ca:        movq    %r10, %rdi
+    0.00 :   4160cd:        callq   0x4171f0 <server_write_fragment_with_sum>
+   57.26 :   4160d2:        popq    %rsi
+   42.74 :   4160d3:        popq    %rdi
+    0.00 :   4160d4:        movq    $0x0, %fs:(%rbx)
+    0.00 :   4160dc:        movq    -0x8(%rbp), %rbx
+    0.00 :   4160e0:        leave
+    0.00 :   4160e1:        retq
+    0.00 :   4160e2:        nopw    (%rax,%rax)
+    0.00 :   4160e8:        subq    $0x8, %rsp
+    0.00 :   4160ec:        movq    %rax, %rdx
+    0.00 :   4160ef:        pushq   %rcx
+    0.00 :   4160f0:        movl    %edi, %ecx
+    0.00 :   4160f2:        movq    %r10, %rdi
+    0.00 :   4160f5:        callq   0x414e00 <server_write_fragment_sync>
+    0.00 :   4160fa:        popq    %rdx
+    0.00 :   4160fb:        popq    %rcx
+    0.00 :   4160fc:        jmp     0x4160d4 <nvme_put+0x74>
+    0.00 :   4160fe:        nop
+    0.00 :   416100:        movl    $0xfffffffb, %eax
+    0.00 :   416105:        retq
+    0.00 :   416106:        nopw    %cs:(%rax,%rax)
+    0.00 :   416110:        movl    $0xfffffffb, %eax
+    0.00 :   416115:        jmp     0x4160dc <nvme_put+0x7c>

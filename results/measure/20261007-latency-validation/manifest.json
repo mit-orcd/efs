@@ -1,0 +1,38 @@
+{
+  "start": 1791354937.6850474,
+  "seed": 30043,
+  "phase_order": [
+    "baseline",
+    "perf",
+    "strace",
+    "reports",
+    "replacement_baseline"
+  ],
+  "baseline_seconds": 30,
+  "repeats": 5,
+  "qd": 16,
+  "window_per_worker": 64,
+  "fragment_bytes": 65536,
+  "roots": [
+    "/data1/efs/bench",
+    "/data2/efs/bench"
+  ],
+  "binaries": {
+    "current": {
+      "path": "/tmp/efs-nuc-latency-20261007/binaries/current/efs-bench",
+      "sha256": "86c921f0a176151182c42faa993edc156b453048fb94351fd5daa5c54ca2c381"
+    },
+    "conditional": {
+      "path": "/tmp/efs-nuc-latency-20261007/binaries/conditional/efs-bench",
+      "sha256": "7f9531bf079c99b8860d86c9431a52d96e97a66df55cd526ee661c9d378fe449"
+    }
+  },
+  "source_commit": "8f24defb",
+  "exclusions": [
+    {
+      "name": "current-root1-sync0-r2",
+      "reason": "Candidate CLI smoke check overlapped startup of this run; replaced after all diagnostic workloads.",
+      "replacement": "current-root1-sync0-r2-replacement"
+    }
+  ]
+}

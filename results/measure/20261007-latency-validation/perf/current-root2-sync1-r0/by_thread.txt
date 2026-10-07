@@ -1,0 +1,31 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles'
+# Event count (approx.): 6387110135
+#
+# Overhead      Pid:Command    Symbol                                               IPC   [IPC Coverage]
+# ........  .................  ...................................................  ....................
+#
+     1.53%  3859047:efs-bench  [k] crc32_body                                       -      -            
+     1.46%  3859046:efs-bench  [k] crc32_body                                       -      -            
+     1.41%  3859045:efs-bench  [k] crc32_body                                       -      -            
+     1.29%  3859044:efs-bench  [k] crc32_body                                       -      -            
+     1.08%  3859046:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     0.93%  3859047:efs-bench  [k] kmem_cache_alloc_noprof                          -      -            
+     0.93%  3859045:efs-bench  [k] kmem_cache_alloc_noprof                          -      -            
+     0.72%  3859047:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.71%  3859045:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     0.70%  3859044:efs-bench  [k] try_grab_folio_fast                              -      -            
+     0.63%  3859046:efs-bench  [k] __memmove                                        -      -            
+     0.54%  3859046:efs-bench  [k] __memcpy                                         -      -            
+     0.52%  3859046:efs-bench  [k] kick_pool                                        -      -            
+     0.50%  3859045:efs-bench  [k] _raw_spin_lock                                   -      -            
+
+
+#
+# (Tip: System-wide collection from all CPUs: perf record -a)
+#

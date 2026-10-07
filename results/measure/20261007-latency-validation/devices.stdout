@@ -1,0 +1,9 @@
+NAME        MODEL                     SIZE TYPE FSTYPE      MOUNTPOINTS
+sda         MK0800GEYKE             745.2G disk xfs         /data1
+nvme0n1     Samsung SSD 970 EVO 1TB 931.5G disk             
+├─nvme0n1p1                           600M part vfat        /boot/efi
+├─nvme0n1p2                             2G part xfs         /boot
+└─nvme0n1p3                         928.9G part LVM2_member 
+  ├─rl-root                            70G lvm  xfs         /
+  ├─rl-swap                          15.6G lvm  swap        
+  └─rl-home                         843.4G lvm  xfs         /home

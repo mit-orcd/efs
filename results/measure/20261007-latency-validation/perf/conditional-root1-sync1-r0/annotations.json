@@ -1,0 +1,17 @@
+[
+  {
+    "symbol": "submit_and_wait_inner",
+    "returncode": 0,
+    "elapsed_s": 0.515512502999627
+  },
+  {
+    "symbol": "slot_main",
+    "returncode": 0,
+    "elapsed_s": 0.5649324270052603
+  },
+  {
+    "symbol": "server_write_fragment_with_sum_sync",
+    "returncode": 0,
+    "elapsed_s": 0.5151436919986736
+  }
+]

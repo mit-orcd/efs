@@ -1,0 +1,79 @@
+ Percent |	Source code & Disassembly of efs-bench for cycles (22 samples, percent: local period)
+-----------------------------------------------------------------------------------------------------
+         : 0      0x416570 <writer_thread>:
+    0.00 :   416570:        pushq   %rbp
+    0.00 :   416571:        movq    %rsp, %rbp
+    0.00 :   416574:        pushq   %r15
+    0.00 :   416576:        pushq   %r14
+    0.00 :   416578:        movslq  %edi, %r14
+    0.00 :   41657b:        imulq   $0xd8, %r14, %r14
+    0.00 :   416582:        pushq   %r13
+    0.00 :   416584:        leaq    0x782738(%r14), %rax
+    0.00 :   41658b:        leaq    0x782708(%r14), %r13
+    0.00 :   416592:        pushq   %r12
+    0.00 :   416594:        pushq   %rbx
+    0.00 :   416595:        leaq    0x7826e0(%r14), %rbx
+    0.00 :   41659c:        subq    $0x18, %rsp
+    0.00 :   4165a0:        movl    $0x1, %fs:-0x700c0
+    0.00 :   4165ac:        movq    %rax, -0x40(%rbp)
+    0.00 :   4165b0:        movq    %rbx, %rdi
+    0.00 :   4165b3:        leaq    0x7826e0(%r14), %r12
+    0.00 :   4165ba:        callq   0x403920 <_init+0x920>
+    0.00 :   4165bf:        movl    0x36f723(%rip), %edx  # 0x785ce8 <g_pool+0x8>
+    0.00 :   4165c5:        testl   %edx, %edx
+    0.00 :   4165c7:        jne     0x4165e9 <writer_thread+0x79>
+    0.00 :   4165c9:        jmp     0x416690 <writer_thread+0x120>
+    0.00 :   4165ce:        nop
+    0.00 :   4165d0:        movq    %rbx, %rsi
+    0.00 :   4165d3:        movq    %r13, %rdi
+    0.00 :   4165d6:        callq   0x4037b0 <_init+0x7b0>
+    0.00 :   4165db:        movl    0x36f707(%rip), %eax  # 0x785ce8 <g_pool+0x8>
+   34.22 :   4165e1:        testl   %eax, %eax
+    0.00 :   4165e3:        je      0x416690 <writer_thread+0x120>
+    0.00 :   4165e9:        cmpl    $0x1, 0xc0(%r12)
+    2.59 :   4165f2:        jne     0x4165d0 <writer_thread+0x60>
+    0.00 :   4165f4:        movq    0x782798(%r14), %r15
+    0.00 :   4165fb:        movq    %rbx, %rdi
+    0.00 :   4165fe:        callq   0x4039f0 <_init+0x9f0>
+    0.00 :   416603:        movl    %fs:-0x7211c, %r12d
+    7.82 :   41660c:        movl    0x28(%r15), %eax
+   15.45 :   416610:        movq    %r15, %rdi
+    0.00 :   416613:        movl    %eax, %fs:-0x72118
+    0.00 :   41661b:        movl    0x84(%r15), %eax
+    9.32 :   416622:        movl    %eax, %fs:-0x7211c
+    0.00 :   41662a:        callq   0x416350 <run_job>
+    0.00 :   41662f:        movl    %eax, -0x34(%rbp)
+    0.00 :   416632:        movl    $0xffffffff, %fs:-0x72118
+    0.00 :   41663e:        movl    %r12d, %fs:-0x7211c
+    0.00 :   416647:        movl    0x28(%r15), %eax
+    0.00 :   41664b:        cmpl    0x36f693(%rip), %eax  # 0x785ce4 <g_pool+0x4>
+    0.00 :   416651:        jb      0x4166c0 <writer_thread+0x150>
+    0.00 :   416653:        movq    %rbx, %rdi
+    0.00 :   416656:        callq   0x403920 <_init+0x920>
+    0.00 :   41665b:        movl    -0x34(%rbp), %eax
+    0.00 :   41665e:        movq    -0x40(%rbp), %rdi
+    0.00 :   416662:        movl    %eax, 0x80(%r15)
+    0.00 :   416669:        movl    $0x2, 0x7827a0(%r14)
+    0.00 :   416674:        callq   0x4031b0 <_init+0x1b0>
+    0.00 :   416679:        movq    %rbx, %rdi
+    0.00 :   41667c:        callq   0x4039f0 <_init+0x9f0>
+    0.00 :   416681:        jmp     0x4165b0 <writer_thread+0x40>
+    0.00 :   416686:        nopw    %cs:(%rax,%rax)
+    0.00 :   416690:        cmpl    $0x1, 0x7827a0(%r14)
+    0.00 :   416698:        je      0x4165f4 <writer_thread+0x84>
+    0.00 :   41669e:        movq    %rbx, %rdi
+    0.00 :   4166a1:        callq   0x4039f0 <_init+0x9f0>
+    0.00 :   4166a6:        addq    $0x18, %rsp
+    0.00 :   4166aa:        xorl    %eax, %eax
+    0.00 :   4166ac:        popq    %rbx
+    0.00 :   4166ad:        popq    %r12
+    0.00 :   4166af:        popq    %r13
+    0.00 :   4166b1:        popq    %r14
+    0.00 :   4166b3:        popq    %r15
+    0.00 :   4166b5:        popq    %rbp
+    0.00 :   4166b6:        retq
+    0.00 :   4166b7:        nopw    (%rax,%rax)
+    0.00 :   4166c0:        addq    $0x85c, %rax
+    0.00 :   4166c6:        lock
+    0.00 :   4166c7:        decl    0x785ce0(,%rax,4)
+   30.60 :   4166ce:        jmp     0x416653 <writer_thread+0xe3>

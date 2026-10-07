@@ -1,0 +1,105 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 19922810793
+#
+# Overhead;Shared Object     ;Symbol                                     ;IPC   [IPC Coverage]
+ 3.24%  ;[kernel.kallsyms] ;[k] _raw_spin_lock                         ;-      -            
+ 2.54%  ;[kernel.kallsyms] ;[k] crc32_body                             ;-      -            
+ 2.08%  ;[kernel.kallsyms] ;[k] entry_SYSCALL_64                       ;-      -            
+ 1.77%  ;[kernel.kallsyms] ;[k] update_load_avg                        ;-      -            
+ 1.76%  ;[kernel.kallsyms] ;[k] __d_lookup_rcu                         ;-      -            
+ 1.56%  ;[kernel.kallsyms] ;[k] available_idle_cpu                     ;-      -            
+ 1.46%  ;[kernel.kallsyms] ;[k] __iomap_dio_rw                         ;-      -            
+ 1.40%  ;[kernel.kallsyms] ;[k] sched_balance_update_blocked_averages  ;-      -            
+ 1.30%  ;[kernel.kallsyms] ;[k] restore_fpregs_from_fpstate            ;-      -            
+ 1.21%  ;[kernel.kallsyms] ;[k] task_h_load                            ;-      -            
+ 1.10%  ;[kernel.kallsyms] ;[k] try_grab_folio_fast                    ;-      -            
+ 1.05%  ;[kernel.kallsyms] ;[k] update_curr                            ;-      -            
+ 1.05%  ;[kernel.kallsyms] ;[k] clear_bhb_loop                         ;-      -            
+ 1.04%  ;libc.so.6         ;[.] __memset_evex_unaligned_erms           ;-      -            
+ 0.87%  ;[kernel.kallsyms] ;[k] finish_task_switch.isra.0              ;-      -            
+ 0.87%  ;libc.so.6         ;[.] pthread_cond_wait@@GLIBC_2.3.2         ;-      -            
+ 0.85%  ;[kernel.kallsyms] ;[k] futex_wake                             ;-      -            
+ 0.83%  ;libc.so.6         ;[.] __GI___pthread_enable_asynccancel      ;-      -            
+ 0.82%  ;[kernel.kallsyms] ;[k] __update_load_avg_cfs_rq               ;-      -            
+ 0.82%  ;[kernel.kallsyms] ;[k] _raw_spin_lock_irqsave                 ;-      -            
+ 0.81%  ;[kernel.kallsyms] ;[k] llist_add_batch                        ;-      -            
+ 0.80%  ;[kernel.kallsyms] ;[k] try_get_folio                          ;-      -            
+ 0.77%  ;libc.so.6         ;[.] pthread_cond_signal@@GLIBC_2.3.2       ;-      -            
+ 0.75%  ;[kernel.kallsyms] ;[k] dequeue_entities                       ;-      -            
+ 0.75%  ;[kernel.kallsyms] ;[k] dequeue_entity                         ;-      -            
+ 0.72%  ;[kernel.kallsyms] ;[k] __schedule                             ;-      -            
+ 0.70%  ;[kernel.kallsyms] ;[k] __update_load_avg_se                   ;-      -            
+ 0.69%  ;[kernel.kallsyms] ;[k] intel_pmu_disable_all                  ;-      -            
+ 0.67%  ;[kernel.kallsyms] ;[k] kmem_cache_alloc_noprof                ;-      -            
+ 0.65%  ;[kernel.kallsyms] ;[k] blk_map_iter_next                      ;-      -            
+ 0.62%  ;[kernel.kallsyms] ;[k] sbitmap_find_bit                       ;-      -            
+ 0.62%  ;[kernel.kallsyms] ;[k] avc_lookup                             ;-      -            
+ 0.61%  ;[kernel.kallsyms] ;[k] __inode_security_revalidate            ;-      -            
+ 0.60%  ;[kernel.kallsyms] ;[k] avg_vruntime                           ;-      -            
+ 0.59%  ;[kernel.kallsyms] ;[k] native_queued_spin_lock_slowpath       ;-      -            
+ 0.57%  ;[kernel.kallsyms] ;[k] its_return_thunk                       ;-      -            
+ 0.56%  ;[kernel.kallsyms] ;[k] gup_fast_pte_range                     ;-      -            
+ 0.55%  ;[kernel.kallsyms] ;[k] futex_q_lock                           ;-      -            
+ 0.54%  ;[kernel.kallsyms] ;[k] syscall_exit_to_user_mode              ;-      -            
+ 0.54%  ;[libahci]         ;[k] ahci_qc_prep                           ;-      -            
+ 0.52%  ;[kernel.kallsyms] ;[k] dma_direct_map_sg                      ;-      -            
+ 0.51%  ;[kernel.kallsyms] ;[k] arch_exit_to_user_mode_prepare.isra.0  ;-      -            
+ 0.50%  ;[kernel.kallsyms] ;[k] generic_permission                     ;-      -            
+ 0.50%  ;[kernel.kallsyms] ;[k] do_syscall_64                          ;-      -            
+ 0.50%  ;[kernel.kallsyms] ;[k] futex_wait                             ;-      -            
+ 0.48%  ;[kernel.kallsyms] ;[k] __bio_iov_iter_get_pages               ;-      -            
+ 0.48%  ;efs-bench         ;[.] submit_and_wait_inner                  ;-      -            
+ 0.47%  ;[kernel.kallsyms] ;[k] selinux_inode_permission               ;-      -            
+ 0.46%  ;efs-bench         ;[.] slot_main                              ;-      -            
+ 0.45%  ;[kernel.kallsyms] ;[k] get_futex_key                          ;-      -            
+ 0.44%  ;[kernel.kallsyms] ;[k] __get_user_8                           ;-      -            
+ 0.44%  ;[xfs]             ;[k] xlog_cil_insert_items                  ;-      -            
+ 0.44%  ;[kernel.kallsyms] ;[k] iomap_dio_bio_iter                     ;-      -            
+ 0.44%  ;[kernel.kallsyms] ;[k] sched_balance_newidle                  ;-      -            
+ 0.44%  ;[kernel.kallsyms] ;[k] update_curr_se                         ;-      -            
+ 0.44%  ;[kernel.kallsyms] ;[k] switch_fpu_return                      ;-      -            
+ 0.43%  ;libc.so.6         ;[.] pthread_cond_timedwait@@GLIBC_2.3.2    ;-      -            
+ 0.41%  ;efs-bench         ;[.] server_write_fragment_with_sum_sync    ;-      -            
+ 0.41%  ;[kernel.kallsyms] ;[k] futex_ref_get                          ;-      -            
+ 0.40%  ;[kernel.kallsyms] ;[k] call_function_single_prep_ipi          ;-      -            
+ 0.40%  ;[kernel.kallsyms] ;[k] __update_idle_core                     ;-      -            
+ 0.40%  ;[xfs]             ;[k] xfs_file_write_iter                    ;-      -            
+ 0.39%  ;[kernel.kallsyms] ;[k] syscall_return_via_sysret              ;-      -            
+ 0.38%  ;[kernel.kallsyms] ;[k] __audit_syscall_exit                   ;-      -            
+ 0.38%  ;[xfs]             ;[k] xfs_vn_getattr                         ;-      -            
+ 0.38%  ;[kernel.kallsyms] ;[k] mutex_lock                             ;-      -            
+ 0.37%  ;libc.so.6         ;[.] __futex_abstimed_wait_common           ;-      -            
+ 0.37%  ;efs-bench         ;[.] server_write_fragment_to_path.isra.0   ;-      -            
+ 0.37%  ;[kernel.kallsyms] ;[k] __calc_delta.constprop.0               ;-      -            
+ 0.36%  ;[kernel.kallsyms] ;[k] native_sched_clock                     ;-      -            
+ 0.36%  ;[kernel.kallsyms] ;[k] futex_hash                             ;-      -            
+ 0.35%  ;efs-bench         ;[.] efs_iostats_add                        ;-      -            
+ 0.34%  ;[kernel.kallsyms] ;[k] __rcu_read_lock                        ;-      -            
+ 0.34%  ;[kernel.kallsyms] ;[k] up_write                               ;-      -            
+ 0.33%  ;[xfs]             ;[k] xfs_file_open                          ;-      -            
+ 0.33%  ;[kernel.kallsyms] ;[k] mem_cgroup_handle_over_high            ;-      -            
+ 0.33%  ;[kernel.kallsyms] ;[k] select_idle_core.isra.0                ;-      -            
+ 0.33%  ;[kernel.kallsyms] ;[k] __bio_add_page                         ;-      -            
+ 0.33%  ;[kernel.kallsyms] ;[k] do_futex                               ;-      -            
+ 0.33%  ;[kernel.kallsyms] ;[k] syscall_exit_work                      ;-      -            
+ 0.32%  ;[kernel.kallsyms] ;[k] update_min_vruntime                    ;-      -            
+ 0.32%  ;libc.so.6         ;[.] pthread_mutex_trylock@@GLIBC_2.34      ;-      -            
+ 0.32%  ;[kernel.kallsyms] ;[k] __futex_wait                           ;-      -            
+ 0.32%  ;[kernel.kallsyms] ;[k] __audit_syscall_entry                  ;-      -            
+ 0.31%  ;[kernel.kallsyms] ;[k] blk_mq_submit_bio                      ;-      -            
+ 0.31%  ;efs-bench         ;[.] run_job                                ;-      -            
+ 0.31%  ;[xfs]             ;[k] xfs_log_reserve                        ;-      -            
+ 0.30%  ;libc.so.6         ;[.] __GI___pthread_disable_asynccancel     ;-      -            
+ 0.30%  ;efs-bench         ;[.] format_ino_chunk_dir                   ;-      -            
+ 0.30%  ;[kernel.kallsyms] ;[k] gup_fast_fallback                      ;-      -            
+ 0.30%  ;[kernel.kallsyms] ;[k] flush_workqueue_prep_pwqs              ;-      -            
+
+
+#
+# (Tip: To analyze cache line scalability issues use perf c2c record ... ; perf c2c report)
+#

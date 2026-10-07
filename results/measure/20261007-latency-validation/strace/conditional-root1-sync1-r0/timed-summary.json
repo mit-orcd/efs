@@ -1,0 +1,55 @@
+{
+  "begin": 1791356449.159128,
+  "end": 1791356454.166138,
+  "wall_s": 5.007009983062744,
+  "complete_calls": 222900,
+  "crossing_boundary_calls": {
+    "futex": 24
+  },
+  "unparsed": 0,
+  "pending": 0,
+  "syscalls": {
+    "close": {
+      "calls": 15528,
+      "wall_sum_s": 0.5116999999999996,
+      "mean_us": 32.95337454920141,
+      "max_us": 1662.0,
+      "errors": 0
+    },
+    "fstat": {
+      "calls": 15528,
+      "wall_sum_s": 0.5474510000000004,
+      "mean_us": 35.255731581658964,
+      "max_us": 170.0,
+      "errors": 0
+    },
+    "futex": {
+      "calls": 160787,
+      "wall_sum_s": 83.12329000000518,
+      "mean_us": 516.9776785436956,
+      "max_us": 5000486.0,
+      "errors": 26475
+    },
+    "openat": {
+      "calls": 15528,
+      "wall_sum_s": 0.661336999999996,
+      "mean_us": 42.5899665121069,
+      "max_us": 208.0,
+      "errors": 0
+    },
+    "write": {
+      "calls": 1,
+      "wall_sum_s": 1.1e-05,
+      "mean_us": 11.0,
+      "max_us": 11.0,
+      "errors": 0
+    },
+    "writev": {
+      "calls": 15528,
+      "wall_sum_s": 7.185590999999952,
+      "mean_us": 462.75057959814217,
+      "max_us": 14774.0,
+      "errors": 0
+    }
+  }
+}

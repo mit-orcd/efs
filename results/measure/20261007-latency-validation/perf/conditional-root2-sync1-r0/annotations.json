@@ -1,0 +1,17 @@
+[
+  {
+    "symbol": "server_write_fragment_with_sum_sync",
+    "returncode": 0,
+    "elapsed_s": 0.4649941480020061
+  },
+  {
+    "symbol": "slot_main",
+    "returncode": 0,
+    "elapsed_s": 0.5150435990071855
+  },
+  {
+    "symbol": "nvme_put",
+    "returncode": 0,
+    "elapsed_s": 0.5151417559973197
+  }
+]

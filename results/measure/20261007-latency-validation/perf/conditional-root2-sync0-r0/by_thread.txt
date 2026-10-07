@@ -1,0 +1,23 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 20882572063
+#
+# Overhead      Pid:Command    Symbol                                          IPC   [IPC Coverage]
+# ........  .................  ..............................................  ....................
+#
+     1.18%  3865762:efs-bench  [k] _raw_spin_lock                              -      -            
+     0.74%  3865760:efs-bench  [.] __GI___pthread_enable_asynccancel           -      -            
+     0.64%  3865761:efs-bench  [k] _raw_spin_lock                              -      -            
+     0.63%  3865761:efs-bench  [k] __iomap_dio_rw                              -      -            
+     0.56%  3865759:efs-bench  [k] _raw_spin_lock                              -      -            
+     0.51%  3865759:efs-bench  [k] try_get_folio                               -      -            
+
+
+#
+# (Tip: For hierarchical output, try: perf report --hierarchy)
+#

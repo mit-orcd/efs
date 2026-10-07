@@ -1,0 +1,17 @@
+[
+  {
+    "symbol": "submit_and_wait_inner",
+    "returncode": 0,
+    "elapsed_s": 0.515299837992643
+  },
+  {
+    "symbol": "writer_thread",
+    "returncode": 0,
+    "elapsed_s": 0.415052716009086
+  },
+  {
+    "symbol": "run_job",
+    "returncode": 0,
+    "elapsed_s": 0.4647245829983149
+  }
+]

@@ -1,0 +1,247 @@
+ Percent |	Source code & Disassembly of efs-bench for cycles (13 samples, percent: local period)
+-----------------------------------------------------------------------------------------------------
+         : 0      0x408120 <slot_main>:
+    0.00 :   408120:        pushq   %rbp
+    0.00 :   408121:        movq    %rsp, %rbp
+    0.00 :   408124:        pushq   %r15
+    0.00 :   408126:        movq    %rdi, %r15
+    0.00 :   408129:        pushq   %r14
+    0.00 :   40812b:        pushq   %r13
+    0.00 :   40812d:        pushq   %r12
+    0.00 :   40812f:        leaq    0x30(%r15), %r12
+    0.00 :   408133:        pushq   %rbx
+    0.00 :   408134:        leaq    0x8(%r15), %rbx
+    0.00 :   408138:        subq    $0xa8, %rsp
+    0.00 :   40813f:        movq    (%rdi), %rdi
+    0.00 :   408142:        callq   0x403920 <_init+0x920>
+    0.00 :   408147:        movq    (%r15), %rdi
+    0.00 :   40814a:        incl    0x58(%rdi)
+    0.00 :   40814d:        addq    $0x28, %rdi
+    0.00 :   408151:        callq   0x4031b0 <_init+0x1b0>
+    0.00 :   408156:        movq    (%r15), %rdi
+    0.00 :   408159:        callq   0x4039f0 <_init+0x9f0>
+    0.00 :   40815e:        movq    %rbx, %rdi
+    0.00 :   408161:        callq   0x403920 <_init+0x920>
+    0.00 :   408166:        movl    0x60(%r15), %r10d
+    0.00 :   40816a:        testl   %r10d, %r10d
+    0.00 :   40816d:        jne     0x408184 <slot_main+0x64>
+    0.00 :   40816f:        nop
+    0.00 :   408170:        movq    %rbx, %rsi
+    0.00 :   408173:        movq    %r12, %rdi
+    0.00 :   408176:        callq   0x4037b0 <_init+0x7b0>
+    0.00 :   40817b:        movl    0x60(%r15), %r9d
+    0.00 :   40817f:        testl   %r9d, %r9d
+    0.00 :   408182:        je      0x408170 <slot_main+0x50>
+    0.00 :   408184:        movq    %rbx, %rdi
+    0.00 :   408187:        leaq    0x70(%rsp), %r13
+    0.00 :   40818c:        leaq    0x30(%rsp), %r14
+    0.00 :   408191:        callq   0x4039f0 <_init+0x9f0>
+    0.00 :   408196:        callq   0x417560 <efs_iostats_now_us>
+    0.00 :   40819b:        movq    %rax, 0x70(%r15)
+    0.00 :   40819f:        nop
+    0.00 :   4081a0:        movq    %r13, %rsi
+    0.00 :   4081a3:        movl    $0x1, %edi
+    0.00 :   4081a8:        callq   0x403180 <_init+0x180>
+    0.00 :   4081ad:        vxorpd  %xmm3, %xmm3, %xmm3
+    0.00 :   4081b1:        vcvtsi2sdq      0x70(%rsp), %xmm3, %xmm1
+    0.00 :   4081b8:        vcvtsi2sdq      0x78(%rsp), %xmm3, %xmm0
+    0.00 :   4081bf:        vdivsd  0xaa2e9(%rip), %xmm0, %xmm0  # 0x4b24b0 <_fini+0x5d60>
+    9.37 :   4081c7:        vaddsd  %xmm1, %xmm0, %xmm0
+    0.00 :   4081cb:        vmovsd  0xa0(%r15), %xmm1
+    0.00 :   4081d4:        vcomisd %xmm0, %xmm1
+    0.00 :   4081d8:        jbe     0x408510 <slot_main+0x3f0>
+    0.00 :   4081de:        movl    0x98(%r15), %r8d
+    0.00 :   4081e5:        movl    0xac(%r15), %edx
+    0.00 :   4081ec:        testl   %r8d, %r8d
+    0.00 :   4081ef:        je      0x4083a8 <slot_main+0x288>
+    0.00 :   4081f5:        testl   %edx, %edx
+    0.00 :   4081f7:        je      0x408510 <slot_main+0x3f0>
+    0.00 :   4081fd:        movl    0x94(%r15), %eax
+    0.00 :   408204:        movl    %edx, %ecx
+    0.00 :   408206:        movl    0xa8(%r15), %ebx
+    0.00 :   40820d:        cmpl    %edx, %eax
+    0.00 :   40820f:        cmovbel %eax, %edx
+    0.00 :   408212:        testl   %eax, %eax
+    0.00 :   408214:        movl    0xb0(%r15), %eax
+    0.00 :   40821b:        cmovel  %ecx, %edx
+    0.00 :   40821e:        leal    0x1(%rax), %ecx
+    0.00 :   408221:        movl    %ecx, 0xb0(%r15)
+    0.00 :   408228:        movl    %edx, %ecx
+    0.00 :   40822a:        xorl    %edx, %edx
+    0.00 :   40822c:        divq    %rcx
+    0.00 :   40822f:        addl    %edx, %ebx
+    0.00 :   408231:        callq   0x417560 <efs_iostats_now_us>
+    0.00 :   408236:        vmovd   %ebx, %xmm2
+    0.00 :   40823a:        movq    0x88(%r15), %rcx
+    9.88 :   408241:        movq    %rax, %r12
+    0.00 :   408244:        movslq  0x78(%r15), %rax
+    9.35 :   408248:        movq    %rax, %rdx
+    0.00 :   40824b:        leal    -0x41110000(%rax), %esi
+    0.00 :   408251:        imulq   $0x55555556, %rax, %rax
+    0.00 :   408258:        movl    %edx, %edi
+    0.00 :   40825a:        sarl    $0x1f, %edi
+    0.00 :   40825d:        shrq    $0x20, %rax
+    0.00 :   408261:        subl    %edi, %eax
+    0.00 :   408263:        movl    0x98(%r15), %edi
+    0.00 :   40826a:        leal    (%rax,%rax,2), %eax
+    0.00 :   40826d:        subl    %eax, %edx
+    0.00 :   40826f:        vpinsrd $0x1, %edx, %xmm2, %xmm0
+    0.00 :   408275:        movq    0x80(%r15), %rdx
+    0.00 :   40827c:        testl   %edi, %edi
+    0.00 :   40827e:        je      0x4083d0 <slot_main+0x2b0>
+    0.00 :   408284:        vpxor   %xmm4, %xmm4, %xmm4
+    0.00 :   408288:        vpxor   %xmm5, %xmm5, %xmm5
+    0.00 :   40828c:        leaq    0x10(%rsp), %rdi
+    0.00 :   408291:        vmovdqu8        %ymm4, 0x70(%rsp)
+    0.00 :   40829c:        vmovdqa %xmm5, 0x90(%rsp)
+    0.00 :   4082a5:        movl    (%rcx), %eax
+    0.00 :   4082a7:        movq    %rsi, 0x78(%rsp)
+    0.00 :   4082ac:        leaq    0x20(%rsp), %rsi
+    0.00 :   4082b1:        movl    $0x0, 0xc(%rsp)
+    0.00 :   4082b9:        movl    %eax, 0x70(%rsp)
+    0.00 :   4082bd:        movl    0x90(%r15), %eax
+    0.00 :   4082c4:        vmovq   %xmm0, 0x90(%rsp)
+    0.00 :   4082cd:        movl    %eax, 0x8(%rsp)
+    0.00 :   4082d1:        vzeroupper
+    0.00 :   4082d4:        callq   0x4161c0 <efs_store_nvme_bind>
+    0.00 :   4082d9:        movq    0x10(%rsp), %rax
+    0.00 :   4082de:        movq    0xe998(%r15), %rdx
+    0.00 :   4082e5:        testq   %rax, %rax
+    0.00 :   4082e8:        je      0x408541 <slot_main+0x421>
+    0.00 :   4082ee:        movq    (%rax), %rax
+    0.00 :   4082f1:        testq   %rax, %rax
+    0.00 :   4082f4:        je      0x408541 <slot_main+0x421>
+    0.00 :   4082fa:        movq    0x18(%rsp), %rdi
+    0.00 :   4082ff:        leaq    0x8(%rsp), %rcx
+    0.00 :   408304:        leaq    0xc(%rsp), %r9
+    0.00 :   408309:        movq    %r14, %r8
+    0.00 :   40830c:        movq    %r13, %rsi
+    0.00 :   40830f:        callq   *%rax
+    0.00 :   408311:        movl    %eax, %ebx
+    0.00 :   408313:        testl   %eax, %eax
+    0.00 :   408315:        jne     0x408330 <slot_main+0x210>
+    0.00 :   408317:        movl    0x8(%rsp), %esi
+    0.00 :   40831b:        cmpl    %esi, 0x90(%r15)
+    0.00 :   408322:        je      0x4084d0 <slot_main+0x3b0>
+    0.00 :   408328:        movl    $0xffffffff, %ebx
+    0.00 :   40832d:        nopl    (%rax)
+    0.00 :   408330:        callq   0x417560 <efs_iostats_now_us>
+    0.00 :   408335:        subq    %r12, %rax
+    0.00 :   408338:        movl    %eax, %edx
+    0.00 :   40833a:        cmpq    $0xff, %rax
+    0.00 :   408340:        jbe     0x40835a <slot_main+0x23a>
+    0.00 :   408342:        movl    $0x38, %esi
+    0.00 :   408347:        lzcntq  %rax, %rdx
+    0.00 :   40834c:        subl    %edx, %esi
+    0.00 :   40834e:        movl    %esi, %edx
+    0.00 :   408350:        shrxq   %rsi, %rax, %rsi
+    0.00 :   408355:        shll    $0x7, %edx
+    0.00 :   408358:        addl    %esi, %edx
+    0.00 :   40835a:        incq    0x198(%r15,%rdx,8)
+   21.23 :   408362:        incq    0x188(%r15)
+   12.08 :   408369:        cmpq    %rax, 0x190(%r15)
+    0.00 :   408370:        jae     0x408379 <slot_main+0x259>
+    0.00 :   408372:        movq    %rax, 0x190(%r15)
+    0.00 :   408379:        testl   %ebx, %ebx
+    0.00 :   40837b:        jne     0x4084c0 <slot_main+0x3a0>
+    0.00 :   408381:        movl    0x98(%r15), %eax
+    0.00 :   408388:        incq    0xb8(%r15)
+    0.00 :   40838f:        testl   %eax, %eax
+    0.00 :   408391:        jne     0x4081a0 <slot_main+0x80>
+    0.00 :   408397:        incl    0xac(%r15)
+    0.00 :   40839e:        jmp     0x4081a0 <slot_main+0x80>
+    0.00 :   4083a3:        nopl    (%rax,%rax)
+    0.00 :   4083a8:        movl    0x94(%r15), %ecx
+    0.00 :   4083af:        movl    0xa8(%r15), %ebx
+    0.00 :   4083b6:        testl   %ecx, %ecx
+    0.00 :   4083b8:        je      0x4083c0 <slot_main+0x2a0>
+    0.00 :   4083ba:        movl    %edx, %eax
+    0.00 :   4083bc:        xorl    %edx, %edx
+    0.00 :   4083be:        divl    %ecx
+    0.00 :   4083c0:        addl    %edx, %ebx
+    0.00 :   4083c2:        jmp     0x408231 <slot_main+0x111>
+    0.00 :   4083c7:        nopw    (%rax,%rax)
+    0.00 :   4083d0:        vpxor   %xmm6, %xmm6, %xmm6
+    0.00 :   4083d4:        vpxor   %xmm7, %xmm7, %xmm7
+    0.00 :   4083d8:        movq    %r14, %rdi
+    0.00 :   4083db:        vmovdqu8        %ymm6, 0x70(%rsp)
+    0.00 :   4083e6:        vmovdqa %xmm7, 0x90(%rsp)
+    0.00 :   4083ef:        movl    (%rcx), %eax
+   12.21 :   4083f1:        movq    %rsi, 0x78(%rsp)
+    0.00 :   4083f6:        leaq    0x50(%rsp), %rsi
+    0.00 :   4083fb:        vmovq   %xmm0, 0x90(%rsp)
+    0.00 :   408404:        movl    %eax, 0x70(%rsp)
+    0.00 :   408408:        vzeroupper
+    0.00 :   40840b:        callq   0x4161c0 <efs_store_nvme_bind>
+    0.00 :   408410:        movl    0x94(%r15), %edx
+    0.00 :   408417:        movl    $0xfffffffe, %eax
+    0.00 :   40841c:        testl   %edx, %edx
+    0.00 :   40841e:        je      0x40842f <slot_main+0x30f>
+    0.00 :   408420:        xorl    %eax, %eax
+    0.00 :   408422:        cmpl    %edx, 0xac(%r15)
+    0.00 :   408429:        setae   %al
+    0.00 :   40842c:        subl    $0x2, %eax
+    0.00 :   40842f:        movq    $-0x7211c, %rbx
+    0.00 :   408436:        leaq    0xe9a0(%r15), %r8
+    0.00 :   40843d:        movl    %eax, %fs:(%rbx)
+    0.00 :   408440:        movq    0x30(%rsp), %rax
+    0.00 :   408445:        movl    0x90(%r15), %ecx
+    0.00 :   40844c:        movq    0xe998(%r15), %rdx
+    5.74 :   408453:        testq   %rax, %rax
+    0.00 :   408456:        je      0x408530 <slot_main+0x410>
+    0.00 :   40845c:        movq    0x8(%rax), %rax
+    0.00 :   408460:        testq   %rax, %rax
+    0.00 :   408463:        je      0x408530 <slot_main+0x410>
+    0.00 :   408469:        movq    0x38(%rsp), %rdi
+    0.00 :   40846e:        movq    %r13, %rsi
+    0.00 :   408471:        callq   *%rax
+    0.00 :   408473:        movl    %eax, %ebx
+    0.00 :   408475:        movq    $-0x72120, %rax
+    0.00 :   40847c:        testl   %ebx, %ebx
+    0.00 :   40847e:        jne     0x4084a0 <slot_main+0x380>
+    0.00 :   408480:        movslq  %fs:(%rax), %rdx
+    0.00 :   408484:        testl   %edx, %edx
+    0.00 :   408486:        js      0x4084a0 <slot_main+0x380>
+    0.00 :   408488:        movq    0x80(%r15), %rsi
+   20.15 :   40848f:        cmpl    0x180c8(%rsi), %edx
+    0.00 :   408495:        jae     0x4084a0 <slot_main+0x380>
+    0.00 :   408497:        incq    0xc0(%r15,%rdx,8)
+    0.00 :   40849f:        nop
+    0.00 :   4084a0:        movq    $-0x7211c, %rcx
+    0.00 :   4084a7:        movl    $0xffffffff, %fs:(%rax)
+    0.00 :   4084ae:        movl    $0xffffffff, %fs:(%rcx)
+    0.00 :   4084b5:        jmp     0x408330 <slot_main+0x210>
+    0.00 :   4084ba:        nopw    (%rax,%rax)
+    0.00 :   4084c0:        incq    0x180(%r15)
+    0.00 :   4084c7:        jmp     0x4081a0 <slot_main+0x80>
+    0.00 :   4084cc:        nopl    (%rax)
+    0.00 :   4084d0:        movl    0xc(%rsp), %edx
+    0.00 :   4084d4:        testl   %edx, %edx
+    0.00 :   4084d6:        je      0x408330 <slot_main+0x210>
+    0.00 :   4084dc:        movq    0xe998(%r15), %rdi
+    0.00 :   4084e3:        leaq    0x50(%rsp), %rdx
+    0.00 :   4084e8:        callq   0x436210 <efs_hash>
+    0.00 :   4084ed:        vmovdqu8        0x50(%rsp), %ymm0
+    0.00 :   4084f8:        vpxorq  (%r14), %ymm0, %ymm0
+    0.00 :   4084fe:        vptest  %ymm0, %ymm0
+    0.00 :   408503:        je      0x408528 <slot_main+0x408>
+    0.00 :   408505:        vzeroupper
+    0.00 :   408508:        jmp     0x408328 <slot_main+0x208>
+    0.00 :   40850d:        nopl    (%rax)
+    0.00 :   408510:        addq    $0xa8, %rsp
+    0.00 :   408517:        xorl    %eax, %eax
+    0.00 :   408519:        popq    %rbx
+    0.00 :   40851a:        popq    %r12
+    0.00 :   40851c:        popq    %r13
+    0.00 :   40851e:        popq    %r14
+    0.00 :   408520:        popq    %r15
+    0.00 :   408522:        popq    %rbp
+    0.00 :   408523:        retq
+    0.00 :   408524:        nopl    (%rax)
+    0.00 :   408528:        vzeroupper
+    0.00 :   40852b:        jmp     0x408330 <slot_main+0x210>
+    0.00 :   408530:        movq    $-0x72120, %rax
+    0.00 :   408537:        movl    $0xfffffffb, %ebx
+    0.00 :   40853c:        jmp     0x4084a0 <slot_main+0x380>
+    0.00 :   408541:        movl    $0xfffffffb, %ebx
+    0.00 :   408546:        jmp     0x408330 <slot_main+0x210>

@@ -1,0 +1,32 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 3K of event 'cycles'
+# Event count (approx.): 35819158996
+#
+# Overhead      Pid:Command    Symbol                                               IPC   [IPC Coverage]
+# ........  .................  ...................................................  ....................
+#
+     3.43%  3854739:efs-bench  [k] crc32_body                                       -      -            
+     2.32%  3854737:efs-bench  [k] crc32_body                                       -      -            
+     2.03%  3854738:efs-bench  [k] crc32_body                                       -      -            
+     1.96%  3854740:efs-bench  [k] crc32_body                                       -      -            
+     1.05%  3854738:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.93%  3854737:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     0.77%  3854737:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.74%  3854739:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     0.66%  3854739:efs-bench  [k] _raw_spin_lock                                   -      -            
+     0.65%  3854740:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     0.60%  3854739:efs-bench  [k] xfs_btree_lookup                                 -      -            
+     0.58%  3854737:efs-bench  [k] __memmove                                        -      -            
+     0.57%  3854737:efs-bench  [k] xfs_btree_lookup                                 -      -            
+     0.55%  3854738:efs-bench  [k] xfs_btree_get_leaf_keys                          -      -            
+     0.55%  3854740:efs-bench  [k] _raw_spin_lock                                   -      -            
+
+
+#
+# (Tip: Print event counts in machine readable CSV format with: perf stat -x\;)
+#

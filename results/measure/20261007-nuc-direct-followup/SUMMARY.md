@@ -1,5 +1,7 @@
 # Direct-I/O follow-up — three rounds, Oct 7
 
+**Measurement caveat (Oct 7):** these short bounded-write runs mixed initial file creation and replacement. Per-run p99 averages below are historical summaries, not pooled p99. The [corrected latency study](../20261007-latency-validation/SUMMARY.md) separates population from timing and retains every observation. Do not use these older tail figures as steady-state acceptance evidence.
+
 Round 1: eight matching original-candidate/current perf profiles and eight new
 strace runs (each root, sync on/off), direct write only, auto FOUR writers,
 QD16, bounded 64 MiB, 64 KiB fragments, 1.5-second diagnostic phases. All pass.

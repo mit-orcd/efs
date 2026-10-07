@@ -1,0 +1,17 @@
+[
+  {
+    "symbol": "shard_io_thread.part.0.constprop.0",
+    "returncode": 0,
+    "elapsed_s": 0.4651844650070416
+  },
+  {
+    "symbol": "server_write_fragment_with_sum_sync",
+    "returncode": 0,
+    "elapsed_s": 0.46480765100568533
+  },
+  {
+    "symbol": "slot_main",
+    "returncode": 0,
+    "elapsed_s": 0.5648689040099271
+  }
+]
