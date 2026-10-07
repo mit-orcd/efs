@@ -8,6 +8,8 @@ def fn(p):
 def block(n):
  a=s.index('struct '+n+' {');return s[a:s.index('\n};',a)+3]
 a=s.index('#define GET_POOL_QDEPTH');b=s.index('static void *get_pool_thread(',a)
+c=s.index('static int rdcache_acquire(',s.index('static int rdcache_acquire(')+1)
+cache_wait_prefix=s[c:s.index('        /* Victim:',c)]+"        pthread_mutex_unlock(mu); return 1;\n    }\n}\n"
 code=r'''
 #include "client_internal.h"
 #include <assert.h>
@@ -35,7 +37,7 @@ static struct {struct rdcache_ent e[1][2];pthread_mutex_t mu;pthread_cond_t cv[1
 static uint64_t rdcache_map_gen(efs_ino_t ino,uint32_t ci){(void)ino;(void)ci;return 1;}
 static uint32_t rdcache_slot(efs_ino_t ino,uint32_t ci){(void)ino;(void)ci;return 0;}
 static pthread_mutex_t*rdcache_mu(uint32_t slot){(void)slot;return &g_rdcache.mu;}
-'''+'static int rdcache_acquire(efs_ino_t ino, uint32_t ci, uint8_t *dst,\n                           uint32_t len)\n{\n    uint64_t tg = rdcache_map_gen(ino, ci);\n    uint32_t s = rdcache_slot(ino, ci);\n    pthread_mutex_t *mu = rdcache_mu(s);\n    int stripe = (int)(s & (RDCACHE_STRIPES - 1));\n\n    if (!dst || !len)\n        return 1;\n    for (;;) {\n        struct rdcache_ent *e = NULL;\n        struct rdcache_ent *pend = NULL;\n        int w;\n\n        pthread_mutex_lock(mu);\n        for (w = 0; w < RDCACHE_WAYS; w++) {\n            struct rdcache_ent *c = &g_rdcache.e[s][w];\n            if (c->ino == ino && c->ci == ci) {\n                if (c->pending)\n                    pend = c;\n                else if (c->data)\n                    e = c;\n            }\n        }\n        if (e && e->gen == tg && e->len >= len && tg) {\n            memcpy(dst, e->data, len);\n            e->tick = ++g_rdcache.tick;\n            pthread_mutex_unlock(mu);\n            return 0;\n        }\n        if (pend) {\n            int rc = get_wait_budget(&g_rdcache.cv[stripe], mu);\n            pthread_mutex_unlock(mu);\n            if (rc != EFS_OK)\n                return rc;\n            continue;\n        }\n        pthread_mutex_unlock(mu); return 1;\n    }\n}\n'+r'''
+'''+cache_wait_prefix+r'''
 static void scenario(unsigned which){
  struct chunk_get_job jobs[4]={{0}};
  if(which==0){deadline=now_ms();uint64_t old=deadline;assert(!get_pool_run(jobs,1)&&jobs[0].rc==EFS_ERR_BUSY&&!reads&&deadline==old);return;}
@@ -72,8 +74,6 @@ static void scenario(unsigned which){
 }
 int main(void){for(unsigned i=0;i<7;i++){pid_t p=fork();assert(p>=0);if(!p){scenario(i);_exit(0);}int st;assert(waitpid(p,&st,0)==p&&WIFEXITED(st)&&!WEXITSTATUS(st));}return 0;}
 '''
-# Keep queue declaration and ring arithmetic equally small.
-code=code.replace('#define GET_POOL_QDEPTH 128','#define GET_POOL_QDEPTH 1')
 with tempfile.TemporaryDirectory(prefix='efs-get-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)
