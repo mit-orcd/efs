@@ -1,0 +1,97 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 109  of event 'cycles'
+# Event count (approx.): 1503991000
+#
+# Overhead  Shared Object      Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+     9.20%  [xfs]              [k] xfs_extent_busy_trim                     -      -            
+     6.05%  [xfs]              [k] xfs_btree_get_leaf_keys                  -      -            
+     4.86%  [kernel.kallsyms]  [k] _raw_spin_lock                           -      -            
+     4.04%  [kernel.kallsyms]  [k] kmem_cache_free                          -      -            
+     3.84%  [xfs]              [k] xfs_alloc_walk_iter                      -      -            
+     3.65%  [xfs]              [k] xfs_rmapbt_diff_two_keys                 -      -            
+     3.02%  [kernel.kallsyms]  [k] __memcpy                                 -      -            
+     2.87%  [kernel.kallsyms]  [k] clear_bhb_loop                           -      -            
+     2.55%  [xfs]              [k] xfs_btree_insert                         -      -            
+     2.17%  [kernel.kallsyms]  [k] __rcu_read_lock                          -      -            
+     2.08%  [xfs]              [k] xfs_defer_create_intents                 -      -            
+     2.05%  [kernel.kallsyms]  [k] do_iter_readv_writev                     -      -            
+     1.89%  [kernel.kallsyms]  [k] wake_up_q                                -      -            
+     1.87%  [xfs]              [k] xfs_btree_lookup                         -      -            
+     1.84%  [xfs]              [k] xfs_alloc_compute_diff                   -      -            
+     1.83%  efs-bench          [.] efs_iostats_add                          -      -            
+     1.76%  [kernel.kallsyms]  [k] llist_add_batch                          -      -            
+     1.75%  [xfs]              [k] xfs_group_intent_get                     -      -            
+     1.72%  [kernel.kallsyms]  [k] blk_map_iter_next                        -      -            
+     1.70%  [kernel.kallsyms]  [k] schedule                                 -      -            
+     1.63%  [kernel.kallsyms]  [k] list_sort                                -      -            
+     1.63%  [kernel.kallsyms]  [k] ___slab_alloc                            -      -            
+     1.61%  [vdso]             [.] 0x00000000000008d8                       -      -            
+     1.60%  [kernel.kallsyms]  [k] __x64_sys_openat                         -      -            
+     1.55%  libc.so.6          [.] __GI___pthread_enable_asynccancel        -      -            
+     1.54%  [kernel.kallsyms]  [k] _raw_spin_lock_irqsave                   -      -            
+     1.35%  [xfs]              [k] xlog_cil_push_background                 -      -            
+     1.35%  [kernel.kallsyms]  [k] try_get_folio                            -      -            
+     1.27%  [xfs]              [k] xfs_trans_del_item                       -      -            
+     1.16%  [kernel.kallsyms]  [k] __futex_wait                             -      -            
+     1.08%  [kernel.kallsyms]  [k] __bio_add_page                           -      -            
+     1.02%  [xfs]              [k] xfs_file_write_checks.constprop.0        -      -            
+     1.02%  [kernel.kallsyms]  [k] blk_mq_hctx_has_pending                  -      -            
+     1.01%  [kernel.kallsyms]  [k] __memmove                                -      -            
+     0.93%  [kernel.kallsyms]  [k] __audit_syscall_entry                    -      -            
+     0.88%  [xfs]              [k] xfs_buf_read_map                         -      -            
+     0.76%  [xfs]              [k] xfs_buf_item_log                         -      -            
+     0.69%  [kernel.kallsyms]  [k] security_compute_sid                     -      -            
+     0.67%  [kernel.kallsyms]  [k] entry_SYSCALL_64                         -      -            
+     0.67%  [kernel.kallsyms]  [k] kmem_cache_alloc_noprof                  -      -            
+     0.67%  libc.so.6          [.] pthread_cond_signal@@GLIBC_2.3.2         -      -            
+     0.67%  [xfs]              [k] xfs_trans_buf_item_match                 -      -            
+     0.66%  [kernel.kallsyms]  [k] generic_permission                       -      -            
+     0.61%  [xfs]              [k] xfs_rmap_update_log_item.isra.0          -      -            
+     0.51%  efs-bench          [.] server_write_fragment_to_path.isra.0     -      -            
+     0.48%  [xfs]              [k] 0x0000000000051b46                       -      -            
+     0.42%  [kernel.kallsyms]  [k] selinux_file_permission                  -      -            
+     0.41%  [kernel.kallsyms]  [k] __cond_resched                           -      -            
+     0.37%  efs-bench          [.] server_write_fragment_with_sum_sync      -      -            
+     0.34%  [kernel.kallsyms]  [k] _inline_copy_from_user                   -      -            
+     0.34%  [kernel.kallsyms]  [k] arch_exit_to_user_mode_prepare.isra.0    -      -            
+     0.34%  [kernel.kallsyms]  [k] available_idle_cpu                       -      -            
+     0.34%  [kernel.kallsyms]  [k] check_preempt_wakeup_fair                -      -            
+     0.34%  [kernel.kallsyms]  [k] futex_hash                               -      -            
+     0.34%  [kernel.kallsyms]  [k] futex_q_lock                             -      -            
+     0.34%  [kernel.kallsyms]  [k] futex_wait                               -      -            
+     0.34%  [kernel.kallsyms]  [k] ima_match_policy                         -      -            
+     0.34%  [kernel.kallsyms]  [k] intel_pmu_disable_all                    -      -            
+     0.34%  [kernel.kallsyms]  [k] its_return_thunk                         -      -            
+     0.34%  [kernel.kallsyms]  [k] mnt_get_write_access                     -      -            
+     0.34%  [kernel.kallsyms]  [k] pick_next_task_fair                      -      -            
+     0.34%  [kernel.kallsyms]  [k] rb_erase                                 -      -            
+     0.34%  [kernel.kallsyms]  [k] restore_fpregs_from_fpstate              -      -            
+     0.34%  [kernel.kallsyms]  [k] sbitmap_find_bit                         -      -            
+     0.34%  [kernel.kallsyms]  [k] select_task_rq                           -      -            
+     0.34%  [kernel.kallsyms]  [k] set_root                                 -      -            
+     0.34%  [kernel.kallsyms]  [k] update_load_avg                          -      -            
+     0.34%  [kernel.kallsyms]  [k] update_sg_lb_stats                       -      -            
+     0.34%  [xfs]              [k] xfs_bmap_del_extent_real                 -      -            
+     0.34%  [xfs]              [k] xfs_bmapi_read                           -      -            
+     0.34%  [xfs]              [k] xfs_contig_bits                          -      -            
+     0.34%  [xfs]              [k] xfs_log_ticket_ungrant                   -      -            
+     0.34%  [xfs]              [k] xfs_next_bit                             -      -            
+     0.34%  [xfs]              [k] xfs_rmap_check_irec                      -      -            
+     0.34%  [xfs]              [k] xlog_cil_insert_items                    -      -            
+     0.34%  [xfs]              [k] 0x0000000000031685                       -      -            
+     0.34%  [xfs]              [k] 0x000000000009d997                       -      -            
+     0.34%  [xfs]              [k] 0x00000000000a713b                       -      -            
+     0.34%  libc.so.6          [.] pthread_cond_timedwait@@GLIBC_2.3.2      -      -            
+     0.34%  libc.so.6          [.] pthread_cond_wait@@GLIBC_2.3.2           -      -            
+     0.33%  [xfs]              [k] 0x000000000004c86a                       -      -            
+
+
+#
+# (Tip: For latency profiling, try: perf record/report --latency)
+#

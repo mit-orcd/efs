@@ -1,0 +1,86 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 79  of event 'cycles'
+# Event count (approx.): 608956486
+#
+# Overhead  Shared Object      Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+     8.40%  [kernel.kallsyms]  [k] __d_lookup_rcu                           -      -            
+     4.34%  [kernel.kallsyms]  [k] lookup_fast                              -      -            
+     4.08%  [kernel.kallsyms]  [k] __iomap_dio_rw                           -      -            
+     3.32%  [kernel.kallsyms]  [k] finish_task_switch.isra.0                -      -            
+     3.05%  [kernel.kallsyms]  [k] _raw_spin_lock                           -      -            
+     3.00%  [kernel.kallsyms]  [k] iomap_iter_done                          -      -            
+     2.72%  [kernel.kallsyms]  [k] gup_fast_fallback                        -      -            
+     2.67%  [kernel.kallsyms]  [k] radix_tree_tag_clear                     -      -            
+     2.51%  [kernel.kallsyms]  [k] mntput_no_expire                         -      -            
+     2.43%  [kernel.kallsyms]  [k] clear_bhb_loop                           -      -            
+     2.33%  [kernel.kallsyms]  [k] update_load_avg                          -      -            
+     2.16%  efs-bench          [.] efs_ino_path_segments                    -      -            
+     2.07%  [kernel.kallsyms]  [k] evm_inode_post_setattr                   -      -            
+     1.99%  [kernel.kallsyms]  [k] __bio_iov_iter_get_pages                 -      -            
+     1.66%  [kernel.kallsyms]  [k] up_read                                  -      -            
+     1.66%  [kernel.kallsyms]  [k] futex_wake                               -      -            
+     1.66%  libc.so.6          [.] __memset_evex_unaligned_erms             -      -            
+     1.59%  [kernel.kallsyms]  [k] avc_policy_seqno                         -      -            
+     1.57%  [xfs]              [k] xfs_buf_find_lock                        -      -            
+     1.55%  [kernel.kallsyms]  [k] futex_wake_mark                          -      -            
+     1.49%  efs-bench          [.] pthread_mutex_unlock@plt                 -      -            
+     1.48%  [xfs]              [k] xfs_defer_trans_roll                     -      -            
+     1.35%  [kernel.kallsyms]  [k] iomap_iter_advance                       -      -            
+     1.33%  [xfs]              [k] xfs_vn_setattr                           -      -            
+     1.31%  [xfs]              [k] xfs_trans_log_inode                      -      -            
+     1.29%  [kernel.kallsyms]  [k] submit_bio_noacct_nocheck                -      -            
+     1.18%  [kernel.kallsyms]  [k] __inode_security_revalidate              -      -            
+     0.91%  [kernel.kallsyms]  [k] dd_insert_requests                       -      -            
+     0.91%  [kernel.kallsyms]  [k] ima_match_policy                         -      -            
+     0.83%  [kernel.kallsyms]  [k] __list_add_valid_or_report               -      -            
+     0.83%  [kernel.kallsyms]  [k] __rcu_read_unlock                        -      -            
+     0.83%  [kernel.kallsyms]  [k] __x64_sys_futex                          -      -            
+     0.83%  [kernel.kallsyms]  [k] _find_next_zero_bit                      -      -            
+     0.83%  [kernel.kallsyms]  [k] account_system_index_time                -      -            
+     0.83%  [kernel.kallsyms]  [k] avc_has_perm_noaudit                     -      -            
+     0.83%  [kernel.kallsyms]  [k] bio_alloc_bioset                         -      -            
+     0.83%  [kernel.kallsyms]  [k] bio_iov_iter_get_pages                   -      -            
+     0.83%  [kernel.kallsyms]  [k] dentry_needs_remove_privs                -      -            
+     0.83%  [kernel.kallsyms]  [k] dequeue_entities                         -      -            
+     0.83%  [kernel.kallsyms]  [k] do_sys_ftruncate                         -      -            
+     0.83%  [kernel.kallsyms]  [k] entry_SYSCALL_64                         -      -            
+     0.83%  [kernel.kallsyms]  [k] futex_do_wait                            -      -            
+     0.83%  [kernel.kallsyms]  [k] futex_wait_setup                         -      -            
+     0.83%  [kernel.kallsyms]  [k] gup_fast_pte_range                       -      -            
+     0.83%  [kernel.kallsyms]  [k] inode_set_ctime_current                  -      -            
+     0.83%  [kernel.kallsyms]  [k] mls_level_isvalid                        -      -            
+     0.83%  [kernel.kallsyms]  [k] mod_objcg_state                          -      -            
+     0.83%  [kernel.kallsyms]  [k] path_get                                 -      -            
+     0.83%  [kernel.kallsyms]  [k] put_prev_task_fair                       -      -            
+     0.83%  [kernel.kallsyms]  [k] restore_fpregs_from_fpstate              -      -            
+     0.83%  [kernel.kallsyms]  [k] sched_balance_newidle                    -      -            
+     0.83%  [kernel.kallsyms]  [k] try_grab_folio_fast                      -      -            
+     0.83%  [kernel.kallsyms]  [k] wake_q_add_safe                          -      -            
+     0.83%  [vdso]             [.] 0x000000000000093a                       -      -            
+     0.83%  [xfs]              [k] __xfs_trans_commit                       -      -            
+     0.83%  [xfs]              [k] _xfs_trans_bjoin                         -      -            
+     0.83%  [xfs]              [k] xfs_btree_get_leaf_keys                  -      -            
+     0.83%  [xfs]              [k] xfs_btree_lookup_get_block               -      -            
+     0.83%  [xfs]              [k] xfs_btree_rec_offset                     -      -            
+     0.83%  [xfs]              [k] xfs_direct_write_iomap_begin             -      -            
+     0.83%  [xfs]              [k] xfs_extent_busy_trim                     -      -            
+     0.83%  [xfs]              [k] xfs_file_release                         -      -            
+     0.83%  [xfs]              [k] xfs_ilock_iocb_for_write                 -      -            
+     0.83%  [xfs]              [k] xfs_log_reserve                          -      -            
+     0.83%  [xfs]              [k] xfs_rmap_get_rec                         -      -            
+     0.83%  [xfs]              [k] xfs_rmapbt_init_high_key_from_rec        -      -            
+     0.83%  efs-bench          [.] efs_store_nvme_bind                      -      -            
+     0.83%  efs-bench          [.] format_ino_chunk_dir                     -      -            
+     0.83%  efs-bench          [.] submit_and_wait_inner                    -      -            
+     0.83%  libc.so.6          [.] pthread_cond_signal@@GLIBC_2.3.2         -      -            
+
+
+#
+# (Tip: To set sample time separation other than 100ms with --sort time use --time-quantum)
+#

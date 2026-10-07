@@ -1,0 +1,47 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 34  of event 'cycles'
+# Event count (approx.): 223530395
+#
+# Overhead  Shared Object      Symbol                                        IPC   [IPC Coverage]
+# ........  .................  ............................................  ....................
+#
+    11.99%  [kernel.kallsyms]  [k] crc32_body                                -      -            
+     7.19%  [vdso]             [.] __vdso_clock_gettime                      -      -            
+     5.53%  [kernel.kallsyms]  [k] iomap_dio_bio_iter                        -      -            
+     5.18%  [xfs]              [k] xfs_trans_brelse                          -      -            
+     4.14%  [xfs]              [k] xfs_lookup_get_search_key                 -      -            
+     3.79%  [kernel.kallsyms]  [k] x64_sys_call                              -      -            
+     3.64%  [kernel.kallsyms]  [k] down_read                                 -      -            
+     3.54%  [kernel.kallsyms]  [k] memset_orig                               -      -            
+     3.53%  [kernel.kallsyms]  [k] __futex_hash                              -      -            
+     3.43%  [kernel.kallsyms]  [k] sort_r                                    -      -            
+     2.73%  [xfs]              [k] xfs_buf_lock                              -      -            
+     2.65%  [kernel.kallsyms]  [k] path_init                                 -      -            
+     2.26%  [kernel.kallsyms]  [k] __calc_delta.constprop.0                  -      -            
+     2.26%  [kernel.kallsyms]  [k] __kmalloc_noprof                          -      -            
+     2.26%  [kernel.kallsyms]  [k] __memcpy                                  -      -            
+     2.26%  [kernel.kallsyms]  [k] bio_associate_blkg_from_css               -      -            
+     2.26%  [kernel.kallsyms]  [k] blk_mq_get_tag                            -      -            
+     2.26%  [kernel.kallsyms]  [k] get_partial_node.part.0                   -      -            
+     2.26%  [kernel.kallsyms]  [k] its_return_thunk                          -      -            
+     2.26%  [kernel.kallsyms]  [k] kmem_cache_alloc_noprof                   -      -            
+     2.26%  [kernel.kallsyms]  [k] mnt_put_write_access                      -      -            
+     2.26%  [kernel.kallsyms]  [k] native_queued_spin_lock_slowpath          -      -            
+     2.26%  [kernel.kallsyms]  [k] wbt_wait                                  -      -            
+     2.26%  [kernel.kallsyms]  [k] xas_start                                 -      -            
+     2.26%  [xfs]              [k] xfs_bmap_add_extent_unwritten_real        -      -            
+     2.26%  [xfs]              [k] xfs_bmapi_trim_map.isra.0                 -      -            
+     2.26%  [xfs]              [k] xfs_buf_lookup.constprop.0                -      -            
+     2.26%  [xfs]              [k] xfs_defer_finish_noroll                   -      -            
+     2.26%  [xfs]              [k] xfs_dir2_data_use_free                    -      -            
+     2.26%  [xfs]              [k] xfs_generic_create                        -      -            
+     1.99%  [kernel.kallsyms]  [k] kfree                                     -      -            
+
+
+#
+# (Tip: To show information about system the samples were collected on use perf report --header)
+#

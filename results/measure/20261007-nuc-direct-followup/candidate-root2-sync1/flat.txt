@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 29  of event 'cycles'
+# Event count (approx.): 163482255
+#
+# Overhead  Shared Object      Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+    11.07%  [kernel.kallsyms]  [k] crc32_body                               -      -            
+     6.39%  [kernel.kallsyms]  [k] iomap_iter                               -      -            
+     5.33%  [kernel.kallsyms]  [k] __cgroup_account_cputime                 -      -            
+     5.04%  [xfs]              [k] xfs_trans_apply_dquot_deltas             -      -            
+     4.37%  [kernel.kallsyms]  [k] strncpy_from_user                        -      -            
+     3.09%  [irqbypass]        [k] 0x0000000000002800                       -      -            
+     3.09%  [kernel.kallsyms]  [k] __inode_security_revalidate              -      -            
+     3.09%  [kernel.kallsyms]  [k] __iomap_dio_rw                           -      -            
+     3.09%  [kernel.kallsyms]  [k] __update_load_avg_se                     -      -            
+     3.09%  [kernel.kallsyms]  [k] bio_alloc_clone                          -      -            
+     3.09%  [kernel.kallsyms]  [k] dequeue_task_fair                        -      -            
+     3.09%  [kernel.kallsyms]  [k] iov_iter_advance                         -      -            
+     3.09%  [kernel.kallsyms]  [k] rw_verify_area                           -      -            
+     3.09%  [kernel.kallsyms]  [k] try_grab_folio_fast                      -      -            
+     3.09%  [kernel.kallsyms]  [k] try_to_grab_pending                      -      -            
+     3.09%  [kernel.kallsyms]  [k] update_curr                              -      -            
+     3.09%  [kernel.kallsyms]  [k] update_curr_se                           -      -            
+     3.09%  [kernel.kallsyms]  [k] vfs_writev                               -      -            
+     3.09%  [xfs]              [k] xfs_assert_ilocked                       -      -            
+     3.09%  [xfs]              [k] xfs_attr_leaf_newentsize                 -      -            
+     3.09%  [xfs]              [k] xfs_attr_set                             -      -            
+     3.09%  [xfs]              [k] xfs_btree_read_buf_block                 -      -            
+     3.09%  [xfs]              [k] xfs_ilock                                -      -            
+     3.09%  [xfs]              [k] xfs_inobt_first_free_inode               -      -            
+     3.09%  [xfs]              [k] xlog_cil_alloc_shadow_bufs.isra.0        -      -            
+     3.09%  efs-bench          [.] format_ino_chunk_dir                     -      -            
+     2.92%  [xfs]              [k] xfs_iomap_write_unwritten                -      -            
+
+
+#
+# (Tip: Use parent filter to see specific call path: perf report -p <regex>)
+#

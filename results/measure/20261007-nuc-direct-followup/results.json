@@ -1,0 +1,1362 @@
+[
+  {
+    "name": "current-direct-sync1-root2-r2",
+    "variant": "current",
+    "repeat": 2,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6172117669921136
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "880",
+        "wall_s": "1.540",
+        "ops_s": "571.6",
+        "p50_us": "22920",
+        "p99_us": "89375",
+        "max_us": "97133",
+        "GiB_s": "0.035",
+        "errors": "0",
+        "diskw_ops": "880",
+        "diskw_avg_us": "6826",
+        "idle_workers": "0",
+        "max_start_us": "117",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root2-r2",
+    "variant": "conditional",
+    "repeat": 2,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.566238155006431
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "53064",
+        "wall_s": "1.501",
+        "ops_s": "35358.8",
+        "p50_us": "464",
+        "p99_us": "886",
+        "max_us": "4661",
+        "GiB_s": "2.158",
+        "errors": "0",
+        "diskw_ops": "53064",
+        "diskw_avg_us": "103",
+        "idle_workers": "0",
+        "max_start_us": "43",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root1-r4",
+    "variant": "conditional",
+    "repeat": 4,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5664930940110935
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10206",
+        "wall_s": "1.503",
+        "ops_s": "6792.6",
+        "p50_us": "2115",
+        "p99_us": "4388",
+        "max_us": "6102",
+        "GiB_s": "0.415",
+        "errors": "0",
+        "diskw_ops": "10206",
+        "diskw_avg_us": "575",
+        "idle_workers": "0",
+        "max_start_us": "101",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root1-r0",
+    "variant": "current",
+    "repeat": 0,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5662439669977175
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10085",
+        "wall_s": "1.502",
+        "ops_s": "6712.3",
+        "p50_us": "2379",
+        "p99_us": "3701",
+        "max_us": "24672",
+        "GiB_s": "0.410",
+        "errors": "0",
+        "diskw_ops": "10085",
+        "diskw_avg_us": "583",
+        "idle_workers": "0",
+        "max_start_us": "103",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root1-r3",
+    "variant": "conditional",
+    "repeat": 3,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.566126293007983
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10086",
+        "wall_s": "1.502",
+        "ops_s": "6713.6",
+        "p50_us": "2253",
+        "p99_us": "3598",
+        "max_us": "24906",
+        "GiB_s": "0.410",
+        "errors": "0",
+        "diskw_ops": "10086",
+        "diskw_avg_us": "583",
+        "idle_workers": "0",
+        "max_start_us": "49",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root2-r3",
+    "variant": "conditional",
+    "repeat": 3,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5666139480017591
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "52249",
+        "wall_s": "1.501",
+        "ops_s": "34812.7",
+        "p50_us": "425",
+        "p99_us": "1383",
+        "max_us": "3579",
+        "GiB_s": "2.125",
+        "errors": "0",
+        "diskw_ops": "52249",
+        "diskw_avg_us": "103",
+        "idle_workers": "0",
+        "max_start_us": "141",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root2-r4",
+    "variant": "current",
+    "repeat": 4,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6173155320138903
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "857",
+        "wall_s": "1.530",
+        "ops_s": "560.1",
+        "p50_us": "27114",
+        "p99_us": "72994",
+        "max_us": "78362",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "857",
+        "diskw_avg_us": "7007",
+        "idle_workers": "0",
+        "max_start_us": "68",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root1-r1",
+    "variant": "current",
+    "repeat": 1,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5667242339986842
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10161",
+        "wall_s": "1.503",
+        "ops_s": "6758.9",
+        "p50_us": "739",
+        "p99_us": "8575",
+        "max_us": "20159",
+        "GiB_s": "0.413",
+        "errors": "0",
+        "diskw_ops": "10161",
+        "diskw_avg_us": "578",
+        "idle_workers": "0",
+        "max_start_us": "107",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root2-r4",
+    "variant": "conditional",
+    "repeat": 4,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.617608068001573
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "860",
+        "wall_s": "1.528",
+        "ops_s": "562.8",
+        "p50_us": "24597",
+        "p99_us": "66397",
+        "max_us": "72541",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "860",
+        "diskw_avg_us": "6987",
+        "idle_workers": "0",
+        "max_start_us": "49",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root1-r0",
+    "variant": "current",
+    "repeat": 0,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5664303899975494
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "7520",
+        "wall_s": "1.503",
+        "ops_s": "5002.2",
+        "p50_us": "3139",
+        "p99_us": "5171",
+        "max_us": "24891",
+        "GiB_s": "0.305",
+        "errors": "0",
+        "diskw_ops": "7520",
+        "diskw_avg_us": "785",
+        "idle_workers": "0",
+        "max_start_us": "98",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root1-r2",
+    "variant": "current",
+    "repeat": 2,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5663830530102132
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10175",
+        "wall_s": "1.502",
+        "ops_s": "6772.9",
+        "p50_us": "2318",
+        "p99_us": "4409",
+        "max_us": "5461",
+        "GiB_s": "0.413",
+        "errors": "0",
+        "diskw_ops": "10175",
+        "diskw_avg_us": "578",
+        "idle_workers": "0",
+        "max_start_us": "44",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root2-r4",
+    "variant": "current",
+    "repeat": 4,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5668387260084273
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "52697",
+        "wall_s": "1.501",
+        "ops_s": "35112.1",
+        "p50_us": "325",
+        "p99_us": "1359",
+        "max_us": "2278",
+        "GiB_s": "2.143",
+        "errors": "0",
+        "diskw_ops": "52697",
+        "diskw_avg_us": "105",
+        "idle_workers": "0",
+        "max_start_us": "82",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root2-r0",
+    "variant": "conditional",
+    "repeat": 0,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.566603216007934
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "52489",
+        "wall_s": "1.501",
+        "ops_s": "34977.0",
+        "p50_us": "446",
+        "p99_us": "820",
+        "max_us": "2057",
+        "GiB_s": "2.135",
+        "errors": "0",
+        "diskw_ops": "52489",
+        "diskw_avg_us": "101",
+        "idle_workers": "0",
+        "max_start_us": "155",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root2-r1",
+    "variant": "conditional",
+    "repeat": 1,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.566448938989197
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "50488",
+        "wall_s": "1.501",
+        "ops_s": "33640.7",
+        "p50_us": "271",
+        "p99_us": "1462",
+        "max_us": "70395",
+        "GiB_s": "2.053",
+        "errors": "0",
+        "diskw_ops": "50488",
+        "diskw_avg_us": "111",
+        "idle_workers": "0",
+        "max_start_us": "92",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root2-r1",
+    "variant": "conditional",
+    "repeat": 1,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6173136610013898
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "869",
+        "wall_s": "1.531",
+        "ops_s": "567.8",
+        "p50_us": "25868",
+        "p99_us": "58164",
+        "max_us": "62434",
+        "GiB_s": "0.035",
+        "errors": "0",
+        "diskw_ops": "869",
+        "diskw_avg_us": "6936",
+        "idle_workers": "0",
+        "max_start_us": "166",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root1-r3",
+    "variant": "conditional",
+    "repeat": 3,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.566224604001036
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "8686",
+        "wall_s": "1.503",
+        "ops_s": "5779.6",
+        "p50_us": "2594",
+        "p99_us": "4552",
+        "max_us": "29034",
+        "GiB_s": "0.353",
+        "errors": "0",
+        "diskw_ops": "8686",
+        "diskw_avg_us": "672",
+        "idle_workers": "0",
+        "max_start_us": "40",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root2-r3",
+    "variant": "current",
+    "repeat": 3,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5666148940072162
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "52464",
+        "wall_s": "1.501",
+        "ops_s": "34961.2",
+        "p50_us": "324",
+        "p99_us": "1386",
+        "max_us": "2524",
+        "GiB_s": "2.134",
+        "errors": "0",
+        "diskw_ops": "52464",
+        "diskw_avg_us": "106",
+        "idle_workers": "0",
+        "max_start_us": "36",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root2-r4",
+    "variant": "conditional",
+    "repeat": 4,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5663268759963103
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "52589",
+        "wall_s": "1.501",
+        "ops_s": "35039.2",
+        "p50_us": "295",
+        "p99_us": "1295",
+        "max_us": "69840",
+        "GiB_s": "2.139",
+        "errors": "0",
+        "diskw_ops": "52589",
+        "diskw_avg_us": "107",
+        "idle_workers": "0",
+        "max_start_us": "48",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root1-r4",
+    "variant": "current",
+    "repeat": 4,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5664422229892807
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "7677",
+        "wall_s": "1.503",
+        "ops_s": "5107.9",
+        "p50_us": "3095",
+        "p99_us": "4736",
+        "max_us": "5615",
+        "GiB_s": "0.312",
+        "errors": "0",
+        "diskw_ops": "7677",
+        "diskw_avg_us": "769",
+        "idle_workers": "0",
+        "max_start_us": "71",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root1-r0",
+    "variant": "conditional",
+    "repeat": 0,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5660529699962353
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "8594",
+        "wall_s": "1.503",
+        "ops_s": "5718.9",
+        "p50_us": "2610",
+        "p99_us": "4636",
+        "max_us": "25381",
+        "GiB_s": "0.349",
+        "errors": "0",
+        "diskw_ops": "8594",
+        "diskw_avg_us": "679",
+        "idle_workers": "0",
+        "max_start_us": "56",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root2-r3",
+    "variant": "current",
+    "repeat": 3,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6175291200052015
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "871",
+        "wall_s": "1.534",
+        "ops_s": "567.8",
+        "p50_us": "26000",
+        "p99_us": "77783",
+        "max_us": "80836",
+        "GiB_s": "0.035",
+        "errors": "0",
+        "diskw_ops": "871",
+        "diskw_avg_us": "6896",
+        "idle_workers": "0",
+        "max_start_us": "102",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root1-r2",
+    "variant": "conditional",
+    "repeat": 2,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5664060220005922
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10174",
+        "wall_s": "1.503",
+        "ops_s": "6769.0",
+        "p50_us": "2274",
+        "p99_us": "4350",
+        "max_us": "6866",
+        "GiB_s": "0.413",
+        "errors": "0",
+        "diskw_ops": "10174",
+        "diskw_avg_us": "577",
+        "idle_workers": "0",
+        "max_start_us": "105",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root1-r2",
+    "variant": "conditional",
+    "repeat": 2,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5662562509969575
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "8608",
+        "wall_s": "1.503",
+        "ops_s": "5728.7",
+        "p50_us": "3163",
+        "p99_us": "4664",
+        "max_us": "27310",
+        "GiB_s": "0.350",
+        "errors": "0",
+        "diskw_ops": "8608",
+        "diskw_avg_us": "678",
+        "idle_workers": "0",
+        "max_start_us": "111",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root2-r3",
+    "variant": "conditional",
+    "repeat": 3,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6174621430109255
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "867",
+        "wall_s": "1.548",
+        "ops_s": "559.9",
+        "p50_us": "26965",
+        "p99_us": "57412",
+        "max_us": "59737",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "867",
+        "diskw_avg_us": "7010",
+        "idle_workers": "0",
+        "max_start_us": "131",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root1-r1",
+    "variant": "current",
+    "repeat": 1,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5665337910031667
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "7594",
+        "wall_s": "1.503",
+        "ops_s": "5052.5",
+        "p50_us": "3174",
+        "p99_us": "5116",
+        "max_us": "5585",
+        "GiB_s": "0.308",
+        "errors": "0",
+        "diskw_ops": "7594",
+        "diskw_avg_us": "777",
+        "idle_workers": "0",
+        "max_start_us": "109",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root1-r1",
+    "variant": "conditional",
+    "repeat": 1,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5665086549997795
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "8622",
+        "wall_s": "1.503",
+        "ops_s": "5736.4",
+        "p50_us": "2627",
+        "p99_us": "4118",
+        "max_us": "25915",
+        "GiB_s": "0.350",
+        "errors": "0",
+        "diskw_ops": "8622",
+        "diskw_avg_us": "677",
+        "idle_workers": "0",
+        "max_start_us": "106",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root2-r0",
+    "variant": "conditional",
+    "repeat": 0,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6176077389973216
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "884",
+        "wall_s": "1.533",
+        "ops_s": "576.8",
+        "p50_us": "28205",
+        "p99_us": "51270",
+        "max_us": "54321",
+        "GiB_s": "0.035",
+        "errors": "0",
+        "diskw_ops": "884",
+        "diskw_avg_us": "6799",
+        "idle_workers": "0",
+        "max_start_us": "52",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root2-r2",
+    "variant": "current",
+    "repeat": 2,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5664250959962374
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "52709",
+        "wall_s": "1.502",
+        "ops_s": "35103.8",
+        "p50_us": "386",
+        "p99_us": "1378",
+        "max_us": "2016",
+        "GiB_s": "2.143",
+        "errors": "0",
+        "diskw_ops": "52709",
+        "diskw_avg_us": "106",
+        "idle_workers": "0",
+        "max_start_us": "48",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root1-r2",
+    "variant": "current",
+    "repeat": 2,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5661281580105424
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "7543",
+        "wall_s": "1.503",
+        "ops_s": "5017.5",
+        "p50_us": "3173",
+        "p99_us": "4487",
+        "max_us": "5682",
+        "GiB_s": "0.306",
+        "errors": "0",
+        "diskw_ops": "7543",
+        "diskw_avg_us": "783",
+        "idle_workers": "0",
+        "max_start_us": "118",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root1-r0",
+    "variant": "conditional",
+    "repeat": 0,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5665124429942807
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10055",
+        "wall_s": "1.502",
+        "ops_s": "6692.3",
+        "p50_us": "2343",
+        "p99_us": "4119",
+        "max_us": "26109",
+        "GiB_s": "0.408",
+        "errors": "0",
+        "diskw_ops": "10055",
+        "diskw_avg_us": "584",
+        "idle_workers": "0",
+        "max_start_us": "115",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root2-r0",
+    "variant": "current",
+    "repeat": 0,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5664847250009188
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "54279",
+        "wall_s": "1.501",
+        "ops_s": "36164.4",
+        "p50_us": "398",
+        "p99_us": "1245",
+        "max_us": "4391",
+        "GiB_s": "2.207",
+        "errors": "0",
+        "diskw_ops": "54279",
+        "diskw_avg_us": "102",
+        "idle_workers": "0",
+        "max_start_us": "103",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root2-r2",
+    "variant": "conditional",
+    "repeat": 2,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6175221540033817
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "810",
+        "wall_s": "1.537",
+        "ops_s": "527.1",
+        "p50_us": "23846",
+        "p99_us": "129003",
+        "max_us": "150196",
+        "GiB_s": "0.032",
+        "errors": "0",
+        "diskw_ops": "810",
+        "diskw_avg_us": "7412",
+        "idle_workers": "0",
+        "max_start_us": "101",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root1-r4",
+    "variant": "current",
+    "repeat": 4,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5660729759983951
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10193",
+        "wall_s": "1.503",
+        "ops_s": "6783.6",
+        "p50_us": "2384",
+        "p99_us": "3683",
+        "max_us": "4156",
+        "GiB_s": "0.414",
+        "errors": "0",
+        "diskw_ops": "10193",
+        "diskw_avg_us": "577",
+        "idle_workers": "0",
+        "max_start_us": "53",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root1-r3",
+    "variant": "current",
+    "repeat": 3,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5665804669988574
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "7397",
+        "wall_s": "1.503",
+        "ops_s": "4921.4",
+        "p50_us": "3146",
+        "p99_us": "4180",
+        "max_us": "26559",
+        "GiB_s": "0.300",
+        "errors": "0",
+        "diskw_ops": "7397",
+        "diskw_avg_us": "799",
+        "idle_workers": "0",
+        "max_start_us": "46",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync0-root1-r1",
+    "variant": "conditional",
+    "repeat": 1,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5665767210011836
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10183",
+        "wall_s": "1.503",
+        "ops_s": "6773.6",
+        "p50_us": "2263",
+        "p99_us": "3859",
+        "max_us": "5513",
+        "GiB_s": "0.413",
+        "errors": "0",
+        "diskw_ops": "10183",
+        "diskw_avg_us": "577",
+        "idle_workers": "0",
+        "max_start_us": "144",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root2-r1",
+    "variant": "current",
+    "repeat": 1,
+    "direct": true,
+    "sync": false,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.5664362959942082
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "52018",
+        "wall_s": "1.501",
+        "ops_s": "34648.9",
+        "p50_us": "372",
+        "p99_us": "1327",
+        "max_us": "1809",
+        "GiB_s": "2.115",
+        "errors": "0",
+        "diskw_ops": "52018",
+        "diskw_avg_us": "107",
+        "idle_workers": "0",
+        "max_start_us": "48",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root2-r1",
+    "variant": "current",
+    "repeat": 1,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6176839209947502
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "838",
+        "wall_s": "1.539",
+        "ops_s": "544.6",
+        "p50_us": "22285",
+        "p99_us": "84525",
+        "max_us": "99723",
+        "GiB_s": "0.033",
+        "errors": "0",
+        "diskw_ops": "838",
+        "diskw_avg_us": "7160",
+        "idle_workers": "0",
+        "max_start_us": "51",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync1-root2-r0",
+    "variant": "current",
+    "repeat": 0,
+    "direct": true,
+    "sync": true,
+    "roots": "root2",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.6178009919967735
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "861",
+        "wall_s": "1.543",
+        "ops_s": "558.1",
+        "p50_us": "25375",
+        "p99_us": "68370",
+        "max_us": "76165",
+        "GiB_s": "0.034",
+        "errors": "0",
+        "diskw_ops": "861",
+        "diskw_avg_us": "6985",
+        "idle_workers": "0",
+        "max_start_us": "84",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  },
+  {
+    "name": "current-direct-sync0-root1-r3",
+    "variant": "current",
+    "repeat": 3,
+    "direct": true,
+    "sync": false,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.566369021005812
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "10084",
+        "wall_s": "1.503",
+        "ops_s": "6709.3",
+        "p50_us": "2305",
+        "p99_us": "4067",
+        "max_us": "26263",
+        "GiB_s": "0.410",
+        "errors": "0",
+        "diskw_ops": "10084",
+        "diskw_avg_us": "582",
+        "idle_workers": "0",
+        "max_start_us": "142",
+        "writers": "4",
+        "sync": "off"
+      }
+    ]
+  },
+  {
+    "name": "conditional-direct-sync1-root1-r4",
+    "variant": "conditional",
+    "repeat": 4,
+    "direct": true,
+    "sync": true,
+    "roots": "root1",
+    "run": {
+      "returncode": 0,
+      "elapsed_s": 1.565969730989309
+    },
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "8675",
+        "wall_s": "1.502",
+        "ops_s": "5774.5",
+        "p50_us": "2616",
+        "p99_us": "3740",
+        "max_us": "19207",
+        "GiB_s": "0.352",
+        "errors": "0",
+        "diskw_ops": "8675",
+        "diskw_avg_us": "672",
+        "idle_workers": "0",
+        "max_start_us": "50",
+        "writers": "4",
+        "sync": "on"
+      }
+    ]
+  }
+]
