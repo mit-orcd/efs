@@ -382,3 +382,27 @@ experiment into production. Registered-buffer/asynchronous I/O remains a separat
 experiment whose benefit must be measured against these ceilings.
 
 [Implementation and functional validation](../../results/measure/20261006-bench-allocation-multiroot/SUMMARY.md).
+
+### October 7 benchmark review
+
+Raw I/O workers wait on private release gates after a shared readiness barrier.
+This avoids a shared-mutex release convoy at QD256. Results retain the idle-worker
+failure gate and report `max_start_us`, the largest release-to-work delay.
+Initially empty windows report `allocation=allocate_then_overwrite`, with
+`allocation_ops` and `overwrite_ops`; most long buffered runs reuse warm pages.
+Their throughput is page-cache acceptance, not a sustained physical-media ceiling.
+
+The profiler defaults to `--call-graph auto`: DWARF for engine data, frame pointers
+for other modes. DWARF recordings are larger; explicit `fp` or `dwarf` overrides
+remain available. Old engine-data recordings contained impossible caller
+addresses from unwinding through libc. Analysis flags noncanonical addresses when
+CPU virtual-address width is recorded. Flat self-samples remain useful; old call
+chains cannot be repaired, and deep DWARF stacks can still truncate. Failed perf
+runs and incomplete reports are labeled invalid and retained only as diagnostics.
+
+Metadata measurements validate returned KV values, flush/compact/stat status,
+and recovered Raft index/term. Errors accumulate across phases, failed batches
+are ended and invalidate the run, and failed or zero-operation phases print
+`BENCH_FAIL`. No durability policy was relaxed to improve rates.
+
+[Review, matched measurements and validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md).

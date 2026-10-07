@@ -1,0 +1,12 @@
+NAME          SIZE TYPE FSTYPE      MOUNTPOINTS
+sda           1.8T disk             
+├─sda1        200M part vfat        
+└─sda2        1.8T part apfs        /mnt/usb2
+nvme1n1       3.7T disk xfs         /data1
+nvme0n1     953.9G disk             
+├─nvme0n1p1   600M part vfat        /boot/efi
+├─nvme0n1p2     1G part xfs         /boot
+└─nvme0n1p3 952.3G part LVM2_member 
+  ├─rl-root    70G lvm  xfs         /
+  ├─rl-swap  30.4G lvm  swap        
+  └─rl-home 851.9G lvm  xfs         /home

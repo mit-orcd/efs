@@ -1,0 +1,36 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 25K of event 'cycles'
+# Event count (approx.): 191902602779
+#
+# Overhead      Pid:Command    Symbol                                          IPC   [IPC Coverage]
+# ........  .................  ..............................................  ....................
+#
+     1.31%  1488140:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     1.15%  1488124:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     1.12%  1487960:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     1.11%  1488032:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     1.07%  1488109:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     1.03%  1487947:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.98%  1487990:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.90%  1487944:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.85%  1487907:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.81%  1488001:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.74%  1487998:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.71%  1487900:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.62%  1488092:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.61%  1488129:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.60%  1488021:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.56%  1487938:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.56%  1487934:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.52%  1488026:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.51%  1487932:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+
+
+#
+# (Tip: For memory address profiling, try: perf mem record / perf mem report)
+#

@@ -1,0 +1,3 @@
+store: put O_DIRECT zero-copy (payload+digest writev) len=65536
+[ perf record: Woken up 75 times to write data ]
+[ perf record: Captured and wrote 20.047 MB /tmp/efs-bench-review-dwarf-20261007/data-direct-w0-qd16/perf/perf.data (2439 samples) ]

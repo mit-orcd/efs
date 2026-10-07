@@ -1,0 +1,31 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 25K of event 'cycles'
+# Event count (approx.): 191902602779
+#
+# Overhead  Shared Object      Symbol                                          IPC   [IPC Coverage]
+# ........  .................  ..............................................  ....................
+#
+    69.43%  efs-bench          [.] blake3_hash_many_avx512                     -      -            
+    15.73%  [kernel.kallsyms]  [k] copy_page_from_iter_atomic                  -      -            
+     0.78%  efs-bench          [.] blake3_hash4_avx512                         -      -            
+     0.72%  [kernel.kallsyms]  [k] iomap_write_iter                            -      -            
+     0.68%  efs-bench          [.] blake3_compress_in_place_avx512             -      -            
+     0.62%  [kernel.kallsyms]  [k] balance_dirty_pages_ratelimited_flags       -      -            
+     0.56%  [kernel.kallsyms]  [k] __filemap_get_folio                         -      -            
+     0.53%  [kernel.kallsyms]  [k] fault_in_readable                           -      -            
+     0.51%  [xfs]              [k] xfs_buffered_write_iomap_begin              -      -            
+     0.42%  [kernel.kallsyms]  [k] iomap_write_end                             -      -            
+     0.41%  [kernel.kallsyms]  [k] filemap_get_entry                           -      -            
+     0.38%  efs-bench          [.] blake3_compress_subtree_wide                -      -            
+     0.34%  [kernel.kallsyms]  [k] vfs_write                                   -      -            
+     0.33%  efs-bench          [.] blake3_compress_xof_avx512                  -      -            
+     0.30%  [kernel.kallsyms]  [k] iomap_write_begin                           -      -            
+
+
+#
+# (Tip: For memory address profiling, try: perf mem record / perf mem report)
+#

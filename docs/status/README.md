@@ -13,6 +13,15 @@ sends you to — not the whole spec.
 ---
 ## 1. The task right now
 
+**Benchmark review (Oct 7).** Cached KV segment lookup now uses validated record
+offsets and binary search; matched warm reads improved about 25%. Raw QD256
+release gates, allocation counters, invalid-profile labels, engine-data DWARF
+unwinding, and metadata result validation are fixed. Linux unit tests, backend
+smoke/fault tests and targeted perf reruns pass. See the
+[benchmark review checkpoint](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md).
+This benchmark work does not activate D25 or change writer durability defaults.
+
+
 **Current implementation task — D25 writer integration (Oct 6).**
 Memory/recovery fixes are committed; the dated checkpoints below retain their
 original working-tree status and are superseded by the review checkpoint.

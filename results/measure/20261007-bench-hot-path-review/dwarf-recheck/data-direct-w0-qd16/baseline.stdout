@@ -1,0 +1,5 @@
+bench data paths=1..1 time_s=1.000 writers=0 direct_io=on frag_bytes=65536 selected_qd=16 window_per_slot=1 (0=append-only)
+BENCH_OK kind=data rw=write paths=1 qd=16 ops=11794 wall_s=1.002 ops_s=11773.3 p50_us=1449 p99_us=3252 max_us=116731 GiB_s=0.719 errors=0 diskw_ops=11794 diskw_avg_us=1355
+ diskutil: nvme1n1=99% sda=3% sda2=3%
+BENCH_OK kind=data rw=read paths=1 qd=16 ops=24222 wall_s=1.001 ops_s=24201.7 p50_us=709 p99_us=1185 max_us=4093 GiB_s=1.477 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil: nvme1n1=100% sda=3% sda2=3%

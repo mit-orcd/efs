@@ -1,0 +1,16 @@
+[
+  "/usr/bin/perf",
+  "report",
+  "-i",
+  "/tmp/efs-bench-review-dwarf-20261007/data-buffered-w0-qd16/perf/perf.data",
+  "--stdio",
+  "--comms",
+  "efs-bench",
+  "--no-children",
+  "--sort",
+  "dso,symbol",
+  "--percent-limit",
+  "0.3",
+  "-g",
+  "none"
+]

@@ -1,0 +1,78 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 2870100438
+#
+# Overhead      Pid:Command    Symbol                                            IPC   [IPC Coverage]
+# ........  .................  ................................................  ....................
+#
+     2.91%  1499636:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     1.79%  1499639:efs-bench  [k] _raw_spin_lock_irqsave                        -      -            
+     1.74%  1499632:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     1.54%  1499628:efs-bench  [.] __memmove_avx512_unaligned_erms               -      -            
+     1.34%  1499628:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     1.20%  1499639:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     1.19%  1499581:efs-bench  [k] xfs_btree_get_leaf_keys                       -      -            
+     0.92%  1499587:efs-bench  [k] xfs_defer_save_resources                      -      -            
+     0.92%  1499637:efs-bench  [k] dequeue_entities                              -      -            
+     0.83%  1499581:efs-bench  [k] alloc_pte.constprop.0                         -      -            
+     0.83%  1499636:efs-bench  [k] iommu_v1_map_pages                            -      -            
+     0.82%  1499641:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     0.80%  1499637:efs-bench  [k] lockref_get_not_dead                          -      -            
+     0.75%  1499587:efs-bench  [k] xfs_buf_get_map                               -      -            
+     0.75%  1499591:efs-bench  [k] _raw_spin_unlock_irqrestore                   -      -            
+     0.73%  1499636:efs-bench  [k] _raw_spin_lock_irqsave                        -      -            
+     0.73%  1499594:efs-bench  [k] __schedule                                    -      -            
+     0.72%  1499584:efs-bench  [k] xfs_alloc_fix_freelist                        -      -            
+     0.72%  1499638:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     0.71%  1499641:efs-bench  [k] try_get_folio                                 -      -            
+     0.70%  1499627:efs-bench  [k] inode_permission                              -      -            
+     0.70%  1499630:efs-bench  [k] arch_exit_to_user_mode_prepare.isra.0         -      -            
+     0.70%  1499627:efs-bench  [k] __rcu_read_unlock                             -      -            
+     0.68%  1499636:efs-bench  [k] nvme_queue_rqs                                -      -            
+     0.66%  1499631:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     0.66%  1499640:efs-bench  [k] __iomap_dio_rw                                -      -            
+     0.65%  1499631:efs-bench  [k] __bio_iov_iter_get_pages                      -      -            
+     0.62%  1499633:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     0.61%  1499584:efs-bench  [k] xfs_btree_get_leaf_keys                       -      -            
+     0.61%  1499641:efs-bench  [k] __inode_security_revalidate                   -      -            
+     0.61%  1499596:efs-bench  [k] iommu_v1_map_pages                            -      -            
+     0.61%  1499641:efs-bench  [.] __libc_pread                                  -      -            
+     0.60%  1499583:efs-bench  [k] xfs_log_ticket_ungrant                        -      -            
+     0.59%  1499585:efs-bench  [k] xfs_group_get                                 -      -            
+     0.58%  1499582:efs-bench  [k] dequeue_entity                                -      -            
+     0.58%  1499640:efs-bench  [k] __rcu_read_unlock                             -      -            
+     0.57%  1499639:efs-bench  [k] gup_fast_pte_range                            -      -            
+     0.57%  1499629:efs-bench  [.] blake3_hash_many_avx512                       -      -            
+     0.57%  1499593:efs-bench  [k] xfs_buf_lookup.constprop.0                    -      -            
+     0.56%  1499591:efs-bench  [k] xfs_btree_get_leaf_keys                       -      -            
+     0.55%  1499582:efs-bench  [k] kmem_cache_alloc_noprof                       -      -            
+     0.55%  1499636:efs-bench  [k] update_load_avg                               -      -            
+     0.55%  1499591:efs-bench  [k] blk_mq_get_tag                                -      -            
+     0.54%  1499629:efs-bench  [k] __inode_security_revalidate                   -      -            
+     0.54%  1499589:efs-bench  [k] xfs_iext_lookup_extent                        -      -            
+     0.54%  1499630:efs-bench  [k] native_sched_clock                            -      -            
+     0.54%  1499586:efs-bench  [k] iommu_v1_map_pages                            -      -            
+     0.53%  1499582:efs-bench  [k] xfs_btree_get_leaf_keys                       -      -            
+     0.52%  1499632:efs-bench  [k] bio_set_pages_dirty                           -      -            
+     0.52%  1499581:efs-bench  [k] xfs_buf_item_init                             -      -            
+     0.52%  1499583:efs-bench  [k] xlog_cil_alloc_shadow_bufs.isra.0             -      -            
+     0.51%  1499593:efs-bench  [k] xfs_rmapbt_init_high_key_from_rec             -      -            
+     0.51%  1499591:efs-bench  [k] xfs_rmapbt_diff_two_keys                      -      -            
+     0.51%  1499584:efs-bench  [k] __memcpy                                      -      -            
+     0.51%  1499589:efs-bench  [k] xlog_cil_commit                               -      -            
+     0.51%  1499584:efs-bench  [k] file_ra_state_init                            -      -            
+     0.51%  1499589:efs-bench  [k] bpf_lsm_file_permission                       -      -            
+     0.51%  1499584:efs-bench  [k] srso_alias_return_thunk                       -      -            
+     0.50%  1499587:efs-bench  [k] xfs_extent_busy_trim                          -      -            
+     0.50%  1499581:efs-bench  [k] xfs_rmap_unmap                                -      -            
+     0.50%  1499579:efs-bench  [k] do_anonymous_page                             -      -            
+
+
+#
+# (Tip: To adjust path to source files to local file system use perf report --prefix=... --prefix-strip=...)
+#

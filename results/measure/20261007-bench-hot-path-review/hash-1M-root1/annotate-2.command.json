@@ -1,0 +1,10 @@
+[
+  "perf",
+  "annotate",
+  "-i",
+  "/tmp/efs-bench-review-evidence-20261007/hash-1M-root1/perf.data",
+  "--stdio",
+  "--source",
+  "--symbol",
+  "blake3_compress_subtree_wide"
+]

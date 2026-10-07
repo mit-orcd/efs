@@ -1,0 +1,40 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 19343284153
+#
+# Overhead  Shared Object      Symbol                                     
+# ........  .................  ...........................................
+#
+    13.63%  libc.so.6          [.] __memcmp_evex_movbe
+    12.82%  efs-bench          [.] search_block
+     7.76%  efs-bench          [.] kv_seg_probe
+     7.55%  [vdso]             [.] 0x00000000000008d8
+     6.97%  efs-bench          [.] efs_bench_local_main
+     5.54%  libc.so.6          [.] __GI___pthread_mutex_unlock_usercnt
+     3.78%  efs-bench          [.] lookup
+     3.34%  efs-bench          [.] efs_crc32
+     3.29%  libc.so.6          [.] __memmove_avx512_unaligned_erms
+     3.19%  libc.so.6          [.] pthread_mutex_lock@@GLIBC_2.2.5
+     2.10%  efs-bench          [.] lsm_get
+     1.96%  efs-bench          [.] kv_mtab_pos
+     1.19%  efs-bench          [.] efs_iostats_now_us
+     0.86%  [kernel.kallsyms]  [k] crc32_body
+     0.81%  [kernel.kallsyms]  [k] update_load_avg
+     0.69%  efs-bench          [.] u64_cmp
+     0.54%  [vdso]             [.] 0x0000000000000998
+     0.52%  [kernel.kallsyms]  [k] sched_balance_update_blocked_averages
+     0.50%  efs-bench          [.] kv_buf_set
+     0.48%  [kernel.kallsyms]  [k] do_syscall_64
+     0.39%  [vdso]             [.] 0x00000000000008e9
+     0.35%  [vdso]             [.] 0x00000000000008da
+     0.35%  [kernel.kallsyms]  [k] dequeue_entity
+     0.31%  [kernel.kallsyms]  [k] balance_dirty_pages_ratelimited_flags
+
+
+#
+# (Tip: List events using substring match: perf list <keyword>)
+#

@@ -1,0 +1,334 @@
+[
+  {
+    "version": "before",
+    "repeat": 0,
+    "rc": 0,
+    "command": [
+      "/tmp/efs/logs/efs-bench-20261007T001758.671828Z/efs-bench",
+      "--bench",
+      "meta",
+      "--meta-storage",
+      "/data1/efs/bench/efs-review-meta-a3bbeamm",
+      "--time",
+      "3",
+      "--skip-ceiling"
+    ],
+    "metrics": [
+      {
+        "kind": "meta",
+        "phase": "kv-write",
+        "ops": "5633",
+        "wall_s": "3.000",
+        "ops_s": "1877.6",
+        "p50_us": "493",
+        "p99_us": "1059",
+        "max_us": "11714",
+        "MB_s": "0.272",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "kv-flush-compact",
+        "flush_s": "0.004",
+        "compact_s": "0.004",
+        "mt_bytes": "0",
+        "l0_bytes": "0",
+        "n_l0": "0",
+        "n_l1": "1"
+      },
+      {
+        "kind": "meta",
+        "phase": "kv-read",
+        "ops": "11755853",
+        "wall_s": "3.000",
+        "ops_s": "3918617.4",
+        "p50_us": "0",
+        "p99_us": "1",
+        "max_us": "51",
+        "MB_s": "0.000",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-append-qd1",
+        "ops": "5638",
+        "wall_s": "3.000",
+        "ops_s": "1879.3",
+        "p50_us": "485",
+        "p99_us": "1066",
+        "max_us": "11096",
+        "MB_s": "0.459",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-append-batch32",
+        "batches": "4769",
+        "entries": "152608",
+        "wall_s": "3.000",
+        "entries_s": "50865.8",
+        "batch_p50_us": "611",
+        "batch_p99_us": "1143",
+        "batch_max_us": "8956",
+        "MB_s": "12.418",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-reopen",
+        "reopen_s": "0.231",
+        "last_idx": "158246",
+        "entries": "158246"
+      }
+    ]
+  },
+  {
+    "version": "after",
+    "repeat": 0,
+    "rc": 0,
+    "command": [
+      "/tmp/efs-bench-review-20261007/efs-bench",
+      "--bench",
+      "meta",
+      "--meta-storage",
+      "/data1/efs/bench/efs-review-meta-ihkcvo09",
+      "--time",
+      "3",
+      "--skip-ceiling"
+    ],
+    "metrics": [
+      {
+        "kind": "meta",
+        "phase": "kv-write",
+        "ops": "4940",
+        "wall_s": "3.000",
+        "ops_s": "1646.5",
+        "p50_us": "485",
+        "p99_us": "1062",
+        "max_us": "383861",
+        "MB_s": "0.239",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "kv-flush-compact",
+        "flush_s": "0.004",
+        "compact_s": "0.004",
+        "mt_bytes": "0",
+        "l0_bytes": "0",
+        "n_l0": "0",
+        "n_l1": "1"
+      },
+      {
+        "kind": "meta",
+        "phase": "kv-read",
+        "ops": "14778156",
+        "wall_s": "3.000",
+        "ops_s": "4926051.4",
+        "p50_us": "0",
+        "p99_us": "1",
+        "max_us": "104",
+        "MB_s": "0.000",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-append-qd1",
+        "ops": "4909",
+        "wall_s": "3.000",
+        "ops_s": "1636.2",
+        "p50_us": "483",
+        "p99_us": "1095",
+        "max_us": "292502",
+        "MB_s": "0.399",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-append-batch32",
+        "batches": "4740",
+        "entries": "151680",
+        "wall_s": "3.001",
+        "entries_s": "50551.5",
+        "batch_p50_us": "612",
+        "batch_p99_us": "1164",
+        "batch_max_us": "10778",
+        "MB_s": "12.342",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-reopen",
+        "reopen_s": "0.221",
+        "last_idx": "156589",
+        "entries": "156589"
+      }
+    ]
+  },
+  {
+    "version": "before",
+    "repeat": 1,
+    "rc": 0,
+    "command": [
+      "/tmp/efs/logs/efs-bench-20261007T001758.671828Z/efs-bench",
+      "--bench",
+      "meta",
+      "--meta-storage",
+      "/data1/efs/bench/efs-review-meta-obsnwv8x",
+      "--time",
+      "3",
+      "--skip-ceiling"
+    ],
+    "metrics": [
+      {
+        "kind": "meta",
+        "phase": "kv-write",
+        "ops": "5629",
+        "wall_s": "3.000",
+        "ops_s": "1876.3",
+        "p50_us": "492",
+        "p99_us": "1044",
+        "max_us": "11047",
+        "MB_s": "0.272",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "kv-flush-compact",
+        "flush_s": "0.004",
+        "compact_s": "0.004",
+        "mt_bytes": "0",
+        "l0_bytes": "0",
+        "n_l0": "0",
+        "n_l1": "1"
+      },
+      {
+        "kind": "meta",
+        "phase": "kv-read",
+        "ops": "11656956",
+        "wall_s": "3.000",
+        "ops_s": "3885651.7",
+        "p50_us": "0",
+        "p99_us": "1",
+        "max_us": "97",
+        "MB_s": "0.000",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-append-qd1",
+        "ops": "5291",
+        "wall_s": "3.000",
+        "ops_s": "1763.4",
+        "p50_us": "490",
+        "p99_us": "1195",
+        "max_us": "138122",
+        "MB_s": "0.431",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-append-batch32",
+        "batches": "3844",
+        "entries": "123008",
+        "wall_s": "3.000",
+        "entries_s": "41002.6",
+        "batch_p50_us": "619",
+        "batch_p99_us": "1371",
+        "batch_max_us": "330185",
+        "MB_s": "10.010",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-reopen",
+        "reopen_s": "0.180",
+        "last_idx": "128299",
+        "entries": "128299"
+      }
+    ]
+  },
+  {
+    "version": "after",
+    "repeat": 1,
+    "rc": 0,
+    "command": [
+      "/tmp/efs-bench-review-20261007/efs-bench",
+      "--bench",
+      "meta",
+      "--meta-storage",
+      "/data1/efs/bench/efs-review-meta-ieq2tltj",
+      "--time",
+      "3",
+      "--skip-ceiling"
+    ],
+    "metrics": [
+      {
+        "kind": "meta",
+        "phase": "kv-write",
+        "ops": "5749",
+        "wall_s": "3.000",
+        "ops_s": "1916.1",
+        "p50_us": "480",
+        "p99_us": "974",
+        "max_us": "10592",
+        "MB_s": "0.278",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "kv-flush-compact",
+        "flush_s": "0.004",
+        "compact_s": "0.004",
+        "mt_bytes": "0",
+        "l0_bytes": "0",
+        "n_l0": "0",
+        "n_l1": "1"
+      },
+      {
+        "kind": "meta",
+        "phase": "kv-read",
+        "ops": "14467582",
+        "wall_s": "3.000",
+        "ops_s": "4822527.2",
+        "p50_us": "0",
+        "p99_us": "1",
+        "max_us": "24",
+        "MB_s": "0.000",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-append-qd1",
+        "ops": "5595",
+        "wall_s": "3.000",
+        "ops_s": "1865.0",
+        "p50_us": "489",
+        "p99_us": "1104",
+        "max_us": "12050",
+        "MB_s": "0.455",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-append-batch32",
+        "batches": "4737",
+        "entries": "151584",
+        "wall_s": "3.000",
+        "entries_s": "50519.8",
+        "batch_p50_us": "609",
+        "batch_p99_us": "1173",
+        "batch_max_us": "10810",
+        "MB_s": "12.334",
+        "errors": "0"
+      },
+      {
+        "kind": "meta",
+        "phase": "raft-reopen",
+        "reopen_s": "0.228",
+        "last_idx": "157179",
+        "entries": "157179"
+      }
+    ]
+  }
+]

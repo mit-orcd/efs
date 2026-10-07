@@ -1,0 +1,34 @@
+CEIL_RAW wseq64k bytes=536870912 wall_s=0.503 GiB_s=0.994
+CEIL_RAW rseq64k bytes=536870912 wall_s=0.531 GiB_s=0.942
+CEIL_RAW wsync4k ops=1103 wall_s=5.003 ops_s=220.5 avg_us=4535.8
+CEIL_RAW rrand4k ops=0 wall_s=0.000 ops_s=0.0 avg_us=6.9
+BENCH_OK kind=meta phase=kv-write ops=7 wall_s=0.032 ops_s=219.6 p50_us=4496 p99_us=4802 max_us=4802 MB_s=0.032 errors=0
+kv-compact: start l0=1 inputs=1 range=353 l0only=0
+kv-compact: end bytes=1127 ms=18 l0=0 l1=1 rc=0
+BENCH_OK kind=meta phase=kv-flush-compact flush_s=0.018 compact_s=0.018 mt_bytes=0 l0_bytes=0 n_l0=0 n_l1=1
+BENCH_OK kind=meta phase=kv-read ops=235210 wall_s=0.030 ops_s=7840298.1 p50_us=0 p99_us=1 max_us=17 MB_s=0.000 errors=0
+BENCH_OK kind=meta phase=raft-append-qd1 ops=7 wall_s=0.031 ops_s=223.3 p50_us=4472 p99_us=4512 max_us=4512 MB_s=0.055 errors=0
+BENCH_OK kind=meta phase=raft-append-batch32 batches=7 entries=224 wall_s=0.033 entries_s=6810.8 batch_p50_us=4624 batch_p99_us=5172 batch_max_us=5172 MB_s=1.663 errors=0
+BENCH_OK kind=meta phase=raft-reopen reopen_s=0.000 last_idx=231 entries=231
+CEIL_RAW wseq64k bytes=536870912 wall_s=0.506 GiB_s=0.988
+CEIL_RAW rseq64k bytes=536870912 wall_s=0.533 GiB_s=0.939
+CEIL_RAW wsync4k ops=1100 wall_s=5.001 ops_s=220.0 avg_us=4546.2
+CEIL_RAW rrand4k ops=0 wall_s=0.000 ops_s=0.0 avg_us=5.5
+bench data paths=1..1 time_s=0.030 writers=2 direct_io=off frag_bytes=65536 selected_qd=0 window_per_slot=0 (0=append-only)
+BENCH_OK kind=data rw=write paths=1 qd=1 ops=624 wall_s=0.030 ops_s=20763.2 p50_us=44 p99_us=106 max_us=307 GiB_s=1.267 errors=0 diskw_ops=624 diskw_avg_us=39
+ diskutil: nvme1n1=80%
+BENCH_OK kind=data rw=write paths=1 qd=16 ops=877 wall_s=0.031 ops_s=28360.4 p50_us=81 p99_us=4913 max_us=8515 GiB_s=1.731 errors=0 diskw_ops=877 diskw_avg_us=46
+ diskutil: nvme1n1=84%
+BENCH_OK kind=data rw=write paths=1 qd=64 ops=561 wall_s=0.035 ops_s=15846.7 p50_us=211 p99_us=23288 max_us=25777 GiB_s=0.967 errors=0 diskw_ops=561 diskw_avg_us=58
+ diskutil: nvme1n1=79%
+BENCH_OK kind=data rw=write paths=1 qd=256 ops=588 wall_s=0.060 ops_s=9727.6 p50_us=631 p99_us=36723 max_us=38977 GiB_s=0.594 errors=0 diskw_ops=588 diskw_avg_us=67
+ diskutil: nvme1n1=74% sda=7% sda2=7%
+BENCH_OK kind=data rw=read paths=1 qd=1 ops=1571 wall_s=0.030 ops_s=52318.4 p50_us=19 p99_us=30 max_us=68 GiB_s=3.193 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil: nvme1n1=87% sda=3% sda2=3%
+BENCH_OK kind=data rw=read paths=1 qd=16 ops=14216 wall_s=0.031 ops_s=465690.4 p50_us=26 p99_us=92 max_us=8231 GiB_s=28.423 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil: nvme1n1=29%
+BENCH_OK kind=data rw=read paths=1 qd=64 ops=15843 wall_s=0.032 ops_s=491135.3 p50_us=24 p99_us=196 max_us=20715 GiB_s=29.977 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil: nvme1n1=47% sda=3% sda2=3%
+BENCH_OK kind=data rw=read paths=1 qd=256 ops=15413 wall_s=0.072 ops_s=215369.9 p50_us=25 p99_us=130 max_us=18045 GiB_s=13.145 errors=0 diskw_ops=0 diskw_avg_us=0
+ diskutil: nvme1n1=54% sda=11% sda2=13%
+benchmark CLI: ownership, parsing and scratch protection PASS

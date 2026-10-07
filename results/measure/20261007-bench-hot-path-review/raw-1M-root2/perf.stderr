@@ -1,0 +1,5 @@
+Events disabled
+Events enabled
+Events disabled
+[ perf record: Woken up 7 times to write data ]
+[ perf record: Captured and wrote 3.700 MB /tmp/efs-bench-review-evidence-20261007/raw-1M-root2/perf.data (23282 samples) ]

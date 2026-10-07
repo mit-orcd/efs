@@ -1,0 +1,10 @@
+[
+  "/usr/bin/perf",
+  "annotate",
+  "-i",
+  "/tmp/efs-bench-review-dwarf-20261007/data-buffered-w0-qd16/perf/perf.data",
+  "--stdio",
+  "--source",
+  "--symbol",
+  "blake3_hash4_avx512"
+]

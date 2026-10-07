@@ -1,0 +1,184 @@
+[
+  {
+    "name": "data-buffered-w0-qd16",
+    "status": "PASS",
+    "runs": {
+      "baseline": {
+        "returncode": 0,
+        "elapsed_s": 2.082604141003685,
+        "metrics_valid": true,
+        "command": [
+          "/tmp/efs-bench-review-dwarf-20261007/efs-bench",
+          "--bench",
+          "data",
+          "--time",
+          "1.0",
+          "--qd",
+          "16",
+          "--window",
+          "1",
+          "--no-direct-io",
+          "--writers",
+          "0",
+          "--storage",
+          "/data1/efs/bench/efs-bench-h74vmdez",
+          "--skip-ceiling"
+        ]
+      },
+      "perf": {
+        "returncode": 0,
+        "elapsed_s": 3.2707324369985145,
+        "metrics_valid": true,
+        "command": [
+          "/tmp/efs-bench-review-dwarf-20261007/efs-bench",
+          "--bench",
+          "data",
+          "--time",
+          "1.0",
+          "--qd",
+          "16",
+          "--window",
+          "1",
+          "--no-direct-io",
+          "--writers",
+          "0",
+          "--storage",
+          "/data1/efs/bench/efs-bench-a53ime7z",
+          "--skip-ceiling"
+        ],
+        "reports_state": "COMPLETE",
+        "call_graph": "dwarf",
+        "reports_valid": true
+      }
+    },
+    "storage_label": "default",
+    "root_indices": [
+      0
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "12476",
+        "wall_s": "1.001",
+        "ops_s": "12463.4",
+        "p50_us": "1505",
+        "p99_us": "3438",
+        "max_us": "4684",
+        "GiB_s": "0.761",
+        "errors": "0",
+        "diskw_ops": "12476",
+        "diskw_avg_us": "1280"
+      },
+      {
+        "kind": "data",
+        "rw": "read",
+        "paths": "1",
+        "qd": "16",
+        "ops": "670434",
+        "wall_s": "1.000",
+        "ops_s": "670109.0",
+        "p50_us": "23",
+        "p99_us": "27",
+        "max_us": "77602",
+        "GiB_s": "40.900",
+        "errors": "0",
+        "diskw_ops": "0",
+        "diskw_avg_us": "0"
+      }
+    ]
+  },
+  {
+    "name": "data-direct-w0-qd16",
+    "status": "PASS",
+    "runs": {
+      "baseline": {
+        "returncode": 0,
+        "elapsed_s": 2.067460532009136,
+        "metrics_valid": true,
+        "command": [
+          "/tmp/efs-bench-review-dwarf-20261007/efs-bench",
+          "--bench",
+          "data",
+          "--time",
+          "1.0",
+          "--qd",
+          "16",
+          "--window",
+          "1",
+          "--direct-io",
+          "--writers",
+          "0",
+          "--storage",
+          "/data1/efs/bench/efs-bench-0eymlx9x",
+          "--skip-ceiling"
+        ]
+      },
+      "perf": {
+        "returncode": 0,
+        "elapsed_s": 3.2693408469785936,
+        "metrics_valid": true,
+        "command": [
+          "/tmp/efs-bench-review-dwarf-20261007/efs-bench",
+          "--bench",
+          "data",
+          "--time",
+          "1.0",
+          "--qd",
+          "16",
+          "--window",
+          "1",
+          "--direct-io",
+          "--writers",
+          "0",
+          "--storage",
+          "/data1/efs/bench/efs-bench-l58umqzb",
+          "--skip-ceiling"
+        ],
+        "reports_state": "COMPLETE",
+        "call_graph": "dwarf",
+        "reports_valid": true
+      }
+    },
+    "storage_label": "default",
+    "root_indices": [
+      0
+    ],
+    "metrics": [
+      {
+        "kind": "data",
+        "rw": "write",
+        "paths": "1",
+        "qd": "16",
+        "ops": "11794",
+        "wall_s": "1.002",
+        "ops_s": "11773.3",
+        "p50_us": "1449",
+        "p99_us": "3252",
+        "max_us": "116731",
+        "GiB_s": "0.719",
+        "errors": "0",
+        "diskw_ops": "11794",
+        "diskw_avg_us": "1355"
+      },
+      {
+        "kind": "data",
+        "rw": "read",
+        "paths": "1",
+        "qd": "16",
+        "ops": "24222",
+        "wall_s": "1.001",
+        "ops_s": "24201.7",
+        "p50_us": "709",
+        "p99_us": "1185",
+        "max_us": "4093",
+        "GiB_s": "1.477",
+        "errors": "0",
+        "diskw_ops": "0",
+        "diskw_avg_us": "0"
+      }
+    ]
+  }
+]

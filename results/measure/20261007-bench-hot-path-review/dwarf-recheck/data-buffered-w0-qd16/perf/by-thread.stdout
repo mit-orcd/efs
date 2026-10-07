@@ -1,0 +1,40 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 67070706916
+#
+# Overhead      Pid:Command    Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+     4.73%  1499448:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     4.57%  1499440:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     4.54%  1499452:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     4.48%  1499443:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     4.32%  1499446:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     4.27%  1499451:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     4.15%  1499439:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     4.09%  1499444:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     3.94%  1499449:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     3.64%  1499442:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     3.47%  1499441:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     3.41%  1499453:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     3.40%  1499445:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     3.35%  1499450:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     3.23%  1499438:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     3.22%  1499447:efs-bench  [.] blake3_hash_many_avx512                  -      -            
+     0.90%  1499451:efs-bench  [k] _copy_to_iter                            -      -            
+     0.90%  1499441:efs-bench  [k] _raw_spin_lock                           -      -            
+     0.68%  1499438:efs-bench  [k] _copy_to_iter                            -      -            
+     0.58%  1499442:efs-bench  [k] _copy_to_iter                            -      -            
+     0.57%  1499445:efs-bench  [k] _copy_to_iter                            -      -            
+     0.56%  1499449:efs-bench  [k] _copy_to_iter                            -      -            
+     0.56%  1499439:efs-bench  [k] _copy_to_iter                            -      -            
+
+
+#
+# (Tip: To adjust path to source files to local file system use perf report --prefix=... --prefix-strip=...)
+#

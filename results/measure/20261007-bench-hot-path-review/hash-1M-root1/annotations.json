@@ -1,0 +1,17 @@
+[
+  {
+    "symbol": "blake3_hash_many_avx512",
+    "returncode": 0,
+    "elapsed_s": 0.414750642987201
+  },
+  {
+    "symbol": "blake3_compress_subtree_wide",
+    "returncode": 0,
+    "elapsed_s": 0.41450243900180794
+  },
+  {
+    "symbol": "blake3_hash_many",
+    "returncode": 0,
+    "elapsed_s": 0.4144576329854317
+  }
+]

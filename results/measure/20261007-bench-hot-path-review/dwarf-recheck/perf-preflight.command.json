@@ -1,0 +1,17 @@
+[
+  "/usr/bin/perf",
+  "record",
+  "-e",
+  "cycles",
+  "-F",
+  "99",
+  "-g",
+  "--call-graph",
+  "fp",
+  "-o",
+  "/tmp/efs-bench-review-dwarf-20261007/preflight.data",
+  "--",
+  "/usr/bin/python3",
+  "-c",
+  "sum(range(1000000))"
+]

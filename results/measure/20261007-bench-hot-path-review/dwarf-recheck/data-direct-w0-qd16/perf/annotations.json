@@ -1,0 +1,17 @@
+[
+  {
+    "symbol": "blake3_hash_many_avx512",
+    "returncode": 0,
+    "elapsed_s": 0.3644344290078152
+  },
+  {
+    "symbol": "shard_io_thread.part.0.constprop.0",
+    "returncode": 0,
+    "elapsed_s": 0.36431940901093185
+  },
+  {
+    "symbol": "blake3_compress_xof_avx512",
+    "returncode": 0,
+    "elapsed_s": 0.36442460998659953
+  }
+]

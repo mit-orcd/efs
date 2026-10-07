@@ -1,0 +1,21 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 25K of event 'cycles'
+# Event count (approx.): 196849633921
+#
+# Overhead  Shared Object      Symbol                                          IPC   [IPC Coverage]
+# ........  .................  ..............................................  ....................
+#
+    57.13%  efs-bench          [.] blake3_hash_many_avx512                     -      -            
+    35.18%  [kernel.kallsyms]  [k] copy_page_from_iter_atomic                  -      -            
+     0.87%  efs-bench          [.] blake3_compress_subtree_wide                -      -            
+     0.81%  [kernel.kallsyms]  [k] fault_in_readable                           -      -            
+     0.58%  efs-bench          [.] blake3_hash_many                            -      -            
+
+
+#
+# (Tip: To analyze cache line scalability issues use perf c2c record ... ; perf c2c report)
+#

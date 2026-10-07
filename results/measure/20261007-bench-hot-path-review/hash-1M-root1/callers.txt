@@ -1,0 +1,158 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 25K of event 'cycles'
+# Event count (approx.): 196849633921
+#
+# Children      Self  Symbol                                          IPC   [IPC Coverage]
+# ........  ........  ..............................................  ....................
+#
+    99.84%     0.00%  [.] start_thread                                -      -            
+    60.40%     0.03%  [.] io_worker_run                               -      -            
+            |
+            ---start_thread
+
+    60.34%     0.00%  [.] efs_hash                                    -      -            
+            |
+            ---io_worker_run
+               start_thread
+
+    60.23%     0.08%  [.] blake3_hasher_update.part.0                 -      -            
+            |          
+             --60.22%--efs_hash
+                       io_worker_run
+                       start_thread
+
+    59.85%     0.87%  [.] blake3_compress_subtree_wide                -      -            
+            |          
+             --59.75%--blake3_compress_subtree_wide
+                       |          
+                        --59.61%--blake3_compress_subtree_wide
+                                  |          
+                                   --59.30%--blake3_compress_subtree_wide
+                                             |          
+                                              --58.85%--blake3_compress_subtree_wide
+                                                        |          
+                                                        |--58.04%--blake3_compress_subtree_wide
+                                                        |          |          
+                                                        |          |--56.50%--blake3_compress_subtree_wide
+                                                        |          |          blake3_hasher_update.part.0
+                                                        |          |          efs_hash
+                                                        |          |          io_worker_run
+                                                        |          |          start_thread
+                                                        |          |          
+                                                        |           --1.54%--blake3_hasher_update.part.0
+                                                        |                     efs_hash
+                                                        |                     io_worker_run
+                                                        |                     start_thread
+                                                        |          
+                                                         --0.81%--blake3_hasher_update.part.0
+                                                                   efs_hash
+                                                                   io_worker_run
+                                                                   start_thread
+
+    58.47%    57.13%  [.] blake3_hash_many_avx512                     -      -            
+            |          
+             --58.19%--blake3_compress_subtree_wide
+                       |          
+                        --58.14%--blake3_compress_subtree_wide
+                                  |          
+                                   --58.08%--blake3_compress_subtree_wide
+                                             |          
+                                              --57.86%--blake3_compress_subtree_wide
+                                                        |          
+                                                         --57.58%--blake3_compress_subtree_wide
+                                                                   |          
+                                                                    --57.11%--blake3_compress_subtree_wide
+                                                                              |          
+                                                                              |--56.15%--blake3_compress_subtree_wide
+                                                                              |          blake3_hasher_update.part.0
+                                                                              |          efs_hash
+                                                                              |          io_worker_run
+                                                                              |          start_thread
+                                                                              |          
+                                                                               --0.97%--blake3_hasher_update.part.0
+                                                                                         efs_hash
+                                                                                         io_worker_run
+                                                                                         start_thread
+
+    39.35%     0.02%  [.] __libc_pwrite                               -      -            
+            |
+            ---start_thread
+
+    39.22%     0.00%  [k] entry_SYSCALL_64_after_hwframe              -      -            
+            |          
+             --39.18%--__libc_pwrite
+                       start_thread
+
+    39.22%     0.05%  [k] do_syscall_64                               -      -            
+            |
+            ---entry_SYSCALL_64_after_hwframe
+               |          
+                --39.18%--__libc_pwrite
+                          start_thread
+
+    39.00%     0.03%  [k] __x64_sys_pwrite64                          -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    38.86%     0.04%  [k] vfs_write                                   -      -            
+            |
+            ---__x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    38.65%     0.07%  [k] xfs_file_buffered_write                     -      -            
+            |
+            ---vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    37.64%     0.02%  [k] iomap_file_buffered_write                   -      -            
+            |
+            ---xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    37.38%     0.03%  [k] iomap_write_iter                            -      -            
+            |
+            ---iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    35.88%    35.18%  [k] copy_page_from_iter_atomic                  -      -            
+            |
+            ---iomap_write_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+
+
+#
+# (Tip: To analyze cache line scalability issues use perf c2c record ... ; perf c2c report)
+#

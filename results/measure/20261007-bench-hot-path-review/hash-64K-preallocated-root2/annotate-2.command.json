@@ -1,0 +1,10 @@
+[
+  "perf",
+  "annotate",
+  "-i",
+  "/tmp/efs-bench-review-evidence-20261007/hash-64K-preallocated-root2/perf.data",
+  "--stdio",
+  "--source",
+  "--symbol",
+  "blake3_hash4_avx512"
+]

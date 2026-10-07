@@ -1,0 +1,34 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 25K of event 'cycles'
+# Event count (approx.): 196849633921
+#
+# Overhead      Pid:Command    Symbol                                          IPC   [IPC Coverage]
+# ........  .................  ..............................................  ....................
+#
+     1.17%  1488317:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.97%  1488379:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.88%  1488390:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.85%  1488518:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.73%  1488400:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.68%  1488305:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.67%  1488317:efs-bench  [k] copy_page_from_iter_atomic                  -      -            
+     0.64%  1488390:efs-bench  [k] copy_page_from_iter_atomic                  -      -            
+     0.64%  1488379:efs-bench  [k] copy_page_from_iter_atomic                  -      -            
+     0.63%  1488278:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.63%  1488362:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.61%  1488291:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.56%  1488434:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.52%  1488377:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.52%  1488425:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.52%  1488268:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+     0.52%  1488276:efs-bench  [.] blake3_hash_many_avx512                     -      -            
+
+
+#
+# (Tip: To analyze cache line scalability issues use perf c2c record ... ; perf c2c report)
+#

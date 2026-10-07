@@ -1,0 +1,164 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 25K of event 'cycles'
+# Event count (approx.): 191902602779
+#
+# Children      Self  Symbol                                          IPC   [IPC Coverage]
+# ........  ........  ..............................................  ....................
+#
+    99.94%     0.00%  [.] start_thread                                -      -            
+    73.39%     0.08%  [.] io_worker_run                               -      -            
+            |
+            ---start_thread
+
+    73.30%     0.02%  [.] efs_hash                                    -      -            
+            |          
+             --73.30%--io_worker_run
+                       start_thread
+
+    72.73%     0.17%  [.] blake3_hasher_update.part.0                 -      -            
+            |
+            ---efs_hash
+               io_worker_run
+               start_thread
+
+    71.16%    69.43%  [.] blake3_hash_many_avx512                     -      -            
+            |          
+            |--69.34%--blake3_compress_subtree_wide
+            |          |          
+            |          |--68.19%--blake3_compress_subtree_wide
+            |          |          |          
+            |          |          |--65.82%--blake3_compress_subtree_wide
+            |          |          |          blake3_hasher_update.part.0
+            |          |          |          efs_hash
+            |          |          |          io_worker_run
+            |          |          |          start_thread
+            |          |          |          
+            |          |           --2.37%--blake3_hasher_update.part.0
+            |          |                     efs_hash
+            |          |                     io_worker_run
+            |          |                     start_thread
+            |          |          
+            |           --1.15%--blake3_hasher_update.part.0
+            |                     efs_hash
+            |                     io_worker_run
+            |                     start_thread
+            |          
+             --1.80%--blake3_hasher_update.part.0
+                       efs_hash
+                       io_worker_run
+                       start_thread
+
+    69.95%     0.38%  [.] blake3_compress_subtree_wide                -      -            
+            |          
+            |--68.68%--blake3_compress_subtree_wide
+            |          |          
+            |          |--66.03%--blake3_compress_subtree_wide
+            |          |          blake3_hasher_update.part.0
+            |          |          efs_hash
+            |          |          io_worker_run
+            |          |          start_thread
+            |          |          
+            |           --2.65%--blake3_hasher_update.part.0
+            |                     efs_hash
+            |                     io_worker_run
+            |                     start_thread
+            |          
+             --1.26%--blake3_hasher_update.part.0
+                       efs_hash
+                       io_worker_run
+                       start_thread
+
+    26.36%     0.08%  [.] __libc_pwrite                               -      -            
+            |
+            ---start_thread
+
+    26.15%     0.14%  [k] entry_SYSCALL_64_after_hwframe              -      -            
+            |          
+             --26.12%--__libc_pwrite
+                       start_thread
+
+    25.99%     0.25%  [k] do_syscall_64                               -      -            
+            |
+            ---entry_SYSCALL_64_after_hwframe
+               |          
+                --25.96%--__libc_pwrite
+                          start_thread
+
+    25.40%     0.05%  [k] __x64_sys_pwrite64                          -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    25.10%     0.34%  [k] vfs_write                                   -      -            
+            |
+            ---__x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    24.28%     0.23%  [k] xfs_file_buffered_write                     -      -            
+            |
+            ---vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    22.98%     0.17%  [k] iomap_file_buffered_write                   -      -            
+            |
+            ---xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    21.36%     0.72%  [k] iomap_write_iter                            -      -            
+            |
+            ---iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+    15.91%    15.73%  [k] copy_page_from_iter_atomic                  -      -            
+            |
+            ---iomap_write_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+     2.04%     0.30%  [k] iomap_write_begin                           -      -            
+            |
+            ---iomap_write_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+
+
+#
+# (Tip: For memory address profiling, try: perf mem record / perf mem report)
+#

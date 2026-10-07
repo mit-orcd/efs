@@ -1,0 +1,5 @@
+[
+  "findmnt",
+  "-T",
+  "/tmp/efs-bench-review-dwarf-20261007"
+]

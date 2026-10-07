@@ -1,0 +1,2 @@
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.032 MB /tmp/efs-bench-review-dwarf-20261007/preflight.data (12 samples) ]

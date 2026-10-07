@@ -1,0 +1,126 @@
+{
+  "host": "xorinox",
+  "event": "cycles",
+  "binary_sha256": "f8cbefa384f3db48cc5c286d7591cd639ae2487256787027460e87e8be80f5a6",
+  "commit": "unknown",
+  "seed": null,
+  "created_utc": "20261007T022855.951135Z",
+  "options": {
+    "binary": "efs-bench",
+    "output": "/tmp/efs-bench-review-dwarf-20261007",
+    "storage_root": [
+      "/data1/efs/bench"
+    ],
+    "require_distinct_devices": false,
+    "io_write_layouts": "both",
+    "time": 1.0,
+    "io_sizes": [
+      4096,
+      65536,
+      1048576
+    ],
+    "io_sync": false,
+    "hash_sizes": [
+      4096,
+      65536,
+      131072,
+      1048576
+    ],
+    "threads": null,
+    "writers": [
+      0
+    ],
+    "data_size": [
+      1048576
+    ],
+    "qds": [
+      16
+    ],
+    "modes": "data",
+    "seed": null,
+    "export": "efs-test",
+    "files": 5000,
+    "dirs": 64,
+    "store_size": [
+      268435456
+    ],
+    "chunk_base": 0,
+    "strace": false,
+    "strace_expr": null,
+    "frequency": 99,
+    "event": "cycles",
+    "call_graph": "auto",
+    "report_jobs": 4,
+    "reports_only": null,
+    "no_perf": false,
+    "skip_ceiling": true,
+    "timeout": 600,
+    "dry_run": false,
+    "analyze": null
+  },
+  "cases": [
+    {
+      "name": "data-buffered-w0-qd16",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.0",
+        "--qd",
+        "16",
+        "--window",
+        "1",
+        "--no-direct-io",
+        "--writers",
+        "0"
+      ]
+    },
+    {
+      "name": "data-direct-w0-qd16",
+      "mode": "data",
+      "args": [
+        "--bench",
+        "data",
+        "--time",
+        "1.0",
+        "--qd",
+        "16",
+        "--window",
+        "1",
+        "--direct-io",
+        "--writers",
+        "0"
+      ]
+    }
+  ],
+  "storage_devices": [
+    {
+      "path": "/data1/efs/bench",
+      "device_id": "259:0",
+      "free_bytes": 3551103401984
+    }
+  ],
+  "affinity_cpus": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "perf_policy": {
+    "perf_event_paranoid": "-1",
+    "kptr_restrict": "0"
+  }
+}

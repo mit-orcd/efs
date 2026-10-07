@@ -1,0 +1,6 @@
+BENCH_OK kind=meta phase=kv-write ops=5633 wall_s=3.000 ops_s=1877.6 p50_us=493 p99_us=1059 max_us=11714 MB_s=0.272 errors=0
+BENCH_OK kind=meta phase=kv-flush-compact flush_s=0.004 compact_s=0.004 mt_bytes=0 l0_bytes=0 n_l0=0 n_l1=1
+BENCH_OK kind=meta phase=kv-read ops=11755853 wall_s=3.000 ops_s=3918617.4 p50_us=0 p99_us=1 max_us=51 MB_s=0.000 errors=0
+BENCH_OK kind=meta phase=raft-append-qd1 ops=5638 wall_s=3.000 ops_s=1879.3 p50_us=485 p99_us=1066 max_us=11096 MB_s=0.459 errors=0
+BENCH_OK kind=meta phase=raft-append-batch32 batches=4769 entries=152608 wall_s=3.000 entries_s=50865.8 batch_p50_us=611 batch_p99_us=1143 batch_max_us=8956 MB_s=12.418 errors=0
+BENCH_OK kind=meta phase=raft-reopen reopen_s=0.231 last_idx=158246 entries=158246

@@ -1,0 +1,120 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 24K of event 'cycles'
+# Event count (approx.): 187847517073
+#
+# Children      Self  Symbol                                       IPC   [IPC Coverage]
+# ........  ........  ...........................................  ....................
+#
+    99.90%     0.00%  [.] start_thread                             -      -            
+    99.37%     0.06%  [.] __libc_pwrite                            -      -            
+            |
+            ---start_thread
+
+    99.08%     0.04%  [k] entry_SYSCALL_64_after_hwframe           -      -            
+            |          
+             --99.02%--__libc_pwrite
+                       start_thread
+
+    99.04%     0.04%  [k] do_syscall_64                            -      -            
+            |
+            ---entry_SYSCALL_64_after_hwframe
+               |          
+                --98.98%--__libc_pwrite
+                          start_thread
+
+    98.58%     0.06%  [k] __x64_sys_pwrite64                       -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --98.55%--__libc_pwrite
+                          start_thread
+
+    98.22%     0.21%  [k] vfs_write                                -      -            
+            |
+            ---__x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --98.19%--__libc_pwrite
+                          start_thread
+
+    97.80%     0.29%  [k] xfs_file_buffered_write                  -      -            
+            |
+            ---vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --97.77%--__libc_pwrite
+                          start_thread
+
+    95.77%     0.07%  [k] iomap_file_buffered_write                -      -            
+            |
+            ---xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --95.74%--__libc_pwrite
+                          start_thread
+
+    95.00%     0.12%  [k] iomap_write_iter                         -      -            
+            |
+            ---iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+                --94.97%--__libc_pwrite
+                          start_thread
+
+    87.89%    86.22%  [k] copy_page_from_iter_atomic               -      -            
+            |
+            ---iomap_write_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+     4.42%     0.02%  [k] fault_in_iov_iter_readable               -      -            
+            |
+            ---iomap_write_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+     4.40%     4.29%  [k] fault_in_readable                        -      -            
+            |
+            ---fault_in_iov_iter_readable
+               iomap_write_iter
+               iomap_file_buffered_write
+               xfs_file_buffered_write
+               vfs_write
+               __x64_sys_pwrite64
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __libc_pwrite
+               start_thread
+
+
+
+#
+# (Tip: Boolean options have negative forms, e.g.: perf report --no-children)
+#

@@ -1,0 +1,18 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 24K of event 'cycles'
+# Event count (approx.): 187847517073
+#
+# Overhead  Shared Object      Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+    86.22%  [kernel.kallsyms]  [k] copy_page_from_iter_atomic               -      -            
+     4.29%  [kernel.kallsyms]  [k] fault_in_readable                        -      -            
+
+
+#
+# (Tip: To see callchains in a more compact form: perf report -g folded)
+#

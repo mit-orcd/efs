@@ -1,0 +1,57 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 24K of event 'cycles'
+# Event count (approx.): 187847517073
+#
+# Overhead      Pid:Command    Symbol                                       IPC   [IPC Coverage]
+# ........  .................  ...........................................  ....................
+#
+     2.47%  1487613:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     2.46%  1487536:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     1.78%  1487553:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     1.28%  1487523:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     1.25%  1487688:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     1.22%  1487702:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     1.15%  1487741:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     1.08%  1487726:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     1.04%  1487620:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     1.03%  1487619:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.89%  1487607:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.87%  1487593:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.86%  1487522:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.85%  1487655:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.82%  1487730:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.80%  1487734:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.78%  1487637:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.76%  1487551:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.75%  1487594:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.71%  1487526:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.70%  1487611:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.66%  1487736:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.66%  1487755:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.65%  1487731:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.64%  1487580:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.63%  1487729:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.62%  1487596:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.60%  1487660:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.59%  1487527:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.59%  1487590:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.59%  1487618:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.59%  1487762:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.59%  1487689:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.58%  1487722:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.57%  1487614:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.52%  1487627:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.52%  1487738:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.51%  1487739:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.51%  1487634:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+     0.51%  1487633:efs-bench  [k] copy_page_from_iter_atomic               -      -            
+
+
+#
+# (Tip: To see callchains in a more compact form: perf report -g folded)
+#

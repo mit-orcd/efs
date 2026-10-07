@@ -1,0 +1,4 @@
+kv-compact: start l0=1 inputs=1 range=353 l0only=0
+kv-compact: end bytes=884212 ms=5 l0=0 l1=1 rc=0
+[ perf record: Woken up 2 times to write data ]
+[ perf record: Captured and wrote 0.266 MB /tmp/efs-bench-review-evidence-20261007/meta-after.data (2122 samples) ]

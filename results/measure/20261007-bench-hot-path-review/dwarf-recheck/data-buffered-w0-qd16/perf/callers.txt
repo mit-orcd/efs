@@ -1,0 +1,1056 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 67070706916
+#
+# Children      Self  Symbol                                               IPC   [IPC Coverage]
+# ........  ........  ...................................................  ....................
+#
+    65.25%     0.00%  [.] efs_hash                                         -      -            
+            |          
+             --6.49%--slot_get (inlined)
+                       slot_main
+                       |          
+                        --6.42%--start_thread
+                                  |          
+                                   --6.00%--clone3
+
+    65.12%     0.21%  [.] blake3_hasher_update.part.0                      -      -            
+            |          
+             --64.91%--blake3_hasher_update.part.0
+                       |          
+                        --64.84%--efs_hash
+                                  |          
+                                   --6.08%--slot_get (inlined)
+                                             slot_main
+                                             |          
+                                              --6.01%--start_thread
+                                                        |          
+                                                         --5.59%--clone3
+
+    65.05%     0.00%  [.] compress_subtree_to_parent_node (inlined)        -      -            
+            |
+            ---blake3_hasher_update_base (inlined)
+               blake3_hasher_update.part.0
+               |          
+                --64.98%--efs_hash
+                          |          
+                           --6.22%--slot_get (inlined)
+                                     slot_main
+                                     |          
+                                      --6.15%--start_thread
+                                                |          
+                                                 --5.73%--clone3
+
+    64.00%    62.80%  [.] blake3_hash_many_avx512                          -      -            
+            |          
+            |--22.78%--_mm512_ror_epi32 (inlined)
+            |          |          
+            |          |--7.02%--rot12_512 (inlined)
+            |          |          round_fn16 (inlined)
+            |          |          blake3_hash16_avx512 (inlined)
+            |          |          blake3_hash_many_avx512
+            |          |          |          
+            |          |          |--6.45%--compress_chunks_parallel (inlined)
+            |          |          |          blake3_compress_subtree_wide
+            |          |          |          blake3_compress_subtree_wide
+            |          |          |          blake3_compress_subtree_wide
+            |          |          |          compress_subtree_to_parent_node (inlined)
+            |          |          |          blake3_hasher_update_base (inlined)
+            |          |          |          blake3_hasher_update.part.0
+            |          |          |          efs_hash
+            |          |          |          
+            |          |           --0.57%--compress_parents_parallel (inlined)
+            |          |                     blake3_compress_subtree_wide
+            |          |          
+            |          |--5.59%--rot8_512 (inlined)
+            |          |          round_fn16 (inlined)
+            |          |          blake3_hash16_avx512 (inlined)
+            |          |          blake3_hash_many_avx512
+            |          |          |          
+            |          |           --5.10%--compress_chunks_parallel (inlined)
+            |          |                     blake3_compress_subtree_wide
+            |          |                     blake3_compress_subtree_wide
+            |          |                     blake3_compress_subtree_wide
+            |          |                     compress_subtree_to_parent_node (inlined)
+            |          |                     blake3_hasher_update_base (inlined)
+            |          |                     blake3_hasher_update.part.0
+            |          |                     efs_hash
+            |          |          
+            |          |--5.44%--rot16_512 (inlined)
+            |          |          round_fn16 (inlined)
+            |          |          blake3_hash16_avx512 (inlined)
+            |          |          blake3_hash_many_avx512
+            |          |          |          
+            |          |           --5.16%--compress_chunks_parallel (inlined)
+            |          |                     blake3_compress_subtree_wide
+            |          |                     blake3_compress_subtree_wide
+            |          |                     blake3_compress_subtree_wide
+            |          |                     compress_subtree_to_parent_node (inlined)
+            |          |                     blake3_hasher_update_base (inlined)
+            |          |                     blake3_hasher_update.part.0
+            |          |                     efs_hash
+            |          |          
+            |           --4.74%--rot7_512 (inlined)
+            |                     round_fn16 (inlined)
+            |                     blake3_hash16_avx512 (inlined)
+            |                     blake3_hash_many_avx512
+            |                     |          
+            |                      --4.60%--compress_chunks_parallel (inlined)
+            |                                blake3_compress_subtree_wide
+            |                                blake3_compress_subtree_wide
+            |                                blake3_compress_subtree_wide
+            |                                compress_subtree_to_parent_node (inlined)
+            |                                blake3_hasher_update_base (inlined)
+            |                                blake3_hasher_update.part.0
+            |                                efs_hash
+            |          
+            |--18.64%--_mm512_add_epi32 (inlined)
+            |          add_512 (inlined)
+            |          round_fn16 (inlined)
+            |          blake3_hash16_avx512 (inlined)
+            |          blake3_hash_many_avx512
+            |          |          
+            |          |--17.59%--compress_chunks_parallel (inlined)
+            |          |          blake3_compress_subtree_wide
+            |          |          blake3_compress_subtree_wide
+            |          |          blake3_compress_subtree_wide
+            |          |          compress_subtree_to_parent_node (inlined)
+            |          |          blake3_hasher_update_base (inlined)
+            |          |          blake3_hasher_update.part.0
+            |          |          efs_hash
+            |          |          
+            |           --1.04%--compress_parents_parallel (inlined)
+            |                     blake3_compress_subtree_wide
+            |                     |          
+            |                      --0.56%--blake3_compress_subtree_wide
+            |                                compress_subtree_to_parent_node (inlined)
+            |                                blake3_hasher_update_base (inlined)
+            |                                blake3_hasher_update.part.0
+            |                                efs_hash
+            |                                slot_get (inlined)
+            |                                slot_main
+            |                                start_thread
+            |                                clone3
+            |          
+            |--15.51%--_mm512_xor_si512 (inlined)
+            |          xor_512 (inlined)
+            |          |          
+            |          |--13.97%--round_fn16 (inlined)
+            |          |          blake3_hash16_avx512 (inlined)
+            |          |          blake3_hash_many_avx512
+            |          |          |          
+            |          |          |--13.27%--compress_chunks_parallel (inlined)
+            |          |          |          blake3_compress_subtree_wide
+            |          |          |          blake3_compress_subtree_wide
+            |          |          |          blake3_compress_subtree_wide
+            |          |          |          compress_subtree_to_parent_node (inlined)
+            |          |          |          blake3_hasher_update_base (inlined)
+            |          |          |          blake3_hasher_update.part.0
+            |          |          |          efs_hash
+            |          |          |          
+            |          |           --0.70%--compress_parents_parallel (inlined)
+            |          |                     blake3_compress_subtree_wide
+            |          |          
+            |           --1.54%--blake3_hash16_avx512 (inlined)
+            |                     blake3_hash_many_avx512
+            |                     compress_chunks_parallel (inlined)
+            |                     blake3_compress_subtree_wide
+            |                     blake3_compress_subtree_wide
+            |                     blake3_compress_subtree_wide
+            |                     compress_subtree_to_parent_node (inlined)
+            |                     blake3_hasher_update_base (inlined)
+            |                     blake3_hasher_update.part.0
+            |                     efs_hash
+            |          
+            |--1.97%--_mm512_shuffle_i32x4 (inlined)
+            |          |          
+            |          |--1.14%--unpack_lo_128 (inlined)
+            |          |          transpose_vecs_512 (inlined)
+            |          |          |          
+            |          |           --1.00%--transpose_msg_vecs16 (inlined)
+            |          |                     blake3_hash16_avx512 (inlined)
+            |          |                     blake3_hash_many_avx512
+            |          |                     compress_chunks_parallel (inlined)
+            |          |                     blake3_compress_subtree_wide
+            |          |                     blake3_compress_subtree_wide
+            |          |                     blake3_compress_subtree_wide
+            |          |                     compress_subtree_to_parent_node (inlined)
+            |          |                     blake3_hasher_update_base (inlined)
+            |          |                     blake3_hasher_update.part.0
+            |          |                     efs_hash
+            |          |          
+            |           --0.83%--unpack_hi_128 (inlined)
+            |                     transpose_vecs_512 (inlined)
+            |                     |          
+            |                      --0.62%--transpose_msg_vecs16 (inlined)
+            |                                blake3_hash16_avx512 (inlined)
+            |                                blake3_hash_many_avx512
+            |                                |          
+            |                                 --0.55%--compress_chunks_parallel (inlined)
+            |                                           blake3_compress_subtree_wide
+            |                                           blake3_compress_subtree_wide
+            |                                           blake3_compress_subtree_wide
+            |                                           compress_subtree_to_parent_node (inlined)
+            |                                           blake3_hasher_update_base (inlined)
+            |                                           blake3_hasher_update.part.0
+            |                                           efs_hash
+            |          
+            |--1.41%--blake3_hash_many_avx512
+            |          |          
+            |           --1.06%--compress_parents_parallel (inlined)
+            |                     |          
+            |                      --0.92%--compress_subtree_to_parent_node (inlined)
+            |                                blake3_hasher_update_base (inlined)
+            |                                blake3_hasher_update.part.0
+            |                                efs_hash
+            |                                slot_get (inlined)
+            |                                slot_main
+            |                                start_thread
+            |                                clone3
+            |          
+            |--0.70%--_mm_prefetch (inlined)
+            |          transpose_msg_vecs16 (inlined)
+            |          blake3_hash16_avx512 (inlined)
+            |          blake3_hash_many_avx512
+            |          compress_chunks_parallel (inlined)
+            |          blake3_compress_subtree_wide
+            |          blake3_compress_subtree_wide
+            |          blake3_compress_subtree_wide
+            |          compress_subtree_to_parent_node (inlined)
+            |          blake3_hasher_update_base (inlined)
+            |          blake3_hasher_update.part.0
+            |          efs_hash
+            |          
+             --0.69%--_mm512_loadu_si512 (inlined)
+                       loadu_512 (inlined)
+                       transpose_msg_vecs16 (inlined)
+                       blake3_hash16_avx512 (inlined)
+                       blake3_hash_many_avx512
+                       compress_chunks_parallel (inlined)
+                       blake3_compress_subtree_wide
+                       blake3_compress_subtree_wide
+                       blake3_compress_subtree_wide
+                       compress_subtree_to_parent_node (inlined)
+                       blake3_hasher_update_base (inlined)
+                       blake3_hasher_update.part.0
+                       efs_hash
+
+    63.22%     0.42%  [.] blake3_compress_subtree_wide                     -      -            
+            |          
+             --62.87%--blake3_compress_subtree_wide
+                       |          
+                       |--61.33%--blake3_compress_subtree_wide
+                       |          |          
+                       |          |--58.97%--blake3_compress_subtree_wide
+                       |          |          compress_subtree_to_parent_node (inlined)
+                       |          |          blake3_hasher_update_base (inlined)
+                       |          |          blake3_hasher_update.part.0
+                       |          |          efs_hash
+                       |          |          
+                       |           --2.37%--compress_subtree_to_parent_node (inlined)
+                       |                     blake3_hasher_update_base (inlined)
+                       |                     blake3_hasher_update.part.0
+                       |                     efs_hash
+                       |                     slot_get (inlined)
+                       |                     slot_main
+                       |                     start_thread
+                       |                     clone3
+                       |          
+                        --1.54%--compress_subtree_to_parent_node (inlined)
+                                  blake3_hasher_update_base (inlined)
+                                  blake3_hasher_update.part.0
+                                  efs_hash
+                                  slot_get (inlined)
+                                  slot_main
+                                  start_thread
+                                  clone3
+
+    62.25%     0.00%  [.] blake3_hash16_avx512 (inlined)                   -      -            
+            |
+            ---blake3_hash_many_avx512
+               |          
+               |--58.69%--compress_chunks_parallel (inlined)
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          compress_subtree_to_parent_node (inlined)
+               |          blake3_hasher_update_base (inlined)
+               |          blake3_hasher_update.part.0
+               |          efs_hash
+               |          
+                --3.56%--compress_parents_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          |          
+                          |--2.16%--blake3_compress_subtree_wide
+                          |          compress_subtree_to_parent_node (inlined)
+                          |          blake3_hasher_update_base (inlined)
+                          |          blake3_hasher_update.part.0
+                          |          efs_hash
+                          |          slot_get (inlined)
+                          |          slot_main
+                          |          start_thread
+                          |          clone3
+                          |          
+                           --1.40%--compress_subtree_to_parent_node (inlined)
+                                     blake3_hasher_update_base (inlined)
+                                     blake3_hasher_update.part.0
+                                     efs_hash
+                                     slot_get (inlined)
+                                     slot_main
+                                     start_thread
+                                     clone3
+
+    59.18%     0.00%  [.] compress_chunks_parallel (inlined)               -      -            
+            |
+            ---blake3_compress_subtree_wide
+               blake3_compress_subtree_wide
+               blake3_compress_subtree_wide
+               compress_subtree_to_parent_node (inlined)
+               blake3_hasher_update_base (inlined)
+               blake3_hasher_update.part.0
+               efs_hash
+
+    55.67%     0.00%  [.] round_fn16 (inlined)                             -      -            
+            |
+            ---blake3_hash16_avx512 (inlined)
+               blake3_hash_many_avx512
+               |          
+               |--52.46%--compress_chunks_parallel (inlined)
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          compress_subtree_to_parent_node (inlined)
+               |          blake3_hasher_update_base (inlined)
+               |          blake3_hasher_update.part.0
+               |          efs_hash
+               |          
+                --3.21%--compress_parents_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          |          
+                          |--1.95%--blake3_compress_subtree_wide
+                          |          compress_subtree_to_parent_node (inlined)
+                          |          blake3_hasher_update_base (inlined)
+                          |          blake3_hasher_update.part.0
+                          |          efs_hash
+                          |          slot_get (inlined)
+                          |          slot_main
+                          |          start_thread
+                          |          clone3
+                          |          
+                           --1.26%--compress_subtree_to_parent_node (inlined)
+                                     blake3_hasher_update_base (inlined)
+                                     blake3_hasher_update.part.0
+                                     efs_hash
+                                     slot_get (inlined)
+                                     slot_main
+                                     start_thread
+                                     clone3
+
+    52.76%     0.00%  [.] blake3_hasher_update_base (inlined)              -      -            
+            |
+            ---blake3_hasher_update.part.0
+               |          
+                --52.69%--efs_hash
+                          |          
+                           --4.67%--slot_get (inlined)
+                                     slot_main
+                                     |          
+                                      --4.60%--start_thread
+                                                |          
+                                                 --4.32%--clone3
+
+    32.44%     0.14%  [.] server_read_fragment_with_sum                    -      -            
+            |          
+             --32.30%--server_read_fragment_with_sum
+
+    32.26%     0.21%  [k] entry_SYSCALL_64_after_hwframe                   -      -            
+            |          
+            |--15.77%--__GI___libc_open
+            |          |          
+            |          |--15.06%--read_file_bytes
+            |          |          server_read_fragment_with_sum
+            |          |          
+            |           --0.71%--shard_io_thread.part.0.constprop.0
+            |                     shard_io_thread (inlined)
+            |                     server_write_fragment_to_path.isra.0
+            |          
+            |--10.48%--read
+            |          read_file_bytes
+            |          server_read_fragment_with_sum
+            |          
+            |--3.79%--__close
+            |          |          
+            |          |--2.87%--read_file_bytes
+            |          |          server_read_fragment_with_sum
+            |          |          
+            |           --0.92%--shard_io_thread.part.0.constprop.0
+            |                     shard_io_thread (inlined)
+            |                     server_write_fragment_to_path.isra.0
+            |          
+             --2.01%--__libc_pread
+                       read_file_bytes
+                       server_read_fragment_with_sum
+
+    32.06%     0.28%  [k] do_syscall_64                                    -      -            
+            |
+            ---entry_SYSCALL_64_after_hwframe
+               |          
+               |--15.70%--__GI___libc_open
+               |          |          
+               |          |--14.99%--read_file_bytes
+               |          |          server_read_fragment_with_sum
+               |          |          
+               |           --0.71%--shard_io_thread.part.0.constprop.0
+               |                     shard_io_thread (inlined)
+               |                     server_write_fragment_to_path.isra.0
+               |          
+               |--10.41%--read
+               |          read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+               |--3.72%--__close
+               |          |          
+               |          |--2.80%--read_file_bytes
+               |          |          server_read_fragment_with_sum
+               |          |          
+               |           --0.92%--shard_io_thread.part.0.constprop.0
+               |                     shard_io_thread (inlined)
+               |                     server_write_fragment_to_path.isra.0
+               |          
+                --2.01%--__libc_pread
+                          read_file_bytes
+                          server_read_fragment_with_sum
+
+    32.01%     0.14%  [.] read_file_bytes                                  -      -            
+            |
+            ---server_read_fragment_with_sum
+
+    22.85%     0.00%  [.] _mm512_ror_epi32 (inlined)                       -      -            
+            |          
+            |--7.09%--rot12_512 (inlined)
+            |          round_fn16 (inlined)
+            |          blake3_hash16_avx512 (inlined)
+            |          blake3_hash_many_avx512
+            |          |          
+            |          |--6.52%--compress_chunks_parallel (inlined)
+            |          |          blake3_compress_subtree_wide
+            |          |          blake3_compress_subtree_wide
+            |          |          blake3_compress_subtree_wide
+            |          |          compress_subtree_to_parent_node (inlined)
+            |          |          blake3_hasher_update_base (inlined)
+            |          |          blake3_hasher_update.part.0
+            |          |          efs_hash
+            |          |          
+            |           --0.57%--compress_parents_parallel (inlined)
+            |                     blake3_compress_subtree_wide
+            |          
+            |--5.59%--rot8_512 (inlined)
+            |          round_fn16 (inlined)
+            |          blake3_hash16_avx512 (inlined)
+            |          blake3_hash_many_avx512
+            |          |          
+            |           --5.10%--compress_chunks_parallel (inlined)
+            |                     blake3_compress_subtree_wide
+            |                     blake3_compress_subtree_wide
+            |                     blake3_compress_subtree_wide
+            |                     compress_subtree_to_parent_node (inlined)
+            |                     blake3_hasher_update_base (inlined)
+            |                     blake3_hasher_update.part.0
+            |                     efs_hash
+            |          
+            |--5.44%--rot16_512 (inlined)
+            |          round_fn16 (inlined)
+            |          blake3_hash16_avx512 (inlined)
+            |          blake3_hash_many_avx512
+            |          |          
+            |           --5.16%--compress_chunks_parallel (inlined)
+            |                     blake3_compress_subtree_wide
+            |                     blake3_compress_subtree_wide
+            |                     blake3_compress_subtree_wide
+            |                     compress_subtree_to_parent_node (inlined)
+            |                     blake3_hasher_update_base (inlined)
+            |                     blake3_hasher_update.part.0
+            |                     efs_hash
+            |          
+             --4.74%--rot7_512 (inlined)
+                       round_fn16 (inlined)
+                       blake3_hash16_avx512 (inlined)
+                       blake3_hash_many_avx512
+                       |          
+                        --4.60%--compress_chunks_parallel (inlined)
+                                  blake3_compress_subtree_wide
+                                  blake3_compress_subtree_wide
+                                  blake3_compress_subtree_wide
+                                  compress_subtree_to_parent_node (inlined)
+                                  blake3_hasher_update_base (inlined)
+                                  blake3_hasher_update.part.0
+                                  efs_hash
+
+    18.84%     0.00%  [.] add_512 (inlined)                                -      -            
+            |
+            ---round_fn16 (inlined)
+               blake3_hash16_avx512 (inlined)
+               blake3_hash_many_avx512
+               |          
+               |--17.80%--compress_chunks_parallel (inlined)
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          compress_subtree_to_parent_node (inlined)
+               |          blake3_hasher_update_base (inlined)
+               |          blake3_hasher_update.part.0
+               |          efs_hash
+               |          
+                --1.04%--compress_parents_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          |          
+                           --0.56%--blake3_compress_subtree_wide
+                                     compress_subtree_to_parent_node (inlined)
+                                     blake3_hasher_update_base (inlined)
+                                     blake3_hasher_update.part.0
+                                     efs_hash
+                                     slot_get (inlined)
+                                     slot_main
+                                     start_thread
+                                     clone3
+
+    18.84%     0.00%  [.] _mm512_add_epi32 (inlined)                       -      -            
+            |
+            ---add_512 (inlined)
+               round_fn16 (inlined)
+               blake3_hash16_avx512 (inlined)
+               blake3_hash_many_avx512
+               |          
+               |--17.80%--compress_chunks_parallel (inlined)
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          compress_subtree_to_parent_node (inlined)
+               |          blake3_hasher_update_base (inlined)
+               |          blake3_hasher_update.part.0
+               |          efs_hash
+               |          
+                --1.04%--compress_parents_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          |          
+                           --0.56%--blake3_compress_subtree_wide
+                                     compress_subtree_to_parent_node (inlined)
+                                     blake3_hasher_update_base (inlined)
+                                     blake3_hasher_update.part.0
+                                     efs_hash
+                                     slot_get (inlined)
+                                     slot_main
+                                     start_thread
+                                     clone3
+
+    16.54%     0.28%  [.] __GI___libc_open                                 -      -            
+            |          
+            |--15.83%--read_file_bytes
+            |          server_read_fragment_with_sum
+            |          
+             --0.71%--shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+    15.52%     0.00%  [.] xor_512 (inlined)                                -      -            
+            |          
+            |--13.98%--round_fn16 (inlined)
+            |          blake3_hash16_avx512 (inlined)
+            |          blake3_hash_many_avx512
+            |          |          
+            |          |--13.28%--compress_chunks_parallel (inlined)
+            |          |          blake3_compress_subtree_wide
+            |          |          blake3_compress_subtree_wide
+            |          |          blake3_compress_subtree_wide
+            |          |          compress_subtree_to_parent_node (inlined)
+            |          |          blake3_hasher_update_base (inlined)
+            |          |          blake3_hasher_update.part.0
+            |          |          efs_hash
+            |          |          
+            |           --0.70%--compress_parents_parallel (inlined)
+            |                     blake3_compress_subtree_wide
+            |          
+             --1.54%--blake3_hash16_avx512 (inlined)
+                       blake3_hash_many_avx512
+                       compress_chunks_parallel (inlined)
+                       blake3_compress_subtree_wide
+                       blake3_compress_subtree_wide
+                       blake3_compress_subtree_wide
+                       compress_subtree_to_parent_node (inlined)
+                       blake3_hasher_update_base (inlined)
+                       blake3_hasher_update.part.0
+                       efs_hash
+
+    15.52%     0.00%  [.] _mm512_xor_si512 (inlined)                       -      -            
+            |
+            ---xor_512 (inlined)
+               |          
+               |--13.98%--round_fn16 (inlined)
+               |          blake3_hash16_avx512 (inlined)
+               |          blake3_hash_many_avx512
+               |          |          
+               |          |--13.28%--compress_chunks_parallel (inlined)
+               |          |          blake3_compress_subtree_wide
+               |          |          blake3_compress_subtree_wide
+               |          |          blake3_compress_subtree_wide
+               |          |          compress_subtree_to_parent_node (inlined)
+               |          |          blake3_hasher_update_base (inlined)
+               |          |          blake3_hasher_update.part.0
+               |          |          efs_hash
+               |          |          
+               |           --0.70%--compress_parents_parallel (inlined)
+               |                     blake3_compress_subtree_wide
+               |          
+                --1.54%--blake3_hash16_avx512 (inlined)
+                          blake3_hash_many_avx512
+                          compress_chunks_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          compress_subtree_to_parent_node (inlined)
+                          blake3_hasher_update_base (inlined)
+                          blake3_hasher_update.part.0
+                          efs_hash
+
+    14.98%     0.07%  [k] __x64_sys_openat                                 -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               |          
+               |--14.29%--read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --0.69%--shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+    14.91%     0.28%  [k] do_sys_openat2                                   -      -            
+            |
+            ---__x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               |          
+               |--14.22%--read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --0.69%--shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+    12.97%     0.07%  [k] do_filp_open                                     -      -            
+            |
+            ---do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               |          
+               |--12.28%--read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --0.69%--shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+    12.90%     0.23%  [k] path_openat                                      -      -            
+            |
+            ---do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               |          
+               |--12.21%--read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --0.69%--shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+    12.36%     0.00%  [.] blake3_hasher_update_base (inlined)              -      -            
+            |
+            ---blake3_hasher_update.part.0
+               efs_hash
+               |          
+                --1.63%--slot_get (inlined)
+                          slot_main
+                          start_thread
+                          |          
+                           --1.49%--clone3
+
+    11.14%     0.42%  [k] vfs_read                                         -      -            
+            |          
+            |--9.74%--ksys_read
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          read
+            |          read_file_bytes
+            |          server_read_fragment_with_sum
+            |          
+             --1.40%--__x64_sys_pread64
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_pread
+                       read_file_bytes
+                       server_read_fragment_with_sum
+
+    10.68%     0.06%  [.] read                                             -      -            
+            |
+            ---read_file_bytes
+               server_read_fragment_with_sum
+
+    10.51%     0.21%  [k] xfs_file_read_iter                               -      -            
+            |
+            ---vfs_read
+               |          
+               |--9.32%--ksys_read
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          read
+               |          read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --1.19%--__x64_sys_pread64
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __libc_pread
+                          read_file_bytes
+                          server_read_fragment_with_sum
+
+    10.30%     0.21%  [k] xfs_file_buffered_read                           -      -            
+            |
+            ---xfs_file_read_iter
+               vfs_read
+               |          
+               |--9.18%--ksys_read
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          read
+               |          read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --1.12%--__x64_sys_pread64
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __libc_pread
+                          read_file_bytes
+                          server_read_fragment_with_sum
+
+    10.12%     0.07%  [k] ksys_read                                        -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               read
+               read_file_bytes
+               server_read_fragment_with_sum
+
+     9.88%     0.83%  [k] filemap_read                                     -      -            
+            |
+            ---xfs_file_buffered_read
+               xfs_file_read_iter
+               vfs_read
+               |          
+               |--9.11%--ksys_read
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          read
+               |          read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --0.77%--__x64_sys_pread64
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __libc_pread
+                          read_file_bytes
+                          server_read_fragment_with_sum
+
+     8.35%     0.71%  [k] copy_page_to_iter                                -      -            
+            |
+            ---filemap_read
+               xfs_file_buffered_read
+               xfs_file_read_iter
+               vfs_read
+               |          
+                --8.07%--ksys_read
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          read
+                          read_file_bytes
+                          server_read_fragment_with_sum
+
+     7.64%     7.64%  [k] _copy_to_iter                                    -      -            
+            |
+            ---copy_page_to_iter
+               filemap_read
+               xfs_file_buffered_read
+               xfs_file_read_iter
+               vfs_read
+               |          
+                --7.43%--ksys_read
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          read
+                          read_file_bytes
+                          server_read_fragment_with_sum
+
+     7.09%     0.00%  [.] rot12_512 (inlined)                              -      -            
+            |
+            ---round_fn16 (inlined)
+               blake3_hash16_avx512 (inlined)
+               blake3_hash_many_avx512
+               |          
+               |--6.52%--compress_chunks_parallel (inlined)
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          blake3_compress_subtree_wide
+               |          compress_subtree_to_parent_node (inlined)
+               |          blake3_hasher_update_base (inlined)
+               |          blake3_hasher_update.part.0
+               |          efs_hash
+               |          
+                --0.57%--compress_parents_parallel (inlined)
+                          blake3_compress_subtree_wide
+
+     6.71%     0.14%  [.] slot_main                                        -      -            
+            |          
+             --6.57%--slot_main
+                       |          
+                        --6.50%--start_thread
+                                  |          
+                                   --6.08%--clone3
+
+     6.64%     0.00%  [.] start_thread                                     -      -            
+            |          
+             --6.22%--clone3
+
+     6.63%     0.00%  [.] slot_get (inlined)                               -      -            
+            |
+            ---slot_main
+               |          
+                --6.57%--start_thread
+                          |          
+                           --6.15%--clone3
+
+     6.57%     0.58%  [k] link_path_walk.part.0.constprop.0                -      -            
+            |
+            ---path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               |          
+                --6.55%--read_file_bytes
+                          server_read_fragment_with_sum
+
+     6.22%     0.00%  [.] clone3                                           -      -            
+     5.59%     0.00%  [.] rot8_512 (inlined)                               -      -            
+            |
+            ---round_fn16 (inlined)
+               blake3_hash16_avx512 (inlined)
+               blake3_hash_many_avx512
+               |          
+                --5.10%--compress_chunks_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          compress_subtree_to_parent_node (inlined)
+                          blake3_hasher_update_base (inlined)
+                          blake3_hasher_update.part.0
+                          efs_hash
+
+     5.44%     0.00%  [.] rot16_512 (inlined)                              -      -            
+            |
+            ---round_fn16 (inlined)
+               blake3_hash16_avx512 (inlined)
+               blake3_hash_many_avx512
+               |          
+                --5.16%--compress_chunks_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          compress_subtree_to_parent_node (inlined)
+                          blake3_hasher_update_base (inlined)
+                          blake3_hasher_update.part.0
+                          efs_hash
+
+     4.74%     0.00%  [.] rot7_512 (inlined)                               -      -            
+            |
+            ---round_fn16 (inlined)
+               blake3_hash16_avx512 (inlined)
+               blake3_hash_many_avx512
+               |          
+                --4.60%--compress_chunks_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          compress_subtree_to_parent_node (inlined)
+                          blake3_hasher_update_base (inlined)
+                          blake3_hasher_update.part.0
+                          efs_hash
+
+     4.41%     0.00%  [.] transpose_msg_vecs16 (inlined)                   -      -            
+            |
+            ---blake3_hash16_avx512 (inlined)
+               blake3_hash_many_avx512
+               |          
+                --4.27%--compress_chunks_parallel (inlined)
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          blake3_compress_subtree_wide
+                          compress_subtree_to_parent_node (inlined)
+                          blake3_hasher_update_base (inlined)
+                          blake3_hasher_update.part.0
+                          efs_hash
+
+     4.34%     0.07%  [k] do_open                                          -      -            
+            |
+            ---path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               |          
+               |--3.69%--read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --0.66%--shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+     4.20%     0.14%  [.] __close                                          -      -            
+            |          
+            |--3.21%--read_file_bytes
+            |          server_read_fragment_with_sum
+            |          
+             --0.92%--shard_io_thread.part.0.constprop.0
+                       shard_io_thread (inlined)
+                       server_write_fragment_to_path.isra.0
+
+     3.77%     0.00%  [.] compress_parents_parallel (inlined)              -      -            
+            |
+            ---blake3_compress_subtree_wide
+               |          
+               |--2.37%--blake3_compress_subtree_wide
+               |          compress_subtree_to_parent_node (inlined)
+               |          blake3_hasher_update_base (inlined)
+               |          blake3_hasher_update.part.0
+               |          efs_hash
+               |          slot_get (inlined)
+               |          slot_main
+               |          start_thread
+               |          clone3
+               |          
+                --1.40%--compress_subtree_to_parent_node (inlined)
+                          blake3_hasher_update_base (inlined)
+                          blake3_hasher_update.part.0
+                          efs_hash
+                          slot_get (inlined)
+                          slot_main
+                          start_thread
+                          clone3
+
+     3.37%     0.07%  [k] __x64_sys_close                                  -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __close
+               |          
+               |--2.45%--read_file_bytes
+               |          server_read_fragment_with_sum
+               |          
+                --0.92%--shard_io_thread.part.0.constprop.0
+                          shard_io_thread (inlined)
+                          server_write_fragment_to_path.isra.0
+
+     3.37%     0.00%  [.] transpose_vecs_512 (inlined)                     -      -            
+            |          
+             --3.02%--transpose_msg_vecs16 (inlined)
+                       blake3_hash16_avx512 (inlined)
+                       blake3_hash_many_avx512
+                       |          
+                        --2.88%--compress_chunks_parallel (inlined)
+                                  blake3_compress_subtree_wide
+                                  blake3_compress_subtree_wide
+                                  blake3_compress_subtree_wide
+                                  compress_subtree_to_parent_node (inlined)
+                                  blake3_hasher_update_base (inlined)
+                                  blake3_hasher_update.part.0
+                                  efs_hash
+
+     3.13%     0.35%  [k] security_inode_permission                        -      -            
+            |
+            ---link_path_walk.part.0.constprop.0
+               path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               read_file_bytes
+               server_read_fragment_with_sum
+
+     2.57%     1.12%  [k] selinux_inode_permission                         -      -            
+            |
+            ---security_inode_permission
+               link_path_walk.part.0.constprop.0
+               path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               read_file_bytes
+               server_read_fragment_with_sum
+
+     2.49%     0.01%  [k] vfs_open                                         -      -            
+            |
+            ---do_open
+               path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               |          
+                --2.46%--read_file_bytes
+                          server_read_fragment_with_sum
+
+     2.48%     0.48%  [k] do_dentry_open                                   -      -            
+            |
+            ---vfs_open
+               do_open
+               path_openat
+               do_filp_open
+               do_sys_openat2
+               __x64_sys_openat
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __GI___libc_open
+               |          
+                --2.46%--read_file_bytes
+                          server_read_fragment_with_sum
+
+     2.15%     0.00%  [.] __libc_pread                                     -      -            
+            |
+            ---read_file_bytes
+               server_read_fragment_with_sum
+
+
+
+#
+# (Tip: To adjust path to source files to local file system use perf report --prefix=... --prefix-strip=...)
+#

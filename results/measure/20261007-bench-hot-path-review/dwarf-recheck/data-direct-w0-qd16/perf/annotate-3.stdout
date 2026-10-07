@@ -1,0 +1,337 @@
+ Percent |	Source code & Disassembly of efs-bench for cycles (2 samples, percent: local period)
+----------------------------------------------------------------------------------------------------
+         : 0      0x44bd40 <blake3_compress_xof_avx512>:
+    0.00 :   44bd40:        vmovdqu 0x10(%rsi), %xmm6
+    0.00 :   44bd45:        vmovdqu (%rsi), %xmm5
+    0.00 :   44bd49:        movq    %rdi, %rax
+    0.00 :   44bd4c:        movzbl  %dl, %edx
+    0.00 :   44bd4f:        vmovdqu 0x10(%rdi), %xmm1
+    0.00 :   44bd54:        vpaddd  (%rdi), %xmm1, %xmm3
+    0.00 :   44bd58:        movq    %rcx, %rdi
+    0.00 :   44bd5b:        movzbl  %r8b, %r8d
+    0.00 :   44bd5f:        vmovd   %edx, %xmm7
+    0.00 :   44bd63:        vmovdqu 0x20(%rsi), %xmm8
+    0.00 :   44bd68:        shrq    $0x20, %rdi
+    0.00 :   44bd6c:        vpinsrd $0x1, %r8d, %xmm7, %xmm2
+    0.00 :   44bd72:        vmovd   %ecx, %xmm7
+    0.00 :   44bd76:        vpinsrd $0x1, %edi, %xmm7, %xmm0
+    0.00 :   44bd7c:        vshufps $0x88, %xmm6, %xmm5, %xmm4
+    0.00 :   44bd81:        vpunpcklqdq     %xmm2, %xmm0, %xmm0
+    0.00 :   44bd85:        vshufps $0xdd, %xmm6, %xmm5, %xmm5
+    0.00 :   44bd8a:        vmovdqu 0x30(%rsi), %xmm6
+    0.00 :   44bd8f:        vpaddd  %xmm4, %xmm3, %xmm3
+    0.00 :   44bd93:        vpxorq  %xmm3, %xmm0, %xmm0
+    0.00 :   44bd99:        vpaddd  %xmm5, %xmm3, %xmm3
+    0.00 :   44bd9d:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44bda4:        vshufps $0x88, %xmm6, %xmm8, %xmm7
+    0.00 :   44bda9:        vshufps $0xdd, %xmm6, %xmm8, %xmm8
+    0.00 :   44bdae:        vpshufd $0x93, %xmm7, %xmm7
+    0.00 :   44bdb3:        vpshufd $0x93, %xmm8, %xmm8
+    0.00 :   44bdb9:        vshufps $0xfa, %xmm8, %xmm7, %xmm9
+    0.00 :   44bdbf:        vpaddd  0x6a129(%rip), %xmm0, %xmm2  # 0x4b5ef0 <_fini+0x546c>
+    0.00 :   44bdc7:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44bdcd:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44bdd4:        vpaddd  %xmm1, %xmm3, %xmm3
+    0.00 :   44bdd8:        vpxorq  %xmm3, %xmm0, %xmm0
+    0.00 :   44bdde:        vpshufd $0x93, %xmm3, %xmm3
+    0.00 :   44bde3:        vpaddd  %xmm7, %xmm3, %xmm3
+    0.00 :   44bde7:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44bdee:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44bdf2:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44bdf7:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44bdfd:        vpshufd $0x39, %xmm2, %xmm2
+    0.00 :   44be02:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44be09:        vpaddd  %xmm1, %xmm3, %xmm3
+    0.00 :   44be0d:        vpxorq  %xmm3, %xmm0, %xmm0
+    0.00 :   44be13:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44be1a:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44be1e:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44be24:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44be2b:        vpaddd  %xmm1, %xmm8, %xmm6
+    0.00 :   44be2f:        vpaddd  %xmm3, %xmm6, %xmm6
+    0.00 :   44be33:        vshufps $0xd6, %xmm5, %xmm4, %xmm3
+    0.00 :   44be38:        vpshufd $0xf, %xmm4, %xmm4
+    0.00 :   44be3d:        vpblendw        $0xcc, %xmm9, %xmm4, %xmm4
+    0.00 :   44be43:        vpxorq  %xmm6, %xmm0, %xmm0
+    0.00 :   44be49:        vpshufd $0x39, %xmm3, %xmm3
+    0.00 :   44be4e:        vpshufd $0x39, %xmm6, %xmm6
+    0.00 :   44be53:        vpaddd  %xmm3, %xmm6, %xmm6
+    0.00 :   44be57:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44be5e:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44be62:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44be67:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44be6d:        vpshufd $0x93, %xmm2, %xmm2
+    0.00 :   44be72:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44be79:        vpaddd  %xmm1, %xmm6, %xmm6
+    0.00 :   44be7d:        vpxorq  %xmm6, %xmm0, %xmm0
+    0.00 :   44be83:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44be8a:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44be8e:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44be94:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44be9b:        vpaddd  %xmm4, %xmm1, %xmm9
+    0.00 :   44be9f:        vpaddd  %xmm6, %xmm9, %xmm9
+    0.00 :   44bea3:        vpunpcklqdq     %xmm5, %xmm8, %xmm6
+    0.00 :   44bea7:        vpunpckhdq      %xmm8, %xmm5, %xmm5
+    0.00 :   44beac:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44beb2:        vpblendw        $0xc0, %xmm7, %xmm6, %xmm6
+    0.00 :   44beb8:        vpshufd $0x93, %xmm9, %xmm9
+    0.00 :   44bebe:        vpunpckldq      %xmm5, %xmm7, %xmm7
+    0.00 :   44bec2:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44bec9:        vpshufd $0x78, %xmm6, %xmm6
+    0.00 :   44bece:        vpshufd $0x1e, %xmm7, %xmm8
+    0.00 :   44bed3:        vpaddd  %xmm6, %xmm9, %xmm9
+    0.00 :   44bed7:        vshufps $0xd6, %xmm4, %xmm3, %xmm5
+    0.00 :   44bedc:        vpshufd $0xf, %xmm3, %xmm3
+    0.00 :   44bee1:        vpshufd $0x39, %xmm5, %xmm5
+    0.00 :   44bee6:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44beea:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44beef:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44bef5:        vpshufd $0x39, %xmm2, %xmm2
+    0.00 :   44befa:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44bf01:        vpaddd  %xmm1, %xmm9, %xmm9
+    0.00 :   44bf05:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44bf0b:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44bf12:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44bf16:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44bf1c:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44bf23:        vpaddd  %xmm1, %xmm8, %xmm7
+    0.00 :   44bf27:        vpaddd  %xmm9, %xmm7, %xmm7
+    0.00 :   44bf2c:        vshufps $0xfa, %xmm8, %xmm6, %xmm9
+    0.00 :   44bf32:        vpxorq  %xmm7, %xmm0, %xmm0
+    0.00 :   44bf38:        vpshufd $0x39, %xmm7, %xmm7
+    0.00 :   44bf3d:        vpaddd  %xmm5, %xmm7, %xmm7
+    0.00 :   44bf41:        vpblendw        $0xcc, %xmm9, %xmm3, %xmm3
+    0.00 :   44bf47:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44bf4e:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44bf52:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44bf57:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44bf5d:        vpshufd $0x93, %xmm2, %xmm2
+    0.00 :   44bf62:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44bf69:        vpaddd  %xmm1, %xmm7, %xmm7
+    0.00 :   44bf6d:        vpxorq  %xmm7, %xmm0, %xmm0
+    0.00 :   44bf73:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44bf7a:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44bf7e:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44bf84:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44bf8b:        vpaddd  %xmm3, %xmm1, %xmm9
+    0.00 :   44bf8f:        vpaddd  %xmm7, %xmm9, %xmm9
+    0.00 :   44bf93:        vpunpcklqdq     %xmm4, %xmm8, %xmm7
+    0.00 :   44bf97:        vpunpckhdq      %xmm8, %xmm4, %xmm4
+    0.00 :   44bf9c:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44bfa2:        vpblendw        $0xc0, %xmm6, %xmm7, %xmm7
+    0.00 :   44bfa8:        vpshufd $0x93, %xmm9, %xmm9
+    0.00 :   44bfae:        vpunpckldq      %xmm4, %xmm6, %xmm6
+    0.00 :   44bfb2:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44bfb9:        vpshufd $0x78, %xmm7, %xmm7
+    0.00 :   44bfbe:        vpshufd $0x1e, %xmm6, %xmm8
+    0.00 :   44bfc3:        vpaddd  %xmm7, %xmm9, %xmm9
+    0.00 :   44bfc7:        vshufps $0xd6, %xmm3, %xmm5, %xmm4
+    0.00 :   44bfcc:        vpshufd $0xf, %xmm5, %xmm5
+    0.00 :   44bfd1:        vpshufd $0x39, %xmm4, %xmm4
+    0.00 :   44bfd6:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44bfda:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44bfdf:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44bfe5:        vpshufd $0x39, %xmm2, %xmm2
+    0.00 :   44bfea:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44bff1:        vpaddd  %xmm1, %xmm9, %xmm9
+   99.30 :   44bff5:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44bffb:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c002:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c006:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c00c:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c013:        vpaddd  %xmm1, %xmm8, %xmm6
+    0.00 :   44c017:        vpaddd  %xmm9, %xmm6, %xmm6
+    0.00 :   44c01c:        vshufps $0xfa, %xmm8, %xmm7, %xmm9
+    0.00 :   44c022:        vpxorq  %xmm6, %xmm0, %xmm0
+    0.00 :   44c028:        vpshufd $0x39, %xmm6, %xmm6
+    0.00 :   44c02d:        vpaddd  %xmm4, %xmm6, %xmm6
+    0.00 :   44c031:        vpblendw        $0xcc, %xmm9, %xmm5, %xmm5
+    0.00 :   44c037:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c03e:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c042:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c047:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c04d:        vpshufd $0x93, %xmm2, %xmm2
+    0.00 :   44c052:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c059:        vpaddd  %xmm1, %xmm6, %xmm6
+    0.00 :   44c05d:        vpxorq  %xmm6, %xmm0, %xmm0
+    0.00 :   44c063:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c06a:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c06e:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c074:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c07b:        vpaddd  %xmm5, %xmm1, %xmm9
+    0.00 :   44c07f:        vpaddd  %xmm6, %xmm9, %xmm9
+    0.00 :   44c083:        vpunpcklqdq     %xmm3, %xmm8, %xmm6
+    0.00 :   44c087:        vpunpckhdq      %xmm8, %xmm3, %xmm3
+    0.00 :   44c08c:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44c092:        vpblendw        $0xc0, %xmm7, %xmm6, %xmm6
+    0.00 :   44c098:        vpshufd $0x93, %xmm9, %xmm9
+    0.00 :   44c09e:        vpunpckldq      %xmm3, %xmm7, %xmm7
+    0.00 :   44c0a2:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c0a9:        vpshufd $0x78, %xmm6, %xmm6
+    0.00 :   44c0ae:        vpshufd $0x1e, %xmm7, %xmm8
+    0.00 :   44c0b3:        vpaddd  %xmm6, %xmm9, %xmm9
+    0.00 :   44c0b7:        vshufps $0xd6, %xmm5, %xmm4, %xmm3
+    0.00 :   44c0bc:        vpshufd $0xf, %xmm4, %xmm4
+    0.00 :   44c0c1:        vpshufd $0x39, %xmm3, %xmm3
+    0.00 :   44c0c6:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c0ca:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c0cf:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c0d5:        vpshufd $0x39, %xmm2, %xmm2
+    0.00 :   44c0da:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c0e1:        vpaddd  %xmm1, %xmm9, %xmm9
+    0.00 :   44c0e5:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44c0eb:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c0f2:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c0f6:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c0fc:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c103:        vpaddd  %xmm1, %xmm8, %xmm7
+    0.00 :   44c107:        vpaddd  %xmm9, %xmm7, %xmm7
+    0.00 :   44c10c:        vshufps $0xfa, %xmm8, %xmm6, %xmm9
+    0.00 :   44c112:        vpxorq  %xmm7, %xmm0, %xmm0
+    0.00 :   44c118:        vpshufd $0x39, %xmm7, %xmm7
+    0.00 :   44c11d:        vpaddd  %xmm3, %xmm7, %xmm7
+    0.00 :   44c121:        vpblendw        $0xcc, %xmm9, %xmm4, %xmm4
+    0.00 :   44c127:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c12e:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c132:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c137:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c13d:        vpshufd $0x93, %xmm2, %xmm2
+    0.00 :   44c142:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c149:        vpaddd  %xmm1, %xmm7, %xmm7
+    0.00 :   44c14d:        vpxorq  %xmm7, %xmm0, %xmm0
+    0.00 :   44c153:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c15a:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c15e:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c164:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c16b:        vpaddd  %xmm4, %xmm1, %xmm9
+    0.00 :   44c16f:        vpaddd  %xmm7, %xmm9, %xmm9
+    0.00 :   44c173:        vpunpcklqdq     %xmm5, %xmm8, %xmm7
+    0.00 :   44c177:        vpunpckhdq      %xmm8, %xmm5, %xmm5
+    0.00 :   44c17c:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44c182:        vpblendw        $0xc0, %xmm6, %xmm7, %xmm7
+    0.00 :   44c188:        vpshufd $0x93, %xmm9, %xmm9
+    0.00 :   44c18e:        vpunpckldq      %xmm5, %xmm6, %xmm6
+    0.00 :   44c192:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c199:        vpshufd $0x78, %xmm7, %xmm7
+    0.00 :   44c19e:        vpshufd $0x1e, %xmm6, %xmm8
+    0.00 :   44c1a3:        vpaddd  %xmm7, %xmm9, %xmm9
+    0.00 :   44c1a7:        vshufps $0xd6, %xmm4, %xmm3, %xmm6
+    0.00 :   44c1ac:        vpshufd $0xf, %xmm3, %xmm3
+    0.00 :   44c1b1:        vpshufd $0x39, %xmm6, %xmm6
+    0.00 :   44c1b6:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c1ba:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c1bf:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c1c5:        vpshufd $0x39, %xmm2, %xmm2
+    0.00 :   44c1ca:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c1d1:        vpaddd  %xmm1, %xmm9, %xmm9
+    0.00 :   44c1d5:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44c1db:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c1e2:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c1e6:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c1ec:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c1f3:        vpaddd  %xmm1, %xmm8, %xmm5
+    0.00 :   44c1f7:        vpaddd  %xmm9, %xmm5, %xmm5
+    0.00 :   44c1fc:        vshufps $0xfa, %xmm8, %xmm7, %xmm9
+    0.00 :   44c202:        vpxorq  %xmm5, %xmm0, %xmm0
+    0.00 :   44c208:        vpshufd $0x39, %xmm5, %xmm5
+    0.00 :   44c20d:        vpaddd  %xmm6, %xmm5, %xmm5
+    0.00 :   44c211:        vpblendw        $0xcc, %xmm9, %xmm3, %xmm3
+    0.00 :   44c217:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c21e:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c222:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c227:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c22d:        vpshufd $0x93, %xmm2, %xmm2
+    0.00 :   44c232:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c239:        vpaddd  %xmm1, %xmm5, %xmm5
+    0.00 :   44c23d:        vpxorq  %xmm5, %xmm0, %xmm0
+    0.00 :   44c243:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c24a:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c24e:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c254:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c25b:        vpaddd  %xmm3, %xmm1, %xmm9
+    0.00 :   44c25f:        vpaddd  %xmm5, %xmm9, %xmm9
+    0.00 :   44c263:        vpunpcklqdq     %xmm4, %xmm8, %xmm5
+    0.00 :   44c267:        vpunpckhdq      %xmm8, %xmm4, %xmm4
+    0.00 :   44c26c:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44c272:        vpblendw        $0xc0, %xmm7, %xmm5, %xmm5
+    0.00 :   44c278:        vpshufd $0x93, %xmm9, %xmm9
+    0.00 :   44c27e:        vpunpckldq      %xmm4, %xmm7, %xmm7
+    0.00 :   44c282:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c289:        vpshufd $0x78, %xmm5, %xmm5
+    0.00 :   44c28e:        vpshufd $0x1e, %xmm7, %xmm7
+    0.00 :   44c293:        vpaddd  %xmm5, %xmm9, %xmm9
+    0.00 :   44c297:        vshufps $0xd6, %xmm3, %xmm6, %xmm4
+    0.00 :   44c29c:        vpshufd $0x39, %xmm4, %xmm4
+    0.00 :   44c2a1:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c2a5:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c2aa:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c2b0:        vpshufd $0x39, %xmm2, %xmm2
+    0.00 :   44c2b5:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c2bc:        vpaddd  %xmm1, %xmm9, %xmm9
+    0.00 :   44c2c0:        vpxorq  %xmm9, %xmm0, %xmm0
+    0.00 :   44c2c6:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c2cd:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c2d1:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c2d7:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c2de:        vpaddd  %xmm1, %xmm7, %xmm8
+    0.00 :   44c2e2:        vpaddd  %xmm9, %xmm8, %xmm8
+    0.00 :   44c2e7:        vpxorq  %xmm8, %xmm0, %xmm0
+    0.00 :   44c2ed:        vpshufd $0x39, %xmm8, %xmm8
+    0.00 :   44c2f3:        vpaddd  %xmm4, %xmm8, %xmm8
+    0.00 :   44c2f7:        vpshufd $0xf, %xmm6, %xmm4
+    0.00 :   44c2fc:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c303:        vshufps $0xfa, %xmm7, %xmm5, %xmm6
+    0.00 :   44c308:        vpblendw        $0xcc, %xmm6, %xmm4, %xmm4
+    0.00 :   44c30e:        vpunpcklqdq     %xmm3, %xmm7, %xmm6
+    0.00 :   44c312:        vpunpckhdq      %xmm7, %xmm3, %xmm3
+    0.00 :   44c316:        vpblendw        $0xc0, %xmm5, %xmm6, %xmm6
+    0.00 :   44c31c:        vpunpckldq      %xmm3, %xmm5, %xmm5
+    0.00 :   44c320:        vpshufd $0x78, %xmm6, %xmm6
+    0.00 :   44c325:        vpshufd $0x1e, %xmm5, %xmm5
+    0.00 :   44c32a:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c32e:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c333:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.70 :   44c339:        vpshufd $0x93, %xmm2, %xmm2
+    0.00 :   44c33e:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c345:        vpaddd  %xmm1, %xmm8, %xmm8
+    0.00 :   44c349:        vpxorq  %xmm8, %xmm0, %xmm0
+    0.00 :   44c34f:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c356:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c35a:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c360:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c367:        vpaddd  %xmm4, %xmm1, %xmm4
+    0.00 :   44c36b:        vpaddd  %xmm8, %xmm4, %xmm4
+    0.00 :   44c370:        vpxorq  %xmm4, %xmm0, %xmm0
+    0.00 :   44c376:        vpshufd $0x93, %xmm4, %xmm4
+    0.00 :   44c37b:        vpaddd  %xmm6, %xmm4, %xmm4
+    0.00 :   44c37f:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c386:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c38a:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c38f:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c395:        vpshufd $0x39, %xmm2, %xmm2
+    0.00 :   44c39a:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c3a1:        vpaddd  %xmm1, %xmm4, %xmm4
+    0.00 :   44c3a5:        vpxorq  %xmm4, %xmm0, %xmm0
+    0.00 :   44c3ab:        vprord  $0x10, %xmm0, %xmm0
+    0.00 :   44c3b2:        vpaddd  %xmm0, %xmm2, %xmm2
+    0.00 :   44c3b6:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c3bc:        vprord  $0xc, %xmm1, %xmm1
+    0.00 :   44c3c3:        vpaddd  %xmm1, %xmm5, %xmm5
+    0.00 :   44c3c7:        vpaddd  %xmm4, %xmm5, %xmm5
+    0.00 :   44c3cb:        vpxorq  %xmm5, %xmm0, %xmm0
+    0.00 :   44c3d1:        vpshufd $0x39, %xmm5, %xmm5
+    0.00 :   44c3d6:        vprord  $0x8, %xmm0, %xmm0
+    0.00 :   44c3dd:        vpaddd  %xmm2, %xmm0, %xmm2
+    0.00 :   44c3e1:        vpshufd $0x4e, %xmm0, %xmm0
+    0.00 :   44c3e6:        vpxorq  %xmm2, %xmm1, %xmm1
+    0.00 :   44c3ec:        vpshufd $0x93, %xmm2, %xmm2
+    0.00 :   44c3f1:        vpxorq  %xmm5, %xmm2, %xmm5
+    0.00 :   44c3f7:        vprord  $0x7, %xmm1, %xmm1
+    0.00 :   44c3fe:        vmovdqu %xmm5, (%r9)
+    0.00 :   44c403:        vpxorq  %xmm1, %xmm0, %xmm1
+    0.00 :   44c409:        vmovdqu %xmm1, 0x10(%r9)
+    0.00 :   44c40f:        vpxorq  (%rax), %xmm2, %xmm2
+    0.00 :   44c415:        vmovdqu %xmm2, 0x20(%r9)
+    0.00 :   44c41b:        vpxorq  0x10(%rax), %xmm0, %xmm0
+    0.00 :   44c422:        vmovdqu %xmm0, 0x30(%r9)
+    0.00 :   44c428:        retq

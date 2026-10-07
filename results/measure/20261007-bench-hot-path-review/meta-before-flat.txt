@@ -1,0 +1,44 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles'
+# Event count (approx.): 19350882929
+#
+# Overhead  Shared Object      Symbol                                     
+# ........  .................  ...........................................
+#
+    23.78%  libc.so.6          [.] __memcmp_evex_movbe
+    12.33%  efs-bench          [.] search_block
+     7.32%  efs-bench          [.] kv_seg_probe
+     5.19%  [vdso]             [.] 0x00000000000008d8
+     4.73%  efs-bench          [.] efs_bench_local_main
+     3.82%  efs-bench          [.] lookup
+     3.05%  efs-bench          [.] efs_crc32
+     2.41%  libc.so.6          [.] __memmove_avx512_unaligned_erms
+     2.30%  libc.so.6          [.] pthread_mutex_lock@@GLIBC_2.2.5
+     1.88%  libc.so.6          [.] __GI___pthread_mutex_unlock_usercnt
+     1.40%  efs-bench          [.] efs_iostats_now_us
+     1.27%  efs-bench          [.] kv_mtab_pos
+     1.21%  efs-bench          [.] lsm_get
+     1.07%  efs-bench          [.] memcmp@plt
+     0.77%  [kernel.kallsyms]  [k] sched_balance_update_blocked_averages
+     0.73%  efs-bench          [.] u64_cmp
+     0.67%  [kernel.kallsyms]  [k] crc32_body
+     0.65%  [kernel.kallsyms]  [k] update_load_avg
+     0.53%  efs-bench          [.] kv_buf_set
+     0.49%  [kernel.kallsyms]  [k] arch_exit_to_user_mode_prepare.isra.0
+     0.48%  libc.so.6          [.] msort_with_tmp.part.0
+     0.48%  [kernel.kallsyms]  [k] do_syscall_64
+     0.47%  [kernel.kallsyms]  [k] __update_load_avg_cfs_rq
+     0.46%  [kernel.kallsyms]  [k] vfs_read
+     0.36%  libc.so.6          [.] clock_gettime@@GLIBC_2.17
+     0.35%  [kernel.kallsyms]  [k] flush_workqueue_prep_pwqs
+     0.34%  [vdso]             [.] 0x0000000000000998
+     0.32%  [kernel.kallsyms]  [k] balance_dirty_pages_ratelimited_flags
+
+
+#
+# (Tip: Use parent filter to see specific call path: perf report -p <regex>)
+#

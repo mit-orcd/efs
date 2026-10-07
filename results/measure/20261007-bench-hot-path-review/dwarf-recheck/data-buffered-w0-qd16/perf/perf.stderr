@@ -1,0 +1,2 @@
+[ perf record: Woken up 78 times to write data ]
+[ perf record: Captured and wrote 21.523 MB /tmp/efs-bench-review-dwarf-20261007/data-buffered-w0-qd16/perf/perf.data (2634 samples) ]
