@@ -1304,10 +1304,18 @@ static void *replay_fan_thread(void *arg)
         uint64_t k;
 
         pthread_mutex_lock(&f->mu);
+        if (f->next >= f->n) {
+            pthread_mutex_unlock(&f->mu);
+            break;
+        }
+        if (efs_client_rpc_past_deadline()) {
+            if (!f->error)
+                f->error = EFS_ERR_BUSY;
+            pthread_mutex_unlock(&f->mu);
+            break;
+        }
         k = f->next++;
         pthread_mutex_unlock(&f->mu);
-        if (k >= f->n)
-            break;
         int rc = dcache_replay_stale_ex(f->pp[k].ino, f->pp[k].ci,
                                         f->pp[k].absent);
         if (rc != EFS_OK) {
@@ -1329,6 +1337,8 @@ static int replay_fan_run(struct stale_pair *rp, uint64_t n)
 
     if (!n)
         return EFS_OK;
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
     f.deadline = efs_client_rpc_deadline_ms();
     f.error = EFS_OK;
     f.pp = rp;

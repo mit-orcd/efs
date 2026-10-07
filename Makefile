@@ -212,6 +212,7 @@ test-wb-runtime:
 	python3 tests/test_wb_runtime.py
 	python3 tests/test_wb_fault.py
 	python3 tests/test_stale_recovery.py
+	python3 tests/test_replay_fan_budget.py
 	python3 tests/test_pull_deadline.py
 	python3 tests/test_pull_group_boundary.py
 	python3 tests/test_getchunks_budget.py
