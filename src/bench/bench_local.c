@@ -1,4 +1,5 @@
 #include "bench_local.h"
+#include "perf_control.h"
 #include "efs/checksum.h"
 #include "efs/common.h"
 #include "efs/kv.h"
@@ -405,7 +406,18 @@ static void ceil_raw(const char *root)
 
 /* ---- data bench: the fragment store + writer pool, the handlers' way ---- */
 
+struct round_start {
+    pthread_mutex_t mu;
+    pthread_cond_t cv;
+    unsigned ready;
+};
+
 struct bench_slot {
+    struct round_start *start;
+    pthread_mutex_t release_mu;
+    pthread_cond_t release_cv;
+    int released;
+    uint64_t release_us, start_us;
     int slot;
     struct efsd_server *s;
     struct efs_export *ex;
@@ -417,6 +429,7 @@ struct bench_slot {
     uint32_t written;     /* chunks this slot has stored (across rounds) */
     uint32_t read_seq;
     uint64_t ops;
+    uint64_t root_ops[EFS_MAX_STORAGE_PATHS];
     uint64_t errors;
     struct lat_vec lat;
     uint8_t *buf;
@@ -437,8 +450,12 @@ static int slot_put(struct bench_slot *sl, uint32_t chunk_index)
         .chunk_generation = 0,
     };
     efs_store_nvme_bind(&st, &nctx, sl->s, sl->ex);
-    efs_tls_path_hint = EFS_PATH_HINT_SKIP; /* handler's EFS_PATH_HINT_NEW */
+    efs_tls_path_hint = !sl->window || sl->written < sl->window ?
+                        EFS_PATH_HINT_SKIP : -1; /* bounded overwrites must probe */
     int rc = efs_store_put(&st, &fid, sl->buf, sl->frag_len, sl->sum);
+    if (rc == EFS_OK && efs_tls_path_used >= 0 &&
+        (unsigned)efs_tls_path_used < sl->s->storage_path_count)
+        sl->root_ops[efs_tls_path_used]++;
     efs_tls_path_hint = -1;
     efs_tls_path_used = -1;
     return rc;
@@ -476,6 +493,15 @@ static int slot_get(struct bench_slot *sl, uint32_t chunk_index)
 static void *slot_main(void *arg)
 {
     struct bench_slot *sl = arg;
+    pthread_mutex_lock(&sl->start->mu);
+    sl->start->ready++;
+    pthread_cond_signal(&sl->start->cv);
+    pthread_mutex_unlock(&sl->start->mu);
+    pthread_mutex_lock(&sl->release_mu);
+    while (!sl->released)
+        pthread_cond_wait(&sl->release_cv, &sl->release_mu);
+    pthread_mutex_unlock(&sl->release_mu);
+    sl->start_us = efs_iostats_now_us();
     while (now_sec() < sl->deadline) {
         uint32_t ci;
         if (sl->reading) {
@@ -502,45 +528,82 @@ static void *slot_main(void *arg)
 
 /* One ladder round: qd threads, each on its own slot, for time_sec. */
 static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
-                      int qd, double time_sec, uint32_t frag_len)
+                      int qd, double time_sec, uint32_t frag_len, int writer_stats)
 {
     pthread_t tids[BENCH_MAX_SLOTS];
+    struct round_start start = { .mu = PTHREAD_MUTEX_INITIALIZER,
+                                 .cv = PTHREAD_COND_INITIALIZER };
+    unsigned created = 0;
+    uint64_t control_errors = 0;
     struct ds_row ds0[DS_MAX_DEV], ds1[DS_MAX_DEV];
     struct efs_msg_io_stats_reply io0, io1;
 
     for (int i = 0; i < qd; i++) {
+        slots[i].start = &start;
+        slots[i].released = 0;
+        pthread_mutex_init(&slots[i].release_mu, NULL);
+        pthread_cond_init(&slots[i].release_cv, NULL);
         slots[i].reading = reading;
         slots[i].ops = 0;
+        memset(slots[i].root_ops, 0, sizeof(slots[i].root_ops));
         slots[i].errors = 0;
         slots[i].lat.n = 0;
         slots[i].read_seq = 0;
     }
     efs_iostats_snapshot(&io0);
     int nds0 = ds_read(ds0);
-    double t0 = now_sec();
-    double deadline = t0 + time_sec;
     for (int i = 0; i < qd; i++) {
-        slots[i].deadline = deadline;
         if (pthread_create(&tids[i], NULL, slot_main, &slots[i]) != 0) {
             slots[i].errors++;
             tids[i] = 0;
-        }
+        } else created++;
+    }
+    pthread_mutex_lock(&start.mu);
+    while (start.ready < created)
+        pthread_cond_wait(&start.cv, &start.mu);
+    pthread_mutex_unlock(&start.mu);
+    server_writer_stats_reset(writer_stats && !reading);
+    int profiling = perf_command("enable\n") == 0;
+    if (!profiling) control_errors++;
+    double t0 = now_sec();
+    double deadline = profiling ? t0 + time_sec : t0;
+    uint64_t release_us = efs_iostats_now_us();
+    for (int i = 0; i < qd; i++) {
+        pthread_mutex_lock(&slots[i].release_mu);
+        slots[i].deadline = deadline;
+        slots[i].release_us = release_us;
+        slots[i].released = 1;
+        pthread_cond_signal(&slots[i].release_cv);
+        pthread_mutex_unlock(&slots[i].release_mu);
     }
     for (int i = 0; i < qd; i++) {
         if (tids[i])
             pthread_join(tids[i], NULL);
     }
     double wall = now_sec() - t0;
+    if (profiling && perf_command("disable\n")) control_errors++;
+    struct efs_writer_stats ws;
+    server_writer_stats_snapshot(&ws);
+    server_writer_stats_reset(0);
+    for (int i = 0; i < qd; i++) {
+        pthread_cond_destroy(&slots[i].release_cv);
+        pthread_mutex_destroy(&slots[i].release_mu);
+    }
+    pthread_cond_destroy(&start.cv);
+    pthread_mutex_destroy(&start.mu);
     int nds1 = ds_read(ds1);
     efs_iostats_snapshot(&io1);
     if (wall < 1e-6)
         wall = 1e-6;
 
-    uint64_t ops = 0, errors = 0, samples = 0;
+    uint64_t ops = 0, errors = control_errors, samples = 0, idle = 0, max_start = 0;
     for (int i = 0; i < qd; i++) {
         ops += slots[i].ops;
         errors += slots[i].errors;
         samples += slots[i].lat.n;
+        if (!slots[i].ops) idle++;
+        if (tids[i] && slots[i].start_us - release_us > max_start)
+            max_start = slots[i].start_us - release_us;
     }
     /* Exact percentiles over all recorded samples of the round. */
     uint64_t *all = malloc((size_t)(samples ? samples : 1) * sizeof(*all));
@@ -567,16 +630,37 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
     double gib_s = (double)ops * frag_len / (1 << 30) / wall;
     printf("%s kind=data rw=%s paths=%d qd=%d ops=%llu wall_s=%.3f "
            "ops_s=%.1f p50_us=%llu p99_us=%llu max_us=%llu GiB_s=%.3f "
-           "errors=%llu diskw_ops=%llu diskw_avg_us=%llu\n",
-           errors || !ops ? "BENCH_FAIL" : "BENCH_OK",
+           "errors=%llu diskw_ops=%llu diskw_avg_us=%llu idle_workers=%llu max_start_us=%llu writers=%d\n",
+           errors || !ops || idle ? "BENCH_FAIL" : "BENCH_OK",
            reading ? "read" : "write", npaths, qd, (unsigned long long)ops,
            wall, (double)ops / wall, (unsigned long long)p50,
            (unsigned long long)p99, (unsigned long long)max, gib_s,
            (unsigned long long)errors, (unsigned long long)diskw_ops,
-           (unsigned long long)(diskw_ops ? diskw_us / diskw_ops : 0));
+           (unsigned long long)(diskw_ops ? diskw_us / diskw_ops : 0),
+           (unsigned long long)idle, (unsigned long long)max_start, slots[0].s->nwriters);
+    if (writer_stats && !reading) {
+        printf("BENCH_WAIT jobs=%llu queued=%llu fallback=%llu peak_active=%llu "
+               "admission_us=%llu admission_max_us=%llu queue_us=%llu queue_max_us=%llu "
+               "service_us=%llu service_max_us=%llu resume_us=%llu resume_max_us=%llu "
+               "lock_us=%llu lock_max_us=%llu\n",
+               (unsigned long long)ws.jobs, (unsigned long long)ws.queued,
+               (unsigned long long)ws.fallback, (unsigned long long)ws.peak_active,
+               (unsigned long long)ws.admission_us, (unsigned long long)ws.admission_max_us,
+               (unsigned long long)ws.queue_us, (unsigned long long)ws.queue_max_us,
+               (unsigned long long)ws.service_us, (unsigned long long)ws.service_max_us,
+               (unsigned long long)ws.resume_us, (unsigned long long)ws.resume_max_us,
+               (unsigned long long)ws.lock_us, (unsigned long long)ws.lock_max_us);
+    }
+    if (!reading) {
+        for (int p = 0; p < npaths; p++) {
+            uint64_t writes = 0;
+            for (int i = 0; i < qd; i++) writes += slots[i].root_ops[p];
+            printf("BENCH_ROOT path=%d writes=%llu\n", p, (unsigned long long)writes);
+        }
+    }
     ds_print_delta(ds0, nds0, ds1, nds1, wall);
     fflush(stdout);
-    return errors + !ops;
+    return errors + !ops + idle;
 }
 
 static void bench_export_tree_rm(struct efsd_server *s)
@@ -589,7 +673,7 @@ static void bench_export_tree_rm(struct efsd_server *s)
     }
 }
 
-static int run_data_bench(struct efsd_server *s, double time_sec, int qd, int ceiling, uint32_t window)
+static int run_data_bench(struct efsd_server *s, double time_sec, int qd, int ceiling, uint32_t window, const char *rw, int full_paths, int writer_stats)
 {
     uint32_t npaths_total = s->storage_path_count;
     if (npaths_total == 0 || npaths_total > EFS_MAX_STORAGE_PATHS) {
@@ -669,22 +753,37 @@ static int run_data_bench(struct efsd_server *s, double time_sec, int qd, int ce
 
     uint64_t errors = 0;
     uint32_t saved_count = s->storage_path_count;
-    for (uint32_t np = 1; np <= npaths_total; np++) {
+    for (uint32_t np = full_paths ? npaths_total : 1; np <= npaths_total; np++) {
         s->storage_path_count = np;
         if (server_writer_pool_start(s) != 0) {
             fprintf(stderr, "bench: writer pool start failed (paths=%u)\n", np);
             s->storage_path_count = saved_count;
             return 1;
         }
-        if (qd) {
-            errors += run_round(slots, 0, (int)np, qd, time_sec, frag_len);
-            errors += run_round(slots, 1, (int)np, qd, time_sec, frag_len);
-        } else {
-            for (int q = 0; q < BENCH_NQDS; q++)
-                errors += run_round(slots, 0, (int)np, bench_qds[q], time_sec, frag_len);
-            for (int q = 0; q < BENCH_NQDS; q++)
-                errors += run_round(slots, 1, (int)np, bench_qds[q], time_sec, frag_len);
+        int first_q = qd ? -1 : 0, last_q = qd ? -1 : BENCH_NQDS - 1;
+        /* Read-only population is bounded and outside both timing and perf. */
+        if (!strcmp(rw, "read")) {
+            int max_qd = qd ? qd : BENCH_MAX_SLOTS;
+            for (int i = 0; i < max_qd; i++) {
+                for (uint32_t j = 0; j < window; j++) {
+                    if (slot_put(&slots[i], slots[i].ci_base + j) != EFS_OK) {
+                        fprintf(stderr, "bench: read population failed\n");
+                        errors++;
+                        goto path_done;
+                    }
+                    slots[i].written++;
+                }
+            }
         }
+        if (strcmp(rw, "read"))
+            for (int q = first_q; q <= last_q; q++)
+                errors += run_round(slots, 0, (int)np, qd ? qd : bench_qds[q],
+                                    time_sec, frag_len, writer_stats);
+        if (strcmp(rw, "write"))
+            for (int q = first_q; q <= last_q; q++)
+                errors += run_round(slots, 1, (int)np, qd ? qd : bench_qds[q],
+                                    time_sec, frag_len, writer_stats);
+path_done:
         server_writer_pool_stop(s);
         /* Bound scratch use: next path count rewrites from empty. */
         bench_export_tree_rm(s);
@@ -958,7 +1057,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
 }
 
 static int run_local_bench(struct efsd_server *s, const char *kind,
-                           double time_sec, int qd, int ceiling, uint32_t window)
+                           double time_sec, int qd, int ceiling, uint32_t window, const char *rw, int full_paths, int writer_stats)
 {
     if (!s || !kind || time_sec <= 0.0) {
         fprintf(stderr, "bench: invalid args (kind data|meta, --time > 0)\n");
@@ -985,7 +1084,7 @@ static int run_local_bench(struct efsd_server *s, const char *kind,
 
     int rc;
     if (strcmp(kind, "data") == 0)
-        rc = run_data_bench(s, time_sec, qd, ceiling, window);
+        rc = run_data_bench(s, time_sec, qd, ceiling, window, rw, full_paths, writer_stats);
     else if (strcmp(kind, "meta") == 0)
         rc = run_meta_bench(s, time_sec, ceiling);
     else {
@@ -1009,6 +1108,8 @@ static void local_usage(const char *prog)
         "   or: %s --bench meta --meta-storage <path> [--time seconds] [--perf]\n"
         "Local engine benchmarks; no cluster or sockets. Scratch roots must be\n"
         "empty. Data sweeps paths x QD 1/16/64/256; meta measures KV and Raft log.\n"
+        "--rw read|write|both isolates phases; read requires --window.\n"
+        "--full-paths skips the path-prefix ladder; --writer-stats enables wait timing.\n"
         "--skip-ceiling omits the separate fio/raw ceiling probe.\n"
         "--storage may repeat; meta also accepts its first root. Default time: 10s.\n",
         prog, prog);
@@ -1038,11 +1139,14 @@ int efs_bench_local_main(int argc, char **argv)
     s.listen_fd = -1;
     const char *kind = NULL;
     double duration = 10.0;
-    int qd = 0, ceiling = 1;
+    int qd = 0, ceiling = 1, full_paths = 0, writer_stats = 0;
+    const char *rw = "both";
     uint32_t window = 0;
     for (int i = 1; i < argc; i++) {
         const char *opt = argv[i];
         if (!strcmp(opt, "--help")) { local_usage(argv[0]); return 0; }
+        if (!strcmp(opt, "--writer-stats")) { writer_stats = 1; continue; }
+        if (!strcmp(opt, "--full-paths")) { full_paths = 1; continue; }
         if (!strcmp(opt, "--skip-ceiling")) { ceiling = 0; continue; }
         if (!strcmp(opt, "--perf")) { s.perf = 1; continue; }
         if (!strcmp(opt, "--direct-io")) { s.direct_io = 1; continue; }
@@ -1053,6 +1157,9 @@ int efs_bench_local_main(int argc, char **argv)
         if (!strcmp(opt, "--bench")) {
             if (kind || (strcmp(value, "data") && strcmp(value, "meta"))) goto invalid;
             kind = value;
+        } else if (!strcmp(opt, "--rw")) {
+            if (strcmp(value, "both") && strcmp(value, "read") && strcmp(value, "write")) goto invalid;
+            rw = value;
         } else if (!strcmp(opt, "--storage")) {
             if (local_storage_arg(&s, value)) goto invalid;
         } else if (!strcmp(opt, "--meta-storage")) {
@@ -1079,11 +1186,13 @@ int efs_bench_local_main(int argc, char **argv)
             s.nwriters = (int)n;
         } else goto invalid;
     }
-    if (((qd || window) && kind && strcmp(kind, "data")) || !kind || (!s.storage_path_count &&
+    if ((!strcmp(rw, "read") && !window) ||
+        ((full_paths || writer_stats || strcmp(rw, "both")) && kind && strcmp(kind, "data")) ||
+        ((qd || window) && kind && strcmp(kind, "data")) || !kind || (!s.storage_path_count &&
         (!strcmp(kind, "data") || !s.meta_storage[0]))) goto invalid;
     pthread_mutex_init(&s.lock, NULL);
     pthread_cond_init(&s.export_idle_cv, NULL);
-    int rc = run_local_bench(&s, kind, duration, qd, ceiling, window);
+    int rc = run_local_bench(&s, kind, duration, qd, ceiling, window, rw, full_paths, writer_stats);
     pthread_cond_destroy(&s.export_idle_cv);
     pthread_mutex_destroy(&s.lock);
     return rc;

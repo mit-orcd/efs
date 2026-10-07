@@ -110,10 +110,41 @@ def main():
             run('efs-bench', '--bench', 'io', '--storage', root, '--io-size', size, ok=False)
         run('efs-bench', '--bench', 'io', '--storage', root, '--rw', 'read', '--sync', ok=False)
         assert keep.read_text() == 'keep'
+    for rw in ['read', 'write']:
+        for nw in ['0', '2']:
+            with tempfile.TemporaryDirectory(prefix='efs-engine-phase-') as root:
+                out = run('efs-bench', '--bench', 'data', '--storage', root,
+                          '--qd', '2', '--window', '2', '--time', '.1',
+                          '--writers', nw, '--rw', rw, '--full-paths',
+                          '--writer-stats', '--skip-ceiling')
+                rows = [dict(re.findall(r'(\w+)=([^\s]+)', line)) for line in out.splitlines()
+                        if line.startswith('BENCH_OK ')]
+                assert len(rows) == 1 and rows[0]['rw'] == rw, out
+                assert rows[0]['idle_workers'] == '0', out
+                waits = [dict(re.findall(r'(\w+)=([^\s]+)', line)) for line in out.splitlines()
+                         if line.startswith('BENCH_WAIT ')]
+                if rw == 'write':
+                    assert len(waits) == 1 and waits[0]['jobs'] == rows[0]['ops'], out
+                    assert waits[0]['queued'] == ('0' if nw == '0' else rows[0]['ops']), out
+                    assert int(waits[0]['peak_active']) <= 2, out
+                else:
+                    assert not waits, out
+    with tempfile.TemporaryDirectory(prefix='efs-engine-roots-a-') as a, tempfile.TemporaryDirectory(prefix='efs-engine-roots-b-') as b:
+        out = run('efs-bench', '--bench', 'data', '--storage', a, '--storage', b,
+                  '--qd', '2', '--window', '2', '--time', '.1', '--writers', '0',
+                  '--rw', 'write', '--full-paths', '--skip-ceiling')
+        roots = [dict(re.findall(r'(\w+)=([^\s]+)', line)) for line in out.splitlines()
+                 if line.startswith('BENCH_ROOT ')]
+        assert len(roots) == 2 and all(int(r['writes']) > 0 for r in roots), out
+        assert sum(int(r['writes']) for r in roots) == int(dict(re.findall(r'(\w+)=([^\s]+)', next(line for line in out.splitlines() if line.startswith('BENCH_OK '))))['ops']), out
+    with tempfile.TemporaryDirectory(prefix='efs-engine-invalid-') as root:
+        run('efs-bench', '--bench', 'data', '--storage', root, '--rw', 'read', ok=False)
+        run('efs-bench', '--bench', 'meta', '--storage', root, '--rw', 'write', ok=False)
+        run('efs-bench', '--bench', 'data', '--storage', root, '--rw', 'bad', ok=False)
     if args.smoke:
         for kind, option in [('meta', '--meta-storage'), ('data', '--storage')]:
             with tempfile.TemporaryDirectory(prefix='efs-bench-smoke-') as root:
-                opts = ['--writers', '2'] if kind == 'data' else []
+                opts = ['--writers', '2', '--qd', '2', '--window', '2', '--skip-ceiling'] if kind == 'data' else ['--skip-ceiling']
                 out = run('efs-bench', '--bench', kind, option, root,
                           '--time', '.03', *opts, timeout=180)
                 assert f'BENCH_OK kind={kind}' in out, out

@@ -73,6 +73,9 @@ def parser():
     p.add_argument('--hash-sizes', type=sizes, default=sizes('4K,64K,128K,1M'))
     p.add_argument('--threads', type=integers, help='BLAKE3 thread ladder; default 1,2,4,affinity CPU count')
     p.add_argument('--writers', type=writers, default=writers('0,2,auto'), help='inline, fixed pool and automatic pool variants')
+    p.add_argument('--data-rw', choices=['both', 'split', 'read', 'write'], default='both', help='split records isolated write and populated-read cases')
+    p.add_argument('--data-full-paths', action='store_true', help='measure all selected roots together without the engine prefix ladder')
+    p.add_argument('--writer-stats', action='store_true', help='opt-in engine writer admission, handoff and service timing')
     p.add_argument('--data-size', type=sizes, default=sizes('256M'), help='bounded local data working set across all QD slots (fragment bytes)')
     p.add_argument('--qds', type=integers, default=integers('1,16,64,256'))
     p.add_argument('--modes', default=DEFAULT_MODES, help='comma-separated modes; all adds remote modes')
@@ -169,10 +172,15 @@ def cases_for(a, cpus):
             add(f'blake3-{style}-{size}-t{nt}', 'blake3',
                 ['--bench', 'blake3', '--time', duration, '--size', str(size), '--threads', str(nt), f'--{style}'])
     if 'data' in modes:
-        for direct, writer, qd in itertools.product([False, True], a.writers, a.qds):
-            add(f'data-{"direct" if direct else "buffered"}-w{writer}-qd{qd}', 'data',
+        phases = ['write', 'read'] if a.data_rw == 'split' else [a.data_rw]
+        for direct, writer, qd, rw in itertools.product([False, True], a.writers, a.qds, phases):
+            suffix = '' if rw == 'both' else f'-{rw}'
+            add(f'data-{"direct" if direct else "buffered"}-w{writer}-qd{qd}{suffix}', 'data',
                 ['--bench', 'data', '--time', duration, '--qd', str(qd), '--window', str(a.data_size[0] // (65536 * qd)),
-                 '--direct-io' if direct else '--no-direct-io'] + ([] if writer == 'auto' else ['--writers', str(writer)]))
+                 '--rw', rw, '--direct-io' if direct else '--no-direct-io'] +
+                ([] if writer == 'auto' else ['--writers', str(writer)]) +
+                (['--full-paths'] if a.data_full_paths else []) +
+                (['--writer-stats'] if a.writer_stats else []))
     if 'meta' in modes:
         add('meta-local', 'meta', ['--bench', 'meta', '--time', duration])
     # A fixed-size PUT primes the entire read window; no reads of uninitialized
@@ -637,7 +645,7 @@ def main(argv=None):
                 workload_cmd = cmd[:]
                 control_dir = None
                 control = ack = None
-                if stage == 'perf' and case['mode'] in ['io', 'io-blake3']:
+                if stage == 'perf' and case['mode'] in ['io', 'io-blake3', 'data']:
                     control_dir = tempfile.TemporaryDirectory(prefix='efs-bench-perf-control-')
                     control, ack = str(Path(control_dir.name) / 'control'), str(Path(control_dir.name) / 'ack')
                     os.mkfifo(control); os.mkfifo(ack)

@@ -29,6 +29,16 @@ class ProfileTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bench.cases_for(a, 4)
 
+    def test_split_engine_phases_and_wait_instrumentation(self):
+        a = bench.parser().parse_args(['--modes', 'data', '--qds', '1', '--writers', '2',
+                                      '--data-rw', 'split', '--data-full-paths', '--writer-stats'])
+        cases = bench.cases_for(a, 4)
+        self.assertEqual(len(cases), 4)
+        self.assertEqual({c['args'][c['args'].index('--rw') + 1] for c in cases}, {'read', 'write'})
+        for case in cases:
+            self.assertIn('--full-paths', case['args'])
+            self.assertIn('--writer-stats', case['args'])
+
     def test_raw_io_pairs_use_identical_geometry(self):
         a = bench.parser().parse_args(['--modes', 'io,io-blake3', '--io-sizes', '64K', '--qds', '2', '--data-size', '1M'])
         cases = bench.cases_for(a, 4)

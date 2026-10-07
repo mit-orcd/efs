@@ -55,3 +55,5 @@ __pycache__/
 /tests/test_mtime_barrier
 
 /tests/test_kv_seg_index
+
+/tests/test_writer_routing

@@ -216,6 +216,15 @@ int server_write_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                    const uint8_t checksum[EFS_HASH_SIZE]);
 
 int server_default_writer_threads(void);
+/* Opt-in diagnostics; enable/reset only while no writes are in flight. */
+struct efs_writer_stats {
+    uint64_t jobs, queued, fallback, active, peak_active;
+    uint64_t admission_us, admission_max_us, queue_us, queue_max_us;
+    uint64_t service_us, service_max_us, resume_us, resume_max_us;
+    uint64_t lock_us, lock_max_us;
+};
+void server_writer_stats_reset(int enabled);
+void server_writer_stats_snapshot(struct efs_writer_stats *out);
 int server_writer_pool_start(struct efsd_server *s);
 void server_writer_pool_stop(struct efsd_server *s);
 /* Grow the least-q path set after a live add-storage (append-only). */

@@ -25,6 +25,8 @@ struct writer_job {
     const uint8_t *data;
     uint32_t data_len;
     const uint8_t *checksum;
+    int measure, fallback;
+    uint64_t submitted_us, queued_us, started_us, finished_us, lock_us;
     int result;
     int path_hint; /* efs_tls_path_hint of the handler; the write runs here */
 };
@@ -83,6 +85,34 @@ struct writer_slot {
 static struct writer_slot g_slots[EFS_MAX_WRITERS];
 static int g_slot_rr;
 static int g_slots_live;
+static int g_stats_enabled;
+static struct efs_writer_stats g_stats;
+
+void server_writer_stats_reset(int enabled)
+{
+    memset(&g_stats, 0, sizeof(g_stats));
+    g_stats_enabled = enabled;
+}
+
+void server_writer_stats_snapshot(struct efs_writer_stats *out)
+{
+    /* Call after the measured producers have joined. */
+    *out = g_stats;
+}
+
+static void stats_max(uint64_t *dst, uint64_t value)
+{
+    uint64_t old = __atomic_load_n(dst, __ATOMIC_RELAXED);
+    while (old < value && !__atomic_compare_exchange_n(dst, &old, value, 0,
+               __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
+}
+
+static void stats_time(uint64_t *sum, uint64_t *max, uint64_t value)
+{
+    __atomic_fetch_add(sum, value, __ATOMIC_RELAXED);
+    stats_max(max, value);
+}
+
 
 int server_default_writer_threads(void)
 {
@@ -153,6 +183,7 @@ static uint32_t pick_write_path(struct writer_job *job, int existing)
 static int run_job(struct writer_job *job)
 {
     int rc = EFS_OK;
+    if (job->measure) job->started_us = efs_iostats_now_us();
     int saved_zero = efs_tls_write_known_zero;
     int saved_root = efs_tls_write_root;
     uint64_t saved_gen = efs_tls_chunk_gen;
@@ -194,6 +225,7 @@ static int run_job(struct writer_job *job)
         efs_iostats_add(EFS_IOSTAT_DISK_WRITE, job->data_len,
                         efs_iostats_now_us() - io_t0, rc != EFS_OK);
     }
+    if (job->measure) job->finished_us = efs_iostats_now_us();
     efs_tls_path_used = efs_tls_write_root;
     efs_tls_write_known_zero = saved_zero;
     efs_tls_write_root = saved_root;
@@ -248,6 +280,7 @@ static int slot_run_locked(struct writer_slot *sl, struct writer_job *job)
 {
     int rc;
 
+    if (job->measure) job->queued_us = efs_iostats_now_us();
     sl->job = job;
     sl->state = WSLOT_QUEUED;
     pthread_cond_signal(&sl->cv_work);
@@ -289,7 +322,12 @@ static int slot_handoff(struct writer_job *job, int nw, int *queued)
     {
         struct writer_slot *sl = &g_slots[start % nw];
         int rc;
+        uint64_t lock_start = job->measure ? efs_iostats_now_us() : 0;
         pthread_mutex_lock(&sl->mu);
+        if (job->measure) {
+            job->fallback = 1;
+            job->lock_us += efs_iostats_now_us() - lock_start;
+        }
         while (sl->state != WSLOT_EMPTY && g_pool.running) {
             if (pthread_cond_timedwait(&sl->cv_empty, &sl->mu, &deadline) ==
                 ETIMEDOUT) {
@@ -308,7 +346,7 @@ static int slot_handoff(struct writer_job *job, int nw, int *queued)
     }
 }
 
-static int submit_and_wait(struct writer_job *job)
+static int submit_and_wait_inner(struct writer_job *job)
 {
     int existing = -1;
     uint32_t pi;
@@ -352,6 +390,36 @@ static int submit_and_wait(struct writer_job *job)
     return rc;
 }
 
+static int submit_and_wait(struct writer_job *job)
+{
+    job->measure = g_stats_enabled;
+    if (!job->measure) return submit_and_wait_inner(job);
+    job->submitted_us = efs_iostats_now_us();
+    uint64_t active = __atomic_add_fetch(&g_stats.active, 1, __ATOMIC_RELAXED);
+    stats_max(&g_stats.peak_active, active);
+    int rc = submit_and_wait_inner(job);
+    uint64_t done = efs_iostats_now_us();
+    __atomic_fetch_sub(&g_stats.active, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&g_stats.jobs, 1, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&g_stats.queued, !!job->queued_us, __ATOMIC_RELAXED);
+    __atomic_fetch_add(&g_stats.fallback, job->fallback, __ATOMIC_RELAXED);
+    uint64_t admitted = job->queued_us ? job->queued_us :
+                        (job->started_us ? job->started_us : done);
+    stats_time(&g_stats.admission_us, &g_stats.admission_max_us,
+               admitted - job->submitted_us);
+    if (job->started_us && job->queued_us)
+        stats_time(&g_stats.queue_us, &g_stats.queue_max_us,
+                   job->started_us - job->queued_us);
+    if (job->finished_us) {
+        stats_time(&g_stats.service_us, &g_stats.service_max_us,
+                   job->finished_us - job->started_us);
+        stats_time(&g_stats.resume_us, &g_stats.resume_max_us,
+                   done - job->finished_us);
+    }
+    stats_time(&g_stats.lock_us, &g_stats.lock_max_us, job->lock_us);
+    return rc;
+}
+
 void server_writer_set_npaths(uint32_t n)
 {
     if (n < 1)
@@ -371,8 +439,6 @@ int server_writer_pool_start(struct efsd_server *s)
         nw = server_default_writer_threads();
     s->nwriters = nw;
     g_pool.nwriters = nw;
-    if (nw <= 0)
-        return 0;
 
     uint32_t npaths = s->storage_path_count ? s->storage_path_count : 1;
     if (npaths > EFS_MAX_STORAGE_PATHS)
@@ -382,6 +448,8 @@ int server_writer_pool_start(struct efsd_server *s)
     pthread_mutex_init(&g_pool.lock, NULL);
     pthread_cond_init(&g_pool.not_empty, NULL);
     pthread_cond_init(&g_pool.not_full, NULL);
+    if (nw <= 0)
+        return 0;
     g_pool.threads = calloc((size_t)nw, sizeof(pthread_t));
     if (!g_pool.threads) {
         server_writer_pool_stop(s);
