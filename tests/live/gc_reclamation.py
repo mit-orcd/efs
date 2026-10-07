@@ -41,6 +41,10 @@ p.add_argument('--rename-cache', action='store_true', help='root rename evicts t
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
 p.add_argument('--compactor-pressure', action='store_true', help='fault-build follower pressure with finite stop and recovery')
+p.add_argument('--lookup-barrier',action='store_true',help='delay an actual LOOKUP row across local chmod')
+p.add_argument('--storage-roots',type=int,choices=(1,2),default=1)
+p.add_argument('--put-reply-fault',action='store_true',help='fault client loses accepted PUT replies and collides path hints')
+p.add_argument('--opid-failover',action='store_true',help='kill the leader after a committed CREATE reply is lost')
 p.add_argument('--report-audit', action='store_true', help='small-file publication trace and cold verification')
 p.add_argument('--server-binary', type=Path, help='owned experimental/fault daemon; normal client/mgmt remain unchanged')
 p.add_argument('--client-binary', type=Path, help='owned test-only FUSE binary')
@@ -59,6 +63,7 @@ for port in range(a.port, a.port+4):
 work = Path(tempfile.mkdtemp(prefix='gc-'+a.mode+'-', dir=parents[0]))
 other = Path(tempfile.mkdtemp(prefix='gc-'+a.mode+'-', dir=parents[1]))
 roots = [work/'n1',work/'n2',other/'n3',other/'n4']
+data_roots=[root/('storage'+str(i)) for root in roots for i in range(2)] if a.storage_roots==2 else roots
 mount = work/'mnt'
 mount.mkdir()
 digest=hashlib.sha256()
@@ -79,6 +84,12 @@ if a.worker_fault:
     assert a.workers and a.client_binary,'worker faults require explicit fault client and --workers'
     env['EFS_FAULT_REPLY_BUFFER']=a.worker_fault
 if a.pressure or a.mixed_reads:env.update(EFS_DCACHE_BYTES=str(16<<20),EFS_DCACHE_HARD_BYTES=str(32<<20),EFS_DCACHE_DRAIN_BYTES=str(32<<20),EFS_BUF_BUDGET_TRACE='1')
+if a.lookup_barrier:
+    assert a.client_binary,'LOOKUP barrier requires fault client'
+    env['EFS_FAULT_LOOKUP_BARRIER']=str(work)
+if a.put_reply_fault:
+    assert a.client_binary,'PUT reply fault requires explicit fault client'
+if a.opid_failover:assert a.opid and not a.opid_restart
 servers=[]
 client=None
 peer=None
@@ -113,6 +124,11 @@ def start():
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
         cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota','4G' if a.compactor_pressure else '1G','--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        if a.storage_roots==2:
+            first=root/'storage0';second=root/'storage1'
+            first.mkdir(exist_ok=True);second.mkdir(exist_ok=True)
+            cmd[cmd.index(root)]=first
+            cmd += ['--storage',second]
         if i:cmd += ['--join',f'127.0.0.1:{a.port}']
         node_env=dict(env)
         if a.compactor_pressure:
@@ -156,7 +172,7 @@ def files(ino):
     seg=[]
     for _ in range(5):seg.append(f'{ino%10000:04d}');ino//=10000
     found=[]
-    for root in roots:
+    for root in data_roots:
         folder=root/'data/exports/1'
         for part in reversed(seg):folder/=part
         found += [x for x in folder.glob('*/*') if x.is_file() and '.sum' not in x.name]
@@ -606,6 +622,57 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         os.unlink(target);os.unlink(donor)
         wait(lambda:not files(target_ino) and not files(donor_ino),'integrity fixtures reclaimed')
         print('two swapped fragments fail read; restored bytes verify cold PASS',flush=True)
+    if a.lookup_barrier:
+        target,fd,target_ino=create('memo-blocked',b'memo-race')
+        os.close(fd);unmount();mount_client()
+        fd=os.open(target,os.O_RDWR)
+        (work/'lookup-arm').touch()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            stale=pool.submit(os.stat,target)
+            deadline=time.monotonic()+10
+            while not (work/'lookup-entered').exists():
+                assert time.monotonic()<deadline,'LOOKUP barrier not reached'
+                time.sleep(.01)
+            try:os.fchmod(fd,0o640)
+            finally:(work/'lookup-arm').unlink()
+            old=stale.result(timeout=10)
+        current=os.stat(target)
+        assert current.st_mode&0o777==0o640,(old,current)
+        os.close(fd);target.unlink()
+        wait(lambda:not files(target_ino),'lookup barrier file reclaimed')
+        (work/'lookup-barrier.json').write_text(json.dumps({'old_mode':old.st_mode,'new_mode':current.st_mode},indent=2))
+        print('actual LOOKUP reply spanning chmod cannot repopulate stale memo PASS',flush=True)
+    if a.put_reply_fault:
+        # Enable this one-object fault on a fresh process, independently of
+        # earlier memo tests/remounts. Preserve old process logs as evidence.
+        unmount();env['EFS_FAULT_PUT_REPLY_COLLISION']='1';mount_client()
+        log_offset=(work/'fuse.log').stat().st_size
+        probe,fd,probe_ino=create('ambiguous-put-fuse',bytes(range(256))*4096)
+        os.close(fd)
+        with (work/'fuse.log').open('rb') as log:
+            log.seek(log_offset);text=log.read().decode()
+        faults=re.findall(r'put-reply fault ino=(\d+) ci=(\d+) fi=(\d+) collision=1',text)
+        assert len(faults)==3,faults
+        target,ci=faults[0][:2]
+        attempts=re.findall(r'put-attempt ino='+target+r' ci='+ci+r' fi=(\d+) gen=(\d+) first=(\d+) hint=(\d+)',text)
+        retried=[x for x in attempts if x[2]=='0']
+        assert len(retried)>=3 and all(x[3]=='0' for x in retried),attempts
+        assert len({x[1] for x in attempts})==1,attempts
+        # Inspect both roots for duplicate immutable fragment identities.
+        identities={}
+        for root in roots:
+            for path in root.rglob('*'):
+                if path.is_file() and re.match(r'\d+\.\d+\.',path.name):
+                    key=(path.parent.name,path.name)
+                    assert key not in identities,(key,path,identities.get(key))
+                    identities[key]=str(path)
+        usage=totals(status())['data_usage_bytes']
+        assert usage==len(identities)*65536,(usage,len(identities))
+        unmount();env.pop('EFS_FAULT_PUT_REPLY_COLLISION');mount_client()
+        assert probe.read_bytes()==bytes(range(256))*4096*9
+        probe.unlink();wait(lambda:not files(probe_ino),'ambiguous PUT fixture reclaimed')
+        (work/'put-reply-collision.json').write_text(json.dumps({'faults':faults,'attempts':attempts,'unique_objects':len(identities),'data_usage_bytes':usage},indent=2))
+        print('actual FUSE accepted-reply loss/collision: retries probe same generation; cold bytes and reclaim PASS',flush=True)
     if a.workers:
         # Prior cold integrity reads can leave kernel readahead callbacks in
         # flight. Give the retirement/RSS gate its own fresh client process.
@@ -750,11 +817,13 @@ static efs_ino_t call(unsigned type,const void*req,unsigned size,unsigned seq){
 int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     struct efs_msg_inode_create create={0};create.export_id=1;create.parent=1;create.mode=S_IFREG|0600;strcpy(create.name,"opid-source");
     efs_ino_t ino=call(EFS_MSG_INODE_CREATE,&create,sizeof(create),1);assert(ino);
+    struct efs_msg_inode_link link={0};link.export_id=1;link.src_ino=ino;link.new_parent=1;strcpy(link.new_name,"opid-link");
+    assert(call(EFS_MSG_INODE_LINK,&link,sizeof(link),2)==ino);
     struct efs_msg_inode_rename_at rename={0};rename.export_id=1;rename.old_parent=rename.new_parent=1;strcpy(rename.old_name,"opid-source");strcpy(rename.new_name,"opid-renamed");
-    assert(call(EFS_MSG_INODE_RENAME_AT,&rename,sizeof(rename),2)==ino);
+    assert(call(EFS_MSG_INODE_RENAME_AT,&rename,sizeof(rename),3)==ino);
     struct efs_msg_inode_unlink unlink={0};unlink.export_id=1;unlink.parent=1;strcpy(unlink.name,"opid-renamed");
-    assert(call(EFS_MSG_INODE_UNLINK,&unlink,sizeof(unlink),3)==ino);
-    puts("CREATE/RENAME/UNLINK lost replies recovered with same operation identity PASS");
+    assert(call(EFS_MSG_INODE_UNLINK,&unlink,sizeof(unlink),4)==ino);
+    puts("CREATE/LINK/RENAME/UNLINK lost replies recovered with same operation identity PASS");
 }
 ''')
         run(['cc','-I'+str(source/'include'),helper,source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',work/'opid-client'])
@@ -777,6 +846,24 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
                             if primary: endpoint=a.port+primary-1
                         if reply[1]==0 and kind not in dropped:
                             dropped[kind]=(request,reply)
+                            if a.opid_failover and kind==45:
+                                for index,proc in enumerate(servers):
+                                    reply_status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+index}'],capture_output=True,text=True).stdout
+                                    if re.search(r'group 0 hosted=1 role=LEADER ',reply_status):
+                                        proc.kill();proc.wait(timeout=10);dead=index;break
+                                else:raise AssertionError('no leader to fail over')
+                                endpoint=a.port+next(i for i in range(4) if i!=dead)
+                                deadline=time.monotonic()+60
+                                while True:
+                                    reply_status=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{endpoint}'],capture_output=True,text=True).stdout
+                                    if 'group 0 hosted=1 role=LEADER ' in reply_status:break
+                                    leader_match=re.search(r'group 0 .*leader=(\d+)',reply_status)
+                                    if leader_match and int(leader_match[1])>=0:
+                                        candidate=int(leader_match[1])
+                                        if candidate!=dead:endpoint=a.port+candidate
+                                    assert time.monotonic()<deadline,'failover election timed out'
+                                    time.sleep(.1)
+                                print('lost committed CREATE replay crosses leader death PASS',flush=True)
                             if a.opid_restart:
                                 client_socket.close()
                                 stop(crash=True);start();endpoint=a.port
@@ -791,7 +878,8 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         try:
             run([work/'opid-client',proxy_port],timeout=120 if a.opid_restart else 60)
             assert not proxy_errors,proxy_errors
-            assert len(dropped)==len(replayed)==3,(dropped.keys(),replayed.keys())
+            if a.opid_failover:unmount();stop();start();mount_client()
+            assert len(dropped)==len(replayed)==4,(dropped.keys(),replayed.keys())
             for name in ('opid-source','opid-renamed'):
                 def absent():
                     reply=run([source/'efs-mgmt','raft-lookup',f'127.0.0.1:{target}','1',name],capture_output=True,text=True).stdout
@@ -799,9 +887,13 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
                     assert 'status=1' in reply,reply
                     return True
                 wait(absent,'lost-reply namespace absent after replay',30)
-            (work/'namespace-lost-replies.json').write_text(json.dumps({'dropped_reply_types':sorted(dropped),'replayed_types':sorted(replayed),'unchanged_request_identity':True,'crash_restart_between_commit_and_replay':a.opid_restart},indent=2))
+            (work/'namespace-lost-replies.json').write_text(json.dumps({'dropped_reply_types':sorted(dropped),'replayed_types':sorted(replayed),'unchanged_request_identity':True,'crash_restart_between_commit_and_replay':a.opid_restart,'leader_death_after_create_commit':a.opid_failover},indent=2))
         finally:
             proxy_stop.set();listener.close();proxy_thread.join(5)
+    if a.opid:
+        linked=mount/'opid-link'
+        assert linked.stat().st_nlink==1
+        linked.unlink()
     # Two peers repeatedly touch adjacent ranges until the span chain folds.
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
     peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
@@ -931,7 +1023,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     start()
     # No user fragment remains, even on a restart. Physical scan is independent
     # of logical namespace disappearance and the asynchronous quota snapshot.
-    wait(lambda:all(not [x for x in (root/'data/exports/1').glob('**/*') if x.is_file()] for root in roots),
+    wait(lambda:all(not [x for x in (root/'data/exports/1').glob('**/*') if x.is_file()] for root in data_roots),
          'physical inventory empty after restart',180)
     wait(drained,'restart orphan and GC queues drained',180)
     final=status()

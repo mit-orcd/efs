@@ -4748,12 +4748,33 @@ static void fill_entry(fuse_ino_t ino, struct fuse_entry_param *e,
     e->entry_timeout = 0.0;
 }
 
+#if EFS_FAULTS
+static void lookup_reply_barrier(const struct efs_inode *row)
+{
+    static int used;
+    const char *directory = getenv("EFS_FAULT_LOOKUP_BARRIER");
+    char armed[1024], entered[1024];
+    if (!directory || !t_lookup_memo_serial || strcmp(row->name,"memo-blocked")) return;
+    if (snprintf(armed,sizeof(armed),"%s/lookup-arm",directory)>=(int)sizeof(armed) ||
+        snprintf(entered,sizeof(entered),"%s/lookup-entered",directory)>=(int)sizeof(entered)) return;
+    if (access(armed,F_OK) || !__sync_bool_compare_and_swap(&used,0,1)) return;
+    int fd=open(entered,O_CREAT|O_WRONLY|O_EXCL,0600);
+    if(fd>=0)close(fd);
+    uint64_t deadline=fuse_now_us()+10000000ull;
+    while(!access(armed,F_OK) && fuse_now_us()<deadline)usleep(1000);
+    fprintf(stderr,"lookup-reply barrier ino=%llu released\n",(unsigned long long)row->ino);
+}
+#endif
+
 static void fill_entry_row(fuse_ino_t ino, struct fuse_entry_param *e,
                            const struct efs_inode *row)
 {
     struct stat st;
     fill_stat_from_inode(&st, row);
     fill_entry(ino, e, &st);
+#if EFS_FAULTS
+    lookup_reply_barrier(row);
+#endif
     lookup_memo_put(row);
 }
 
