@@ -147,6 +147,7 @@ test-report-pressure:
 	python3 tests/test_report_retry_budget.py
 	python3 tests/test_write_queue.py
 	python3 tests/test_conn_checkout_budget.py
+	python3 tests/test_net_receive_deadline.py
 	python3 tests/test_wb_worker_budget.py
 	python3 tests/test_put_pool_budget.py
 	python3 tests/test_put_window_deadline.py

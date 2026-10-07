@@ -1434,16 +1434,15 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
     return EFS_OK;
 }
 
-static __thread uint64_t tl_rpc_deadline_ms;
 
 void efs_client_rpc_set_deadline_ms(uint64_t mono_ms)
 {
-    tl_rpc_deadline_ms = mono_ms;
+    efs_net_set_deadline_ms(mono_ms);
 }
 
 uint64_t efs_client_rpc_deadline_ms(void)
 {
-    return tl_rpc_deadline_ms;
+    return efs_net_deadline_ms();
 }
 
 static int rpc_past_deadline(void)
@@ -1451,11 +1450,12 @@ static int rpc_past_deadline(void)
     struct timespec ts;
     uint64_t now;
 
-    if (!tl_rpc_deadline_ms)
+    uint64_t deadline = efs_net_deadline_ms();
+    if (!deadline)
         return 0;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     now = (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
-    return now >= tl_rpc_deadline_ms;
+    return now >= deadline;
 }
 
 int efs_client_rpc_past_deadline(void)

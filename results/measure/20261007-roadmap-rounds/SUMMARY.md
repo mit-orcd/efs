@@ -21,4 +21,5 @@ implementation rounds.
 | 10 | Prevent chunk-group end from wrapping at the upper uint32 boundary | serial/fan boundary regression PASS on Mac and NUC; live sparse single/peer gates PASS | 8996f08f |
 | 11 | Stop STALE replay fanout after budget expiry without replacing earlier errors | replay/classifier regressions PASS; NUC concurrent and peer-overlap gates PASS | 098e1a3f |
 | 12 | Bound PUT dispatch, wake shard workers immediately, refuse shutdown admissions and recover failed pool startup | inline/full/shutdown/startup/one-slot regressions PASS; NUC concurrent and overlap gates PASS | 6d105c58 |
-| 13 | One connection checkout budget includes wakeups, parent deadline and late-connect rejection | real checkout regression PASS; NUC concurrent and overlap gates PASS | accompanying client commit |
+| 13 | One connection checkout budget includes wakeups, parent deadline and late-connect rejection | real checkout regression PASS; NUC concurrent and overlap gates PASS | 54a36da8 |
+| 14 | Bind RPC scopes to absolute TCP receive deadlines, including slow-drip frames | network regression/wire/fd checks PASS; NUC full 216/217 and 64/64 peer PASS | accompanying client commit |

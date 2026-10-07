@@ -19,10 +19,38 @@
 #include <execinfo.h>
 #include <sys/stat.h>
 #include <time.h>
+#include <limits.h>
 
 /* Keep short: a missing peer must not stall small-file meta flushes for long.
  * Down-marked peers are skipped entirely for EFS_NODE_DOWN_MS after one fail. */
 #define EFS_CONNECT_TIMEOUT_SEC 2
+
+static __thread uint64_t net_deadline_ms;
+
+void efs_net_set_deadline_ms(uint64_t deadline)
+{
+    net_deadline_ms = deadline;
+}
+
+uint64_t efs_net_deadline_ms(void)
+{
+    return net_deadline_ms;
+}
+
+int efs_net_remaining_ms(int cap_ms)
+{
+    if (!net_deadline_ms)
+        return cap_ms;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t now = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    if (now >= net_deadline_ms)
+        return 0;
+    uint64_t remaining = net_deadline_ms - now;
+    if (cap_ms >= 0 && remaining > (uint64_t)cap_ms)
+        return cap_ms;
+    return remaining > INT_MAX ? INT_MAX : (int)remaining;
+}
 
 static void efs_ignore_sigpipe_once(void)
 {
@@ -220,9 +248,26 @@ int efs_recv_all(int fd, void *buf, size_t len)
     uint8_t *p = buf;
     size_t got = 0;
     while (got < len) {
-        ssize_t n = recv(fd, p + got, len - got, 0);
+        int bounded = net_deadline_ms != 0;
+        if (bounded) {
+            int remaining = efs_net_remaining_ms(INT_MAX);
+            if (!remaining) {
+                errno = ETIMEDOUT;
+                return -1;
+            }
+            struct pollfd pfd = {.fd = fd, .events = POLLIN};
+            int ready = poll(&pfd, 1, remaining);
+            if (ready < 0 && errno == EINTR)
+                continue;
+            if (ready <= 0) {
+                if (!ready) errno = ETIMEDOUT;
+                return -1;
+            }
+        }
+        ssize_t n = recv(fd, p + got, len - got, bounded ? MSG_DONTWAIT : 0);
         if (n <= 0) {
-            if (n < 0 && errno == EINTR)
+            if (n < 0 && (errno == EINTR ||
+                (bounded && (errno == EAGAIN || errno == EWOULDBLOCK))))
                 continue;
             if (n == 0)
                 errno = ECONNRESET;

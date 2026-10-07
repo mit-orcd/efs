@@ -4,6 +4,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Thread-local absolute monotonic I/O budget; zero clears it. Shared with
+ * client RPC scopes so partial frames cannot restart a relative timeout. */
+void efs_net_set_deadline_ms(uint64_t deadline);
+uint64_t efs_net_deadline_ms(void);
+/* Clamp a relative wait; negative cap means unlimited. Zero means expired. */
+int efs_net_remaining_ms(int cap_ms);
+
 /* Create a TCP connection to host:port. Returns fd or -1 on error. */
 int efs_connect_tcp(const char *host, uint16_t port);
 
