@@ -2,6 +2,7 @@
 """Private Linux RPC corruption gate for recorded fragment integrity evidence."""
 import ctypes as c
 import os
+import re
 from pathlib import Path
 import socket
 import struct
@@ -67,6 +68,26 @@ for direct in (False, True):
                         assert reply==bytes([5,1]),(label,reply[:40])
                         print(f'{direct=} {roots=} {label}: unavailable PASS',flush=True)
                     good()
+                    endpoint=f'127.0.0.1:{port}'
+                    # Model an ambiguous PUT: send the complete request
+                    # and discard its reply. All retries lose their root hint
+                    # and must probe, retaining exactly one object and charge.
+                    usage_before=subprocess.run([str(source/'efs-mgmt'),'gc-status',endpoint],capture_output=True,text=True,check=True).stdout
+                    body=bytes(put)+b'x'*65536
+                    with socket.create_connection(('127.0.0.1',port),5) as lost:
+                        lost.sendall(struct.pack('>IB',len(body)+1,6)+body)
+                        # Wait for the reply to prove processing, then discard
+                        # it without parsing status or teaching a path hint.
+                        assert lost.recv(1,socket.MSG_PEEK)
+                    put.hint=0
+                    for retry in range(20):
+                        assert rpc(6,bytes(put)+b'x'*65536)[:2]==bytes([7,0])
+                    usage_after=subprocess.run([str(source/'efs-mgmt'),'gc-status',endpoint],capture_output=True,text=True,check=True).stdout
+                    assert re.search(r'data_usage_bytes=(\d+)',usage_before).group(1)==re.search(r'data_usage_bytes=(\d+)',usage_after).group(1),(usage_before,usage_after)
+                    retry_files=[path for root in Path(work).glob('root*') for path in (root/'data/exports/1').rglob('*') if path.is_file()]
+                    assert len(retry_files)==1,retry_files
+                    good()
+                    print(f'{direct=} {roots=} hintless PUT retries preserve one object and quota charge PASS',flush=True)
                     print(f'{direct=} {roots=} rejected digest/truncated body cannot change fragment size PASS',flush=True)
                     endpoint=f'127.0.0.1:{port}'
                     shrink=subprocess.run([str(source/'efs-mgmt'),'shrink-quota',endpoint,'8M'],capture_output=True,text=True)
@@ -94,6 +115,19 @@ for direct in (False, True):
                     with path.open('r+b') as fragment:fragment.write(b'y')
                     bad('payload flip')
                     path.write_bytes(original);good()
+                    proc.terminate();assert proc.wait(20)==0
+                    proc=subprocess.Popen(cmd,env=dict(os.environ,EFS_MD_RAFT_N='3'),stdout=log,stderr=log)
+                    for _ in range(100):
+                        assert proc.poll() is None,'daemon exited on restart'
+                        try:
+                            with socket.create_connection(('127.0.0.1',port),.1):break
+                        except OSError:time.sleep(.1)
+                    else:raise AssertionError('restart timeout')
+                    good()
+                    usage_restart=subprocess.run([str(source/'efs-mgmt'),'gc-status',endpoint],capture_output=True,text=True,check=True).stdout
+                    assert re.search(r'data_usage_bytes=(\d+)',usage_after).group(1)==re.search(r'data_usage_bytes=(\d+)',usage_restart).group(1),(usage_after,usage_restart)
+                    assert rpc(6,bytes(put)+b'x'*65536)[:2]==bytes([7,0]);good()
+                    print(f'{direct=} {roots=} hintless retry after restart retains bytes and accounting PASS',flush=True)
                     with path.open('r+b') as fragment:fragment.truncate(65536)
                     bad('missing digest')
                     path.write_bytes(original[:65536]+original[65536:65544])
