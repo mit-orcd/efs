@@ -481,17 +481,31 @@ static void putid_miss_note(efs_ino_t ino, uint32_t ci,
     uint64_t now;
     struct timespec ts;
 
-    __sync_fetch_and_add(&n, 1);
+    uint64_t count = __sync_add_and_fetch(&n, 1);
     clock_gettime(CLOCK_MONOTONIC, &ts);
     now = (uint64_t)ts.tv_sec * 1000ull + (uint64_t)ts.tv_nsec / 1000000ull;
-    if (now - last_ms < 1000ull)
+    uint64_t previous = __sync_val_compare_and_swap(&last_ms, 0, 0);
+    if (now - previous < 1000ull ||
+        !__sync_bool_compare_and_swap(&last_ms, previous, now))
         return;
-    last_ms = now;
     fprintf(stderr,
-            "efs: report rec ino=%llu ci=%u identity from staging table "
+            "efs: report rec ino=%llu ci=%u rejected unowned staging observation "
             "nodes=%u,%u,%u (putid miss, n=%llu)\n",
             (unsigned long long)ino, ci, nodes[0], nodes[1], nodes[2],
-            (unsigned long long)n);
+            (unsigned long long)count);
+}
+
+/* Both initial and STALE-rebuilt REPORTs use the same ownership rule.
+ * Nonzero nodes in a fetched table are observations, never PUT evidence. */
+static int report_fill_owned(efs_ino_t ino, uint32_t ci,
+                             struct efs_chunk_rec *rec, uint64_t *seq,
+                             const efs_node_id_t observed[EFS_NUM_FRAGMENTS])
+{
+    if (putid_fill(ino, ci, rec, seq) || dcache_object_of(ino, ci, rec, seq))
+        return 1;
+    putid_miss_note(ino, ci, observed);
+    report_retry_without_identity(ino, ci);
+    return 0;
 }
 
 static void now_ns(uint64_t *sec, uint32_t *nsec)
@@ -1761,14 +1775,8 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
         crecs[cn].publish_epoch = 0;
         crecs[cn].publish_flags = 0;
         cseq[cn] = 0;
-        if (!putid_fill(ds.chunk_inos[i], ds.chunk_idxs[i], &crecs[cn], &cseq[cn]) &&
-            !dcache_object_of(ds.chunk_inos[i], ds.chunk_idxs[i],
-                              &crecs[cn], &cseq[cn])) {
-            putid_miss_note(ds.chunk_inos[i], ds.chunk_idxs[i],
-                            ce.fragment_nodes);
-            /* No successful unpublished PUT identity: this is a table
-             * observation, which may name an already superseded object. */
-            report_retry_without_identity(ds.chunk_inos[i], ds.chunk_idxs[i]);
+        if (!report_fill_owned(ds.chunk_inos[i], ds.chunk_idxs[i],
+                               &crecs[cn], &cseq[cn], ce.fragment_nodes)) {
             ds.chunk_inos[i] = 0;
             continue;
         }
@@ -1958,15 +1966,8 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                 crecs[cn].publish_epoch = 0;
                 crecs[cn].publish_flags = 0;
                 cseq[cn] = 0;
-                if (!putid_fill(ds.chunk_inos[i], ds.chunk_idxs[i],
-                                &crecs[cn], &cseq[cn]) &&
-                    !dcache_object_of(ds.chunk_inos[i], ds.chunk_idxs[i],
-                                      &crecs[cn], &cseq[cn])) {
-                    /* Repull can install a peer's span-only row. A stale
-                     * report mark without local bytes is not pending work. */
-                    putid_miss_note(ds.chunk_inos[i], ds.chunk_idxs[i],
-                                    ce.fragment_nodes);
-                    report_retry_without_identity(ds.chunk_inos[i], ds.chunk_idxs[i]);
+                if (!report_fill_owned(ds.chunk_inos[i], ds.chunk_idxs[i],
+                                       &crecs[cn], &cseq[cn], ce.fragment_nodes)) {
                     ds.chunk_inos[i] = 0;
                     continue;
                 }
