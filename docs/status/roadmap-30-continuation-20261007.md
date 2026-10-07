@@ -234,3 +234,14 @@ and normalize the local shell to default/id 1. Failure guidance uses Raft root
 health/initialization instead of retired named-export/meta-table instructions.
 NUC owned compatibility-label mount passes normal file operations and the full
 physical GC/restart/valid-PUT fence gate. Log `/private/tmp/efs-roadmap-mount-label.log`.
+
+## Round 23 — namespace rejection cannot DROP an unassigned transaction
+
+Participant admission failure in mkdir/rmdir/unlink/link now returns through the
+completion path before PREPARE or cleanup. Baseline over-envelope live rmdir
+returned BUSY but appended 64 DROP records with uninitialized txid (commit sum
+1661→1725). Fixed NUC full-64-lane gate preserves the directory and rejects
+without those mutations; the subsequent physical GC/restart/quota/valid-PUT
+fences pass. Logs `/private/tmp/efs-roadmap-namespace-boundary-baseline.log` and
+`/private/tmp/efs-roadmap-namespace-boundary-fixed.log`. Full-lane envelope
+completeness remains open; no predicate is omitted to force success.

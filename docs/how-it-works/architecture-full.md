@@ -4999,6 +4999,14 @@ transaction preparation, including HASHED layout. Direct namespace plus physical
 GC/restart gates pass. The 64-participant/64-hop ceiling remains; full-depth and
 maximum-lane behavior, concurrent cycles and failover gates are still owed.
 
+Admission failure now bypasses transaction cleanup before PREPARE in mkdir,
+rmdir, unlink and link. Previously the shared cleanup used an uninitialized
+transaction ID; NUC over-envelope empty-directory rmdir returned BUSY while
+adding 64 DROP entries (commit sum 1661 → 1725). The fixed live gate preserves
+the directory and refuses without those log mutations, then passes physical GC,
+restart, quota and valid late-PUT fences. This fixes rejection safety; the fully
+spread directory's permanent envelope limit remains explicitly open.
+
 **Next:** reconcile bounded work with the accepted full-ancestry and all-used-
 lane predicates. Document any approved product limit explicitly; otherwise
 support the required predicate set without dropping guards. A bounded memory

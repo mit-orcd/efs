@@ -9553,7 +9553,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         if (rc == EFS_OK)
             rc = host_parts_add(&parts, dsh);
         if (rc != EFS_OK)
-            goto mkdir_prepped;
+            goto mkdir_done;
         stage = 9;
         fill_txid(h, &t);
         np = 0;
@@ -9604,7 +9604,6 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         }
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, np, &hint);
-mkdir_prepped:
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
@@ -9880,7 +9879,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         for (i = 0; i < ngv && rc == EFS_OK; i++)
             rc = host_parts_add(&parts, gv[i].shard);
         if (rc != EFS_OK)
-            goto rmdir_prepped;
+            goto rmdir_done;
         fill_txid(h, &t);
         npref = 0;
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
@@ -9960,7 +9959,6 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         }
         if (rc == EFS_OK)
             rc = host_wait_refs(h, prefs, npref, &hint);
-rmdir_prepped:
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
@@ -10116,7 +10114,7 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
         if (rc == EFS_OK && last && !held)
             rc = host_parts_add(&parts, ash);
         if (rc != EFS_OK)
-            goto prepped;
+            goto unlink_done;
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -10159,7 +10157,6 @@ static void host_unlink_txn(efs_ino_t parent, const char *name,
             rc = host_prep(h, ash, EFS_TXN_EXCL, &t, &parts, k_reap, krl,
                            rver, EFS_TXN_PUT, v_reap, sizeof(v_reap),
                            &hint);
-prepped:
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
@@ -10167,6 +10164,7 @@ prepped:
             rc = host_txn_commit(h, &t, &parts, coord, &hint);
         }
     }
+unlink_done:
     if (rc == EFS_OK && !last) {
         rc = host_read_inode_lanes(h, row.ino, &hint);
         if (rc == EFS_OK)
@@ -11177,7 +11175,7 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         if (rc == EFS_OK && touch_parent)
             rc = host_parts_add(&parts, psh);
         if (rc != EFS_OK)
-            goto link_prepped;
+            goto link_done;
         fill_txid(h, &t);
         for (i = 0; i < parts.n && rc == EFS_OK; i++) {
             uint32_t sh = parts.shard[i];
@@ -11202,7 +11200,6 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                 rc = host_prep_ino_delta(h, ish, &t, &parts, k_ino, ki, &id,
                                          NULL, &hint);
         }
-link_prepped:
         if (rc != EFS_OK)
             (void)host_drop_parts(h, &t, &parts, &hint);
         else {
@@ -11210,6 +11207,7 @@ link_prepped:
             rc = host_txn_commit(h, &t, &parts, coord, &hint);
         }
     }
+link_done:
     if (rc == EFS_OK)
         rc = host_read_inode_lanes(h, src_ino, &hint);
     if (rc == EFS_OK)

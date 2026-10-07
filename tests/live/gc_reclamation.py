@@ -25,6 +25,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--posix', action='store_true')
 p.add_argument('--integrity', action='store_true')
 p.add_argument('--namespace', action='store_true')
+p.add_argument('--namespace-boundary', action='store_true')
 p.add_argument('--mount-label', default='default')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
@@ -182,7 +183,7 @@ try:
         text=(work/'fuse.log').read_text()
         assert 'is ignored' in text and "mounted export 'default'" in text,text
         print('legacy mount label explicitly ignored; canonical single export selected PASS',flush=True)
-    if a.namespace:
+    if a.namespace or a.namespace_boundary:
         nested = mount/'deep-namespace';nested.mkdir()
         chain = [nested]
         for depth in range(20):
@@ -199,7 +200,8 @@ try:
         helper=work/'names.c'
         helper.write_text(r'''#include "efs/kv_key.h"
 #include <stdio.h>
-int main(void){unsigned seen[64]={0},n=0;char name[32];for(unsigned i=0;n<16;i++){snprintf(name,sizeof(name),"lane-%u",i);unsigned lane=efs_kv_dir_lane(name);if(!seen[lane]){seen[lane]=1;n++;printf("%u %s\n",lane,name);}}}
+#include <stdlib.h>
+int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1]):16;char name[32];for(unsigned i=0;n<limit;i++){snprintf(name,sizeof(name),"lane-%u",i);unsigned lane=efs_kv_dir_lane(name);if(!seen[lane]){seen[lane]=1;n++;printf("%u %s\n",lane,name);}}}
 ''')
         run(['cc','-I'+str(source/'include'),helper,source/'libefs.a','-pthread','-o',work/'names'])
         witnesses=run([work/'names'],capture_output=True,text=True).stdout.splitlines()
@@ -238,6 +240,28 @@ int main(void){unsigned seen[64]={0},n=0;char name[32];for(unsigned i=0;n<16;i++
         os.rmdir(replacement)
         (work/'namespace-lanes.txt').write_text('\n'.join(witnesses)+'\n')
         print('sixteen used-lane empty HASHED rmdir and replacement PASS',flush=True)
+        if a.namespace_boundary:
+            witnesses=run([work/'names','64'],capture_output=True,text=True).stdout.splitlines()
+            assert len(witnesses)==64
+            boundary=mount/'full-lane-boundary';boundary_ino=spread(boundary)
+            wait(drained,'namespace boundary prior GC drained')
+            def commit_sum():
+                groups={}
+                for node in range(4):
+                    text=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+node}'],capture_output=True,text=True).stdout
+                    for group,index in re.findall(r'group (\d+) hosted=1 .*?commit=(\d+)',text):
+                        groups[group]=max(groups.get(group,0),int(index))
+                return sum(groups.values())
+            time.sleep(1);before_admission=commit_sum()
+            for node in range(4):
+                reply=run([source/'efs-mgmt','raft-rmdir',f'127.0.0.1:{a.port+node}','1',boundary.name],capture_output=True,text=True).stdout
+                if 'status=7' not in reply:break
+            assert 'status=5' in reply,reply
+            after_admission=commit_sum()
+            assert boundary.stat().st_ino==boundary_ino
+            assert after_admission-before_admission<8,(before_admission,after_admission,reply)
+            print('over-envelope rmdir rejects before PREPARE/DROP and preserves directory PASS',flush=True)
+
     if a.integrity:
         # A swap preserves a valid local payload/digest pair but violates the
         # checksum recorded for this immutable object in committed metadata.
