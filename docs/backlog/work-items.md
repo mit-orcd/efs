@@ -2938,11 +2938,23 @@ result is used for a later request. The
 check for read-only requests; previously committed writes are not perpetual
 read authority. The architecture forbids clock-based leader leases.
 
-**Next:** define fresh request/batch authority and make host/core read coverage
-respect it. Readers already admitted to a pending round can share work;
-a completed round cannot automatically authorize later requests. Preserve
-current-term commit and apply barriers, and correlate acknowledgements with
-the appropriate round instead of accepting delayed responses as new evidence.
+**Implementation (Oct 7, follow-up round 1):** each new host request requires
+`read_round+1`, so neither a completed round nor probes sent before admission
+can cover it. AppendEntries echoes the round context in its existing fixed wire
+slot; only successful matching-context voter replies count. Write commits no
+longer create read authority. Completion requires a committed current-term entry,
+application and unchanged configuration. Published host predicates use a coherent
+sequence-checked snapshot. The pump credits election no-ops only through the
+already-fsynced disk watermark, avoiding a fresh-read/first-write deadlock when
+only the new leader and one follower survive.
+
+NUC unit regressions reject delayed replies from completed rounds and revoke
+read authority on higher terms. The private real-daemon
+`tests/live/raft_read_freshness.py` cuts peer traffic in both directions while
+keeping client RPC reachable: majority changes root mode, eight concurrent old
+leader GETATTRs fail, then healed reads return the new mode. This is narrower
+than the full gate below; LOOKUP, transaction/session/publication views and
+configuration-change partition scenarios remain owed.
 
 **Gate:** old leader serves A, majority commits B after isolation, then a new
 read at the old leader must fail/retry, never return A as authoritative.

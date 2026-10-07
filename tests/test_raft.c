@@ -352,18 +352,32 @@ static void test_replicate_and_readindex(void)
     CHECK(app[0].n + app[1].n + app[2].n >= 3, "applied somewhere");
     {
         uint64_t want = efs_raft_commit(n.r[lid]);
-        /* The commit quorum of 'A' doubles as a read quorum (raft.c
-         * advance_commit), so the leader already covers `want`. */
-        CHECK(efs_raft_read_covers(n.r[lid], want), "commit quorum covers");
+        /* A write quorum predating a request cannot authorize that read. */
+        CHECK(!efs_raft_read_covers(n.r[lid], want), "write quorum is not fresh read authority");
         CHECK(!efs_raft_read_covers(n.r[lid], want + 1), "not a later index");
-        /* Hold the followers back so a fresh round stays pending: this is
-         * what host_read_index batches on — a second reader must join the
-         * pending round, never read_begin again (that resets its acks). */
+        /* Hold followers back and inject successful replies from an older
+         * round. They must not satisfy the new request's quorum. */
         for (i = 0; i < 3; i++)
             n.drop[i] = (i != lid);
         CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "read begin");
         CHECK(efs_raft_read_pending(n.r[lid]), "round pending after begin");
         CHECK(!efs_raft_read_ready(n.r[lid]), "not ready without a quorum");
+        {
+            struct efs_raft_msg delayed = {0};
+            delayed.type = EFS_RAFT_MSG_AE_REP;
+            delayed.to = lid;
+            delayed.term = efs_raft_term(n.r[lid]);
+            delayed.success = 1;
+            delayed.match_index = want;
+            delayed.last_log_index = efs_raft_read_round(n.r[lid]) - 1;
+            for (i = 0; i < 3; i++) {
+                if (i == lid)
+                    continue;
+                delayed.from = i;
+                CHECK(efs_raft_recv(n.r[lid], &delayed) == EFS_OK, "deliver delayed reply");
+            }
+            CHECK(!efs_raft_read_ready(n.r[lid]), "old replies cannot authorize new round");
+        }
         CHECK(!efs_raft_read_covers(n.r[lid], want), "pending round covers nothing");
         for (i = 0; i < 3; i++)
             n.drop[i] = 0;
@@ -377,10 +391,34 @@ static void test_replicate_and_readindex(void)
     cmd = 'B';
     CHECK(efs_raft_propose(n.r[lid], &cmd, 1, &idx) == EFS_OK, "propose 2");
     elect(&n, 8);
-    CHECK(efs_raft_read_current(n.r[lid]),
-          "commit quorum keeps ReadIndex current");
-    CHECK(efs_raft_read_covers(n.r[lid], idx),
-          "commit quorum covers the new index too");
+    CHECK(!efs_raft_read_current(n.r[lid]), "new commit needs another read round");
+    CHECK(!efs_raft_read_covers(n.r[lid], idx), "old round cannot cover new commit");
+    CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "fresh round after write");
+    elect(&n, 4);
+    CHECK(efs_raft_read_current(n.r[lid]), "fresh quorum covers new commit");
+    {
+        uint64_t completed = efs_raft_read_round(n.r[lid]);
+        struct efs_raft_msg delayed = {0};
+        for (i = 0; i < 3; i++)
+            n.drop[i] = (i != lid);
+        CHECK(efs_raft_read_begin(n.r[lid]) == EFS_OK, "partitioned leader begins fresh read");
+        delayed.type = EFS_RAFT_MSG_AE_REP;
+        delayed.to = lid;
+        delayed.term = efs_raft_term(n.r[lid]);
+        delayed.success = 1;
+        delayed.match_index = idx;
+        delayed.last_log_index = completed;
+        for (i = 0; i < 3; i++) {
+            if (i == lid)
+                continue;
+            delayed.from = i;
+            CHECK(efs_raft_recv(n.r[lid], &delayed) == EFS_OK, "old completed-round reply");
+        }
+        CHECK(!efs_raft_read_ready(n.r[lid]), "partition cannot reuse completed authority");
+        delayed.term++;
+        CHECK(efs_raft_recv(n.r[lid], &delayed) == EFS_OK, "higher term fences read");
+        CHECK(!efs_raft_read_done(n.r[lid]), "stepped-down leader has no read authority");
+    }
     CHECK(!efs_raft_read_pending(n.r[0] == n.r[lid] ? n.r[1] : n.r[0]),
           "follower never reports a pending round");
     for (i = 0; i < 3; i++) {

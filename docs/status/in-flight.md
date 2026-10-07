@@ -10,13 +10,18 @@ Do not use a historical cluster address, binary hash or mount as current state.
 
 ## Active correctness work
 
+Follow-up round 1 implements W82 fresh read rounds and correlated acknowledgements.
+NUC real-daemon partition GETATTR acceptance passes; wider W82 RPC/configuration
+gates remain open. Follow the [round ledger](roadmap-followup-20261007.md).
+
 **W61/W62/W63 — GC:** repairs are committed in `3a1b4a52`; the
 [implementation checkpoint](gc-implementation-20261007.md) records isolated
 NUC direct-store acceptance. Buffered broad concurrent append lost records
 (**W87**) despite later isolated repeats passing. Xorinox was rolled to `cb5e86de` on Oct 7 with safe drains and full units;
 24.2 GiB payload reclamation and increased physical free space were observed.
 The queues had not fully drained, xefs3 recorded one reap error, and lost-ledger
-reconciliation remains open. Existing NUC service rollout is not established. Preserve
+reconciliation remains open. The Oct 7 follow-up deploys the NUC service and passes full direct-I/O gates;
+this does not establish final incident GC drainage. Preserve
 live references and keep the original [incident review](gc-reclamation-review.md).
 This round did not inspect the remote fixture logs.
 
@@ -97,8 +102,9 @@ size-based admission/migrator exists and the pressure policy still needs review.
 
 [W82–W85](README.md#source-findings-awaiting-triage) cover stale completed read
 coverage, missing transaction-decision retirement, namespace guard bounds
-and eviction of ambiguous PUT retry history. W82 has an isolated core
-reproduction and W85 an isolated helper reproduction; live RPC/FUSE and
+and eviction of ambiguous PUT retry history. W82 now has fresh-round repairs
+and a NUC real-daemon partition GETATTR gate; broader RPC/configuration gates
+remain owed. W85 has an isolated helper reproduction; live RPC/FUSE and
 storage/accounting gates remain owed. W85's attempt-owned/locked placement-cache repair is now committed in
 `6d6056c3`; the GC checkpoint reports helper/concurrency and two-root tests.
 This review did not rerun those tests or establish release/restart acceptance. These findings do not assign a new work order or change accepted designs.

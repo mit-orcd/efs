@@ -1459,6 +1459,9 @@ this document is the invariant they are measured against.
 
 ### 1. The task right now
 
+Follow-up round 1: W82 request-scoped read authority; see the
+[round ledger](../status/roadmap-followup-20261007.md) for implementation and NUC gates.
+
 Reviewed Oct 7, 2026, final round, from HEAD `b3a11877` through the
 `75f6a42e` GC checkpoint / `7582df59` generated-artifact update and existing
 working changes. Earlier round ledgers retain their own baselines. This is a documentation review; recorded deployments are evidence
@@ -1469,7 +1472,7 @@ from their dated runs, not a live cluster inventory.
   direct acceptance and a buffered append failure (**W87**). The xorinox incident cluster was rolled to `cb5e86de` on Oct 7 with safe
   client drains and full units; a captured sample shows 24.2 GiB payload
   reclaimed and physical free space rising to 9.8–10.8 GB/node. Queues were
-  still draining and xefs3 had one reap error. Existing NUC service rollout,
+  still draining and xefs3 had one reap error. The Oct 7 follow-up rolls the NUC service through full direct-I/O gates;
   final incident drain and authority-safe lost-ledger reconciliation remain open.
 - **W86/D31 — durable PUT tickets:** narrow abandoned-upload policy is recorded
   in that checkpoint; metadata state machine is committed in `b3a11877` and staged for integration. Production sessions,
@@ -1483,7 +1486,11 @@ from their dated runs, not a live cluster inventory.
 - **W64/W65:** durable append failover replay and slow daemon shutdown are
   unresolved findings from the [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
 
-Latest recorded NUC production acceptance: `128f6b7d`, direct I/O, full rebuilt
+Latest NUC follow-up acceptance: isolated `5ee9ab6b` + W82 round changes,
+direct I/O, units, POSIX 216/0/1 skip, peer POSIX 64/64 and persistence
+26/26 in both phases. See the [ledger](../status/roadmap-followup-20261007.md).
+
+Earlier recorded NUC production acceptance: `128f6b7d`, direct I/O, full rebuilt
 Linux units, W36 20/20, single-client POSIX 216 pass/0 fail/one unsupported mmap
 skip, peer POSIX 64/64, persistence 26/26 in each phase and ten concurrent
 8/8 repeats. This does not close D25, D27, GC reconciliation, append failover
@@ -1555,7 +1562,7 @@ positions do not assign an execution order or override the active handoff.
 | op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | open — advertised extra name is silently ignored; initialization remains idempotent | [evidence and gate](#w79) |
 | op4 | **W80** · efs-query reports retired zero-filled statistics as totals | operator observability | open — server QUERY_STATS returns an all-zero placeholder; not evidence of an empty store | [evidence and gate](#w80) |
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](#w81) |
-| proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | reproduced in isolated core model; host covering-view path inspected; live RPC gate owed | [evidence and gate](#w82) |
+| proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | fresh-round/ack correlation implemented; NUC live partition GETATTR gate passes; broader RPC/configuration gates owed | [evidence and gate](#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
 | proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | ancestry and used-lane guard limits return BUSY; live gate not run | [evidence and gate](#w84) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | baseline helper collision reproduced; repair committed `6d6056c3`; checkpoint reports helper/concurrency and two-root accounting tests; independent release/restart acceptance not established here | [evidence and gate](#w85) |
@@ -1622,13 +1629,18 @@ Do not use a historical cluster address, binary hash or mount as current state.
 
 ### Active correctness work
 
+Follow-up round 1 implements W82 fresh read rounds and correlated acknowledgements.
+NUC real-daemon partition GETATTR acceptance passes; wider W82 RPC/configuration
+gates remain open. Follow the [round ledger](../status/roadmap-followup-20261007.md).
+
 **W61/W62/W63 — GC:** repairs are committed in `3a1b4a52`; the
 [implementation checkpoint](../status/gc-implementation-20261007.md) records isolated
 NUC direct-store acceptance. Buffered broad concurrent append lost records
 (**W87**) despite later isolated repeats passing. Xorinox was rolled to `cb5e86de` on Oct 7 with safe drains and full units;
 24.2 GiB payload reclamation and increased physical free space were observed.
 The queues had not fully drained, xefs3 recorded one reap error, and lost-ledger
-reconciliation remains open. Existing NUC service rollout is not established. Preserve
+reconciliation remains open. The Oct 7 follow-up deploys the NUC service and passes full direct-I/O gates;
+this does not establish final incident GC drainage. Preserve
 live references and keep the original [incident review](../status/gc-reclamation-review.md).
 This round did not inspect the remote fixture logs.
 
@@ -1709,8 +1721,9 @@ size-based admission/migrator exists and the pressure policy still needs review.
 
 [W82–W85](#source-findings-awaiting-triage) cover stale completed read
 coverage, missing transaction-decision retirement, namespace guard bounds
-and eviction of ambiguous PUT retry history. W82 has an isolated core
-reproduction and W85 an isolated helper reproduction; live RPC/FUSE and
+and eviction of ambiguous PUT retry history. W82 now has fresh-round repairs
+and a NUC real-daemon partition GETATTR gate; broader RPC/configuration gates
+remain owed. W85 has an isolated helper reproduction; live RPC/FUSE and
 storage/accounting gates remain owed. W85's attempt-owned/locked placement-cache repair is now committed in
 `6d6056c3`; the GC checkpoint reports helper/concurrency and two-root tests.
 This review did not rerun those tests or establish release/restart acceptance. These findings do not assign a new work order or change accepted designs.
@@ -4835,11 +4848,23 @@ result is used for a later request. The
 check for read-only requests; previously committed writes are not perpetual
 read authority. The architecture forbids clock-based leader leases.
 
-**Next:** define fresh request/batch authority and make host/core read coverage
-respect it. Readers already admitted to a pending round can share work;
-a completed round cannot automatically authorize later requests. Preserve
-current-term commit and apply barriers, and correlate acknowledgements with
-the appropriate round instead of accepting delayed responses as new evidence.
+**Implementation (Oct 7, follow-up round 1):** each new host request requires
+`read_round+1`, so neither a completed round nor probes sent before admission
+can cover it. AppendEntries echoes the round context in its existing fixed wire
+slot; only successful matching-context voter replies count. Write commits no
+longer create read authority. Completion requires a committed current-term entry,
+application and unchanged configuration. Published host predicates use a coherent
+sequence-checked snapshot. The pump credits election no-ops only through the
+already-fsynced disk watermark, avoiding a fresh-read/first-write deadlock when
+only the new leader and one follower survive.
+
+NUC unit regressions reject delayed replies from completed rounds and revoke
+read authority on higher terms. The private real-daemon
+`tests/live/raft_read_freshness.py` cuts peer traffic in both directions while
+keeping client RPC reachable: majority changes root mode, eight concurrent old
+leader GETATTRs fail, then healed reads return the new mode. This is narrower
+than the full gate below; LOOKUP, transaction/session/publication views and
+configuration-change partition scenarios remain owed.
 
 **Gate:** old leader serves A, majority commits B after isolation, then a new
 read at the old leader must fail/retry, never return A as authoritative.

@@ -72,7 +72,7 @@ struct efs_raft_msg {
     int to;
     uint64_t term;
     uint64_t boot_id; /* process incarnation; stale packets drop */
-    uint64_t last_log_index;
+    uint64_t last_log_index; /* AE request/reply: echoed read-round context */
     uint64_t last_log_term;
     int vote_granted;
     uint64_t prev_index;
@@ -242,14 +242,15 @@ void efs_raft_allow_campaign(struct efs_raft *r, int on);
  * in the current term, then applied >= that index. No clock leases. */
 int efs_raft_read_begin(struct efs_raft *r);
 int efs_raft_read_ready(const struct efs_raft *r);
-/* 1 if a prior ReadIndex still covers commit_index (skip a new quorum). */
+/* Inspection of the most recently begun round, not authority for a new
+ * request. Callers must admit before starting their eligible round. */
 int efs_raft_read_current(const struct efs_raft *r);
-/* Batching: a round is pending when begun and not yet quorum-acked; a
- * reader that recorded commit_index = want on arrival is satisfied once
- * a finished round has read_index >= want and applied >= read_index.
- * Readers arriving during a pending round wait for it (never restart it,
- * which would drop its acks) and begin the next one only if its index
- * turns out older than what they need. */
+/* A reader captures read_round+1 at arrival. It may share a later round
+ * with other previously admitted readers, but cannot join a round whose
+ * probes were sent before its arrival. Hosts queue rather than restart a
+ * pending round; explicit core restarts discard its acknowledgements and
+ * allocate a new context. No clock leases. */
+uint64_t efs_raft_read_round(const struct efs_raft *r);
 int efs_raft_read_pending(const struct efs_raft *r);
 int efs_raft_read_covers(const struct efs_raft *r, uint64_t want);
 /* Raw round state for a host that publishes a lock-free view: the round's

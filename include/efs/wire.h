@@ -49,6 +49,9 @@ int efs_wire_unpack(const void *in, uint32_t in_len, void *msg, uint32_t len);
  *   u64 prev_index, u64 prev_term, u64 leader_commit, u64 match_index,
  *   u32 nentries (0..EFS_RAFT_AE_MAX — a catch-up AE may carry a batch),
  *   per entry: u64 term, u32 clen, u8 cmd[clen].
+ * AE request/reply reuse last_log_index as an echoed ReadIndex context.
+ * Legacy peers echo zero and cannot satisfy a new read quorum. Upgrade
+ * all metadata replicas together; fixed framing remains unchanged.
  * decode packs every cmd into cmd_buf (caller-owned) and points
  * msg->entries[i].cmd at the matching offset. */
 #define EFS_WIRE_RAFT_HDR_LEN 80u /* fixed part through nentries */

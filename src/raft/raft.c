@@ -55,7 +55,8 @@ struct efs_raft {
     uint64_t rng;               /* election-timeout PRNG state (seeded via cfg) */
     uint32_t hb_elapsed;
     uint32_t heartbeat_ticks;
-    uint64_t read_index;
+    uint64_t read_index, read_round;
+    uint32_t read_cfg_old, read_cfg_new;
     unsigned read_acks;
     int read_in_flight;
     uint32_t log_old;
@@ -284,6 +285,10 @@ static int send_msg(struct efs_raft *r, struct efs_raft_msg *m)
     m->term = r->current_term;
     m->group = r->group;
     m->boot_id = r->boot_id;
+    /* AE has no last-log-index field semantics. Reuse that fixed wire slot
+     * for a read-round context; legacy peers echo zero and fail closed. */
+    if (m->type == EFS_RAFT_MSG_AE_REQ)
+        m->last_log_index = r->read_in_flight == 1 ? r->read_round : 0;
     return r->send(r->net, m);
 }
 
@@ -377,9 +382,17 @@ static int apply_committed(struct efs_raft *r)
         free(cmd);
         r->last_applied = idx;
     }
-    if (r->read_in_flight && r->last_applied >= r->read_index &&
-        quorum_ok(r, r->read_acks))
-        r->read_in_flight = 2;
+    if (r->read_in_flight &&
+        (r->read_cfg_old != r->log_old || r->read_cfg_new != r->log_new))
+        r->read_in_flight = 0;
+    if (r->read_in_flight == 1 && r->role == EFS_RAFT_LEADER &&
+        r->last_applied >= r->read_index && quorum_ok(r, r->read_acks)) {
+        uint64_t committed_term = 0;
+        /* A leader must first commit an entry in its own term. */
+        if (log_term(r, r->commit_index, &committed_term) == EFS_OK &&
+            committed_term == r->current_term)
+            r->read_in_flight = 2;
+    }
     return EFS_OK;
 }
 
@@ -954,13 +967,11 @@ static int try_commit(struct efs_raft *r)
         }
         if (quorum_ok(r, bits)) {
             r->commit_index = n;
-            /* Commit quorum in this term is a ReadIndex majority for n.
-             * Without this, every propose invalidates read_current and the
-             * next LOOKUP/CREATE pays another heartbeat RTT (~50 ms). */
-            r->read_index = n;
-            r->read_acks = bits;
-            if (!r->read_in_flight)
-                r->read_in_flight = 1;
+            /* A write quorum is not request-scoped read authority. Keep a
+             * pending round's application barrier current, but only its
+             * correlated heartbeat responses can complete it. */
+            if (r->read_in_flight == 1)
+                r->read_index = n;
             break;
         }
     }
@@ -1113,6 +1124,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     m.type = EFS_RAFT_MSG_AE_REP;
     m.to = in->from;
     m.vote_granted = in->vote_granted; /* echo a commit probe */
+    m.last_log_index = in->last_log_index; /* echo ReadIndex context */
     if (in->term < r->current_term) {
         m.success = 0;
         return send_msg(r, &m);
@@ -1237,7 +1249,8 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         if (in->match_index > r->match_index[in->from])
             r->match_index[in->from] = in->match_index;
         r->next_index[in->from] = r->match_index[in->from] + 1;
-        if (r->read_in_flight == 1)
+        if (r->read_in_flight == 1 && in->last_log_index == r->read_round &&
+            is_voter(r, in->from))
             r->read_acks |= 1u << in->from;
         /* Queue the next batch before apply. The sender thread writes
          * it while apply still holds the lock, so the round trip
@@ -1937,15 +1950,16 @@ int efs_raft_read_begin(struct efs_raft *r)
         return EFS_ERR_INVAL;
     if (r->role != EFS_RAFT_LEADER)
         return EFS_ERR_NOT_PRIMARY;
+    if (r->read_round == UINT64_MAX)
+        return EFS_ERR_BUSY;
+    r->read_round++;
+    r->read_cfg_old = r->log_old;
+    r->read_cfg_new = r->log_new;
     r->read_index = r->commit_index;
     r->read_acks = 1u << r->id;
     r->read_in_flight = 1;
-    if (solo(r)) {
-        apply_committed(r);
-        if (r->last_applied >= r->read_index && quorum_ok(r, r->read_acks))
-            r->read_in_flight = 2;
-        return EFS_OK;
-    }
+    if (solo(r))
+        return apply_committed(r);
     return broadcast_ae(r);
 }
 
@@ -1986,4 +2000,9 @@ int efs_raft_read_covers(const struct efs_raft *r, uint64_t want)
         return 0;
     return r->read_in_flight == 2 && r->read_index >= want &&
            r->last_applied >= r->read_index;
+}
+
+uint64_t efs_raft_read_round(const struct efs_raft *r)
+{
+    return r ? r->read_round : 0;
 }
