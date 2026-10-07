@@ -18,6 +18,23 @@ static pthread_once_t reply_buffers_once = PTHREAD_ONCE_INIT;
 static int reply_buffers_key_error;
 static int reply_buffers_trace;
 
+#if defined(EFS_FAULTS) && EFS_FAULTS
+/* Test-only failures at this owner boundary, not arbitrary libc allocation.
+ * Every seventeenth matching attempt fails so real workers can recover. */
+static int reply_buffers_fault_kind;
+static unsigned long reply_buffers_fault_count;
+static int reply_buffers_fault(int kind)
+{
+    if (kind != reply_buffers_fault_kind ||
+        (__sync_add_and_fetch(&reply_buffers_fault_count, 1) % 17) != 0)
+        return 0;
+    fprintf(stderr,"reply-buffer fault kind=%d pid=%ld\n",kind,(long)getpid());
+    return 1;
+}
+#else
+#define reply_buffers_fault(kind) 0
+#endif
+
 static void reply_buffers_event(const char *event, const struct reply_buffers *b)
 {
     if (reply_buffers_trace)
@@ -41,6 +58,14 @@ static void reply_buffers_init(void)
 {
     const char *trace = getenv("EFS_REPLY_BUFFER_TRACE");
     reply_buffers_trace = trace && trace[0] && strcmp(trace,"0") != 0;
+#if defined(EFS_FAULTS) && EFS_FAULTS
+    const char *fault = getenv("EFS_FAULT_REPLY_BUFFER");
+    if (fault) {
+        if (!strcmp(fault,"allocation")) reply_buffers_fault_kind=1;
+        else if (!strcmp(fault,"tls")) reply_buffers_fault_kind=2;
+        else if (!strcmp(fault,"growth")) reply_buffers_fault_kind=3;
+    }
+#endif
     reply_buffers_key_error =
         pthread_key_create(&reply_buffers_key, reply_buffers_destroy);
 }
@@ -54,10 +79,11 @@ static char *reply_buffer_get(unsigned which, size_t size)
         return NULL;
     b = pthread_getspecific(reply_buffers_key);
     if (!b) {
+        if (reply_buffers_fault(1)) return NULL;
         b = calloc(1, sizeof(*b));
         if (!b)
             return NULL;
-        if (pthread_setspecific(reply_buffers_key, b)) {
+        if (reply_buffers_fault(2) || pthread_setspecific(reply_buffers_key, b)) {
             free(b);
             return NULL;
         }
@@ -66,6 +92,7 @@ static char *reply_buffer_get(unsigned which, size_t size)
     if (!size)
         size = 1;
     if (b->capacity[which] < size) {
+        if (reply_buffers_fault(3)) return NULL;
         grown = realloc(b->data[which], size);
         if (!grown)
             return NULL;
