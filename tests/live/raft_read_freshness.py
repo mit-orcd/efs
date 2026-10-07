@@ -19,6 +19,8 @@ import time
 
 source = Path(__file__).resolve().parents[2]
 parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--transactions',action='store_true',help='test cross-parent namespace decisions across an old-leader partition')
+parser.add_argument('--publication',action='store_true',help='test stored publication receipts through an isolated old leader')
 parser.add_argument('--configuration',action='store_true',help='change group voters while the old leader is isolated')
 args=parser.parse_args()
 base, proxy_base, count = 21340, 21400, 3
@@ -165,6 +167,30 @@ try:
     assert 'status=0' in session_before,session_before
     session_before=mgmt(old,'raft-session','get',session_uuid)
     assert 'status=0' in session_before and 'epoch=1 state=1' in session_before,session_before
+    if args.transactions:
+        txn_parents=[]
+        for name in ('txn-source','txn-destination'):
+            created=mgmt(old,'raft-create',1,name,'040755')
+            assert 'status=0' in created,created
+            txn_parents.append(int(re.search(r'ino=(\d+)',created)[1]))
+        created=mgmt(old,'raft-create',txn_parents[0],'txn-file')
+        assert 'status=0' in created,created
+        txn_ino=int(re.search(r'ino=(\d+)',created)[1])
+        assert 'status=0' in mgmt(old,'raft-lookup',txn_parents[0],'txn-file')
+    if args.publication:
+        created=mgmt(old,'raft-create',1,'publication-probe')
+        publication_ino=int(re.search(r'ino=(\d+)',created)[1])
+        helper=work/'publication-partition'
+        subprocess.run(['cc','-I'+str(source/'include'),str(source/'tests/live/publication_partition.c'),str(source/'libefs.a'),'-pthread','-lm','-ldl','-libverbs','-o',str(helper)],check=True)
+        def publication(node,mode):
+            result=subprocess.run([str(helper),'127.0.0.1',str(base+node),str(publication_ino),mode],capture_output=True,text=True,timeout=20,check=True)
+            return result.stdout
+        shard=re.search(r'shard=(\d+)',publication(old,'describe'))[1]
+        assert 'status=0' in mgmt(old,'raft-session','register',session_uuid,shard,1)
+        assert 'status=0' in mgmt(old,'raft-session','establish',session_uuid,shard,1)
+        prepared=publication(old,'prepare')
+        assert 'status=0 state=2' in prepared,prepared
+        assert 'status=0 state=2' in publication(old,'query')
     isolated = old
     with lock:
         for client, peer, src, dst in list(connections):
@@ -182,7 +208,24 @@ try:
     assert leader() == old or 'group 0 hosted=1 role=LEADER ' in mgmt(old,'raft-status')
     current = mgmt(new,'raft-getattr',1)
     assert 'status=0' in current and 'mode=040700' in current, current
-    fenced = mgmt(new,'raft-session','fence',session_uuid)
+    if args.transactions:
+        moved=mgmt(new,'raft-rename',txn_parents[0],'txn-file',txn_parents[1],'txn-moved')
+        assert 'status=0' in moved,moved
+        assert 'status=1' in mgmt(new,'raft-lookup',txn_parents[0],'txn-file')
+        majority_lookup=mgmt(new,'raft-lookup',txn_parents[1],'txn-moved')
+        assert 'status=0' in majority_lookup and f'ino={txn_ino} ' in majority_lookup,majority_lookup
+        old_transaction_reads=[mgmt(old,'raft-lookup',txn_parents[0],'txn-file'),mgmt(old,'raft-lookup',txn_parents[1],'txn-moved'),mgmt(old,'raft-getattr',txn_ino)]
+        assert all(re.search(r'status=(5|7)\b',reply) for reply in old_transaction_reads),old_transaction_reads
+        (work/'transaction-views.txt').write_text('\n'.join([moved,majority_lookup,*old_transaction_reads]))
+        print('PASS: cross-parent transaction commits on majority; old leader refuses stale source/destination/inode views',flush=True)
+    if args.publication:
+        current_receipt=publication(new,'query')
+        assert 'status=0 state=2' in current_receipt,current_receipt
+        isolated_receipts=[publication(old,'query') for _ in range(3)]
+        assert all(re.search(r'status=(5|7) state=0',reply) for reply in isolated_receipts),isolated_receipts
+        (work/'publication-receipts.txt').write_text(''.join([prepared,current_receipt,*isolated_receipts]))
+        print('PASS: isolated old leader refuses cached publication receipt authority',flush=True)
+    fenced = mgmt(new,'raft-session' ,'fence',session_uuid)
     assert 'status=0' in fenced and 'epoch=2 state=1' in fenced,fenced
     session_replies = [mgmt(old,'raft-session','get',session_uuid) for _ in range(3)]
     assert all(re.search(r'rc=-(13|15)\b', reply) and 'status=0' not in reply for reply in session_replies),session_replies
