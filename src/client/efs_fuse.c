@@ -2966,6 +2966,8 @@ static int fuse_write_admit(size_t size)
     uint64_t chunks, bytes;
     efs_ino_t after = 0;
     int admission;
+    if (efs_client_rpc_past_deadline())
+        return -EAGAIN;
     if (!size)
         return 0;
     if (!cs || size > UINT32_MAX)
@@ -3002,6 +3004,8 @@ static int fuse_write_admit(size_t size)
     /* Finite drain work, no cache/append mutex held here.
      * This is a pressure drain, not D27's whole-call recovery protocol. */
     for (int i = 0; i < 16; i++) {
+        if (efs_client_rpc_past_deadline())
+            return -EAGAIN;
         efs_ino_t ino = efs_dcache_pressure_ino(after);
         int rc;
         if (!ino)
@@ -3026,7 +3030,14 @@ static int fuse_write_admit(size_t size)
     /* A concurrent reservation or REPORT may release capacity without a
      * dirty inode left to drain. Wait briefly outside all cache locks. */
     for (int i = 0; i < 8; ++i) {
-        usleep(100000);
+        uint64_t deadline = efs_client_rpc_deadline_ms();
+        uint64_t now = stats_now_ms();
+        if (deadline && now >= deadline)
+            return -EAGAIN;
+        unsigned wait_us = 100000;
+        if (deadline && deadline - now < 100)
+            wait_us = (unsigned)(deadline - now) * 1000;
+        usleep(wait_us);
         efs_rdcache_trim();
         efs_dcache_trim_metadata();
         admission = efs_buf_reserve_request(bytes,
@@ -3058,7 +3069,9 @@ static int efs_fuse_write_admitted(const char *path, const char *buf, size_t siz
         return -EINVAL;
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
-        pthread_mutex_lock(append_mu(ino));
+        int lock_rc = wb_lock_budget(append_mu(ino));
+        if (lock_rc != EFS_OK)
+            return fuse_stat_errno(lock_rc);
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0) {
             pthread_mutex_unlock(append_mu(ino));
@@ -3110,7 +3123,7 @@ static int efs_fuse_write_admitted(const char *path, const char *buf, size_t siz
     return (int)size;
 }
 
-static int efs_fuse_write(const char *path, const char *buf, size_t size,
+static int efs_fuse_write_run(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
     int extent = fuse_validate_write_extent(offset, size);
@@ -3133,6 +3146,19 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
     rc = efs_fuse_write_admitted(path, buf, size, offset, fi);
     efs_buf_unreserve();
     efs_client_report_unreserve();
+    return rc;
+}
+
+static int efs_fuse_write(const char *path, const char *buf, size_t size,
+                          off_t offset, struct fuse_file_info *fi)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = stats_now_ms() + 30000;
+    if (previous && previous < deadline)
+        deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc = efs_client_rpc_past_deadline() ? -EAGAIN : efs_fuse_write_run(path, buf, size, offset, fi);
+    efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
 
@@ -3159,7 +3185,9 @@ static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf
 
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
-        pthread_mutex_lock(append_mu(ino));
+        int lock_rc = wb_lock_budget(append_mu(ino));
+        if (lock_rc != EFS_OK)
+            return fuse_stat_errno(lock_rc);
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
         if (rc != 0) {
             pthread_mutex_unlock(append_mu(ino));
@@ -3320,7 +3348,7 @@ static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf
     }
 }
 
-static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
+static int efs_fuse_write_buf_run(const char *path, struct fuse_bufvec *buf,
                               off_t offset, struct fuse_file_info *fi)
 {
     int extent = fuse_validate_write_extent(offset, fuse_buf_size(buf));
@@ -3344,6 +3372,19 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
     rc = efs_fuse_write_buf_admitted(path, buf, offset, fi);
     efs_buf_unreserve();
     efs_client_report_unreserve();
+    return rc;
+}
+
+static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
+                              off_t offset, struct fuse_file_info *fi)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = stats_now_ms() + 30000;
+    if (previous && previous < deadline)
+        deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc = efs_client_rpc_past_deadline() ? -EAGAIN : efs_fuse_write_buf_run(path, buf, offset, fi);
+    efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
 

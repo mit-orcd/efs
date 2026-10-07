@@ -86,6 +86,10 @@ static int dcache_store_owned(efs_ino_t ino, uint32_t ci, uint8_t *p, uint32_t l
 static void dcache_img_to_rdcache(efs_ino_t ino,uint32_t ci,uint8_t *img,uint32_t len) { (void)ino;(void)ci;efs_buf_free(img,len); }
 '''+function(w,'dcache_note_committed')+'\n'+function(w,'efs_dcache_pressure_ino')
 source += r'''
+static uint64_t deadline;
+uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
+static uint64_t stats_now_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
+int efs_client_rpc_past_deadline(void) {return deadline&&stats_now_ms()>=deadline;}
 static uint32_t fuse_chunk_size(void) { return EFS_CHUNK_SIZE; }
 static int flush_error, drains, trims;
 void efs_rdcache_trim(void) { trims++; }
@@ -109,6 +113,7 @@ static int efs_append_flush_report(void *fi, efs_ino_t ino) {
 source += r'''
 static struct dcache_ent *entry(uint32_t ci) { return dcache_find_meta(dcache_slot(1,ci),1,ci); }
 int main(void) {
+    deadline=stats_now_ms();assert(fuse_write_admit(1)==-EAGAIN);deadline=0;
     uint64_t limit=(uint64_t)UINT32_MAX*EFS_CHUNK_SIZE;
     assert(!fuse_validate_write_extent(0,1));
     assert(fuse_validate_write_extent(-1,1)==-EINVAL);
