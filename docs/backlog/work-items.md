@@ -2593,8 +2593,10 @@ logging. NUC real FUSE read/readdir bursts with max_threads=16 and idle=1 retire
 4,581 owners / 77,746,176 bytes of capacity; no owners remain after the burst.
 Forty cycles show 3,292 KiB RSS span after warmup. Production helper units also
 cover 128 retired workers, failed allocation/growth/TLS ownership. Subsequent
-physical GC/restart gates pass. This is live direct-mode lifecycle evidence;
-buffered and real fault-injected RSS variants remain separate acceptance.
+physical GC/restart gates pass. The final buffered combined gate retires 5,121
+owners / 103,487,696 capacity bytes with zero remaining owners and 2,648 KiB RSS
+span. Trace attribution includes PID so exited remounts cannot be counted as live
+owners. Real fault-injected RSS variants remain separate acceptance.
 
 **Home:** [current detail](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit).
 

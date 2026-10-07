@@ -3,8 +3,9 @@
 Baseline `1a3a1143`. Test every round on NUC; preserve concurrent benchmark
 work and use isolated source snapshots for deployments. A round is a concrete
 implementation/investigation with its own validation, not an arbitrary tiny
-commit. Only completed rounds are counted below. Remaining rounds continue in
-priority order; stop for a required design decision rather than guessing.
+commit. All 30 rounds below are completed and committed. The ledger distinguishes
+production repairs, new acceptance gates and retained failures. Larger activation
+contracts remain open; passing these rounds does not activate D25/PUT tickets.
 
 ## Round 1 — W82 stale namespace lookup gate
 
@@ -311,3 +312,35 @@ fixes that while preserving the other edit. Logs
 `/private/tmp/efs-roadmap-accepted-flags.log`,
 `/private/tmp/efs-roadmap-cycle29-live.log`,
 `/private/tmp/efs-roadmap-cycle29-units-repeat.log`.
+
+## Round 30 — combined buffered acceptance and reproducible evidence
+
+The final private four-node NUC buffered gate combines namespace boundary/cycle/
+replacement checks, metadata-anchored corruption recovery, real worker retirement,
+lost namespace replies, broad POSIX deletion and GC protection/failure/restart.
+POSIX 216/0/1 unsupported mmap skip; peer 64/64. GC passes 56→343, removed
+fragments 270→22,248 and reclaimed payload bytes 17,694,720→1,458,044,928 across
+the POSIX phase. Final restart has zero physical fragment inventory, zero data
+usage, drained queues and valid delayed PUT rejected by every member.
+
+The combined harness initially counted owners from exited remount processes;
+PID-tagged trace now scopes them to the measured mount. A subsequent healthy
+follower BUSY is now retried within 30 seconds; a successful wrong-inode reply
+still fails immediately. The corrected run retires 5,121 owners / 103,487,696
+capacity bytes, zero remaining owners and 2,648 KiB RSS span. Full Linux units
+pass afterward. Manifest records gate options, real storage paths and source/
+test/binary hashes. Small evidence is retained under
+[continuation evidence](../../results/measure/20261007-roadmap-continuation/buffered-manifest.json).
+Logs `/private/tmp/efs-roadmap-round30-buffered-final.log` and
+`/private/tmp/efs-roadmap-round30-units.log`; fixture
+`/data1/efs/gc-buffered-it_redju`. Failed iterations remain in the preceding
+round30 logs; unrelated benchmark and GC-investigation work is preserved.
+
+## Remaining correctness work
+
+D25 remains staged: W71 durable fragment acknowledgements and W72/W86 production
+session/ticket/fence integration remain activation blockers. W88 legacy span
+replay, W83 decision retirement, W64 append failover, W84 maximum namespace
+envelope/depth, W87's retained buffered failure and the outstanding fault/RDMA/
+configuration-change gates remain open. These 30 rounds are fixes and acceptance
+work, not a claim that the complete roadmap or all GC recovery is finished.

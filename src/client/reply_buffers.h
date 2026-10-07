@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 /* The pthread key owns both reusable buffers, including failed-growth
  * leftovers. Compiler TLS alone does not free heap storage at worker exit. */
@@ -20,8 +21,8 @@ static int reply_buffers_trace;
 static void reply_buffers_event(const char *event, const struct reply_buffers *b)
 {
     if (reply_buffers_trace)
-        fprintf(stderr, "reply-buffer %s owner=%p read=%zu readdir=%zu\n",
-                event, (const void *)b, b->capacity[0], b->capacity[1]);
+        fprintf(stderr, "reply-buffer %s owner=%p read=%zu readdir=%zu pid=%ld\n",
+                event, (const void *)b, b->capacity[0], b->capacity[1], (long)getpid());
 }
 
 

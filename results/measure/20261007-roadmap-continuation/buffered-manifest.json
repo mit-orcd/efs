@@ -1,0 +1,36 @@
+{
+  "mode": "buffered",
+  "roots": [
+    "/data1/efs/gc-buffered-it_redju/n1",
+    "/data1/efs/gc-buffered-it_redju/n2",
+    "/data2/efs/gc-buffered-0oaqdumb/n3",
+    "/data2/efs/gc-buffered-0oaqdumb/n4"
+  ],
+  "real_roots": [
+    "/data1/efs/gc-buffered-it_redju/n1",
+    "/data1/efs/gc-buffered-it_redju/n2",
+    "/home/efs/additional-work-dir/gc-buffered-0oaqdumb/n3",
+    "/home/efs/additional-work-dir/gc-buffered-0oaqdumb/n4"
+  ],
+  "port": 20250,
+  "gates": {
+    "mode": "buffered",
+    "root": [],
+    "posix": true,
+    "integrity": true,
+    "namespace": false,
+    "namespace_boundary": true,
+    "mount_label": "default",
+    "workers": true,
+    "pressure": false,
+    "opid": true,
+    "port": 20250
+  },
+  "source_tree_sha256": "9b7d8fff0cef2c2b0e94dd53f5980cb8003461da29d7ae77357bc7ae7a509300",
+  "test_script_sha256": "1977f5141a3afa21ff8470db0f26168c25e1a26c7649b71a9e59916003dfd8e2",
+  "binary_sha256": {
+    "efsd": "ddf44d926b5404bf712bda8dcbe53bfad064d85a9ce15613ed14441e7786292e",
+    "efs-fuse": "9d241eacf420fe1dc95d8823faef239a74b2a82a1a0aa8a8b3364b86192e3960",
+    "efs-mgmt": "df35164cf46c0c902cf11bc89fc90ee1d62e5c46539157b07c909938f3926223"
+  }
+}

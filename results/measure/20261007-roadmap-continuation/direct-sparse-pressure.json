@@ -1,0 +1,20 @@
+{
+  "hard_body_bytes": 33554432,
+  "drain_bytes": 8388608,
+  "files": 8,
+  "writes": 256,
+  "retry_count": 0,
+  "peak_rss_kib": 121556,
+  "before_delete": {
+    "passes": 21,
+    "removed_fragments": 0,
+    "reclaimed_payload_bytes": 0,
+    "data_usage_bytes": 50331648
+  },
+  "after_delete": {
+    "passes": 29,
+    "removed_fragments": 768,
+    "reclaimed_payload_bytes": 50331648,
+    "data_usage_bytes": 0
+  }
+}

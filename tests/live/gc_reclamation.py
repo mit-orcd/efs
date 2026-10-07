@@ -50,7 +50,14 @@ digest=hashlib.sha256()
 inputs=[source/'Makefile'] + [x for folder in ('src','include') for x in (source/folder).rglob('*') if x.suffix in ('.c','.h')]
 for path in sorted(inputs):
     digest.update(str(path.relative_to(source)).encode()+b'\0'+path.read_bytes())
-(work/"manifest.json").write_text(json.dumps({"mode":a.mode,"roots":[str(x) for x in roots],"port":a.port,"source_tree_sha256":digest.hexdigest()},indent=2))
+(work/"manifest.json").write_text(json.dumps({
+    "mode":a.mode,"roots":[str(x) for x in roots],
+    "real_roots":[str(x.resolve()) for x in roots],"port":a.port,
+    "gates":vars(a),"source_tree_sha256":digest.hexdigest(),
+    "test_script_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    "binary_sha256":{name:hashlib.sha256((source/name).read_bytes()).hexdigest()
+                      for name in ('efsd','efs-fuse','efs-mgmt')},
+},indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT='tcp')
 if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
 if a.pressure:env.update(EFS_DCACHE_BYTES=str(16<<20),EFS_DCACHE_HARD_BYTES=str(32<<20),EFS_DCACHE_DRAIN_BYTES=str(8<<20))
@@ -240,9 +247,12 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         actualino=replacement.stat().st_ino
         print(f'replacement inode: source={srcino} old={oldino} observed={actualino}',flush=True)
         for node in range(4):
-            result=subprocess.run([str(source/'efs-mgmt'),'raft-lookup',f'127.0.0.1:{a.port+node}','1','spread-replace'],capture_output=True,text=True,timeout=30,env=env)
-            print(result.stdout+result.stderr,flush=True)
-            assert f'ino={srcino} ' in result.stdout and 'status=0' in result.stdout,result.stdout
+            def replacement_matches():
+                result=run([source/'efs-mgmt','raft-lookup',f'127.0.0.1:{a.port+node}','1','spread-replace'],capture_output=True,text=True).stdout
+                if re.search(r'status=(5|7)\b',result):return False
+                assert 'status=0' in result and f'ino={srcino} ' in result,result
+                return True
+            wait(replacement_matches,f'node {node+1} authoritative replacement inode',30)
         assert actualino==srcino
         os.rmdir(replacement)
         (work/'namespace-lanes.txt').write_text('\n'.join(witnesses)+'\n')
@@ -315,9 +325,10 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
                 text=(Path('/proc')/str(client.pid)/'status').read_text()
                 rss.append(int(re.search(r'VmRSS:\s+(\d+)',text).group(1)))
         time.sleep(.3)
-        events=re.findall(r'reply-buffer (new|grow|retire) owner=(\S+) read=(\d+) readdir=(\d+)',(work/'fuse.log').read_text())
+        events=re.findall(r'reply-buffer (new|grow|retire) owner=(\S+) read=(\d+) readdir=(\d+) pid=(\d+)',(work/'fuse.log').read_text())
         owners={};retired=0;new=0;retired_bytes=0
-        for event,owner,read,directory_bytes in events:
+        for event,owner,read,directory_bytes,pid in events:
+            if int(pid)!=client.pid:continue # earlier remounts have exited address spaces
             capacities=(int(read),int(directory_bytes))
             if event=='new':
                 assert owner not in owners,(event,owner);owners[owner]=capacities;new+=1
