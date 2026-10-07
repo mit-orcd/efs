@@ -43,6 +43,12 @@ int main(void) {
     assert(get_one_reply(NULL,&job)==0 && job.rc==EFS_OK);
     bytes[32768]='y';job.len=0;
     assert(get_one_reply(NULL,&job)==0 && job.rc==EFS_ERR_CHECKSUM && job.len==0);
+    uint8_t expected[EFS_HASH_SIZE];
+    efs_hash(bytes,sizeof(bytes),sum);memcpy(expected,sum,sizeof(expected));
+    job.expected_sum=expected;
+    assert(get_one_reply(NULL,&job)==0 && job.rc==EFS_OK);
+    memset(bytes,'z',sizeof(bytes));efs_hash(bytes,sizeof(bytes),sum);job.len=0;
+    assert(get_one_reply(NULL,&job)==0 && job.rc==EFS_ERR_CHECKSUM && job.len==0);
     puts("parallel GET: valid zero/nonzero and corrupt zero/nonzero replies PASS");
 }
 '''

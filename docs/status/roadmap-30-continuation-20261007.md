@@ -70,3 +70,14 @@ RPC tests reject wrong-digest retries and verify that the existing valid object
 is unchanged; the GET corruption matrix and client verification tests pass.
 Log `/private/tmp/efs-roadmap-w75-put.log`. Adds one hash per data PUT; identity-
 bound format and metadata-table integrity remain separate work.
+
+## Round 7 — W75 trust the captured metadata digest
+
+Preferred, fallback and span reads compare the returned digest with the checksum
+in their captured metadata record, even when EFS_READ_VERIFY is off. A valid
+payload/digest pair from a different object is no longer trusted just because
+those two agree. NUC private four-node direct FUSE gate: one swapped fragment
+recovers via parity; two swapped fragments return EIO; restored bytes verify
+cold; all GC protection/restart/inventory checks pass afterward. Production-code
+packet tests also reject a valid-but-wrong digest. Log
+`/private/tmp/efs-roadmap-w75-anchor.log`. On-disk identity hashing remains open.

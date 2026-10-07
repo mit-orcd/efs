@@ -58,6 +58,7 @@ struct frag_get_job {
     uint32_t len;
     int rc;
     uint64_t chunk_generation;
+    const uint8_t *expected_sum; /* digest from the captured metadata view */
 };
 
 static void get_two_parallel(struct frag_get_job *jobs);
@@ -69,6 +70,11 @@ static void *frag_get_thread(void *arg)
     j->rc = efs_client_get_fragment(j->node, j->ino, j->chunk_index, j->fi,
                                     j->frag_len, j->out, &j->len, sum,
                                     j->chunk_generation);
+    if (j->rc == EFS_OK && j->expected_sum &&
+        memcmp(sum, j->expected_sum, EFS_HASH_SIZE) != 0) {
+        j->rc = EFS_ERR_CHECKSUM;
+        j->len = 0;
+    }
     return NULL;
 }
 
@@ -126,7 +132,8 @@ static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
         j->rc = EFS_ERR_NOT_FOUND;
         return 0;
     }
-    if (!fragment_reply_verified(j->out, j->frag_len, sum)) {
+    if ((j->expected_sum && memcmp(sum, j->expected_sum, EFS_HASH_SIZE) != 0) ||
+        !fragment_reply_verified(j->out, j->frag_len, sum)) {
         j->rc = EFS_ERR_CHECKSUM;
         return 0; /* Reply consumed; the connection remains usable. */
     }
@@ -364,6 +371,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[i].len = 0;
             jobs[i].rc = EFS_ERR_NET;
             jobs[i].chunk_generation = have_ce ? ce.generation : 0;
+            jobs[i].expected_sum = have_ce ? ce.checksums[fi] : NULL;
         }
         /* Both GETs from this worker: send, one poll, recv. The frag
          * pool's condvar hop was ~16 futex per chunk (Oct 1). */
@@ -387,6 +395,7 @@ static int efs_client_decode_placed_chunk_attempts(efs_ino_t ino, uint32_t chunk
             jobs[2].len = 0;
             jobs[2].rc = EFS_ERR_NET;
             jobs[2].chunk_generation = have_ce ? ce.generation : 0;
+            jobs[2].expected_sum = have_ce ? ce.checksums[fi] : NULL;
             frag_get_thread(&jobs[2]); /* single fetch: run inline */
             if (jobs[2].rc == 0 && jobs[2].len == frag_len && !have[fi]) {
                 have[fi] = 1;
@@ -837,7 +846,8 @@ static int overlay_one_delta(efs_ino_t ino, uint32_t ci, uint8_t *buf,
         int grc = efs_client_get_fragment(d->nodes[i], ino, ci, i, frag_len,
                                           frags[i], &got, sum, d->generation);
 
-        if (grc == EFS_OK && got == frag_len) {
+        if (grc == EFS_OK && got == frag_len &&
+            memcmp(sum, d->checksums[i], EFS_HASH_SIZE) == 0) {
             have[i] = 1;
             ngood++;
         }

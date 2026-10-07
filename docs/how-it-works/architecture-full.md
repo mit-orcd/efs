@@ -4656,10 +4656,13 @@ The existing metadata-table root-integrity path is separate and unchanged.
 The client verification option now checks ordinary parallel GET replies as well
 as fallback GETs, hashes zero payloads rather than trusting a zero digest, and
 initializes its shared option with pthread_once. NUC production-code reply tests
-reject corrupted zero/nonzero replies and accept valid ones. Identity binding
-binding remains below. Data PUT also rehashes the received payload before storage
+reject corrupted zero/nonzero replies and accept valid ones. Identity-bound on-disk hashing remains below. Data PUT also rehashes the received payload before storage
 or quota mutation; NUC tests reject wrong caller digests without damaging an
 existing valid object. Metadata-table integrity remains on its separate protocol.
+Mapped base and span reads now compare returned digests with the captured
+metadata checksums on preferred and fallback paths, even when optional payload
+rehashing is disabled. NUC FUSE object-swap tests recover one bad fragment using
+parity, reject two bad fragments with EIO and verify restored bytes on cold reads.
 
 **Change/gate:** define a compatible, trusted identity-bound integrity format
 and fail-closed behavior for missing/corrupt integrity evidence; preserve

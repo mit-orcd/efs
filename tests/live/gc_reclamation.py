@@ -23,6 +23,7 @@ p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--mode', choices=('buffered', 'direct'), required=True)
 p.add_argument('--root', action='append', default=[])
 p.add_argument('--posix', action='store_true')
+p.add_argument('--integrity', action='store_true')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
 source = Path(__file__).resolve().parents[2]
@@ -122,10 +123,10 @@ def files(ino):
         found += [x for x in folder.glob('*/*') if x.is_file() and '.sum' not in x.name]
     return found
 
-def create(name):
+def create(name, body=None):
     path=mount/name
     fd=os.open(path,os.O_RDWR|os.O_CREAT|os.O_EXCL,0o600)
-    body=bytes(range(256))*4096
+    if body is None:body=bytes(range(256))*4096
     for _ in range(9):assert os.write(fd,body)==len(body)
     os.fsync(fd)
     ino=os.fstat(fd).st_ino
@@ -154,6 +155,36 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.integrity:
+        # A swap preserves a valid local payload/digest pair but violates the
+        # checksum recorded for this immutable object in committed metadata.
+        target, fd, target_ino = create('integrity-target');os.close(fd)
+        donor, fd, donor_ino = create('integrity-donor', b'z'*(1024*1024));os.close(fd)
+        originals = {}
+        donors = {int(path.name.split('.')[1]):path.read_bytes()
+                  for path in files(donor_ino) if path.name.startswith('0.')}
+        targets = {int(path.name.split('.')[1]):path
+                   for path in files(target_ino) if path.name.startswith('0.')}
+        assert set(targets)=={0,1,2} and set(donors)=={0,1,2}
+        expected_bytes = bytes(range(256))*4096*9
+        for fi in (0,1):originals[fi]=targets[fi].read_bytes()
+        targets[0].write_bytes(donors[0])
+        unmount();mount_client()
+        assert target.read_bytes()==expected_bytes
+        print('one swapped fragment falls back to trusted parity PASS',flush=True)
+        targets[1].write_bytes(donors[1])
+        unmount();mount_client()
+        try:
+            target.read_bytes()
+        except OSError as error:
+            assert error.errno == 5,error
+        else:raise AssertionError('two swapped objects returned silent wrong bytes')
+        for fi,body in originals.items():targets[fi].write_bytes(body)
+        unmount();mount_client()
+        assert target.read_bytes()==expected_bytes
+        os.unlink(target);os.unlink(donor)
+        wait(lambda:not files(target_ino) and not files(donor_ino),'integrity fixtures reclaimed')
+        print('two swapped fragments fail read; restored bytes verify cold PASS',flush=True)
     # Two peers repeatedly touch adjacent ranges until the span chain folds.
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
     peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
