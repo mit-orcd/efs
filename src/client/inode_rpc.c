@@ -782,10 +782,16 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
     uint32_t shard = efs_kv_inode_shard(parent);
     int rc;
 
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
+    if (inout_count && !*inout_count)
+        return EFS_ERR_INVAL;
     memset(&req, 0, sizeof(req));
     req.export_id = export_id;
     req.parent = parent;
     req.max_ents = inout_count ? *inout_count : EFS_READDIR_MAX;
+    if (req.max_ents > EFS_READDIR_MAX)
+        req.max_ents = EFS_READDIR_MAX;
     req.after_src = src_io ? *src_io : 0;
     if (name_io)
         strncpy(req.after_name, name_io, EFS_MAX_NAME - 1);
@@ -803,10 +809,15 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
     rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
     unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
     if (rc != 0) {
+        free(payload);
         efs_client_conn_drop(nid, conn);
         return EFS_ERR_NET;
     }
     efs_client_conn_release(nid, conn);
+    if (efs_client_rpc_past_deadline()) {
+        free(payload);
+        return EFS_ERR_BUSY;
+    }
     rpc_prof_add(EFS_MSG_INODE_READDIR, t1 - t0, t2 - t1, t3 - t2, 0);
     if (rtype != EFS_MSG_INODE_READDIR_REPLY ||
         plen < sizeof(struct efs_msg_inode_readdir_reply)) {
@@ -820,6 +831,13 @@ int efs_client_rpc_readdir_cur(efs_export_id_t export_id, efs_ino_t parent,
             int st = rpc_status_to_efs(r->status);
             free(payload);
             return st;
+        }
+        if (r->count > req.max_ents || r->next_done > 1 ||
+            !memchr(r->next_name, 0, sizeof(r->next_name)) ||
+            (!r->next_done && r->next_src == req.after_src &&
+             !strcmp(r->next_name, req.after_name))) {
+            free(payload);
+            return EFS_ERR_PROTO;
         }
         n = r->count;
         if (inout_count && n > *inout_count)

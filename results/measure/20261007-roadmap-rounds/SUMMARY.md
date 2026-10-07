@@ -33,4 +33,5 @@ implementation rounds.
 | 22 | Demand read scratch retries stop at inherited expiry and distinguish timeout from allocator exhaustion | pressure regression PASS on Mac/NUC; live NUC read and overlap gates PASS; full source-rebuilt NUC unit suite PASS after round 21 | 22bc6a11 |
 | 23 | Zero-copy read refuses failed PUT-window waits before pinning cached images | production refs regression PASS on Mac/NUC; live NUC read and overlap gates PASS | 1cb09de0 |
 | 24 | Validate copy/zero-copy read extents before uint32 chunk casts; reject invalid pin arrays | production overflow/pointer regressions PASS; NUC sparse single/peer gates PASS | 924195e6 |
-| 25 | Inode writer-view authority acquisition shares whole retry budget and refuses late replies | RPC fault regression PASS on Mac/NUC; NUC concurrent 8/8 and overlap 3/3 PASS | accompanying inode view commit |
+| 25 | Inode writer-view authority acquisition shares whole retry budget and refuses late replies | RPC fault regression PASS on Mac/NUC; NUC concurrent 8/8 and overlap 3/3 PASS | d02c087c |
+| 26 | Validate readdir counts and progressing terminated cookies; reject late pages and free failed buffers before output adoption | malformed reply regression PASS; NUC readdir/listdir gates PASS | accompanying readdir commit |
