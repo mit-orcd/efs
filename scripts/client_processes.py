@@ -62,16 +62,36 @@ def retire(mount):
         endpoint = f'/tmp/efs-control-{value:016x}.sock'
         inodes = {line.split()[6] for line in Path('/proc/net/unix').read_text().splitlines()[1:]
                   if len(line.split()) >= 8 and line.split()[7] == endpoint}
-        links = {os.readlink(fd) for fd in Path(f'/proc/{pid}/fd').iterdir()}
+        links = set()
+        try:
+            for candidate in Path(f'/proc/{pid}/fd').iterdir():
+                try:links.add(os.readlink(candidate))
+                except FileNotFoundError:pass # descriptor closed during exit
+        except FileNotFoundError:
+            pass # process exited; bounded identity check below confirms it
         if not any(f'socket:[{inode}]' in links for inode in inodes):
+            # A naturally exiting client can close its control socket before
+            # its last worker joins. Never signal without endpoint ownership;
+            # allow bounded natural retirement instead.
+            deadline = time.monotonic() + 10
+            while (pid, path, stamp) in clients() and time.monotonic() < deadline:
+                time.sleep(.1)
+            if (pid, path, stamp) not in clients():
+                continue
             raise RuntimeError(f'PID {pid} does not own drained endpoint; retained')
         print(f'Retiring drained efs-fuse PID {pid} for {path}', flush=True)
         if not hasattr(os, 'pidfd_open') or not hasattr(signal, 'pidfd_send_signal'):
             raise RuntimeError('safe retirement requires Linux pidfd support')
-        fd = os.pidfd_open(pid)
+        try:
+            fd = os.pidfd_open(pid)
+        except ProcessLookupError:
+            continue
         try:
             if (pid, path, stamp) in clients():
-                signal.pidfd_send_signal(fd, signal.SIGTERM)
+                try:
+                    signal.pidfd_send_signal(fd, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
         finally:
             os.close(fd)
     deadline = time.monotonic() + 10

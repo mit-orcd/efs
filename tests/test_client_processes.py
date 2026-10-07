@@ -43,12 +43,14 @@ if sys.platform.startswith('linux'):
         code='''import ctypes,os,socket,sys,time
 ctypes.CDLL(None).prctl(15,b"efs-fuse",0,0,0)
 s=socket.socket(socket.AF_UNIX);s.bind(sys.argv[2]);s.listen(4)
+if len(sys.argv)>3:
+ s.close();os.unlink(sys.argv[2])
 print("READY",flush=True)
-time.sleep(30)
+time.sleep(1 if len(sys.argv)>3 else 30)
 '''
-        for owned in (False,True):
+        for owned in (False,True,'closing'):
             bound=endpoint if owned else endpoint+'.other'
-            process=subprocess.Popen([sys.executable,'-c',code,mount,bound],stdout=subprocess.PIPE,text=True)
+            process=subprocess.Popen([sys.executable,'-c',code,mount,bound,*(['closing'] if owned=='closing' else [])],stdout=subprocess.PIPE,text=True)
             try:
                 assert process.stdout.readline().strip()=='READY'
                 assert any(row[0]==process.pid and row[1]==mount for row in m.clients())
@@ -59,7 +61,7 @@ time.sleep(30)
                     assert process.poll() is None
                 else:
                     m.retire(mount)
-                    assert process.wait(timeout=2)==-15
+                    assert process.wait(timeout=2)==(0 if owned=='closing' else -15)
             finally:
                 if process.poll() is None: process.terminate();process.wait()
                 try: os.unlink(bound)
