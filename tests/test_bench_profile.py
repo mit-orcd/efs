@@ -113,6 +113,9 @@ class ProfileTests(unittest.TestCase):
 
     def test_metrics_and_symbols(self):
         self.assertFalse(bench.valid_metrics([]))
+        self.assertFalse(bench.valid_metrics([dict(ops='10', lat_samples='9')]))
+        self.assertFalse(bench.valid_metrics([dict(ops='10', latency_valid='0')]))
+        self.assertTrue(bench.valid_metrics([dict(ops='10', lat_samples='10', latency_valid='1')]))
         self.assertFalse(bench.valid_metrics([{'ops': '0'}]))
         self.assertFalse(bench.valid_metrics([{'chunks_ok': '2', 'chunks_fail': '1'}]))
         self.assertTrue(bench.valid_metrics([{'ops': '10', 'errors': '0'}]))

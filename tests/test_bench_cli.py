@@ -92,6 +92,16 @@ def main():
         rows = [dict(re.findall(r'(\w+)=([^\s]+)', line)) for line in out.splitlines() if line.startswith('BENCH_OK ')]
         assert {(row['paths'], row['rw']) for row in rows} == {('1', 'write'), ('1', 'read'), ('2', 'write'), ('2', 'read')}, out
         assert all(row['errors'] == '0' for row in rows), out
+        assert all(row['lat_samples'] == row['ops'] and row['latency_valid'] == '1' for row in rows), out
+        assert all(row['write_mode'] == ('overwrite' if row['rw'] == 'write' else 'read') for row in rows), out
+        assert all(int(row['p99_lower_us']) <= int(row['p99_us']) <= int(row['max_us']) for row in rows), out
+        assert out.count('BENCH_PREP ') == 2, out
+        histograms = [dict(re.findall(r'(\w+)=([^\s]+)', line)) for line in out.splitlines() if line.startswith('BENCH_HIST ')]
+        assert len(histograms) == len(rows), out
+        for hist, row in zip(histograms, rows):
+            assert hist['n'] == row['lat_samples'] and hist['max_us'] == row['max_us'], out
+            assert sum(int(x.split(':')[1]) for x in hist['bins'].split(',')) == int(hist['n']), out
+
     # Oversubscribe the CPU without spinning at the all-ready start gate.
     with tempfile.TemporaryDirectory(prefix='efs-io-many-workers-') as root:
         out = run('efs-bench', '--bench', 'io', '--storage', root, '--rw', 'write',
@@ -141,6 +151,12 @@ def main():
         run('efs-bench', '--bench', 'data', '--storage', root, '--rw', 'read', ok=False)
         run('efs-bench', '--bench', 'meta', '--storage', root, '--rw', 'write', ok=False)
         run('efs-bench', '--bench', 'data', '--storage', root, '--rw', 'bad', ok=False)
+        run('efs-bench', '--bench', 'data', '--storage', root, '--write-mode', 'overwrite', ok=False)
+        run('efs-bench', '--bench', 'data', '--storage', root, '--write-mode', 'create', '--window', '2', ok=False)
+        out = run('efs-bench', '--bench', 'data', '--storage', root, '--write-mode', 'create',
+                  '--rw', 'write', '--qd', '1', '--writers', '0', '--time', '.03', '--skip-ceiling')
+        assert 'write_mode=create' in out and 'BENCH_PREP ' not in out, out
+
     if args.smoke:
         for kind, option in [('meta', '--meta-storage'), ('data', '--storage')]:
             with tempfile.TemporaryDirectory(prefix='efs-bench-smoke-') as root:

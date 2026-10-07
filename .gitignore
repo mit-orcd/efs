@@ -59,3 +59,5 @@ __pycache__/
 /tests/test_writer_routing
 
 /tests/test_store_overwrite
+
+/tests/test_bench_latency

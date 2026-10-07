@@ -1,5 +1,6 @@
 #include "bench_local.h"
 #include "perf_control.h"
+#include "latency.h"
 #include "efs/checksum.h"
 #include "efs/common.h"
 #include "efs/kv.h"
@@ -28,7 +29,6 @@
 #define EFS_BENCH_EXPORT_ID  ((efs_export_id_t)0xB7)
 
 #define BENCH_MAX_SLOTS   256
-#define BENCH_LAT_MAX     (1u << 20) /* per-thread latency sample cap */
 #define BENCH_CI_SPAN     (1u << 22) /* chunk-index space per slot */
 
 static const int bench_qds[] = { 1, 16, 64, 256 };
@@ -109,37 +109,6 @@ static void fill_nonzero(uint8_t *buf, uint32_t len, uint64_t seed)
         uint32_t n = len - i < 8 ? len - i : 8;
         memcpy(buf + i, &v, n);
     }
-}
-
-/* ---- per-op latency samples (exact p50/p99 at round end) ---- */
-
-struct lat_vec {
-    uint64_t *v;
-    uint32_t n;
-    uint32_t cap;
-};
-
-static void lat_add(struct lat_vec *lv, uint64_t us)
-{
-    if (lv->n >= BENCH_LAT_MAX)
-        return; /* sampling stops; ops still count */
-    if (lv->n == lv->cap) {
-        uint32_t ncap = lv->cap ? lv->cap * 2 : 4096;
-        if (ncap > BENCH_LAT_MAX)
-            ncap = BENCH_LAT_MAX;
-        uint64_t *nv = realloc(lv->v, (size_t)ncap * sizeof(*nv));
-        if (!nv)
-            return;
-        lv->v = nv;
-        lv->cap = ncap;
-    }
-    lv->v[lv->n++] = us;
-}
-
-static int u64_cmp(const void *a, const void *b)
-{
-    uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
-    return (x > y) - (x < y);
 }
 
 /* ---- /proc/diskstats: util per device over one round ---- */
@@ -490,6 +459,19 @@ static int slot_get(struct bench_slot *sl, uint32_t chunk_index)
     return EFS_OK;
 }
 
+static void *slot_populate(void *arg)
+{
+    struct bench_slot *sl = arg;
+    while (sl->written < sl->window) {
+        if (slot_put(sl, sl->ci_base + sl->written) != EFS_OK) {
+            sl->errors++;
+            break;
+        }
+        sl->written++;
+    }
+    return NULL;
+}
+
 static void *slot_main(void *arg)
 {
     struct bench_slot *sl = arg;
@@ -547,7 +529,7 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
         slots[i].ops = 0;
         memset(slots[i].root_ops, 0, sizeof(slots[i].root_ops));
         slots[i].errors = 0;
-        slots[i].lat.n = 0;
+        memset(&slots[i].lat, 0, sizeof(slots[i].lat));
         slots[i].read_seq = 0;
     }
     efs_iostats_snapshot(&io0);
@@ -565,6 +547,8 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
     server_writer_stats_reset(writer_stats && !reading);
     int profiling = perf_command("enable\n") == 0;
     if (!profiling) control_errors++;
+    if (getenv("EFS_BENCH_PHASE_MARKERS"))
+        fprintf(stderr, "BENCH_PHASE begin\n");
     double t0 = now_sec();
     double deadline = profiling ? t0 + time_sec : t0;
     uint64_t release_us = efs_iostats_now_us();
@@ -581,6 +565,8 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
             pthread_join(tids[i], NULL);
     }
     double wall = now_sec() - t0;
+    if (getenv("EFS_BENCH_PHASE_MARKERS"))
+        fprintf(stderr, "BENCH_PHASE end\n");
     if (profiling && perf_command("disable\n")) control_errors++;
     struct efs_writer_stats ws;
     server_writer_stats_snapshot(&ws);
@@ -605,24 +591,13 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
         if (tids[i] && slots[i].start_us - release_us > max_start)
             max_start = slots[i].start_us - release_us;
     }
-    /* Exact percentiles over all recorded samples of the round. */
-    uint64_t *all = malloc((size_t)(samples ? samples : 1) * sizeof(*all));
-    uint64_t p50 = 0, p99 = 0, max = 0;
-    if (all) {
-        uint64_t k = 0;
-        for (int i = 0; i < qd; i++) {
-            memcpy(all + k, slots[i].lat.v,
-                   (size_t)slots[i].lat.n * sizeof(*all));
-            k += slots[i].lat.n;
-        }
-        qsort(all, (size_t)k, sizeof(*all), u64_cmp);
-        if (k) {
-            p50 = all[k / 2];
-            p99 = all[(k * 99) / 100];
-            max = all[k - 1];
-        }
-        free(all);
-    }
+    struct lat_vec all = {0};
+    for (int i = 0; i < qd; i++) lat_merge(&all, &slots[i].lat);
+    uint64_t p99_low = 0;
+    uint64_t p50 = lat_percentile(&all, 50, NULL);
+    uint64_t p99 = lat_percentile(&all, 99, &p99_low), max = all.max;
+    int latency_valid = samples == ops + errors && samples == all.n;
+    if (!latency_valid) errors++;
     uint64_t diskw_ops = io1.cls[EFS_IOSTAT_DISK_WRITE].ops -
                          io0.cls[EFS_IOSTAT_DISK_WRITE].ops;
     uint64_t diskw_us = io1.cls[EFS_IOSTAT_DISK_WRITE].us_sum -
@@ -630,14 +605,30 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
     double gib_s = (double)ops * frag_len / (1 << 30) / wall;
     printf("%s kind=data rw=%s paths=%d qd=%d ops=%llu wall_s=%.3f "
            "ops_s=%.1f p50_us=%llu p99_us=%llu max_us=%llu GiB_s=%.3f "
-           "errors=%llu diskw_ops=%llu diskw_avg_us=%llu idle_workers=%llu max_start_us=%llu writers=%d sync=%s\n",
+           "errors=%llu diskw_ops=%llu diskw_avg_us=%llu idle_workers=%llu max_start_us=%llu writers=%d sync=%s "
+           "latency=store_call lat_samples=%llu latency_valid=%d p99_lower_us=%llu "
+           "latency_quality=%s write_mode=%s\n",
            errors || !ops || idle ? "BENCH_FAIL" : "BENCH_OK",
            reading ? "read" : "write", npaths, qd, (unsigned long long)ops,
            wall, (double)ops / wall, (unsigned long long)p50,
            (unsigned long long)p99, (unsigned long long)max, gib_s,
            (unsigned long long)errors, (unsigned long long)diskw_ops,
            (unsigned long long)(diskw_ops ? diskw_us / diskw_ops : 0),
-           (unsigned long long)idle, (unsigned long long)max_start, slots[0].s->nwriters, slots[0].s->bench_sync && !reading ? "on" : "off");
+           (unsigned long long)idle, (unsigned long long)max_start, slots[0].s->nwriters, slots[0].s->bench_sync && !reading ? "on" : "off",
+           (unsigned long long)samples, latency_valid, (unsigned long long)p99_low,
+           !latency_valid ? "invalid" : samples < 10000 ? "low_samples" : "sufficient_samples",
+           reading ? "read" : slots[0].window ? "overwrite" : "create");
+    /* Emit counts after timing so repeated runs can be pooled without
+     * averaging quantiles. Bucket layout is versioned and documented. */
+    printf("BENCH_HIST version=1 rw=%s paths=%d qd=%d n=%llu max_us=%llu bins=",
+           reading ? "read" : "write", npaths, qd,
+           (unsigned long long)all.n, (unsigned long long)all.max);
+    const char *separator = "";
+    for (unsigned i = 0; i < BENCH_LAT_BUCKETS; i++) if (all.bins[i]) {
+        printf("%s%u:%llu", separator, i, (unsigned long long)all.bins[i]);
+        separator = ",";
+    }
+    putchar('\n');
     if (writer_stats && !reading) {
         printf("BENCH_WAIT jobs=%llu queued=%llu fallback=%llu peak_active=%llu "
                "admission_us=%llu admission_max_us=%llu queue_us=%llu queue_max_us=%llu "
@@ -761,19 +752,26 @@ static int run_data_bench(struct efsd_server *s, double time_sec, int qd, int ce
             return 1;
         }
         int first_q = qd ? -1 : 0, last_q = qd ? -1 : BENCH_NQDS - 1;
-        /* Read-only population is bounded and outside both timing and perf. */
-        if (!strcmp(rw, "read")) {
+        /* Populate every bounded slot before timing: timed writes are all
+         * overwrites. Without a window every timed write creates a new file. */
+        if (window) {
             int max_qd = qd ? qd : BENCH_MAX_SLOTS;
+            pthread_t prep[BENCH_MAX_SLOTS];
+            unsigned started = 0;
             for (int i = 0; i < max_qd; i++) {
-                for (uint32_t j = 0; j < window; j++) {
-                    if (slot_put(&slots[i], slots[i].ci_base + j) != EFS_OK) {
-                        fprintf(stderr, "bench: read population failed\n");
-                        errors++;
-                        goto path_done;
-                    }
-                    slots[i].written++;
+                if (pthread_create(&prep[i], NULL, slot_populate, &slots[i]) != 0) {
+                    errors++;
+                    break;
                 }
+                started++;
             }
+            for (unsigned i = 0; i < started; i++) {
+                pthread_join(prep[i], NULL);
+                errors += slots[i].errors;
+            }
+            if (errors) { fprintf(stderr, "bench: population failed\n"); goto path_done; }
+            printf("BENCH_PREP paths=%u slots=%d fragments=%llu timed=0\n", np, max_qd,
+                   (unsigned long long)window * max_qd);
         }
         if (strcmp(rw, "read"))
             for (int q = first_q; q <= last_q; q++)
@@ -794,7 +792,6 @@ path_done:
 
     for (int i = 0; i < BENCH_MAX_SLOTS; i++) {
         free(slots[i].buf);
-        free(slots[i].lat.v);
     }
     free(slots);
     server_export_put(s, ex);
@@ -806,13 +803,8 @@ path_done:
 static void lat_report(const char *tag, struct lat_vec *lv, uint64_t ops,
                        uint64_t errors, double wall, uint64_t op_bytes)
 {
-    uint64_t p50 = 0, p99 = 0, max = 0;
-    if (lv->n) {
-        qsort(lv->v, lv->n, sizeof(*lv->v), u64_cmp);
-        p50 = lv->v[lv->n / 2];
-        p99 = lv->v[(lv->n * 99) / 100];
-        max = lv->v[lv->n - 1];
-    }
+    uint64_t p50 = lat_percentile(lv, 50, NULL);
+    uint64_t p99 = lat_percentile(lv, 99, NULL), max = lv->max;
     if (wall < 1e-9)
         wall = 1e-9;
     printf("%s kind=meta phase=%s ops=%llu wall_s=%.3f ops_s=%.1f "
@@ -855,7 +847,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
         else ceil_raw(root);
     }
 
-    struct lat_vec lv = { 0, 0, 0 };
+    struct lat_vec lv = {0};
     uint8_t key[24] = "benchmeta-key-";
     uint8_t val[128];
     fill_nonzero(val, sizeof(val), 3);
@@ -910,7 +902,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
     /* KV read: point gets over the keys just written. */
     uint64_t written_keys = ops ? ops : 1;
     uint8_t vbuf[256];
-    lv.n = 0;
+    memset(&lv, 0, sizeof(lv));
     ops = 0;
     errors = 0;
     uint64_t x = 99;
@@ -934,7 +926,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
     lat_report("kv-read", &lv, ops, errors, wall, 0);
     total_errors += errors + !ops;
     efs_kv_lsm_close(kv);
-    free(lv.v);
+
 
     /* Raft log: appends that fsync at QD 1, then batches behind one fsync. */
     struct efs_raft_disk *rd = efs_raft_disk_open(raftdir, EFS_RAFT_DISK_SYNC);
@@ -950,8 +942,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
     }
     uint8_t cmd[256];
     fill_nonzero(cmd, sizeof(cmd), 5);
-    lv.v = NULL;
-    lv.n = lv.cap = 0;
+    memset(&lv, 0, sizeof(lv));
     ops = errors = 0;
     uint64_t idx = 1;
     t0 = now_sec();
@@ -972,7 +963,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
 
     total_errors += errors + !ops;
     if (rst->batch_begin && rst->batch_end) {
-        lv.n = 0;
+        memset(&lv, 0, sizeof(lv));
         ops = errors = 0;
         uint64_t entries = 0;
         t0 = now_sec();
@@ -1007,12 +998,9 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
         if (wall < 1e-9)
             wall = 1e-9;
         uint64_t p50 = 0, p99 = 0, max = 0;
-        if (lv.n) {
-            qsort(lv.v, lv.n, sizeof(*lv.v), u64_cmp);
-            p50 = lv.v[lv.n / 2];
-            p99 = lv.v[(lv.n * 99) / 100];
-            max = lv.v[lv.n - 1];
-        }
+        p50 = lat_percentile(&lv, 50, NULL);
+        p99 = lat_percentile(&lv, 99, NULL);
+        max = lv.max;
         printf("%s kind=meta phase=raft-append-batch32 batches=%llu "
                "entries=%llu wall_s=%.3f entries_s=%.1f batch_p50_us=%llu "
                "batch_p99_us=%llu batch_max_us=%llu MB_s=%.3f errors=%llu\n",
@@ -1025,7 +1013,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
         fflush(stdout);
         total_errors += errors + !ops;
     }
-    free(lv.v);
+
 
     /* Log reopen: close + open + last() in the clock (recovery cost). */
     t0 = now_sec();
@@ -1109,6 +1097,8 @@ static void local_usage(const char *prog)
         "Local engine benchmarks; no cluster or sockets. Scratch roots must be\n"
         "empty. Data sweeps paths x QD 1/16/64/256; meta measures KV and Raft log.\n"
         "--rw read|write|both isolates phases; read requires --window.\n"
+        "--write-mode overwrite requires --window; create requires no window.\n"
+        "Bounded windows are populated before timing. Percentiles have <0.782%% bucket width; max is exact.\n"
         "--sync enables O_SYNC for engine writes (benchmark only).\n"
         "--full-paths skips the path-prefix ladder; --writer-stats enables wait timing.\n"
         "--skip-ceiling omits the separate fio/raw ceiling probe.\n"
@@ -1141,7 +1131,7 @@ int efs_bench_local_main(int argc, char **argv)
     const char *kind = NULL;
     double duration = 10.0;
     int qd = 0, ceiling = 1, full_paths = 0, writer_stats = 0;
-    const char *rw = "both";
+    const char *rw = "both", *write_mode = NULL;
     uint32_t window = 0;
     for (int i = 1; i < argc; i++) {
         const char *opt = argv[i];
@@ -1159,6 +1149,9 @@ int efs_bench_local_main(int argc, char **argv)
         if (!strcmp(opt, "--bench")) {
             if (kind || (strcmp(value, "data") && strcmp(value, "meta"))) goto invalid;
             kind = value;
+        } else if (!strcmp(opt, "--write-mode")) {
+            if (strcmp(value, "create") && strcmp(value, "overwrite")) goto invalid;
+            write_mode = value;
         } else if (!strcmp(opt, "--rw")) {
             if (strcmp(value, "both") && strcmp(value, "read") && strcmp(value, "write")) goto invalid;
             rw = value;
@@ -1188,7 +1181,10 @@ int efs_bench_local_main(int argc, char **argv)
             s.nwriters = (int)n;
         } else goto invalid;
     }
-    if ((!strcmp(rw, "read") && !window) ||
+    if ((write_mode && ((strcmp(kind ? kind : "", "data") != 0) ||
+        (!strcmp(write_mode, "overwrite") && !window) ||
+        (!strcmp(write_mode, "create") && window))) ||
+        (!strcmp(rw, "read") && !window) ||
         ((full_paths || writer_stats || strcmp(rw, "both")) && kind && strcmp(kind, "data")) ||
         ((qd || window) && kind && strcmp(kind, "data")) || !kind || (!s.storage_path_count &&
         (!strcmp(kind, "data") || !s.meta_storage[0]))) goto invalid;

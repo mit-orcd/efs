@@ -256,6 +256,10 @@ def valid_metrics(rows):
     if not rows:
         return False
     for r in rows:
+        if r.get('latency_valid', '1') != '1':
+            return False
+        if 'lat_samples' in r and int(r['lat_samples']) != int(r.get('ops', 0)) + int(r.get('errors', 0)):
+            return False
         if r.get('result') == 'FAIL':
             return False
         if any(int(r.get(k, '0')) != 0 for k in ['errors', 'chunks_fail', 'idle_workers']):
@@ -394,6 +398,7 @@ def analyze(output):
             'CPU sample shares show where execution was sampled, not wall-time spent waiting or proof of an I/O bottleneck.',
             'Profiles filter to efs-bench threads; fio ceiling child processes are excluded. Source annotations need matching debug/source files.',
             'Raw I/O profiles capture only the parallel timed loop; setup, read population and post-run validation are excluded by perf-control acknowledgement.',
+            'Engine bounded-write windows are populated before timing. Store-call latency includes admission, scheduling and I/O; p99 is a bounded histogram estimate and max is an exact observed duration. Runs below 10,000 samples are labelled low_samples; maxima are not guarantees.',
             'Data profiles follow --data-rw: both combines phases, split/read/write isolate them. The path-count ladder is omitted with --data-full-paths.', '',
             '| Case | Result | Baseline measurements | Hottest sampled symbols |', '|---|---|---|---|']
     failures = [r for r in results if r['status'] not in ['PASS', 'REPORTS_PENDING']]
@@ -409,8 +414,8 @@ def analyze(output):
         done.add(r['name'])
         measurements = []
         for m in r.get('metrics', []):
-            tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd', 'allocation', 'sync'] if k in m)
-            numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_us', 'avg_us', 'max_us'] if k in m)
+            tag = '/'.join(m[k] for k in ['phase', 'rw', 'paths', 'qd', 'allocation', 'sync', 'write_mode'] if k in m)
+            numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_lower_us', 'p99_us', 'avg_us', 'max_us', 'lat_samples', 'latency_quality'] if k in m)
             if baseline_valid(r) and numbers:
                 measurements.append(f'{tag} {numbers}'.strip())
             elif not baseline_valid(r):
@@ -441,7 +446,7 @@ def analyze(output):
             hot = 'INVALID profile; diagnostic only: ' + hot
         text.append(f"| [{r['name']}]({r['name']}/baseline.stdout) | {r['status']} | {'; '.join(measurements)} | {hot.replace('|', '/')} |")
         if 'strace' in r.get('runs', {}):
-            details.append(f"**{r['name']} syscall trace:** [summary]({r['name']}/strace/summary.txt); this separate run includes ptrace overhead.")
+            details.append(f"**{r['name']} syscall trace:** [summary]({r['name']}/strace/summary.txt); this separate run uses wall-clock syscall time (-w) and includes setup, population, cleanup and ptrace overhead; it is not a timed-phase latency measurement.")
         annotations = output / r['name'] / 'perf' / 'annotations.json'
         if annotations.exists():
             for annotation in json.loads(annotations.read_text()):
@@ -655,7 +660,7 @@ def main(argv=None):
                     cmd = [perf, 'record', '-e', a.event, '-F', str(a.frequency), '-g', '--call-graph', call_graph_for(a, case['mode']),
                            '-o', str(stage_dir / 'perf.data')] + (['--delay=-1', '--control', f'fifo:{control},{ack}'] if control else []) + ['--'] + cmd
                 elif stage == 'strace':
-                    cmd = [strace, '-f', '-c', '-o', str(stage_dir / 'summary.txt')] + (['-e', a.strace_expr] if a.strace_expr else []) + cmd
+                    cmd = [strace, '-f', '-c', '-w', '-o', str(stage_dir / 'summary.txt')] + (['-e', a.strace_expr] if a.strace_expr else []) + cmd
                 # Prevent inherited EFS_PERF_PATH from causing nested profiling.
                 env = os.environ.copy()
                 env.pop('EFS_PERF_PATH', None)

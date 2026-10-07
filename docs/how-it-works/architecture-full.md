@@ -7377,6 +7377,40 @@ command labels. New runs use `efs-bench --bench`; `efsd` no longer offers local
 benchmark execution. The move changes command ownership, not measured workload
 or backend behavior. No new storage-performance claim follows from this move.
 
+### Latency measurement contract
+
+Engine data latency surrounds the complete `slot_put` / `slot_get` call using
+`CLOCK_MONOTONIC`, rounded to integer microseconds. It includes admission,
+writer scheduling, filesystem work, I/O and return scheduling. It is not device
+latency or end-to-end FUSE latency. QD workers issue the next request only after
+the previous one completes: this measures a closed-loop workload and does not
+model queued arrivals during a stall (coordinated omission).
+
+Every operation contributes to a fixed-size histogram, including failures.
+There is no sample cap or allocation on the measurement path. `lat_samples`
+must equal successes plus errors; invalid coverage fails the data result.
+Percentiles use nearest rank; `p99_lower_us..p99_us` encloses that sample
+percentile. Integer values through 255 us are exact; larger buckets have width
+below 0.782% of their lower bound. `max_us` is the exact observed integer-us
+maximum, independent of histogram buckets. Neither histogram resolution nor
+sample count establishes statistical confidence or a worst-case guarantee.
+
+`latency_quality=low_samples` flags fewer than 10,000 observations. For
+comparisons use longer untraced runs and at least five randomized repeats,
+inspect sample counts and per-run ranges, and keep perf/strace in separate
+runs. A `sufficient_samples` label only passes this count heuristic; correlated
+I/O observations and run-to-run variance still matter. Three-second harness
+defaults are exploratory, not acceptance-quality tail measurements.
+
+`BENCH_HIST version=1` retains mergeable `bucket:count` pairs after each data
+round. Bins 0..255 are exact microseconds. For index `i >= 256`, let
+`s = floor(i/128)-1`; bounds are `(128+i%128)*2^s` through that value plus
+`2^s-1`, capped by the observed maximum. Combine counts from identical workloads
+and use nearest rank on the merged counts for a pooled percentile. Do not
+average per-run p99 values and call the result a pooled p99. Metadata operation
+percentiles also use this collector; raw-I/O and hash modes expose different
+metrics and do not claim an engine operation p99.
+
 ### Benchmark profiling harness
 
 `./efs-bench.sh` on a Linux benchmark host runs an untraced baseline and a
@@ -7404,9 +7438,12 @@ data buffered/direct I/O, inline/two-thread/automatic writer pools and QD
 1/16/64/256; local KV and Raft workloads including individual and batch32
 appends. The fixed data payload remains 64 KiB. The harness bounds the local resident
 working set to 256 MiB of fragment payload across QD slots (`--data-size`);
-filesystem/checksum overhead is additional. Writes wrap after filling that
-window, measuring creation followed by replacement. Direct CLI runs without
-`--window` keep the original append-only workload. `--time` defaults to three
+filesystem/checksum overhead is additional. The full bounded window is now
+populated **before** timing or perf recording; measured writes replace existing
+fragments. `--write-mode overwrite` requires `--window`; `--write-mode create`
+requires no window and times file creation. Omitting the mode infers it from
+the window. Earlier bounded-write results mixed creation and replacement,
+especially in short synchronous runs; do not treat them as pure overwrite data. `--time` defaults to three
 seconds **per timed phase**, so the full baseline/profile matrix takes minutes,
 plus setup, compaction/reopen and report generation. This is a bounded set of
 meaningful configurations, not every combination of arbitrary numeric options.
@@ -7436,9 +7473,13 @@ latency and device ceilings must support an optimization choice.
 Perf defaults to `cycles`, 499 Hz and frame-pointer call graphs. Select
 `--event cpu-clock` on a VM lacking a PMU, or `--call-graph dwarf` when needed.
 `--no-perf` is an explicit baseline-only diagnostic mode and is labelled as such.
-Strace uses `-f -c` and saves per-syscall counts/time/errors; optionally restrict
+Strace uses `-f -c -w` and saves per-syscall counts/wall time/errors; optionally restrict
 it with `--strace-expr trace=writev,fsync,futex`. Traced timings do not replace
-baseline throughput. `--timeout` bounds each subprocess. Timeout/interruption
+baseline throughput. The summary includes population and cleanup, so it is not
+a timed-loop latency measurement. For phase-specific traces, engine data runs
+can set `EFS_BENCH_PHASE_MARKERS=1` and use timestamped `strace -f -ttt -T`,
+then restrict completed calls to the `BENCH_PHASE begin/end` interval.
+`--timeout` bounds each subprocess. Timeout/interruption
 stops the owned process group and retains completed evidence; regenerate the
 summary with `./efs-bench.sh --analyze <result-directory>`.
 
