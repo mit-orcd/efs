@@ -2389,8 +2389,8 @@ static int wb_wait_idle_budget(void)
 {
     uint64_t deadline = efs_client_rpc_deadline_ms();
     if (!deadline) {
-        pthread_cond_wait(&g_wb.idle, &g_wb.mu);
-        return EFS_OK;
+        return pthread_cond_wait(&g_wb.idle, &g_wb.mu) == 0
+               ? EFS_OK : EFS_ERR_IO;
     }
     uint64_t now = stats_now_ms();
     if (now >= deadline)
@@ -2402,7 +2402,9 @@ static int wb_wait_idle_budget(void)
     until.tv_nsec += (long)wait * 1000000;
     until.tv_sec += until.tv_nsec / 1000000000;
     until.tv_nsec %= 1000000000;
-    pthread_cond_timedwait(&g_wb.idle, &g_wb.mu, &until);
+    int rc = pthread_cond_timedwait(&g_wb.idle, &g_wb.mu, &until);
+    if (rc && rc != ETIMEDOUT)
+        return EFS_ERR_IO;
     return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
 }
 
@@ -2671,9 +2673,16 @@ static int efs_wb_sync(void)
 {
     if (!g_wb.ready)
         return EFS_OK;
-    pthread_mutex_lock(&g_wb.mu);
-    while (g_wb.count > 0 || g_wb.inflight > 0)
-        pthread_cond_wait(&g_wb.idle, &g_wb.mu);
+    int rc = wb_lock_budget(&g_wb.mu);
+    if (rc != EFS_OK)
+        return rc;
+    while (g_wb.count > 0 || g_wb.inflight > 0) {
+        rc = wb_wait_idle_budget();
+        if (rc != EFS_OK) {
+            pthread_mutex_unlock(&g_wb.mu);
+            return rc;
+        }
+    }
     int err = g_wb.err;
     g_wb.err = EFS_OK;
     g_wb.err_ino = 0;
@@ -2701,20 +2710,15 @@ static int efs_wb_sync_ino(efs_ino_t ino)
 {
     if (!g_wb.ready)
         return EFS_OK;
-    pthread_mutex_lock(&g_wb.mu);
+    int rc = wb_lock_budget(&g_wb.mu);
+    if (rc != EFS_OK)
+        return rc;
     while (efs_wb_ino_pending_locked(ino)) {
-        if (efs_client_rpc_past_deadline()) {
+        rc = wb_wait_idle_budget();
+        if (rc != EFS_OK) {
             pthread_mutex_unlock(&g_wb.mu);
-            return EFS_ERR_BUSY;
+            return rc;
         }
-        struct timespec until;
-        clock_gettime(CLOCK_REALTIME, &until);
-        until.tv_nsec += 100000000L;
-        if (until.tv_nsec >= 1000000000L) {
-            ++until.tv_sec;
-            until.tv_nsec -= 1000000000L;
-        }
-        (void)pthread_cond_timedwait(&g_wb.idle, &g_wb.mu, &until);
     }
     int err = EFS_OK;
     if (g_wb.err != EFS_OK && g_wb.err_ino == ino) {
