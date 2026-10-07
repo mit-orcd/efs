@@ -7,6 +7,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/kv_snap.h"
 #include "efs/raft.h"
+#include "../src/kv/kv_lsm_internal.h"
 
 #include <dirent.h>
 #include <pthread.h>
@@ -1141,6 +1142,45 @@ static void test_view_export_overlap(void)
     rmtree(g_dir);
 }
 
+/* Deterministically pause a batch at the real durable-WAL/apply boundary.
+ * A maintenance/background flush must preserve the appended tail. */
+static void test_flush_with_unapplied_wal(void)
+{
+    pid_t pid; int status = 0;
+    rmtree(g_dir);
+    pid = fork();
+    CHECK(pid >= 0, "fork WAL tail");
+    if (pid < 0) return;
+    if (pid == 0) {
+        struct efs_kv *kv = open_store(EFS_KV_LSM_SYNC, 0);
+        uint64_t seq = 0;
+        struct efs_kv_item items[] = {
+            { EFS_KV_PUT, (const uint8_t *)"same", 4,
+              (const uint8_t *)"new", 3 },
+            { EFS_KV_PUT, (const uint8_t *)"tail", 4,
+              (const uint8_t *)"keep", 4 },
+            { EFS_KV_DEL, (const uint8_t *)"deleted", 7, NULL, 0 }
+        };
+        if (!kv || put_s(kv,"same","old") || put_s(kv,"deleted","old")) _exit(1);
+        struct kv_lsm *l = kv->ctx;
+        if (kv_wal_append(l->wal,items,3,&seq) || seq != l->apply_next) _exit(2);
+        if (efs_kv_lsm_flush(kv)) _exit(3);
+        _exit(0); /* no destructor, exactly the crash window */
+    }
+    CHECK(waitpid(pid,&status,0)==pid && WIFEXITED(status) && WEXITSTATUS(status)==0,
+          "durable append then crash after flush");
+    struct efs_kv *kv = open_store(EFS_KV_LSM_SYNC,0);
+    CHECK(kv != NULL,"reopen concurrent WAL tail");
+    if (kv) {
+        CHECK(get_is(kv,"same","new")==EFS_OK,"newer unapplied overwrite survives");
+        CHECK(get_is(kv,"tail","keep")==EFS_OK,"unapplied insertion survives");
+        CHECK(get_is(kv,"deleted","")==EFS_ERR_NOT_FOUND,"unapplied deletion survives");
+        CHECK(put_s(kv,"after","progress")==EFS_OK,"apply ordering resumes after reopen");
+        CHECK(efs_kv_lsm_flush(kv)==EFS_OK,"fully applied WAL can reset");
+        efs_kv_lsm_close(kv);
+    }
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
@@ -1163,6 +1203,7 @@ int main(void)
     test_sync_hold();
     test_partitioned_flush();
     test_view_export_overlap();
+    test_flush_with_unapplied_wal();
 
     rmtree(g_dir);
     if (failures) {

@@ -773,9 +773,12 @@ static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
         if (rc != EFS_OK)
             l->io_failed = 1;
     }
+    /* mu prevents the next batch from applying until this flush returns.
+     * Publish the fully applied WAL watermark first, so reset cannot erase
+     * another thread's durable-but-not-yet-applied record. */
+    l->apply_next = seq + 1;
     if (rc == EFS_OK)
         rc = kv_maybe_flush_locked(l);
-    l->apply_next = seq + 1;
     pthread_cond_broadcast(&l->cv);
     pthread_mutex_unlock(&l->mu);
     return rc;

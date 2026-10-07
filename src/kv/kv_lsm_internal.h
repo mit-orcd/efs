@@ -95,7 +95,9 @@ int kv_wal_append(struct kv_wal *w, const struct efs_kv_item *items, uint32_t n,
 /* on=1 defers the next appends' fsync; on=0 (last nest) fsyncs them. */
 int kv_wal_hold(struct kv_wal *w, int on);
 /* Empties the log; call only after the memtable is a durable segment. */
-int kv_wal_reset(struct kv_wal *w);
+/* Reset only when every appended record is already in durable segments.
+ * Otherwise retain the entire WAL so the unapplied tail survives a crash. */
+int kv_wal_reset(struct kv_wal *w, uint64_t applied);
 int kv_wal_replay(const char *path,
                   int (*cb)(void *user, uint8_t op, const uint8_t *key,
                             uint32_t klen, const uint8_t *val, uint32_t vlen),

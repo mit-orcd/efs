@@ -274,7 +274,7 @@ int kv_wal_hold(struct kv_wal *w, int on)
     return rc;
 }
 
-int kv_wal_reset(struct kv_wal *w)
+int kv_wal_reset(struct kv_wal *w, uint64_t applied)
 {
     int rc = EFS_OK;
 
@@ -283,6 +283,10 @@ int kv_wal_reset(struct kv_wal *w)
     pthread_mutex_lock(&w->mu);
     while (w->syncing)
         pthread_cond_wait(&w->cv, &w->mu);
+    if (w->appended > applied) {
+        pthread_mutex_unlock(&w->mu);
+        return EFS_OK;
+    }
     if (ftruncate(w->fd, 0) != 0)
         rc = EFS_ERR_IO;
     else if (w->sync_mode == EFS_KV_LSM_SYNC && fsync(w->fd) != 0)

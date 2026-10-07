@@ -162,7 +162,7 @@ int kv_flush_locked(struct kv_lsm *l)
     if (rc != EFS_OK)
         return rc;
     kv_mtab_clear(&l->mt);
-    return kv_wal_reset(l->wal);
+    return kv_wal_reset(l->wal, l->apply_next - 1);
 
 fail:
     flush_drop_new(l, neu, nneu);
