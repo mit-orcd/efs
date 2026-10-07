@@ -26,3 +26,20 @@ malformed rows stop acceptance, and counter peaks survive reset.
 NUC: four schema/regression tests pass; driver bash syntax passes.
 Evidence `/private/tmp/efs-roadmap-round04-w89.log`. A new pressure run remains
 owed under W23; this round fixes the measurement machinery only.
+
+## Round 3 — observable server GC effects after POSIX deletion
+
+The live FUSE/GC harness waits for passes while hardlink/open-unlinked protection
+is tested. After last close it requires physical target fragments absent, passes
+advanced, removed-fragment/payload-byte counters increased, and usage decreased.
+After broad POSIX deletion it also requires increased pass/removal counters;
+final restart still requires empty physical inventory, zero data usage and
+retired queues. Recorded JSON checkpoints live in
+[GC effects](../../results/measure/20261007-gc-effects/direct-posix.json).
+
+NUC buffered and direct private four-node tests pass: single POSIX 216/0/1 skip,
+peer 64/64, failure/restart/offline-member protection, zero inventory/quota and
+late-PUT fencing. The direct run exercised the new broad-POSIX counter assertion;
+both modes exercised the last-close assertion. Prior W87 failure remains retained;
+one successful broad repeat does not establish its cause or close W87.
+The NUC devops driver adds `--gc` (private stores, no production data deletion).

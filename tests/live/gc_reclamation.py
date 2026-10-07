@@ -132,6 +132,19 @@ def create(name):
     wait(lambda:len(files(ino))>=3,'fragment files present')
     return path,fd,ino
 
+def totals(samples):
+    return {
+        'passes': sum(node[0]['passes'] for node in samples),
+        'removed_fragments': sum(node[1]['removed_fragments'] for node in samples),
+        'reclaimed_payload_bytes': sum(node[1]['reclaimed_payload_bytes'] for node in samples),
+        'data_usage_bytes': sum(node[1]['data_usage_bytes'] for node in samples),
+    }
+
+def observe_pass(label):
+    before = totals(status())
+    wait(lambda: totals(status())['passes'] > before['passes'], label)
+    return before
+
 def drained():
     samples=[group for node in status() for group in node[2:] if group.get('sampled')]
     return {g['group'] for g in samples}=={0,2} and all(g['pending_estimate']==0 and g['reap_seen']==0 and g['orphan_seen']==0 for g in samples)
@@ -176,9 +189,9 @@ try:
         wait(lambda:not files(tail_ino),'span-only truncate then physical reclaim')
     path,fd,ino=create('held')
     link=mount/'hardlink';os.link(path,link);os.unlink(path)
-    time.sleep(3);assert files(ino) and os.pread(fd,16,0)==bytes(range(16))
+    observe_pass('GC runs while hardlink remains');assert files(ino) and os.pread(fd,16,0)==bytes(range(16))
     print('hardlink protects stored fragments PASS',flush=True)
-    os.unlink(link);time.sleep(3)
+    os.unlink(link);observe_pass('GC runs while unlinked inode is open')
     assert files(ino) and os.pread(fd,16,0)==bytes(range(16))
     assert os.pwrite(fd,b'held-write',100)==10;os.fsync(fd)
     print('open unlinked inode retains readable/writable fragments PASS',flush=True)
@@ -187,8 +200,19 @@ try:
         try:before+=x.stat().st_blocks*512
         except FileNotFoundError:pass  # overwritten generation may be collected
 
+    checkpoint = totals(status())
     os.close(fd)
     wait(lambda:not files(ino),'last close physically reclaims fragments')
+    def reclamation_observed():
+        after = totals(status())
+        return (after['passes'] > checkpoint['passes'] and
+                after['removed_fragments'] > checkpoint['removed_fragments'] and
+                after['reclaimed_payload_bytes'] > checkpoint['reclaimed_payload_bytes'] and
+                after['data_usage_bytes'] < checkpoint['data_usage_bytes'])
+    wait(reclamation_observed, 'GC passes, removal bytes and quota reflect last-close deletion')
+    (work/'last-close-gc-effect.json').write_text(json.dumps({
+        'ino': ino, 'before': checkpoint, 'after': totals(status()),
+        'remaining_target_fragments': len(files(ino))}, indent=2))
     assert before>0
     print(f'closed-unlinked inode allocated bytes: {before} -> 0 PASS',flush=True)
     # A failed disk read must retain the durable GC record, not ACK it away.
@@ -229,6 +253,7 @@ try:
     wait(lambda:not files(sino),'sentinel physically reclaimed')
     wait(drained,'all fixture GC records retired')
     if a.posix:
+        posix_checkpoint = totals(status())
         run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
@@ -236,6 +261,12 @@ try:
         run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','gc-posix-peer','--results',work/'posix2.tsv'],timeout=600)
         run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
         wait(drained,'POSIX server deletion queues drained',180)
+        after_posix = totals(status())
+        for metric in ('passes', 'removed_fragments', 'reclaimed_payload_bytes'):
+            assert after_posix[metric] > posix_checkpoint[metric], (metric, posix_checkpoint, after_posix)
+        (work/'posix-gc-effect.json').write_text(json.dumps({
+            'before': posix_checkpoint, 'after': after_posix}, indent=2))
+        print('POSIX deletes advance GC passes and physical removal counters PASS',flush=True)
     unmount();stop()
     start()
     # No user fragment remains, even on a restart. Physical scan is independent
