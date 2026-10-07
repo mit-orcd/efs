@@ -2743,7 +2743,11 @@ tests pass for payload flips, missing/truncated digests and digest flips in
 buffered/direct mode with one/two roots, preserving valid-object reads. The
 baseline serves missing-digest data successfully and fails this same gate.
 The existing metadata-table root-integrity path is separate and unchanged.
-Identity binding, PUT validation and complete client verification remain below.
+The client verification option now checks ordinary parallel GET replies as well
+as fallback GETs, hashes zero payloads rather than trusting a zero digest, and
+initializes its shared option with pthread_once. NUC production-code reply tests
+reject corrupted zero/nonzero replies and accept valid ones. Identity binding
+and PUT validation remain below.
 
 **Change/gate:** define a compatible, trusted identity-bound integrity format
 and fail-closed behavior for missing/corrupt integrity evidence; preserve

@@ -87,6 +87,28 @@ static uint8_t *decode_frag_scratch(uint32_t need)
     return (uint8_t *)reply_buffer_get(0, need);
 }
 
+/* One synchronized option value for every GET path. Even zero digests
+ * require hashing the received bytes when verification is requested. */
+static pthread_once_t read_verify_once = PTHREAD_ONCE_INIT;
+static int read_verify;
+
+static void read_verify_init(void)
+{
+    const char *value = getenv("EFS_READ_VERIFY");
+    read_verify = value && *value && strcmp(value, "0") != 0;
+}
+
+static int fragment_reply_verified(const uint8_t *data, uint32_t len,
+                                   const uint8_t sum[EFS_HASH_SIZE])
+{
+    uint8_t actual[EFS_HASH_SIZE];
+    pthread_once(&read_verify_once, read_verify_init);
+    if (!read_verify)
+        return 1;
+    efs_hash(data, len, actual);
+    return memcmp(actual, sum, EFS_HASH_SIZE) == 0;
+}
+
 /* Issue two fragment GETs and wait for both on this thread. */
 static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
 {
@@ -103,6 +125,10 @@ static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
     if (status != EFS_GET_CHUNK_OK) {
         j->rc = EFS_ERR_NOT_FOUND;
         return 0;
+    }
+    if (!fragment_reply_verified(j->out, j->frag_len, sum)) {
+        j->rc = EFS_ERR_CHECKSUM;
+        return 0; /* Reply consumed; the connection remains usable. */
     }
     j->len = j->frag_len;
     j->rc = EFS_OK;
@@ -633,35 +659,8 @@ int efs_client_get_fragment(efs_node_id_t node_id, efs_ino_t ino, uint32_t chunk
         }
         *data_len = expected_frag_len;
 
-        /* Verify payload. Known-zero digests are trusted (writer/store already
-         * short-circuit zeros); avoid a 64KiB memcmp on every GET.
-         * Read-verify is OFF by default: at GB/s per client the inline
-         * blake3 re-hash costs several cores and caps the frag pool, and
-         * integrity is already covered server-side (write-time verify plus
-         * the background scrubber, which also heals). EFS_READ_VERIFY=1
-         * re-enables the end-to-end check for RDMA-CRC/ECC paranoia. */
-        static int read_verify = -1;
-        if (read_verify < 0) {
-            const char *v = getenv("EFS_READ_VERIFY");
-            read_verify = (v && *v && strcmp(v, "0") != 0) ? 1 : 0;
-        }
-        int sum_ok;
-        if (!read_verify) {
-            sum_ok = 1;
-        } else {
-            uint8_t zero_ck[EFS_HASH_SIZE];
-            if (expected_frag_len == EFS_META_FRAGMENT_SIZE)
-                efs_hash_zero_fragment(zero_ck);
-            else
-                efs_hash_zero_fragment_len(expected_frag_len, zero_ck);
-            if (memcmp(checksum, zero_ck, EFS_HASH_SIZE) == 0) {
-                sum_ok = 1;
-            } else {
-                uint8_t verify[EFS_HASH_SIZE];
-                efs_hash(data, expected_frag_len, verify);
-                sum_ok = (memcmp(verify, checksum, EFS_HASH_SIZE) == 0);
-            }
-        }
+        /* Match the ordinary parallel GET path, including zero payloads. */
+        int sum_ok = fragment_reply_verified(data, expected_frag_len, checksum);
         if (!sum_ok) {
             efs_client_conn_release(node_id, conn);
             return EFS_ERR_CHECKSUM;

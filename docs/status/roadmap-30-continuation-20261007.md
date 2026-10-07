@@ -52,3 +52,12 @@ remain covered. NUC real-RPC corruption tests pass for buffered/direct and one/t
 roots. The old production binary fails the same missing-digest assertion,
 confirming regression sensitivity. Logs `/private/tmp/efs-roadmap-w75-integrity.log`
 and `/private/tmp/efs-roadmap-w75-baseline.log`. Identity-bound format remains open.
+
+## Round 5 — W75 comprehensive optional client payload verification
+
+The ordinary parallel GET path now honors EFS_READ_VERIFY, uses the same verifier
+as fallback GET, hashes bytes even when the returned digest is the known-zero
+value, and initializes the option once without a data race. NUC production-code
+reply tests cover valid/corrupt zero/nonzero packets; all sixteen real-server
+corruption combinations still pass. Log `/private/tmp/efs-roadmap-w75-verify.log`.
+This verifies payload hashes; it does not claim identity-bound integrity or repair.
