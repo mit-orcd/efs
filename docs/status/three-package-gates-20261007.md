@@ -1,5 +1,9 @@
 # Three-package acceptance round — Oct 7, 2026
 
+**Later follow-up:** [memory acceptance](memory-closure-20261007.md) closes
+W59/W67. Counts and remaining memory gates below record the earlier pass;
+current totals are 46 open packages, 10 awaiting gates.
+
 Requested packages: W59/W67, W84 and W23/W89. Baseline `ceadd6d2` plus
 existing unrelated benchmark/documentation changes; fixture manifests capture
 source and executable hashes. Tests use the NUC's private

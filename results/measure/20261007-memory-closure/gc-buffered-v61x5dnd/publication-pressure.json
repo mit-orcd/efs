@@ -1,0 +1,27 @@
+{
+  "accepted_writes": 2037,
+  "errors": [
+    12,
+    5
+  ],
+  "peak_rss_kib": 387532,
+  "pressure_charges": [
+    [
+      "266993664",
+      "0",
+      "268435456",
+      "335544320"
+    ]
+  ],
+  "cold_bytes_verified": true,
+  "same_mount_admission_recovered": true,
+  "drain_exhaustion": [
+    [
+      "523",
+      "335544320",
+      "0",
+      "335544320",
+      "335544320"
+    ]
+  ]
+}

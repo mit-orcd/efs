@@ -1,0 +1,3 @@
+buf-fault drain held=512 live=67108864 reserved=0 backing=67108864 limit=67108864
+buf-fault drain released=512
+test_bufpool: OK (hard bound, reserve, failures, concurrency, metadata)

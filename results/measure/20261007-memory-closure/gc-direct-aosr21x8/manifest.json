@@ -1,0 +1,60 @@
+{
+  "mode": "direct",
+  "roots": [
+    "/data1/efs/gc-direct-aosr21x8/n1",
+    "/data1/efs/gc-direct-aosr21x8/n2",
+    "/data2/efs/gc-direct-xz3ih_f9/n3",
+    "/data2/efs/gc-direct-xz3ih_f9/n4"
+  ],
+  "real_roots": [
+    "/data1/efs/gc-direct-aosr21x8/n1",
+    "/data1/efs/gc-direct-aosr21x8/n2",
+    "/home/efs/additional-work-dir/gc-direct-xz3ih_f9/n3",
+    "/home/efs/additional-work-dir/gc-direct-xz3ih_f9/n4"
+  ],
+  "port": 20950,
+  "gates": {
+    "mode": "direct",
+    "root": [],
+    "posix": false,
+    "integrity": false,
+    "namespace": false,
+    "namespace_boundary": false,
+    "namespace_cycles": false,
+    "mount_label": "default",
+    "workers": false,
+    "pressure": true,
+    "drain_pressure": true,
+    "memory_limit_bytes": 1073741824,
+    "publication_pressure": true,
+    "namespace_max": false,
+    "opid": false,
+    "opid_restart": false,
+    "fold_audit": false,
+    "sequential": false,
+    "memo": false,
+    "rename_cache": false,
+    "mixed_reads": false,
+    "allocation": false,
+    "compactor_pressure": false,
+    "du_audit": false,
+    "lookup_barrier": false,
+    "storage_roots": 1,
+    "put_reply_fault": false,
+    "opid_failover": false,
+    "report_audit": false,
+    "server_binary": null,
+    "client_binary": "/data1/efs/close-memory-measured-src/efs-fuse",
+    "worker_fault": null,
+    "idle_seconds": 0,
+    "full_node": false,
+    "port": 20950
+  },
+  "source_tree_sha256": "89b253d39cf84e9a164be51133c57531b4c6978f4d2e7341e435fce0c48f5915",
+  "test_script_sha256": "02baf15accff19114b65334487e35c280647d06bcba6c3c2e6529d697de0bd67",
+  "binary_sha256": {
+    "efsd": "c33730b0b64b42f9ef828acc5c2776a47da36564e869bd27040f177559cfd11b",
+    "efs-fuse": "a83d1d39436b6f752e6e4bd99a0173977f096846ca81668fc29ce7e889956101",
+    "efs-mgmt": "a1eca334fe15a9269bd8f4dbb8cd0e0c9fee6bf241bfc00678bc20ef510b6cbd"
+  }
+}

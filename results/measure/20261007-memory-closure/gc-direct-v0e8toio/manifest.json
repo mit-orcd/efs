@@ -1,0 +1,60 @@
+{
+  "mode": "direct",
+  "roots": [
+    "/data1/efs/gc-direct-v0e8toio/n1",
+    "/data1/efs/gc-direct-v0e8toio/n2",
+    "/data2/efs/gc-direct-wupcie1t/n3",
+    "/data2/efs/gc-direct-wupcie1t/n4"
+  ],
+  "real_roots": [
+    "/data1/efs/gc-direct-v0e8toio/n1",
+    "/data1/efs/gc-direct-v0e8toio/n2",
+    "/home/efs/additional-work-dir/gc-direct-wupcie1t/n3",
+    "/home/efs/additional-work-dir/gc-direct-wupcie1t/n4"
+  ],
+  "port": 20910,
+  "gates": {
+    "mode": "direct",
+    "root": [],
+    "posix": false,
+    "integrity": false,
+    "namespace": false,
+    "namespace_boundary": false,
+    "namespace_cycles": false,
+    "mount_label": "default",
+    "workers": false,
+    "pressure": true,
+    "drain_pressure": true,
+    "memory_limit_bytes": 1073741824,
+    "publication_pressure": true,
+    "namespace_max": false,
+    "opid": false,
+    "opid_restart": false,
+    "fold_audit": false,
+    "sequential": false,
+    "memo": false,
+    "rename_cache": false,
+    "mixed_reads": false,
+    "allocation": false,
+    "compactor_pressure": false,
+    "du_audit": false,
+    "lookup_barrier": false,
+    "storage_roots": 1,
+    "put_reply_fault": false,
+    "opid_failover": false,
+    "report_audit": false,
+    "server_binary": null,
+    "client_binary": "/data1/efs/close-memory-src/efs-fuse",
+    "worker_fault": null,
+    "idle_seconds": 0,
+    "full_node": false,
+    "port": 20910
+  },
+  "source_tree_sha256": "654e02a078e6734bfde0012613f9db60424fbd51bd93862ec3b07a064ea59af9",
+  "test_script_sha256": "7c7464159a41627e2003cb05d58dbdefc2fccd1708f48fafb8af55ba8914ba02",
+  "binary_sha256": {
+    "efsd": "189bf22401668ec0a19e2ddbddb556920d4c15183d343ff10e6d2b10f0135097",
+    "efs-fuse": "97b7785c6d656f86be9c19811ec4a4f22e9146b8afcaca69fcbf56878728f02a",
+    "efs-mgmt": "1643a957e58a79a64aced5e389ccc919c4349fb75e1d85f51aa55b0792aa96f4"
+  }
+}

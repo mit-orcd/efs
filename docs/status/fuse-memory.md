@@ -11,7 +11,7 @@ remain open. A body allocator limit is not a process RSS limit.
 
 ## Sparse dirty writes bypass reclaim and cache admission has no hard bound
 
-**W67 — implemented; targeted acceptance open.** Shared body admission tracks
+**W67 — closed after NUC live memory/reserve acceptance.** Shared body admission tracks
 read/dirty/PUT/merge ownership and reserves capacity before copying writes.
 Default hard budget is 256 MiB, with a 64 MiB drain reserve; dynamic collision
 metadata has a separate 8 MiB bound. `EFS_DCACHE_BYTES` defaults to a 128 MiB
@@ -22,8 +22,10 @@ outside this bound; oversized exports may require explicit larger budgets.
 Local allocation/reservation/failure and ownership regressions passed. The
 NUC rebuilt unit suite and broad POSIX gates are recorded in the
 [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
-Required to close: sparse and append/concurrent pressure, failed publication,
-cold-byte verification and small-host RSS under recovery-reserve exhaustion.
+The [memory closure](memory-closure-20261007.md) completes live failed
+publication plus physically exhausted scratch under a 1 GiB/no-swap cgroup,
+for both I/O modes and 32+32 / production 256+64 MiB values. Same-mount
+admission, cold bytes, concurrent sparse pressure and GC/restart pass.
 Keep dirty bytes pinned until the matching commit; never drop on retry count.
 
 ## Read/readdir reply buffers leak when FUSE workers exit

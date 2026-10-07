@@ -2212,6 +2212,14 @@ as accepted on that build. [Raw evidence](../archive/queue-review-20261007-round
 
 ## W59 · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains (queue row 0p)
 
+**Current status — closed (Oct 7 memory follow-up):** NUC direct/buffered
+live publication failure plus physically exhausted recovery scratch passes
+at 32+32 and production 256+64 MiB values inside a 1 GiB/no-swap cgroup.
+Same-mount new admission, cold bytes, GC/restart/quota and zero OOM events
+are verified. Earlier remaining-gate statements below are historical and
+superseded by this closure. D27's broader recovery/timing is separate.
+See the [closure ledger](../status/memory-closure-20261007.md).
+
 **Acceptance update (Oct 7, three-package round):** NUC direct/buffered
 withheld-publication gates reach finite refusal, preserve the refused write
 size, recover every accepted range on cold clients and drain physical GC.
@@ -2591,6 +2599,14 @@ signals (63–215 ms); handlers still drain before teardown.
 
 ## W67 · Sparse dirty writes and bounded body admission (queue row mem1)
 
+**Current status — closed (Oct 7 memory follow-up):** NUC direct/buffered
+live publication failure plus physically exhausted recovery scratch passes
+at 32+32 and production 256+64 MiB values inside a 1 GiB/no-swap cgroup.
+Same-mount new admission, cold bytes, GC/restart/quota and zero OOM events
+are verified. Earlier remaining-gate statements below are historical and
+superseded by this closure. D27's broader recovery/timing is separate.
+See the [closure ledger](../status/memory-closure-20261007.md).
+
 **Acceptance update (Oct 7, three-package round):** live withheld-publication
 pressure reaches finite refusal, retains accepted bytes and recovers on NUC
 direct/buffered clients with traced 32+32 MiB budgets. Allocator unit exhausts
@@ -2603,7 +2619,7 @@ New direct/buffered sparse and mixed gates request and trace 32 + 32 MiB.
 Old byte/RSS evidence remains valid but does not prove an 8 MiB drain reserve.
 Failure/recovery-reserve exhaustion acceptance remains open.
 
-**Class:** correctness / resource exhaustion. **Status:** open; indexed Oct 7, 2026.
+**Class:** correctness / resource exhaustion. **Status:** closed after NUC memory acceptance, Oct 7, 2026.
 
 **Evidence/current state:** Committed foundation 033a842a and later regressions implement body admission and retained-byte ownership. Targeted pressure/failure/RSS acceptance remains open.
 

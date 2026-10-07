@@ -1,0 +1,23 @@
+{
+  "/data1/efs/gc-buffered-cir9lcbz": [
+    "close-memory-final-buffered.log"
+  ],
+  "/data1/efs/gc-buffered-v61x5dnd": [
+    "close-memory-default-buffered.log"
+  ],
+  "/data1/efs/gc-direct-v0e8toio": [
+    "close-memory-direct.log"
+  ],
+  "/data1/efs/gc-direct-93eshswn": [
+    "close-memory-final-direct.log"
+  ],
+  "/data1/efs/gc-buffered-hbzx1mki": [
+    "close-memory-measured-buffered.log"
+  ],
+  "/data1/efs/gc-direct-aosr21x8": [
+    "close-memory-measured-direct.log"
+  ],
+  "/data1/efs/gc-direct-ih_mwkgd": [
+    "close-memory-default-direct.log"
+  ]
+}
