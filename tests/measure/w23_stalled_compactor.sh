@@ -76,6 +76,7 @@ say "faults binary OK (hook present only in /tmp/efs-faults-efsd)"
 
 # --- the driver, run detached on the node
 ssh_node "$NODE" 'mkdir -p /tmp/w23'
+ssh_node "$NODE" 'cat > /tmp/w23/samples.py' < "$HERE/tests/measure/w23_samples.py"
 cat > /tmp/w23-driver.$$ <<'DRIVER'
 #!/bin/bash
 # W23 stalled-compactor driver — runs entirely on the one VM.
@@ -206,17 +207,19 @@ sampler() {
         local ts n rss lag p ko as bp ro
         ts=$(date -u +%H:%M:%S)
         for n in 1 2 3; do
-            rss=$(awk '/VmRSS/{print $2}' "/proc/$(pid_of "$n")/status" 2>/dev/null || echo 0)
+            rss=$(awk '/VmRSS/{print $2}' "/proc/$(pid_of "$n")/status" 2>/dev/null || true)
             lag=$(lag_of "$n"); ko=$(kvobs "$n"); p=$(phm "$n")
             as=$(grep -c 'apply-sleep' "$WORK/s$n.log" 2>/dev/null || true)
             bp=$(grep -c 'kv-compact: backpressure' "$WORK/s$n.log" 2>/dev/null || true)
             ro=$(role_of "$n")
-            echo -e "$ts\t$n\t${ko:-0 0 0 0}\t${rss:-0}\t${lag:-0}\t${p:-0}\t$as\t$bp\t${ro:-?}" >> "$SAMPLES"
+            python3 "$WORK/samples.py" row "$ts" "$n" "$ko" "$rss" "$lag" "$p" "$as" "$bp" "$ro" >> "$SAMPLES" || {
+                touch "$WORK/sampler.failed"; return 1;
+            }
         done
         sleep 5
     done
 }
-rm -f "$WORK/sampler.stop"
+rm -f "$WORK/sampler.stop" "$WORK/sampler.failed"
 sampler &
 SAMPID=$!
 
@@ -304,19 +307,9 @@ done
 cp "$WORK"/s*.log "$WORK/fuse.log" "$OUTD/" 2>/dev/null || true
 
 # peaks from the sampler file (nodes 1..3 rows)
-awk -F'\t' 'NR>1 {
-    if ($3+0 > mt[$2]) mt[$2]=$3+0;
-    if ($4+0 > l0b[$2]) l0b[$2]=$4+0;
-    if ($5+0 > nl0[$2]) nl0[$2]=$5+0;
-    if ($7+0 > rss[$2]) rss[$2]=$7+0;
-    if ($8+0 > lag[$2]) lag[$2]=$8+0;
-    if ($9+0 > phm[$2]) phm[$2]=$9+0;
-    as[$2]=$10+0; bp[$2]=$11+0;
-} END {
-    for (n=1; n<=3; n++)
-        printf "node%d peak_mt_bytes=%d peak_l0_bytes=%d peak_n_l0=%d peak_rss_kb=%d peak_lag=%d max_pump_hold_us=%d apply_sleep_lines=%d backpressure_lines=%d\n", \
-               n, mt[n], l0b[n], nl0[n], rss[n], lag[n], phm[n], as[n], bp[n];
-}' "$SAMPLES" | tee "$OUTD/peaks.txt"
+[ ! -f "$WORK/sampler.failed" ] || { say "FATAL: invalid sample row"; exit 2; }
+python3 "$WORK/samples.py" peaks "$SAMPLES" > "$OUTD/peaks.txt" || exit 2
+cat "$OUTD/peaks.txt"
 
 {
     echo "W23 stalled-compactor run (dev Tart cluster, one VM, private 3-node)"

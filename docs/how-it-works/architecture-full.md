@@ -5023,7 +5023,16 @@ The [retained fixture](../archive/round6-span-replay-repro.c) uses the actual me
 
 **Evidence:** [original samples](../../results/measure/20261005-040810-w23-stalled-compactor/samples.tsv), [node3 log](../../results/measure/20261005-040810-w23-stalled-compactor/s3.log), [corrected expansion](../archive/round6-w23-samples-corrected.tsv) and [recomputed peaks](../archive/round6-w23-peaks-corrected.txt). Node3 logs L0=22 / 3,367,253 bytes during the 04:08:29–04:08:56 park; corrected samples confirm these peaks. Node1 peaks at 4 / 105,281, node2 at 13 / 1,366,435. Recorded RSS peaks are 30,316 / 25,936 / 25,624 KiB. These are samples, not guaranteed continuous maxima. All sample lag peaks are zero; the 27-second RSS-threshold run does not prove a follower pressure bound.
 
-**Next/gate:** serialize separate fields and reject wrong field counts/types before reducing. Verify a synthetic distinctive row round-trips every header/metric, match sampled fields against raw logs, preserve missing values as missing rather than zero and rerun W23 under meaningful cap pressure. Correct future summaries; retain the original record and this withdrawal. No measurement script or result file was modified in this documentation round.
+**Implementation (Oct 7 continuation):** the sampler serializes twelve explicit
+fields through `tests/measure/w23_samples.py`. The reducer validates the header,
+field counts and numeric types, fails on malformed rows and preserves unavailable
+observations as `NA`. Counter peaks survive resets. NUC synthetic tests cover
+all distinct fields, the historical nine-field shape, bad values, missing values
+and counter resets; driver shell syntax passes.
+
+**Remaining gate:** rerun W23 under meaningful cap pressure and compare samples
+with raw logs. This format repair does not establish a follower pressure bound;
+the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 

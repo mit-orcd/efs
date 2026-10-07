@@ -17,3 +17,12 @@ verify the renamed entry after healing.
 NUC private daemon gate passes, including eight concurrent GETATTRs and three
 LOOKUPs. Evidence `/private/tmp/efs-roadmap-round03-partition.log`.
 Transaction/session/publication view and configuration-change gates remain.
+
+## Round 2 — W89 measurement serialization
+
+Replaced packed KV metrics with validated twelve-column TSV serialization and
+strict reduction. Missing observations remain NA rather than becoming zero;
+malformed rows stop acceptance, and counter peaks survive reset.
+NUC: four schema/regression tests pass; driver bash syntax passes.
+Evidence `/private/tmp/efs-roadmap-round04-w89.log`. A new pressure run remains
+owed under W23; this round fixes the measurement machinery only.
