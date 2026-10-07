@@ -80,6 +80,18 @@ class ProfileTests(unittest.TestCase):
             time.sleep(.45)
             self.assertFalse(flag.exists())
 
+    def test_call_graph_policy_and_impossible_frames(self):
+        a = bench.parser().parse_args([])
+        self.assertEqual(bench.call_graph_for(a, 'data'), 'dwarf')
+        self.assertEqual(bench.call_graph_for(a, 'io'), 'fp')
+        a.call_graph = 'fp'
+        self.assertEqual(bench.call_graph_for(a, 'data'), 'fp')
+        with tempfile.TemporaryDirectory() as root:
+            path = Path(root) / 'callers'
+            path.write_text('0x68636e65622f7366 0x00007fff12345678 0xffff800012345678 0x8d8')
+            self.assertEqual(bench.bad_callchain_addresses(path, 48), ['0x68636e65622f7366'])
+            self.assertEqual(bench.bad_callchain_addresses(path, None), [])
+
     def test_metrics_and_symbols(self):
         self.assertFalse(bench.valid_metrics([]))
         self.assertFalse(bench.valid_metrics([{'ops': '0'}]))
@@ -120,6 +132,17 @@ class ProfileTests(unittest.TestCase):
             self.assertIn('best observed 1.234', analysis)
             self.assertIn('unresolved symbols', analysis)
             self.assertIn('`cycles:u`', analysis)
+            good['runs']['perf'] = dict(returncode=1, metrics_valid=False, reports_valid=True)
+            (output / 'results.json').write_text(json.dumps([good, bad]))
+            bench.analyze(output)
+            analysis = (output / 'ANALYSIS.md').read_text()
+            self.assertIn('INVALID profile; diagnostic only:', analysis)
+            self.assertIn('INVALID workload/report', analysis)
+            self.assertIn('best observed 1.234', analysis)  # valid baseline survives
+            (output / 'cpu.stdout').write_text('Address sizes: 48 bits physical, 48 bits virtual')
+            (profile / 'callers.txt').write_text('0x68636e65622f7366')
+            bench.analyze(output)
+            self.assertIn('unreliable call chains', (output / 'ANALYSIS.md').read_text())
 
     def test_bounded_parallel_reports_include_failed_workloads(self):
         with tempfile.TemporaryDirectory() as root:

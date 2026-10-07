@@ -86,7 +86,7 @@ def parser():
     p.add_argument('--strace-expr', help='strace -e expression, e.g. trace=writev,fsync,futex')
     p.add_argument('--frequency', type=int, default=499)
     p.add_argument('--event', default='cycles', help='perf sampling event; use cpu-clock on VMs without PMU')
-    p.add_argument('--call-graph', choices=['fp', 'dwarf'], default='fp')
+    p.add_argument('--call-graph', choices=['auto', 'fp', 'dwarf'], default='auto', help='auto uses DWARF for engine data/libc stacks and frame pointers elsewhere; DWARF recordings are larger')
     p.add_argument('--report-jobs', type=int, default=4, help='parallel case report jobs after workloads finish (each runs one perf process at a time)')
     p.add_argument('--reports-only', type=Path, help='regenerate reports/analysis in an existing run; never execute workloads')
     p.add_argument('--no-perf', action='store_true', help='explicit unprofiled run; analysis marks profiles absent')
@@ -95,6 +95,25 @@ def parser():
     p.add_argument('--dry-run', action='store_true', help='print matrix; do not build, create scratch or run tools')
     p.add_argument('--analyze', type=Path, help='regenerate analysis from a completed/interrupted result directory')
     return p
+
+
+def call_graph_for(a, mode):
+    if a.call_graph != 'auto':
+        return a.call_graph
+    return 'dwarf' if mode == 'data' else 'fp'
+
+
+def bad_callchain_addresses(path, virtual_bits):
+    if not path.exists() or not virtual_bits or not 1 < virtual_bits < 64:
+        return []
+    bad = []
+    for token in sorted(set(re.findall(r'0x[0-9a-fA-F]+', path.read_text(errors='replace')))):
+        address = int(token, 16)
+        upper = address >> virtual_bits
+        expected = (1 << (64 - virtual_bits)) - 1 if (address >> (virtual_bits - 1)) & 1 else 0
+        if address >= 1 << 64 or upper != expected:
+            bad.append(token)
+    return bad
 
 
 def cases_for(a, cpus):
@@ -386,6 +405,15 @@ def analyze(output):
                 measurements.append(f'{tag} {numbers}'.strip())
             elif not baseline_valid(r):
                 measurements.append(f"INVALID baseline: errors={m.get('errors', '?')}, idle_workers={m.get('idle_workers', 'not recorded')}")
+        cpu_path = output / 'cpu.stdout'
+        match = re.search(r'(\d+) bits virtual', cpu_path.read_text(errors='replace')) if cpu_path.exists() else None
+        bits = int(match[1]) if match else None
+        callers_path = output / r['name'] / 'perf' / 'callers.txt'
+        if not callers_path.exists():
+            callers_path = callers_path.with_name('callers.stdout')
+        bad_frames = bad_callchain_addresses(callers_path, bits)
+        if bad_frames:
+            details.append(f"**{r['name']}: unreliable call chains — noncanonical caller addresses for this {bits}-bit virtual address space ({', '.join(bad_frames[:3])}).** Frame-pointer unwinding through libc can read data as return addresses. Use flat self samples; re-record engine data with `--call-graph dwarf` (the new auto default for data). DWARF can still truncate deep stacks.")
         symbols_path = output / r['name'] / 'perf' / 'symbols.stdout'
         symbols = profile_rows(symbols_path)
         if symbols_path.exists():
@@ -395,7 +423,12 @@ def analyze(output):
             details.append(f"{r['name']}: reports pending; generated after workloads finish.")
         if r.get('runs', {}).get('perf', {}).get('metrics_valid') is False and symbols:
             details.append(f"**{r['name']}: profile is from an invalid workload rerun; use for diagnosis, not representative hot-path comparisons.**")
+        perf_run = r.get('runs', {}).get('perf', {})
+        profile_valid = (perf_run.get('metrics_valid', True) and perf_run.get('returncode', 0) == 0
+                         and perf_run.get('reports_valid', True))
         hot = ', '.join(f"{s['symbol']} ({s['percent']:.1f}%)" for s in symbols[:3]) or 'no CPU profile'
+        if symbols and not profile_valid:
+            hot = 'INVALID profile; diagnostic only: ' + hot
         text.append(f"| [{r['name']}]({r['name']}/baseline.stdout) | {r['status']} | {'; '.join(measurements)} | {hot.replace('|', '/')} |")
         if 'strace' in r.get('runs', {}):
             details.append(f"**{r['name']} syscall trace:** [summary]({r['name']}/strace/summary.txt); this separate run includes ptrace overhead.")
@@ -412,7 +445,7 @@ def analyze(output):
             unresolved = sum(s['percent'] for s in symbols if s['symbol'].startswith('0x') or s['dso'] == '[unknown]')
             if unresolved >= 20:
                 details.append(f"**{r['name']}: {unresolved:.1f}% of reported samples have unresolved symbols.** Do not assign those addresses to a storage or algorithm hot path.")
-            details += ['', f"**{r['name']} sampled CPU:** " + ', '.join(f'{k} {v:.1f}%' for k, v in sorted(totals.items(), key=lambda x: -x[1])),
+            details += ['', f"**{r['name']} {'sampled CPU' if profile_valid else 'INVALID workload/report — diagnostic CPU samples'}:** " + ', '.join(f'{k} {v:.1f}%' for k, v in sorted(totals.items(), key=lambda x: -x[1])),
                      f"[Flat]({r['name']}/perf/{'flat.txt' if (output / r['name'] / 'perf' / 'flat.txt').exists() else 'flat.stdout'}), [threads]({r['name']}/perf/{'by_thread.txt' if (output / r['name'] / 'perf' / 'by_thread.txt').exists() else 'by-thread.stdout'}), [call chains]({r['name']}/perf/{'callers.txt' if (output / r['name'] / 'perf' / 'callers.txt').exists() else 'callers.stdout'}), source annotations under `{r['name']}/perf/annotate-*.stdout`.", '']
     text += ['', '## Baseline comparisons', '']
     hash_best = {}
@@ -444,10 +477,11 @@ def analyze(output):
     if effective_events:
         text += ['', 'Recorded perf events: ' + ', '.join(f'`{e}`' for e in sorted(effective_events)) + '. Requested events can be narrowed by host permissions.']
     text += ['', 'Raw buffered I/O is a warm bounded working-set measurement, not physical-device throughput. High QD means more synchronous workers, not asynchronous queue slots.',
-             'Raw operation-cycle latency includes benchmark loop bookkeeping and scheduling; compare throughput and latency together. Idle workers invalidate a case.',
+             'Raw operation-cycle latency includes benchmark loop bookkeeping and scheduling; compare throughput and latency together. Idle workers invalidate a case; max_start_us records release-to-first-operation delay.',
              'Unresolved kernel/vDSO addresses are retained, not guessed. Time/vDSO and unresolved samples are separate categories.',
              'Category totals are heuristic, mutually exclusive self-sample classifications above the 0.3% report threshold; inspect symbols/callers before choosing changes.',
              'BLAKE3 reuses per-worker buffers: this measures warm-buffer CPU throughput, not disk bandwidth. Streaming omits per-buffer finalize overhead.',
+             'Raw allocating writes fill the window once then overwrite it: allocation_ops and overwrite_ops distinguish first fill from warm overwrites. They are not an append-only allocation ceiling.',
              'Local data writes wrap within the configured bounded working set after filling it; profiles include create and replacement work. Direct local CLI without --window retains append-only writes.',
              'Buffered storage reads are warm; compare direct-I/O cases and the separate ceiling probe before inferring device limits.', '']
     (output / 'ANALYSIS.md').write_text('\n'.join(text))
@@ -560,7 +594,7 @@ def main(argv=None):
             for i, root in enumerate(roots):
                 execute(['findmnt', '-T', str(root)], output, f'storage-mount-{i + 1}', a.timeout)
         if not a.no_perf:
-            preflight = execute([perf, 'record', '-e', a.event, '-F', str(a.frequency), '-g', '--call-graph', a.call_graph,
+            preflight = execute([perf, 'record', '-e', a.event, '-F', str(a.frequency), '-g', '--call-graph', call_graph_for(a, 'preflight'),
                                  '-o', str(output / 'preflight.data'), '--', sys.executable, '-c', 'sum(range(1000000))'],
                                 output, 'perf-preflight', a.timeout)
             if preflight['returncode']:
@@ -608,7 +642,7 @@ def main(argv=None):
                     control, ack = str(Path(control_dir.name) / 'control'), str(Path(control_dir.name) / 'ack')
                     os.mkfifo(control); os.mkfifo(ack)
                 if stage == 'perf':
-                    cmd = [perf, 'record', '-e', a.event, '-F', str(a.frequency), '-g', '--call-graph', a.call_graph,
+                    cmd = [perf, 'record', '-e', a.event, '-F', str(a.frequency), '-g', '--call-graph', call_graph_for(a, case['mode']),
                            '-o', str(stage_dir / 'perf.data')] + (['--delay=-1', '--control', f'fifo:{control},{ack}'] if control else []) + ['--'] + cmd
                 elif stage == 'strace':
                     cmd = [strace, '-f', '-c', '-o', str(stage_dir / 'summary.txt')] + (['-e', a.strace_expr] if a.strace_expr else []) + cmd
@@ -628,6 +662,7 @@ def main(argv=None):
                         result['metrics'] = rows
                     if stage == 'perf':
                         run['reports_state'] = 'PENDING'
+                        run['call_graph'] = call_graph_for(a, case['mode'])
                     if run['returncode'] != 0 or not run['metrics_valid'] or run.get('reports_valid') is False:
                         result['status'] = f'FAIL ({stage})'
                         break
