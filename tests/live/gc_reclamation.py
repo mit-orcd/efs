@@ -24,6 +24,7 @@ p.add_argument('--mode', choices=('buffered', 'direct'), required=True)
 p.add_argument('--root', action='append', default=[])
 p.add_argument('--posix', action='store_true')
 p.add_argument('--integrity', action='store_true')
+p.add_argument('--namespace', action='store_true')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
 source = Path(__file__).resolve().parents[2]
@@ -155,6 +156,62 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.namespace:
+        nested = mount/'deep-namespace';nested.mkdir()
+        chain = [nested]
+        for depth in range(20):
+            nested /= f'd{depth}';nested.mkdir();chain.append(nested)
+        moving=mount/'moving-dir';moving.mkdir()
+        os.rename(moving,nested/'moved')
+        assert (nested/'moved').is_dir()
+        try:os.rename(chain[0],nested/'cycle')
+        except OSError as error:assert error.errno==22,error
+        else:raise AssertionError('ancestry cycle accepted')
+        os.rmdir(nested/'moved')
+        for folder in reversed(chain):os.rmdir(folder)
+        print('twenty-ancestor rename preserves all guards and rejects cycle PASS',flush=True)
+        helper=work/'names.c'
+        helper.write_text(r'''#include "efs/kv_key.h"
+#include <stdio.h>
+int main(void){unsigned seen[64]={0},n=0;char name[32];for(unsigned i=0;n<16;i++){snprintf(name,sizeof(name),"lane-%u",i);unsigned lane=efs_kv_dir_lane(name);if(!seen[lane]){seen[lane]=1;n++;printf("%u %s\n",lane,name);}}}
+''')
+        run(['cc','-I'+str(source/'include'),helper,source/'libefs.a','-pthread','-o',work/'names'])
+        witnesses=run([work/'names'],capture_output=True,text=True).stdout.splitlines()
+        assert len(witnesses)==16 and len({line.split()[0] for line in witnesses})==16
+        def spread(folder):
+            folder.mkdir();ino=folder.stat().st_ino
+            for operation in ('begin','finish'):
+                for node in range(4):
+                    result=subprocess.run([str(source/'efs-mgmt'),'raft-dir',f'127.0.0.1:{a.port+node}',str(ino),operation],capture_output=True,text=True,timeout=30,env=env)
+                    if result.returncode==0 and 'status=0' in result.stdout:break
+                else:raise AssertionError('cannot force directory spread: '+result.stdout+result.stderr)
+            # Administrative layout transition bypasses this mount's cache.
+            unmount();mount_client()
+            for line in witnesses:
+                child=folder/line.split()[1];child.touch()
+                try:child.unlink()
+                except OSError:
+                    print(f'failed unlink parent={ino} child={child.name}',flush=True)
+                    for node in range(4):
+                        for op,arguments in [('raft-lookup',[str(ino),child.name]),('raft-readdir',[str(ino)])]:
+                            result=subprocess.run([str(source/'efs-mgmt'),op,f'127.0.0.1:{a.port+node}',*arguments],capture_output=True,text=True,timeout=30,env=env)
+                            print(result.stdout+result.stderr,flush=True)
+                    raise
+            return ino
+        empty=mount/'spread-empty';spread(empty);os.rmdir(empty)
+        replacement=mount/'spread-replace';oldino=spread(replacement)
+        source_dir=mount/'replace-source';source_dir.mkdir();srcino=source_dir.stat().st_ino
+        os.rename(source_dir,replacement)
+        actualino=replacement.stat().st_ino
+        print(f'replacement inode: source={srcino} old={oldino} observed={actualino}',flush=True)
+        for node in range(4):
+            result=subprocess.run([str(source/'efs-mgmt'),'raft-lookup',f'127.0.0.1:{a.port+node}','1','spread-replace'],capture_output=True,text=True,timeout=30,env=env)
+            print(result.stdout+result.stderr,flush=True)
+            assert f'ino={srcino} ' in result.stdout and 'status=0' in result.stdout,result.stdout
+        assert actualino==srcino
+        os.rmdir(replacement)
+        (work/'namespace-lanes.txt').write_text('\n'.join(witnesses)+'\n')
+        print('sixteen used-lane empty HASHED rmdir and replacement PASS',flush=True)
     if a.integrity:
         # A swap preserves a valid local payload/digest pair but violates the
         # checksum recorded for this immutable object in committed metadata.

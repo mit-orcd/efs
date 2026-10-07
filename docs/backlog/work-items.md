@@ -3051,6 +3051,17 @@ replacement checks exist in the directory rename path. Repeating without a
 layout/input change does not remove these static bounds. No live deep-rename
 or emptied-spread-directory reproduction was run.
 
+**Continuation repair (Oct 7):** namespace guards now use the existing 64-participant
+transaction envelope; rmdir's pending-index array is sized for that envelope plus
+its fixed overhead. No guards are discarded. NUC owned FUSE tests rename through
+twenty ancestors, reject an ancestry cycle, and remove/replace empty HASHED
+directories after sixteen distinct historical lanes were used. The fixture also
+exposed a cross-group HASHED unlink: single-entry apply inferred placement from
+an unordered parent-row copy. Parent/dentry group mismatch now uses captured-key
+transaction preparation, including HASHED layout. Direct namespace plus physical
+GC/restart gates pass. The 64-participant/64-hop ceiling remains; full-depth and
+maximum-lane behavior, concurrent cycles and failover gates are still owed.
+
 **Next:** reconcile bounded work with the accepted full-ancestry and all-used-
 lane predicates. Document any approved product limit explicitly; otherwise
 support the required predicate set without dropping guards. A bounded memory

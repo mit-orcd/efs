@@ -39,8 +39,8 @@ retired queues. Recorded JSON checkpoints live in
 
 NUC buffered and direct private four-node tests pass: single POSIX 216/0/1 skip,
 peer 64/64, failure/restart/offline-member protection, zero inventory/quota and
-late-PUT fencing. The direct run exercised the new broad-POSIX counter assertion;
-both modes exercised the last-close assertion. Prior W87 failure remains retained;
+late-PUT fencing. Both modes exercised the broad-POSIX counter assertion and the last-close
+assertion (`/private/tmp/efs-roadmap-gc-buffered-final.log` for the buffered repeat). Prior W87 failure remains retained;
 one successful broad repeat does not establish its cause or close W87.
 The NUC devops driver adds `--gc` (private stores, no production data deletion).
 
@@ -144,3 +144,15 @@ mkfs compatibility gates still pass on NUC. Log
 `/private/tmp/efs-roadmap-w82-session-repeat.log`. Transaction/publication views
 and configuration-change coverage remain open; production session activation is
 not implied by this primitive gate.
+
+## Round 15 — W84 namespace guards and cross-group HASHED unlink
+
+Namespace work uses the existing 64-participant envelope with matching rmdir
+wait capacity. NUC twenty-ancestor rename, cycle rejection, sixteen historical
+lanes followed by empty HASHED rmdir/replacement pass. The gate exposed an
+unlink single-entry apply reading a parent row ordered by another Raft group;
+parent/dentry group mismatch now selects the existing captured-key transaction.
+The direct fixture passes physical GC, failure retry, offline-member protection,
+restart zero inventory/quota and late-PUT checks. Log
+`/private/tmp/efs-roadmap-w84-cross-group.log`. Maximum envelope/depth, concurrent
+cycle and namespace failover coverage remain open; W84 is partially repaired.

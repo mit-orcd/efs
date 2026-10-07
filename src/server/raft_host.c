@@ -9660,7 +9660,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
     uint32_t psh, csh, dsh, coord;
     uint64_t cver = 0, gver = 0, now;
     uint8_t rmcmd[HOST_CMD_MAX], p_lane = 0;
-    struct host_idx_ref prefs[16];
+    struct host_idx_ref prefs[EFS_TXN_NAMESPACE_MAX_PART + 8];
     int hint = -1;
     int rc, i, held, stamp_lane = 0, ngv = 0, hashed_child = 0, npref = 0;
     uint32_t rmlen = 0;
@@ -9888,7 +9888,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
             int g;
             rc = host_dent_drop_prep(h, sh, &drop, &t, &parts, &hint);
             if (rc == EFS_OK && sh == dsh) {
-                if (npref >= 16)
+                if (npref >= (int)(sizeof(prefs) / sizeof(prefs[0])))
                     rc = EFS_ERR_BUSY;
                 else
                     rc = host_prep_dseq_bump(h, dsh, &t, &parts, k_pdseq, kps,
@@ -9896,7 +9896,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                 if (rc == EFS_OK)
                     npref++;
                 if (rc == EFS_OK && stamp_lane) {
-                    if (npref >= 16)
+                    if (npref >= (int)(sizeof(prefs) / sizeof(prefs[0])))
                         rc = EFS_ERR_BUSY;
                     else
                         rc = host_prep_lane_stamp(h, dsh, &t, &parts, &prow,
@@ -9906,7 +9906,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                         npref++;
                 }
                 if (rc == EFS_OK && host_has_opid(q)) {
-                    if (npref >= 16)
+                    if (npref >= (int)(sizeof(prefs) / sizeof(prefs[0])))
                         rc = EFS_ERR_BUSY;
                     else
                         rc = host_prep_opid(h, dsh, &t, &parts, q, row.ino, 0,
@@ -9916,7 +9916,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                 }
             }
             if (rc == EFS_OK && sh == psh) {
-                if (npref >= 16)
+                if (npref >= (int)(sizeof(prefs) / sizeof(prefs[0])))
                     rc = EFS_ERR_BUSY;
                 else
                     rc = host_prep_ino_delta(h, psh, &t, &parts, k_pino, kpi,
@@ -9925,7 +9925,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                     npref++;
             }
             if (rc == EFS_OK && sh == csh) {
-                if (npref >= 16)
+                if (npref >= (int)(sizeof(prefs) / sizeof(prefs[0])))
                     rc = EFS_ERR_BUSY;
                 else
                     rc = host_prep_async(h, csh, EFS_TXN_EXCL, &t, &parts,
@@ -9934,7 +9934,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
                 if (rc == EFS_OK)
                     npref++;
                 if (rc == EFS_OK && !hashed_child) {
-                    if (npref >= 16)
+                    if (npref >= (int)(sizeof(prefs) / sizeof(prefs[0])))
                         rc = EFS_ERR_BUSY;
                     else
                         rc = host_prep_async(h, csh, EFS_TXN_GUARD, &t, &parts,
@@ -9947,7 +9947,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
             for (g = 0; g < ngv && rc == EFS_OK; g++) {
                 if (gv[g].shard != sh)
                     continue;
-                if (npref >= 16)
+                if (npref >= (int)(sizeof(prefs) / sizeof(prefs[0])))
                     rc = EFS_ERR_BUSY;
                 else
                     rc = host_prep_async(h, gv[g].shard, EFS_TXN_GUARD, &t,
@@ -10318,8 +10318,10 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
             return;
         }
         if (rc == EFS_OK) {
-            if (row.nlink > 1 || ig != dg ||
-                (prow.layout == EFS_META_LAYOUT_SPLITTING && pg != dg)) {
+            /* Single-entry apply resolves placement from the parent row.
+             * A different parent group cannot supply that row in the same
+             * ordered log; use captured transaction keys for HASHED too. */
+            if (row.nlink > 1 || ig != dg || pg != dg) {
                 host_unlink_txn(parent, name, q, out);
                 return;
             }

@@ -15,9 +15,9 @@
 
 #define EFS_TXN_ID_LEN   16
 /* A file's 64 lane shards include its inode shard (lane 0). Namespace
- * coordinators retain their existing smaller work bound. */
+ * coordinators use the same bounded participant envelope. */
 #define EFS_TXN_MAX_PART 64
-#define EFS_TXN_NAMESPACE_MAX_PART 8
+#define EFS_TXN_NAMESPACE_MAX_PART EFS_TXN_MAX_PART
 #define EFS_TXN_PARTS_BYTES (1u + 4u * EFS_TXN_MAX_PART)
 #define EFS_TXN_VALUE_MAX (8u + 16u * EFS_FENCE_HISTORY_MAX)
 #define EFS_TXN_RECORD_MAX (16u + EFS_TXN_PARTS_BYTES + 14u + EFS_TXN_VALUE_MAX)
