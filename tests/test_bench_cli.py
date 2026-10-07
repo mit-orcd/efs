@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Exercise benchmark command ownership, parsing and scratch-root protection."""
 import argparse
+import os
+import sys
 import pathlib
 import re
 import subprocess
@@ -116,6 +118,22 @@ def main():
                           '--time', '.03', *opts, timeout=180)
                 assert f'BENCH_OK kind={kind}' in out, out
                 print(out, end='')
+    if args.smoke and sys.platform.startswith('linux'):
+        # Fail actual backend durability calls, rather than mocking the CLI.
+        with tempfile.TemporaryDirectory(prefix='efs-bench-fault-') as tmp:
+            source = pathlib.Path(tmp) / 'fault.c'
+            library = pathlib.Path(tmp) / 'fault.so'
+            source.write_text('#include <errno.h>\nint fsync(int fd) { (void)fd; errno=EIO; return -1; }\nint fdatasync(int fd) { return fsync(fd); }\n')
+            subprocess.run(['cc', '-shared', '-fPIC', str(source), '-o', str(library)], check=True)
+            root = pathlib.Path(tmp) / 'scratch'
+            env = dict(os.environ, LD_PRELOAD=str(library))
+            result = subprocess.run([str(ROOT / 'efs-bench'), '--bench', 'meta',
+                                     '--meta-storage', str(root), '--time', '.03',
+                                     '--skip-ceiling'], env=env, text=True,
+                                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
+            assert result.returncode != 0, result.stdout
+            assert 'BENCH_FAIL kind=meta' in result.stdout, result.stdout
+            print('metadata durability fault: rejected PASS')
     print('benchmark CLI: ownership, parsing and scratch protection PASS')
 
 

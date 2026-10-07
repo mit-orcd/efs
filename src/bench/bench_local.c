@@ -82,7 +82,7 @@ static int dir_is_empty(const char *path)
 {
     DIR *d = opendir(path);
     if (!d)
-        return 1; /* absent: the bench creates it */
+        return errno == ENOENT; /* only absent roots may be created */
     struct dirent *de;
     int empty = 1;
     while ((de = readdir(d)) != NULL) {
@@ -565,9 +565,10 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
     uint64_t diskw_us = io1.cls[EFS_IOSTAT_DISK_WRITE].us_sum -
                         io0.cls[EFS_IOSTAT_DISK_WRITE].us_sum;
     double gib_s = (double)ops * frag_len / (1 << 30) / wall;
-    printf("BENCH_OK kind=data rw=%s paths=%d qd=%d ops=%llu wall_s=%.3f "
+    printf("%s kind=data rw=%s paths=%d qd=%d ops=%llu wall_s=%.3f "
            "ops_s=%.1f p50_us=%llu p99_us=%llu max_us=%llu GiB_s=%.3f "
            "errors=%llu diskw_ops=%llu diskw_avg_us=%llu\n",
+           errors || !ops ? "BENCH_FAIL" : "BENCH_OK",
            reading ? "read" : "write", npaths, qd, (unsigned long long)ops,
            wall, (double)ops / wall, (unsigned long long)p50,
            (unsigned long long)p99, (unsigned long long)max, gib_s,
@@ -575,7 +576,7 @@ static uint64_t run_round(struct bench_slot *slots, int reading, int npaths,
            (unsigned long long)(diskw_ops ? diskw_us / diskw_ops : 0));
     ds_print_delta(ds0, nds0, ds1, nds1, wall);
     fflush(stdout);
-    return errors;
+    return errors + !ops;
 }
 
 static void bench_export_tree_rm(struct efsd_server *s)
@@ -715,8 +716,9 @@ static void lat_report(const char *tag, struct lat_vec *lv, uint64_t ops,
     }
     if (wall < 1e-9)
         wall = 1e-9;
-    printf("BENCH_OK kind=meta phase=%s ops=%llu wall_s=%.3f ops_s=%.1f "
+    printf("%s kind=meta phase=%s ops=%llu wall_s=%.3f ops_s=%.1f "
            "p50_us=%llu p99_us=%llu max_us=%llu MB_s=%.3f errors=%llu\n",
+           errors || !ops ? "BENCH_FAIL" : "BENCH_OK",
            tag, (unsigned long long)ops, wall, (double)ops / wall,
            (unsigned long long)p50, (unsigned long long)p99,
            (unsigned long long)max,
@@ -767,7 +769,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
         fprintf(stderr, "bench: kv open %s failed\n", kvdir);
         return 1;
     }
-    uint64_t ops = 0, errors = 0;
+    uint64_t ops = 0, errors = 0, total_errors = 0;
     double t0 = now_sec();
     double deadline = t0 + time_sec;
     while (now_sec() < deadline) {
@@ -783,21 +785,27 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
     double wall = now_sec() - t0;
     lat_report("kv-write", &lv, ops, errors, wall, sizeof(key) + sizeof(val));
 
+    total_errors += errors + !ops;
+
     /* Flush + compact: the compactor segment fsync (the D11 100 ms mode)
      * is its own line, wall clock. */
     struct efs_kv_lsm_stats kst;
     double tf = now_sec();
-    efs_kv_lsm_flush(kv);
+    int flush_rc = efs_kv_lsm_flush(kv);
     double flush_s = now_sec() - tf;
     tf = now_sec();
-    efs_kv_lsm_compact(kv);
+    int compact_rc = efs_kv_lsm_compact(kv);
     double compact_s = now_sec() - tf;
     memset(&kst, 0, sizeof(kst));
-    efs_kv_lsm_stats(kv, &kst);
-    printf("BENCH_OK kind=meta phase=kv-flush-compact flush_s=%.3f "
-           "compact_s=%.3f mt_bytes=%llu l0_bytes=%llu n_l0=%u n_l1=%u\n",
+    int stats_rc = efs_kv_lsm_stats(kv, &kst);
+    uint64_t flush_errors = (flush_rc != EFS_OK) +
+                            (compact_rc != EFS_OK) + (stats_rc != EFS_OK);
+    total_errors += flush_errors;
+    printf("%s kind=meta phase=kv-flush-compact flush_s=%.3f "
+           "compact_s=%.3f mt_bytes=%llu l0_bytes=%llu n_l0=%u n_l1=%u errors=%llu\n",
+           flush_errors ? "BENCH_FAIL" : "BENCH_OK",
            flush_s, compact_s, (unsigned long long)kst.mt_bytes,
-           (unsigned long long)kst.l0_bytes, kst.n_l0, kst.n_l1);
+           (unsigned long long)kst.l0_bytes, kst.n_l0, kst.n_l1, (unsigned long long)flush_errors);
     fflush(stdout);
 
     /* KV read: point gets over the keys just written. */
@@ -817,13 +825,15 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
         uint64_t t = efs_iostats_now_us();
         int rc = efs_kv_get(kv, key, sizeof(key), vbuf, &vlen);
         lat_add(&lv, efs_iostats_now_us() - t);
-        if (rc == EFS_OK)
+        if (rc == EFS_OK && vlen == sizeof(val) &&
+            memcmp(vbuf, val, sizeof(val)) == 0)
             ops++;
         else
             errors++;
     }
     wall = now_sec() - t0;
     lat_report("kv-read", &lv, ops, errors, wall, 0);
+    total_errors += errors + !ops;
     efs_kv_lsm_close(kv);
     free(lv.v);
 
@@ -861,6 +871,7 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
     wall = now_sec() - t0;
     lat_report("raft-append-qd1", &lv, ops, errors, wall, sizeof(cmd));
 
+    total_errors += errors + !ops;
     if (rst->batch_begin && rst->batch_end) {
         lv.n = 0;
         ops = errors = 0;
@@ -870,20 +881,28 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
         while (now_sec() < deadline) {
             uint64_t t = efs_iostats_now_us();
             int rc = rst->batch_begin(rst);
+            int began = rc == EFS_OK;
+            uint64_t batch_entries = 0;
             for (int b = 0; b < 32 && rc == EFS_OK; b++) {
                 rc = rst->append(rst, idx, 1, cmd, sizeof(cmd));
                 if (rc == EFS_OK) {
                     idx++;
-                    entries++;
+                    batch_entries++;
                 }
             }
-            if (rc == EFS_OK)
-                rc = rst->batch_end(rst);
+            if (began) {
+                int end_rc = rst->batch_end(rst);
+                if (rc == EFS_OK)
+                    rc = end_rc;
+            }
             lat_add(&lv, efs_iostats_now_us() - t);
-            if (rc == EFS_OK)
+            if (rc == EFS_OK) {
                 ops++;
-            else
+                entries += batch_entries;
+            } else {
                 errors++;
+                break; /* a failed batch invalidates the run */
+            }
         }
         wall = now_sec() - t0;
         if (wall < 1e-9)
@@ -895,15 +914,17 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
             p99 = lv.v[(lv.n * 99) / 100];
             max = lv.v[lv.n - 1];
         }
-        printf("BENCH_OK kind=meta phase=raft-append-batch32 batches=%llu "
+        printf("%s kind=meta phase=raft-append-batch32 batches=%llu "
                "entries=%llu wall_s=%.3f entries_s=%.1f batch_p50_us=%llu "
                "batch_p99_us=%llu batch_max_us=%llu MB_s=%.3f errors=%llu\n",
+               errors || !ops ? "BENCH_FAIL" : "BENCH_OK",
                (unsigned long long)ops, (unsigned long long)entries, wall,
                (double)entries / wall, (unsigned long long)p50,
                (unsigned long long)p99, (unsigned long long)max,
                (double)entries * sizeof(cmd) / (1 << 20) / wall,
                (unsigned long long)errors);
         fflush(stdout);
+        total_errors += errors + !ops;
     }
     free(lv.v);
 
@@ -913,21 +934,27 @@ static int run_meta_bench(struct efsd_server *s, double time_sec, int ceiling)
     rd = efs_raft_disk_open(raftdir, EFS_RAFT_DISK_SYNC);
     double reopen_s = now_sec() - t0;
     uint64_t last_idx = 0, last_term = 0;
+    int recovery_rc = EFS_ERR_IO;
     if (rd) {
         struct efs_raft_store *r2 = efs_raft_disk_group(rd, 0);
         if (r2 && r2->last)
-            r2->last(r2, &last_idx, &last_term);
+            recovery_rc = r2->last(r2, &last_idx, &last_term);
     }
-    printf("BENCH_OK kind=meta phase=raft-reopen reopen_s=%.3f last_idx=%llu "
-           "entries=%llu\n",
-           reopen_s, (unsigned long long)last_idx, (unsigned long long)(idx - 1));
+    uint64_t recovery_errors = recovery_rc != EFS_OK || last_idx != idx - 1 ||
+                               (last_idx && last_term != 1);
+    total_errors += recovery_errors;
+    printf("%s kind=meta phase=raft-reopen reopen_s=%.3f last_idx=%llu "
+           "entries=%llu errors=%llu\n",
+           recovery_errors ? "BENCH_FAIL" : "BENCH_OK",
+           reopen_s, (unsigned long long)last_idx, (unsigned long long)(idx - 1),
+           (unsigned long long)recovery_errors);
     fflush(stdout);
     if (rd)
         efs_raft_disk_close(rd);
 
     rm_tree(kvdir);
     rm_tree(raftdir);
-    return errors ? 1 : 0;
+    return total_errors ? 1 : 0;
 }
 
 static int run_local_bench(struct efsd_server *s, const char *kind,
