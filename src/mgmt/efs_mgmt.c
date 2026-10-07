@@ -685,6 +685,63 @@ static int cmd_version(int argc, char **argv)
     return 0;
 }
 
+static int cmd_gc_status(int argc, char **argv)
+{
+    char host[64];
+    uint16_t port;
+    uint8_t type = 0;
+    void *payload = NULL;
+    uint32_t len = 0;
+    if (argc != 1 || parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
+        fprintf(stderr, "usage: gc-status <node:port>\n");
+        return 1;
+    }
+    int fd = efs_connect_tcp(host, port);
+    if (fd < 0)
+        return 1;
+    efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
+    int rc = send_recv(fd, EFS_MSG_GC_STATUS, NULL, 0, &type, &payload, &len);
+    close(fd);
+    if (rc || type != EFS_MSG_GC_STATUS_REPLY ||
+        len != sizeof(struct efs_msg_gc_status_reply)) {
+        fprintf(stderr, "GC status unavailable (server upgrade may be required)\n");
+        free(payload);
+        return 1;
+    }
+    struct efs_msg_gc_status_reply *g = payload;
+    if (g->version != 1) {
+        free(payload);
+        return 1;
+    }
+    printf("node=%u stage=%u group=%u exports=%u passes=%llu elapsed_ms=%llu "
+           "last_pass_age_ms=%llu last_delete_age_ms=%llu\n",
+           g->node_id, g->stage, g->group, g->exports, (unsigned long long)g->passes,
+           (unsigned long long)g->pass_elapsed_ms,
+           (unsigned long long)g->last_pass_age_ms,
+           (unsigned long long)g->last_delete_age_ms);
+    printf(
+        "data_usage_bytes=%llu removed_fragments=%llu unlinked_file_bytes=%llu reclaimed_payload_bytes=%llu "
+        "delete_errors=%llu mismatches=%llu sweep_errors=%llu reap_errors=%llu "
+        "ack_errors=%llu scan_errors=%llu missing_exports=%llu\n",
+        (unsigned long long)g->data_usage_bytes,
+        (unsigned long long)g->removed_fragments,
+        (unsigned long long)g->removed_file_bytes,
+        (unsigned long long)g->removed_payload_bytes,
+        (unsigned long long)g->delete_errors, (unsigned long long)g->mismatches,
+        (unsigned long long)g->sweep_errors, (unsigned long long)g->reap_errors,
+        (unsigned long long)g->ack_errors, (unsigned long long)g->scan_errors,
+        (unsigned long long)g->missing_exports);
+    for (unsigned i = 0; i < 2; i++)
+        printf("group=%u sampled=%u pending_estimate=%llu reap_seen=%llu orphan_seen=%llu capped=%u "
+               "first_reap_ino=%llu observed_age_ms=%llu\n",
+               i * 2, (g->sampled_mask >> i) & 1, (unsigned long long)g->pending[i],
+               (unsigned long long)g->reap_seen[i], (unsigned long long)g->orphan_seen[i], g->reap_capped[i],
+               (unsigned long long)g->first_reap[i],
+               (unsigned long long)g->first_seen_age_ms[i]);
+    free(payload);
+    return 0;
+}
+
 static int cmd_raft_status(int argc, char **argv)
 {
     char host[64];
@@ -2301,6 +2358,7 @@ int main(int argc, char **argv)
                     "  io-stats <node:port>\n"
                     "  version <node:port>\n"
                     "  raft-status <node:port>\n"
+                    "  gc-status <node:port>\n"
                     "  raft-mkfs <node:port>\n"
                     "  raft-change <node:port> <group> <voters>\n"
                     "  raft-dir <node:port> <ino> <begin|migrate|finish>\n"
@@ -2341,6 +2399,8 @@ int main(int argc, char **argv)
     /* One metadata engine: mkfs is the raft mkfs. */
     if (strcmp(cmd, "mkfs") == 0)
         return cmd_raft_mkfs(argc - 2, argv + 2);
+    if (strcmp(cmd, "gc-status") == 0)
+        return cmd_gc_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-status") == 0)
         return cmd_raft_status(argc - 2, argv + 2);
     if (strcmp(cmd, "raft-mkfs") == 0)

@@ -271,6 +271,7 @@ static void *heartbeat_thread(void *arg)
     if (!nodes)
         return NULL;
 
+    uint64_t gc_log_ms = 0;
     while (__atomic_load_n(&s->running, __ATOMIC_ACQUIRE)) {
         usleep(EFS_HEARTBEAT_MS * 1000);
 
@@ -283,6 +284,23 @@ static void *heartbeat_thread(void *arg)
         pthread_mutex_unlock(&s->lock);
 
         uint64_t now = hb_now_ms();
+        if (now - gc_log_ms >= 15000) {
+            struct efs_msg_gc_status_reply gc;
+            server_gc_status(s, &gc);
+            fprintf(stderr, "gc-health: stage=%u group=%u elapsed_ms=%llu last_pass_age_ms=%llu "
+                    "passes=%llu sampled=%u pending=%llu,%llu reap=%llu,%llu removed=%llu "
+                    "file_bytes=%llu payload_bytes=%llu delete_errors=%llu sweep_errors=%llu "
+                    "reap_errors=%llu ack_errors=%llu missing_exports=%llu\n",
+                    gc.stage, gc.group, (unsigned long long)gc.pass_elapsed_ms,
+                    (unsigned long long)gc.last_pass_age_ms, (unsigned long long)gc.passes,
+                    gc.sampled_mask, (unsigned long long)gc.pending[0], (unsigned long long)gc.pending[1],
+                    (unsigned long long)gc.reap_seen[0], (unsigned long long)gc.reap_seen[1],
+                    (unsigned long long)gc.removed_fragments, (unsigned long long)gc.removed_file_bytes,
+                    (unsigned long long)gc.removed_payload_bytes, (unsigned long long)gc.delete_errors,
+                    (unsigned long long)gc.sweep_errors, (unsigned long long)gc.reap_errors,
+                    (unsigned long long)gc.ack_errors, (unsigned long long)gc.missing_exports);
+            gc_log_ms = now;
+        }
         for (uint32_t i = 0; i < node_count; i++) {
             if (nodes[i].id == self)
                 continue;

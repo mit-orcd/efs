@@ -306,6 +306,7 @@ struct efs_meta_pub {
     uint64_t inode_gen;
     uint64_t mtime_gen;
     uint8_t lane_local;
+    uint8_t fresh_object; /* a new PUT, even when checksums match an older object */
     struct efs_opid publication_id; /* mount/session + unique snapshot sequence */
     uint8_t durable_result; /* atomically record exact immutable publication result */
     /* delta_len > 0 appends an immutable span instead of CAS-replacing
@@ -706,6 +707,7 @@ int efs_meta_apply_readdir(struct efs_kv *kv, efs_ino_t dir,
  * fragments (L7), and it must be atomic with the row delete so a crash can
  * never strand the chunks. */
 int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino);
+int efs_meta_apply_orphan_reclaim(struct efs_kv *, efs_ino_t, uint64_t generation);
 int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
 /* NOT_FOUND means unknown, NEVER permission to rebase. Read under lane ReadIndex. */
 /* Retired is a replay barrier, not evidence of commit or rejection. */

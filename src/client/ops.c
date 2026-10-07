@@ -1319,10 +1319,16 @@ int efs_client_truncate(efs_ino_t ino, uint64_t size)
             return rrc != EFS_OK ? rrc : EFS_ERR_IO;
         }
         memset(chunk + keep, 0, chunk_size - keep);
-        int wrc = efs_client_write(ino, chunk_start, chunk_size,
-                                   (const char *)chunk);
-        efs_buf_free(chunk, chunk_size);
-        if (wrc != 0)
+        /* Use the normal owned-image pipeline: a fresh full object must
+         * name the span list it replaces and retain its body through REPORT.
+         * The immediate PUT path has neither that observation nor replay
+         * ownership, so a span-only tail could loop on FOLD_LIST until EIO. */
+        if (efs_dcache_store_full_owned(ino, ci, chunk, chunk_size) != 0) {
+            efs_buf_free(chunk, chunk_size);
+            return EFS_ERR_NOMEM;
+        }
+        int wrc = efs_dcache_flush_ino(ino);
+        if (wrc != EFS_OK)
             return wrc;
     }
 

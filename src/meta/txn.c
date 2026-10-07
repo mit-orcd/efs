@@ -1256,6 +1256,20 @@ static int res_add_put(struct res_acc *a, const uint8_t *key, uint32_t klen,
     a->it[a->n].val = a->vals[a->n];
     a->it[a->n].vlen = vlen;
     a->n++;
+    if (klen >= 3 && key[2] == EFS_KV_KIND_INODE) {
+        struct efs_meta_row row;
+        if (efs_meta_unpack_inode(val, vlen, &row) != EFS_OK) {
+            a->rc = EFS_ERR_PROTO; return 1;
+        }
+        if (!row.nlink) {
+            uint8_t orphan[KEY_MAX], generation[8]; uint32_t olen = 0;
+            int rc = efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(row.ino)),
+                                     row.ino, orphan, &olen);
+            if (rc != EFS_OK) { a->rc = rc; return 1; }
+            orphan[2] = EFS_KV_KIND_ORPHAN; be64(generation, row.generation);
+            return res_add_put(a, orphan, olen, generation, sizeof(generation));
+        }
+    }
     return 0;
 }
 

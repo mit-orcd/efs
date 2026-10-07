@@ -302,7 +302,8 @@ static inline int efs_writer_plan_report(const struct efs_writer_plan *plan,
     r.base_gen=plan->base_generation;
     r.delta_base_n=plan->base_delta_count;r.delta_base_seq=plan->base_sequence;
     r.file_generation=plan->generation;r.publish_epoch=plan->publish_epoch;
-    r.publish_flags=EFS_CHUNK_REC_F_CAPTURED_EPOCH|EFS_CHUNK_REC_F_CAPTURED_FILEID;
+    r.publish_flags=EFS_CHUNK_REC_F_CAPTURED_EPOCH|EFS_CHUNK_REC_F_CAPTURED_FILEID|
+        (put->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT);
     *out=r;
     return EFS_OK;
 }

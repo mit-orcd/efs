@@ -580,6 +580,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
-                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]);
+                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
+                                      uint64_t *object_out);
 
 #endif

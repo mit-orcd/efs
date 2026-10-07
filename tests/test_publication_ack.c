@@ -143,6 +143,11 @@ static void durable_order(void)
 }
 int main(void)
 {
+    struct efs_msg_publication r=request(99);struct efs_meta_pub p=intent(&r);
+    uint8_t before[EFS_HASH_SIZE],after[EFS_HASH_SIZE];
+    assert(!efs_publication_digest(&p,before));
+    r.rec.publish_flags|=EFS_CHUNK_REC_F_FRESH_OBJECT;p=intent(&r);assert(p.fresh_object);
+    assert(!efs_publication_digest(&p,after)&&memcmp(before,after,sizeof(before)));
     ownership();bounded_wrap();durable_order();
     puts("publication ACK: immutable ownership, ordered retirement, bounded wrap and lost replies PASS");
     return 0;

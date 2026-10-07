@@ -10,6 +10,7 @@
 #include "efs/publication.h"
 #include "efs/write_extent.h"
 #include <errno.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -204,22 +205,35 @@ static void report_retry_without_identity(efs_ino_t ino, uint32_t ci)
         efs_client_mark_chunk_dirty(ino, ci);
 }
 
-/* Object identity for PUT/GET. Must match host_pub_candidate_gen. */
-static uint64_t chunk_candidate_gen(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
-                                    const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
-                                    uint32_t chunk_index)
+/* Each new PUT owns a fresh object name. A content-derived name can be
+ * republished after supersession while an older GC record still names it.
+ * Retries of this PUT retain its name; another PUT of identical bytes does
+ * not revive an object already scheduled for collection. */
+static pthread_once_t object_uuid_once = PTHREAD_ONCE_INIT;
+static uint8_t object_uuid[EFS_OPID_UUID_LEN];
+static int object_uuid_ready;
+static uint64_t object_sequence;
+static void object_uuid_init(void)
 {
-    uint8_t h[EFS_HASH_SIZE];
-    uint8_t in[sizeof(((struct efs_chunk_rec *)0)->nodes) +
-               sizeof(((struct efs_chunk_rec *)0)->checksums)];
-    uint64_t g;
-
-    memcpy(in, nodes, sizeof(((struct efs_chunk_rec *)0)->nodes));
-    memcpy(in + sizeof(((struct efs_chunk_rec *)0)->nodes), checksums,
-           sizeof(((struct efs_chunk_rec *)0)->checksums));
-    efs_hash(in, sizeof(in), h);
-    g = efs_meta_candidate_gen(h, 0, 1, chunk_index, 0);
-    return g ? g : 1;
+    int fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return;
+    size_t n = 0;
+    while (n < sizeof(object_uuid)) {
+        ssize_t got = read(fd, object_uuid + n, sizeof(object_uuid) - n);
+        if (got < 0 && errno == EINTR) continue;
+        if (got <= 0) break;
+        n += (size_t)got;
+    }
+    close(fd);
+    object_uuid_ready = n == sizeof(object_uuid);
+}
+static uint64_t new_chunk_object_gen(uint32_t ci)
+{
+    pthread_once(&object_uuid_once, object_uuid_init);
+    if (!object_uuid_ready) return 0;
+    uint64_t seq = __atomic_add_fetch(&object_sequence, 1, __ATOMIC_RELAXED);
+    if (!seq) return 0;
+    return efs_meta_candidate_gen(object_uuid, 0, seq, ci, 0);
 }
 
 /* Last successful PUT, independent of dcache_find (which requires e->data).
@@ -394,8 +408,8 @@ static void putid_note(efs_ino_t ino, uint32_t ci, uint64_t gen, uint64_t seq,
     p->delta_base_n = delta_base_n;
     p->delta_base_seq = delta_base_seq;
     p->publish_epoch = obs ? obs->read_view.fence_epoch : 0;
-    p->publish_flags = obs && obs->read_view.count ?
-                       EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0;
+    p->publish_flags = EFS_CHUNK_REC_F_FRESH_OBJECT |
+        (obs && obs->read_view.count ? EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0);
     pthread_mutex_unlock(&g_putid_mu);
 }
 
@@ -1752,15 +1766,11 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                               &crecs[cn], &cseq[cn])) {
             putid_miss_note(ds.chunk_inos[i], ds.chunk_idxs[i],
                             ce.fragment_nodes);
-            if (ce.fragment_nodes[0] == 0) {
-                /* Never publish a peer's span-only row as our object. */
-                report_retry_without_identity(ds.chunk_inos[i],
-                                                ds.chunk_idxs[i]);
-                ds.chunk_inos[i] = 0;
-                continue;
-            }
-            crecs[cn].chunk_generation = chunk_candidate_gen(
-                ce.fragment_nodes, ce.checksums, ds.chunk_idxs[i]);
+            /* No successful unpublished PUT identity: this is a table
+             * observation, which may name an already superseded object. */
+            report_retry_without_identity(ds.chunk_inos[i], ds.chunk_idxs[i]);
+            ds.chunk_inos[i] = 0;
+            continue;
         }
         cn++;
     }
@@ -1956,14 +1966,9 @@ static int report_dirty_ino_run(efs_ino_t only_ino, int sync)
                      * report mark without local bytes is not pending work. */
                     putid_miss_note(ds.chunk_inos[i], ds.chunk_idxs[i],
                                     ce.fragment_nodes);
-                    if (ce.fragment_nodes[0] == 0) {
-                        report_retry_without_identity(ds.chunk_inos[i],
-                                                        ds.chunk_idxs[i]);
-                        ds.chunk_inos[i] = 0;
-                        continue;
-                    }
-                    crecs[cn].chunk_generation = chunk_candidate_gen(
-                        ce.fragment_nodes, ce.checksums, ds.chunk_idxs[i]);
+                    report_retry_without_identity(ds.chunk_inos[i], ds.chunk_idxs[i]);
+                    ds.chunk_inos[i] = 0;
+                    continue;
                 }
                 cn++;
             }
@@ -2332,7 +2337,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
-                                      int failed_out[EFS_NUM_FRAGMENTS])
+                                      int failed_out[EFS_NUM_FRAGMENTS], uint64_t object_gen)
 {
     struct efs_conn *conns[EFS_NUM_FRAGMENTS];
     int pending[EFS_NUM_FRAGMENTS];
@@ -2385,8 +2390,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         hdrs[i].fragment_index = (uint32_t)i;
         hdrs[i].data_len = frag_len;
         memcpy(hdrs[i].checksum, checksums[i], EFS_HASH_SIZE);
-        hdrs[i].chunk_generation = chunk_candidate_gen(nodes, checksums,
-                                                       chunk_index);
+        hdrs[i].chunk_generation = object_gen;
         hdrs[i].path_hint = path_hint_get(nodes[i], ino, chunk_index,
                                           (uint8_t)i);
     }
@@ -2697,8 +2701,12 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
-                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE])
+                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
+                                      uint64_t *object_out)
 {
+    uint64_t object_gen = new_chunk_object_gen(chunk_index);
+    if (!object_gen) return EFS_ERR_IO;
+    if (object_out) *object_out = object_gen;
     /* 2+1 EC requires 3 distinct nodes. On a 1-2 node ring placement wraps and
      * two fragments land on one machine, so a "2-ack quorum" can be a single
      * disk — losing that node loses the chunk. Refuse rather than store
@@ -2719,7 +2727,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
     for (int attempt = 1; attempt <= 4; attempt++) {
         reroute_down_fragments(nodes, attempt == 1 ? NULL : failed);
         rc = put_fragments_parallel_once(ino, chunk_index, nodes, fragments,
-                                         frag_len, checksums, failed);
+                                         frag_len, checksums, failed, object_gen);
         if (rc == EFS_OK || rc == EFS_ERR_QUOTA)
             return rc;
         /* Only hard I/O failures invalidate a node's idle pool. failed[] is
@@ -2910,6 +2918,7 @@ struct chunk_put_job {
     uint64_t end;
     int rc;
     int deferred;
+    uint64_t object_gen;
     int flush_put; /* 1: dcache_put_now(flush_buf) — W3 fsync pipeline */
     const uint8_t *flush_buf;
     uint32_t flush_len;
@@ -3418,8 +3427,9 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
 
     efs_node_id_t nodes[EFS_NUM_FRAGMENTS];
     efs_place_fragments(g_client.nodes, g_client.node_count, ino, ci, nodes);
+    uint64_t object_gen = 0;
     int rc = efs_client_put_fragments_parallel(ino, ci, nodes, cfrags, frag_len,
-                                               checksums);
+                                               checksums, &object_gen);
     efs_buf_free(parity, frag_len);
     if (rc != EFS_OK)
         return rc;
@@ -3441,7 +3451,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
     uint64_t obs_seq = 0;
     {
         struct efs_chunk_entry ce;
-        uint64_t obj = chunk_candidate_gen(nodes, checksums, ci);
+        uint64_t obj = object_gen;
         int have = export_chunk_copy(ino, ci, &ce) == 0;
 
         if (have) {
@@ -3502,7 +3512,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
                                      checksums);
                 (void)efs_export_set_chunk_gen(
                     &g_client.export, ino, ci,
-                    chunk_candidate_gen(nodes, checksums, ci));
+                    object_gen);
                 span = 0;
             }
         } else {
@@ -3512,7 +3522,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
              * set_chunk_gen drops the span list this image folds. */
             (void)efs_export_set_chunk_gen(
                 &g_client.export, ino, ci,
-                chunk_candidate_gen(nodes, checksums, ci));
+                object_gen);
         }
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
@@ -3520,7 +3530,7 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
                    span ? delta_off : 0, span ? delta_len : 0, obs_n, obs_seq, obs);
     }
     {
-        uint64_t obj = chunk_candidate_gen(nodes, checksums, ci);
+        uint64_t obj = object_gen;
         uint32_t sl = dcache_slot(ino, ci);
         struct dcache_ent *de;
         pthread_mutex_lock(dcache_mu(sl));
@@ -3536,8 +3546,8 @@ static int dcache_put_now_budgeted(efs_ino_t ino, uint32_t ci, const uint8_t *ch
             de->object_delta_base_seq = obs_seq;
             de->object_file_generation = 0;
             de->object_publish_epoch = obs ? obs->read_view.fence_epoch : 0;
-            de->object_publish_flags = obs && obs->read_view.count ?
-                                      EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0;
+            de->object_publish_flags = EFS_CHUNK_REC_F_FRESH_OBJECT |
+                (obs && obs->read_view.count ? EFS_CHUNK_REC_F_CAPTURED_EPOCH : 0);
             DTRACE(de, "put-record obj=%llx seq=%llu",
                    (unsigned long long)obj, (unsigned long long)snap_seq);
         } else {
@@ -5998,7 +6008,7 @@ static int dcache_object_of(efs_ino_t ino, uint32_t ci, struct efs_chunk_rec *re
     s = dcache_slot(ino, ci);
     pthread_mutex_lock(dcache_mu(s));
     e = dcache_find_meta(s, ino, ci);
-    if (e && e->object_gen) {
+    if (e && e->object_gen && dcache_unpublished(e)) {
         memcpy(rec->nodes, e->object_nodes, sizeof(rec->nodes));
         memcpy(rec->checksums, e->object_cks, sizeof(rec->checksums));
         rec->chunk_generation = e->object_gen;
@@ -6907,7 +6917,8 @@ static void *chunk_put_worker(void *arg)
              * well-known zero digest; decode synthesizes zeros on read.
              * dd if=/dev/zero was spending ~1 GB/s on 2-ack PUTs of zeros. */
             efs_dcache_drop(job->ino, job->ci);
-            job->rc = EFS_OK;
+            job->object_gen = new_chunk_object_gen(job->ci);
+            job->rc = job->object_gen ? EFS_OK : EFS_ERR_IO;
             return NULL;
         }
 
@@ -6936,7 +6947,7 @@ static void *chunk_put_worker(void *arg)
         efs_place_fragments(g_client.nodes, g_client.node_count, job->ino,
                             job->ci, job->nodes);
         job->rc = efs_client_put_fragments_parallel(
-            job->ino, job->ci, job->nodes, cfrags2, frag_len, job->checksums);
+            job->ino, job->ci, job->nodes, cfrags2, frag_len, job->checksums, &job->object_gen);
         if (frag_len > EFS_FRAGMENT_SIZE)
             free(parity);
         efs_rdcache_invalidate(job->ino, job->ci);
@@ -6987,7 +6998,7 @@ static void *chunk_put_worker(void *arg)
     efs_place_fragments(g_client.nodes, g_client.node_count, job->ino, job->ci,
                         job->nodes);
     job->rc = efs_client_put_fragments_parallel(job->ino, job->ci, job->nodes,
-                                                cfrags, frag_len, job->checksums);
+                                                cfrags, frag_len, job->checksums, &job->object_gen);
     efs_rdcache_invalidate(job->ino, job->ci);
     if (job->rc != EFS_OK)
         (void)dcache_store(job->ino, job->ci, chunk, chunk_size);
@@ -7071,8 +7082,9 @@ static int client_write_run(efs_ino_t ino, uint64_t offset, size_t size, const c
         hash_write_fragments(cfrags, frag_len, chunk_size, from_zero, chunk_start,
                              wr_start, wr_end, checksums);
 
+        uint64_t object_gen = 0;
         int rc = efs_client_put_fragments_parallel(ino, ci, nodes, cfrags, frag_len,
-                                                   checksums);
+                                                   checksums, &object_gen);
         efs_buf_free(chunk, chunk_size);
         if (frag_buf != frag_tls)
             free(frag_buf);
@@ -7090,10 +7102,10 @@ static int client_write_run(efs_ino_t ino, uint64_t offset, size_t size, const c
         pthread_mutex_lock(&g_client.idx_mu);
         efs_client_set_chunk(&g_client.export, ino, ci, nodes, checksums);
         (void)efs_export_set_chunk_gen(&g_client.export, ino, ci,
-                                       chunk_candidate_gen(nodes, checksums,
-                                                           ci));
+                                       object_gen);
         pthread_mutex_unlock(&g_client.idx_mu);
         efs_client_unlock_dir(ino);
+        putid_note(ino,ci,object_gen,0,nodes,checksums,0,0,0,0,NULL);
         efs_client_mark_chunk_dirty(ino, ci);
     }
 
@@ -7230,10 +7242,7 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                                          jobs[i].nodes, jobs[i].checksums);
                 (void)efs_export_set_chunk_gen(&g_client.export, ino,
                                                jobs[i].ci,
-                                               chunk_candidate_gen(
-                                                   jobs[i].nodes,
-                                                   jobs[i].checksums,
-                                                   jobs[i].ci));
+                                               jobs[i].object_gen);
                 /* The row must already cover this chunk's bytes when the
                  * chunk mark below makes it reportable: a REPORT snapshot
                  * between the mark and the size update at the end of this
@@ -7254,9 +7263,7 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                 pthread_mutex_unlock(&g_client.idx_mu);
                 efs_client_unlock_dir(ino);
                 putid_note(ino, jobs[i].ci,
-                           chunk_candidate_gen(jobs[i].nodes,
-                                               jobs[i].checksums,
-                                               jobs[i].ci),
+                           jobs[i].object_gen,
                            0, jobs[i].nodes, jobs[i].checksums, 0, 0,
                            have ? prev.ndelta : 0,
                            have ? prev.delta_seq : 0, NULL);
@@ -7264,7 +7271,8 @@ static int write_chunks_no_replicate(efs_ino_t ino, uint64_t offset, size_t size
                  * generation. Skipping REPORT left KV on the ftruncate
                  * stub gen while PUT wrote `{ci}.{fi}.{G}` — remount
                  * GET of the stub missed (W1 DECODE). */
-                if (!same_nodes || !same_ck) {
+                if (!same_nodes || !same_ck || !have ||
+                    prev.generation != jobs[i].object_gen) {
                     efs_client_mark_chunk_dirty(ino, jobs[i].ci);
                     /* Ino mark right behind the chunk mark, as in the
                      * dcache put-record path, so the irec is in the same

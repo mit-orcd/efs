@@ -6475,7 +6475,7 @@ static void *bench_put_worker(void *arg)
             efs_hash(a->frags[i], EFS_FRAGMENT_SIZE, sums[i]);
         uint64_t t0 = fuse_now_us();
         int rc = efs_client_put_fragments_parallel(
-            ino, ci, nodes, (const uint8_t **)a->frags, EFS_FRAGMENT_SIZE, sums);
+            ino, ci, nodes, (const uint8_t **)a->frags, EFS_FRAGMENT_SIZE, sums, NULL);
         bench_lat_add(&a->lat, fuse_now_us() - t0);
         if (rc == EFS_OK)
             a->ops++;

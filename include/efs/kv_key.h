@@ -12,6 +12,7 @@
 #define EFS_KV_SHARD_MASK 0xFFFu
 #define EFS_KV_KEY_MAX    320
 
+#define EFS_KV_KIND_ORPHAN 28 /* zero-link inode awaiting lease/txn-safe reclamation */
 #define EFS_KV_KIND_PUBLICATION_FLOOR 27 /* stream replay barrier, never expires */
 #define EFS_KV_KIND_PUBLICATION 26 /* FileID/chunk/intent digest: durable verdict */
 

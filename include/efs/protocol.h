@@ -171,6 +171,32 @@ enum efs_msg_type {
     EFS_MSG_PUBLICATION_STATUS_REPLY = 116,
     EFS_MSG_PUBLICATION_RETIRE = 117,
     EFS_MSG_PUBLICATION_RETIRE_REPLY = 118,
+    EFS_MSG_GC_STATUS = 119,
+    EFS_MSG_GC_STATUS_REPLY = 120,
+    EFS_MSG_GC_INODE = 121,
+    EFS_MSG_GC_INODE_REPLY = 122,
+};
+
+/* Trusted reaper only: all lanes swept and no remaining open lease.
+ * The durable reap marker is retained until every member confirms cleanup. */
+struct efs_msg_gc_inode {
+    uint32_t export_id, reserved;
+    uint64_t ino, generation;
+};
+struct efs_msg_gc_inode_reply { int32_t rc; };
+
+/* Runtime counters, reset on restart. Queue samples cover leader groups only;
+ * reap_capped means reap_seen is a lower bound. Ages are monotonic durations,
+ * UINT64_MAX means never observed. File bytes are unlinked lengths, not a
+ * promise that the filesystem has released blocks held by another open fd. */
+struct efs_msg_gc_status_reply {
+    uint32_t version, node_id, stage, group;
+    uint32_t sampled_mask, exports, reap_capped[2];
+    uint64_t passes, pass_elapsed_ms, last_pass_age_ms, last_delete_age_ms;
+    uint64_t removed_fragments, removed_file_bytes, removed_payload_bytes, data_usage_bytes;
+    uint64_t delete_errors, mismatches, sweep_errors, reap_errors, ack_errors;
+    uint64_t scan_errors, missing_exports;
+    uint64_t pending[2], reap_seen[2], orphan_seen[2], first_reap[2], first_seen_age_ms[2];
 };
 
 /* D25 read authority for write admission, including holes and new lanes.
@@ -762,6 +788,7 @@ struct efs_msg_inode_flock {
 #define EFS_CHUNK_BASE_UNCOND UINT64_MAX
 #define EFS_CHUNK_REC_F_CAPTURED_EPOCH 1u
 #define EFS_CHUNK_REC_F_CAPTURED_FILEID 2u
+#define EFS_CHUNK_REC_F_FRESH_OBJECT 4u
 struct efs_chunk_rec {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -812,7 +839,8 @@ static inline int efs_chunk_publish_epoch(const struct efs_chunk_rec *r,
                                           uint64_t current, uint64_t *out)
 {
     if (!r || !out || (r->publish_flags &
-        ~(EFS_CHUNK_REC_F_CAPTURED_EPOCH | EFS_CHUNK_REC_F_CAPTURED_FILEID)) ||
+        ~(EFS_CHUNK_REC_F_CAPTURED_EPOCH | EFS_CHUNK_REC_F_CAPTURED_FILEID |
+          EFS_CHUNK_REC_F_FRESH_OBJECT)) ||
         ((r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_FILEID) &&
          (!(r->publish_flags & EFS_CHUNK_REC_F_CAPTURED_EPOCH) || !r->file_generation)))
         return EFS_ERR_INVAL;

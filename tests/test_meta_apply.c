@@ -8,6 +8,7 @@
 #include "efs/meta_cmd.h"
 #include "efs/opid.h"
 #include "efs/txn.h"
+#include "efs/session.h"
 #include "efs/common.h"
 #include <stdio.h>
 #include <string.h>
@@ -3357,7 +3358,7 @@ static void gc_ack_all(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
 static int chunk_present(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                          uint32_t ci)
 {
-    uint8_t key[EFS_KV_KEY_MAX], val[512];
+    uint8_t key[EFS_KV_KEY_MAX], val[2048];
     uint32_t kl = 0, vl = sizeof(val);
     uint8_t lane = (uint8_t)(ci % EFS_META_LANES);
 
@@ -4811,7 +4812,7 @@ static void test_content_fence_sweep_cas(void)
 
 static void test_gc_fold_live_alias(void)
 {
-    for (unsigned variant = 0; variant < 5; ++variant) {
+    for (unsigned variant = 0; variant < 6; ++variant) {
         struct efs_kv *kv = efs_kv_mem_create();
         efs_ino_t ino = 0;
         struct efs_meta_pub p = {0};
@@ -4861,6 +4862,7 @@ static void test_gc_fold_live_alias(void)
             p.delta_base_seq = newest;
         }
         p.candidate_gen = same_gen ? span_gen : 0x5403;
+        p.fresh_object = variant == 5; /* identical bytes, separate PUT objects */
         if (variant == 0 || variant == 4) {
             /* Same-generation protection is independent of the placement
              * alias check; the distinct-generation control is truly dead. */
@@ -4872,19 +4874,106 @@ static void test_gc_fold_live_alias(void)
                   got.generation == p.candidate_gen,
               "W54 replacement base installed");
         CHECK(gc_probe(kv, &pr) == 0 &&
-                  pr.n == (variant == 4 ? 1 : 0),
+                  pr.n == (variant >= 4 ? 1 : 0),
               "W54 only distinct dead objects queued");
         CHECK(!gc_probe_find(&pr, p.candidate_gen, 0, 0),
               "W54 no GC for live base identity");
-        if (variant == 4)
+        if (variant >= 4)
             CHECK(gc_probe_find(&pr, span_gen, 0, 0),
                   "W54 dead span still reclaimed");
         CHECK(efs_meta_apply_publish(kv, &p) == EFS_OK,
               "W54 fold replay idempotent");
         CHECK(gc_probe(kv, &pr) == 0 &&
-                  pr.n == (variant == 4 ? 1 : 0),
+                  pr.n == (variant >= 4 ? 1 : 0),
               "W54 replay adds no GC");
         CHECK(efs_meta_apply_check(kv) == EFS_OK, "W54 metadata check");
+        efs_kv_mem_free(kv);
+    }
+}
+
+struct gc_many_probe { efs_ino_t ino; unsigned n; uint16_t bits[420]; };
+static int gc_many_cb(void *arg, const uint8_t *key, uint32_t kl,
+                       const uint8_t *val, uint32_t vl)
+{
+    struct gc_many_probe *p = arg;
+    (void)val; (void)vl;
+    if (kl < 24 || gc_rd64(key + 3) != p->ino) return 0;
+    uint32_t ci = ((uint32_t)key[20] << 24) | ((uint32_t)key[21] << 16) |
+                  ((uint32_t)key[22] << 8) | key[23];
+    uint64_t gen = gc_rd64(key + 11);
+    unsigned chunk = ci / EFS_META_LANES;
+    CHECK(chunk < 420 && gen >= 0x6200 + chunk * 16 &&
+              gen <= 0x6208 + chunk * 16, "W62 exact dead identity");
+    if (chunk < 420 && gen >= 0x6200 + chunk * 16 && gen <= 0x6208 + chunk * 16)
+        p->bits[chunk] |= (uint16_t)(1u << (gen - (0x6200 + chunk * 16)));
+    p->n++; return 0;
+}
+static void test_gc_delta_batch_boundary(void)
+{
+    for (int truncate = 0; truncate < 3; truncate++) {
+        struct efs_kv *kv = efs_kv_mem_create();
+        efs_ino_t ino = 0; struct efs_meta_row row;
+        struct gc_many_probe probe = {0};
+        uint8_t prefix[3]; uint32_t plen;
+        CHECK(efs_meta_apply_init(kv, T0) == EFS_OK, "W62 init");
+        CHECK(efs_meta_apply_create_file(kv, &g_at, EFS_ROOT_INO, S_IFREG | 0644,
+                                         "gc-many", &ino) == EFS_OK, "W62 create");
+        CHECK(efs_meta_apply_get_inode(kv, ino, &row) == EFS_OK, "W62 row");
+        for (unsigned c = 0; c < (truncate == 2 ? 420u : 13u); c++) {
+            uint32_t ci = c * EFS_META_LANES;
+            uint64_t base = 0x6200 + c * 16;
+            pub(kv, ino, ci, (uint64_t)(ci + 1) * EFS_MIN_CHUNK_SIZE,
+                base, 0, T0 + 1, "W62 base");
+            for (unsigned d = 1; d <= EFS_CHUNK_DELTA_MAX; d++) {
+                struct efs_meta_pub span = {0};
+                span.ino = ino; span.chunk_index = ci; span.expected_gen = base;
+                span.candidate_gen = base + d; span.delta_off = d * 100;
+                span.delta_len = 10; span.content_epoch = row.content_epoch;
+                span.coding_profile_id = EFS_META_PROFILE_K2F1;
+                span.new_size = (uint64_t)(ci + 1) * EFS_MIN_CHUNK_SIZE;
+                span.now = T0 + 1 + d; fill_ch(&span.ch);
+                CHECK(efs_meta_apply_publish(kv, &span) == EFS_OK, "W62 delta");
+            }
+        }
+        if (truncate == 2) {
+            struct efs_meta_truncate t = {.size=0, .lane_mask=~0ULL};
+            CHECK(efs_meta_apply_truncate(kv, ino, T0+21, &t) == EFS_ERR_NOMEM,
+                  "W62 oversized truncate fails atomically");
+            for (unsigned c=0;c<420;c++)
+                CHECK(chunk_present(kv,ino,row.generation,c*EFS_META_LANES),
+                      "W62 capacity rejection preserves every source reference");
+            struct gc_probe empty;
+            CHECK(gc_probe(kv,&empty)==EFS_OK && !empty.n,"W62 no partial GC on rejection");
+            efs_kv_mem_free(kv); continue;
+        }
+        if (!truncate) CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "gc-many", T0+20) == EFS_OK, "W62 unlink");
+        CHECK(efs_kv_mem_fail_next_batch(kv) == EFS_OK, "W62 fail batch");
+        struct efs_meta_truncate t = {.size=0, .lane_mask=~0ULL};
+        int rc = truncate ? efs_meta_apply_truncate(kv, ino, T0+21, &t) :
+                            efs_meta_apply_lane_sweep(kv, ino, row.generation, 0);
+        CHECK(rc == EFS_ERR_IO, "W62 failed cleanup visible");
+        CHECK(chunk_present(kv, ino, row.generation, 0), "W62 failure retains reference");
+        rc = truncate ? efs_meta_apply_truncate(kv, ino, T0+21, &t) :
+                        efs_meta_apply_lane_sweep(kv, ino, row.generation, 0);
+        CHECK(rc == EFS_OK, "W62 retry cleanup");
+        probe.ino = ino;
+        for (unsigned anchor = 1; anchor <= 2; anchor++) {
+            CHECK(efs_kv_key_gc_prefix(anchor, prefix, &plen) == EFS_OK, "W62 prefix");
+            CHECK(efs_kv_scan_prefix(kv, prefix, plen, gc_many_cb, &probe) == EFS_OK, "W62 scan");
+        }
+        CHECK(probe.n == 13 * (1 + EFS_CHUNK_DELTA_MAX), "W62 no missing GC generations");
+        for (unsigned c = 0; c < 13; c++) {
+            CHECK(probe.bits[c] == 0x1ff, "W62 all base and eight deltas queued");
+            CHECK(!chunk_present(kv, ino, row.generation, c * EFS_META_LANES), "W62 row deleted");
+            for (unsigned d = 0; d <= EFS_CHUNK_DELTA_MAX; d++)
+                gc_ack_all(kv, ino, 0x6200 + c*16 + d, 0, c*EFS_META_LANES, "W62 collect");
+        }
+        probe.n=0;
+        for (unsigned anchor=1;anchor<=2;anchor++) {
+            efs_kv_key_gc_prefix(anchor,prefix,&plen);
+            efs_kv_scan_prefix(kv,prefix,plen,gc_many_cb,&probe);
+        }
+        CHECK(!probe.n, "W62 all identities retired");
         efs_kv_mem_free(kv);
     }
 }
@@ -5383,8 +5472,56 @@ static void test_orphan_unlink(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_gc_last_close_before_resolve(void)
+{
+    for (int held = 0; held < 3; held++) {
+        struct efs_kv *kv = efs_kv_mem_create();
+        efs_ino_t ino = 0; struct efs_meta_row row;
+        uint8_t uuid[16] = {1}, key[EFS_KV_KEY_MAX], orphan[EFS_KV_KEY_MAX], val[8];
+        uint32_t kl = 0, ol = 0, vl = sizeof(val);
+        CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"orphan init");
+        CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0644,"orphan-race",&ino)==EFS_OK,"orphan create");
+        CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"orphan row");
+        uint64_t gen = row.generation;
+        uint32_t shard = efs_kv_inode_shard(ino);
+        struct efs_txn_parts parts = {.n=1,.shard={shard}};
+        struct efs_txid tx = {{1}}, link = {{2}};
+        struct efs_txn_ino_delta delta = {.d_nlink=-1};
+        CHECK(efs_kv_key_inode(shard,ino,key,&kl)==EFS_OK,"orphan key");
+        CHECK(efs_lease_open(kv,ino,gen,uuid,1)==EFS_OK,"orphan lease open");
+        CHECK(efs_txn_prepare_ino_delta(kv,&tx,&parts,key,kl,&delta)==EFS_OK,"orphan prepare");
+        if (!held) {
+            CHECK(efs_lease_close(kv,ino,gen,uuid,1)==EFS_OK,"close before resolve");
+            CHECK(efs_meta_apply_reclaim(kv,ino)==EFS_ERR_BUSY,"linked row survives early close");
+        }
+        CHECK(efs_txn_resolve(kv,&tx,shard,EFS_TXN_COMMIT)==EFS_OK,"orphan resolve");
+        CHECK(efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,orphan,&ol)==EFS_OK,"orphan anchor");
+        orphan[2]=EFS_KV_KIND_ORPHAN;
+        CHECK(efs_kv_get(kv,orphan,ol,val,&vl)==EFS_OK && vl==8,"resolve atomically indexes zero-link row");
+        CHECK(efs_meta_apply_orphan_reclaim(kv,ino,gen+1)==EFS_ERR_STALE,"wrong generation cannot clear candidate");
+        if (held) {
+            CHECK(efs_meta_apply_orphan_reclaim(kv,ino,gen)==EFS_ERR_BUSY,"open unlinked row stays readable");
+            if (held==2) {
+                delta.d_nlink=1;
+                CHECK(efs_txn_prepare_ino_delta(kv,&link,&parts,key,kl,&delta)==EFS_OK,"pending LINK");
+            }
+            CHECK(efs_lease_close(kv,ino,gen,uuid,1)==EFS_OK,"last close");
+            if (held==2) {
+                CHECK(efs_meta_apply_reclaim(kv,ino)==EFS_ERR_BUSY,"pending LINK protects row");
+                CHECK(efs_txn_resolve(kv,&link,shard,EFS_TXN_COMMIT)==EFS_OK,"LINK resolve");
+            }
+        }
+        CHECK(efs_meta_apply_orphan_reclaim(kv,ino,gen)==EFS_OK,"orphan retry");
+        CHECK(efs_kv_get(kv,orphan,ol,val,&vl)==EFS_ERR_NOT_FOUND,"candidate retired atomically");
+        int rc=efs_meta_apply_get_inode(kv,ino,&row);
+        CHECK(held==2 ? rc==EFS_OK && row.nlink==1 : rc==EFS_ERR_NOT_FOUND,"only dead unheld row reclaimed");
+        efs_kv_mem_free(kv);
+    }
+}
+
 int main(void)
 {
+    test_gc_last_close_before_resolve();
     test_orphan_unlink();
     test_create_lookup_unlink();
     test_xattr();
@@ -5452,6 +5589,7 @@ int main(void)
     test_content_fence_sweep_cas();
     test_writer_authority_race();
     test_content_fence_view_race();
+    test_gc_delta_batch_boundary();
     test_gc_tail_alias();
     test_gc_watermark();
     if (failures) {

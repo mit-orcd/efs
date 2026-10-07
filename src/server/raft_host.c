@@ -99,6 +99,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
  * pack/push loop. */
 #define HOST_PUB_BATCH_N   2048u
 #define HOST_PUB_F_LANE_LOCAL 1
+#define HOST_PUB_F_FRESH_OBJECT 2
 #define HOST_PUBLICATION_LEN (HOST_PUBLISH_LEN + 28u)
 #define HOST_PUB_TAIL_TRIES  4 /* cross-group truncate tail CAS retries */
 #define HOST_ACTIVATE_LANE_LEN 10 /* tag + ino:8 + lane:1 */
@@ -408,6 +409,11 @@ struct efs_raft_host {
     pthread_mutex_t outbox_mu;
     int tx_running;
     struct host_outbox tx[EFS_RAFT_MAX_PEERS];
+    uint8_t orphan_cursor[HOST_NGROUPS][11];
+    uint32_t orphan_cursor_len[HOST_NGROUPS];
+    uint8_t orphan_discovery_cursor[HOST_NGROUPS][EFS_KV_KEY_MAX];
+    uint32_t orphan_discovery_len[HOST_NGROUPS];
+    int orphan_discovery_done[HOST_NGROUPS];
     /* EFS_RAFT_OBS: wait_applied timeouts, pump h->mu hold high-water, and
      * the last stats-dump timestamp (ms). */
     uint64_t obs_wait_timeouts;
@@ -1546,13 +1552,21 @@ static int apply_lane_sweep_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < 18)
-        return EFS_OK;
+        return EFS_ERR_PROTO;
     ino = rd64be(cmd + 1);
     rc = efs_meta_apply_lane_sweep(h->kv, ino, rd64be(cmd + 9), cmd[17]);
     if (rc != EFS_OK)
         fprintf(stderr, "raft-host: apply lane-sweep rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-    return EFS_OK;
+    return rc;
+}
+
+static int apply_orphan_reap_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                  uint32_t len, uint64_t index)
+{
+    (void)index;
+    if (len != 17) return EFS_ERR_PROTO;
+    return efs_meta_apply_orphan_reclaim(h->kv, rd64be(cmd + 1), rd64be(cmd + 9));
 }
 
 /* EFS_MD_CMD_REAP_DONE on the inode's group: every active lane of the dead
@@ -1564,13 +1578,13 @@ static int apply_reap_done_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < 17)
-        return EFS_OK;
+        return EFS_ERR_PROTO;
     ino = rd64be(cmd + 1);
     rc = efs_meta_apply_reap_done(h->kv, ino, rd64be(cmd + 9));
     if (rc != EFS_OK)
         fprintf(stderr, "raft-host: apply reap-done rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-    return EFS_OK;
+    return rc;
 }
 
 /* EFS_MD_CMD_GC_ACK on the group whose anchor shard holds the records:
@@ -1585,10 +1599,10 @@ static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
     (void)index;
     if (clen < 3)
-        return EFS_OK;
+        return EFS_ERR_PROTO;
     cnt = (uint32_t)((cmd[1] << 8) | cmd[2]);
     if (cnt > EFS_META_GC_ACK_MAX || clen < 3 + cnt * 22)
-        return EFS_OK;
+        return EFS_ERR_PROTO;
     off = 3;
     for (i = 0; i < cnt; i++) {
         items[i].ino = rd64be(cmd + off);
@@ -1602,7 +1616,7 @@ static int apply_gc_ack_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (rc != EFS_OK)
         fprintf(stderr, "raft-host: apply gc-ack rc=%d index=%llu cnt=%u\n",
                 rc, (unsigned long long)index, cnt);
-    return EFS_OK;
+    return rc;
 }
 
 /* Same layout as sim apply_append_rsv_cmd, big-endian. A zero UUID/seq
@@ -1852,7 +1866,9 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 "raft-host: apply session rc=%d index=%llu ino=%llu kind=%u\n",
                 rc, (unsigned long long)index, (unsigned long long)ino,
                 (unsigned)cmd[1]);
-        return EFS_OK;
+        /* A failed lease close/drop must remain retryable on every replica;
+         * advancing past it can pin an unlinked inode forever. */
+        return rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM ? rc : EFS_OK;
     }
     fprintf(stderr,
             "raft-host: applied session index=%llu kind=%u shard=%u ino=%llu\n",
@@ -1941,6 +1957,7 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
     p.inode_gen = rd64be(q);
     p.mtime_gen = rd64be(q + 8);
     p.lane_local = (q[16] & HOST_PUB_F_LANE_LOCAL) ? 1 : 0;
+    p.fresh_object = !!(q[16] & HOST_PUB_F_FRESH_OBJECT);
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE) {
         p.durable_result = 1;
         memcpy(p.publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
@@ -2176,9 +2193,17 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
            cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
            cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
-           cmd[0] == EFS_MD_CMD_LANE_FENCE)
+           cmd[0] == EFS_MD_CMD_LANE_FENCE ||
+           cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
+           cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP)
               ? EFS_OK
               : rc;
+    /* Storage failure must retry this entry on every replica, rather than
+     * advance a follower past cleanup it did not durably perform. */
+    if ((cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
+         cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP) &&
+        (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
+        ret = rc;
     if (a0) {
         h->obs_apply_cnt++;
         h->obs_apply_cycle_us += now_us_() - a0;
@@ -2531,6 +2556,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
         return apply_lock_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_LANE_SWEEP)
         return apply_lane_sweep_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_ORPHAN_REAP)
+        return apply_orphan_reap_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_REAP_DONE)
         return apply_reap_done_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_GC_ACK)
@@ -4476,7 +4503,8 @@ static int pack_publish_cmd(uint8_t *out, uint32_t *len, const struct efs_meta_p
     q += 28;
     wr64be(q, p->inode_gen);
     wr64be(q + 8, p->mtime_gen);
-    q[16] = p->lane_local ? HOST_PUB_F_LANE_LOCAL : 0;
+    q[16] = (p->lane_local ? HOST_PUB_F_LANE_LOCAL : 0) |
+            (p->fresh_object ? HOST_PUB_F_FRESH_OBJECT : 0);
     *len = HOST_PUBLISH_LEN;
     return EFS_OK;
 }
@@ -5696,8 +5724,10 @@ static struct efs_export *host_gc_export(struct efs_raft_host *h)
     struct efs_export *ex = NULL;
 
     pthread_mutex_lock(&h->s->lock);
-    if (h->s->export_count > 0)
-        ex = server_export_acquire_locked(h->s, h->s->exports[0].id);
+    /* The v1 inode/GC namespace belongs to export 1. Recreate its context
+     * after restart even when no GET/PUT has occurred. Geometry is inferred
+     * from each stored fragment by checksum-conditional deletion. */
+    ex = server_export_acquire_or_create_locked(h->s, 1);
     pthread_mutex_unlock(&h->s->lock);
     return ex;
 }
@@ -5786,6 +5816,65 @@ out:
     return rc;
 }
 
+
+/* Reap markers are the durable retry ledger for unreferenced PUT bodies too.
+ * All members must install a death fence and finish their bounded inventory
+ * before REAP_DONE removes that ledger. Never use the live-inode collector. */
+static int host_gc_inode_nodes(struct efs_raft_host *h, efs_ino_t ino, uint64_t gen)
+{
+    struct efs_node nodes[EFS_MAX_NODES];
+    uint32_t count;
+    pthread_mutex_lock(&h->s->lock);
+    count = h->s->node_count;
+    memcpy(nodes, h->s->nodes, count * sizeof(nodes[0]));
+    pthread_mutex_unlock(&h->s->lock);
+    uint32_t present = 0;
+    for (uint32_t i = 0; i < count; i++) {
+        if (!nodes[i].id || nodes[i].id > (uint32_t)h->n)
+            return EFS_ERR_BUSY;
+        present |= 1u << (nodes[i].id - 1);
+    }
+    /* A restart can form a quorum before its final storage member rejoins.
+     * Missing membership/address is not proof that its orphan files are gone. */
+    int result = present == ((1u << h->n) - 1u) ? EFS_OK : EFS_ERR_BUSY;
+    for (uint32_t i = 0; i < count; i++) {
+        int rc = EFS_ERR_IO;
+        if (nodes[i].id == h->s->id)
+            rc = server_gc_inode(h->s, 1, ino, gen);
+        else {
+            struct efs_conn *pc = server_peer_conn_get(nodes[i].addr, nodes[i].port);
+            if (pc) {
+                if (pc->kind == EFS_CONN_TCP) {
+                    efs_set_recv_timeout(pc->fd, HOST_SEND_IO_MS);
+                    efs_set_send_timeout(pc->fd, HOST_SEND_IO_MS);
+                }
+                struct efs_msg_gc_inode req = {
+                    .export_id = 1, .ino = ino, .generation = gen};
+                uint8_t type;
+                void *reply = NULL;
+                uint32_t len = 0;
+                if (!efs_conn_send_msg(pc, EFS_MSG_GC_INODE, &req, sizeof(req)) &&
+                    !efs_conn_recv_msg(pc, &type, &reply, &len) &&
+                    type == EFS_MSG_GC_INODE_REPLY &&
+                    len == sizeof(struct efs_msg_gc_inode_reply))
+                    rc = ((struct efs_msg_gc_inode_reply *)reply)->rc;
+                free(reply);
+                if (rc == EFS_OK || rc == EFS_ERR_BUSY) {
+                    if (pc->kind == EFS_CONN_TCP) {
+                        efs_set_recv_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                        efs_set_send_timeout(pc->fd, EFS_IO_TIMEOUT_MS);
+                    }
+                    server_peer_conn_release(nodes[i].addr, nodes[i].port, pc);
+                } else
+                    server_peer_conn_drop(nodes[i].addr, nodes[i].port, pc);
+            }
+        }
+        if (rc != EFS_OK)
+            result = rc;
+    }
+    return result;
+}
+
 /* Propose one GC command and wait for it to apply. The reaper walks the
  * anchor shards of groups this node LEADS, but the commands it drives do
  * not all land in that group: a lane's shard is ish + lane * (odd stride),
@@ -5842,7 +5931,77 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
 static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen)
 {
-    return host_bg_propose(h, group, cmd, clen, 0);
+    int rc = host_bg_propose(h, group, cmd, clen, 1);
+    if (rc != EFS_OK) {
+        uint64_t *counter = cmd[0] == EFS_MD_CMD_LANE_SWEEP ? &h->s->gc_sweep_errors :
+                            (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_ORPHAN_REAP) ? &h->s->gc_reap_errors :
+                            &h->s->gc_ack_errors;
+        __atomic_fetch_add(counter, 1, __ATOMIC_RELAXED);
+    }
+    return rc;
+}
+
+
+struct orphan_scan {
+    uint8_t skip[EFS_KV_KEY_MAX], last[EFS_KV_KEY_MAX];
+    uint32_t skip_len, last_len, visited, count;
+    uint8_t group;
+    int discovery;
+    efs_ino_t ino[32];
+    uint64_t gen[32];
+};
+static int orphan_scan_cb(void *user, const uint8_t *key, uint32_t kl,
+                            const uint8_t *value, uint32_t vl)
+{
+    struct orphan_scan *scan = user;
+    if (kl == scan->skip_len && !memcmp(key, scan->skip, kl)) return 0;
+    if (kl > sizeof(scan->last)) return -1;
+    if (scan->count == 32 || scan->visited == 4096) return 1;
+    memcpy(scan->last, key, kl); scan->last_len = kl; scan->visited++;
+    efs_ino_t ino = 0; uint64_t gen = 0;
+    if (scan->discovery) {
+        struct efs_meta_row row;
+        if (kl != 11 || key[2] != EFS_KV_KIND_INODE ||
+            efs_raft_shard_group(((uint32_t)key[0]<<8)|key[1]) != scan->group)
+            return 0;
+        if (efs_meta_unpack_inode(value, vl, &row) != EFS_OK) return -1;
+        if (row.nlink) return 0;
+        ino = row.ino; gen = row.generation;
+    } else {
+        if (kl != 11 || vl != 8) return -1;
+        ino = rd64be(key + 3); gen = rd64be(value);
+    }
+    scan->ino[scan->count] = ino; scan->gen[scan->count++] = gen;
+    return 0;
+}
+static void host_gc_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
+{
+    int gi = gc_gi(group);
+    for (int discovery = 0; discovery < 2; discovery++) {
+        if (discovery && h->orphan_discovery_done[gi]) continue;
+        uint8_t prefix[3] = {(uint8_t)(anchor>>8),(uint8_t)anchor,EFS_KV_KIND_ORPHAN};
+        uint8_t *cursor = discovery ? h->orphan_discovery_cursor[gi] : h->orphan_cursor[gi];
+        uint32_t *len = discovery ? &h->orphan_discovery_len[gi] : &h->orphan_cursor_len[gi];
+        struct orphan_scan scan = {.group=group, .discovery=discovery, .skip_len=*len};
+        memcpy(scan.skip,cursor,*len);
+        int rc = efs_kv_scan_from(h->kv, discovery ? NULL : prefix, discovery ? 0 : 3,
+                                   *len ? cursor : NULL, *len, orphan_scan_cb, &scan);
+        if (rc < 0) {
+            __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED); continue;
+        }
+        if (!discovery) __atomic_store_n(&h->s->gc_orphan_seen[gi],scan.count,__ATOMIC_RELAXED);
+        if (rc == 0) {
+            *len = 0;
+            if (discovery) h->orphan_discovery_done[gi] = 1;
+        } else if (scan.last_len) {
+            memcpy(cursor,scan.last,scan.last_len); *len=scan.last_len;
+        }
+        for (uint32_t i=0;i<scan.count && h->gc_running;i++) {
+            uint8_t cmd[17]={EFS_MD_CMD_ORPHAN_REAP};
+            wr64be(cmd+1,scan.ino[i]);wr64be(cmd+9,scan.gen[i]);
+            (void)host_gc_propose(h,group,cmd,sizeof(cmd));
+        }
+    }
 }
 
 /* Txn finisher. A coordinator that proposed DECIDE COMMIT and then hit
@@ -6221,8 +6380,18 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     /* src > 0 is the scan callback's "batch full, stop" signal (merge_scan
      * propagates it), NOT an error — process the partial batch and pick up
      * the rest next pass. Only a negative rc is a real KV failure. */
-    if (prc != EFS_OK || src < 0)
+    if (prc != EFS_OK || src < 0) {
+        __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
         return;
+    }
+    unsigned gi = group == 0 ? 0 : 1;
+    __atomic_store_n(&h->s->gc_reap_seen[gi], c.n, __ATOMIC_RELAXED);
+    __atomic_store_n(&h->s->gc_reap_capped[gi], src > 0, __ATOMIC_RELAXED);
+    uint64_t first = c.n ? c.ino[0] : 0;
+    if (__atomic_load_n(&h->s->gc_first_reap[gi], __ATOMIC_RELAXED) != first) {
+        __atomic_store_n(&h->s->gc_first_reap[gi], first, __ATOMIC_RELAXED);
+        __atomic_store_n(&h->s->gc_first_seen_us[gi], first ? now_us_() : 0, __ATOMIC_RELAXED);
+    }
     for (i = 0; i < c.n && h->gc_running && h->running; i++) {
         uint8_t cmd[18];
         int lanes_ok = 1;
@@ -6250,6 +6419,10 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                         (unsigned long long)c.ino[i], lrc);
             continue;
         }
+        /* Include losing/never-published PUT objects. Namespace deletion
+         * alone is insufficient evidence of physical reclamation. */
+        if (host_gc_inode_nodes(h,c.ino[i],c.gen[i]) != EFS_OK)
+            continue;
         cmd[0] = EFS_MD_CMD_REAP_DONE;
         wr64be(cmd + 1, c.ino[i]);
         wr64be(cmd + 9, c.gen[i]);
@@ -6318,14 +6491,18 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         uint64_t n = 0;
 
         src = efs_kv_scan_prefix(h->kv, prefix, plen, gc_count_cb, &n);
-        if (src < 0)
+        if (src < 0) {
+            __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
             return;
+        }
         efs_meta_gc_pending_derived(anchor, n);
         pend = efs_meta_gc_pending_peek(anchor);
         if (env_on("EFS_GC_DBG"))
             fprintf(stderr, "raft-host: gc watermark group=%u anchor=%u derived=%llu\n",
                     group, anchor, (unsigned long long)n);
     }
+    __atomic_store_n(&h->s->gc_pending[group == 0 ? 0 : 1], (uint64_t)pend, __ATOMIC_RELAXED);
+    __atomic_fetch_or(&h->s->gc_sampled_mask, 1u << (group == 0 ? 0 : 1), __ATOMIC_RELAXED);
     if (pend == 0) {
         g_gc_cur_len[gc_gi(group)] = 0;
         return;
@@ -6354,8 +6531,10 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         /* src > 0 is the scan callback's "batch full" stop, not an error.
          * No export yet (pre-mkfs / post-restart before a PUT or GET):
          * nothing to delete under — do not advance the cursor. */
-        if (src < 0)
+        if (src < 0) {
+            __atomic_fetch_add(&h->s->gc_scan_errors, 1, __ATOMIC_RELAXED);
             break;
+        }
         if (c.n == 0) {
             if (g_gc_cur_len[gi]) {
                 g_gc_cur_len[gi] = 0;
@@ -6377,8 +6556,10 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
             }
             continue;
         }
-        if (!ex)
+        if (!ex) {
+            __atomic_fetch_add(&h->s->gc_missing_exports, 1, __ATOMIC_RELAXED);
             break;
+        }
         for (i = 0; i < c.n && h->gc_running && h->running; i++) {
             /* Room for one whole record's acks, so a record is never
              * split across two entries (the apply folds a record's
@@ -6403,6 +6584,8 @@ static void host_gc_frag_pass(struct efs_raft_host *h, uint8_t group,
         usleep(GC_FRAG_YIELD_US);
     }
 out:
+    pend = efs_meta_gc_pending_peek(anchor);
+    __atomic_store_n(&h->s->gc_pending[group == 0 ? 0 : 1], (uint64_t)pend, __ATOMIC_RELAXED);
     if (ex)
         server_export_put(h->s, ex);
     if (recs > 0 && env_on("EFS_RAFT_OBS"))
@@ -6655,7 +6838,10 @@ static void *host_gc_thread(void *arg)
         uint64_t t0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
 
+        __atomic_store_n(&h->s->gc_pass_start_us, now_us_(), __ATOMIC_RELAXED);
+        __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
         host_snap_export_pass(h);
+        __atomic_store_n(&h->s->gc_stage, 2, __ATOMIC_RELAXED);
         host_snap_import_pass(h);
         memset(&sc_frag, 0, sizeof(sc_frag));
         efs_kv_lsm_scan_stats(NULL, 1);
@@ -6675,12 +6861,19 @@ static void *host_gc_thread(void *arg)
                 fprintf(stderr, "raft-host: gc loop g=%d group=%u r=%p role=%d lead=%d\n",
                         g, h->g[g].group, (void *)h->g[g].r,
                         h->g[g].r ? efs_raft_role(h->g[g].r) : -1, lead);
-            if (!lead)
+            if (!lead) {
+                h->orphan_discovery_done[g] = 0;
+                h->orphan_discovery_len[g] = 0;
+                __atomic_fetch_and(&h->s->gc_sampled_mask, ~(1u << g), __ATOMIC_RELAXED);
                 continue;
+            }
             /* Group 0 owns the odd shards (anchor 1), group 2 the even
              * ones (anchor 2) — efs_kv_anchor_shard's parity rule. */
             anchor = (h->g[g].group == 0) ? 1u : 2u;
             ta = now_us_();
+            __atomic_store_n(&h->s->gc_group, h->g[g].group, __ATOMIC_RELAXED);
+            __atomic_store_n(&h->s->gc_stage, 3, __ATOMIC_RELAXED);
+            host_gc_orphan_pass(h, h->g[g].group, anchor);
             host_gc_reap_pass(h, h->g[g].group, anchor);
             t_reap += now_us_() - ta;
             ta = now_us_();
@@ -6688,6 +6881,7 @@ static void *host_gc_thread(void *arg)
                 struct efs_kv_scan_stats b, a;
 
                 efs_kv_lsm_scan_stats(&b, 0);
+                __atomic_store_n(&h->s->gc_stage, 4, __ATOMIC_RELAXED);
                 host_gc_frag_pass(h, h->g[g].group, anchor);
                 efs_kv_lsm_scan_stats(&a, 0);
                 sc_frag.scans += a.scans - b.scans;
@@ -6699,9 +6893,11 @@ static void *host_gc_thread(void *arg)
             t_frag += now_us_() - ta;
         }
         t_spread = now_us_();
+        __atomic_store_n(&h->s->gc_stage, 5, __ATOMIC_RELAXED);
         host_dir_spread_pass(h);
         t_spread = now_us_() - t_spread;
         t_rec = now_us_();
+        __atomic_store_n(&h->s->gc_stage, 6, __ATOMIC_RELAXED);
         host_txn_recover_pass(h);
         t_rec = now_us_() - t_rec;
         t_all = now_us_() - t0;
@@ -6735,6 +6931,10 @@ static void *host_gc_thread(void *arg)
                     (unsigned long long)sc_all.keys,
                     (unsigned long long)sc_all.emitted,
                     (unsigned long long)sc_all.tombstones);
+        __atomic_store_n(&h->s->gc_last_pass_us, now_us_(), __ATOMIC_RELAXED);
+        __atomic_fetch_add(&h->s->gc_passes, 1, __ATOMIC_RELAXED);
+        __atomic_store_n(&h->s->gc_stage, 0, __ATOMIC_RELAXED);
+        __atomic_store_n(&h->s->gc_pass_start_us, 0, __ATOMIC_RELAXED);
         /* ~1s between passes, in 20 ms slices so shutdown is prompt.
          * A snapshot export queued by the pump starts on the next slice. */
         for (g = 0; g < GC_LOOP_MS / 20 && h->gc_running; g++) {
@@ -10425,6 +10625,22 @@ static void host_truncate(efs_ino_t ino, uint64_t size, uint64_t mtime,
             }
             if (rc != EFS_OK)
                 break;
+            if (!got.generation) {
+                struct efs_meta_delta deltas[EFS_CHUNK_DELTA_MAX];
+                uint32_t count = 0;
+                rc = efs_meta_apply_get_chunk_deltas(h->kv, ino, tci, deltas,
+                                                    EFS_CHUNK_DELTA_MAX, &count,
+                                                    NULL);
+                if (rc == EFS_OK && count) {
+                    /* A span-only tail is live data, just as in the
+                     * same-group branch. The committed fence hides EOF;
+                     * do not replace its trailer with a zero stub. */
+                    break;
+                }
+                if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND)
+                    break;
+                rc = EFS_OK;
+            }
             memset(&tail, 0, sizeof(tail));
             memset(uuid, 0, sizeof(uuid));
             tail.ino = ino;
@@ -11824,6 +12040,8 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
         else if (rc != EFS_OK)
             return rc;
         if (got.generation != 0 &&
+            (!(rec->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT) ||
+             got.generation == rec->chunk_generation) &&
             memcmp(got.nodes, rec->nodes, sizeof(got.nodes)) == 0 &&
             memcmp(got.checksums, rec->checksums, sizeof(got.checksums)) == 0)
             return EFS_OK;
@@ -11843,6 +12061,7 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
      * a last resort — a hash of empty checksums is a constant that was
      * never written (remount GET DECODE). */
     p.candidate_gen = rec->chunk_generation;
+    p.fresh_object = !!(rec->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT);
     if (!p.candidate_gen)
         p.candidate_gen = host_pub_candidate_gen(rec, rec->chunk_index);
     if (p.candidate_gen == 0)

@@ -91,7 +91,8 @@ static void hash_write_fragments(const uint8_t *p[EFS_NUM_FRAGMENTS],uint32_t n,
 int efs_client_put_fragments_parallel(efs_ino_t ino,uint32_t ci,
                                     efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                     const uint8_t *buf[EFS_NUM_FRAGMENTS],uint32_t len,
-                                    const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE]) {
+                                    const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE], uint64_t *object_out) {
+    *object_out=42;
     (void)ino;(void)ci;(void)nodes;(void)buf;(void)len;(void)sums;
     assert(len==CS/2);memcpy(uploaded,buf[0],len);memcpy(uploaded+len,buf[1],len);
     if (race) {
@@ -103,10 +104,7 @@ void efs_rdcache_invalidate(efs_ino_t ino,uint32_t ci) { (void)ino;(void)ci; }
 int efs_client_ensure_meta_room(uint64_t a,uint64_t b) { (void)a;(void)b;return EFS_OK; }
 int efs_export_needs_chunk_grow(const struct efs_export *ex) { (void)ex;return 0; }
 static void export_reserve_chunks_locked(uint64_t n) { (void)n; }
-static uint64_t chunk_candidate_gen(const efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
-                                   const uint8_t sums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],uint32_t ci) {
-    (void)nodes;(void)sums;(void)ci;return 42;
-}
+
 void efs_client_lock_dir(efs_ino_t ino) { (void)ino; }
 void efs_client_unlock_dir(efs_ino_t ino) { (void)ino; }
 int efs_client_set_chunk(struct efs_export *ex,efs_ino_t ino,uint32_t ci,
@@ -187,7 +185,7 @@ static void put_tests(void) {
     assert(notes==1 && !noted_off && !noted_len && noted_n==1 && noted_seq==9);
     assert(uploaded[500]=='P');
     assert(slot.object_publish_epoch==6 &&
-           slot.object_publish_flags==EFS_CHUNK_REC_F_CAPTURED_EPOCH);free(slot.data);
+           slot.object_publish_flags==(EFS_CHUNK_REC_F_CAPTURED_EPOCH|EFS_CHUNK_REC_F_FRESH_OBJECT));free(slot.data);
     reset();put_error=EFS_ERR_IO;
     assert(dcache_put_now_budgeted(1,0,slot.data,CS,7,1,100,64,NULL)==EFS_ERR_IO);
     assert(!notes && !dirty_marks && !replacements);free(slot.data);

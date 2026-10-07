@@ -19,6 +19,7 @@ source=r'''
 #define HOST_PUBLISH_LEN 202
 #define HOST_PUBLICATION_LEN 230
 #define HOST_PUB_F_LANE_LOCAL 1
+#define HOST_PUB_F_FRESH_OBJECT 2
 #define APPLY_LOG(...) ((void)0)
 static int raft_dbg_on(void){return 0;}
 static void wr32be(uint8_t *p,uint32_t n){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(n>>(24-8*i));}

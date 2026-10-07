@@ -82,6 +82,14 @@ struct efsd_server {
     char rejoin_addr[64]; /* explicit --join target to keep retrying; empty = use persisted peers */
     uint16_t rejoin_port;
 
+    /* Runtime GC progress: atomically updated, reset on daemon restart. */
+    uint64_t gc_removed_fragments, gc_removed_file_bytes, gc_removed_payload_bytes;
+    uint64_t gc_delete_errors, gc_mismatches, gc_last_delete_us;
+    uint64_t gc_pass_start_us, gc_last_pass_us, gc_passes;
+    uint64_t gc_sweep_errors, gc_reap_errors, gc_ack_errors, gc_scan_errors;
+    uint64_t gc_reap_seen[2], gc_orphan_seen[2], gc_pending[2], gc_first_reap[2], gc_first_seen_us[2];
+    uint64_t gc_missing_exports;
+    uint32_t gc_stage, gc_group, gc_sampled_mask, gc_reap_capped[2];
     int direct_io; /* use O_DIRECT for fragment reads/writes */
     int bench_sync; /* benchmark-only O_SYNC; daemon store builds ignore it */
     /* Shared writer-pool size (0 = inline, <0 = auto from nproc at start). */
@@ -246,6 +254,10 @@ void efs_iostats_dump(int force);
 
 /* Append local storage roots without restart. csv is comma-separated
  * absolute paths. Existing roots are skipped. count_out is the new total. */
+int server_gc_inode(struct efsd_server *s, efs_export_id_t eid, efs_ino_t ino,
+                     uint64_t generation);
+void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out);
+
 int server_add_storage_paths(struct efsd_server *s, const char *csv,
                              uint32_t *count_out);
 

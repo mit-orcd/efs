@@ -20,7 +20,7 @@ int efs_publication_digest(const struct efs_meta_pub *r, uint8_t out[EFS_HASH_SI
     if (!nonzero || !r->publication_id.seq || !r->publication_id.session_epoch)
         return EFS_ERR_INVAL;
     uint8_t buf[160 + EFS_NUM_FRAGMENTS * (4 + EFS_HASH_SIZE)], *p = buf;
-    put(&p, 1, 4);
+    put(&p, r->fresh_object ? 2 : 1, 4);
     memcpy(p, r->publication_id.client_uuid, EFS_OPID_UUID_LEN);
     p += EFS_OPID_UUID_LEN;
     put(&p, r->publication_id.session_epoch, 4);
@@ -60,6 +60,7 @@ int efs_publication_from_rec(const struct efs_chunk_rec *r, uint64_t size,
     p->new_size = size;
     p->expected_gen = r->base_gen;
     p->candidate_gen = r->chunk_generation;
+    p->fresh_object = !!(r->publish_flags & EFS_CHUNK_REC_F_FRESH_OBJECT);
     p->content_epoch = epoch;
     p->coding_profile_id = EFS_META_PROFILE_K2F1;
     p->delta_off = r->delta_off;

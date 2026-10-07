@@ -2263,6 +2263,12 @@ int efs_meta_apply_unlink_op(struct efs_kv *kv, efs_ino_t parent, const char *na
             it[n].val = v_ino;
             it[n].vlen = INO_VAL;
             n++;
+            rc = efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(row.ino)),
+                                 row.ino, k_reap, &kr);
+            if (rc != EFS_OK) return rc;
+            k_reap[2] = EFS_KV_KIND_ORPHAN;
+            be64(v_reap, row.generation);
+            it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_reap, kr, v_reap, 8};
         } else {
             int xa = 0;
 
@@ -3295,7 +3301,8 @@ int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)
     uint8_t k_reap[EFS_KV_KEY_MAX], v_reap[EFS_META_REAP_VAL];
     uint8_t k_xa[EFS_KV_KEY_MAX];
     uint32_t ki = 0, kr = 0, kxa = 0;
-    struct efs_kv_item it[3];
+    struct efs_kv_item it[4];
+    uint8_t k_orphan[EFS_KV_KEY_MAX];
     int rc, held, xa = 0;
 
     if (!kv || ino == 0)
@@ -3311,6 +3318,8 @@ int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)
     if (held)
         return EFS_ERR_BUSY;
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
+    if (rc == EFS_OK)
+        rc = efs_txn_key_busy(kv, k_ino, ki);
     if (rc == EFS_OK)
         rc = efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),
                              ino, k_reap, &kr);
@@ -3333,8 +3342,36 @@ int efs_meta_apply_reclaim(struct efs_kv *kv, efs_ino_t ino)
     rc = xattr_del_item(kv, ino, k_xa, &kxa, &it[2], &xa);
     if (rc != EFS_OK)
         return rc;
-    return meta_write_batch(kv, it, xa ? 3 : 2);
+    memcpy(k_orphan, k_reap, kr); k_orphan[2] = EFS_KV_KIND_ORPHAN;
+    it[xa ? 3 : 2] = (struct efs_kv_item){EFS_KV_DEL, k_orphan, kr, NULL, 0};
+    return meta_write_batch(kv, it, xa ? 4 : 3);
 }
+
+/* Unlike a REAP marker, this index never authorizes fragment deletion.
+ * Closing a lease can precede RESOLVE's nlink decrement; recheck after all
+ * pending namespace transactions settle, on the inode's own Raft group. */
+int efs_meta_apply_orphan_reclaim(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
+{
+    struct efs_meta_row row;
+    uint8_t key[EFS_KV_KEY_MAX], value[8];
+    uint32_t len = 0, vl = sizeof(value);
+    if (!kv || ino <= EFS_ROOT_INO || !gen) return EFS_ERR_INVAL;
+    int rc = efs_meta_apply_get_inode(kv, ino, &row);
+    if (rc == EFS_OK && row.generation == gen && !row.nlink)
+        return efs_meta_apply_reclaim(kv, ino);
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
+    rc = efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)), ino, key, &len);
+    if (rc != EFS_OK) return rc;
+    key[2] = EFS_KV_KIND_ORPHAN;
+    rc = efs_kv_get(kv, key, len, value, &vl);
+    if (rc == EFS_ERR_NOT_FOUND) return EFS_OK;
+    if (rc != EFS_OK) return rc;
+    if (vl != sizeof(value)) return EFS_ERR_PROTO;
+    if (rd64(value) != gen) return EFS_ERR_STALE;
+    rc = meta_write_del(kv, key, len);
+    return rc == EFS_ERR_NOT_FOUND ? EFS_OK : rc;
+}
+
 
 static void pack_chunk(uint8_t *p, const struct efs_meta_chunk *ch)
 {
@@ -4176,7 +4213,8 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
      * aliases the old fragment set (truncate tail stub), in which case the
      * fragments are shared with the live row and nothing is dead. */
     if (!appending && committed != 0 &&
-        got.generation != stored.generation && !chunk_aliases(&stored, &got)) {
+        got.generation != stored.generation &&
+        (p->fresh_object || !chunk_aliases(&stored, &got))) {
         rc = gc_queue(it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
                       k_gc, v_gc, p->ino, lane, p->chunk_index, &got);
         if (rc != EFS_OK)
@@ -4203,7 +4241,7 @@ static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
             memcpy(dead.nodes, dead_d.nodes, sizeof(dead.nodes));
             memcpy(dead.checksums, dead_d.checksums, sizeof(dead.checksums));
             if (dead.generation == stored.generation ||
-                chunk_aliases(&stored, &dead))
+                (!p->fresh_object && chunk_aliases(&stored, &dead)))
                 continue;
             rc = gc_queue(it, &n, (uint32_t)(sizeof(it) / sizeof(it[0])),
                           k_gc, v_gc, p->ino, lane, p->chunk_index, &dead);
@@ -5411,6 +5449,30 @@ struct sweep_scan {
     int rc;
 };
 
+/* Reserve every dead identity before queuing its only reference's deletion. */
+static int chunk_gc_slots(const uint8_t *val, uint32_t vlen,
+                           const struct efs_meta_chunk *dead, uint32_t *slots)
+{
+    uint32_t nd = 0;
+    if (vlen != CHUNK_VAL) {
+        if (vlen < CHUNK_VAL + DELTA_HDR)
+            return EFS_ERR_PROTO;
+        nd = ((uint32_t)val[CHUNK_VAL] << 8) | val[CHUNK_VAL + 1];
+        if (nd > EFS_CHUNK_DELTA_MAX ||
+            vlen < CHUNK_VAL + DELTA_HDR + nd * DELTA_REC)
+            return EFS_ERR_PROTO;
+    }
+    *slots = 1u + (dead->generation != 0);
+    for (uint32_t i = 0; i < nd; i++) {
+        struct efs_meta_delta dd;
+        int rc = trailer_at(val, vlen, i, &dd);
+        if (rc != EFS_OK)
+            return rc;
+        *slots += dd.generation != 0;
+    }
+    return EFS_OK;
+}
+
 static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
                     const uint8_t *val, uint32_t vlen)
 {
@@ -5418,7 +5480,7 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
     struct efs_meta_chunk dead;
     efs_ino_t ino;
     uint64_t gen;
-    uint32_t ci;
+    uint32_t ci, need;
     uint8_t lane;
 
     if (klen < 24 || key[2] != EFS_KV_KIND_CHUNK)
@@ -5429,12 +5491,13 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
     ci = rd32(key + 20);
     if (ino != ss->ino || gen != ss->gen)
         return 0;
-    if (ss->n + 2 > ss->cap) {
-        ss->full = 1;
+    ss->rc = unpack_chunk(val, vlen, &dead);
+    if (ss->rc == EFS_OK)
+        ss->rc = chunk_gc_slots(val, vlen, &dead, &need);
+    if (ss->rc != EFS_OK)
         return 1;
-    }
-    if (unpack_chunk(val, vlen, &dead) != EFS_OK) {
-        ss->rc = EFS_ERR_PROTO;
+    if (need > ss->cap - ss->n) {
+        ss->full = 1;
         return 1;
     }
     memcpy(ss->keys[ss->n], key, klen);
@@ -5457,9 +5520,10 @@ static int sweep_cb(void *user, const uint8_t *key, uint32_t klen,
             struct efs_meta_delta dd;
             struct efs_meta_chunk span;
 
-            if (ss->n + 1 > ss->cap)
-                break;
-            if (trailer_at(val, vlen, di, &dd) != EFS_OK || dd.generation == 0)
+            ss->rc = trailer_at(val, vlen, di, &dd);
+            if (ss->rc != EFS_OK)
+                return 1;
+            if (dd.generation == 0)
                 continue;
             memset(&span, 0, sizeof(span));
             span.generation = dd.generation;
@@ -5506,9 +5570,7 @@ int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
         ss.cap = (uint32_t)(sizeof(it) / sizeof(it[0]));
         rc = efs_kv_scan_prefix(kv, pref, plen, sweep_cb, &ss);
         if (ss.rc != EFS_OK)
-            return ss.rc == EFS_ERR_INVAL ? EFS_OK : ss.rc;
-        if (rc == EFS_ERR_INVAL)
-            return EFS_OK;
+            return ss.rc;
         /* rc > 0 is sweep_cb's "batch full, stop" (merge_scan propagates
          * the callback's return), not an error. Treating it as one made
          * every lane with more than SWEEP_CHUNKS chunks unsweepable: the
@@ -6058,7 +6120,7 @@ static int trunc_del_cb(void *user, const uint8_t *key, uint32_t klen,
     struct efs_meta_chunk dead;
     efs_ino_t ino;
     uint64_t gen;
-    uint32_t ci;
+    uint32_t ci, need;
     uint8_t lane;
 
     if (klen < 24 || key[2] != EFS_KV_KIND_CHUNK)
@@ -6076,7 +6138,12 @@ static int trunc_del_cb(void *user, const uint8_t *key, uint32_t klen,
         goto del;
     return 0;
 del:
-    if (ts->n + 2 > ts->cap) {
+    ts->rc = unpack_chunk(val, vlen, &dead);
+    if (ts->rc == EFS_OK)
+        ts->rc = chunk_gc_slots(val, vlen, &dead, &need);
+    if (ts->rc != EFS_OK)
+        return 1;
+    if (need > ts->cap - ts->n) {
         ts->rc = EFS_ERR_NOMEM;
         return 1;
     }
@@ -6092,10 +6159,6 @@ del:
     ts->n++;
     ts->dropped++;
     /* The chunk key dies here; its fragment set must not (L7). */
-    if (unpack_chunk(val, vlen, &dead) != EFS_OK) {
-        ts->rc = EFS_ERR_PROTO;
-        return 1;
-    }
     if (dead.generation != 0) {
         ts->rc = gc_queue(ts->it, &ts->n, ts->cap, ts->gc_keys, ts->gc_vals,
                           ino, lane, ci, &dead);
@@ -6103,8 +6166,7 @@ del:
             return 1;
     }
     /* Spans ride in the value. The key delete drops them; queue a GC
-     * record per span while the batch has room. A span that does not
-     * fit is an orphan fragment (L7), not a resurrected byte. */
+     * record per span; whole-record capacity was checked before deletion. */
     {
         uint32_t di, nd = trailer_n(val, vlen);
 
@@ -6112,9 +6174,10 @@ del:
             struct efs_meta_delta dd;
             struct efs_meta_chunk span;
 
-            if (ts->n + 1 > ts->cap)
-                break;
-            if (trailer_at(val, vlen, di, &dd) != EFS_OK || dd.generation == 0)
+            ts->rc = trailer_at(val, vlen, di, &dd);
+            if (ts->rc != EFS_OK)
+                return 1;
+            if (dd.generation == 0)
                 continue;
             memset(&span, 0, sizeof(span));
             span.generation = dd.generation;
@@ -6334,7 +6397,8 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
  * range-deleted chunk keys per lane, each paired with a GC record (L7),
  * + the tail chunk/lane pair and its GC record. del_keys/gc_keys/gc_vals
  * carry the same bound and are indexed by the global item number (see
- * trunc_del_cb), so one `n + 2 > cap` check covers all arrays. */
+ * trunc_del_cb). Whole-record reservations include every live delta; an
+ * oversized legacy truncate fails atomically rather than orphaning spans. */
 #define TRUNC_IT_CAP (EFS_META_LANES + 1 + EFS_META_LANES * 32 * 2 + 3)
 
 static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
@@ -6386,6 +6450,8 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
 
         if ((row.active_lanes & t->lane_mask & (1ULL << i)) == 0)
             continue;
+        if (n >= TRUNC_IT_CAP)
+            return EFS_ERR_NOMEM;
         n0 = n;
         rc = fence_lane_bits(kv, ino, row.generation, 1ULL << i, epoch_lane_upd,
                              &new_epoch, it, &n, k_ln, v_ln);
@@ -6417,6 +6483,8 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
     if (rc != EFS_OK)
         return rc;
+    if (n >= TRUNC_IT_CAP)
+        return EFS_ERR_NOMEM;
     it[n].op = EFS_KV_PUT;
     it[n].key = k_ino;
     it[n].klen = ki;

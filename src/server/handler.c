@@ -452,24 +452,39 @@ send_reply:
             }
             break;
         }
+        case EFS_MSG_GC_INODE: {
+            struct efs_msg_gc_inode_reply rep = {.rc=EFS_ERR_PROTO};
+            if (payload_len == sizeof(struct efs_msg_gc_inode)) {
+                const struct efs_msg_gc_inode *req=payload;
+                rep.rc=server_gc_inode(g_server,req->export_id,req->ino,req->generation);
+            }
+            efs_conn_send_msg(conn,EFS_MSG_GC_INODE_REPLY,&rep,sizeof(rep));
+            break;
+        }
+        case EFS_MSG_GC_STATUS: {
+            struct efs_msg_gc_status_reply rep;
+            server_gc_status(g_server, &rep);
+            efs_conn_send_msg(conn, EFS_MSG_GC_STATUS_REPLY, &rep, sizeof(rep));
+            break;
+        }
         case EFS_MSG_GC_FRAGMENT: {
             /* Data-plane GC (spec L7): checksum-conditional fragment
              * delete. Idempotent — absent/deleted/mismatch-gone all reply
              * 0; only a real I/O failure asks the reaper to retry. No
-             * export auto-create: no export means no fragments, which is
-             * "already gone". */
+             * export context must be restored after restart: absent RAM
+             * context does not prove on-disk fragments are absent. */
             if (payload_len >= sizeof(struct efs_msg_gc_fragment)) {
                 struct efs_msg_gc_fragment *req = payload;
                 struct efs_msg_gc_fragment_reply rep;
                 struct efs_store st;
                 struct efs_nvme_store nctx;
                 struct efs_frag_id fid;
-                int grc = EFS_OK;
+                int grc = EFS_ERR_BUSY;
 
                 memset(&rep, 0, sizeof(rep));
                 pthread_mutex_lock(&g_server->lock);
                 struct efs_export *ex =
-                    server_export_acquire_locked(g_server, req->export_id);
+                    server_export_acquire_or_create_locked(g_server, req->export_id);
                 pthread_mutex_unlock(&g_server->lock);
                 if (ex) {
                     fid.export_id = ex->id;

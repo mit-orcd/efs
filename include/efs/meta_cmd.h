@@ -11,6 +11,7 @@
  * remaining SIM_CMD_* values converge onto this header when the
  * coordinator side is lifted out of src/sim (production adoption P2). */
 
+#define EFS_MD_CMD_ORPHAN_REAP 30 /* [ino:8][generation:8], recheck leases/intents */
 #define EFS_MD_CMD_CREATE 1 /* matches sim CMD_CREATE; see pack in raft_host.c */
 #define EFS_MD_CMD_UNLINK  2 /* matches sim CMD_UNLINK */
 #define EFS_MD_CMD_PUBLICATION_RETIRE 29 /* same immutable payload, exact acknowledgement */

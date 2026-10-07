@@ -56,7 +56,9 @@ int main(void)
     assert(efs_chunk_publish_epoch(&r, 5, &epoch) == EFS_ERR_STALE && epoch == 99);
     assert(efs_chunk_publish_epoch(&r, 3, &epoch) == EFS_ERR_STALE && epoch == 99);
     assert(efs_chunk_publish_epoch(&r, 4, &epoch) == EFS_OK && epoch == 4);
-    r.publish_flags |= 4;
+    r.publish_flags |= EFS_CHUNK_REC_F_FRESH_OBJECT;
+    assert(efs_chunk_publish_epoch(&r, 4, &epoch) == EFS_OK);
+    r.publish_flags |= 8;
     assert(efs_chunk_publish_epoch(&r, 4, &epoch) == EFS_ERR_INVAL);
     puts("writeback recovery: sticky errors, partial resolution, progress and captured epoch PASS");
     return 0;
