@@ -225,3 +225,27 @@ restart after FENCE_LOC before global ACK, and subsequent epoch admission.
 Automatic lane session admission belongs with the pending FUSE integration.
 Next finish coherent lane-local mtime invalidation, then integrate both flush
 paths and bounded abandoned-stream cleanup under the barrier.
+
+## Regular-file mtime coherence — implemented, Oct 6 2026
+
+Regular-file MTIME SETATTR now uses exact-image EXCL PREPARE on the inode
+first, freezing its active-lane bitmap, then on every active lane. One durable
+transaction decision covers the new inode generation/timestamp and cleared lane
+mtime stamps. Missing active lane stamps are created at the captured content
+epoch. Publications, bootstrap and resize honor the holds; unresolved lane
+admission returns BUSY without consulting the inode. An intervening publication
+loses the exact lane CAS and aborts the proposed timestamp change rather than
+losing newer data. Ambiguous COMMIT is retained for existing finisher recovery.
+Only mtime is invalidated: ctime, size, block counts and content history survive.
+
+Cold bootstrap captures and validates the inode mtime generation and installs it
+with the lane stamp. Legacy REPORTs carrying an older generation cannot revive
+pre-utimens mtime. Durable lane publications use the serialized local generation;
+there is no new per-write inode RPC. Directories and atime-only SETATTR retain
+their existing paths; this change does not claim directory-fence redesign.
+
+Linux regression tests cover backwards time, lane admission exclusion,
+bootstrap races, stale publication stamps, exact-image publication conflicts,
+incomplete plans, lost decision acknowledgement and durable PREPARE/COMMIT/ABORT
+restart with partial resolution. D25 publication/flush activation and bounded
+abandoned-stream cleanup remain pending.

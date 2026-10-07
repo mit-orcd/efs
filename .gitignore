@@ -51,3 +51,5 @@ tests/faults/fault_sim
 
 # python
 __pycache__/
+
+/tests/test_mtime_barrier

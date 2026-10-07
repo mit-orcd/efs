@@ -67,7 +67,7 @@ int efs_meta_get_lane_writer_view(struct efs_kv *kv, efs_ino_t ino,
                                   struct efs_meta_writer_view *out);
 struct efs_meta_lane_bootstrap {
     struct efs_meta_writer_view view;
-    uint64_t active_lanes, base_size, lane_epoch, lane_seq;
+    uint64_t active_lanes, base_size, lane_epoch, lane_seq, mtime_gen;
     uint32_t chunk_size;
     uint8_t lane, lane_present;
 };
@@ -88,6 +88,35 @@ int efs_meta_apply_lane_bootstrap(struct efs_kv *kv, const struct efs_txid *t,
                                   const struct efs_txn_parts *parts,
                                   const uint8_t *key, uint32_t kl,
                                   const uint8_t *pay, uint32_t plen);
+
+/* Regular-file mtime barrier. Capture under authoritative views of every
+ * participant, then freeze the inode FIRST and each active lane with exact
+ * image CAS. Missing active stamps are created with the current content epoch.
+ * Ordinary publication/bootstrap/resize honor these EXCL intents. The durable
+ * decision and per-shard resolution use the existing recovery machinery. */
+struct efs_meta_mtime_image {
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t klen, expected_len, new_len;
+    uint8_t expected[EFS_META_INO_BYTES], value[EFS_META_INO_BYTES];
+};
+struct efs_meta_mtime_plan {
+    struct efs_txn_parts parts;
+    uint32_t count;
+    struct efs_meta_mtime_image images[EFS_META_LANES + 1];
+};
+int efs_meta_capture_mtime(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
+                           uint32_t mask, uint64_t mtime, uint64_t atime,
+                           efs_txn_coord_fn coord, void *ctx,
+                           struct efs_meta_mtime_plan *out);
+struct efs_meta_mtime_ops {
+    int (*prepare)(void *, const struct efs_txid *, const struct efs_txn_parts *,
+                   const struct efs_meta_mtime_image *);
+    int (*decide)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
+    int (*resolve)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
+};
+int efs_meta_execute_mtime(const struct efs_meta_mtime_plan *plan,
+                           const struct efs_txid *t,
+                           const struct efs_meta_mtime_ops *ops, void *ctx);
 
 /* Atomic single-authority fence, for the future serialized TRUNCATE path.
  * Caller owns Raft apply serialization and cross-authority coordination.

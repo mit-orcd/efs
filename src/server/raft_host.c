@@ -8582,6 +8582,44 @@ static int host_resize_resolve(void *user, const struct efs_txid *t,
     return rc;
 }
 
+static int host_mtime_prepare(void *user, const struct efs_txid *t,
+                               const struct efs_txn_parts *parts,
+                               const struct efs_meta_mtime_image *image)
+{
+    struct host_resize_ctx *ctx = user;
+    uint8_t pay[9 + 2 * EFS_META_INO_BYTES]; uint32_t pn;
+    int rc = efs_txn_encode_excl_value(pay, sizeof(pay), &pn,
+        image->expected, image->expected_len, EFS_TXN_PUT, image->value, image->new_len);
+    if (rc != EFS_OK) return rc;
+    uint32_t shard = ((uint32_t)image->key[0] << 8) | image->key[1];
+    return host_prep_raw(ctx->host, shard, EFS_TXN_EXCL_VALUE, t, parts,
+                         image->key, image->klen, pay, pn, NULL, ctx->hint);
+}
+
+static int host_regular_mtime(struct efs_raft_host *h, efs_ino_t ino,
+                               const struct efs_meta_utimens *u, int *hint)
+{
+    const struct efs_meta_mtime_ops ops = {
+        host_mtime_prepare, host_resize_decide, host_resize_resolve};
+    struct host_resize_ctx ctx = {h, hint};
+    struct efs_meta_mtime_plan *plan = malloc(sizeof(*plan));
+    struct efs_txid t;
+    if (!plan) return EFS_ERR_NOMEM;
+    uint8_t groups[2]; host_need_both(groups);
+    int rc = EFS_OK;
+    for (unsigned i = 0; i < 2 && rc == EFS_OK; ++i)
+        rc = host_read_index(h, groups[i], hint);
+    if (rc == EFS_OK)
+        rc = efs_meta_capture_mtime(h->kv, ino, now_ns(), u->mask, u->mtime,
+                                    u->atime, host_txn_coord, h, plan);
+    if (rc == EFS_OK) {
+        fill_txid(h, &t);
+        rc = efs_meta_execute_mtime(plan, &t, &ops, &ctx);
+    }
+    free(plan);
+    return rc;
+}
+
 int server_raft_host_logical_resize(efs_ino_t ino, uint64_t size, uint64_t now,
                                     int *leader_hint)
 {
@@ -10109,6 +10147,16 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
     rc = host_read_index(h, g, &hint);
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    if (rc == EFS_OK && S_ISREG(row.mode) && (u.mask & EFS_META_SET_MTIME)) {
+        uint8_t need[2]; host_need_both(need);
+        if (!host_hosts(h, need[0]) || !host_hosts(h, need[1])) {
+            host_fwd_setattr(h, ino, mask, 0, 0, 0, 0, mtime, mtime_nsec,
+                             atime, atime_nsec, out, need, 2);
+            return;
+        }
+        rc = host_regular_mtime(h, ino, &u, &hint);
+        goto collect;
+    }
     if (rc == EFS_OK && (u.mask & EFS_META_SET_MTIME)) {
         uint64_t cross = 0;
         uint8_t fg = g;
@@ -10157,6 +10205,7 @@ static void host_utimens(efs_ino_t ino, uint32_t mask, uint64_t mtime,
         rc = host_propose(h, g, cmd, clen, &idx, &term, &hint);
     if (rc == EFS_OK)
         rc = host_wait_settled(h, g, idx, term, &hint);
+collect:
     if (rc == EFS_OK)
         rc = host_read_inode_lanes(h, ino, &hint);
     if (rc == EFS_OK)

@@ -818,7 +818,13 @@ fence over the inode row plus the active lanes** (≤65 authorities; rare ops
 pay, P2). The entry deletes no chunk rows and rewrites no tail: its apply
 is O(lanes), never O(chunks), so a truncate of a petabyte file holds the
 Raft pump for the same single-digit milliseconds as a truncate of a page.
-The same fence distributes `mtime_gen`.
+The bounded `utimens` fence distributes `mtime_gen` independently of content
+history. For regular files it prepares the inode first to freeze the active-lane
+set, then each lane's exact stamp image, and decides/resolves durably. A missing
+active stamp is installed at the captured content epoch; cold lane bootstrap
+copies the inode's mtime generation. Old-generation REPORT timestamps cannot
+resurrect an invalidated mtime. Ordinary lane publications use the serialized
+local generation and do not add an inode lookup.
 
 **Validity rule — the one rule every reader, every publish merge and the
 sweep apply.** The base image and each immutable delta span have their own
