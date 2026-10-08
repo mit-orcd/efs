@@ -144,3 +144,28 @@ worker or settled command transport yet. Main W90/W91 are independently recorded
 as design-open; preserve their documentation and add real expiry lifecycle gates
 when the implemented interface can be exercised. Do not simulate expiration by
 having the test unlink files itself or report unsupported cases as passing.
+
+## Oct 8, 02:34 EDT — immutable catalog fold tested offline
+
+`query_catalog.h/c` now builds bounded immutable catalogs in the background-only
+API, reuses unchanged raw-metadata/name-index partitions, and folds subtree
+rollups in RAM. It uses the actual metadata getattr reducer over the captured
+RAM KV image, including lane publications and open append frontiers. APPEND_CUR
+is now a metadata dirty hint: its frontier can change the logical size without
+an inode or lane write. Dentry layout precedence deduplicates split mirrors and
+honors hashed tombstones. Hardlinks count each name. Name searches spend an
+actual shared candidate visit budget across partitions, preserving exact/prefix
+seek efficiency and explicit exhaustion. Query-time operations neither scan LSM
+nor rebuild aggregates. Host ownership must serialize catalog builds/frees and
+keep readers alive until publication retirement; permissions require fresh host
+validation before delivery.
+
+NUC catalog/name-index unit suites and Mac focused ASan/UBSan suites pass.
+Raw evidence: results/measure/20261008-w92-query-catalog. One initial expected
+ctime was wrong because hardlink advances it; retained failure and corrected
+expectation are documented. These are offline applied-image tests, not live
+server acceptance. Host refresh/publication and RPC integration remain next.
+No deployed binary changed. Loader remains active, ~16,384 new small files /
+256 MiB at 02:31 EDT; no GiB stage completed. Reserves ~700 GiB /data1 and
+803 GiB /home, hundreds of millions of free inodes. No errors or intervention
+required; continue monitoring before any eventual pause/deployment.

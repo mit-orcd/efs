@@ -23,6 +23,10 @@ uint32_t efs_name_index_count(const struct efs_name_index *index)
 {
     return index ? index->count : 0;
 }
+uint64_t efs_name_index_bytes(const struct efs_name_index *index)
+{
+    return index ? sizeof(*index)+(uint64_t)index->capacity*sizeof(*index->entries) : 0;
+}
 static int has_pending(void *user, const uint8_t *key, uint32_t klen,
                         const uint8_t *val, uint32_t vlen)
 {
@@ -102,14 +106,15 @@ static uint32_t lower_bound(const struct efs_name_index *index, const char *term
     }
     return lo;
 }
-int efs_name_index_query(const struct efs_name_index *index,
+int efs_name_index_query_visits(const struct efs_name_index *index,
                           enum efs_name_match match, const char *term,
                           uint32_t *cursor, uint32_t visit_budget,
                           int (*emit)(void *, const struct efs_name_entry *),
-                          void *user)
+                          void *user, uint32_t *visits)
 {
+    if (visits) *visits=0;
     if (!index || !term || !cursor || !emit || match<EFS_NAME_EXACT ||
-        match>EFS_NAME_CONTAINS || *cursor>index->count || !visit_budget ||
+        match>EFS_NAME_CONTAINS || *cursor>index->count ||
         strnlen(term,EFS_MAX_NAME)>=EFS_MAX_NAME) return EFS_ERR_INVAL;
     size_t len=strlen(term);
     uint32_t at=*cursor,visited=0;
@@ -130,6 +135,7 @@ int efs_name_index_query(const struct efs_name_index *index,
         if (!matches && (match==EFS_NAME_EXACT || match==EFS_NAME_PREFIX)) break;
         if (visited==visit_budget) { *cursor=at;return EFS_ERR_BUSY; }
         visited++;
+        if (visits) *visits=visited;
         if (matches) {
             int rc=emit(user,entry);
             if (rc!=EFS_OK) { *cursor=at;return rc; }
@@ -138,4 +144,13 @@ int efs_name_index_query(const struct efs_name_index *index,
     }
     *cursor=at;
     return EFS_OK;
+}
+
+int efs_name_index_query(const struct efs_name_index *index,
+                          enum efs_name_match match, const char *term,
+                          uint32_t *cursor, uint32_t visit_budget,
+                          int (*emit)(void *, const struct efs_name_entry *), void *user)
+{
+    if (!visit_budget) return EFS_ERR_INVAL;
+    return efs_name_index_query_visits(index,match,term,cursor,visit_budget,emit,user,NULL);
 }

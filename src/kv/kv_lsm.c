@@ -735,7 +735,7 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
     case EFS_KV_KIND_INODE: case EFS_KV_KIND_DENTRY: case EFS_KV_KIND_LANE:
     case EFS_KV_KIND_INTENT: case EFS_KV_KIND_GUARD: case EFS_KV_KIND_REDUCE:
     case EFS_KV_KIND_DECISION: case EFS_KV_KIND_PVER: case EFS_KV_KIND_DSEQ:
-    case EFS_KV_KIND_EXPORT:
+    case EFS_KV_KIND_EXPORT: case EFS_KV_KIND_APPEND_CUR:
         l->metadata_revision[shard]++;
         break;
     default: break;

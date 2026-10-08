@@ -176,3 +176,10 @@ Offline query foundations now exist on this branch: full local KV snapshots
 name-candidate indexes. See the latest checkpoint for commits and retained unit/
 sanitizer evidence. They are not connected to live server refresh/RPCs yet;
 .stats remains incorrect and W92 remains open.
+
+An offline immutable catalog now folds logical sizes through the real metadata
+getattr reducer, reuses unchanged shard caches/name indexes, and resolves split
+layout precedence before stats/find output. Catalog and name-index unit tests
+pass on NUC and focused Mac ASan/UBSan. These are builder foundations; host
+publication, fresh permissions, RPC consumers and live/scale gates remain open.
+See the continuation checkpoint and query-catalog evidence ledger.

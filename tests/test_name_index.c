@@ -69,6 +69,13 @@ int main(void)
     CHECK(!efs_name_index_query(index,EFS_NAME_EXACT,"report-aaa.dat",&cursor,10,collect,&f) && f.n==2,
           "exact seeks duplicate names");
     CHECK(f.parents[0]==100 && f.parents[1]==101,"stable parent ordering");
+    f=(struct found){0};cursor=0;uint32_t visits=99;
+    CHECK(!efs_name_index_query_visits(index,EFS_NAME_EXACT,"absent",&cursor,0,collect,&f,&visits) && !visits,
+          "empty exact range needs no visit budget");
+    cursor=0;
+    CHECK(efs_name_index_query_visits(index,EFS_NAME_EXACT,"report-aaa.dat",&cursor,1,collect,&f,&visits)==EFS_ERR_BUSY && visits==1,
+          "actual visited count excludes sorted seek distance");
+
     f=(struct found){0};cursor=0;
     CHECK(efs_name_index_query(index,EFS_NAME_PREFIX,"report-",&cursor,1,collect,&f)==EFS_ERR_BUSY && f.n==1,
           "prefix bounded page is explicit");

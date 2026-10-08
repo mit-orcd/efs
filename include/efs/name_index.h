@@ -26,6 +26,7 @@ int efs_name_index_build(struct efs_kv_lsm_snapshot *source, uint32_t shard,
 void efs_name_index_free(struct efs_name_index *index);
 uint64_t efs_name_index_revision(const struct efs_name_index *index);
 uint32_t efs_name_index_count(const struct efs_name_index *index);
+uint64_t efs_name_index_bytes(const struct efs_name_index *index);
 /* Cursor belongs to this immutable index and pattern; never reuse it across
  * versions or queries. At most visit_budget candidate rows are visited, and
  * *cursor advances after each accepted callback. BUSY is an explicit partial
@@ -38,4 +39,11 @@ int efs_name_index_query(const struct efs_name_index *index,
                           int (*emit)(void *, const struct efs_name_entry *),
                           void *user);
 
+/* Actual visited rows allow one budget across partitions. A zero remaining
+ * budget succeeds only when the selected range contains no candidates. */
+int efs_name_index_query_visits(const struct efs_name_index *index,
+                          enum efs_name_match match, const char *term,
+                          uint32_t *cursor, uint32_t visit_budget,
+                          int (*emit)(void *, const struct efs_name_entry *),
+                          void *user, uint32_t *visits);
 #endif
