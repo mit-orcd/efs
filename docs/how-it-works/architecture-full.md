@@ -1459,6 +1459,14 @@ this document is the invariant they are measured against.
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
+### Accepted design follow-up
+
+[D32–D35](../status/accepted-namespace-scratch-20261008.md) settle W84's current transaction
+limit, W90 expiry policy, W91 `.efs/` commands and W81 contention-triggered spread.
+Implementation and gates remain open; no fixed directory depth or universal
+scratch TTL is selected. D28–D30 are also accepted. The zero decision count
+refers to settled registered asks, not to every remaining implementation detail.
+
 ### 1. The task right now
 
 [AMD functional follow-up](../status/amd-functional-gates-20261008.md): append retry ownership,
@@ -1703,6 +1711,14 @@ harnesses are outside this work. D28/D29/D30 were accepted Oct 8 in the [decisio
 D28 defers salvage; implement D29 with W88, then D30 admission/pacing, keeping
 their implementation and fault/recovery gates separate from design acceptance.
 
+### Accepted namespace and feature policies
+
+[D32–D35](../status/accepted-namespace-scratch-20261008.md) are accepted: W84's existing
+144-participant product limit, W90 opt-in fixed expiry, W91 directory-local
+commands, W81 sustained-contention spreading. Preserve all linked gates;
+acceptance is not implementation or activation. These supersede older open-policy
+wording without cancelling replay/readiness priorities.
+
 ### Active correctness work
 
 Follow-up round 1 implements W82 fresh read rounds and correlated acknowledgements.
@@ -1854,7 +1870,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-##### Decisions — taken and pending (register D1–D31)
+##### Decisions — taken and pending (register D1–D35)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -1985,6 +2001,22 @@ Completed global revocation, durable lane/storage rejection floors, all-member
 deletion acknowledgements and replay-floor retirement are required. Age,
 disconnect and missing receipt are not authority. D28 accepts loss of unpublished buffered writes after client death and defers
 automatic salvage; it does not relax these collection-authority requirements.
+
+### D32–D35 — accepted namespace, scratch and command policies
+
+**Accepted Oct 8, 2026:** the user accepted all four recommendations after the
+W84 sizing and W91 command/script clarifications.
+
+| ID / work item | Accepted choice | Contract / remaining gates |
+| --- | --- | --- |
+| D32 / W84 | Current 144-participant limit, no hardcoded directory depth; prompt atomic refusal with diagnostics; larger-operation protocol deferred. | [Contract](../status/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions) |
+| D33 / W90 | Opt-in fixed deadlines, owner renewal within operator limits, singly linked regular files, clock-safe conditional namespace deletion. No universal TTL. | [Contract](../status/accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry) |
+| D34 / W91 | Opt-in `.efs/` commands, initially readable Python 3 scripts using bounded versioned query paths and immutable results; real names win collisions. | [Contract](../status/accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands) |
+| D35 / W81 | Sustained directory-local contention plus activity triggers spread, with hysteresis, bounded migration and measured configurable thresholds. | [Contract](../status/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading) |
+
+Accepted policy does not establish deployment acceptance. Numeric W81 settings,
+query encoding and other implementation details must satisfy the linked gates;
+configured expiry TTL is an operator choice, not a selected global default.
 
 
 ## Appendix 4 — Work items — long-form text for the open W items and the queue rows
@@ -5154,6 +5186,8 @@ not diagnose the current reclamation incident.
 
 ### W81 · Automatic directory spread responds to size, not pressure
 
+**Policy accepted Oct 8 (D35):** sustained directory-local serialization wait and queue pressure plus activity; retain size trigger, use hysteresis/cooldowns and bounded fair migration. Exclude global overload signals; select explicit configurable thresholds from AMD measurements before activation. [Contract](../status/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading).
+
 **Class/state:** accepted scalability requirement / feature gap; source-reviewed
 Oct 7, awaiting triage. The directory protocol requires size OR sustained
 serialization pressure to start spread, with the numeric pressure bound still
@@ -5276,6 +5310,8 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 <a id="w84"></a>
 
 ### W84 · Namespace guard bounds reject supported deep/spread-directory work
+
+**Policy accepted Oct 8 (D32):** retain the current 144-participant product limit, with no fixed depth promise; require prompt atomic refusal and clear diagnostics. Larger-operation protocol is deferred. Earlier finite-limit asks below are superseded; remaining diagnostics/refusal and recovery gates govern closure. [Contract](../status/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions).
 
 **Oct 8 AMD follow-up:** AMD direct-I/O/TCP now passes exact 144-participant coordinator death at both PREPARE and COMMIT, including cold atomic recovery. The existing depth 143 acceptance/depth 144 bounded refusal also passes. Full-ancestry versus a supported finite transaction envelope remains a product decision; no universal 143-depth promise follows from this fixture.
 See [the package evidence](../status/amd-functional-gates-20261008.md).

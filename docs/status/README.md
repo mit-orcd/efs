@@ -4,6 +4,14 @@
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
 
+## Accepted design follow-up
+
+[D32–D35](accepted-namespace-scratch-20261008.md) settle W84's current transaction
+limit, W90 expiry policy, W91 `.efs/` commands and W81 contention-triggered spread.
+Implementation and gates remain open; no fixed directory depth or universal
+scratch TTL is selected. D28–D30 are also accepted. The zero decision count
+refers to settled registered asks, not to every remaining implementation detail.
+
 ## 1. The task right now
 
 [AMD functional follow-up](amd-functional-gates-20261008.md): append retry ownership,

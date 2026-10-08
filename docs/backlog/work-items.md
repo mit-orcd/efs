@@ -3163,6 +3163,8 @@ not diagnose the current reclamation incident.
 
 ## W81 · Automatic directory spread responds to size, not pressure
 
+**Policy accepted Oct 8 (D35):** sustained directory-local serialization wait and queue pressure plus activity; retain size trigger, use hysteresis/cooldowns and bounded fair migration. Exclude global overload signals; select explicit configurable thresholds from AMD measurements before activation. [Contract](../status/accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading).
+
 **Class/state:** accepted scalability requirement / feature gap; source-reviewed
 Oct 7, awaiting triage. The directory protocol requires size OR sustained
 serialization pressure to start spread, with the numeric pressure bound still
@@ -3285,6 +3287,8 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 <a id="w84"></a>
 
 ## W84 · Namespace guard bounds reject supported deep/spread-directory work
+
+**Policy accepted Oct 8 (D32):** retain the current 144-participant product limit, with no fixed depth promise; require prompt atomic refusal and clear diagnostics. Larger-operation protocol is deferred. Earlier finite-limit asks below are superseded; remaining diagnostics/refusal and recovery gates govern closure. [Contract](../status/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions).
 
 **Oct 8 AMD follow-up:** AMD direct-I/O/TCP now passes exact 144-participant coordinator death at both PREPARE and COMMIT, including cold atomic recovery. The existing depth 143 acceptance/depth 144 bounded refusal also passes. Full-ancestry versus a supported finite transaction envelope remains a product decision; no universal 143-depth promise follows from this fixture.
 See [the package evidence](../status/amd-functional-gates-20261008.md).

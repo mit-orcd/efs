@@ -1,4 +1,4 @@
-# Decisions — taken and pending (register D1–D31)
+# Decisions — taken and pending (register D1–D35)
 
 **Decided means the design was accepted; it does not mean implementation or
 acceptance is complete. Preserve accepted choices and check their current work
@@ -9,7 +9,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-#### Decisions — taken and pending (register D1–D31)
+#### Decisions — taken and pending (register D1–D35)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -140,3 +140,19 @@ Completed global revocation, durable lane/storage rejection floors, all-member
 deletion acknowledgements and replay-floor retirement are required. Age,
 disconnect and missing receipt are not authority. D28 accepts loss of unpublished buffered writes after client death and defers
 automatic salvage; it does not relax these collection-authority requirements.
+
+## D32–D35 — accepted namespace, scratch and command policies
+
+**Accepted Oct 8, 2026:** the user accepted all four recommendations after the
+W84 sizing and W91 command/script clarifications.
+
+| ID / work item | Accepted choice | Contract / remaining gates |
+| --- | --- | --- |
+| D32 / W84 | Current 144-participant limit, no hardcoded directory depth; prompt atomic refusal with diagnostics; larger-operation protocol deferred. | [Contract](accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions) |
+| D33 / W90 | Opt-in fixed deadlines, owner renewal within operator limits, singly linked regular files, clock-safe conditional namespace deletion. No universal TTL. | [Contract](accepted-namespace-scratch-20261008.md#d33--w90-opt-in-fixed-scratch-expiry) |
+| D34 / W91 | Opt-in `.efs/` commands, initially readable Python 3 scripts using bounded versioned query paths and immutable results; real names win collisions. | [Contract](accepted-namespace-scratch-20261008.md#d34--w91-directory-local-efs-commands) |
+| D35 / W81 | Sustained directory-local contention plus activity triggers spread, with hysteresis, bounded migration and measured configurable thresholds. | [Contract](accepted-namespace-scratch-20261008.md#d35--w81-sustained-contention-directory-spreading) |
+
+Accepted policy does not establish deployment acceptance. Numeric W81 settings,
+query encoding and other implementation details must satisfy the linked gates;
+configured expiry TTL is an operator choice, not a selected global default.

@@ -18,6 +18,14 @@ harnesses are outside this work. D28/D29/D30 were accepted Oct 8 in the [decisio
 D28 defers salvage; implement D29 with W88, then D30 admission/pacing, keeping
 their implementation and fault/recovery gates separate from design acceptance.
 
+## Accepted namespace and feature policies
+
+[D32–D35](accepted-namespace-scratch-20261008.md) are accepted: W84's existing
+144-participant product limit, W90 opt-in fixed expiry, W91 directory-local
+commands, W81 sustained-contention spreading. Preserve all linked gates;
+acceptance is not implementation or activation. These supersede older open-policy
+wording without cancelling replay/readiness priorities.
+
 ## Active correctness work
 
 Follow-up round 1 implements W82 fresh read rounds and correlated acknowledgements.
