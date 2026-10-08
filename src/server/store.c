@@ -1,4 +1,5 @@
 #include "server_internal.h"
+#include "store_containers.h"
 #include "efs/checksum.h"
 #include "efs/kv_key.h"
 #include "efs/protocol.h"
@@ -429,10 +430,14 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
 
 /* Unlink a fragment from every storage root. A leftover .sum from
  * before the tail format is removed too; new files have no sidecar. */
-void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
+int server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index)
 {
+    if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
+        /* Unconditional vtable deletion still uses the existing lifetime lock. */
+        return server_delete_fragment_if_sum(s, ex, ino, chunk_index, fragment_index, NULL);
+    }
     char path[8192];
     char sum_path[8200];
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
@@ -444,6 +449,7 @@ void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
         snprintf(sum_path, sizeof(sum_path), "%s.sum", path);
         unlink(sum_path);
     }
+    return EFS_OK;
 }
 
 void server_gc_status(struct efsd_server *s, struct efs_msg_gc_status_reply *out)
@@ -617,13 +623,36 @@ int server_delete_fragment_if_sum(struct efsd_server *s, struct efs_export *ex,
                                   uint32_t fragment_index,
                                   const uint8_t expect_sum[EFS_HASH_SIZE])
 {
-    if (!s || !ex || !expect_sum)
+    if (!s || !ex || (!expect_sum && !s->storage_engine))
         return EFS_ERR_INVAL;
     char path[8192];
     uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     int live = 0, rc = EFS_OK;
     pthread_mutex_t *mu = fragment_mutex(ex->id, ino, chunk_index, fragment_index);
     pthread_mutex_lock(mu);
+    if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
+        for (uint32_t ri = 0; ri < n; ri++) {
+            fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path, sizeof(path));
+            uint64_t payload = 0, bytes = 0;
+            int dr = server_container_delete(s, path, expect_sum, &payload, &bytes);
+            if (bytes) {
+                __atomic_fetch_add(&s->gc_removed_fragments, 1, __ATOMIC_RELAXED);
+                __atomic_fetch_add(&s->gc_removed_file_bytes, bytes, __ATOMIC_RELAXED);
+                __atomic_fetch_add(&s->gc_removed_payload_bytes, payload, __ATOMIC_RELAXED);
+                pthread_mutex_lock(&s->lock);
+                struct efs_node *ln = server_local_node(s);
+                if (ln) ln->used = ln->used >= payload ? ln->used - payload : 0;
+                pthread_mutex_unlock(&s->lock);
+                server_usage_mark_dirty(s);
+                __atomic_store_n(&s->gc_last_delete_us, gc_clock_us(), __ATOMIC_RELAXED);
+            }
+            if (dr == EFS_ERR_EXIST) { live = 1; __atomic_fetch_add(&s->gc_mismatches, 1, __ATOMIC_RELAXED); }
+            else if (dr != EFS_OK) { rc = dr; break; }
+        }
+        pthread_mutex_unlock(mu);
+        if (rc != EFS_OK) __atomic_fetch_add(&s->gc_delete_errors, 1, __ATOMIC_RELAXED);
+        return rc != EFS_OK ? rc : live ? EFS_ERR_EXIST : EFS_OK;
+    }
     for (uint32_t ri = 0; ri < n; ri++) {
         struct stat st;
         uint8_t got[EFS_HASH_SIZE];
@@ -899,15 +928,18 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
                 rc = EFS_ERR_BUSY;
                 break;
             }
-            if (gc_unlink_file(s, child)) {
+            uint64_t payload = 0, stored_bytes = (uint64_t)st.st_size;
+            if (s->storage_engine) {
+                int cr = server_container_delete(s, child, NULL, &payload, &stored_bytes);
+                if (cr != EFS_OK) { rc = cr; break; }
+            } else if (gc_unlink_file(s, child)) {
                 if (errno == ENOENT)
                     continue;
                 rc = EFS_ERR_IO;
                 break;
             }
             (*left)--;
-            uint64_t payload;
-            if (fragment_payload_bytes((uint64_t)st.st_size, &payload) != EFS_OK)
+            if (!s->storage_engine && fragment_payload_bytes((uint64_t)st.st_size, &payload) != EFS_OK)
                 payload = (uint64_t)st.st_size;
             pthread_mutex_lock(&s->lock);
             struct efs_node *ln = server_local_node(s);
@@ -916,7 +948,7 @@ static int gc_dead_directory(struct efsd_server *s, const char *path, unsigned *
             pthread_mutex_unlock(&s->lock);
             server_usage_mark_dirty(s);
             __atomic_fetch_add(&s->gc_removed_fragments, 1, __ATOMIC_RELAXED);
-            __atomic_fetch_add(&s->gc_removed_file_bytes, (uint64_t)st.st_size,
+            __atomic_fetch_add(&s->gc_removed_file_bytes, stored_bytes,
                                __ATOMIC_RELAXED);
             __atomic_fetch_add(&s->gc_removed_payload_bytes, payload, __ATOMIC_RELAXED);
             struct timespec ts;
@@ -1394,14 +1426,23 @@ static void frag_loc_note(efs_export_id_t export_id, efs_ino_t ino,
  * open() itself is the probe, and the digest is the 4 KiB tail of that
  * file. Roots are probed low to high, same as server_find_fragment_root.
  * *sum_ok is set when the tail supplied the sum (caller hashes otherwise). */
-int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
+static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,
                                   uint32_t *data_len,
                                   uint8_t checksum[EFS_HASH_SIZE], int *sum_ok)
 {
-    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
     *sum_ok = 0;
+    uint32_t n = s->storage_path_count ? s->storage_path_count : 1;
+    if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
+        char path[8192];
+        for (uint32_t ri = 0; ri < n; ri++) {
+            fragment_path_at(s, ri, ex, ino, chunk_index, fragment_index, path, sizeof(path));
+            int rc = server_container_get(s, path, data, data_len, checksum, sum_ok);
+            if (rc != EFS_ERR_NOT_FOUND) return rc;
+        }
+        return EFS_ERR_NOT_FOUND;
+    }
     if (n != 1) {
         uint32_t want = server_frag_len(ex, ino);
         int direct = s->direct_io && !efs_ino_is_meta_table(ino);
@@ -1467,18 +1508,23 @@ int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
     return EFS_OK;
 }
 
-/* True if path contains the sharded leaf for EFS_META_TABLE_INO. */
-static int path_under_meta_table_ino(const char *path)
+int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
+                                  efs_ino_t ino, uint32_t ci, uint32_t fi,
+                                  uint8_t *data, uint32_t *len, uint8_t sum[EFS_HASH_SIZE], int *sum_ok)
 {
-    char seg[EFS_INO_PATH_SEGS][5];
-    char needle[64];
-    efs_ino_path_segments(EFS_META_TABLE_INO, seg);
-    snprintf(needle, sizeof(needle), "/%s/%s/%s/%s/%s",
-             seg[4], seg[3], seg[2], seg[1], seg[0]);
-    return strstr(path, needle) != NULL;
+    if (!s->storage_engine || efs_ino_is_meta_table(ino))
+        return read_fragment_impl(s, ex, ino, ci, fi, data, len, sum, sum_ok);
+    pthread_rwlock_t *im = inode_gc_lock(ex->id, ino);
+    pthread_mutex_t *mu = fragment_mutex(ex->id, ino, ci, fi);
+    pthread_rwlock_rdlock(im);
+    pthread_mutex_lock(mu);
+    int rc = read_fragment_impl(s, ex, ino, ci, fi, data, len, sum, sum_ok);
+    pthread_mutex_unlock(mu);
+    pthread_rwlock_unlock(im);
+    return rc;
 }
 
-static uint64_t compute_dir_usage(const char *path)
+static uint64_t compute_dir_usage(const char *path, int containers, size_t root_len)
 {
     uint64_t total = 0;
     DIR *d = opendir(path);
@@ -1508,7 +1554,7 @@ static uint64_t compute_dir_usage(const char *path)
         snprintf(full_path, sizeof(full_path), "%s/%s", path, entry->d_name);
 
         /* Sharded: skip the meta-table inode leaf and everything under it. */
-        if (path_under_meta_table_ino(full_path))
+        if (server_container_metadata_path(full_path + root_len))
             continue;
 
         struct stat st;
@@ -1518,10 +1564,12 @@ static uint64_t compute_dir_usage(const char *path)
         }
         uint64_t bytes = 0;
         if (S_ISDIR(st.st_mode)) {
-            bytes = compute_dir_usage(full_path);
+            bytes = compute_dir_usage(full_path, containers, root_len);
         } else if (S_ISREG(st.st_mode)) {
             uint64_t payload;
-            bytes = fragment_payload_bytes((uint64_t)st.st_size, &payload) == EFS_OK
+            if (containers) {
+                bytes = server_container_payload(full_path, &payload) == EFS_OK ? payload : UINT64_MAX;
+            } else bytes = fragment_payload_bytes((uint64_t)st.st_size, &payload) == EFS_OK
                 ? payload : (uint64_t)st.st_size;
         }
         if (bytes == UINT64_MAX || bytes > UINT64_MAX - total) {
@@ -1537,7 +1585,8 @@ uint64_t server_compute_usage(const char *path)
 {
     char data_path[8192];
     snprintf(data_path, sizeof(data_path), "%s/data", path);
-    return compute_dir_usage(data_path);
+    int mode = server_storage_root_mode(path);
+    return mode < 0 ? UINT64_MAX : compute_dir_usage(data_path, mode, strlen(path));
 }
 
 uint64_t server_compute_local_usage(struct efsd_server *s)
@@ -1613,7 +1662,7 @@ static int prepare_storage_root(const char *root)
 int server_add_storage_paths(struct efsd_server *s, const char *csv,
                              uint32_t *count_out)
 {
-    if (!s || !csv || !*csv)
+    if (!s || !csv || !*csv || s->storage_engine)
         return EFS_ADD_STORAGE_INVALID;
 
     char buf[EFS_MAX_PATH];
@@ -1673,7 +1722,7 @@ int server_add_storage_paths(struct efsd_server *s, const char *csv,
     }
 
     for (uint32_t i = 0; i < nfresh; i++) {
-        if (prepare_storage_root(fresh[i]) != 0)
+        if (server_storage_root_mode(fresh[i]) != 0 || prepare_storage_root(fresh[i]) != 0)
             return EFS_ADD_STORAGE_ERROR;
     }
 
@@ -1685,9 +1734,10 @@ int server_add_storage_paths(struct efsd_server *s, const char *csv,
             pthread_mutex_unlock(&s->lock);
             return EFS_ADD_STORAGE_FULL;
         }
-        strncpy(s->storage_paths[s->storage_path_count], fresh[i],
-                sizeof(s->storage_paths[0]) - 1);
-        s->storage_paths[s->storage_path_count][sizeof(s->storage_paths[0]) - 1] = '\0';
+        if (server_storage_files_attach(s, fresh[i], s->storage_path_count) != EFS_OK) {
+            pthread_mutex_unlock(&s->lock);
+            return EFS_ADD_STORAGE_ERROR;
+        }
         s->storage_path_count++;
     }
     total = s->storage_path_count;
@@ -1848,6 +1898,30 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
                                          const char *path,
                                          const uint8_t *checksum)
 {
+    if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
+        uint32_t old_len = 0;
+        int ir = server_container_info(s, path, &old_len, NULL);
+        if (ir != EFS_OK && ir != EFS_ERR_NOT_FOUND) return ir;
+        uint64_t charge = data_len > old_len ? data_len - old_len : 0;
+        pthread_mutex_lock(&s->lock);
+        struct efs_node *ln = server_local_node(s);
+        if (!ln || (s->quota && (ln->used > s->quota || charge > s->quota - ln->used))) {
+            pthread_mutex_unlock(&s->lock); return ln ? EFS_ERR_QUOTA : EFS_ERR_INVAL;
+        }
+        ln->used += charge;
+        pthread_mutex_unlock(&s->lock);
+        int published = 0;
+        int rc = server_container_put(s, path, data, data_len, checksum, &published);
+        pthread_mutex_lock(&s->lock);
+        ln = server_local_node(s);
+        if (ln) {
+            if (!published) ln->used -= charge;
+            else if (old_len > data_len) ln->used -= old_len - data_len;
+        }
+        pthread_mutex_unlock(&s->lock);
+        server_usage_mark_dirty(s);
+        return rc;
+    }
     /* Quota charges logical fragment size once per fragment. A first
      * write (EFS_PATH_HINT_SKIP: the name cannot exist) creates in one
      * open. Any other PUT tries O_CREAT|O_EXCL first — success is a new

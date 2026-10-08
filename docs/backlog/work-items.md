@@ -2503,6 +2503,13 @@ item.
 
 ## P4 — deferred until P3's numbers (long; one is a wipe)
 
+**Oct 8 activation:** user authorized P4.1 implementation on isolated
+`devel-storage-engine`, with `files|containers` and buffered/direct A/B in xorinox
+VMs. [Container format and acceptance checkpoint](../status/container-engine-20261008.md).
+The prototype retains durable per-fragment mapping files, packs data into 1 GiB
+containers, and preserves file-engine defaults. Fresh roots only; no installed
+cluster wipe or data migration. Other P4 rows remain conditional.
+
 | row | item | taken only if | what |
 | --- | --- | --- | --- |
 | P4.1 | plan row I — fragment on-disk layout (W34 residual) | `efs-bench --bench` shows the server PUT path (create + O_DIRECT write per 64 KiB fragment, 16 K/s per server at the cluster wall) is the wall | fewer path components / larger containers per fragment; **wipe**; design row first |
