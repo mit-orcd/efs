@@ -64,6 +64,23 @@ verified and accounted for.
   reserved segment, then releases/recreates the victim. Reclamation is bounded
   and synchronous within the worker; other workers can continue independently.
 
+Punch retirement is bounded by `--batch-size` records per worker. Retired slots
+become reusable only after successful physical punching; the allocator drains
+early if it runs out of free slots. Allocation accounting uses an actual
+`fstat` pair per affected container/batch. Released-byte counters sum positive
+batch block deltas; metadata fluctuations can differ from older per-punch
+accounting. Final allocation snapshots remain actual `st_blocks` measurements. Every remaining punch is timed before
+completion, including `none`; this is worker-local reference authority, not an
+EFS GC protocol. `each` drains and flushes each replacement; `batch` amortizes
+reclamation/accounting at its boundary. Container directory barriers are issued
+when namespace entries change, rather than after every unchanged-name batch.
+Body flush requirements remain selected by the persistence policy.
+
+Synthetic payload generation uses four independent 64-bit xorshift lanes;
+identities/generations and full BLAKE3 verification remain present. Historical
+profiles generated different deterministic bytes. Source archives identify each
+version; synthetic generation improvements are not production-engine speedups.
+
 Foreground write latency includes required reclamation. Container cleaning has
 its own latency, copy-byte, cleaning-count and dead-record backlog fields.
 Rare cleaning pauses can fall outside foreground p99; inspect write max and
@@ -115,8 +132,9 @@ and inspect errors and verified counts before comparing latency or throughput.
   `released_allocated_bytes` is gross block release across retirements, not net
   free capacity or SSD TRIM/NAND erasure. Preallocation can reserve released space
   again immediately. Copy bytes include the checksum tail.
-- `dead_records` measures append segments' remaining retired slots, with bounded
-  per-worker peak backlog. It is not an EFS GC queue or a global oldest age.
+- `dead_records` measures remaining retired slots. Punch batches must drain to
+  zero before completion; append compaction may retain dead slots. The bounded
+  per-worker peak includes pending punch retirements. It is not an EFS GC queue or a global oldest age.
 - `model_bytes` estimates explicit worker/model storage; `rss_kib` is process
   high-water RSS including setup. Filesystem and kernel caches are outside it.
 - The source snapshot can have unknown Git version metadata when transferred
@@ -138,3 +156,17 @@ production recovery acceptance remain open.
 For concurrent access to one container, see the separate
 [shared-range experiments](storage-ranges.md). Churn workers own separate models
 and containers; increasing their count does not itself test overlapping ranges.
+
+## Profiling the measured interval
+
+Churn honors `EFS_BENCH_PERF_CONTROL` and `EFS_BENCH_PERF_ACK` using the same
+perf FIFO control protocol as the existing local benchmarks. Enable occurs
+before releasing measured workers; disable occurs after they join, before final
+verification. Control failures invalidate the run. Setting
+`EFS_BENCH_PHASE_MARKERS=1` emits `BENCH_PHASE begin/end` to stderr, allowing
+syscall traces to exclude setup and verification. Profiling/tracing throughput
+is diagnostic; compare separate unprofiled samples with identical arguments.
+
+See the [five-round profile ledger](../../results/measure/20261008-w90-perf-five-rounds/README.md)
+for accepted/rejected candidates, profile snapshots, syscall accounting and
+measurement limits.

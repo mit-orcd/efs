@@ -1562,7 +1562,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | P2.3 | **W23** · stalled-compactor test | performance | strict W89 samples pass; NUC engine reaches production 1 GiB L0 cap; deferred idle drain and unapplied WAL-tail durability repaired; universal follower memory/lag bound remains open | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
 | P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
-| bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB sustained scaling, deferred file-body batching and shared-range evidence recorded; no production changes | [work item](#w90) · [follow-up](../status/bench-scaling-ranges-20261008.md) |
+| bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB scaling, shared ranges and five profiling rounds recorded; bounded punch batching retained; no production changes | [work item](#w90) · [ranges](../status/bench-scaling-ranges-20261008.md) · [profiles](../status/bench-perf-five-rounds-20261008.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](../status/metadata-scaling.md) |
 | — | **D28** (who owns acknowledged bytes across client death) · **D29** (a REPORT receipt for "committed, apply pending") · **D30** (the remedy for compaction-induced apply lag) | ask | ask — not code until the user decides | [decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d31) |
@@ -5437,6 +5437,16 @@ mixed-record diagnostics, with separate syscall/lock/flush maxima. See the
 [measurement ledger](../../results/measure/20261008-w90-scaling-ranges/README.md).
 The improved file baseline must supersede immediate-body reference numbers in
 layout decisions. Recovery/authority and broader lifetime gates remain open.
+
+
+**Five profiling rounds (Oct 8):** benchmark-only CPU/metadata optimization and
+syscall audit are recorded in the [profile checkpoint](../status/bench-perf-five-rounds-20261008.md).
+Bounded punch retirement, grouped allocation accounting, namespace dirty tracking
+and optimized synthetic generation are retained. Sorted/coalesced random
+retirements were rejected. Short four-worker samples improved about 33%; the
+separate 60-second eight-worker sample improved 15% with a write-p99 tradeoff.
+These results do not close production durability/recovery or broader workload
+acceptance. Required body flushes and integrity verification remain present.
 
 
 ## Appendix 5 — Naming

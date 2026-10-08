@@ -38,6 +38,29 @@ class ChurnTests(unittest.TestCase):
             with self.subTest(layout=layout,occupancy=occupancy,direct=direct,persist=persist), tempfile.TemporaryDirectory() as root:
                 self.case(root,layout,persist,direct,occupancy)
 
+    def test_punch_backpressure_and_final_drain(self):
+        # A batch larger than the free pool must drain early for progress.
+        for persist,direct in itertools.product(['none','each','batch'],[False,True]):
+            with self.subTest(persist=persist,direct=direct),tempfile.TemporaryDirectory() as root:
+                r=self.case(root,'punch',persist,direct,95,extra=('--batch-size','1000'))
+                self.assertEqual(r['dead_records'],'0')
+                self.assertGreater(int(r['released_allocated_bytes']),0)
+                self.assertGreater(int(r['max_dead_per_worker']),0)
+
+    def test_punch_failure_rejects_completion(self):
+        code='#include <errno.h>\n#include <sys/types.h>\nint fallocate(int fd,int mode,off_t off,off_t len){(void)fd;(void)mode;(void)off;(void)len;errno=EIO;return -1;}\n'
+        with tempfile.TemporaryDirectory() as temp,tempfile.TemporaryDirectory() as root:
+            p=Path(temp);(p/'fault.c').write_text(code)
+            subprocess.run(['cc','-shared','-fPIC',str(p/'fault.c'),'-o',str(p/'fault.so')],check=True)
+            self.case(root,'punch',env=dict(os.environ,LD_PRELOAD=str(p/'fault.so')),ok=False)
+            self.assertEqual(list(Path(root).iterdir()),[])
+
+    def test_profile_control_errors_invalidate_run(self):
+        with tempfile.TemporaryDirectory() as root:
+            env=dict(os.environ,EFS_BENCH_PERF_CONTROL=root+'/missing',EFS_BENCH_PERF_ACK=root+'/missing-ack')
+            self.case(root,'punch',env=env,ok=False)
+            self.assertEqual(list(Path(root).iterdir()),[])
+
     def test_parallel_workers_and_preallocated_containers(self):
         for layout in ('punch','compact'):
             with self.subTest(layout=layout),tempfile.TemporaryDirectory() as root:

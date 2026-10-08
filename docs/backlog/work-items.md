@@ -3479,3 +3479,13 @@ mixed-record diagnostics, with separate syscall/lock/flush maxima. See the
 [measurement ledger](../../results/measure/20261008-w90-scaling-ranges/README.md).
 The improved file baseline must supersede immediate-body reference numbers in
 layout decisions. Recovery/authority and broader lifetime gates remain open.
+
+
+**Five profiling rounds (Oct 8):** benchmark-only CPU/metadata optimization and
+syscall audit are recorded in the [profile checkpoint](../status/bench-perf-five-rounds-20261008.md).
+Bounded punch retirement, grouped allocation accounting, namespace dirty tracking
+and optimized synthetic generation are retained. Sorted/coalesced random
+retirements were rejected. Short four-worker samples improved about 33%; the
+separate 60-second eight-worker sample improved 15% with a write-p99 tradeoff.
+These results do not close production durability/recovery or broader workload
+acceptance. Required body flushes and integrity verification remain present.

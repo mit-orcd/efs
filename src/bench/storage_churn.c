@@ -4,6 +4,7 @@
  */
 #include "storage_churn.h"
 #include "latency.h"
+#include "perf_control.h"
 #include "efs/checksum.h"
 #include <dirent.h>
 #include <errno.h>
@@ -43,7 +44,7 @@ struct worker {
     uint8_t *state, *buf, *verify;
     struct segment *segments;
     unsigned *pending, pending_count;
-    int dfd, owns_dir, error;
+    int dfd, owns_dir, error, namespace_dirty;
     char dir[4096];
     uint64_t rng, dead, before, after, start_ns, end_ns, extents_after;
     struct sample stats;
@@ -103,7 +104,16 @@ static void make_record(struct worker *w,unsigned object,uint64_t generation)
 {
     uint64_t identity=((uint64_t)w->id<<32)|object;
     uint64_t x=identity^generation^UINT64_C(0x9e3779b97f4a7c15);
-    for(unsigned i=0;i<w->c->payload;i++) {x^=x<<13;x^=x>>7;x^=x<<17;w->buf[i]=(uint8_t)x;}
+    /* Independent lanes remove the scalar dependency chain; the compiler can
+     * vectorize the fill. This is synthetic benchmark data, not a codec. */
+    uint64_t lanes[4];
+    for(unsigned lane=0;lane<4;lane++)lanes[lane]=x^((lane+1)*UINT64_C(0xd1b54a32d192ed03));
+    for(unsigned i=0;i<w->c->payload;i+=32) {
+        for(unsigned lane=0;lane<4;lane++) {
+            uint64_t v=lanes[lane];v^=v<<13;v^=v>>7;v^=v<<17;
+            lanes[lane]=v;memcpy(w->buf+i+lane*8,&v,8);
+        }
+    }
     memcpy(w->buf,&identity,8); memcpy(w->buf+8,&generation,8);
     memset(w->buf+w->c->payload,0,w->c->stride-w->c->payload);
     efs_hash(w->buf,w->c->payload,w->buf+w->c->payload);
@@ -120,8 +130,31 @@ static int verify_location(struct worker *w,unsigned object,unsigned loc,uint64_
        memcmp(expected,digest,32) || memcmp(digest,w->verify+w->c->payload,32)) {errno=EIO;return -1;}
     return 0;
 }
+/* A bounded retirement batch. No reader references remain in this worker-local
+ * model. Freed slots become reusable only after successful physical punching. */
+static int drain_punches(struct worker *w,struct sample *s)
+{
+    if(strcmp(w->c->layout,"punch")||!w->pending_count)return 0;
+    for(unsigned seg=0;seg<w->nsegments;seg++) {
+        unsigned count=0;
+        for(unsigned i=0;i<w->pending_count;i++)if(w->pending[i]/w->per_segment==seg)count++;
+        if(!count)continue;
+        struct stat before,after;int fd=w->segments[seg].fd;
+        if(fstat(fd,&before))return -1;
+        for(unsigned i=0;i<w->pending_count;i++) {
+            unsigned loc=w->pending[i];if(loc/w->per_segment!=seg)continue;
+            if(w->state[loc]!=2){errno=EIO;return -1;}
+            if(fallocate(fd,FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE,(off_t)offset(w,loc),w->c->stride))return -1;
+            w->state[loc]=0;w->dead--;
+        }
+        if(fstat(fd,&after))return -1;
+        if(before.st_blocks>after.st_blocks)s->reclaimed+=(uint64_t)(before.st_blocks-after.st_blocks)*512;
+    }
+    w->pending_count=0;return 0;
+}
 static int flush_worker(struct worker *w,struct sample *s)
 {
+    if(drain_punches(w,s))return -1;
     if(container_mode(w)) {
         for(unsigned i=0;i<w->nsegments;i++) if(w->segments[i].dirty) {
             if(sync_file(w->segments[i].fd))return -1;
@@ -139,8 +172,11 @@ static int flush_worker(struct worker *w,struct sample *s)
         }
         w->pending_count=0;
     }
-    if(sync_file(w->dfd))return -1;
-    s->syncs++; return 0;
+    if(!container_mode(w)||w->namespace_dirty) {
+        if(sync_file(w->dfd))return -1;
+        w->namespace_dirty=0;s->syncs++;
+    }
+    return 0;
 }
 static int create_segment(struct worker *w,unsigned i)
 {
@@ -159,7 +195,7 @@ static int create_segment(struct worker *w,unsigned i)
         int err=posix_fallocate(g->fd,0,(off_t)w->c->container);
         if(err){errno=err;return -1;}
     }
-    g->dirty=1; g->live=0; return 0;
+    w->namespace_dirty=1;g->dirty=1; g->live=0; return 0;
 }
 static int retire_location(struct worker *w,unsigned loc,struct sample *s)
 {
@@ -170,10 +206,11 @@ static int retire_location(struct worker *w,unsigned loc,struct sample *s)
         w->state[loc]=0; s->reclaimed+=(uint64_t)st.st_blocks*512;
     } else if(!strcmp(w->c->layout,"punch")) {
         struct segment *g=&w->segments[loc/w->per_segment];
-        struct stat before,after;
-        if(fstat(g->fd,&before)||fallocate(g->fd,FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE,(off_t)offset(w,loc),w->c->stride)||fstat(g->fd,&after))return -1;
-        g->dirty=1;g->live--;w->state[loc]=0;
-        if(before.st_blocks>after.st_blocks)s->reclaimed+=(uint64_t)(before.st_blocks-after.st_blocks)*512;
+        if(w->pending_count>=w->c->batch){errno=EOVERFLOW;return -1;}
+        w->pending[w->pending_count++]=loc;
+        g->dirty=1;g->live--;w->state[loc]=2;w->dead++;
+        if(w->dead>s->max_dead)s->max_dead=w->dead;
+        if(w->pending_count==w->c->batch&&drain_punches(w,s))return -1;
     } else {
         w->segments[loc/w->per_segment].live--;w->state[loc]=2;w->dead++;
         if(w->dead>s->max_dead)s->max_dead=w->dead;
@@ -250,7 +287,9 @@ static int free_location(struct worker *w,struct sample *s,unsigned *out)
             if(container_mode(w)&&i/w->per_segment==w->spare)continue;
             if(!w->state[i]){*out=i;w->cursor=(i+1)%w->slots;return 0;}
         }
-        if(strcmp(w->c->layout,"compact")||clean_segment(w,s))return -1;
+        if(!strcmp(w->c->layout,"punch")) {
+            if(!w->pending_count||drain_punches(w,s))return -1;
+        } else if(strcmp(w->c->layout,"compact")||clean_segment(w,s))return -1;
     }
     errno=ENOSPC;return -1;
 }
@@ -303,6 +342,7 @@ static int cycles(struct worker *w,unsigned count,struct sample *s)
             lat_add(&s->write,(now_ns()-start)/1000);
         }
     }
+    if(drain_punches(w,s))return -1;
     /* Final batch barrier is part of elapsed time, not an uncounted flush. */
     if(strcmp(w->c->persist,"none") && flush_worker(w,s))return -1;
     return 0;
@@ -342,14 +382,14 @@ static int prepare(struct worker *w)
     if(w->live<2 || w->live>=data_slots || w->slots>1048576){errno=EINVAL;return -1;}
     if(snprintf(w->dir,sizeof(w->dir),"%s/churn-%u",c->root,w->id)>=4096)return -1;
     if(mkdir(w->dir,0700))return -1;
-    w->owns_dir=1;w->dfd=open(w->dir,O_RDONLY|O_DIRECTORY);if(w->dfd<0)return -1;
+    w->owns_dir=1;w->namespace_dirty=1;w->dfd=open(w->dir,O_RDONLY|O_DIRECTORY);if(w->dfd<0)return -1;
     if(c->filestreams) {
         struct fsxattr a;if(ioctl(w->dfd,FS_IOC_FSGETXATTR,&a))return -1;
         a.fsx_xflags|=FS_XFLAG_FILESTREAM;
         if(ioctl(w->dfd,FS_IOC_FSSETXATTR,&a))return -1;
     }
     w->objects=calloc(w->live,sizeof(*w->objects));w->state=calloc(w->slots,1);
-    if(c->file_batch_sync){w->pending=calloc(c->batch,sizeof(*w->pending));if(!w->pending)return -1;}
+    if(c->file_batch_sync||!strcmp(c->layout,"punch")){w->pending=calloc(c->batch,sizeof(*w->pending));if(!w->pending)return -1;}
     w->segments=calloc(w->nsegments,sizeof(*w->segments));
     if(w->segments)for(unsigned i=0;i<w->nsegments;i++)w->segments[i].fd=-1;
     if(!w->objects||!w->state||(w->nsegments&&!w->segments))return -1;
@@ -494,9 +534,14 @@ int efs_bench_churn_main(int argc,char **argv)
     }
     pthread_mutex_lock(&gate.mu);while(gate.ready<c.qd)pthread_cond_wait(&gate.cv,&gate.mu);pthread_mutex_unlock(&gate.mu);
 release:
+    if(perf_command("enable\n"))errors++;
+    if(getenv("EFS_BENCH_PHASE_MARKERS"))fprintf(stderr,"BENCH_PHASE begin\n");
     start=now_ns();pthread_mutex_lock(&gate.mu);gate.go=1;pthread_cond_broadcast(&gate.cv);pthread_mutex_unlock(&gate.mu);
     for(unsigned i=0;i<made;i++)pthread_join(threads[i],NULL);
-    end=now_ns();if(made!=c.qd)goto done;
+    end=now_ns();
+    if(getenv("EFS_BENCH_PHASE_MARKERS"))fprintf(stderr,"BENCH_PHASE end\n");
+    if(perf_command("disable\n"))errors++;
+    if(made!=c.qd)goto done;
     for(unsigned i=0;i<c.qd;i++) {
         struct worker *v=&w[i]; struct sample *s=&v->stats;
         if(v->error){errors++;fprintf(stderr,"churn worker %u: %s\n",i,strerror(v->error));}
@@ -531,7 +576,7 @@ release:
         before+=v->before;after+=v->after;dead+=v->dead;live+=v->live;
         mem+=sizeof(*v)+(uint64_t)v->slots+(uint64_t)v->live*sizeof(struct object)+
              (uint64_t)v->nsegments*sizeof(struct segment)+2ull*c.stride+
-             (c.file_batch_sync?(uint64_t)c.batch*sizeof(unsigned):0);
+             ((c.file_batch_sync||!strcmp(c.layout,"punch"))?(uint64_t)c.batch*sizeof(unsigned):0);
     }
     struct rusage usage;getrusage(RUSAGE_SELF,&usage);double wall=(end-start)/1e9;
     printf("%s kind=churn model=independent layout=%s persist=%s direct=%d payload_bytes=%u record_bytes=%u container_bytes=%llu capacity_bytes=%llu occupancy_pct=%u qd=%u steps=%u seconds=%u warmup=%u batch=%u read_pct=%u preallocate=%d extent_hint=%llu filestreams=%d file_batch_sync=%d wall_s=%.6f reads=%llu writes=%llu retired=%llu ops_s=%.3f payload_GiB_s=%.6f read_p50_us=%llu read_p99_us=%llu read_max_us=%llu write_p50_us=%llu write_p99_us=%llu write_max_us=%llu gc_p99_us=%llu cleanings=%llu copied_records=%llu copy_bytes=%llu released_allocated_bytes=%llu allocated_before=%llu allocated_after=%llu dead_records=%llu max_dead_per_worker=%llu live_objects=%llu verified_objects=%llu syncs=%llu extents_available=%d extents_after=%llu model_bytes=%llu rss_kib=%ld errors=%d gc=worker_local index=in_memory\n",

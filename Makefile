@@ -123,7 +123,7 @@ BENCH_CLIENT_OBJ = $(BENCH_CLIENT_SRC:.c=.o)
 src/bench/bench_local.o src/bench/io_bench.o: src/bench/perf_control.h
 src/bench/bench_local.o: src/bench/latency.h
 src/bench/storage_principles.o: src/bench/storage_principles.h src/bench/perf_control.h src/bench/latency.h
-src/bench/storage_churn.o: src/bench/storage_churn.h src/bench/latency.h
+src/bench/storage_churn.o: src/bench/storage_churn.h src/bench/latency.h src/bench/perf_control.h
 src/bench/storage_ranges.o: src/bench/storage_ranges.h src/bench/latency.h
 src/client/efs_bench.o: src/bench/storage_principles.h src/bench/storage_churn.h src/bench/storage_ranges.h
 $(BENCH_CLIENT_OBJ): src/bench/bench_local.h src/bench/blake3_bench.h src/bench/io_bench.h
