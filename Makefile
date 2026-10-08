@@ -175,6 +175,7 @@ test-report-pressure:
 	python3 tests/test_report_orphan.py
 
 test-create-errors:
+	python3 tests/test_kv_wal_faults.py
 	python3 tests/test_create_errors.py
 	python3 tests/test_open_lease.py
 	python3 tests/test_unlink_verdict.py

@@ -42,6 +42,7 @@ struct kv_wal {
     uint64_t appended;
     uint64_t synced;
     int syncing;
+    int io_failed; /* A failed append/sync cannot be followed by a successful ACK. */
     /* Nested: apply of one Raft entry writes many WAL records then one
      * fsync (arch §8: amortize the persistence boundary). */
     int hold;
@@ -200,6 +201,8 @@ static int kv_wal_fsync_to_locked(struct kv_wal *w, uint64_t mine)
         uint64_t target;
         int rc;
 
+        if (w->io_failed)
+            return EFS_ERR_IO;
         if (w->synced >= mine)
             return EFS_OK;
         if (w->syncing) {
@@ -214,6 +217,7 @@ static int kv_wal_fsync_to_locked(struct kv_wal *w, uint64_t mine)
         rc = fdatasync(w->fd) == 0 ? EFS_OK : EFS_ERR_IO;
         pthread_mutex_lock(&w->mu);
         w->syncing = 0;
+        if (rc != EFS_OK) w->io_failed = 1;
         if (rc == EFS_OK && w->synced < target)
             w->synced = target;
         pthread_cond_broadcast(&w->cv);
@@ -233,6 +237,10 @@ int kv_wal_append(struct kv_wal *w, const struct efs_kv_item *items, uint32_t n,
         return EFS_ERR_INVAL;
     *out_seq = 0;
     pthread_mutex_lock(&w->mu);
+    if (w->io_failed) {
+        pthread_mutex_unlock(&w->mu);
+        return EFS_ERR_IO;
+    }
     rc = wal_encode(w, items, n, &len);
     if (rc != EFS_OK) {
         pthread_mutex_unlock(&w->mu);
@@ -240,6 +248,8 @@ int kv_wal_append(struct kv_wal *w, const struct efs_kv_item *items, uint32_t n,
     }
     rc = write_all(w->fd, w->rec, len);
     if (rc != EFS_OK) {
+        w->io_failed = 1;
+        pthread_cond_broadcast(&w->cv);
         pthread_mutex_unlock(&w->mu);
         return rc;
     }
@@ -265,6 +275,10 @@ int kv_wal_hold(struct kv_wal *w, int on)
     if (!w)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&w->mu);
+    if (w->io_failed) {
+        pthread_mutex_unlock(&w->mu);
+        return EFS_ERR_IO;
+    }
     if (on) {
         w->hold++;
     } else if (w->hold > 0) {
@@ -285,6 +299,10 @@ int kv_wal_reset(struct kv_wal *w, uint64_t applied)
     pthread_mutex_lock(&w->mu);
     while (w->syncing)
         pthread_cond_wait(&w->cv, &w->mu);
+    if (w->io_failed) {
+        pthread_mutex_unlock(&w->mu);
+        return EFS_ERR_IO;
+    }
     if (w->appended > applied) {
         pthread_mutex_unlock(&w->mu);
         return EFS_OK;
@@ -295,13 +313,17 @@ int kv_wal_reset(struct kv_wal *w, uint64_t applied)
         rc = EFS_ERR_IO;
     if (rc == EFS_OK)
         w->synced = w->appended;
+    else
+        w->io_failed = 1;
     pthread_mutex_unlock(&w->mu);
     return rc;
 }
 
 static int read_exact(FILE *f, uint8_t *p, uint32_t n)
 {
-    return fread(p, 1, n, f) == n ? EFS_OK : EFS_ERR_NOT_FOUND;
+    if (fread(p, 1, n, f) == n)
+        return EFS_OK;
+    return ferror(f) ? EFS_ERR_IO : EFS_ERR_NOT_FOUND;
 }
 
 int kv_wal_replay(const char *path,
@@ -313,22 +335,34 @@ int kv_wal_replay(const char *path,
     uint8_t hdr[8];
     uint8_t *buf = NULL;
     uint32_t cap = 0;
-    int rc = EFS_OK;
+    off_t valid_end = 0;
+    int rc = EFS_OK, repair_tail = 0;
 
     if (!path || !cb)
         return EFS_ERR_INVAL;
-    f = fopen(path, "rb");
+    /* Recovery owns the WAL exclusively, before the append descriptor opens.
+     * A discarded tail must be removed before any subsequent append. */
+    f = fopen(path, "r+b");
     if (!f)
-        return EFS_OK;
+        return errno == ENOENT ? EFS_OK : EFS_ERR_IO;
     for (;;) {
         uint32_t crc, paylen, n, off, i;
 
-        if (read_exact(f, hdr, 8) != EFS_OK)
+        rc = read_exact(f, hdr, 8);
+        if (rc != EFS_OK) {
+            if (rc == EFS_ERR_NOT_FOUND) {
+                off_t end = ftello(f);
+                if (end < 0) rc = EFS_ERR_IO;
+                else { repair_tail = end != valid_end; rc = EFS_OK; }
+            }
             break;
+        }
         crc = get_u32(hdr);
         paylen = get_u32(hdr + 4);
-        if (paylen < 4 || paylen > KV_LSM_REC_MAX)
+        if (paylen < 4 || paylen > KV_LSM_REC_MAX) {
+            repair_tail = 1;
             break;
+        }
         if (paylen > cap) {
             uint8_t *p = realloc(buf, paylen);
             if (!p) {
@@ -338,11 +372,16 @@ int kv_wal_replay(const char *path,
             buf = p;
             cap = paylen;
         }
-        if (read_exact(f, buf, paylen) != EFS_OK)
+        rc = read_exact(f, buf, paylen);
+        if (rc != EFS_OK) {
+            if (rc == EFS_ERR_NOT_FOUND) { repair_tail = 1; rc = EFS_OK; }
             break;
-        if (efs_crc32(buf, paylen) != crc)
-            break;
+        }
+        if (efs_crc32(buf, paylen) != crc) { repair_tail = 1; break; }
         n = get_u32(buf);
+        if (!n || n > (paylen - 4) / 10) { rc = EFS_ERR_PROTO; break; }
+        /* Validate the entire atomic batch before applying its first item.
+         * CRC-valid malformed data is an error, not authority to truncate. */
         off = 4;
         for (i = 0; i < n && rc == EFS_OK; i++) {
             uint8_t op;
@@ -357,17 +396,37 @@ int kv_wal_replay(const char *path,
             off += 4;
             vlen = get_u32(buf + off);
             off += 4;
-            if ((uint64_t)off + klen + vlen > paylen) {
+            if ((op != KV_OP_PUT && op != KV_OP_DEL) || !klen ||
+                klen > KV_LSM_KLEN_MAX || vlen > KV_LSM_VLEN_MAX ||
+                (op == KV_OP_DEL && vlen) ||
+                (uint64_t)off + klen + vlen > paylen) {
                 rc = EFS_ERR_PROTO;
                 break;
             }
-            rc = cb(user, op, buf + off, klen, buf + off + klen, vlen);
             off += klen + vlen;
         }
-        if (rc != EFS_OK)
-            break;
+        if (rc == EFS_OK && off != paylen) rc = EFS_ERR_PROTO;
+        if (rc != EFS_OK) break;
+        off = 4;
+        for (i = 0; i < n; i++) {
+            uint8_t op = buf[off++];
+            uint32_t klen = get_u32(buf + off); off += 4;
+            uint32_t vlen = get_u32(buf + off); off += 4;
+            rc = cb(user, op, buf + off, klen, buf + off + klen, vlen);
+            if (rc != EFS_OK) break;
+            off += klen + vlen;
+        }
+        if (rc != EFS_OK) break;
+        valid_end = ftello(f);
+        if (valid_end < 0) { rc = EFS_ERR_IO; break; }
+    }
+    /* Never repair after an I/O/callback/structural error: preserve evidence
+     * and refuse open. Only the existing torn/CRC-invalid tail rule permits it. */
+    if (rc == EFS_OK && repair_tail) {
+        if (ftruncate(fileno(f), valid_end) != 0 ||
+            fdatasync(fileno(f)) != 0) rc = EFS_ERR_IO;
     }
     free(buf);
-    fclose(f);
+    if (fclose(f) != 0 && rc == EFS_OK) rc = EFS_ERR_IO;
     return rc;
 }

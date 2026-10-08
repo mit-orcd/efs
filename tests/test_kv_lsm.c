@@ -421,37 +421,58 @@ static void test_scan_from(void)
     efs_kv_lsm_close(kv);
 }
 
-/* A torn trailing record was never ACKed, so it must be discarded while
- * everything before it survives. */
+/* Recovery must remove the discarded bytes, not merely stop replay: a new
+ * acknowledged record must still be reachable after a second process crash. */
 static void test_torn_tail(void)
 {
-    struct efs_kv *kv;
-    char path[600];
-    FILE *f;
-
-    rmtree(g_dir);
-    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
-    CHECK(kv != NULL, "open");
-    if (!kv)
-        return;
-    CHECK(put_s(kv, "good", "yes") == EFS_OK, "put");
-    efs_kv_lsm_close(kv);
-
-    snprintf(path, sizeof(path), "%s/wal", g_dir);
-    f = fopen(path, "ab");
-    CHECK(f != NULL, "open wal");
-    if (f) {
-        static const uint8_t junk[13] = { 0xAA, 0xBB, 0xCC, 0xDD, 9, 0, 0, 0,
-                                          1, 2, 3, 4, 5 };
-        fwrite(junk, 1, sizeof(junk), f);
-        fclose(f);
+    static const uint8_t tails[][16] = {
+        {0xaa, 0xbb, 0xcc},                         /* short header */
+        {0, 0, 0, 0, 0, 0, 0, 0},                /* reserved zeros */
+        {0xaa, 0xbb, 0xcc, 0xdd, 9, 0, 0, 0, 1}, /* short payload */
+        {0xaa, 0xbb, 0xcc, 0xdd, 4, 0, 0, 0, 1, 0, 0, 0} /* bad CRC */
+    };
+    static const size_t lengths[] = {3, 8, 9, 12};
+    for (unsigned k = 0; k < sizeof(lengths) / sizeof(lengths[0]); ++k) {
+        rmtree(g_dir);
+        struct efs_kv *kv = open_store(EFS_KV_LSM_SYNC, 0);
+        CHECK(kv != NULL, "open tail fixture");
+        if (!kv) return;
+        CHECK(put_s(kv, "good", "yes") == EFS_OK, "durable prefix");
+        efs_kv_lsm_close(kv);
+        char path[600]; struct stat before, after;
+        snprintf(path, sizeof(path), "%s/wal", g_dir);
+        CHECK(!stat(path, &before), "prefix length");
+        FILE *f = fopen(path, "ab");
+        CHECK(f != NULL, "open append invalid tail");
+        if (!f) return;
+        CHECK(fwrite(tails[k], 1, lengths[k], f) == lengths[k], "append tail");
+        CHECK(!fclose(f), "close invalid tail");
+        pid_t child = fork();
+        CHECK(child >= 0, "fork recovery writer");
+        if (child == 0) {
+            kv = open_store(EFS_KV_LSM_SYNC, 0);
+            if (!kv || get_is(kv, "good", "yes") != EFS_OK ||
+                stat(path, &after) || after.st_size != before.st_size ||
+                put_s(kv, "after", "acknowledged") != EFS_OK) _exit(2);
+            _exit(0); /* No destructor or compaction may mask the WAL defect. */
+        }
+        int status = 0;
+        if (child < 0) return;
+        CHECK(waitpid(child, &status, 0) == child && WIFEXITED(status) &&
+              WEXITSTATUS(status) == 0, "repair and durable append before crash");
+        kv = open_store(EFS_KV_LSM_SYNC, 0);
+        CHECK(kv != NULL, "second recovery");
+        if (!kv) return;
+        CHECK(get_is(kv, "good", "yes") == EFS_OK, "prefix survived twice");
+        CHECK(get_is(kv, "after", "acknowledged") == EFS_OK,
+              "post-repair acknowledged write survived second recovery");
+        CHECK(put_s(kv, "third", "restart") == EFS_OK, "append after second recovery");
+        efs_kv_lsm_close(kv);
+        kv = open_store(EFS_KV_LSM_SYNC, 0);
+        CHECK(kv && get_is(kv, "third", "restart") == EFS_OK,
+              "third recovery retains later append");
+        if (kv) efs_kv_lsm_close(kv);
     }
-    kv = open_store(EFS_KV_LSM_NOSYNC, 0);
-    CHECK(kv != NULL, "reopen with torn tail");
-    if (!kv)
-        return;
-    CHECK(get_is(kv, "good", "yes") == EFS_OK, "prefix survived");
-    efs_kv_lsm_close(kv);
 }
 
 /* Real durability: the child exits without unwinding after batch returned,

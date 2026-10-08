@@ -31,6 +31,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--wal-tail-recovery',action='store_true',help='repair private WAL invalid tails, append acknowledged data, then verify another cold restart')
 p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DSYNC callback failure retains bytes for later fsync recovery')
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
@@ -1733,6 +1734,40 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     # of logical namespace disappearance and the asynchronous quota snapshot.
     wait(lambda:all(not [x for x in (root/'data/exports/1').glob('**/*') if x.is_file()] for root in data_roots),
          'physical inventory empty after restart',180)
+    if a.wal_tail_recovery:
+        mount_client()
+        recovery_paths=[mount/'wal-before-tail',mount/'wal-after-tail']
+        bodies=[hashlib.sha256(b'wal-prefix').digest()*4096,
+                hashlib.sha256(b'wal-new-ack').digest()*4096]
+        with recovery_paths[0].open('xb',buffering=0) as out:
+            assert out.write(bodies[0])==len(bodies[0]);os.fsync(out.fileno())
+        unmount();stop(crash=True)
+        wals=sorted({path for root in roots for path in root.rglob('wal')})
+        assert len(wals)==4,('expected one owned KV WAL per daemon',wals)
+        evidence={'wals':[], 'acknowledged_bytes':list(map(len,bodies))}
+        for path in wals:
+            size=path.stat().st_size
+            with path.open('ab',buffering=0) as out:
+                assert out.write(bytes(8))==8;os.fsync(out.fileno())
+            evidence['wals'].append({'path':str(path),'valid_bytes':size,'injected_tail_bytes':8})
+        start();mount_client()
+        assert recovery_paths[0].read_bytes()==bodies[0]
+        with recovery_paths[1].open('xb',buffering=0) as out:
+            assert out.write(bodies[1])==len(bodies[1]);os.fsync(out.fileno())
+        # Let saved applied markers cover the acknowledged create/publication;
+        # the next restart cannot rely only on replaying an older Raft index.
+        time.sleep(1)
+        unmount();stop(crash=True);start();mount_client()
+        for path,body in zip(recovery_paths,bodies):
+            assert path.read_bytes()==body,('post-tail cold data missing',path)
+        evidence['cold_sha256']=[hashlib.sha256(path.read_bytes()).hexdigest() for path in recovery_paths]
+        (work/'wal-tail-recovery.json').write_text(json.dumps(evidence,indent=2))
+        for path in recovery_paths:path.unlink()
+        wait(drained,'post-WAL-repair deletion queues drained')
+        unmount();stop();start()
+        wait(lambda:all(not [x for x in (root/'data/exports/1').glob('**/*') if x.is_file()] for root in data_roots),
+             'post-WAL-repair physical inventory empty',180)
+        print('invalid WAL tails repaired; later fsynced files survive second cold crash PASS',flush=True)
     wait(drained,'restart orphan and GC queues drained',180)
     final=status()
     assert all(node[1]['data_usage_bytes']==0 for node in final),final
