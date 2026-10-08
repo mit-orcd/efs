@@ -12,14 +12,15 @@ source=r'''
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-static unsigned requests,discoveries,connections;
-static int fail_transport,loop,invalid_count,unknown;
+static unsigned requests,discoveries,connections,waits;
+static int fail_transport,loop,invalid_count,unknown,no_hint;
 static uint8_t immutable[27];
 static int efs_connect_tcp(const char *host,uint16_t port) {
  assert((!strcmp(host,"seed")&&port==1)||(!strcmp(host,"leader.example")&&port==9300));connections++;return 7;
 }
 static int efs_set_recv_timeout(int fd,int n){(void)fd;(void)n;return 0;}
 static int efs_set_send_timeout(int fd,int n){(void)fd;(void)n;return 0;}
+static int usleep(unsigned n){assert(n==50000);waits++;return 0;}
 static int close(int fd){assert(fd==7);return 0;}
 static int send_recv(int fd,uint8_t t,const void *p,uint32_t n,uint8_t *rt,void **out,uint32_t *len) {
  assert(fd==7);
@@ -31,14 +32,17 @@ static int send_recv(int fd,uint8_t t,const void *p,uint32_t n,uint8_t *rt,void 
  }
  assert(t==EFS_MSG_RAFT_MKFS && n==sizeof(immutable) && !memcmp(p,immutable,n));requests++;
  struct efs_msg_raft_mkfs_reply *r=calloc(1,sizeof(*r));assert(r);
- r->rc=(requests==1 || loop)?EFS_ERR_NOT_PRIMARY:EFS_OK;r->leader_hint=2;
+ r->rc=(requests==1 || loop)?EFS_ERR_NOT_PRIMARY:EFS_OK;r->leader_hint=no_hint?-1:2;
  *out=r;*len=sizeof(*r);*rt=EFS_MSG_RAFT_MKFS_REPLY;return fail_transport;
 }
 ''' +s[a:b]+r'''
-static void reset(void){requests=discoveries=connections=0;fail_transport=loop=invalid_count=unknown=0;}
+static void reset(void){requests=discoveries=connections=waits=0;fail_transport=loop=invalid_count=unknown=no_hint=0;}
 int main(void) {
  struct efs_msg_raft_mkfs_reply out;memset(immutable,0xa5,sizeof(immutable));
  reset();assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_OK && requests==2 && discoveries==1);
+ reset();no_hint=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_OK && requests==2 && waits==1 && !discoveries);
+ reset();no_hint=loop=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_ERR_NOT_PRIMARY && requests==8 && waits==8 && !discoveries);
+ reset();no_hint=fail_transport=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_ERR_IO && requests==1 && !waits);
  reset();fail_transport=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_ERR_IO && requests==1 && !discoveries);
  reset();loop=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_ERR_NOT_PRIMARY && requests==8);
  reset();invalid_count=1;assert(sess_rpc("seed",1,immutable,sizeof(immutable),&out)==EFS_ERR_PROTO && requests==1);

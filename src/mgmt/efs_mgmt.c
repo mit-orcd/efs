@@ -1155,6 +1155,15 @@ static int sess_rpc(const char *host, uint16_t port, const uint8_t *payload,
         }
         memcpy(out,reply,sizeof(*out));free(reply);
         if(out->rc!=EFS_ERR_NOT_PRIMARY)return out->rc;
+        if(out->leader_hint<0) {
+            /* Explicit NOT_PRIMARY means this request was not proposed.
+             * After cold rejoin the owner may not advertise a leader yet;
+             * retry the seed within the same finite admission budget. Never
+             * retry transport failures or an ambiguous submitted command. */
+            snprintf(target,sizeof(target),"%s",host);target_port=port;
+            usleep(50000);
+            continue;
+        }
         rc=sess_leader_address(host,port,out->leader_hint,target,&target_port);
         if(rc!=EFS_OK){out->rc=rc;return rc;}
     }
