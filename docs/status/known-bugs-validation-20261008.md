@@ -86,3 +86,20 @@ server/client timelines and longer original-shape fresh-directory stress. The
 production client retry-layer fault regression passes with mocked network outcomes.
 W55 remains open pending the original NFS reproduction/acceptance and a
 confirmed causal diagnosis of the historical missing-object incident.
+
+
+## POSIX suite organization follow-up
+
+At the user's request, optional shared/private mmap and the three `.efs`
+capability checks now belong to **POSIX extras**. Default **POSIX** selects the
+212 remaining core tests; **POSIX concurrent** names the existing two-client
+suite (`posix2` remains supported). The five extras include the four previously
+skipped checks plus their paired private-mmap test, which previously passed.
+`--suite all` preserves access to the original combined inventory. Retained
+213-pass/4-skip results above describe the historical run and are not rewritten.
+See [testing commands](../how-it-works/testing.md) for selection and skip semantics.
+
+Selector partition checks and the runner self-test pass. A local-filesystem
+extras run reports two mmap passes and three expected disabled-command skips;
+a core smoke test passes. No new EFS acceptance count is inferred from those
+local harness checks.

@@ -23,10 +23,28 @@ passes, one unsupported writable-mmap skip, 64 peer passes and 26 cold-remount
 verification passes. Full Linux `make test` passes. These are functional gates,
 not power-loss durability or cross-host hardware-RoCE measurements.
 
+The current suites are organized as:
+
+- **POSIX**: default core filesystem checks (`posix_suite.py`).
+- **POSIX concurrent**: existing two-client visibility/race checks
+  (`posix_2client.py`; `posix2` remains a compatible command).
+- **POSIX extras**: optional shared/private mmap and the three `.efs` command
+  checks (`posix_extras.py`, or `posix_suite.py --suite extras`). Unsupported
+  capabilities remain reported as SKIP in extras, not silently counted as passes.
+
+The in-repository remote driver accepts `bash tests/run_tests.sh posix`,
+`posix concurrent`, and `posix extras`; it retains its existing fcstor SSH/site
+configuration. This does not rename commands in external cluster controllers.
+Default core excludes all five extras; `--suite all` restores the combined
+selection. Existing concurrency checks within core remain core correctness tests;
+the concurrent entry point is the independent two-client suite. Historical
+result tables and acceptance totals above are unchanged.
+
 Against two already serving disposable mounts:
 
 ```bash
 python3 tests/posix/posix_suite.py /mount/one --jobs 4 --timeout-s 30 --results /tmp/posix.tsv
+python3 tests/posix/posix_extras.py /mount/one --jobs 4 --results /tmp/posix-extras.tsv
 python3 tests/posix/posix_2client.py --local /mount/one /mount/two --parent posix-peer --results /tmp/posix2.tsv
 python3 tests/posix/posix_persist.py /mount/one --phase prepare --results /tmp/persist-prepare.tsv
 # Cleanly stop and remount /mount/one with the same intended transport/settings.

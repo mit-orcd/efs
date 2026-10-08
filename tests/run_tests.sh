@@ -10,6 +10,8 @@
 # Usage:
 #   run_tests.sh posix [--keep] [--parallel] [efs-host ...]
 #                                                POSIX suite vs XFS baseline
+#   run_tests.sh posix extras [efs-host ...]   optional mmap / .efs checks
+#   run_tests.sh posix concurrent [host-a] [host-b]  two-client visibility
 #   run_tests.sh posix2 [host-a] [host-b]        two-client visibility vs XFS
 #   run_tests.sh posix2 multi                    4 non-overlapping pairs in parallel
 #   run_tests.sh posixstress [N] [host ...]      N full suites per host in parallel
@@ -216,6 +218,7 @@ cmd_setup() { # [host ...]
 # ---------------------------------------------------------------- posix ---
 cmd_posix() { # [--keep] [--parallel] [efs-host ...]
     local keep="" parallel=0 hosts=()
+    local selection=${POSIX_SELECTION:-core}
     for a in "$@"; do
         case "$a" in
             --keep) keep="--keep" ;;
@@ -225,6 +228,7 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
     done
     [ ${#hosts[@]} -eq 0 ] && hosts=("${DEFAULT_HOSTS[@]:0:1}")
     local pdir="$RESULTS/posix/$RUN_ID"
+    [ "$selection" = extras ] && pdir="$RESULTS/posix-extras/$RUN_ID"
     mkdir -p "$pdir"
 
     wait_cluster_idle || return 1
@@ -234,7 +238,7 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
     local xfs_tsv="/tmp/posix-xfs-$RUN_ID.tsv"
     ssh_to "$POSIX_SSH_SEC" "$XFS_HOST" "rm -f '$xfs_tsv'
         PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
-        python3 /tmp/efs/tests/posix/posix_suite.py '$XFS_DIR' \
+        python3 /tmp/efs/tests/posix/posix_suite.py '$XFS_DIR' --suite $selection \
         --timeout-s ${POSIX_TEST_SEC:-15} --jobs ${POSIX_JOBS:-16} \
         --results '$xfs_tsv' >&2
         if [ ! -s '$xfs_tsv' ]; then
@@ -259,7 +263,7 @@ cmd_posix() { # [--keep] [--parallel] [efs-host ...]
         local remote_tsv="/tmp/posix-efs-${RUN_ID}-${h%.ib}${suffix}.tsv"
         ssh_to "$POSIX_SSH_SEC" "$h" "rm -f '$remote_tsv'
             PYTHONUNBUFFERED=1 timeout -k 5 $((POSIX_SSH_SEC - 15)) \
-            python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' \
+            python3 /tmp/efs/tests/posix/posix_suite.py '$EFS_MNT' --suite $selection \
             $keep $tag --timeout-s ${POSIX_TEST_SEC:-15} --jobs ${POSIX_JOBS:-16} \
             --results '$remote_tsv' >&2
             if [ ! -s '$remote_tsv' ]; then
@@ -690,7 +694,12 @@ main() {
     local cmd=${1:-}
     shift || true
     case "$cmd" in
-        posix) cmd_posix "$@" ;;
+        posix)
+            case "${1:-}" in
+                extras) shift; POSIX_SELECTION=extras cmd_posix "$@" ;;
+                concurrent) shift; cmd_posix2 "$@" ;;
+                *) cmd_posix "$@" ;;
+            esac ;;
         posixstress) cmd_posixstress "$@" ;;
         posixpersist) cmd_posixpersist "$@" ;;
         posix2) cmd_posix2 "$@" ;;
