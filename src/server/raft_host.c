@@ -8513,7 +8513,7 @@ static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
     int hops, rc;
 
     *ng = 0;
-    for (hops = 0; hops < 64; hops++) {
+    for (hops = 0; hops < EFS_TXN_NAMESPACE_MAX_PART; hops++) {
         struct efs_meta_row r;
         uint32_t sh;
 
@@ -8598,6 +8598,41 @@ static int host_wait_refs(struct efs_raft_host *h, struct host_idx_ref *refs,
  * (proposed together, waited together). A wait that runs out after the
  * DECIDE is in the log goes to the finisher; the caller still sees the
  * error (the client retries, and the op-id window answers the retry). */
+#ifdef EFS_FAULTS
+/* Owned namespace gate only: stop a large transaction before its decision,
+ * or after durable COMMIT and before participant resolution. */
+static void host_txn_fault_barrier(struct efs_raft_host *h,
+                                  const struct efs_txn_parts *parts,
+                                  const char *stage)
+{
+    const char *path = getenv("EFS_FAULT_TXN_BARRIER");
+    char wanted[16] = {0}, ready[8192];
+    if (!path || parts->n < 64)
+        return;
+    int fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return;
+    ssize_t count = read(fd, wanted, sizeof(wanted) - 1);
+    close(fd);
+    if (count <= 0 || strcmp(wanted, stage) ||
+        snprintf(ready, sizeof(ready), "%s.ready", path) >= (int)sizeof(ready))
+        return;
+    fd = open(ready, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0)
+        return;
+    char record[96];
+    int size = snprintf(record, sizeof(record), "pid=%ld parts=%u stage=%s\n",
+                        (long)getpid(), parts->n, stage);
+    if (write(fd, record, (size_t)size) != size) {
+        close(fd);unlink(ready);return;
+    }
+    close(fd);
+    uint64_t end = now_us_() + 15000000;
+    while (h->running && h->s->running && access(path, F_OK) == 0 && now_us_() < end)
+        usleep(1000);
+}
+#endif
+
 static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
                            const struct efs_txn_parts *parts, uint32_t coord,
                            int *hint)
@@ -8606,6 +8641,9 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
     struct host_idx_ref refs[EFS_TXN_MAX_PART];
     int i, n = 0, rc;
 
+#ifdef EFS_FAULTS
+    host_txn_fault_barrier(h, parts, "prepare");
+#endif
     pack_decide(cmd, t, coord, EFS_TXN_COMMIT);
     rc = host_propose_wait(h, efs_raft_shard_group(coord), cmd, 22, hint);
     if (rc != EFS_OK) {
@@ -8616,6 +8654,9 @@ static int host_txn_commit(struct efs_raft_host *h, const struct efs_txid *t,
             host_fin_add(h, t, parts, coord);
         return rc;
     }
+#ifdef EFS_FAULTS
+    host_txn_fault_barrier(h, parts, "commit");
+#endif
     for (i = 0; i < parts->n && i < EFS_TXN_MAX_PART; i++) {
         pack_resolve(cmd, t, parts->shard[i], EFS_TXN_COMMIT);
         refs[n].group = efs_raft_shard_group(parts->shard[i]);
