@@ -7345,7 +7345,9 @@ static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *r
     /* A moved/deleted entry must not be rendered with stale ancestry while
      * using fresh permissions. A concurrent mutation refuses the whole result. */
     struct efs_meta_dentry fresh;
-    rc=efs_meta_apply_lookup_tx(q->h->kv,entry->parent,entry->name,host_txn_coord,q->h,&fresh);
+    struct efs_meta_row *parent=NULL;
+    rc=query_auth_dir(q,entry->parent,5,&parent);
+    if (!rc) rc=efs_meta_apply_lookup_row_tx(q->h->kv,parent,entry->name,host_txn_coord,q->h,&fresh);
     if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
     if (rc) return rc;
     if (fresh.ino!=entry->dentry.ino || fresh.generation!=entry->dentry.generation) return EFS_ERR_BUSY;
@@ -7448,14 +7450,17 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
         if (!rc) rc=efs_query_catalog_find(view->catalog,q->req->root,q->req->match,q->req->term,
                                            q->req->visit_budget,query_emit,q);
     }
-    /* Recheck authorization/ancestry just before delivery. Open result bytes
+    /* Recheck authorization/ancestry and the layouts used by batched dentry
+     * reads just before delivery. A split invalidates the whole result.
+     * Open result bytes
      * then remain immutable; later chmod does not rewrite an already-open FD. */
     for (uint32_t i=0;i<HOST_QUERY_AUTH_N && !rc;i++) if (q->auth[i].valid) {
         if (query_mono_ms()>q->deadline) { rc=EFS_ERR_BUSY;break; }
         struct efs_meta_row now;
         rc=efs_meta_apply_get_inode_tx(q->h->kv,q->auth[i].row.ino,host_txn_coord,q->h,&now);
         if (!rc && (now.generation!=q->auth[i].row.generation || now.parent!=q->auth[i].row.parent ||
-            now.mode!=q->auth[i].row.mode || now.uid!=q->auth[i].row.uid || now.gid!=q->auth[i].row.gid || !now.nlink))
+            now.mode!=q->auth[i].row.mode || now.uid!=q->auth[i].row.uid || now.gid!=q->auth[i].row.gid || !now.nlink ||
+            now.layout!=q->auth[i].row.layout || now.layout_epoch!=q->auth[i].row.layout_epoch))
             rc=EFS_ERR_BUSY;
         if (!rc) rc=query_directory_binding(q,now.ino);
     }

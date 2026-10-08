@@ -1240,6 +1240,19 @@ static void test_readdir_local(void)
 /* A spread directory is up to 64 ranges on 64 shards. readdir has to visit
  * the lanes the directory actually uses — including lanes the migrator
  * populated — and must not return a name twice or resurrect a deleted one. */
+static void check_row_lookup(struct efs_kv *kv, const char *name)
+{
+    struct efs_meta_row row;
+    struct efs_meta_dentry a, b;
+    CHECK(efs_meta_apply_get_inode(kv, EFS_ROOT_INO, &row) == EFS_OK, "batch parent");
+    int rc = efs_meta_apply_lookup(kv, EFS_ROOT_INO, name, &a);
+    CHECK(efs_meta_apply_lookup_row_tx(kv, &row, name, NULL, NULL, &b) == rc,
+          "row lookup agrees across layout transitions/tombstones");
+    if (rc == EFS_OK)
+        CHECK(a.ino == b.ino && a.generation == b.generation && a.type == b.type,
+              "same live binding");
+}
+
 static void test_readdir_spread(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -1258,10 +1271,13 @@ static void test_readdir_spread(void)
                                          nm, &ino) == EFS_OK, "create");
     }
 
+    check_row_lookup(kv, "s00");
+    check_row_lookup(kv, "absent");
     /* SPLITTING: entries still local, plus whatever has migrated. */
     CHECK(efs_meta_dir_begin_split(kv, EFS_ROOT_INO) == EFS_OK, "split");
     for (k = 0; k < (int)(sizeof(page) / sizeof(page[0])); k++) {
         CHECK(list_dir(kv, EFS_ROOT_INO, page[k], &l) == EFS_OK, "list");
+        check_row_lookup(kv, "s00"); check_row_lookup(kv, "s10");
         CHECK(l.n == 12, "all during SPLITTING");
         CHECK(!list_dups(&l), "no duplicates during SPLITTING");
     }
@@ -1272,6 +1288,7 @@ static void test_readdir_spread(void)
         CHECK(efs_meta_dir_migrate_one(kv, EFS_ROOT_INO) == EFS_OK, "migrate");
     for (k = 0; k < (int)(sizeof(page) / sizeof(page[0])); k++) {
         CHECK(list_dir(kv, EFS_ROOT_INO, page[k], &l) == EFS_OK, "list");
+        check_row_lookup(kv, "s00"); check_row_lookup(kv, "s10");
         CHECK(l.n == 12, "all mid-migration");
         CHECK(!list_dups(&l), "no duplicates mid-migration");
     }
@@ -1279,6 +1296,7 @@ static void test_readdir_spread(void)
     /* A delete during SPLITTING writes a tombstone on the hashed side; the
      * migrator must not bring the name back and readdir must not show it. */
     CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "s11", T0) == EFS_OK, "unlink");
+    check_row_lookup(kv, "s11");
     CHECK(list_dir(kv, EFS_ROOT_INO, 3, &l) == EFS_OK, "list");
     CHECK(l.n == 11 && !list_has(&l, "s11"), "tombstoned name hidden");
     while (efs_meta_dir_migrate_one(kv, EFS_ROOT_INO) == EFS_OK)
@@ -1292,6 +1310,7 @@ static void test_readdir_spread(void)
      * to record a lane would break. */
     for (k = 0; k < (int)(sizeof(page) / sizeof(page[0])); k++) {
         CHECK(list_dir(kv, EFS_ROOT_INO, page[k], &l) == EFS_OK, "list");
+        check_row_lookup(kv, "s00"); check_row_lookup(kv, "s11");
         CHECK(l.n == 11, "all when HASHED");
         CHECK(!list_dups(&l), "no duplicates when HASHED");
         CHECK(list_has(&l, "s00") && list_has(&l, "s10"), "specific names");
@@ -1744,9 +1763,13 @@ static void test_lookup_committed_unresolved_dentry(void)
               EFS_OK, "intent");
     CHECK(efs_meta_apply_lookup_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc,
                                    &dent) == EFS_ERR_NOT_FOUND, "undecided absent");
+    CHECK(efs_meta_apply_lookup_row_tx(kv, &root, "c", coord_fn, &cc, &dent) ==
+              EFS_ERR_NOT_FOUND, "batch undecided absent");
     cc.fail = 1;
     CHECK(efs_meta_apply_lookup_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc,
                                    &dent) == EFS_ERR_IO, "no authority = IO");
+    CHECK(efs_meta_apply_lookup_row_tx(kv, &root, "c", coord_fn, &cc, &dent) ==
+              EFS_ERR_IO, "batch no authority = IO");
     cc.fail = 0;
     coord = efs_txn_coordinator(&t, &p);
     CHECK(efs_txn_decide(kv, coord, &t, EFS_TXN_COMMIT) == EFS_OK, "decide");
@@ -1755,6 +1778,8 @@ static void test_lookup_committed_unresolved_dentry(void)
     CHECK(efs_meta_apply_lookup_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc,
                                    &dent) == EFS_OK && dent.ino == ino,
           "committed unresolved dentry visible");
+    CHECK(efs_meta_apply_lookup_row_tx(kv, &root, "c", coord_fn, &cc, &dent) ==
+              EFS_OK && dent.ino == ino, "batch committed unresolved visible");
     CHECK(efs_meta_apply_resolve_tx(kv, EFS_ROOT_INO, "c", coord_fn, &cc, &dent,
                                     &row) == EFS_OK && row.ino == ino,
           "resolve sees the row");

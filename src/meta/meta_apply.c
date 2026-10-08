@@ -698,7 +698,21 @@ static int lookup_at(struct efs_kv *kv, efs_ino_t parent, const char *name,
     }
     if (rc != EFS_OK)
         return rc;
-    if (prow.layout == EFS_META_LAYOUT_LOCAL)
+    return efs_meta_apply_lookup_row_tx(kv, &prow, name, coord, ctx, out);
+}
+
+int efs_meta_apply_lookup_row_tx(struct efs_kv *kv,
+                                 const struct efs_meta_row *parent_row,
+                                 const char *name, efs_txn_coord_fn coord,
+                                 void *ctx, struct efs_meta_dentry *out)
+{
+    if (!kv || !parent_row || !parent_row->ino || !name || !out ||
+        parent_row->layout > EFS_META_LAYOUT_HASHED)
+        return EFS_ERR_INVAL;
+    efs_ino_t parent = parent_row->ino;
+    uint32_t hsh;
+    int rc;
+    if (parent_row->layout == EFS_META_LAYOUT_LOCAL)
         return dent_get_tx(kv, efs_kv_inode_shard(parent), parent, name,
                            coord, ctx, out);
     hsh = efs_kv_dentry_shard(parent, name, EFS_META_LAYOUT_HASHED);
@@ -710,7 +724,7 @@ static int lookup_at(struct efs_kv *kv, efs_ino_t parent, const char *name,
     }
     if (rc != EFS_ERR_NOT_FOUND)
         return rc;
-    if (prow.layout == EFS_META_LAYOUT_HASHED)
+    if (parent_row->layout == EFS_META_LAYOUT_HASHED)
         return EFS_ERR_NOT_FOUND;
     return dent_get_tx(kv, efs_kv_inode_shard(parent), parent, name, coord,
                        ctx, out);
