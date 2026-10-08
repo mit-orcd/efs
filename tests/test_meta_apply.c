@@ -5538,10 +5538,54 @@ static void test_gc_last_close_before_resolve(void)
     }
 }
 
+
+static int (*create_batch_original)(void *,const struct efs_kv_item *,uint32_t);
+static int create_batch_fail,create_batch_calls,create_lease_items;
+static int create_batch_fault(void *ctx,const struct efs_kv_item *items,uint32_t n)
+{
+    create_batch_calls++;create_lease_items=0;
+    for(uint32_t i=0;i<n;i++)if(items[i].klen>=3 && items[i].key[2]==EFS_KV_KIND_LEASE)create_lease_items++;
+    if(create_batch_fail)return EFS_ERR_IO;
+    return create_batch_original(ctx,items,n);
+}
+static void test_create_initial_lease_atomic(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();
+    CHECK(kv!=NULL,"atomic create KV");
+    CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"atomic create init");
+    struct efs_kv_ops ops=*kv->ops;
+    create_batch_original=ops.batch;ops.batch=create_batch_fault;
+    const struct efs_kv_ops *original=kv->ops;kv->ops=&ops;
+    uint8_t uuid[EFS_OPID_UUID_LEN]={5};
+    struct efs_opid_req q={0};q.id.client_uuid[0]=3;q.id.session_epoch=1;q.id.seq=1;
+    efs_ino_t ino=0;struct efs_meta_dentry dent;struct efs_opid_reply reply;
+    create_batch_calls=0;create_batch_fail=1;
+    CHECK(efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,"atomic",0,-1,&q,uuid,1,&ino)==EFS_ERR_IO,
+          "failed combined CREATE reports error");
+    CHECK(create_batch_calls==1 && create_lease_items==1,"lease shares the sole atomic namespace batch");
+    CHECK(efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,"no name after failed combined batch");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&reply)==0,"failed batch records no successful replay verdict");
+    create_batch_fail=0;create_batch_calls=0;
+    CHECK(efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,"atomic",0,-1,&q,uuid,1,&ino)==EFS_OK && ino,
+          "combined create succeeds after retry");
+    CHECK(create_batch_calls==1 && create_lease_items==1 && efs_lease_any(kv,ino,1)==1,
+          "created inode already protected by atomic lease");
+    CHECK(efs_meta_apply_unlink(kv,1,"atomic",T0+1)==EFS_OK,"unlink held created inode");
+    struct efs_meta_row row;
+    CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK && row.nlink==0,"open-unlinked inode survives");
+    CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK && efs_lease_any(kv,ino,1)==0,"close initial lease");
+    create_batch_calls=0;efs_ino_t replay=0;
+    CHECK(efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,"atomic",0,-1,&q,uuid,1,&replay)==EFS_OK && replay==ino,
+          "CREATE replay returns original inode after unlink");
+    CHECK(!create_batch_calls && efs_lease_any(kv,ino,1)==0,"old replay does not recreate a closed lease");
+    kv->ops=original;efs_kv_destroy(kv);
+}
+
 int main(void)
 {
     test_gc_last_close_before_resolve();
     test_orphan_unlink();
+    test_create_initial_lease_atomic();
     test_create_lookup_unlink();
     test_xattr();
     test_mkdir();

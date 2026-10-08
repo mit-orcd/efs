@@ -1253,6 +1253,7 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                              efs_ino_t parent, uint32_t mode,
                              const char *name, const struct efs_opid_req *q,
                              int from_log, efs_ino_t want_ino, int want_layout,
+                             const uint8_t *lease_uuid, uint32_t lease_epoch,
                              efs_ino_t *out)
 {
     struct efs_meta_dentry dent;
@@ -1264,6 +1265,8 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     uint8_t v_opid[EFS_OPID_VAL_MAX];
     uint32_t kd = 0, ki = 0, ka = 0;
     struct efs_kv_item it[10];
+    uint8_t k_lease[EFS_KV_KEY_MAX], lease_one = 1;
+    uint32_t lease_len = 0;
     uint32_t n = 0, shard;
     efs_ino_t next = 0, ino;
     uint8_t k_aver[EFS_KV_KEY_MAX], v_aver[8];
@@ -1482,6 +1485,14 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         n += (uint32_t)rc;
     }
 
+    if (lease_uuid) {
+        rc = efs_kv_key_lease(shard, ino, row.generation, lease_uuid,
+                               lease_epoch, k_lease, &lease_len);
+        if (rc != EFS_OK) return rc;
+        it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_lease, lease_len,
+                                      &lease_one, 1};
+    }
+
     rc = meta_write_batch(kv, it, n);
     if (rc != EFS_OK)
         return rc;
@@ -1494,7 +1505,7 @@ int efs_meta_apply_create_file(struct efs_kv *kv, const struct efs_meta_attrs *a
                                efs_ino_t parent, uint32_t mode,
                                const char *name, efs_ino_t *out)
 {
-    return create_file_batch(kv, at, parent, mode, name, NULL, 0, 0, -1, out);
+    return create_file_batch(kv, at, parent, mode, name, NULL, 0, 0, -1, NULL, 0, out);
 }
 
 int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
@@ -1508,14 +1519,14 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
         return EFS_ERR_INVAL;
     memset(&q, 0, sizeof(q));
     q.id = *op;
-    return create_file_batch(kv, at, parent, mode, name, &q, 0, 0, -1, out);
+    return create_file_batch(kv, at, parent, mode, name, &q, 0, 0, -1, NULL, 0, out);
 }
 
 int efs_meta_apply_create_file_log(struct efs_kv *kv, const struct efs_meta_attrs *at,
                                    efs_ino_t parent, uint32_t mode,
                                    const char *name, efs_ino_t *out)
 {
-    return create_file_batch(kv, at, parent, mode, name, NULL, 1, 0, -1, out);
+    return create_file_batch(kv, at, parent, mode, name, NULL, 1, 0, -1, NULL, 0, out);
 }
 
 int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
@@ -1526,7 +1537,7 @@ int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
                                       efs_ino_t *out)
 {
     return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
-                             ino ? layout : -1, out);
+                             ino ? layout : -1, NULL, 0, out);
 }
 
 int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_attrs *at,
@@ -1537,7 +1548,21 @@ int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_a
     if (!ino)
         return EFS_ERR_INVAL;
     return create_file_batch(kv, at, parent, mode, name, NULL, 1, ino,
-                             (int)layout, out);
+                             (int)layout, NULL, 0, out);
+}
+
+/* Namespace, inode, replay verdict and initial lease share one KV batch.
+ * Replaying an already recorded op never recreates a subsequently closed lease. */
+int efs_meta_apply_create_file_log_lease(struct efs_kv *kv,
+                                         const struct efs_meta_attrs *at,
+                                         efs_ino_t parent, uint32_t mode,
+                                         const char *name, efs_ino_t ino,
+                                         int layout, const struct efs_opid_req *q,
+                                         const uint8_t *uuid, uint32_t epoch,
+                                         efs_ino_t *out)
+{
+    return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
+                             ino ? layout : -1, uuid, epoch, out);
 }
 
 static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,

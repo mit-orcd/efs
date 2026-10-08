@@ -1179,24 +1179,13 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             else
                 rc = efs_meta_apply_mkdir(h->kv, &at, parent, mode, name, &ino);
         } else {
-            rc = efs_meta_apply_create_file_log_op(h->kv, &at, parent, mode,
-                                                   name, want, lay, qp, &ino);
-        }
-    }
-    if (rc == EFS_OK && ino && !S_ISDIR(mode)) {
-        const uint8_t *uuid = cmd + HOST_CREATE_NAME_OFF + nl;
-        int zi, zero = 1;
-
-        for (zi = 0; zi < EFS_OPID_UUID_LEN; zi++) {
-            if (uuid[zi]) {
-                zero = 0;
-                break;
-            }
-        }
-        if (!zero) {
-            struct efs_meta_row row;
-            if (efs_meta_apply_get_inode(h->kv, ino, &row) == EFS_OK)
-                (void)efs_lease_open(h->kv, ino, row.generation, uuid, 1);
+            const uint8_t *uuid = cmd + HOST_CREATE_NAME_OFF + nl;
+            int nonzero = 0;
+            for (int i = 0; i < EFS_OPID_UUID_LEN; i++) nonzero |= uuid[i];
+            rc = efs_meta_apply_create_file_log_lease(h->kv, &at, parent, mode,
+                                                      name, want, lay, qp,
+                                                      nonzero ? uuid : NULL,
+                                                      1, &ino);
         }
     }
     if (rc != EFS_OK) {
@@ -8676,7 +8665,8 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const char *name, uint32_t mode,
                                   const struct efs_meta_attrs *at,
                                   struct efs_meta_row *prow, uint32_t dsh,
-                                  const struct efs_opid_req *q, int *hint);
+                                  const struct efs_opid_req *q, uint64_t hold,
+                                  int *hint);
 
 /* I16 leader-side probe: the op's window lives on `shard` (the dentry
  * shard of the named entry), which this host must hold. 1 = replay, reply
@@ -8829,7 +8819,7 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         pg != dg) {
         hashed = 1;
         rc = host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh, q,
-                                    &hint);
+                                    hold, &hint);
     } else if (rc == EFS_OK) {
         efs_ino_t next = 0;
 
@@ -8858,15 +8848,6 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     }
     if (rc == EFS_OK)
         rc = efs_meta_apply_get_inode(h->kv, dent.ino, &prow);
-    if (rc == EFS_OK && hashed && hold) {
-        uint8_t lcmd[HOST_CMD_MAX], uuid[EFS_OPID_UUID_LEN];
-        uint32_t llen = 0;
-        uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(dent.ino));
-
-        host_hold_uuid(hold, uuid);
-        pack_lease_cmd(lcmd, &llen, 1, dent.ino, prow.generation, uuid, 1);
-        rc = host_propose_wait(h, ig, lcmd, llen, &hint);
-    }
     if (rc == EFS_OK)
         host_stat_from_row(&prow, &st);
     if (dirop_fail_on(rc))
@@ -9766,7 +9747,8 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const char *name, uint32_t mode,
                                   const struct efs_meta_attrs *at,
                                   struct efs_meta_row *prow, uint32_t dsh,
-                                  const struct efs_opid_req *q, int *hint)
+                                  const struct efs_opid_req *q, uint64_t hold,
+                                  int *hint)
 {
     struct efs_meta_row crow;
     struct efs_meta_dentry dent;
@@ -9775,6 +9757,8 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     struct efs_txn_ino_delta pd;
     uint8_t k_dent[EFS_KV_KEY_MAX], k_pino[EFS_KV_KEY_MAX], k_cino[EFS_KV_KEY_MAX];
     uint8_t k_alloc[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
+    uint8_t k_lease[EFS_KV_KEY_MAX], lease_uuid[EFS_OPID_UUID_LEN], lease_one = 1;
+    uint32_t lease_len = 0;
     uint8_t v_dent[EFS_META_DENT_BYTES];
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
@@ -9835,6 +9819,11 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
         rc = efs_txn_ver_get(h->kv, k_alloc, ka, &aver);
     if (rc == EFS_OK)
         rc = efs_txn_ver_get(h->kv, k_dent, kd, &dver);
+    if (rc == EFS_OK && hold) {
+        host_hold_uuid(hold, lease_uuid);
+        rc = efs_kv_key_lease(dsh, ino, crow.generation, lease_uuid, 1,
+                               k_lease, &lease_len);
+    }
     if (rc == EFS_OK) {
         memset(&parts, 0, sizeof(parts));
         parts.n = 2;
@@ -9869,6 +9858,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                 if (rc == EFS_OK)
                     rc = host_prep_lane_stamp(h, dsh, &t, &parts, prow, name,
                                               at->now, NULL, hint);
+                if (rc == EFS_OK && hold)
+                    rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_lease,
+                                   lease_len, 0, EFS_TXN_PUT, &lease_one, 1, hint);
                 if (rc == EFS_OK)
                     rc = host_prep_opid(h, dsh, &t, &parts, q, ino, 0, NULL,
                                         hint);

@@ -31,6 +31,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--create-lease',action='store_true',help='initial CREATE lease atomicity on local and first-use cross-group hashed lanes, cold replay/unlink/close')
 p.add_argument('--wal-tail-recovery',action='store_true',help='repair private WAL invalid tails, append acknowledged data, then verify another cold restart')
 p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DSYNC callback failure retains bytes for later fsync recovery')
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
@@ -341,6 +342,32 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.create_lease:
+        helper=work/'create-lease'
+        run(['cc','-I'+str(source/'include'),source/'tests/live/create_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
+        cases=[]
+        for number,hashed in enumerate((False,True)):
+            folder=mount/('lease-hashed' if hashed else 'lease-local');folder.mkdir()
+            parent=folder.stat().st_ino
+            if hashed:
+                for operation in ('begin','finish'):
+                    for node in range(4):
+                        result=subprocess.run([str(source/'efs-mgmt'),'raft-dir',f'127.0.0.1:{a.port+node}',str(parent),operation],capture_output=True,text=True,timeout=30,env=env)
+                        if result.returncode==0 and 'status=0' in result.stdout:break
+                    else:raise AssertionError('CREATE lease spread failed: '+result.stdout+result.stderr)
+            owner=93000000+os.getpid()*2+number
+            output=run([helper,str(a.port),str(parent),str(owner),'0'],capture_output=True,text=True).stdout.split()
+            assert len(output)==3,output
+            cases.append({'parent':parent,'owner':owner,'ino':int(output[0]),'name':output[1],'hashed_shard':int(output[2]),'hashed':hashed})
+        time.sleep(1)
+        unmount();stop(crash=True);start();mount_client()
+        for case in cases:
+            run([helper,str(a.port),str(case['parent']),str(case['owner']),str(case['ino'])])
+        # The helper used inode RPCs; remount before checking cached directories.
+        unmount();mount_client()
+        for folder in ('lease-local','lease-hashed'):(mount/folder).rmdir()
+        (work/'create-lease.json').write_text(json.dumps(cases,indent=2))
+        print('atomic CREATE lease local/first-use cross-group cold replay and final close PASS',flush=True)
     if a.append_sync_boundary or a.sync_writes:
         peer_log=open(work/'sync-peer.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)

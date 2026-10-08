@@ -82,3 +82,25 @@ Controlled queued-request cost: serial 6382–6579 durable entries/s versus
 These are per-group protocol measurements, not filesystem throughput claims.
 Mixed-group sustained and idle-latency measurements remain before W93 closure.
 [Evidence](../../results/measure/20261008-w93-w96-implementation/w93-batching/README.md).
+
+## W94 atomic server CREATE/lease
+
+Ordinary CREATE now puts the initial lease into the same atomic KV batch as
+namespace, inode, allocator and replay verdict. It no longer ignores a separate
+lease-write failure. First-use cross-group hashed CREATE prepares the lease in
+the namespace transaction, eliminating its post-COMMIT lease proposal and the
+replay hole. Old replay does not recreate a lease that was already closed.
+
+AMD metadata/session tests pass. Injected combined-batch failure leaves no name
+or successful replay verdict. Private live `gc-direct-k1krefwt` creates held
+files on ordinary and first-use cross-group hashed paths, crashes all four
+daemons before adoption, retries the identical CREATE identity, unlinks while
+held and verifies nlink-zero inode lifetime until final close and removal.
+Full POSIX 216/0/1, peer 64/64 and GC/cold recovery pass; service restored.
+[Evidence](../../results/measure/20261008-w93-w96-implementation/w94-atomic-server/live.log).
+
+W94 remains open for client adoption ownership and ambiguous-result cleanup.
+FUSE still uses separate HOLD; enabling the old flag now would retain the
+last-close-before-adoption race. Production legacy mount sessions also lack
+durable revocation integration, so new orphanable CREATE claims must not be
+introduced as a shortcut.

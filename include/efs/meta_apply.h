@@ -535,6 +535,14 @@ int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
                                       const char *name, efs_ino_t ino,
                                       int layout, const struct efs_opid_req *q,
                                       efs_ino_t *out);
+/* Optional initial lease is part of the same atomic CREATE/op-id batch. */
+int efs_meta_apply_create_file_log_lease(struct efs_kv *kv,
+                                         const struct efs_meta_attrs *at,
+                                         efs_ino_t parent, uint32_t mode,
+                                         const char *name, efs_ino_t ino,
+                                         int layout, const struct efs_opid_req *q,
+                                         const uint8_t *uuid, uint32_t epoch,
+                                         efs_ino_t *out);
 int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *at,
                                 efs_ino_t parent, uint32_t mode, const char *name,
                                 efs_ino_t ino, int layout,
