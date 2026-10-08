@@ -6,11 +6,19 @@ query result. The command is scoped to the directory containing .efs, even
 when invoked through a symlink or from another working directory. Expiry is
 unavailable until the server implements and enables the expiry policy.
 """
+import sys
+
+# The synthetic command directory contains no Python dependencies. Removing
+# its automatic import-search entry avoids a remote negative lookup for every
+# standard-library import (and prevents user files from shadowing dependencies).
+# Leave embedding/importing applications' search paths unchanged.
+if __name__ == "__main__" and sys.path:
+    del sys.path[0]
+
 import argparse
 import errno
 import json
 import os
-import sys
 import time
 
 MAX_OUTPUT = 16 << 20

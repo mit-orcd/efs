@@ -61,6 +61,14 @@ class Commands(unittest.TestCase):
         literal = ''.join(json.loads(line.rstrip(';')) for line in lines)
         self.assertEqual(literal, SOURCE.read_text())
 
+    def test_command_directory_cannot_shadow_standard_library(self):
+        self.result("stats")
+        (self.directory / "json.py").write_text("raise RuntimeError('shadowed json')\n")
+        (self.directory / "argparse.py").write_text("raise RuntimeError('shadowed argparse')\n")
+        p = self.run_command("stats", "--json")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads(p.stdout)["stats"]["tree_bytes"], 7)
+
     def test_source_read_never_queries(self):
         # No query files exist; simply reading source succeeds and has no side effects.
         self.assertEqual((self.directory / "find").read_bytes(), SOURCE.read_bytes())
