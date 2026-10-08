@@ -1,0 +1,103 @@
+Evidence directory: /data1/efs/gc-direct-7k7efidz
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=12984854846522885535
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544045 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544089 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544133 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544205 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544413 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544455 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544497 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544560 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544747 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544789 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544831 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 544961 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 545082 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 545191 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 545261 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 545436 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+opposite directory moves preserve acyclic ancestry and make progress PASS
+twenty-ancestor rename preserves all guards and rejects cycle PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 545517 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 545782 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+replacement inode: source=676 old=1044 observed=676
+node 1 authoritative replacement inode PASS
+node 2 authoritative replacement inode PASS
+node 3 authoritative replacement inode PASS
+node 4 authoritative replacement inode PASS
+sixteen used-lane empty HASHED rmdir and replacement PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 546180 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+namespace boundary prior GC drained PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 546453 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-7k7efidz/mnt
+Retiring drained efs-fuse PID 547779 for /data1/efs/gc-direct-7k7efidz/mnt
+Unmounted /data1/efs/gc-direct-7k7efidz/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS

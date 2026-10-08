@@ -3199,6 +3199,18 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 
 ## W84 · Namespace guard bounds reject supported deep/spread-directory work
 
+**Envelope follow-up (Oct 7):** the shared transaction capacity is now 144:
+64 used-directory lanes plus 64 ancestry shards and fixed namespace participants.
+PREPARE command buffers derive from participant/key/payload bounds rather than
+512 bytes; lengths are validated before encoding. The previous post-encoding
+size check could detect overflow only after the stack buffer was overwritten.
+The one-byte count encoding is unchanged, and existing <=64-participant records
+remain readable. All participating servers must be upgraded together before
+larger transactions are admitted; downgrade while larger intents exist is unsafe.
+See [acceptance ledger](../status/w84-envelope-20261007.md). W84 remains open:
+the independent 64-hop ancestry limit and leader-failure acceptance remain.
+
+
 **Acceptance update (Oct 7, three-package round):** cycle/error distinction
 and one shared eight-second rename retry budget are repaired. Exact guard and
 participant helper boundaries pass; NUC direct maximum-envelope refusal and

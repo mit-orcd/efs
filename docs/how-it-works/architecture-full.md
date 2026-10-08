@@ -1581,7 +1581,7 @@ positions do not assign an execution order or override the active handoff.
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
-| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | 64-participant envelope and cross-group HASHED unlink repair; NUC boundary/refusal/restart gates and exact helper limits pass; shared 8-second rename budget; full 64-lane support and boundary leader-failure acceptance remain open | [evidence and gate](#w84) |
+| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | 64-participant envelope and cross-group HASHED unlink repair; NUC boundary/refusal/restart gates and exact helper limits pass; shared 8-second rename budget; 144-participant envelope and full 64-lane removal/replacement implemented; 64-hop ancestry limit and boundary leader-failure acceptance remain open | [evidence and gate](#w84) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine committed `b3a11877`, staged for integration; production admission, sessions and all-member collection not active | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
@@ -5137,6 +5137,18 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 <a id="w84"></a>
 
 ### W84 · Namespace guard bounds reject supported deep/spread-directory work
+
+**Envelope follow-up (Oct 7):** the shared transaction capacity is now 144:
+64 used-directory lanes plus 64 ancestry shards and fixed namespace participants.
+PREPARE command buffers derive from participant/key/payload bounds rather than
+512 bytes; lengths are validated before encoding. The previous post-encoding
+size check could detect overflow only after the stack buffer was overwritten.
+The one-byte count encoding is unchanged, and existing <=64-participant records
+remain readable. All participating servers must be upgraded together before
+larger transactions are admitted; downgrade while larger intents exist is unsafe.
+See [acceptance ledger](../status/w84-envelope-20261007.md). W84 remains open:
+the independent 64-hop ancestry limit and leader-failure acceptance remain.
+
 
 **Acceptance update (Oct 7, three-package round):** cycle/error distinction
 and one shared eight-second rename retry budget are repaired. Exact guard and

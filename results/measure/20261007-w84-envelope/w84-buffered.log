@@ -1,0 +1,91 @@
+Evidence directory: /data1/efs/gc-buffered-67lehvxr
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=1426236306113240199
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 545594 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 545799 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 545847 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 545890 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546042 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546216 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546260 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546308 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546560 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546609 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546651 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546693 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546901 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546943 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 546985 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 547090 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+opposite directory moves preserve acyclic ancestry and make progress PASS
+twenty-ancestor rename preserves all guards and rejects cycle PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 547235 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 547452 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS
+replacement inode: source=18 old=1570 observed=18
+node 1 authoritative replacement inode PASS
+node 2 authoritative replacement inode PASS
+node 3 authoritative replacement inode PASS
+node 4 authoritative replacement inode PASS
+sixteen used-lane empty HASHED rmdir and replacement PASS
+Unmounting /data1/efs/gc-buffered-67lehvxr/mnt
+Retiring drained efs-fuse PID 547725 for /data1/efs/gc-buffered-67lehvxr/mnt
+Unmounted /data1/efs/gc-buffered-67lehvxr/mnt
+client serving PASS

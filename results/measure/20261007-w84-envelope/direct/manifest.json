@@ -1,0 +1,61 @@
+{
+  "mode": "direct",
+  "roots": [
+    "/data1/efs/gc-direct-aenhqlqz/n1",
+    "/data1/efs/gc-direct-aenhqlqz/n2",
+    "/data2/efs/gc-direct-uvrj3_b0/n3",
+    "/data2/efs/gc-direct-uvrj3_b0/n4"
+  ],
+  "real_roots": [
+    "/data1/efs/gc-direct-aenhqlqz/n1",
+    "/data1/efs/gc-direct-aenhqlqz/n2",
+    "/home/efs/additional-work-dir/gc-direct-uvrj3_b0/n3",
+    "/home/efs/additional-work-dir/gc-direct-uvrj3_b0/n4"
+  ],
+  "port": 24390,
+  "gates": {
+    "mode": "direct",
+    "root": [],
+    "posix": true,
+    "integrity": false,
+    "namespace": false,
+    "namespace_boundary": true,
+    "namespace_cycles": true,
+    "mount_label": "default",
+    "workers": false,
+    "pressure": false,
+    "production_budgets": false,
+    "drain_pressure": false,
+    "memory_limit_bytes": null,
+    "publication_pressure": false,
+    "namespace_max": true,
+    "opid": false,
+    "opid_restart": false,
+    "fold_audit": false,
+    "sequential": false,
+    "memo": false,
+    "rename_cache": false,
+    "mixed_reads": false,
+    "allocation": false,
+    "compactor_pressure": false,
+    "du_audit": false,
+    "lookup_barrier": false,
+    "storage_roots": 1,
+    "put_reply_fault": false,
+    "opid_failover": false,
+    "report_audit": false,
+    "server_binary": null,
+    "client_binary": null,
+    "worker_fault": null,
+    "idle_seconds": 0,
+    "full_node": false,
+    "port": 24390
+  },
+  "source_tree_sha256": "bf909f7f92201f943780f933be23d175da36097a3754169758d3edfc74017caf",
+  "test_script_sha256": "f2adb99ddedc748c7a29198ae77e172414057eb94813de66810ef2365db0ea95",
+  "binary_sha256": {
+    "efsd": "72323bd118e0a58d2686584034ec1ef9d49ffdecaa4e5d027199844b54534698",
+    "efs-fuse": "231dd97a4eedf1bac080a4b13683a307d06eff933d06491b778115f3efe4d670",
+    "efs-mgmt": "281328de660ed4b49cb5ee0df00eeb72801d8222b5f93110987b75a66b7356f6"
+  }
+}

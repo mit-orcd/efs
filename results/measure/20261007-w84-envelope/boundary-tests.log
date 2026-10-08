@@ -1,0 +1,3 @@
+PREPARE maximum participant/key/CAS payload canaries PASS
+Transaction parts: exact configured-capacity participant wire, canaries, short output, invalid counts and null pointers PASS
+namespace: exact 64 same-shard guards, 65 BUSY, observed cycles INVAL, ReadIndex IO, participant boundary PASS

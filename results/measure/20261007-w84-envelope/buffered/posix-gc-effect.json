@@ -1,0 +1,14 @@
+{
+  "before": {
+    "passes": 61,
+    "removed_fragments": 270,
+    "reclaimed_payload_bytes": 17694720,
+    "data_usage_bytes": 0
+  },
+  "after": {
+    "passes": 516,
+    "removed_fragments": 22167,
+    "reclaimed_payload_bytes": 1452736512,
+    "data_usage_bytes": 0
+  }
+}

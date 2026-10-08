@@ -1,0 +1,22 @@
+{
+  "implementation_commit": "51c8bf12",
+  "direct_exit": 0,
+  "buffered_exit": 0,
+  "linux_make_test_exit": 0,
+  "direct": {
+    "posix_pass": 216,
+    "posix_skip": 1,
+    "posix_fail": 0,
+    "peer_pass": 64,
+    "peer_fail": 0
+  },
+  "buffered": {
+    "posix_pass": 216,
+    "posix_skip": 1,
+    "posix_fail": 0,
+    "peer_pass": 64,
+    "peer_fail": 0
+  },
+  "w84_closed": false,
+  "initial_runs": "interrupted, not acceptance"
+}
