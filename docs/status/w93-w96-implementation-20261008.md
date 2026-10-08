@@ -165,3 +165,22 @@ The full Linux regression suite also passes in an isolated generated-doc tree.
 
 This fixes a lifecycle leak; it does not enable CREATE lease piggybacking.
 Client adoption and ambiguous CREATE/lease-close recovery remain open.
+
+## W93 durable ACK ordering and W95 production churn
+
+Follower cross-request ACKs now follow successful log durability without waiting
+for the whole cohort's state-machine/KV apply. Inbox processing still completes
+apply before returning. A real-disk child exits at the last ACK before any apply;
+all acknowledged records and the other group's held bytes survive cold reopen.
+Focused Raft/disk tests, local ASan/UBSan and the full Linux suite pass.
+Full AMD direct/TCP `gc-direct-_moyfi4u` passes POSIX 216/0/1, peer 64/64,
+rejected descriptor replies, append/replay/fsync/shutdown and repeated WAL/GC
+cold recovery. Installed service restored. Mixed-load performance acceptance
+for this ordering is being measured separately.
+
+W95's new production churn gate fsyncs 300 create/overwrite/delete/recreate
+generations across 100 files, payloads 1/17/128/512/65536 bytes. It verifies
+every final generation after abrupt private-daemon restart, then proves
+physical deletion and queue drain. This is functional correctness evidence,
+not an independent packed-index crash test or a power-loss claim.
+[Evidence](../../results/measure/20261008-w93-w96-implementation/w95-live-churn/live.log).

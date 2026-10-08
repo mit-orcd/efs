@@ -655,6 +655,7 @@ static void test_raft_on_disk_store(void)
 
 static struct efs_raft_disk *recv_disk;
 static unsigned recv_acks, recv_applies;
+static int recv_crash_before_apply;
 static int durable_recv_send(void *ctx,const struct efs_raft_msg *m)
 {
     (void)ctx;
@@ -663,6 +664,11 @@ static int durable_recv_send(void *ctx,const struct efs_raft_msg *m)
                                                    efs_raft_disk_synced_bytes(recv_disk));
         CHECK(m->match_index<=covered,"follower ACK covered despite another group's shared hold");
         recv_acks++;
+        if (recv_crash_before_apply && recv_acks==3) {
+            CHECK(recv_applies==0,"ACK crash precedes all state-machine apply");
+            CHECK(efs_raft_disk_sync_depth(recv_disk)==1,"ACK crash retains unrelated hold ownership");
+            _exit(failures?1:0);
+        }
     }
     return EFS_OK;
 }
@@ -674,8 +680,9 @@ static int durable_recv_apply(void *ctx,uint64_t index,uint64_t term,
                         efs_raft_disk_synced_bytes(recv_disk)),"follower applies durable bytes");
     recv_applies++;return EFS_OK;
 }
-static void test_recv_batch_crash(void)
+static void test_recv_batch_crash(int before_apply)
 {
+    recv_crash_before_apply=before_apply;
     pid_t child=fork();CHECK(child>=0,"fork receive crash");
     if(child==0) {
         recv_disk=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);
@@ -720,7 +727,8 @@ int main(void)
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-raftstore-test-%d", (int)getpid());
     rmtree(g_dir);
 
-    test_recv_batch_crash();
+    test_recv_batch_crash(0);
+    test_recv_batch_crash(1);
     test_matches_mem();
     test_hold_covers_batch();
     test_reopen();

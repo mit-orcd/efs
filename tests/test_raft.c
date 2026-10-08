@@ -1414,7 +1414,7 @@ static void test_ae_full_window_not_resent_per_propose(void)
 /* Durable follower request batching: callbacks must never see pending bytes. */
 static struct {
     struct efs_raft_store original;
-    unsigned depth, barriers, replies, applies;
+    unsigned depth, barriers, replies, applies, first_ack_applies;
     int fail_end, fail_append, fail_hard, fail_truncate;
     uint64_t durable, read_context;
 } recv_test;
@@ -1454,6 +1454,7 @@ static int recv_test_send(void *ctx,const struct efs_raft_msg *m)
     (void)ctx;
     CHECK(!recv_test.depth,"no ACK before persistence");
     CHECK(!m->success || m->match_index<=recv_test.durable,"ACK covers durable bytes only");
+    if (!recv_test.replies) recv_test.first_ack_applies=recv_test.applies;
     recv_test.replies++;
     recv_test.read_context=m->last_log_index;
     return EFS_OK;
@@ -1511,6 +1512,8 @@ static void test_recv_batch(void)
         } else {
             CHECK(rc==EFS_OK && recv_test.barriers==1 && recv_test.replies==3 && recv_test.applies==3,
                   "three requests share one durable boundary");
+            CHECK(recv_test.first_ack_applies==0,
+                  "durable ACK is not held behind the cohort state-machine apply");
             CHECK(recv_test.read_context==12,"read context preserved");
             unsigned barriers=recv_test.barriers;
             /* Duplicate, then a new append, then a higher-term heartbeat:

@@ -1739,9 +1739,13 @@ static int recv_batch_finish(struct efs_raft *r, int prior)
         fence_storage(r);
         return rc != EFS_OK ? rc : prior;
     }
-    rc = apply_committed(r);
-    if (rc != EFS_OK) return rc;
+    /* AppendEntries ACK proves log durability, not completion of local
+     * state-machine apply. Holding every ACK behind the whole cohort's KV
+     * apply adds unrelated metadata persistence to the leader's quorum path.
+     * Preserve inbox order: apply still finishes before recv_batch returns. */
+    rc = EFS_OK;
     for (uint32_t i = 0; i < q->n; i++) {
+        if (r->storage_failed) return EFS_ERR_IO;
         struct efs_raft_msg reply;
         memset(&reply, 0, sizeof(reply));
         reply.type = EFS_RAFT_MSG_AE_REP;
@@ -1757,7 +1761,9 @@ static int recv_batch_finish(struct efs_raft *r, int prior)
         int sent = r->send(r->net, &reply);
         if (rc == EFS_OK) rc = sent;
     }
-    return rc;
+    if (r->storage_failed) return EFS_ERR_IO;
+    int applied = apply_committed(r);
+    return applied != EFS_OK ? applied : rc;
 }
 
 int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
