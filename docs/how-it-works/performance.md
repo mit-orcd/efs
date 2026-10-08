@@ -533,3 +533,8 @@ The [W90 storage churn guide](storage-churn.md) documents 1 GiB container versus
 small-file comparisons, matched persistence, bounded 50/80/95-percent model
 occupancy, verification and result interpretation. This is an independent
 benchmark with a volatile index, not production GC or a recovery acceptance gate.
+
+The independent [shared-container range suite](storage-ranges.md) separates
+disjoint lanes, concurrent immutable reads, locked hot-record updates and unsafe
+diagnostics. It reports lock and I/O/sync delays; it does not establish a durable
+or distributed storage protocol.

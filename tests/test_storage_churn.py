@@ -53,6 +53,48 @@ class ChurnTests(unittest.TestCase):
             self.assertEqual(list(Path(root).iterdir()),[])
             self.case(root,ok=False,extra=('--occupancy','100'))
 
+    def test_deferred_file_body_flushes(self):
+        for direct in [False,True]:
+            with self.subTest(direct=direct),tempfile.TemporaryDirectory() as root:
+                r=self.case(root,'files',direct=direct,qd=2,extra=('--file-batch-sync',))
+                self.assertEqual(r['file_batch_sync'],'1')
+                self.case(root,'files',persist='none',extra=('--file-batch-sync',),ok=False)
+                self.case(root,'punch',extra=('--file-batch-sync',),ok=False)
+
+    def test_timed_budget_and_extent_snapshot(self):
+        with tempfile.TemporaryDirectory() as root:
+            args=[str(ROOT/'efs-bench'),'--bench','churn','--storage',root,'--layout','punch',
+                  '--capacity-bytes','1048576','--container-bytes','262144','--payload-size','4096',
+                  '--seconds','1','--steps','10000000','--warmup','0']
+            p=subprocess.run(args,text=True,capture_output=True,timeout=15)
+            self.assertEqual(p.returncode,0,p.stdout+p.stderr)
+            f=dict(re.findall(r'(\w+)=([^\s]+)',next(s for s in p.stdout.splitlines() if s.startswith('BENCH_OK '))))
+            self.assertGreaterEqual(float(f['wall_s']),1)
+            self.assertIn(f['extents_available'],['0','1'])
+            if f['extents_available']=='1':self.assertGreater(int(f['extents_after']),0)
+            p=subprocess.run([*args,'--steps','1'],text=True,capture_output=True,timeout=15)
+            self.assertNotEqual(p.returncode,0)
+            self.assertEqual(list(Path(root).iterdir()),[])
+
+    def test_missing_fiemap_is_unavailable_not_zero_fragmentation(self):
+        code=r'''#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <errno.h>
+#include <linux/fs.h>
+#include <linux/fiemap.h>
+#include <stdarg.h>
+#include <sys/ioctl.h>
+int ioctl(int fd,unsigned long request,...){
+ va_list args;va_start(args,request);void *arg=va_arg(args,void*);va_end(args);
+ if(request==FS_IOC_FIEMAP){errno=ENOTTY;return -1;}
+ int(*f)(int,unsigned long,...)=dlsym(RTLD_NEXT,"ioctl");return f(fd,request,arg);
+}'''
+        with tempfile.TemporaryDirectory() as d,tempfile.TemporaryDirectory() as root:
+            p=Path(d);(p/'fault.c').write_text(code)
+            subprocess.run(['cc','-shared','-fPIC',str(p/'fault.c'),'-ldl','-o',str(p/'fault.so')],check=True)
+            r=self.case(root,'punch',env=dict(os.environ,LD_PRELOAD=str(p/'fault.so')))
+            self.assertEqual(r['extents_available'],'0');self.assertEqual(r['extents_after'],'0')
+
     def test_io_and_sync_failures_do_not_pass(self):
         source=r'''
 #define _GNU_SOURCE

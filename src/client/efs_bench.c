@@ -4,6 +4,7 @@
 #include "../bench/io_bench.h"
 #include "../bench/storage_principles.h"
 #include "../bench/storage_churn.h"
+#include "../bench/storage_ranges.h"
 #include "efs/checksum.h"
 #include "efs/common.h"
 #include "efs/metadata.h"
@@ -62,6 +63,7 @@ static void usage(const char *prog)
             "  Local: %s --bench data --storage <scratch> [--time seconds]\n"
             "         %s --bench meta --meta-storage <scratch> [--time seconds]\n"
             "         --bench data|meta --help for local options (no cluster).\n"
+            "  Ranges: --bench ranges --help (shared-container contention).\n"
             "  Churn: --bench churn --help (bounded mixed storage experiments).\n"
             "  Principles: --bench principles --help (independent EFS-shaped I/O).\n"
             "              efs-bench.sh --storage-principles --storage-root <scratch>\n"
@@ -1182,6 +1184,8 @@ int main(int argc, char **argv)
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--bench")) {
+            if (i + 1 < argc && !strcmp(argv[i + 1], "ranges"))
+                return efs_bench_ranges_main(argc, argv);
             if (i + 1 < argc && !strcmp(argv[i + 1], "churn"))
                 return efs_bench_churn_main(argc, argv);
             if (i + 1 < argc && !strcmp(argv[i + 1], "principles"))

@@ -3469,3 +3469,13 @@ over files and expose heavy compaction copying/pauses. The 64 KiB gap is smaller
 Private-directory filestreams improved throughput in three runs but increased
 write p99; preallocation reserved the additional spare capacity. These are
 independent model results, not production GC or durability acceptance.
+
+
+**Oct 8 follow-up:** timed 64 KiB churn at 1/4/8 workers, final FIEMAP accounting,
+and bounded deferred file-body flush scheduling extend the baseline. New shared
+1 GiB range tests distinguish safe expected-version verification from unsafe
+mixed-record diagnostics, with separate syscall/lock/flush maxima. See the
+[status checkpoint](../status/bench-scaling-ranges-20261008.md) and
+[measurement ledger](../../results/measure/20261008-w90-scaling-ranges/README.md).
+The improved file baseline must supersede immediate-body reference numbers in
+layout decisions. Recovery/authority and broader lifetime gates remain open.

@@ -23,6 +23,18 @@ class MatrixTests(unittest.TestCase):
             self.assertEqual('--preallocate' in c['args'],c['layout']!='files')
             self.assertEqual('--extent-hint' in c['args'],c['layout']!='files')
             self.assertIn('--filestreams',c['args'])
+    def test_file_body_batching_only_applies_to_files(self):
+        a=m.parser().parse_args(['--storage-root','/scratch','--file-batch-sync'])
+        for c in m.cases(a):self.assertEqual('--file-batch-sync' in c['args'],c['layout']=='files')
+        a.persist='each'
+        with self.assertRaises(ValueError):list(m.cases(a))
+
+    def test_timed_run_has_hard_cap(self):
+        a=m.parser().parse_args(["--storage-root","/scratch","--seconds","120"])
+        for c in m.cases(a):
+            args=c["args"];self.assertEqual(args[args.index("--steps")+1],"10000000")
+            self.assertEqual(args[args.index("--seconds")+1],"120")
+
     def test_invalid_model_is_rejected(self):
         for args in [['--occupancies','100'],['--capacity-per-worker','1000'],['--payload-sizes','1000'],['--read-percent','0'],['--steps','0'],['--layouts','production']]:
             with self.subTest(args=args),self.assertRaises(ValueError):

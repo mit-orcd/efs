@@ -9,6 +9,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <linux/fs.h>
+#include <linux/fiemap.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -24,8 +25,8 @@
 struct config {
     const char *root, *layout, *persist;
     uint64_t capacity, container, hint;
-    unsigned payload, stride, occupancy, qd, steps, warmup, batch, reads;
-    int direct, preallocate, filestreams;
+    unsigned payload, stride, occupancy, qd, steps, warmup, batch, reads, seconds;
+    int direct, preallocate, filestreams, file_batch_sync;
 };
 struct object { uint64_t generation; unsigned location; uint8_t digest[32]; };
 struct segment { int fd, dirty; unsigned live; char path[4096]; };
@@ -41,9 +42,10 @@ struct worker {
     /* slot: 0 free, 1 live, 2 retired but still physically allocated. */
     uint8_t *state, *buf, *verify;
     struct segment *segments;
+    unsigned *pending, pending_count;
     int dfd, owns_dir, error;
     char dir[4096];
-    uint64_t rng, dead, before, after, start_ns, end_ns;
+    uint64_t rng, dead, before, after, start_ns, end_ns, extents_after;
     struct sample stats;
 };
 struct gate { pthread_mutex_t mu; pthread_cond_t cv; unsigned ready; int go; };
@@ -125,9 +127,17 @@ static int flush_worker(struct worker *w,struct sample *s)
             if(sync_file(w->segments[i].fd))return -1;
             w->segments[i].dirty=0; s->syncs++;
         }
-    } else {
-        /* File bodies are individually fsynced before closing. batching only
-         * amortizes the parent directory sync; it never skips body durability. */
+    } else if(w->c->file_batch_sync) {
+        /* Deferring per-file fsyncs lets XFS/device barriers coalesce naturally.
+         * A location retired within this unacknowledged batch needs no flush.
+         * Reused locations are flushed at their current version, possibly twice. */
+        for(unsigned i=0;i<w->pending_count;i++) {
+            unsigned loc=w->pending[i];if(w->state[loc]!=1)continue;
+            int fd=open_location(w,loc,0);if(fd<0)return -1;
+            int rc=sync_file(fd);if(close_location(w,fd,rc))return -1;
+            s->syncs++;
+        }
+        w->pending_count=0;
     }
     if(sync_file(w->dfd))return -1;
     s->syncs++; return 0;
@@ -252,7 +262,9 @@ static int write_object(struct worker *w,unsigned object,int setup,struct sample
     make_record(w,object,gen);
     int fd=open_location(w,loc,1);if(fd<0)return -1;
     int rc=record_io(fd,w->buf,w->c->stride,offset(w,loc),0);
-    if(!rc && !container_mode(w) && (setup||strcmp(w->c->persist,"none"))) {
+    /* Initial bodies are flushed as a complete live set in prepare(), after
+     * warmup. Avoid forcing the XFS journal separately for every setup file. */
+    if(!rc && !container_mode(w) && !setup && strcmp(w->c->persist,"none") && !w->c->file_batch_sync) {
         rc=sync_file(fd);s->syncs++;
     }
     if(close_location(w,fd,rc))return -1;
@@ -264,6 +276,10 @@ static int write_object(struct worker *w,unsigned object,int setup,struct sample
     unsigned old=o->location;
     w->state[loc]=1;o->location=loc;o->generation=gen;
     memcpy(o->digest,w->buf+w->c->payload,32);
+    if(!setup && w->c->file_batch_sync) {
+        if(w->pending_count>=w->c->batch){errno=EOVERFLOW;return -1;}
+        w->pending[w->pending_count++]=loc;
+    }
     if(!setup && retire_location(w,old,s))return -1;
     s->writes++;
     if(!setup && strcmp(w->c->persist,"none") &&
@@ -272,7 +288,9 @@ static int write_object(struct worker *w,unsigned object,int setup,struct sample
 }
 static int cycles(struct worker *w,unsigned count,struct sample *s)
 {
+    uint64_t until=(s==&w->stats && w->c->seconds)?now_ns()+(uint64_t)w->c->seconds*1000000000:0;
     for(unsigned i=0;i<count;i++) {
+        if(until && now_ns()>=until)break;
         unsigned object=(unsigned)(random_next(w)%w->live);
         int reading=random_next(w)%100<w->c->reads;
         uint64_t start=now_ns();
@@ -331,6 +349,7 @@ static int prepare(struct worker *w)
         if(ioctl(w->dfd,FS_IOC_FSSETXATTR,&a))return -1;
     }
     w->objects=calloc(w->live,sizeof(*w->objects));w->state=calloc(w->slots,1);
+    if(c->file_batch_sync){w->pending=calloc(c->batch,sizeof(*w->pending));if(!w->pending)return -1;}
     w->segments=calloc(w->nsegments,sizeof(*w->segments));
     if(w->segments)for(unsigned i=0;i<w->nsegments;i++)w->segments[i].fd=-1;
     if(!w->objects||!w->state||(w->nsegments&&!w->segments))return -1;
@@ -349,6 +368,43 @@ static int prepare(struct worker *w)
     }
     free(initial);w->before=allocated(w);return w->before==UINT64_MAX?-1:0;
 }
+static void *prepare_worker(void *arg)
+{
+    struct worker *w=arg;
+    if(prepare(w))w->error=errno?errno:EIO;
+    return NULL;
+}
+/* Snapshot allocated extents after final flush, outside the measured clock. */
+static uint64_t extent_count(int fd)
+{
+    size_t bytes=sizeof(struct fiemap)+256*sizeof(struct fiemap_extent);
+    struct fiemap *m=calloc(1,bytes);if(!m)return UINT64_MAX;
+    uint64_t count=0,start=0;
+    for(;;) {
+        memset(m,0,bytes);m->fm_start=start;m->fm_length=UINT64_MAX-start;m->fm_extent_count=256;
+        if(ioctl(fd,FS_IOC_FIEMAP,m)){free(m);return UINT64_MAX;}
+        if(!m->fm_mapped_extents)break;
+        count+=m->fm_mapped_extents;
+        struct fiemap_extent *last=&m->fm_extents[m->fm_mapped_extents-1];
+        if(last->fe_flags&FIEMAP_EXTENT_LAST)break;
+        uint64_t next=last->fe_logical+last->fe_length;
+        if(next<=start){free(m);errno=EIO;return UINT64_MAX;}start=next;
+    }
+    free(m);return count;
+}
+static int snapshot_extents(struct worker *w)
+{
+    unsigned n=container_mode(w)?w->nsegments:w->live;
+    for(unsigned i=0;i<n;i++) {
+        int fd=container_mode(w)?w->segments[i].fd:open_location(w,w->objects[i].location,0);
+        if(fd<0)return -1;
+        uint64_t count=extent_count(fd);
+        int rc=count==UINT64_MAX?-1:0;
+        if(close_location(w,fd,rc))return -1;
+        w->extents_after+=count;
+    }
+    return 0;
+}
 static void cleanup(struct worker *w)
 {
     if(w->segments)for(unsigned i=0;i<w->nsegments;i++)if(w->segments[i].fd>=0)close(w->segments[i].fd);
@@ -358,7 +414,7 @@ static void cleanup(struct worker *w)
         if(w->dfd>=0)close(w->dfd);
         rmdir(w->dir);
     }
-    free(w->objects);free(w->state);free(w->segments);free(w->buf);free(w->verify);
+    free(w->objects);free(w->state);free(w->pending);free(w->segments);free(w->buf);free(w->verify);
 }
 int efs_bench_churn_main(int argc,char **argv)
 {
@@ -372,9 +428,9 @@ int efs_bench_churn_main(int argc,char **argv)
             puts("Independent mixed storage churn (private empty scratch root only).\n"
                  "--bench churn --storage EMPTY_ROOT --layout files|punch|compact\n"
                  "--capacity-bytes N --container-bytes N (default 1 GiB) --payload-size N\n"
-                 "--occupancy 50|80|95 --qd N --steps N --warmup N --read-percent N\n"
+                 "--occupancy 50|80|95 --qd N --steps N --seconds N --warmup N --read-percent N\n"
                  "--persist none|each|batch --batch-size N --direct-io|--no-direct-io\n"
-                 "--preallocate (containers only) --extent-hint N --filestreams\n"
+                 "--preallocate (containers only) --extent-hint N --filestreams --file-batch-sync\n"
                  "All sizes are integer bytes; one reserved cleaning container per worker.\n"
                  "Occupancy is experiment capacity, not host filesystem fullness.\n"
                  "Worker-local synchronous GC; in-memory index; no crash recovery claim.");return 0;
@@ -383,6 +439,7 @@ int efs_bench_churn_main(int argc,char **argv)
         if(!strcmp(key,"--no-direct-io")){c.direct=0;continue;}
         if(!strcmp(key,"--preallocate")){c.preallocate=1;continue;}
         if(!strcmp(key,"--filestreams")){c.filestreams=1;continue;}
+        if(!strcmp(key,"--file-batch-sync")){c.file_batch_sync=1;continue;}
         if(++i==argc)goto invalid;
         const char *v=argv[i];
         if(!strcmp(key,"--bench")){if(seen++||strcmp(v,"churn"))goto invalid;continue;}
@@ -398,17 +455,19 @@ int efs_bench_churn_main(int argc,char **argv)
         else if(!strcmp(key,"--occupancy"))c.occupancy=(unsigned)n;
         else if(!strcmp(key,"--qd"))c.qd=(unsigned)n;
         else if(!strcmp(key,"--steps"))c.steps=(unsigned)n;
+        else if(!strcmp(key,"--seconds"))c.seconds=(unsigned)n;
         else if(!strcmp(key,"--warmup"))c.warmup=(unsigned)n;
         else if(!strcmp(key,"--read-percent"))c.reads=(unsigned)n;
         else if(!strcmp(key,"--batch-size"))c.batch=(unsigned)n;
         else goto invalid;
     }
-    if(!seen||!c.root||!c.qd||c.qd>64||!c.steps||c.steps>10000000||c.warmup>1000000||
+    if(!seen||!c.root||!c.qd||c.qd>64||!c.steps||c.steps>10000000||c.warmup>1000000||c.seconds>3600||
        !c.batch||c.batch>100000||c.reads<1||c.reads>99||c.payload<4096||c.payload>1048576||c.payload%4096||
        (c.occupancy!=50&&c.occupancy!=80&&c.occupancy!=95)||c.container<c.payload*4ull||c.container>(UINT64_C(4)<<30)||
        c.container%4096||!c.capacity||c.capacity>(UINT64_C(64)<<30)||
        (strcmp(c.layout,"files")&&strcmp(c.layout,"punch")&&strcmp(c.layout,"compact"))||
        (strcmp(c.persist,"none")&&strcmp(c.persist,"each")&&strcmp(c.persist,"batch"))||
+       (c.file_batch_sync&&(strcmp(c.layout,"files")||strcmp(c.persist,"batch")))||
        (!strcmp(c.layout,"files")&&(c.preallocate||c.hint))||c.hint>UINT32_MAX||c.hint%4096)goto invalid;
     c.stride=c.payload+4096;
     if(strcmp(c.layout,"files") && c.capacity/c.qd/c.container<2)goto invalid;
@@ -419,8 +478,15 @@ int efs_bench_churn_main(int argc,char **argv)
     struct worker *w=calloc(c.qd,sizeof(*w));pthread_t *threads=calloc(c.qd,sizeof(*threads));
     struct sample *total=calloc(1,sizeof(*total));if(!w||!threads||!total){free(w);free(threads);free(total);return 1;}
     for(unsigned i=0;i<c.qd;i++){w[i].dfd=-1;w[i].c=&c;w[i].id=i;w[i].rng=UINT64_C(0x12345678)+i;}
-    unsigned made=0;int rc=1,errors=0;uint64_t start=0,end=0,verified=0,live=0,before=0,after=0,dead=0,mem=0;
-    for(unsigned i=0;i<c.qd;i++)if(prepare(&w[i])){fprintf(stderr,"churn setup worker %u: %s\n",i,strerror(errno));goto done;}
+    unsigned made=0;int rc=1,errors=0,extents_available=1;uint64_t start=0,end=0,verified=0,live=0,before=0,after=0,dead=0,mem=0,extents=0;
+    unsigned prepared=0;
+    for(unsigned i=0;i<c.qd;i++) {
+        int err=pthread_create(&threads[i],NULL,prepare_worker,&w[i]);
+        if(err){errors++;break;}prepared++;
+    }
+    for(unsigned i=0;i<prepared;i++)pthread_join(threads[i],NULL);
+    if(prepared!=c.qd)goto done;
+    for(unsigned i=0;i<c.qd;i++)if(w[i].error){fprintf(stderr,"churn setup worker %u: %s\n",i,strerror(w[i].error));goto done;}
     gate.ready=0;gate.go=0;
     for(unsigned i=0;i<c.qd;i++) {
         int err=pthread_create(&threads[i],NULL,run,&w[i]);
@@ -434,7 +500,8 @@ release:
     for(unsigned i=0;i<c.qd;i++) {
         struct worker *v=&w[i]; struct sample *s=&v->stats;
         if(v->error){errors++;fprintf(stderr,"churn worker %u: %s\n",i,strerror(v->error));}
-        if(s->reads+s->writes!=c.steps||!s->reads||!s->writes)errors++;
+        if((!c.seconds && s->reads+s->writes!=c.steps)||!s->reads||!s->writes)errors++;
+        if(c.seconds && v->end_ns-v->start_ns<(uint64_t)c.seconds*1000000000)errors++;
         lat_merge(&total->read,&s->read);lat_merge(&total->write,&s->write);lat_merge(&total->gc,&s->gc);
 #define ADD(field) total->field+=s->field
         ADD(reads);ADD(writes);ADD(retired);ADD(copied);ADD(copy_bytes);ADD(reclaimed);ADD(syncs);ADD(cleanings);
@@ -456,18 +523,24 @@ release:
         unsigned states=0;for(unsigned j=0;j<v->slots;j++)if(v->state[j]==1)states++;
         if(states!=v->live)errors++;
         v->after=allocated(v);if(v->after==UINT64_MAX)errors++;
+        if(snapshot_extents(v)) {
+            if(errno==ENOTTY||errno==EOPNOTSUPP||errno==ENOSYS)extents_available=0;
+            else errors++;
+        }
+        extents+=v->extents_after;
         before+=v->before;after+=v->after;dead+=v->dead;live+=v->live;
         mem+=sizeof(*v)+(uint64_t)v->slots+(uint64_t)v->live*sizeof(struct object)+
-             (uint64_t)v->nsegments*sizeof(struct segment)+2ull*c.stride;
+             (uint64_t)v->nsegments*sizeof(struct segment)+2ull*c.stride+
+             (c.file_batch_sync?(uint64_t)c.batch*sizeof(unsigned):0);
     }
     struct rusage usage;getrusage(RUSAGE_SELF,&usage);double wall=(end-start)/1e9;
-    printf("%s kind=churn model=independent layout=%s persist=%s direct=%d payload_bytes=%u record_bytes=%u container_bytes=%llu capacity_bytes=%llu occupancy_pct=%u qd=%u steps=%u warmup=%u batch=%u read_pct=%u preallocate=%d extent_hint=%llu filestreams=%d wall_s=%.6f reads=%llu writes=%llu retired=%llu ops_s=%.3f payload_GiB_s=%.6f read_p50_us=%llu read_p99_us=%llu read_max_us=%llu write_p50_us=%llu write_p99_us=%llu write_max_us=%llu gc_p99_us=%llu cleanings=%llu copied_records=%llu copy_bytes=%llu released_allocated_bytes=%llu allocated_before=%llu allocated_after=%llu dead_records=%llu max_dead_per_worker=%llu live_objects=%llu verified_objects=%llu syncs=%llu model_bytes=%llu rss_kib=%ld errors=%d gc=worker_local index=in_memory\n",
-      errors?"BENCH_FAIL":"BENCH_OK",c.layout,c.persist,c.direct,c.payload,c.stride,(unsigned long long)c.container,(unsigned long long)c.capacity,c.occupancy,c.qd,c.steps,c.warmup,c.batch,c.reads,c.preallocate,(unsigned long long)c.hint,c.filestreams,wall,
+    printf("%s kind=churn model=independent layout=%s persist=%s direct=%d payload_bytes=%u record_bytes=%u container_bytes=%llu capacity_bytes=%llu occupancy_pct=%u qd=%u steps=%u seconds=%u warmup=%u batch=%u read_pct=%u preallocate=%d extent_hint=%llu filestreams=%d file_batch_sync=%d wall_s=%.6f reads=%llu writes=%llu retired=%llu ops_s=%.3f payload_GiB_s=%.6f read_p50_us=%llu read_p99_us=%llu read_max_us=%llu write_p50_us=%llu write_p99_us=%llu write_max_us=%llu gc_p99_us=%llu cleanings=%llu copied_records=%llu copy_bytes=%llu released_allocated_bytes=%llu allocated_before=%llu allocated_after=%llu dead_records=%llu max_dead_per_worker=%llu live_objects=%llu verified_objects=%llu syncs=%llu extents_available=%d extents_after=%llu model_bytes=%llu rss_kib=%ld errors=%d gc=worker_local index=in_memory\n",
+      errors?"BENCH_FAIL":"BENCH_OK",c.layout,c.persist,c.direct,c.payload,c.stride,(unsigned long long)c.container,(unsigned long long)c.capacity,c.occupancy,c.qd,c.steps,c.seconds,c.warmup,c.batch,c.reads,c.preallocate,(unsigned long long)c.hint,c.filestreams,c.file_batch_sync,wall,
       (unsigned long long)total->reads,(unsigned long long)total->writes,(unsigned long long)total->retired,(total->reads+total->writes)/wall,(double)(total->reads+total->writes)*c.payload/(1ull<<30)/wall,
       (unsigned long long)lat_percentile(&total->read,50,NULL),(unsigned long long)lat_percentile(&total->read,99,NULL),(unsigned long long)total->read.max,
       (unsigned long long)lat_percentile(&total->write,50,NULL),(unsigned long long)lat_percentile(&total->write,99,NULL),(unsigned long long)total->write.max,
       (unsigned long long)lat_percentile(&total->gc,99,NULL),(unsigned long long)total->cleanings,(unsigned long long)total->copied,(unsigned long long)total->copy_bytes,(unsigned long long)total->reclaimed,
-      (unsigned long long)before,(unsigned long long)after,(unsigned long long)dead,(unsigned long long)total->max_dead,(unsigned long long)live,(unsigned long long)verified,(unsigned long long)total->syncs,(unsigned long long)mem,usage.ru_maxrss,errors);
+      (unsigned long long)before,(unsigned long long)after,(unsigned long long)dead,(unsigned long long)total->max_dead,(unsigned long long)live,(unsigned long long)verified,(unsigned long long)total->syncs,extents_available,(unsigned long long)(extents_available?extents:0),(unsigned long long)mem,usage.ru_maxrss,errors);
     rc=errors?1:0;
 done:
     for(unsigned i=0;i<c.qd;i++)cleanup(&w[i]);

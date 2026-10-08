@@ -1,0 +1,52 @@
+{
+  "binary": "/data1/efs/bench/w90-20261008/round2-src/efs-bench",
+  "binary_sha256": "c8307ac424e684f6f66d0a16b0e4741118c4910f35c9c15202f5175f1d52ce44",
+  "sources": {
+    "src/bench/storage_churn.c": "ae2995a7881b93837d07bba882cf2597a683e48514237d3b8c8450041eddc968",
+    "src/bench/storage_churn.h": "7e711b02a412d7729ef9bf8832dc95ea713ab53e38c621179b2966c83eb688b3",
+    "src/bench/latency.h": "cf78d75c9a57500b6c5b73f3241558f0b7a44c93e15d79fb5938f77c867d4970",
+    "scripts/bench_churn.py": "18d6a98540b2f2dd78af133f40c047147c576f00a3087a0a9d6f39c4de1c0340",
+    "src/client/efs_bench.c": "c586d68787bc15fb5330fd145ca0422c52a92c58f7fdc9fc00e7dee47e3fcd37",
+    "Makefile": "7dd603f140fefcb61e6c9c4e6adfedad0eebc8b7053ae73a0939ad742a86e826",
+    "src/bench/storage_ranges.c": "ef404f8c8c44559453a755d2281be2373ebe41eb373ae01675c1b8a416826f9e",
+    "src/bench/storage_ranges.h": "e063b9989d9268e82451a576b113848279e1b116f3a9355eef8cc7e046c3b03b"
+  },
+  "arguments": {
+    "binary": "/data1/efs/bench/w90-20261008/round2-src/efs-bench",
+    "storage_root": "/data1/efs/bench/w90-20261008/scratch",
+    "output": "/data1/efs/bench/w90-20261008/sustained-95-qd4-punch-r1",
+    "layouts": "punch",
+    "occupancies": [
+      95
+    ],
+    "payload_sizes": [
+      65536
+    ],
+    "qds": [
+      4
+    ],
+    "io_modes": "direct",
+    "persist": "batch",
+    "capacity_per_worker": 2147483648,
+    "container_bytes": 1073741824,
+    "steps": null,
+    "seconds": 120,
+    "warmup": 1000,
+    "read_percent": 50,
+    "batch_size": 32,
+    "repeat": 1,
+    "timeout": 1800,
+    "preallocate": false,
+    "extent_hint": 0,
+    "filestreams": false,
+    "dry_run": false
+  },
+  "uname": [
+    "Linux",
+    "xorinox",
+    "6.12.0-211.61.1.el10_2.x86_64",
+    "#1 SMP PREEMPT_DYNAMIC Tue Sep 29 12:35:33 UTC 2026",
+    "x86_64"
+  ],
+  "started_utc": "2026-10-08T05:53:37.358748+00:00"
+}

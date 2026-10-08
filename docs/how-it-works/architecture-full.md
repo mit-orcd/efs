@@ -1562,7 +1562,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | P2.3 | **W23** · stalled-compactor test | performance | strict W89 samples pass; NUC engine reaches production 1 GiB L0 cap; deferred idle drain and unapplied WAL-tail durability repaired; universal follower memory/lag bound remains open | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
 | P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
-| bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence, repeated sustained acceptance pending; no production changes | [work item](#w90) |
+| bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence; 64 KiB sustained scaling, deferred file-body batching and shared-range evidence recorded; no production changes | [work item](#w90) · [follow-up](../status/bench-scaling-ranges-20261008.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](../status/metadata-scaling.md) |
 | — | **D28** (who owns acknowledged bytes across client death) · **D29** (a REPORT receipt for "committed, apply pending") · **D30** (the remedy for compaction-induced apply lag) | ask | ask — not code until the user decides | [decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d31) |
@@ -5429,6 +5429,16 @@ write p99; preallocation reserved the additional spare capacity. These are
 independent model results, not production GC or durability acceptance.
 
 
+**Oct 8 follow-up:** timed 64 KiB churn at 1/4/8 workers, final FIEMAP accounting,
+and bounded deferred file-body flush scheduling extend the baseline. New shared
+1 GiB range tests distinguish safe expected-version verification from unsafe
+mixed-record diagnostics, with separate syscall/lock/flush maxima. See the
+[status checkpoint](../status/bench-scaling-ranges-20261008.md) and
+[measurement ledger](../../results/measure/20261008-w90-scaling-ranges/README.md).
+The improved file baseline must supersede immediate-body reference numbers in
+layout decisions. Recovery/authority and broader lifetime gates remain open.
+
+
 ## Appendix 5 — Naming
 
 *Source: `how-it-works/naming.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
@@ -8249,6 +8259,11 @@ The [W90 storage churn guide](storage-churn.md) documents 1 GiB container versus
 small-file comparisons, matched persistence, bounded 50/80/95-percent model
 occupancy, verification and result interpretation. This is an independent
 benchmark with a volatile index, not production GC or a recovery acceptance gate.
+
+The independent [shared-container range suite](storage-ranges.md) separates
+disjoint lanes, concurrent immutable reads, locked hot-record updates and unsafe
+diagnostics. It reports lock and I/O/sync delays; it does not establish a durable
+or distributed storage protocol.
 
 
 ## Appendix 13 — Development — modularity constraint

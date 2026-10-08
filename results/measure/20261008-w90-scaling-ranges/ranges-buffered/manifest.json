@@ -1,0 +1,39 @@
+{
+  "arguments": {
+    "binary": "/data1/efs/bench/w90-20261008/src/efs-bench",
+    "storage_root": "/data1/efs/bench/w90-20261008/scratch",
+    "output": "/data1/efs/bench/w90-20261008/ranges-buffered",
+    "qds": [
+      8
+    ],
+    "accesses": "disjoint,hot-read,hot-locked,hot-unlocked",
+    "io_modes": "buffered",
+    "seconds": 10,
+    "steps": 10000000,
+    "container_bytes": 1073741824,
+    "payload_size": 65536,
+    "persist": "batch",
+    "split_write": false,
+    "punch_before_write": false,
+    "repeat": 1,
+    "timeout": 300,
+    "dry_run": false
+  },
+  "binary_sha256": "221b7ba892bf52b381bb7f20b65a5503c4d5172648036962241f39c39b70bb4e",
+  "sources": {
+    "src/bench/storage_ranges.c": "79b6a665df1120188076edb34dacae6382f5a1e6dd3df59b505a33d9f664f3af",
+    "src/bench/storage_ranges.h": "e063b9989d9268e82451a576b113848279e1b116f3a9355eef8cc7e046c3b03b",
+    "src/bench/latency.h": "cf78d75c9a57500b6c5b73f3241558f0b7a44c93e15d79fb5938f77c867d4970",
+    "scripts/bench_ranges.py": "f1560ef415198f90adccf6ee3a6b213ef096fad6bb6095403a4dff5eea4e15b9",
+    "src/client/efs_bench.c": "1c15ffe4600ecdbb1825425991cd28faa609c6a22f0cbcd82a50674d5dfc7ff0",
+    "Makefile": "461e513d1696ce83c5fb6260bd6c181ea78440f11c0fb392f6cc49bddbf763d2"
+  },
+  "uname": [
+    "Linux",
+    "xorinox",
+    "6.12.0-211.61.1.el10_2.x86_64",
+    "#1 SMP PREEMPT_DYNAMIC Tue Sep 29 12:35:33 UTC 2026",
+    "x86_64"
+  ],
+  "started_utc": "2026-10-08T05:37:02.657171+00:00"
+}

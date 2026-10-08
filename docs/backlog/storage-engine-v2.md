@@ -416,3 +416,40 @@ microbenchmark.
 
 Design sizes and predicted benefits above are experiments, not measured results
 or accepted NAND placement guarantees.
+
+
+### Candidate range ownership and index recovery plan
+
+This is a design sketch for a future backend, not an implemented authority or a
+production decision. The [shared-range laboratory](../how-it-works/storage-ranges.md)
+tests physical I/O contention; its local locks do not replace EFS ownership,
+fencing, conditional publication or the recovery invariants above.
+
+An initial candidate keeps published fragment records immutable. A mapping
+identifies the authoritative fragment identity plus container, offset, length,
+allocation generation and checksum. A writer reserves a free slot, writes and
+flushes the body, then conditionally publishes the new mapping against the
+expected prior version. Readers resolve and pin a particular location/version
+before I/O and retain that pin until completion. Competing writers need an
+explicit conditional-publication winner; a whole valid checksum alone cannot
+detect a lost logical update.
+
+Retirement would first become durable under the existing authoritative
+protocol. Physical punching/reuse waits for readers, checkpoints and other
+references, and checks the exact allocation generation to avoid reusing a slot
+under a stale reader/deleter. Allocation bookkeeping may need a short allocator
+lock; ordinary reads of immutable, distinct slots should not require a mutex
+covering an entire 1 GiB file. A local range lock can coordinate a prototype's
+in-place updates, but a production ownership contract must cover every process
+and node that can act on the record.
+
+A durable index/checkpoint plus a bounded replay ledger would distinguish
+reserved, written/unpublished, published and retired allocations. Recovery
+would reject incomplete records, retain all committed referenced locations,
+and reconcile unreferenced allocations through authoritative retirement rather
+than age alone. Explicit crash gates belong between body flush and mapping
+publication, publication and retirement, retirement and punch/reuse, and each
+relocation step. Stale reader/writer/delete generations, concurrent publication,
+restart during cleaning, checkpoint references and idempotent replay are
+separate required tests before production integration. The W90 in-memory index
+cannot answer any of those recovery questions.

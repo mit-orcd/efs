@@ -36,6 +36,7 @@ def parser():
     p.add_argument('--capacity-per-worker',type=int,default=2*1024**3)
     p.add_argument('--container-bytes',type=int,default=1024**3)
     p.add_argument('--steps',type=int,help='fixed per-worker operations; default six operations per capacity slot')
+    p.add_argument('--seconds',type=int,default=0,help='minimum measured seconds per worker; steps remains a hard cap')
     p.add_argument('--warmup',type=int,default=1000)
     p.add_argument('--read-percent',type=int,default=50)
     p.add_argument('--batch-size',type=int,default=32)
@@ -43,28 +44,33 @@ def parser():
     p.add_argument('--timeout',type=int,default=600,help='case deadline seconds; timeout invalidates case')
     p.add_argument('--preallocate',action='store_true',help='container-only variation; files stay reference')
     p.add_argument('--extent-hint',type=int,default=0,help='container-only XFS hint in bytes')
+    p.add_argument('--file-batch-sync',action='store_true',default=None,help='files only: defer per-file body fsyncs (automatic for batch persistence)')
+    p.add_argument('--file-immediate-sync',dest='file_batch_sync',action='store_false',default=None,help='legacy reference: flush every replacement body immediately')
     p.add_argument('--filestreams',action='store_true',help='per-private-directory XFS allocation flag')
     p.add_argument('--dry-run',action='store_true')
     return p
 
 def cases(a):
     layouts=a.layouts.split(',');modes=a.io_modes.split(',')
+    if a.file_batch_sync is True and a.persist!='batch':raise ValueError('file-batch-sync requires batch persistence')
     if any(s not in ['files','punch','compact'] for s in layouts) or any(s not in ['direct','buffered'] for s in modes):raise ValueError('unknown layout or I/O mode')
     if any(n not in [50,80,95] for n in a.occupancies):raise ValueError('occupancy must be 50,80,95')
-    if not 1<=a.repeat<=10 or a.timeout<1 or a.warmup<0 or not 1<=a.read_percent<=99:raise ValueError('invalid repeat, deadline, warmup or read percentage')
+    if not 1<=a.repeat<=10 or a.timeout<1 or not 0<=a.seconds<=3600 or a.warmup<0 or not 1<=a.read_percent<=99:raise ValueError('invalid repeat, deadline, warmup or read percentage')
     if not 1<=a.batch_size<=100000 or any(q>64 for q in a.qds):raise ValueError('invalid batch/QD')
     if a.container_bytes<16384 or a.container_bytes%4096 or a.capacity_per_worker<2*a.container_bytes:raise ValueError('capacity per worker must hold at least two containers')
     if any(s<4096 or s>1048576 or s%4096 for s in a.payload_sizes):raise ValueError('payload sizes must be aligned 4 KiB..1 MiB')
     for payload,occupancy,qd,mode,layout,repeat in itertools.product(a.payload_sizes,a.occupancies,a.qds,modes,layouts,range(a.repeat)):
         stride=payload+4096
         slots=(a.capacity_per_worker//a.container_bytes)*(a.container_bytes//stride)
-        steps=a.steps if a.steps is not None else slots*6
+        steps=a.steps if a.steps is not None else (10000000 if a.seconds else slots*6)
         if not 1<=steps<=10000000:raise ValueError('invalid steps')
         argv=['--bench','churn','--layout',layout,'--persist',a.persist,
               '--capacity-bytes',str(a.capacity_per_worker*qd),'--container-bytes',str(a.container_bytes),
               '--payload-size',str(payload),'--occupancy',str(occupancy),'--qd',str(qd),
               '--steps',str(steps),'--warmup',str(a.warmup),'--read-percent',str(a.read_percent),
               '--batch-size',str(a.batch_size),'--direct-io' if mode=='direct' else '--no-direct-io']
+        if a.seconds:argv+=['--seconds',str(a.seconds)]
+        if layout=='files' and a.persist=='batch' and a.file_batch_sync is not False:argv+=['--file-batch-sync']
         if layout!='files' and a.preallocate:argv+=['--preallocate']
         if layout!='files' and a.extent_hint:argv+=['--extent-hint',str(a.extent_hint)]
         if a.filestreams:argv+=['--filestreams']
@@ -78,13 +84,14 @@ def report(out,results):
            'Independent workload with a volatile index and worker-local reclamation; not production GC or crash recovery.',
            'Container size is a fixed logical file length; sparse and preallocated allocation are distinct. Occupancy is bounded data-slot capacity with one extra cleaning container per worker.',
            'Buffered reads can be cached. No global cache drop, mount change or host-disk occupancy change is performed. Gross released blocks do not equal net free space or NAND erasure.',
-           'each/batch times required body/directory sync; files still require one body flush per replacement. No on-disk index/journal is modeled, so this is not a durable storage engine.',
-           '', '| Payload | Occupancy | Workers | I/O | Layout | Status | Ops/s | Read p99 ms | Write p99 ms | Copy / new record bytes | Cleanings |',
-           '|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|']
+           'each/batch times required body/directory sync. Deferred file batching still flushes each pending live body; legacy immediate scheduling is a separate reference. No durable index/recovery is modeled.',
+           '', '| Payload | Occupancy | Workers | I/O | Layout | File flush | Status | Ops/s | Read p99 ms | Write p99 ms | Copy / new record bytes | Cleanings |',
+           '|---|---:|---:|---|---|---|---|---:|---:|---:|---:|---:|']
     for c in results:
         f=c.get('fields',{});writes=int(f.get('writes',0));copies=int(f.get('copy_bytes',0));stride=int(f.get('record_bytes',1))
         copy_ratio=copies/(writes*stride) if writes else 0
-        lines.append(f"| {c['payload']//1024} KiB | {c['occupancy']}% | {c['qd']} | {c['mode']} | {c['layout']} | {c['status']} | {float(f.get('ops_s',0)):.0f} | {int(f.get('read_p99_us',0))/1000:.3f} | {int(f.get('write_p99_us',0))/1000:.3f} | {copy_ratio:.2f} | {f.get('cleanings','—')} |")
+        file_flush=('deferred' if f.get('file_batch_sync')=='1' else 'immediate') if c['layout']=='files' else '—'
+        lines.append(f"| {c['payload']//1024} KiB | {c['occupancy']}% | {c['qd']} | {c['mode']} | {c['layout']} | {file_flush} | {c['status']} | {float(f.get('ops_s',0)):.0f} | {int(f.get('read_p99_us',0))/1000:.3f} | {int(f.get('write_p99_us',0))/1000:.3f} | {copy_ratio:.2f} | {f.get('cleanings','—')} |")
     (out/'SUMMARY.md').write_text('\n'.join(lines)+'\n')
     (out/'results.json').write_text(json.dumps(results,indent=2)+'\n')
 
@@ -98,7 +105,7 @@ def main():
     if not parent.is_dir():raise ValueError('scratch parent must already exist')
     out=(a.output or ROOT/'logs'/('churn-'+datetime.datetime.now(datetime.timezone.utc).strftime('%Y%m%dT%H%M%SZ'))).resolve()
     out.mkdir(parents=True,exist_ok=False)
-    sources={str(p.relative_to(ROOT)):digest(p) for p in [ROOT/'src/bench/storage_churn.c',ROOT/'src/bench/storage_churn.h',ROOT/'src/bench/latency.h',ROOT/'scripts/bench_churn.py',ROOT/'src/client/efs_bench.c',ROOT/'Makefile']}
+    sources={str(p.relative_to(ROOT)):digest(p) for p in [ROOT/'src/bench/storage_churn.c',ROOT/'src/bench/storage_churn.h',ROOT/'src/bench/latency.h',ROOT/'scripts/bench_churn.py',ROOT/'src/client/efs_bench.c',ROOT/'Makefile',*[p for p in [ROOT/'src/bench/storage_ranges.c',ROOT/'src/bench/storage_ranges.h'] if p.is_file()]]}
     manifest={'binary':str(binary),'binary_sha256':digest(binary),'sources':sources,'arguments':vars(a),'uname':os.uname(),'started_utc':datetime.datetime.now(datetime.timezone.utc).isoformat()}
     (out/'manifest.json').write_text(json.dumps(manifest,default=str,indent=2)+'\n')
     shutil.copy2(binary,out/'efs-bench')

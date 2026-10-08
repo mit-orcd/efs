@@ -71,10 +71,30 @@ cleaning latency as well as percentiles.
 `none` is unsynced acceptance; final allocation measurement flushes outside its
 clock. `each` and `batch` include body and parent-directory persistence barriers
 in measured wall time. Each replacement file still needs its own body fsync;
-file batching amortizes directory barriers, not all file-body flushes. The final
+the matrix driver defers those body flushes to the batch boundary by default,
+then fsyncs every still-live pending body before the directory barrier. This
+allows the filesystem/device to coalesce work without omitting required flushes.
+Use `--file-immediate-sync` on the matrix driver for the earlier immediate-body
+reference policy. Raw `--bench churn` requires `--file-batch-sync` to select
+deferred file-body batching; it is valid only for files with `--persist batch`. The final
 batch barrier is in wall time. Batch intermediate operations are not individually
 durable completions. No durable map/checkpoint is modeled, so neither mode proves
 power-loss durability of a complete storage engine.
+
+`--seconds 120` selects a timed run per worker; the matrix raises the default
+operation cap to ten million. `--steps` remains a hard cap: reaching it before
+the requested duration invalidates the run. Required final barriers are timed.
+Initialization runs in parallel across workers. Initial file bodies are flushed
+as a complete live set after warmup, before measurement; measured replacement
+flushes retain their selected persistence policy.
+
+For scaling, keep in mind that capacity is per worker: eight workers mean
+16 GiB of data-slot capacity and eight reserved 1 GiB cleaning containers with
+the default geometry. This is not a fixed-working-set scaling experiment.
+`extents_after` counts allocated FIEMAP mappings after the final flush, outside
+timing. `extents_available=0` reports filesystems without FIEMAP support; it does
+not imply zero fragmentation. Extent counts are filesystem mappings, not NAND
+placement. Normalize them by allocation and consider different inode counts.
 
 The fixed operation budget bounds work. Default work is six operations per
 capacity slot at a 50/50 read/write mix. `--steps` overrides it; short runs can
@@ -109,5 +129,12 @@ pretending the requested variation ran. No mount option or XFS filesystem
 provisioning is changed by this experiment.
 
 The initial [xorinox evidence](../../results/measure/20261008-w90-xorinox/README.md)
-records 35 passing performance cases and their limits. W90 remains open for
-repeated sustained acceptance and broader worker/lifetime distributions.
+records 35 passing performance cases and their limits. The follow-up
+[scaling and shared-range ledger](../../results/measure/20261008-w90-scaling-ranges/README.md)
+compares longer 64 KiB workloads and explicitly distinguishes immediate versus
+deferred file-body flush scheduling. Broader lifetime distributions and
+production recovery acceptance remain open.
+
+For concurrent access to one container, see the separate
+[shared-range experiments](storage-ranges.md). Churn workers own separate models
+and containers; increasing their count does not itself test overlapping ranges.
