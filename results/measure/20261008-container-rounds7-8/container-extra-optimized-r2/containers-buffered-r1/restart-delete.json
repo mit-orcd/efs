@@ -1,0 +1,13 @@
+{
+  "phase": "restart-delete",
+  "workers": 4,
+  "operations": 256,
+  "bytes": 0,
+  "wall_s": 0.7100734019913943,
+  "MiB_s": 0.0,
+  "ops_s": 360.5261079798938,
+  "p99_ms": 22.166583003127016,
+  "max_ms": 22.673532002954744,
+  "errors": 0,
+  "integrity": false
+}

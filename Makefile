@@ -496,5 +496,8 @@ tests/test_put_ticket: tests/test_put_ticket.o $(LIB)
 
 src/server/store.o src/server/store_containers.o src/server/efsd.o src/bench/store.o src/bench/store_containers.o: src/server/store_containers.h
 
+# Both sides must rebuild together when GET checksum provenance changes.
+src/server/handler.o src/server/store_containers.o src/bench/store_containers.o tests/test_store_containers: include/efs/store.h
+
 tests/test_store_containers: tests/test_store_containers.c src/server/store.c src/server/store_containers.c src/server/server_internal.h src/bench/writer.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o $(LIB) $(LDFLAGS)

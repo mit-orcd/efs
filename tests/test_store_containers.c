@@ -13,7 +13,13 @@
 #include <unistd.h>
 static int fault;
 static const char *watched_root;
-static unsigned outside_syncs, root_syncs, mkdir_calls;
+static unsigned outside_syncs, root_syncs, mkdir_calls, mapping_reads;
+static ssize_t container_pread(int fd,void *buf,size_t n,off_t off) {
+    struct stat st;assert(!fstat(fd,&st));
+    if(st.st_size==4096 && n==4096 && off==0)
+        __atomic_fetch_add(&mapping_reads,1,__ATOMIC_RELAXED);
+    return pread(fd,buf,n,off);
+}
 static int container_mkdir(const char *path, mode_t mode) {
     mkdir_calls++;
     return mkdir(path,mode);
@@ -47,12 +53,14 @@ static int container_renameat(int ad,const char *a,int bd,const char *b)
 {
     int rc=renameat(ad,a,bd,b);if(!rc&&fault==5)_exit(45);return rc;
 }
+#define pread container_pread
 #define renameat container_renameat
 #define mkdir container_mkdir
 #define fsync container_sync
 #define fallocate container_punch
 #define rename container_rename
 #include "../src/server/store_containers.c"
+#undef pread
 #undef renameat
 #undef mkdir
 #undef fsync
@@ -70,7 +78,7 @@ static void read_value(efs_ino_t ino,unsigned ci,int expected,int value)
 {
     uint8_t data[EFS_FRAGMENT_SIZE],sum[32];uint32_t len=sizeof(data);int ok=0;
     int rc=server_read_fragment_with_sum(&server,&ex,ino,ci,0,data,&len,sum,&ok);assert(rc==expected);
-    if(!rc){assert(ok&&len==sizeof(data));uint8_t h[32];efs_hash(data,len,h);assert(!memcmp(sum,h,32));
+    if(!rc){assert(ok==(efs_ino_is_meta_table(ino)?EFS_STORE_SUM_PRESENT:EFS_STORE_SUM_VERIFIED)&&len==sizeof(data));uint8_t h[32];efs_hash(data,len,h);assert(!memcmp(sum,h,32));
         for(unsigned i=0;i<len;i++)assert(data[i]==(value<0?data[0]:(unsigned)value));}
 }
 static void restart(void){server_storage_engine_close(&server);assert(!server_storage_engine_init(&server));server_init_local_usage(&server);}
@@ -102,6 +110,8 @@ int main(void)
         write_value(42,0,18,EFS_OK);assert(server.nodes[0].used==EFS_FRAGMENT_SIZE);
         assert(!outside_syncs && root_syncs && !mkdir_calls);watched_root=NULL;
         assert(((struct target*)server.container_targets[0])->data_fds[0]==cached_fd);
+        /* One validated mapping serves quota admission and old-extent retirement. */
+        mapping_reads=0;write_value(42,0,18,EFS_OK);assert(mapping_reads==1);
         /* A nonce collision must fail without altering the existing temp/map. */
         char collision_path[8192],collision_tmp[8192];
         server_fragment_path(&server,&ex,42,0,0,collision_path,sizeof(collision_path));
@@ -179,6 +189,29 @@ int main(void)
         assert(!server_read_fragment_with_sum(&server,&ex,902,0,0,data,&small_len,wrong,&small_ok));
         assert(small_len==sizeof(small)&&small_ok&&!memcmp(data,small,sizeof(small)));
         assert(!server_delete_fragment_if_sum(&server,&ex,902,0,0,sum));
+        /* Quota follows variable-size replacements and rolls back pre-publication
+         * failure. A partial result never claims a verified whole-payload digest. */
+        efs_tls_chunk_gen=891;uint64_t before_var=server.nodes[0].used;
+        memset(data,80,sizeof(data));efs_hash(data,sizeof(data),sum);
+        assert(!server_write_fragment_with_sum_sync(&server,&ex,903,0,0,data,sizeof(data),sum));
+        assert(server.nodes[0].used==before_var+sizeof(data));
+        efs_hash(small,sizeof(small),sum);
+        assert(!server_write_fragment_with_sum_sync(&server,&ex,903,0,0,small,sizeof(small),sum));
+        assert(server.nodes[0].used==before_var+sizeof(small));
+        uint32_t partial_len=8;int partial_ok=-1;
+        assert(!server_read_fragment_with_sum(&server,&ex,903,0,0,data,&partial_len,wrong,&partial_ok));
+        assert(partial_len==8&&partial_ok==EFS_STORE_SUM_PRESENT&&!memcmp(data,small,8));
+        fault=1;memset(data,81,sizeof(data));efs_hash(data,sizeof(data),wrong);
+        assert(server_write_fragment_with_sum_sync(&server,&ex,903,0,0,data,sizeof(data),wrong)==EFS_ERR_IO);fault=0;
+        assert(server.nodes[0].used==before_var+sizeof(small));
+        uint32_t all_len=sizeof(data);int all_ok=-1;
+        assert(!server_read_fragment_with_sum(&server,&ex,903,0,0,data,&all_len,wrong,&all_ok));
+        assert(all_len==sizeof(small)&&all_ok==EFS_STORE_SUM_VERIFIED&&!memcmp(data,small,sizeof(small)));
+        /* A backend-computed digest without a supplied checksum is not trusted. */
+        assert(!server_write_fragment_with_sum_sync(&server,&ex,903,0,0,small,sizeof(small),NULL));
+        all_len=sizeof(data);all_ok=-1;
+        assert(!server_read_fragment_with_sum(&server,&ex,903,0,0,data,&all_len,wrong,&all_ok));assert(all_ok==EFS_STORE_SUM_NONE);
+        assert(!server_delete_fragment_if_sum(&server,&ex,903,0,0,sum));assert(server.nodes[0].used==before_var);
         /* Both map and referenced extent headers fail startup closed when damaged. */
         efs_tls_chunk_gen=101;efs_tls_write_root=0;char path[8192];server_fragment_path(&server,&ex,42,0,0,path,sizeof(path));
         struct mapping m;struct target *t=target_at(&server,path);assert(!mapping_read(path,t,&m));

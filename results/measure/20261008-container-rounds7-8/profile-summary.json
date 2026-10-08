@@ -1,0 +1,82 @@
+[
+  {
+    "round": 7,
+    "io": "direct",
+    "phase": "read",
+    "MiB_s": 88.46959531411873,
+    "p99_ms": 31.85271000256762,
+    "daemon_cpu_ms_per_MiB": 21.366985321791496,
+    "cycles_per_MiB": 37186613.69138126,
+    "context_switches_per_MiB": 534.002258185924
+  },
+  {
+    "round": 7,
+    "io": "direct",
+    "phase": "churn",
+    "MiB_s": 17.092297080775115,
+    "p99_ms": 68.99820298713166,
+    "daemon_cpu_ms_per_MiB": 103.44050534499515,
+    "cycles_per_MiB": 191100436.9212828,
+    "context_switches_per_MiB": 2524.396501457726
+  },
+  {
+    "round": 7,
+    "io": "buffered",
+    "phase": "read",
+    "MiB_s": 89.43654008924769,
+    "p99_ms": 33.077860993216746,
+    "daemon_cpu_ms_per_MiB": 20.52379746835443,
+    "cycles_per_MiB": 35434269.80268057,
+    "context_switches_per_MiB": 517.5487714072971
+  },
+  {
+    "round": 7,
+    "io": "buffered",
+    "phase": "churn",
+    "MiB_s": 17.21945829965849,
+    "p99_ms": 68.0478750000475,
+    "daemon_cpu_ms_per_MiB": 102.1750024166264,
+    "cycles_per_MiB": 187697177.35331076,
+    "context_switches_per_MiB": 2513.2837119381343
+  },
+  {
+    "round": 8,
+    "io": "direct",
+    "phase": "read",
+    "MiB_s": 87.6175070311086,
+    "p99_ms": 33.35134299413767,
+    "daemon_cpu_ms_per_MiB": 21.103009118541035,
+    "cycles_per_MiB": 35806422.17629179,
+    "context_switches_per_MiB": 535.0767477203648
+  },
+  {
+    "round": 8,
+    "io": "direct",
+    "phase": "churn",
+    "MiB_s": 16.761618180800433,
+    "p99_ms": 63.0491659976542,
+    "daemon_cpu_ms_per_MiB": 101.0774789081886,
+    "cycles_per_MiB": 185525912.44863525,
+    "context_switches_per_MiB": 2488.1548387096773
+  },
+  {
+    "round": 8,
+    "io": "buffered",
+    "phase": "read",
+    "MiB_s": 89.02126210446477,
+    "p99_ms": 32.43164699233603,
+    "daemon_cpu_ms_per_MiB": 20.575459985041135,
+    "cycles_per_MiB": 35523045.68511593,
+    "context_switches_per_MiB": 517.7456993268512
+  },
+  {
+    "round": 8,
+    "io": "buffered",
+    "phase": "churn",
+    "MiB_s": 17.263558574487806,
+    "p99_ms": 69.2483700113371,
+    "daemon_cpu_ms_per_MiB": 103.4187951807229,
+    "cycles_per_MiB": 191953947.08819276,
+    "context_switches_per_MiB": 2516.2872289156626
+  }
+]

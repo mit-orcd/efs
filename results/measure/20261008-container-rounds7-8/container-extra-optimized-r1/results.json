@@ -1,0 +1,176 @@
+[
+  {
+    "name": "containers-direct-r1",
+    "engine": "containers",
+    "io": "direct",
+    "repeat": 1,
+    "status": "PASS",
+    "phases": [
+      {
+        "phase": "create",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 10.49438927299343,
+        "MiB_s": 12.196993714479314,
+        "ops_s": 24.393987428958628,
+        "p99_ms": 837.402685006964,
+        "max_ms": 851.5575700002955,
+        "errors": 0,
+        "integrity": false
+      },
+      {
+        "phase": "read",
+        "workers": 4,
+        "operations": 364,
+        "bytes": 190840832,
+        "wall_s": 30.421916550010792,
+        "MiB_s": 5.98252906587292,
+        "ops_s": 11.96505813174584,
+        "p99_ms": 1055.3470229933737,
+        "max_ms": 1537.3696669994388,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "churn",
+        "workers": 4,
+        "operations": 889,
+        "bytes": 116523008,
+        "wall_s": 30.021211646992015,
+        "MiB_s": 3.701549467978725,
+        "ops_s": 29.6123957438298,
+        "p99_ms": 640.2117589896079,
+        "max_ms": 1029.1343499993673,
+        "errors": 0,
+        "integrity": false
+      },
+      {
+        "phase": "verify",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 20.1156704229943,
+        "MiB_s": 6.363198308005818,
+        "ops_s": 12.726396616011636,
+        "p99_ms": 1171.6051719995448,
+        "max_ms": 1525.5780559964478,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "restart-verify",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 28.14903836499434,
+        "MiB_s": 4.5472246099596285,
+        "ops_s": 9.094449219919257,
+        "p99_ms": 1513.1632050033659,
+        "max_ms": 1569.022915995447,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "restart-delete",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 0,
+        "wall_s": 11.581643602010445,
+        "MiB_s": 0.0,
+        "ops_s": 22.10394386126346,
+        "p99_ms": 642.9386500094552,
+        "max_ms": 759.734966995893,
+        "errors": 0,
+        "integrity": false
+      }
+    ]
+  },
+  {
+    "name": "containers-buffered-r1",
+    "engine": "containers",
+    "io": "buffered",
+    "repeat": 1,
+    "status": "PASS",
+    "phases": [
+      {
+        "phase": "create",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 2.8736861789948307,
+        "MiB_s": 44.54209403087025,
+        "ops_s": 89.0841880617405,
+        "p99_ms": 83.76544900238514,
+        "max_ms": 172.6087980059674,
+        "errors": 0,
+        "integrity": false
+      },
+      {
+        "phase": "read",
+        "workers": 4,
+        "operations": 8582,
+        "bytes": 4499439616,
+        "wall_s": 30.00655663399084,
+        "MiB_s": 143.00207959013994,
+        "ops_s": 286.0041591802799,
+        "p99_ms": 20.098691995372064,
+        "max_ms": 46.2633629940683,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "churn",
+        "workers": 4,
+        "operations": 5471,
+        "bytes": 717094912,
+        "wall_s": 30.012512062996393,
+        "MiB_s": 22.78632986684165,
+        "ops_s": 182.2906389347332,
+        "p99_ms": 47.94446499727201,
+        "max_ms": 83.95855699200183,
+        "errors": 0,
+        "integrity": false
+      },
+      {
+        "phase": "verify",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 1.0391228849912295,
+        "MiB_s": 123.1808112868964,
+        "ops_s": 246.3616225737928,
+        "p99_ms": 26.070432999404147,
+        "max_ms": 26.897913005086593,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "restart-verify",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 134217728,
+        "wall_s": 0.9354067980020773,
+        "MiB_s": 136.83886013378722,
+        "ops_s": 273.67772026757444,
+        "p99_ms": 30.310913003631867,
+        "max_ms": 33.069975004764274,
+        "errors": 0,
+        "integrity": true
+      },
+      {
+        "phase": "restart-delete",
+        "workers": 4,
+        "operations": 256,
+        "bytes": 0,
+        "wall_s": 0.550580473995069,
+        "MiB_s": 0.0,
+        "ops_s": 464.9638192623095,
+        "p99_ms": 12.435209995601326,
+        "max_ms": 12.674376004724763,
+        "errors": 0,
+        "integrity": false
+      }
+    ]
+  }
+]

@@ -12,6 +12,7 @@ int server_container_get(struct efsd_server *s, const char *path, uint8_t *data,
 int server_container_info(struct efsd_server *s, const char *path,
                           uint32_t *len, uint8_t *sum);
 int server_container_payload(const char *path, uint64_t *len);
+/* Reserves/reconciles logical quota using the same mapping as retirement. */
 int server_container_put(struct efsd_server *s, const char *path, const uint8_t *data,
                          uint32_t len, const uint8_t *sum, int *published);
 int server_container_delete(struct efsd_server *s, const char *path,

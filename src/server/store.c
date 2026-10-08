@@ -1425,7 +1425,8 @@ static void frag_loc_note(efs_export_id_t export_id, efs_ino_t ino,
 /* Combined fragment+checksum read. Single probe pass per GET: the data
  * open() itself is the probe, and the digest is the 4 KiB tail of that
  * file. Roots are probed low to high, same as server_find_fragment_root.
- * *sum_ok is set when the tail supplied the sum (caller hashes otherwise). */
+ * *sum_ok uses efs_store_sum_state: PRESENT requires caller verification;
+ * containers can return VERIFIED for a complete checked payload. */
 static int read_fragment_impl(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,
@@ -1899,28 +1900,8 @@ static int server_write_fragment_to_path(struct efsd_server *s, struct efs_expor
                                          const uint8_t *checksum)
 {
     if (s->storage_engine && !efs_ino_is_meta_table(ino)) {
-        uint32_t old_len = 0;
-        int ir = server_container_info(s, path, &old_len, NULL);
-        if (ir != EFS_OK && ir != EFS_ERR_NOT_FOUND) return ir;
-        uint64_t charge = data_len > old_len ? data_len - old_len : 0;
-        pthread_mutex_lock(&s->lock);
-        struct efs_node *ln = server_local_node(s);
-        if (!ln || (s->quota && (ln->used > s->quota || charge > s->quota - ln->used))) {
-            pthread_mutex_unlock(&s->lock); return ln ? EFS_ERR_QUOTA : EFS_ERR_INVAL;
-        }
-        ln->used += charge;
-        pthread_mutex_unlock(&s->lock);
         int published = 0;
-        int rc = server_container_put(s, path, data, data_len, checksum, &published);
-        pthread_mutex_lock(&s->lock);
-        ln = server_local_node(s);
-        if (ln) {
-            if (!published) ln->used -= charge;
-            else if (old_len > data_len) ln->used -= old_len - data_len;
-        }
-        pthread_mutex_unlock(&s->lock);
-        server_usage_mark_dirty(s);
-        return rc;
+        return server_container_put(s, path, data, data_len, checksum, &published);
     }
     /* Quota charges logical fragment size once per fragment. A first
      * write (EFS_PATH_HINT_SKIP: the name cannot exist) creates in one

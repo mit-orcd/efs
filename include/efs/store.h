@@ -25,9 +25,19 @@ struct efs_frag_id {
     uint32_t coding_profile_id;
 };
 
+/* GET checksum provenance, internal to the storage API (never on the wire).
+ * VERIFIED covers exactly the complete returned payload, checked against its
+ * stored digest by the backend. A partial read with a stored digest reports
+ * PRESENT; a read without one reports NONE. */
+enum efs_store_sum_state {
+    EFS_STORE_SUM_NONE = 0,
+    EFS_STORE_SUM_PRESENT = 1,
+    EFS_STORE_SUM_VERIFIED = 2,
+};
+
 struct efs_store_ops {
     /* *len is capacity in, bytes out. sum / sum_ok may be NULL.
-     * *sum_ok is set when a sidecar checksum was stored with the put. */
+     * *sum_ok is an efs_store_sum_state; nonzero means a stored digest exists. */
     int (*get)(void *ctx, const struct efs_frag_id *id,
                uint8_t *buf, uint32_t *len,
                uint8_t sum[EFS_HASH_SIZE], int *sum_ok);

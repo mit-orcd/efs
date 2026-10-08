@@ -175,3 +175,10 @@ attachment overhead). No consistent reduction; these are diagnostic values.
 | 4 | 21.2 | 20.5 | 102.2 | 101.1 |
 | 5 | 21.4 | 20.9 | 100.8 | 101.4 |
 | 6 | 21.2 | 20.7 | 100.2 | 101.4 |
+
+## Follow-up
+
+[Rounds 7–8](container-profiling-rounds7-8-20261008.md) remove duplicated mapping
+reads and RPC payload hashing. Four additional diagnostic cases and eight matched
+cases pass; buffered overwrite median is +2.8% in two repeats, other rates remain
+mixed. The follow-up retains stalled runs and does not establish an overall gain.

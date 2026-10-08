@@ -123,3 +123,8 @@ fail without modifying an existing temporary or current map. Physical format and
 checksum/durability/lifetime-lock requirements are unchanged.
 
 See the [six-round profiling checkpoint](../status/container-profiling-20261008.md).
+
+The follow-up [rounds 7–8](../status/container-profiling-rounds7-8-20261008.md)
+remove duplicate mapping reads during quota admission and duplicate RPC hashing
+of container payloads already fully verified by the backend. Partial reads and
+missing stored checksums retain their previous verification requirements.

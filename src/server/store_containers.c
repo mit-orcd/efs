@@ -3,6 +3,7 @@
 * No acknowledged mapping is reclaimed using age, header scans or guesses. */
 #include "store_containers.h"
 #include "efs/checksum.h"
+#include "efs/store.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -330,15 +331,13 @@ static int release_extent(struct target *t,struct mapping *m)
     }
     return rc;
 }
-int server_container_put(struct efsd_server *s,const char *path,const uint8_t *data,uint32_t len,const uint8_t *sum,int *published)
+/* The mapping used for quota admission also owns the retirement decision.
+ * The caller holds the fragment lifetime lock throughout both operations. */
+static int container_put_known(struct target *t,const char *path,const uint8_t *data,
+                               uint32_t len,const uint8_t *sum,int *published,
+                               struct mapping *old,int found)
 {
-    *published=0;
-    if(len>EFS_MAX_FRAGMENT_SIZE||(len&&!data))return EFS_ERR_INVAL;
-    struct target *t=target_at(s,path);
-    if(!t)return EFS_ERR_IO;
-    struct mapping old,m={0};
-    int found=mapping_read(path,t,&old);
-    if(found!=EFS_OK&&found!=EFS_ERR_NOT_FOUND)return found;
+    struct mapping m={0};
     m.len=len;
     m.span=1+(len+PAGE-1)/PAGE;
     int rc=reserve(t,&m);
@@ -380,9 +379,39 @@ int server_container_put(struct efsd_server *s,const char *path,const uint8_t *d
     if(found==EFS_OK){
         /* Mapping is durable. Failure to reclaim old space must not undo it.
         * Busy bits retain failed retirements until startup reconciliation. */
-        if(release_extent(t,&old))fprintf(stderr,"containers: retained old extent after punch/sync failure\n");
+        if(release_extent(t,old))fprintf(stderr,"containers: retained old extent after punch/sync failure\n");
     }
     return EFS_OK;
+}
+int server_container_put(struct efsd_server *s,const char *path,const uint8_t *data,uint32_t len,const uint8_t *sum,int *published)
+{
+    *published=0;
+    if(len>EFS_MAX_FRAGMENT_SIZE||(len&&!data))return EFS_ERR_INVAL;
+    struct target *t=target_at(s,path);
+    if(!t)return EFS_ERR_IO;
+    struct mapping old;
+    int found=mapping_read(path,t,&old);
+    if(found!=EFS_OK&&found!=EFS_ERR_NOT_FOUND)return found;
+    uint32_t old_len=found==EFS_OK?old.len:0;
+    uint64_t charge=len>old_len?len-old_len:0;
+    pthread_mutex_lock(&s->lock);
+    struct efs_node *ln=server_local_node(s);
+    if(!ln||(s->quota&&(ln->used>s->quota||charge>s->quota-ln->used))) {
+        pthread_mutex_unlock(&s->lock);
+        return ln?EFS_ERR_QUOTA:EFS_ERR_INVAL;
+    }
+    ln->used+=charge;
+    pthread_mutex_unlock(&s->lock);
+    int rc=container_put_known(t,path,data,len,sum,published,&old,found);
+    pthread_mutex_lock(&s->lock);
+    ln=server_local_node(s);
+    if(ln) {
+        if(!*published)ln->used-=charge;
+        else if(old_len>len)ln->used-=old_len-len;
+    }
+    pthread_mutex_unlock(&s->lock);
+    server_usage_mark_dirty(s);
+    return rc;
 }
 int server_container_get(struct efsd_server *s,const char *path,uint8_t *data,uint32_t *len,uint8_t *sum,int *sum_ok)
 {
@@ -407,7 +436,8 @@ int server_container_get(struct efsd_server *s,const char *path,uint8_t *data,ui
         memcpy(data,buf+PAGE,n);
         *len=n;
         if(sum)memcpy(sum,m.page+64,32);
-        if(sum_ok)*sum_ok=m.page[48];
+        if(sum_ok)*sum_ok=!m.page[48]?EFS_STORE_SUM_NONE:
+            n==m.len?EFS_STORE_SUM_VERIFIED:EFS_STORE_SUM_PRESENT;
     }
     free(buf);
     return rc;
