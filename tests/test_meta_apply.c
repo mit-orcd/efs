@@ -5558,6 +5558,31 @@ static int test_create_lease_apply(int pending, struct efs_kv *kv,
     return efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,
                                       "atomic",0,-1,q,uuid,1,out);
 }
+static void test_pending_create_negative_replay(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();
+    CHECK(kv && efs_meta_apply_init(kv,T0)==EFS_OK,"negative CREATE init");
+    efs_ino_t existing=0,out=0;struct efs_meta_dentry dent;struct efs_opid_reply rep;
+    CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"atomic",&existing)==EFS_OK,"existing name");
+    uint8_t uuid[EFS_OPID_UUID_LEN]={19};struct efs_opid_req q={0};
+    memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=1;
+    struct efs_kv_ops ops=*kv->ops;const struct efs_kv_ops *original=kv->ops;
+    create_batch_original=ops.batch;ops.batch=create_batch_fault;kv->ops=&ops;
+    create_batch_fail=1;create_batch_calls=0;
+    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_IO,"failed negative verdict remains ambiguous");
+    CHECK(create_batch_calls==1 && !create_lease_items,"negative verdict has no ownership effect");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==0,"failed negative batch has no replay verdict");
+    create_batch_fail=0;
+    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,"negative CREATE recorded");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==1 && rep.rc==EFS_ERR_EXIST && !rep.ino,"durable negative verdict");
+    CHECK(efs_meta_apply_unlink(kv,1,"atomic",T0+1)==EFS_OK,"remove conflicting name");
+    create_batch_calls=0;
+    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,"late CREATE cannot acquire abandoned ownership");
+    CHECK(!create_batch_calls && efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,"negative replay cannot recreate removed name");
+    q.id.seq=2;q.ack=1;
+    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_OK && out,"new request can create after negative retirement");
+    kv->ops=original;efs_kv_destroy(kv);
+}
 static void test_create_initial_lease_atomic(void)
 {
   for (int pending = 0; pending < 2; pending++) {
@@ -5632,6 +5657,7 @@ static void test_create_initial_lease_atomic(void)
 
 int main(void)
 {
+    test_pending_create_negative_replay();
     test_gc_last_close_before_resolve();
     test_orphan_unlink();
     test_create_initial_lease_atomic();
