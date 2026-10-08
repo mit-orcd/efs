@@ -4418,17 +4418,6 @@ static void host_append_replay_put(struct efs_raft_host *h, efs_ino_t ino,
     pthread_mutex_unlock(&h->mu);
 }
 
-static int pack_append_res_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
-                               uint64_t off, int outcome)
-{
-    out[0] = EFS_MD_CMD_APPEND_RES;
-    wr64be(out + 1, ino);
-    wr64be(out + 9, off);
-    out[17] = (uint8_t)outcome;
-    memset(out + 18, 0, EFS_OPID_UUID_LEN + 4);
-    *len = HOST_APPEND_RES_LEN;
-    return EFS_OK;
-}
 
 /* Stand-in identity when the RPC has no session suffix (pre-35b FUSE
  * and smoke). Real (uuid, epoch) come from the optional wire suffix. */
@@ -8947,6 +8936,68 @@ static int host_mtime_prepare(void *user, const struct efs_txid *t,
                          image->key, image->klen, pay, pn, NULL, ctx->hint);
 }
 
+/* APPEND selects exact images once on a complete authoritative view.
+ * Replicas apply those images; they never recompute EOF from local lanes. */
+static int host_append_prepare(void *user,const struct efs_txid *t,
+                                const struct efs_txn_parts *parts,
+                                const struct efs_meta_append_image *im)
+{
+    struct host_resize_ctx *ctx=user;
+    uint8_t pay[9+2*EFS_OPID_VAL_MAX];uint32_t pn;
+    int rc=efs_txn_encode_excl_value(pay,sizeof(pay),&pn,im->expected,
+                                     im->expected_len,im->op,im->value,im->new_len);
+    if(rc!=EFS_OK)return rc;
+    uint32_t shard=((uint32_t)im->key[0]<<8)|im->key[1];
+    return host_prep_raw(ctx->host,shard,EFS_TXN_EXCL_VALUE,t,parts,
+                         im->key,im->klen,pay,pn,NULL,ctx->hint);
+}
+static const struct efs_meta_append_ops host_append_ops={
+    host_append_prepare,host_resize_decide,host_resize_resolve};
+static int host_append_authority(struct efs_raft_host *h,int *hint)
+{
+    uint8_t groups[2];host_need_both(groups);
+    for(unsigned i=0;i<2;++i) {
+        if(!host_hosts(h,groups[i])) {
+            *hint=host_pick_peer(h,groups,2,-1);return EFS_ERR_NOT_PRIMARY;
+        }
+        int rc=host_read_index(h,groups[i],hint);
+        if(rc!=EFS_OK)return rc;
+    }
+    return EFS_OK;
+}
+static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_t len,
+                                    const struct efs_opid_req *q,uint64_t *offset,int *hint)
+{
+    struct host_resize_ctx ctx={h,hint};struct efs_txid t;
+    int rc=host_append_authority(h,hint);
+    if(rc!=EFS_OK)return rc;
+    /* Replayed reservations do not need cleanup or a new transaction. */
+    rc=efs_meta_append_result(h->kv,ino,len,q,offset);
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    /* Bound this request's cleanup effort. BUSY retains the caller's identity
+     * and deadline; a later attempt resumes from durable deleted pages. */
+    for(unsigned page=0;page<32;++page) {
+        rc=efs_meta_append_prune_pending(h->kv,ino);
+        if(rc<=0)break;
+        unsigned removed;fill_txid(h,&t);
+        rc=efs_meta_prune_append(h->kv,ino,&t,&host_append_ops,&ctx,&removed);
+        if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
+        if(page==31)return EFS_ERR_BUSY;
+    }
+    if(rc!=EFS_OK)return rc;
+    struct efs_meta_append_plan *plan=malloc(sizeof(*plan));
+    if(!plan)return EFS_ERR_NOMEM;
+    rc=efs_meta_capture_append(h->kv,ino,len,q,host_txn_coord,h,plan);
+    if(rc==EFS_OK) {
+        *offset=plan->offset;fill_txid(h,&t);
+        rc=efs_meta_execute_append(plan,&t,&host_append_ops,&ctx);
+        /* Exact-image conflicts are retryable; capture's retired identity
+         * STALE is preserved and never allocated a second reservation. */
+        if(rc==EFS_ERR_STALE)rc=EFS_ERR_BUSY;
+    }
+    free(plan);return rc;
+}
+
 static int host_regular_mtime(struct efs_raft_host *h, efs_ino_t ino,
                                const struct efs_meta_utimens *u, int *hint)
 {
@@ -11053,6 +11104,19 @@ static void host_append_owner(struct efs_raft_host *h, efs_ino_t ino,
         out->status = EFS_INODE_RPC_BUSY;
         return;
     }
+    if(ack && sess_uuid) {
+        struct efs_opid_req q={0};
+        memcpy(q.id.client_uuid,sess_uuid,EFS_OPID_UUID_LEN);
+        q.id.session_epoch=sess_epoch;q.id.seq=op_seq;q.ack=*ack;
+        rc=host_append_transaction(h,ino,len,&q,&reserved,&hint);
+        if(rc==EFS_OK)rc=efs_meta_apply_getattr(h->kv,ino,host_txn_coord,h,&st);
+        set_inode_rc(out,rc,hint);
+        if(rc==EFS_OK) {
+            stat_to_inode(&st,&out->inode);
+            out->inode.size=reserved+len;out->inode.atime=reserved;
+        }
+        return;
+    }
     rc = host_read_inode_lanes(h, ino, &hint);
     if (rc != EFS_OK) {
         set_inode_rc(out, rc, hint);
@@ -11143,12 +11207,19 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
         return;
     }
     ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
-    if (!host_hosts(h, ig)) {
-        host_fwd_append(h, ino, len, sess_uuid, sess_epoch, op_seq, ack, out, &ig, 1);
-        return;
+    if(ack) {
+        uint8_t need[2];host_need_both(need);
+        if(!host_hosts(h,need[0]) || !host_hosts(h,need[1])) {
+            host_fwd_append(h,ino,len,sess_uuid,sess_epoch,op_seq,ack,out,need,2);
+            return;
+        }
+    } else {
+        if (!host_hosts(h, ig)) {
+            host_fwd_append(h, ino, len, sess_uuid, sess_epoch, op_seq, ack, out, &ig, 1);
+            return;
+        }
+        if (!host_append_primary(h, ig, out))return;
     }
-    if (!host_append_primary(h, ig, out))
-        return;
     pthread_once(&host_append_once, host_append_init);
     /* Mix the allocation counter with the shard: inodes on one shard
      * differ by 4096, so low bits alone serialize unrelated files. */
@@ -12024,12 +12095,10 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                                   uint64_t sz, int *hint)
 {
     uint64_t offs[64], lens[64];
-    uint32_t n = 64, i, clen = 0;
-    uint8_t cmd[HOST_APPEND_RES_LEN];
-    uint8_t ig;
-    int rc;
+    uint32_t n = 64, i;
+    struct host_resize_ctx ctx={h,hint};struct efs_txid t;
+    int rc,authoritative=0;
 
-    ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
     /* append_open caps at 64. A 400-record O_APPEND burst is 400 OPEN
      * rows; one pass left nopen>0 and the peer stayed BUSY forever. */
     for (;;) {
@@ -12046,16 +12115,21 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
         for (i = 0; i < n; i++) {
             if (offs[i] + lens[i] > sz)
                 continue;
-            rc = pack_append_res_cmd(cmd, &clen, ino, offs[i],
-                                     EFS_META_APPEND_COMPLETED);
-            if (rc != EFS_OK)
-                return rc;
-            rc = host_propose_wait(h, ig, cmd, clen, hint);
-            if (rc != EFS_OK)
-                return rc;
+            if(!authoritative) {
+                rc=host_append_authority(h,hint);
+                if(rc!=EFS_OK)return rc;
+                authoritative=1;
+                /* The old scan may precede the fresh authority boundary.
+                 * Recollect OPEN ranges from the current complete view. */
+                break;
+            }
+            fill_txid(h,&t);
+            rc=efs_meta_finish_append(h->kv,ino,offs[i],EFS_META_APPEND_COMPLETED,
+                                       &t,&host_append_ops,&ctx);
+            if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
             did++;
         }
-        if (!did)
+        if (!did && i==n)
             return EFS_OK;
     }
 }
@@ -12786,10 +12860,12 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         for (k = 0; k < nu && rc == EFS_OK; k++) {
             int rrc = host_resolve_caught_up(h, uino[k], usz[k], &hint);
 
-            if (rrc != EFS_OK)
+            if (rrc != EFS_OK) {
                 fprintf(stderr,
-                        "raft-host: report resolve ino=%llu rc=%d (deferred)\n",
+                        "raft-host: report resolve ino=%llu rc=%d (retry)\n",
                         (unsigned long long)uino[k], rrc);
+                rc=rrc;
+            }
         }
     }
     set_inode_rc(out, rc, hint);

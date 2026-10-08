@@ -376,6 +376,27 @@ os.close(fd)
                         assert writer.wait(timeout=10)==0,writer.stderr.read()
                     finally:
                         if writer.poll() is None:writer.kill();writer.wait()
+        # A different client extends another lane between append bursts.
+        # The next reservation must use that authoritative EOF, including
+        # holes, rather than the reserving host's incomplete local lanes.
+        for gap_chunks in (5,6):
+            name=f'append-peer-extension-{gap_chunks}';path=mount/name
+            first=b'A'*(128<<10);extension=b'E'*(128<<10);tail=b'T'*(128<<10)
+            fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_APPEND,0o600)
+            try:
+                assert os.write(fd,first)==len(first);os.fsync(fd)
+                pfd=os.open(peer_mount/name,os.O_WRONLY)
+                try:
+                    assert os.pwrite(pfd,extension,gap_chunks*(128<<10))==len(extension)
+                    os.fsync(pfd)
+                finally:os.close(pfd)
+                assert os.write(fd,tail)==len(tail);os.fsync(fd)
+            finally:os.close(fd)
+            body=first+bytes((gap_chunks-1)*(128<<10))+extension+tail
+            assert (peer_mount/name).read_bytes()==body,'append ignored peer lane EOF'
+            expected[name]=hashlib.sha256(body).hexdigest()
+            records.append({'name':name,'bytes':len(body),'mixed_peer_extension':True,
+                            'gap_chunks':gap_chunks,'verified_before_close':False})
         run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
         unmount();stop(crash=True);start();mount_client()
         for name,digest in expected.items():

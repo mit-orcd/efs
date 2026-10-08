@@ -9,7 +9,7 @@ benchmark harness changes belong to this package.
 
 | Item | Current work / exit gate |
 | --- | --- |
-| W64 | `9ddcf7a2`: durable inode-shard reservation receipts, bounded ACK retirement and exact replay. Full AMD units, lost committed replies, 32 concurrent identical requests, explicit inode-leader death, cold replay and exact bytes pass. Cross-group EOF authority/routing remains open (see blocker below). |
+| W64 | `9ddcf7a2`: durable inode-shard reservation receipts, bounded ACK retirement and exact replay. Full AMD units, lost committed replies, 32 concurrent identical requests, explicit inode-leader death, cold replay and exact bytes pass. Coordinated EOF/routing and bounded completion now pass AMD direct/TCP append/fsync, peer extension, leader-death replay, POSIX and cold-byte gates (details below). Legacy requests retain their old reserve path; D25 remains staged. |
 | W88 | Production REPORT identity and receipt authority must replace evictable trailer history before activation. Actual host/FUSE eviction, overlapping writes, GC/re-PUT and cold bytes remain required. |
 | D27/0a | `011ae854`: hostname resolution now respects inherited RPC deadlines; at most eight detached NSS jobs retain their own completion state. Hung NSS, saturation, late completion, FD cleanup and thread-creation faults pass, including AMD ASan/UBSan. Whole-write fault/recovery and small-host RSS acceptance remain open. |
 | W23/W89 | Corrected follower pressure measurement and D30 remedy remain pending; no pressure closure from these runs. |
@@ -41,7 +41,7 @@ The original W87 incident is retained; these passes do not identify its sole
 cause. Cross-lane EOF observations during concurrent failover remain an explicit
 acceptance obligation. No rolling downgrade of the new log format is claimed.
 
-## Cross-group append blocker
+## Cross-group append blocker — original reproduction
 
 The W73 candidate's large O_SYNC+O_APPEND write returned 1,048,528 bytes
 instead of 2 MiB. Trace: the first callback published successfully, then the
@@ -122,6 +122,34 @@ per-participant checks also refuse future oversized plans before PREPARE.
 [Source hashes and gates](../../results/measure/20261008-replay-readiness/append-completion-tests.json).
 Production routing integration and the live append/fsync reproducer are next;
 this prerequisite alone does not close W64 or activate D25.
+
+## W64 production APPEND authority — 07:13 UTC
+
+ACK-bearing APPEND now routes to a host with authoritative views of both shard
+groups, then captures/commits one exact reservation using the tested planner.
+It no longer requires that coordinating host to be the inode-group leader.
+Replicas install identical chosen images; no replica independently recomputes
+EOF. Legacy request/log decoding remains available. REPORT completion uses
+coordinated inode/cursor/lane replacements too, and completion failure is now
+returned for retry rather than silently forgetting the owed completion.
+
+AMD direct/TCP fixture `/data1/efs/gc-direct-6np4w1hz` passes repeated 128 KiB
+append+fsync through cross-group publication, two peer non-append extensions
+through holes followed by append at the authoritative EOF, peer visibility and
+exact bytes after a daemon crash. Lost replies, 32 identical requests, explicit
+inode-leader death, cold retry, ACK retirement and changed-payload refusal pass.
+Single-client POSIX: **216 PASS, 0 FAIL, 1 SKIP**. Two-client POSIX: **64/64**.
+Concurrent append during GC retains all **800 exact cold records**; physical
+fragment deletion, quotas, late-PUT fencing and restart inventory pass.
+[Fixture manifest](../../results/measure/20261008-replay-readiness/append-authority-pass/manifest.json),
+[gate console](../../results/measure/20261008-replay-readiness/append-authority-pass/console.log),
+[append/extension cases](../../results/measure/20261008-replay-readiness/append-authority-pass/append-sync-boundary.json).
+
+A combined shutdown run exposed a separate client drain problem after a failed
+PUT: clean stop retained a new partial dirty body until its 60-second deadline.
+That failure is being addressed separately, not counted as a passed shutdown
+gate. Physical power loss, multi-host transport acceptance, production session
+fencing, bounded transaction-history retirement and D25 activation remain owed.
 
 ## Evidence
 
