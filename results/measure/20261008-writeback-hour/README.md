@@ -29,3 +29,6 @@ python3 tests/live/get_pair_deadline.py
 - `sanitizer-frame.log`, `sanitizer-get.log`: address/undefined-behavior sanitizer acceptance on the Mac.
 
 - `final/`: latest-source full unit and AMD direct/TCP broad acceptance, exact manifest, integrated hung-DNS normal/sanitized gate, committed-document check and restored-service process inventory.
+
+`final/tcp-final.log` relinks the actual client against the final production
+connection changes and repeats short/default PUT budgets and partial GET pairs.
