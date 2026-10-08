@@ -21,6 +21,8 @@ class ChurnTests(unittest.TestCase):
         if not ok:return p
         line=next(s for s in p.stdout.splitlines() if s.startswith('BENCH_OK '))
         r=dict(re.findall(r'(\w+)=([^ ]+)',line))
+        workload=next(v for v in p.stdout.splitlines() if v.startswith('WORKLOAD '))
+        r.update(dict(re.findall(r'(\w+)=([^\s]+)',workload)))
         self.assertEqual(r['errors'],'0');self.assertEqual(r['verified_objects'],r['live_objects'])
         self.assertEqual(int(r['reads'])+int(r['writes']),600*qd)
         self.assertEqual(r['retired'],r['writes'])
@@ -37,6 +39,19 @@ class ChurnTests(unittest.TestCase):
         for layout,occupancy,direct,persist in itertools.product(['files','punch','compact'],[50,80,95],[False,True],['none','each','batch']):
             with self.subTest(layout=layout,occupancy=occupancy,direct=direct,persist=persist), tempfile.TemporaryDirectory() as root:
                 self.case(root,layout,persist,direct,occupancy)
+
+    def test_matched_locality_and_multiple_targets(self):
+        traces=[]
+        for layout in ['files','punch','compact']:
+            with tempfile.TemporaryDirectory() as root,tempfile.TemporaryDirectory() as target:
+                r=self.case(root,layout,qd=2,extra=('--storage',target,'--seed','42',
+                    '--hot-set-percent','10','--hot-access-percent','90'))
+                self.assertEqual(list(Path(target).iterdir()),[])
+                traces.append((r['trace'],r['reads'],r['writes'],r['live_objects']))
+        self.assertEqual(traces,[traces[0]]*3)
+        with tempfile.TemporaryDirectory() as root:
+            self.case(root,qd=2,extra=('--storage',root),ok=False)
+            self.case(root,extra=('--hot-set-percent','100'),ok=False)
 
     def test_punch_backpressure_and_final_drain(self):
         # A batch larger than the free pool must drain early for progress.

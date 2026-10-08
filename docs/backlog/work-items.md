@@ -3415,6 +3415,8 @@ the original record and withdrawn interpretation remain retained.
 starting from `53be1da7f190`. Functional gates pass; initial same-device
 measurements are recorded below. Repeated long-running acceptance remains open.
 
+**Oct 8 simulator follow-up:** [matched simulator comparison](../status/bench-layout-comparison-20261008.md): configurable locality/seed, multiple private targets, alternating repeated layout comparisons and summary metrics. Benchmark-only; production engine/recovery remains outside scope. Plan recorded before implementation; completed with 19 test methods and 16 passing comparison cases. Longer performance and physical multi-device evidence remain open.
+
 **Purpose:** extend the existing finite `--storage-principles` experiments with
 bounded, sustained read/write/retire workloads at 50/80/95 percent of an explicit
 experiment-local capacity. This is store occupancy, not filling the host disk.

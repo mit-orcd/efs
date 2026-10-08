@@ -25,6 +25,8 @@
 
 struct config {
     const char *root, *layout, *persist;
+    const char *roots[64]; unsigned nroots;
+    uint64_t seed; unsigned hot_set, hot_access;
     uint64_t capacity, container, hint;
     unsigned payload, stride, occupancy, qd, steps, warmup, batch, reads, seconds;
     int direct, preallocate, filestreams, file_batch_sync;
@@ -47,6 +49,7 @@ struct worker {
     int dfd, owns_dir, error, namespace_dirty;
     char dir[4096];
     uint64_t rng, dead, before, after, start_ns, end_ns, extents_after;
+    uint64_t trace, cpu_us;
     struct sample stats;
 };
 struct gate { pthread_mutex_t mu; pthread_cond_t cv; unsigned ready; int go; };
@@ -331,7 +334,17 @@ static int cycles(struct worker *w,unsigned count,struct sample *s)
     for(unsigned i=0;i<count;i++) {
         if(until && now_ns()>=until)break;
         unsigned object=(unsigned)(random_next(w)%w->live);
+        if(w->c->hot_access) {
+            unsigned hot=(unsigned)((uint64_t)w->live*w->c->hot_set/100);
+            if(!hot)hot=1;
+            if(random_next(w)%100<w->c->hot_access)object%=hot;
+            else object=hot+object%(w->live-hot);
+        }
         int reading=random_next(w)%100<w->c->reads;
+        if(s==&w->stats) {
+            w->trace^=((uint64_t)object<<1)|(unsigned)reading;
+            w->trace*=UINT64_C(1099511628211);
+        }
         uint64_t start=now_ns();
         if(reading) {
             struct object *o=&w->objects[object];
@@ -342,6 +355,7 @@ static int cycles(struct worker *w,unsigned count,struct sample *s)
             lat_add(&s->write,(now_ns()-start)/1000);
         }
     }
+    if(until && now_ns()<until){errno=ETIMEDOUT;return -1;}
     if(drain_punches(w,s))return -1;
     /* Final batch barrier is part of elapsed time, not an uncounted flush. */
     if(strcmp(w->c->persist,"none") && flush_worker(w,s))return -1;
@@ -353,9 +367,13 @@ static void *run(void *arg)
     pthread_mutex_lock(&gate.mu);gate.ready++;pthread_cond_broadcast(&gate.cv);
     while(!gate.go)pthread_cond_wait(&gate.cv,&gate.mu);
     pthread_mutex_unlock(&gate.mu);
+    struct rusage a,b;getrusage(RUSAGE_THREAD,&a);
     w->start_ns=now_ns();
     if(cycles(w,w->c->steps,&w->stats))w->error=errno?errno:EIO;
-    w->end_ns=now_ns();return NULL;
+    w->end_ns=now_ns();getrusage(RUSAGE_THREAD,&b);
+    w->cpu_us=(uint64_t)((b.ru_utime.tv_sec-a.ru_utime.tv_sec+b.ru_stime.tv_sec-a.ru_stime.tv_sec)*1000000LL+
+        b.ru_utime.tv_usec-a.ru_utime.tv_usec+b.ru_stime.tv_usec-a.ru_stime.tv_usec);
+    return NULL;
 }
 static int empty_dir(const char *root)
 {
@@ -377,10 +395,11 @@ static int prepare(struct worker *w)
     unsigned data_segments=(unsigned)(c->capacity/c->qd/c->container);
     if(container_mode(w))w->nsegments=data_segments+1;
     w->slots=container_mode(w)?w->nsegments*w->per_segment:(unsigned)(c->capacity/c->qd/c->stride);
-    unsigned data_slots=container_mode(w)?data_segments*w->per_segment:w->slots;
+    /* Common logical live set across layouts, including segment-tail rounding. */
+    unsigned data_slots=data_segments*w->per_segment;
     w->live=(unsigned)((uint64_t)data_slots*c->occupancy/100);
     if(w->live<2 || w->live>=data_slots || w->slots>1048576){errno=EINVAL;return -1;}
-    if(snprintf(w->dir,sizeof(w->dir),"%s/churn-%u",c->root,w->id)>=4096)return -1;
+    if(snprintf(w->dir,sizeof(w->dir),"%s/churn-%u",c->roots[w->id%c->nroots],w->id)>=4096)return -1;
     if(mkdir(w->dir,0700))return -1;
     w->owns_dir=1;w->namespace_dirty=1;w->dfd=open(w->dir,O_RDONLY|O_DIRECTORY);if(w->dfd<0)return -1;
     if(c->filestreams) {
@@ -460,7 +479,7 @@ int efs_bench_churn_main(int argc,char **argv)
 {
     struct config c={.layout="files",.persist="batch",.capacity=UINT64_C(3)<<30,
         .container=UINT64_C(1)<<30,.payload=65536,.occupancy=80,.qd=1,
-        .steps=10000,.warmup=1000,.batch=32,.reads=70};
+        .steps=10000,.warmup=1000,.batch=32,.reads=70,.seed=UINT64_C(0x12345678),.hot_set=10};
     int seen=0;
     for(int i=1;i<argc;i++) {
         const char *key=argv[i];uint64_t n;
@@ -470,6 +489,8 @@ int efs_bench_churn_main(int argc,char **argv)
                  "--capacity-bytes N --container-bytes N (default 1 GiB) --payload-size N\n"
                  "--occupancy 50|80|95 --qd N --steps N --seconds N --warmup N --read-percent N\n"
                  "--persist none|each|batch --batch-size N --direct-io|--no-direct-io\n"
+                 "--seed N --hot-set-percent 1..99 --hot-access-percent 0..100\n"
+                 "Repeat --storage for multiple targets (workers round-robin).\n"
                  "--preallocate (containers only) --extent-hint N --filestreams --file-batch-sync\n"
                  "All sizes are integer bytes; one reserved cleaning container per worker.\n"
                  "Occupancy is experiment capacity, not host filesystem fullness.\n"
@@ -483,13 +504,14 @@ int efs_bench_churn_main(int argc,char **argv)
         if(++i==argc)goto invalid;
         const char *v=argv[i];
         if(!strcmp(key,"--bench")){if(seen++||strcmp(v,"churn"))goto invalid;continue;}
-        if(!strcmp(key,"--storage")){if(c.root)goto invalid;c.root=v;continue;}
+        if(!strcmp(key,"--storage")){if(c.nroots==64)goto invalid;c.roots[c.nroots++]=v;c.root=c.roots[0];continue;}
         if(!strcmp(key,"--layout")){c.layout=v;continue;}
         if(!strcmp(key,"--persist")){c.persist=v;continue;}
         if(integer(v,&n))goto invalid;
         if(!strcmp(key,"--capacity-bytes"))c.capacity=n;
         else if(!strcmp(key,"--container-bytes"))c.container=n;
         else if(!strcmp(key,"--extent-hint"))c.hint=n;
+        else if(!strcmp(key,"--seed"))c.seed=n;
         else if(n>UINT32_MAX)goto invalid;
         else if(!strcmp(key,"--payload-size"))c.payload=(unsigned)n;
         else if(!strcmp(key,"--occupancy"))c.occupancy=(unsigned)n;
@@ -499,9 +521,11 @@ int efs_bench_churn_main(int argc,char **argv)
         else if(!strcmp(key,"--warmup"))c.warmup=(unsigned)n;
         else if(!strcmp(key,"--read-percent"))c.reads=(unsigned)n;
         else if(!strcmp(key,"--batch-size"))c.batch=(unsigned)n;
+        else if(!strcmp(key,"--hot-set-percent"))c.hot_set=(unsigned)n;
+        else if(!strcmp(key,"--hot-access-percent"))c.hot_access=(unsigned)n;
         else goto invalid;
     }
-    if(!seen||!c.root||!c.qd||c.qd>64||!c.steps||c.steps>10000000||c.warmup>1000000||c.seconds>3600||
+    if(!seen||!c.root||!c.seed||c.hot_set<1||c.hot_set>99||c.hot_access>100||c.nroots>c.qd||!c.qd||c.qd>64||!c.steps||c.steps>10000000||c.warmup>1000000||c.seconds>3600||
        !c.batch||c.batch>100000||c.reads<1||c.reads>99||c.payload<4096||c.payload>1048576||c.payload%4096||
        (c.occupancy!=50&&c.occupancy!=80&&c.occupancy!=95)||c.container<c.payload*4ull||c.container>(UINT64_C(4)<<30)||
        c.container%4096||!c.capacity||c.capacity>(UINT64_C(64)<<30)||
@@ -511,13 +535,21 @@ int efs_bench_churn_main(int argc,char **argv)
        (!strcmp(c.layout,"files")&&(c.preallocate||c.hint))||c.hint>UINT32_MAX||c.hint%4096)goto invalid;
     c.stride=c.payload+4096;
     if(strcmp(c.layout,"files") && c.capacity/c.qd/c.container<2)goto invalid;
-    if(!empty_dir(c.root)){fprintf(stderr,"churn: root must be an existing empty directory: %s\n",c.root);return 1;}
-    struct statvfs space;if(statvfs(c.root,&space))return 1;
-    uint64_t required=c.capacity+(uint64_t)c.qd*c.container;
-    if((uint64_t)space.f_bavail*space.f_frsize<required*2){fprintf(stderr,"churn: need at least twice bounded fixture capacity free\n");return 1;}
+    for(unsigned t=0;t<c.nroots;t++) {
+        struct stat st;
+        if(!empty_dir(c.roots[t])||stat(c.roots[t],&st)){fprintf(stderr,"churn: root must be an existing empty directory: %s\n",c.roots[t]);return 1;}
+        for(unsigned j=0;j<t;j++) {
+            struct stat prev;if(stat(c.roots[j],&prev))return 1;
+            if(prev.st_dev==st.st_dev&&prev.st_ino==st.st_ino)goto invalid;
+        }
+        /* Conservatively check the whole fixture for roots on the same filesystem. */
+        struct statvfs space;if(statvfs(c.roots[t],&space))return 1;
+        uint64_t required=c.capacity+(uint64_t)c.qd*c.container;
+        if((uint64_t)space.f_bavail*space.f_frsize<required*2){fprintf(stderr,"churn: need at least twice bounded fixture capacity free\n");return 1;}
+    }
     struct worker *w=calloc(c.qd,sizeof(*w));pthread_t *threads=calloc(c.qd,sizeof(*threads));
     struct sample *total=calloc(1,sizeof(*total));if(!w||!threads||!total){free(w);free(threads);free(total);return 1;}
-    for(unsigned i=0;i<c.qd;i++){w[i].dfd=-1;w[i].c=&c;w[i].id=i;w[i].rng=UINT64_C(0x12345678)+i;}
+    for(unsigned i=0;i<c.qd;i++){w[i].dfd=-1;w[i].c=&c;w[i].id=i;w[i].rng=c.seed^(UINT64_C(0x9e3779b97f4a7c15)*(i+1));if(!w[i].rng)w[i].rng=1;w[i].trace=UINT64_C(14695981039346656037);}
     unsigned made=0;int rc=1,errors=0,extents_available=1;uint64_t start=0,end=0,verified=0,live=0,before=0,after=0,dead=0,mem=0,extents=0;
     unsigned prepared=0;
     for(unsigned i=0;i<c.qd;i++) {
@@ -586,6 +618,18 @@ release:
       (unsigned long long)lat_percentile(&total->write,50,NULL),(unsigned long long)lat_percentile(&total->write,99,NULL),(unsigned long long)total->write.max,
       (unsigned long long)lat_percentile(&total->gc,99,NULL),(unsigned long long)total->cleanings,(unsigned long long)total->copied,(unsigned long long)total->copy_bytes,(unsigned long long)total->reclaimed,
       (unsigned long long)before,(unsigned long long)after,(unsigned long long)dead,(unsigned long long)total->max_dead,(unsigned long long)live,(unsigned long long)verified,(unsigned long long)total->syncs,extents_available,(unsigned long long)(extents_available?extents:0),(unsigned long long)mem,usage.ru_maxrss,errors);
+    uint64_t cpu=0,trace=0;
+    for(unsigned i=0;i<c.qd;i++){cpu+=w[i].cpu_us;trace^=w[i].trace;}
+    printf("WORKLOAD seed=%llu hot_set_pct=%u hot_access_pct=%u targets=%u trace=%016llx cpu_us=%llu cpu_us_per_op=%.3f\n",
+        (unsigned long long)c.seed,c.hot_set,c.hot_access,c.nroots,(unsigned long long)trace,
+        (unsigned long long)cpu,(double)cpu/(total->reads+total->writes?total->reads+total->writes:1));
+    for(unsigned t=0;t<c.nroots;t++) {
+        uint64_t reads=0,writes=0,bytes=0,tcpu=0;unsigned workers=0;
+        for(unsigned i=t;i<c.qd;i+=c.nroots){reads+=w[i].stats.reads;writes+=w[i].stats.writes;bytes+=w[i].after;tcpu+=w[i].cpu_us;workers++;}
+        printf("TARGET target=%u workers=%u reads=%llu writes=%llu wall_s=%.6f ops_s=%.3f allocated_after=%llu cpu_us=%llu\n",
+            t,workers,(unsigned long long)reads,(unsigned long long)writes,wall,(reads+writes)/wall,
+            (unsigned long long)bytes,(unsigned long long)tcpu);
+    }
     rc=errors?1:0;
 done:
     for(unsigned i=0;i<c.qd;i++)cleanup(&w[i]);

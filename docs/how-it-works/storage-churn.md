@@ -170,3 +170,53 @@ is diagnostic; compare separate unprofiled samples with identical arguments.
 See the [five-round profile ledger](../../results/measure/20261008-w90-perf-five-rounds/README.md)
 for accepted/rejected candidates, profile snapshots, syscall accounting and
 measurement limits.
+
+## Matched simulator comparison
+
+Use `--compare` to alternate layout order across repeats and write
+`COMPARISON.md` alongside the raw per-case evidence. This remains a simulator;
+it does not call the production store or implement crash recovery.
+
+```sh
+./efs-bench.sh --storage-churn --compare \
+  --storage-root /data1/efs/bench --layouts files,punch \
+  --payload-sizes 65536 --occupancies 80,95 --qds 4 \
+  --io-modes direct --persist batch --batch-size 32 \
+  --seed 42 --hot-set-percent 10 --hot-access-percent 90 \
+  --seconds 120 --repeat 4 --timeout 900
+# Multiple targets: repeat --storage-root; QD must cover every target.
+# Create the scratch parents first. Separate directories can share a device.
+./efs-bench.sh --storage-churn --compare \
+  --storage-root /data1/efs/bench/target-a \
+  --storage-root /data2/efs/bench/target-b \
+  --layouts files,punch --payload-sizes 65536 --occupancies 80 \
+  --qds 8 --io-modes direct --steps 100000 --repeat 4
+```
+
+Workers are assigned round-robin to targets and still own independent models.
+Target work/rates and allocations are reported against the common measured
+process interval. Worker CPU includes user and system CPU during measured I/O
+and required final barriers, excluding setup and verification. It excludes work
+performed asynchronously by unrelated kernel threads and is not device utilization.
+The manifest records each root's device ID and mount information; multiple roots
+on the same device do not prove physical-device scaling.
+
+`--hot-access-percent 0` selects uniform random access. Otherwise that percentage
+of operations targets the first `--hot-set-percent` of live objects; remaining
+operations target the cold set. Both reads and replacements use this locality.
+`--seed` controls per-worker deterministic sequences. Every replacement retires
+one old version; this is constant-live-set churn, not independent create/delete
+or a complete application trace.
+
+Logical live counts now use common container-tail rounding in every layout.
+Historical file-only runs could have a slightly larger live set. Fixed-step
+comparison runs validate identical logical operation counts, live counts and
+rolling per-worker trace fingerprints across layouts. Timed runs consume
+potentially different-length prefixes and do not assert identical traces.
+Payload size is fixed within each case; `--payload-sizes` runs separate cases.
+
+The summary reports sample ranges and medians for throughput, latency, CPU and
+allocation. Raw results retain cleanup/backlog/error counters. Use several long
+alternating repeats before drawing workload-specific conclusions; short runs
+only establish functionality. Barriers are matched by policy, not by syscall
+count: files may require many inode flushes where a container requires one.
