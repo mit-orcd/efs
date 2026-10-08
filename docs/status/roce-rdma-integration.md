@@ -54,7 +54,7 @@ Full direct-I/O RDMA POSIX passes 216/0/1 skip in 18.7 seconds; POSIX2 passes
 64/64 in 8.0 seconds. All four daemon and both FUSE logs confirm RDMA upgrade.
 Same-host software RoCE is slower here than the prior TCP baseline (17.9/7.3
 seconds); this is one functional run, not a transport performance conclusion.
-Evidence: [retained results](../../results/measure/20261007-amd-rdma/).
+Evidence: [retained results](../../results/measure/20261007-amd-rdma/posix.tsv).
 Remote full logs: /home/efs/efs-rdma/gate-rdma-5jt0h6.
 
 Cleanup observed client.sh returning an identification error after the first
