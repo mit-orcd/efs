@@ -147,8 +147,54 @@ static void test_fence_drops_opid(void)
     efs_kv_mem_free(kv);
 }
 
+static int count_lease_key(void *ctx,const uint8_t *key,uint32_t klen,
+                            const uint8_t *val,uint32_t vlen)
+{
+    (void)key;(void)klen;(void)val;(void)vlen;(*(unsigned*)ctx)++;return 0;
+}
+static void test_pending_create_ownership(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[EFS_OPID_UUID_LEN];uuid_of(uuid,9);
+    efs_ino_t ino=0;struct efs_meta_row row;
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_LEASE_PENDING_VALUE_LEN],pref[EFS_KV_KEY_MAX];
+    uint32_t klen=0,plen=0;uint64_t token=UINT64_C(0xfedcba9876543210);
+    CHECK(kv!=NULL,"pending KV");if(!kv)return;
+    CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"pending init");
+    CHECK(efs_meta_apply_create_file(kv,&g_at,EFS_ROOT_INO,S_IFREG|0600,"pending",&ino)==EFS_OK,"pending file");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"pending inode");
+    CHECK(efs_kv_key_lease(efs_kv_inode_shard(ino),ino,row.generation,uuid,1,key,&klen)==EFS_OK,"pending key");
+    CHECK(efs_lease_pending_value(token,value)==EFS_OK,"encode full-width token");
+    CHECK(efs_lease_pending_value(0,value)==EFS_ERR_INVAL && efs_lease_pending_value(token,NULL)==EFS_ERR_INVAL,"invalid pending token rejected");
+    CHECK(efs_kv_put(kv,key,klen,value,sizeof(value))==EFS_OK,"seed staged pending value");
+    CHECK(efs_meta_apply_unlink(kv,EFS_ROOT_INO,"pending",T0)==EFS_OK,"unlink pending CREATE");
+    CHECK(efs_lease_close(kv,ino,row.generation,uuid,1)==EFS_OK && efs_lease_any(kv,ino,row.generation)==1,"normal last close cannot drop unadopted CREATE");
+    CHECK(efs_meta_apply_reclaim(kv,ino)==EFS_ERR_BUSY,"pending CREATE protects open-unlinked inode");
+    CHECK(efs_lease_open(kv,ino,row.generation,uuid,1)==EFS_OK,"another local OPEN joins same record");
+    CHECK(efs_kv_key_lease_prefix(efs_kv_inode_shard(ino),ino,row.generation,pref,&plen)==EFS_OK,"lease prefix");
+    unsigned count=0;CHECK(efs_kv_scan_prefix(kv,pref,plen,count_lease_key,&count)==EFS_OK && count==1,"I19 one lease key despite pending and normal ownership");
+    CHECK(efs_lease_close(kv,ino,row.generation,uuid,1)==EFS_OK && efs_lease_any(kv,ino,row.generation)==1,"normal edge preserves pending token");
+    CHECK(efs_lease_pending_close(kv,ino,row.generation,uuid,1,token-1,1)==EFS_ERR_STALE,"wrong adoption token refused");
+    CHECK(efs_lease_open(kv,ino,row.generation,uuid,1)==EFS_OK,"normal OPEN before abandoned-create cleanup");
+    CHECK(efs_lease_pending_close(kv,ino,row.generation,uuid,1,token,0)==EFS_OK && efs_lease_any(kv,ino,row.generation)==1,"abandoned pending cleanup preserves another normal open");
+    CHECK(efs_lease_pending_close(kv,ino,row.generation,uuid,1,token,1)==EFS_ERR_STALE && efs_lease_any(kv,ino,row.generation)==1,"delayed pending final close cannot delete a normal-only lease");
+    CHECK(efs_lease_close(kv,ino,row.generation,uuid,1)==EFS_OK && efs_lease_any(kv,ino,row.generation)==0,"normal final close removes remaining ownership");
+    CHECK(efs_lease_pending_value(token+1,value)==EFS_OK && efs_kv_put(kv,key,klen,value,sizeof(value))==EFS_OK,"new pending claim");
+    CHECK(efs_lease_pending_close(kv,ino,row.generation,uuid,1,token,1)==EFS_ERR_STALE && efs_lease_any(kv,ino,row.generation)==1,"old cleanup cannot delete new pending claim");
+    CHECK(efs_lease_pending_close(kv,ino,row.generation,uuid,1,token+1,1)==EFS_OK && efs_lease_any(kv,ino,row.generation)==0,"matching final-close token releases pending ownership");
+    CHECK(efs_lease_pending_close(kv,ino,row.generation,uuid,1,token+1,1)==EFS_OK,"completed cleanup is idempotent");
+    value[0]=2;value[1]=0;
+    CHECK(efs_kv_put(kv,key,klen,value,sizeof(value))==EFS_OK,"malformed ownership fixture");
+    CHECK(efs_lease_open(kv,ino,row.generation,uuid,1)==EFS_ERR_PROTO && efs_lease_close(kv,ino,row.generation,uuid,1)==EFS_ERR_PROTO,"malformed ownership is not overwritten or discarded");
+    CHECK(efs_lease_pending_value(token,value)==EFS_OK && efs_kv_put(kv,key,klen,value,sizeof(value))==EFS_OK,"restore valid ownership");
+    CHECK(efs_lease_open(kv,ino,row.generation,uuid,1)==EFS_OK,"normal plus pending before durable revoke");
+    CHECK(efs_lease_drop_session(kv,efs_kv_inode_shard(ino),uuid,1)==EFS_OK && efs_lease_any(kv,ino,row.generation)==0,"session cleanup removes the one combined lease");
+    CHECK(efs_meta_apply_reclaim(kv,ino)==EFS_OK,"reclaim after session ownership removed");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_pending_create_ownership();
     test_register_and_fence();
     test_i19_lease();
     test_unlink_no_lease();

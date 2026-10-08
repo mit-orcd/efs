@@ -378,6 +378,53 @@ int efs_session_accept(struct efs_kv *kv, uint32_t shard,
     return EFS_OK;
 }
 
+/* Version 2: normal-open bit + pending-CREATE bit + exact token. There are
+ * no closed tombstones and no extra claim keys; bounded retirement of the
+ * surrounding session/operation identities is an activation prerequisite. */
+#define LEASE_NORMAL 1u
+#define LEASE_PENDING 2u
+int efs_lease_pending_value(uint64_t token, uint8_t out[EFS_LEASE_PENDING_VALUE_LEN])
+{
+    if(!token || !out)return EFS_ERR_INVAL;
+    out[0]=2;out[1]=LEASE_PENDING;
+    for(unsigned i=0;i<8;i++)out[2+i]=(uint8_t)(token>>(56-8*i));
+    return EFS_OK;
+}
+static int lease_value_read(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
+                             uint8_t value[EFS_LEASE_PENDING_VALUE_LEN],
+                             uint8_t *flags,uint64_t *token)
+{
+    uint32_t n=EFS_LEASE_PENDING_VALUE_LEN;*flags=0;*token=0;
+    int rc=efs_kv_get(kv,key,klen,value,&n);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if(rc!=EFS_OK)return rc;
+    if(n==1 && value[0]==1){*flags=LEASE_NORMAL;return EFS_OK;}
+    if(n!=EFS_LEASE_PENDING_VALUE_LEN || value[0]!=2 ||
+       !(value[1]&LEASE_PENDING) || (value[1]&~(LEASE_NORMAL|LEASE_PENDING)))return EFS_ERR_PROTO;
+    for(unsigned i=0;i<8;i++)*token=(*token<<8)|value[2+i];
+    if(!*token)return EFS_ERR_PROTO;
+    *flags=value[1];return EFS_OK;
+}
+int efs_lease_pending_close(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+                            const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
+                            uint64_t token,int release_normal)
+{
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_LEASE_PENDING_VALUE_LEN],flags;
+    uint32_t klen=0;uint64_t current;
+    if(!kv || !uuid || !ino || !token || (release_normal!=0 && release_normal!=1))return EFS_ERR_INVAL;
+    int rc=efs_kv_key_lease(efs_kv_inode_shard(ino),ino,gen,uuid,epoch,key,&klen);
+    if(rc==EFS_OK)rc=lease_value_read(kv,key,klen,value,&flags,&current);
+    if(rc!=EFS_OK)return rc;
+    if(!flags)return EFS_OK; /* repeated completed cleanup */
+    if(!(flags&LEASE_PENDING))return release_normal?EFS_ERR_STALE:EFS_OK;
+    if(current!=token)return EFS_ERR_STALE;
+    if(!release_normal && (flags&LEASE_NORMAL)) {
+        uint8_t one=1;return efs_kv_put(kv,key,klen,&one,1);
+    }
+    rc=efs_kv_del(kv,key,klen);
+    return rc==EFS_ERR_NOT_FOUND?EFS_OK:rc;
+}
+
 int efs_lease_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch)
 {
@@ -397,6 +444,14 @@ int efs_lease_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     rc = efs_kv_key_lease(shard, ino, gen, uuid, epoch, key, &klen);
     if (rc != EFS_OK)
         return rc;
+    uint8_t value[EFS_LEASE_PENDING_VALUE_LEN],flags;uint64_t token;
+    rc=lease_value_read(kv,key,klen,value,&flags,&token);
+    if(rc!=EFS_OK)return rc;
+    if(flags&LEASE_NORMAL)return EFS_OK;
+    if(flags&LEASE_PENDING) {
+        value[1]=flags|LEASE_NORMAL;
+        return efs_kv_put(kv,key,klen,value,sizeof(value));
+    }
     return efs_kv_put(kv, key, klen, &one, 1);
 }
 
@@ -413,6 +468,15 @@ int efs_lease_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                           &klen);
     if (rc != EFS_OK)
         return rc;
+    uint8_t value[EFS_LEASE_PENDING_VALUE_LEN],flags;uint64_t token;
+    rc=lease_value_read(kv,key,klen,value,&flags,&token);
+    if(rc!=EFS_OK)return rc;
+    if(flags&LEASE_PENDING) {
+        if(!(flags&LEASE_NORMAL))return EFS_OK;
+        value[1]=LEASE_PENDING;
+        return efs_kv_put(kv,key,klen,value,sizeof(value));
+    }
+    if(!flags)return EFS_OK;
     rc = efs_kv_del(kv, key, klen);
     if (rc == EFS_ERR_NOT_FOUND)
         return EFS_OK;

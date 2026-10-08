@@ -241,3 +241,15 @@ is preserved after failed recovery. All eleven contract tests pass.
 [Evidence and model limits](../../results/measure/20261008-w93-w96-implementation/w95-crash-phases/README.md).
 This covers the existing fixed-geometry principles model, not a production
 packed-index protocol or a selected/migrated backend.
+
+## W94 staged combined ownership primitive
+
+A versioned pending-CREATE token can now share the existing FileID/session lease
+key with normal OPEN ownership. Normal CLOSE preserves pending ownership; exact-
+token cleanup preserves a separate normal owner, and stale tokens cannot delete
+a later pending claim. Malformed ownership is rejected rather than overwritten.
+AMD `test_session` and `test_meta_apply` pass, including unlink/reclaim protection,
+one-key accounting, stale cleanup and session removal. This primitive is not
+used by production CREATE or enabled on the wire. Guarded ambiguous HOLD edges,
+atomic token composition/adoption and durable runtime-session recovery remain
+activation requirements.

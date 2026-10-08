@@ -64,6 +64,19 @@ int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,
 int efs_session_accept(struct efs_kv *kv, uint32_t shard,
                        const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 
+/* Staged W94 ownership encoding, not yet activated on the wire. Compose this
+ * value into the SAME CREATE KV/transaction batch; never acquire it later.
+ * One key remains one (FileID, session) lease. Calls run under shard apply
+ * serialization, like the ordinary lease SM. */
+#define EFS_LEASE_PENDING_VALUE_LEN 10u
+int efs_lease_pending_value(uint64_t token,
+                            uint8_t out[EFS_LEASE_PENDING_VALUE_LEN]);
+/* Clear only matching pending ownership; release_normal=1 is the guarded
+ * final-local-close edge. A mismatched token never deletes another lease. */
+int efs_lease_pending_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                            const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+                            uint64_t token, int release_normal);
+
 int efs_lease_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 int efs_lease_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
