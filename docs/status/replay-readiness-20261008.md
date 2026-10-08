@@ -327,3 +327,15 @@ emitted by the current write, preventing O_DSYNC from matching the prior O_SYNC
 trace. The stricter rerun passes with both flags and full GC/restart cleanup
 (`/data1/efs/gc-direct-rd5k0ll3`); `sync-fault-pass` now contains that rerun.
 Installed four-daemon/two-mount direct/TCP service was restored at 07:46 UTC.
+
+## D28–D30 acceptance — Oct 8, 2026
+
+The user accepted the recommendations after the one-hour batch: D28 accepts
+loss of unpublished buffered writes after client death and defers salvage;
+D29 adds durable queryable committed/apply-pending receipts without releasing
+bytes or satisfying fsync; D30 bounds pre-proposal admission and uses
+replica-aware pacing with recovery/cleanup reserves. Implement D29 alongside
+W88, then D30; preserve existing validation until equivalence is proven.
+[Accepted contracts and gates](../backlog/decision-contracts.md#d28--client-death-and-unpublished-writes)
+supersede earlier unresolved-policy statements in this dated ledger. No code
+activation or new gate pass is claimed by recording these decisions.

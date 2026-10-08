@@ -16,9 +16,9 @@ was accepted by the user and is now part of the design; implement it
 per the item it points at. A row marked **done** is history. Nothing
 in an ASK row authorizes implementation; explicit user instructions govern work. D14 was never
 assigned. D15/D16 (closed Oct 2) and the Sep 28/29 ordering tables are
-in project-history.md "START-HERE closed items". **D28, D29 and D30 remain ASKS.** D29/D30 detail is in the
-[open ask rows](#open-ask-rows--d29-p13-and-d30-p25); the former A–O
-ordering table is historical, not current implementation status.
+in project-history.md "START-HERE closed items". **D28, D29 and D30 were
+accepted Oct 8, 2026.** Their current contracts and remaining gates are below;
+former ASK descriptions are historical.
 
 ## Earlier decisions — compact register
 
@@ -82,55 +82,39 @@ Read the relevant contract before changing its component.
 | D26 / W44 | Pending-GC watermark plus bounded resumable scan | Historical development gate recorded; current reclamation correctness/diagnostics are W61–W63. [Contract](../backlog/decision-contracts.md#d26--bounded-gc-scan) |
 | D27 / 0a | Bound recovery attempts, retain unresolved bytes, sticky inode errors and refuse ordinary teardown before unresolved drain | Runtime foundations present; strict timing, contention/fault/recovery/RSS gates remain. [Contract](../backlog/decision-contracts.md#d27--retained-failed-writeback), [handoff](in-flight.md) |
 
-## D28 — unresolved client-death salvage choice
+## D28–D30 — accepted Oct 8, 2026
 
-| item | question / choices | state |
+The user accepted all three recommendations in this chat ("i take your
+recomendations, document"). Acceptance settles these choices; implementation,
+fault/recovery tests and activation gates remain separate.
+
+| Decision | Accepted choice | Implementation / acceptance |
 | --- | --- | --- |
-| **D28 · who owns the bytes across client death — ASK (restated Oct 2 04:55Z)** | What D27 leaves: a client that dies (SIGKILL, node loss) with *pending* or *failed* bytes loses them, and the original case (0a) is a process that **closed without `fsync`, whose `flush` failed or stalled, and whose client then died** — the application has already gone. Two things the user established: (1) an intent persisted only at `fsync` protects nothing in that case, because no `fsync` happened; a server-side intent can protect bytes only if it is durable **before the acknowledgment being protected** — for `write()`-returned bytes that acknowledgment is the `write()` itself, i.e. the rejected "every write publishes" cost class, or at the latest the `flush`; (2) under the visibility contract (§3) a durable intent **never** justifies a successful `fsync` — publication must complete; an intent can only make a later recovery possible. So the choice is: **(i) accept the loss on client death and forced teardown** as the written unrecoverable-writeback policy, with D27's controlled-teardown report as the whole contract and ENOSPC/EIO as the live signals; or **(ii) a server-side intent as best-effort salvage, scoped precisely** — one design, not the only one: at detection time (the client is alive, the servers reachable, only the publication rejected) the client persists an intent naming the inode, ranges, PUT objects and opid; a group-side recovery pass after client death can then complete or *name* the loss. Another: periodic server journaling of pending ranges, which can protect some pending writes too. **What (ii) protects, exactly: stalled writes whose intent was successfully persisted** — there is a death window between detection and persistence, and pending bytes are covered only if a journaling variant catches them; neither variant makes every acknowledged write survive death — only durable acceptance *before* the acknowledgment does that, which is the rejected cost class for `write()`. `fsync` still returns EIO until publication lands under either | not to be built either way until decided. (ii) is a protocol and metadata change (intent key kind, a recovery pass like `host_txn_recover_pass`, a client identity that survives restart, and the question of why an intent write succeeds where the publish did not); bring its cost after D27's gate exists and after 0a (a) says whether the Oct 1 stall was a defect or contention |
+| D28 | Unpublished buffered writes have no survival guarantee after client death; automatic salvage is deferred. | Preserve D27 retention and error reporting while alive, refused ordinary teardown, explicit forced-discard reporting and successful synchronization durability. W72/W86/D31 revocation and collection gates remain. |
+| D29 | Durable, queryable committed/apply-pending publication receipts, integrated with existing operation identities and final results. | Implement with W88; retain validation until equivalence is proven. Lost replies, leader change, restart, partial results, retirement and cold-byte gates are required. |
+| D30 | Bounded admission before Raft proposal with replica-aware pacing and bounded client queues. | Implement with W23/W89; retain committed work, reserve recovery/cleanup capacity and prove pressure bounds and catch-up. |
 
----
-
-The [public-path review](spec-implementation.md) records W71–W77; accepted
-decisions and healthy POSIX results do not close those implementation gaps.
+Full contracts and gates: [D28](../backlog/decision-contracts.md#d28--client-death-and-unpublished-writes),
+[D29](../backlog/decision-contracts.md#d29--durable-publication-receipts),
+[D30](../backlog/decision-contracts.md#d30--bounded-admission-and-replica-pacing).
+Order: D29 alongside W88 replay correctness, then D30 pressure control. D28
+establishes the failure contract; it does not activate session/ticket collection.
 
 ## Historical ordering
 
 The Oct 2 A–O sequencing table is [archived](../archive/decision-plan-20261002.md).
-Use the current status queue; its old implementation states are not current.
-Decided means approved design, not implementation or acceptance. D28–D30
-remain unresolved asks; no new decision is created by this cleanup.
+Its former D28–D30 ASK state is superseded by the Oct 8 acceptance above;
+historical measurements and failures remain evidence. Accepted means approved
+design, not completed implementation or deployment acceptance.
 
-## Open ask rows — D29 (P1.3) and D30 (P2.5)
+<a id="d28--unresolved-client-death-salvage-choice"></a>
+<a id="open-ask-rows--d29-p13-and-d30-p25"></a>
+<a id="p13--d29--the-report-receipt-performance-plan-row-ask"></a>
+<a id="p25--d30--the-apply-lag-remedy-performance-plan-row-ask"></a>
 
-The primary ask texts are rows N and O in the
-[historical ordering record](../archive/decision-plan-20261002.md); below are
-the active performance-plan asks. That archived order is not the current queue.
-
-### P1.3 · D29 — the REPORT receipt (performance plan row; ask)
-
-**Item.** **D29** REPORT receipt
-
-**Status.** **ask** — bring with P1.2
-
-**What changes.** a "committed, apply pending" receipt (group, index, term, op identity) the client waits on / queries instead of re-sending; not a publication, frees no dirty bytes; with it the per-record `efs_meta_apply_chunk_holds` get in pack (one get per record, 100–133 µs under `l0=100–170`, added only to make byte-identical resends cheap) can be skipped on a first send — that skip is part of the ask, not a separate change
-
-**Gate / done when.** lost receipt and leader change tests (archived row N); pack_ms per record on the 16× dd drops from ~130 µs to the proposal cost
-
-**Forbidden.** implementing any of it before the decision
-
-
-### P2.5 · D30 — the apply-lag remedy (performance plan row; ask)
-
-**Item.** **D30** apply-lag remedy
-
-**Status.** **ask**, blocked on P2.4
-
-**What changes.** candidate per class: compaction shape (D9/D10 revisit), apply batching, sender pacing
-
-**Gate / done when.** —
-
-**Forbidden.** code before the decision
-
+Former ask anchors are retained for existing links. Their current contracts
+are D28–D30 above; the first-send validation skip requires its own proof under
+D29, and no compaction-shape change is implied by D30.
 
 **D25 writer admission routing — ACCEPTED Oct 6 2026.** The user selected
 lane-local authoritative views before activation. Ordinary write admission must
@@ -154,5 +138,5 @@ does not create a new approval or independently recover the approving exchange.
 state machine committed in `b3a11877`, staged for integration; production integration and distributed fault gates remain open.
 Completed global revocation, durable lane/storage rejection floors, all-member
 deletion acknowledgements and replay-floor retirement are required. Age,
-disconnect and missing receipt are not authority. D28's broader client-death
-salvage/durability choice remains unresolved.
+disconnect and missing receipt are not authority. D28 accepts loss of unpublished buffered writes after client death and defers
+automatic salvage; it does not relax these collection-authority requirements.

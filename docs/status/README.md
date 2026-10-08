@@ -15,8 +15,12 @@ full-ancestry and physical-host obligations remain open.
 
 The [memory acceptance follow-up](memory-closure-20261007.md) closes W59/W67.
 The [three-package closure follow-up](allocation-gc-fold-gates-20261007.md) closes D17.
-Current grouped open count: **44**, including **8** implemented/partial
-packages awaiting gates. W84 and W23 still have implementation/design gaps.
+Current grouped open count: **45**: **15** unfinished correctness/investigation
+packages, **10** implemented/partial awaiting gates, **0** unresolved D28–D30
+decisions and **20** future feature/scaling/performance packages. This Oct 8
+reconciliation moves W71/W73 to awaiting gates, adds W90/W91, settles D28 policy
+and carries D29/D30 into unfinished implementation; accepted designs are not
+closed implementation packages. W84 and W23 still have implementation/design gaps.
 The [five TCP package round](tcp-five-gates-20261007.md) closes W65 for supported TCP and W56 inside W56/W60. RDMA is deferred; nine physical hosts, W60 historical scale and W84 full-ancestry acceptance remain.
 
 The [three-package acceptance round](three-package-gates-20261007.md) advances
@@ -124,7 +128,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](../backlog/work-items.md#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](../backlog/work-items.md#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](../backlog/work-items.md#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](metadata-scaling.md) |
-| — | **D28** (who owns acknowledged bytes across client death) · **D29** (a REPORT receipt for "committed, apply pending") · **D30** (the remedy for compaction-induced apply lag) | ask | ask — not code until the user decides | [decisions.md](decisions.md) |
+| decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](decisions.md#d28d30--accepted-oct-8-2026) |
 | op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | truthful running-quota reporting implemented; NUC accepted/refused shrink and unchanged-byte gates pass; no migration or persistence claim | [work item](../backlog/work-items.md#w70) |
 
 ### Source findings awaiting triage

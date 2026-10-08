@@ -14,9 +14,9 @@ The user authorized replay/writeback correctness followed by durability and
 production activation readiness while offline. Follow the
 [Oct 8 implementation ledger](replay-readiness-20261008.md), with direct-I/O/TCP
 for short functional cycles and a four-mode batch gate. Benchmark sources and
-harnesses are outside this work. Open decisions D28/D29/D30 are not resolved
-by this authorization; measure prerequisites and retain staged work where
-its correctness gates are incomplete.
+harnesses are outside this work. D28/D29/D30 were accepted Oct 8 in the [decision register](decisions.md).
+D28 defers salvage; implement D29 with W88, then D30 admission/pacing, keeping
+their implementation and fault/recovery gates separate from design acceptance.
 
 ## Active correctness work
 
@@ -66,7 +66,7 @@ legacy PUT coverage, recorded fault/recovery/contention and small-host RSS
 acceptance remain owed. Accepted workers retain caller-owned completion state;
 a timeout must not free it. DNS resolution now has bounded ownership/deadlines in `011ae854`; the
 [readiness ledger](replay-readiness-20261008.md) records its tests.
-D28 salvage is undecided. Keep the D27 decision's fault-before-publication gates.
+D28 accepts client-death loss of unpublished bytes and defers automatic salvage. Keep the D27 decision's fault-before-publication gates.
 
 **W64 — append:** host-local replay races were fixed in `ec1500ec`; replay
 across leader changes is not durable merely because concurrent repeats pass.

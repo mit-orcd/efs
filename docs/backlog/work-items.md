@@ -2350,7 +2350,7 @@ implementation or new acceptance is claimed by this review.
 
 ## W51 · what the follower apply lag is made of — CLOSED (plan row 14)
 
-**Performance-plan row P2.4 — CLOSED.** Status: **DONE 14:38Z** — table only; `…w51/SUMMARY.txt` What (as run): 144 apply-sleep episodes from the P0.2 file Result: compact-overlap 47, small-gap 89, lag-gap 0; D30 still ask Forbidden: a remedy before the table.
+**Performance-plan row P2.4 — CLOSED.** Status: **DONE 14:38Z** — table only; `…w51/SUMMARY.txt` What (as run): 144 apply-sleep episodes from the P0.2 file Result: compact-overlap 47, small-gap 89, lag-gap 0; D30 was subsequently accepted Oct 8 as bounded pre-proposal admission and replica-aware pacing; see the decision register. The historical measurement does not prove pressure acceptance.
 
 **W51 · what the follower apply lag is made of — INVESTIGATE (Oct 2 05:30Z)**
 
@@ -2456,11 +2456,11 @@ Rows P0.1–P0.4 are DONE; one-line records are in [../archive/README.md](../arc
 
 **P1 — decided client items (no spec change; take in this order).**
 
-Rows P1.1 and P1.2 are DONE (archive index); P1.3 (D29) is an ask — its row text is in [../status/decisions.md](../status/decisions.md).
+Rows P1.1 and P1.2 are DONE (archive index); P1.3 (D29) is accepted Oct 8; durable receipt integration and gates remain — its contract is in [../status/decisions.md](../status/decisions.md).
 
 **P2 — decided server items.**
 
-Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections below; P2.5 (D30) is an ask — its row text is in [../status/decisions.md](../status/decisions.md).
+Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections below; P2.5 (D30) is accepted Oct 8; bounded admission/pacing and gates remain — its contract is in [../status/decisions.md](../status/decisions.md).
 
 ## P2.2 · D26 — the GC pass (performance plan row)
 
@@ -3477,7 +3477,9 @@ observations as `NA`. Counter peaks survive resets. NUC synthetic tests cover
 all distinct fields, the historical nine-field shape, bad values, missing values
 and counter resets; driver shell syntax passes.
 
-**Remaining gate:** rerun W23 under meaningful cap pressure and compare samples
+**Oct 8 decision:** D30 now approves bounded pre-proposal admission and replica-aware pacing, with bounded client queues and recovery/cleanup reserves. Committed work must remain durable; a slow follower must not indefinitely stop a healthy quorum. [Contract and gates](decision-contracts.md#d30--bounded-admission-and-replica-pacing).
+
+**Remaining gate:** implement that policy, rerun W23 under meaningful cap pressure and compare samples
 with raw logs. This format repair does not establish a follower pressure bound;
 the original record and withdrawn interpretation remain retained.
 
