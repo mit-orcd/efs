@@ -41,6 +41,9 @@ int main(void){struct efs_msg_inode_reply r={0};host.r.role=0;host.r.leader=2;
  assert(host_append_replay_get(&host,42,a,7,10,16,&off)==EFS_ERR_INVAL);
  host_append_replay_put(&host,42,z,7,11,8,88);
  assert(!host_append_replay_get(&host,42,z,7,11,8,&off)&&off==88);
+ uint8_t empty[16]={0};
+ host_append_replay_put(&host,42,empty,7,12,8,96);
+ assert(host_append_replay_get(&host,42,empty,7,12,8,&off)==EFS_ERR_NOT_FOUND);
  return 0;
 }
 '''
@@ -53,6 +56,11 @@ with tempfile.TemporaryDirectory(prefix='efs-append-host-') as d:
 # A term change cannot fall through to generic forwarding without the offset.
 a=s.index('static int host_propose(struct');b=s.index('rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);',a)
 assert 'cmd[0] == EFS_MD_CMD_APPEND_RSV' in s[a:b]
-a=s.index('void server_raft_host_append(');b=s.index('host_append_replay_get(',a)
+a=s.index('static void host_append_owner(');b=s.index('host_append_replay_get(',a)
 assert 'if (!host_append_primary(h, ig, out))' in s[a:b]
 print('append host: leader-only allocation replies, role-change forwarding guard and concurrent replay ownership PASS')
+
+a=s.index('void server_raft_host_append(');b=s.index('\n}',a)
+public=s[a:b]
+assert public.index('host_fwd_append(')<public.index('pthread_mutex_trylock(lock)')
+assert public.index('pthread_mutex_trylock(lock)')<public.index('host_append_owner(')<public.index('pthread_mutex_unlock(lock)')

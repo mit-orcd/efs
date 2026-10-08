@@ -4369,7 +4369,8 @@ static int host_append_replay_get(struct efs_raft_host *h, efs_ino_t ino,
 {
     uint32_t i;
 
-    if (!h || !uuid || seq == 0 || !off_out)
+    if (!h || !uuid || seq == 0 || !off_out ||
+        memcmp(uuid, (uint8_t[EFS_OPID_UUID_LEN]){0}, EFS_OPID_UUID_LEN) == 0)
         return EFS_ERR_NOT_FOUND;
     pthread_mutex_lock(&h->mu);
     for (i = 0; i < 512; i++) {
@@ -4393,7 +4394,8 @@ static void host_append_replay_put(struct efs_raft_host *h, efs_ino_t ino,
 {
     uint32_t i;
 
-    if (!h || !uuid || seq == 0)
+    if (!h || !uuid || seq == 0 ||
+        memcmp(uuid, (uint8_t[EFS_OPID_UUID_LEN]){0}, EFS_OPID_UUID_LEN) == 0)
         return;
     pthread_mutex_lock(&h->mu);
     i = h->ap_rep_i++ & 511u;
@@ -11010,33 +11012,37 @@ static int host_append_primary(struct efs_raft_host *h, uint8_t group,
     return primary;
 }
 
-void server_raft_host_append(efs_ino_t ino, uint64_t len,
-                             const uint8_t *sess_uuid, uint32_t sess_epoch,
-                             uint64_t op_seq, struct efs_msg_inode_reply *out)
+/* Cache locking alone does not own a cache miss: simultaneous retries can
+ * both propose before either installs its reply. Keep reserve+reply insertion
+ * under one inode lock, without holding the Raft/pump mutex while waiting.
+ * Routing occurs before this lock, so forwarding never holds it. */
+#define HOST_APPEND_LOCKS 64
+static pthread_mutex_t host_append_locks[HOST_APPEND_LOCKS];
+static pthread_once_t host_append_once = PTHREAD_ONCE_INIT;
+
+static void host_append_init(void)
 {
-    struct efs_raft_host *h = g_host;
+    for (unsigned i = 0; i < HOST_APPEND_LOCKS; i++)
+        pthread_mutex_init(&host_append_locks[i], NULL);
+}
+
+static void host_append_owner(struct efs_raft_host *h, efs_ino_t ino,
+                               uint64_t len, const uint8_t *sess_uuid,
+                               uint32_t sess_epoch, uint64_t op_seq,
+                               struct efs_msg_inode_reply *out)
+{
     struct efs_meta_row row;
     struct efs_meta_stat st;
     uint8_t cmd[HOST_APPEND_RSV_LEN];
     uint32_t clen = 0;
     uint64_t reserved = 0;
-    uint8_t ig;
-    int hint = -1;
-    int rc;
+    uint8_t ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    int hint = -1, rc;
 
-    memset(out, 0, sizeof(*out));
-    out->status = EFS_INODE_RPC_ERROR;
-    if (!h || !h->running || ino == 0 || len == 0) {
-        out->status = EFS_INODE_RPC_INVAL;
+    if (!h->running) {
+        out->status = EFS_INODE_RPC_BUSY;
         return;
     }
-    ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
-    if (!host_hosts(h, ig)) {
-        host_fwd_append(h, ino, len, sess_uuid, sess_epoch, op_seq, out, &ig, 1);
-        return;
-    }
-    if (!host_append_primary(h, ig, out))
-        return;
     rc = host_read_inode_lanes(h, ino, &hint);
     if (rc != EFS_OK) {
         set_inode_rc(out, rc, hint);
@@ -11105,6 +11111,41 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
         out->inode.size = reserved + len;
         out->inode.atime = reserved;
     }
+}
+
+void server_raft_host_append(efs_ino_t ino, uint64_t len,
+                             const uint8_t *sess_uuid, uint32_t sess_epoch,
+                             uint64_t op_seq, struct efs_msg_inode_reply *out)
+{
+    struct efs_raft_host *h = g_host;
+    uint8_t ig;
+
+    memset(out, 0, sizeof(*out));
+    out->status = EFS_INODE_RPC_ERROR;
+    if (!h || !h->running || ino == 0 || len == 0) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    ig = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    if (!host_hosts(h, ig)) {
+        host_fwd_append(h, ino, len, sess_uuid, sess_epoch, op_seq, out, &ig, 1);
+        return;
+    }
+    if (!host_append_primary(h, ig, out))
+        return;
+    pthread_once(&host_append_once, host_append_init);
+    /* Mix the allocation counter with the shard: inodes on one shard
+     * differ by 4096, so low bits alone serialize unrelated files. */
+    pthread_mutex_t *lock = &host_append_locks[
+        (ino ^ (ino >> EFS_KV_SHARD_BITS)) % HOST_APPEND_LOCKS];
+    /* Do not queue a server handler behind a stalled reservation. The
+     * normal BUSY retry keeps the same identity and its caller deadline. */
+    if (pthread_mutex_trylock(lock) != 0) {
+        out->status = EFS_INODE_RPC_BUSY;
+        return;
+    }
+    host_append_owner(h, ino, len, sess_uuid, sess_epoch, op_seq, out);
+    pthread_mutex_unlock(lock);
 }
 
 /* Hard link: dest dentry + inode nlink++ as a txn (same PREPARE/DECIDE/
