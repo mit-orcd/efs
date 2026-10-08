@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 /* Independent, finite EFS-shaped I/O experiments. No production engine calls. */
 #include "storage_principles.h"
 #include "perf_control.h"
@@ -204,6 +205,7 @@ static int number(const char *v, unsigned *out, unsigned max)
 }
 int efs_bench_principles_main(int argc, char **argv)
 {
+    if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],"principles");return 0; }
     struct experiment e = {.rw="read", .policy="populated", .persist="none",
         .qd=1, .objects=4096, .size=65536, .batch=32,
         .mu=PTHREAD_MUTEX_INITIALIZER, .ready_cv=PTHREAD_COND_INITIALIZER,
@@ -211,14 +213,8 @@ int efs_bench_principles_main(int argc, char **argv)
     int kind=0;
     for (int i=1;i<argc;i++) {
         const char *k=argv[i];
-        if (!strcmp(k,"--help")) {
-            puts("Independent EFS-shaped storage principles (no production engine).\n"
-                 "--bench principles --storage EMPTY_ROOT [repeat] --layout files|container\n"
-                 "--rw read|write|delete --policy populated|allocating|overwrite|unlink|punch|release\n"
-                 "--persist none|each|batch --objects N --payload-size BYTES --qd N --batch-size N\n"
-                 "--direct-io|--no-direct-io; finite one-pass fixtures, not --time loops.\n"
-                 "Payload plus 32-byte checksum tail; direct records use a 4 KiB tail.\n"
-                 "each/batch includes required file and directory fsync in wall time."); return 0;
+        if (!strcmp(k,"--help") || !strcmp(k,"-h")) {
+            efs_cli_help(stdout,argv[0],"principles");return 0;
         }
         if (!strcmp(k,"--direct-io")) { e.direct=1; continue; }
         if (!strcmp(k,"--no-direct-io")) { e.direct=0; continue; }

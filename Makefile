@@ -484,3 +484,6 @@ test-gc-live: all
 
 tests/test_put_ticket: tests/test_put_ticket.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# Native programs share one help renderer and option reference.
+$(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ): include/efs/cli_help.h

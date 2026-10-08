@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 #include "efs/common.h"
 #include "efs/protocol.h"
 #include "efs/network.h"
@@ -24,6 +25,7 @@ static int parse_addr(const char *str, char *host, size_t host_len, uint16_t *po
 int main(int argc, char **argv)
 {
     efs_version_check_argv("efs-query", argc, argv);
+    if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],NULL);return 0; }
 
     const char *addr_arg = NULL;
     for (int i = 1; i < argc; i++) {
@@ -32,12 +34,12 @@ int main(int argc, char **argv)
         } else if (addr_arg == NULL) {
             addr_arg = argv[i];
         } else {
-            fprintf(stderr, "Usage: %s [--raw] <server-addr:port>\n", argv[0]);
+            efs_cli_help(stderr,argv[0],NULL);
             return 1;
         }
     }
     if (addr_arg == NULL) {
-        fprintf(stderr, "Usage: %s [--raw] <server-addr:port>\n", argv[0]);
+        efs_cli_help(stderr,argv[0],NULL);
         return 1;
     }
 

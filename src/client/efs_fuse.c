@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 #define FUSE_USE_VERSION 312
 
 #include "client_internal.h"
@@ -6745,6 +6746,11 @@ static int efs_fuse_bench_run(const char *kind, double time_sec)
 
 int main(int argc, char **argv)
 {
+    if (argc==2 && !strcmp(argv[1],"--help-fuse")) {
+        puts("efs-fuse - FUSE option reference\n");
+        fuse_cmdline_help();fuse_lowlevel_help();return 0;
+    }
+    if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],NULL);return 0; }
     if (argc >= 3 && (strcmp(argv[1], "--stop") == 0 ||
                       strcmp(argv[1], "--resume") == 0)) {
         int force = argc == 4 && strcmp(argv[3], "--force-discard") == 0;
@@ -6782,10 +6788,7 @@ int main(int argc, char **argv)
         g_bench_time = 10.0;
 
     if (argc < 4) {
-        fprintf(stderr,
-                "Usage: %s <node1:port> [<node2:port> ...] <export-name> <mountpoint> [fuse options] [--perf] [--strace]\n"
-                "       A single server address is enough; the client will discover the rest.\n",
-                argv[0]);
+        efs_cli_help(stderr,argv[0],NULL);
         return 1;
     }
 
@@ -7007,10 +7010,8 @@ static int efs_fuse_main_mt(int argc, char *argv[])
     }
 
     if (opts.show_help) {
-        printf("usage: %s [options] <mountpoint>\n\n", args.argv[0]);
-        fuse_cmdline_help();
-        fuse_lowlevel_help();
-        ret = 1;
+        efs_cli_help(stdout,"efs-fuse",NULL);
+        ret = 0;
         goto out;
     }
 

@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 /* Independent raw-file I/O driver. Never changes production checksum policy. */
 #include "io_bench.h"
 #include "efs/checksum.h"
@@ -116,19 +117,11 @@ static int empty_root(const char *path)
 }
 static void usage(const char *prog)
 {
-    fprintf(stderr, "Usage: %s --bench io|io-blake3 --storage <empty-root> [--storage root ...]\n"
-        "  [--rw read|write] [--io-size 64K] [--qd 16] [--window 64]\n"
-        "  [--time 3] [--direct-io|--no-direct-io] [--sync] [--preallocate]\n"
-        "Parallel raw pread/pwrite, one file per worker; no EFS store/network.\n"
-        "io-blake3 hashes each write and verifies each read inside the timed loop.\n"
-        "io does no timed hashing. --window bounds blocks per worker.\n"
-        "--preallocate allocates, populates and flushes the write window before timing.\n"
-        "Read files are populated first; all written blocks are checked after timing.\n"
-        "--sync includes fdatasync per successful write; default buffered writes\n"
-        "measure page-cache acceptance. Direct I/O sizes must be 4 KiB aligned.\n", prog);
+    efs_cli_help(stderr,prog,"io");
 }
 int efs_bench_io_main(int argc, char **argv)
 {
+    if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],"io");return 0; }
     const char *roots[IO_MAX_ROOTS], *rw = "write";
     int nroots = 0, qd = 16, hashing = 0, direct = 0, sync_writes = 0, have_kind = 0, preallocate = 0;
     uint32_t size = 65536, window = 64;

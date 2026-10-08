@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 #include "client_internal.h"
 #include "../bench/bench_local.h"
 #include "../bench/blake3_bench.h"
@@ -38,34 +39,7 @@ enum bench_mode {
 
 static void usage(const char *prog)
 {
-    fprintf(stderr,
-            "Usage:\n"
-            "  %s <seed_host:port> --time <seconds>\n"
-            "      Discover cluster; hammer all servers with mount-like parallel\n"
-            "      BENCH_PUT fanout (servers ACK and discard). Measures net ceiling.\n"
-            "  %s <seed_host:port> --size <bytes|[K|M|G|T]>\n"
-            "      Discover cluster; write that many logical bytes (chunk-aligned)\n"
-            "      with real PUT_CHUNK so servers store fragments (2+1 EC fanout).\n"
-            "  %s <seed_host:port> --store --time <seconds>\n"
-            "      PUT_CHUNK for a fixed duration (disk write load).\n"
-            "  %s <seed_host:port> --read --time <seconds> [--window <chunks>]\n"
-            "      GET 2-of-3 fragments for chunk_index %% window (disk read load).\n"
-            "  %s <seed_host:port> --meta [--export NAME] [--files N] [--dirs D]\n"
-            "      [--workers W] [--size bytes] [--phases csv] [--keep] [--id n]\n"
-            "      Metadata read+write phases (mkdir/create/stat/getattr/readdir/\n"
-            "      setattr/rename/unlink). No caches; every op is a real RPC.\n"
-            "  I/O:   %s --bench io|io-blake3 --storage <scratch> --rw read|write [--preallocate]\n"
-            "         [--io-size 64K] [--qd 16] [--window 64] [--direct-io] [--sync]\n"
-            "  CPU:   %s --bench blake3 [--size 64K] [--threads N] [--time seconds]\n"
-            "         [--oneshot|--stream] (no storage or cluster).\n"
-            "  Local: %s --bench data --storage <scratch> [--time seconds]\n"
-            "         %s --bench meta --meta-storage <scratch> [--time seconds]\n"
-            "         --bench data|meta --help for local options (no cluster).\n"
-            "  Principles: --bench principles --help (independent EFS-shaped I/O).\n"
-            "              efs-bench.sh --storage-principles --storage-root <scratch>\n"
-            "  Optional: --perf  (perf record -g on this process; EFS_PERF_PATH)\n"
-            "            --id <n>  chunk-index base so parallel writers do not collide\n",
-            prog, prog, prog, prog, prog, prog, prog, prog, prog);
+    efs_cli_help(stderr,prog,NULL);
 }
 
 static pid_t g_perf_pid = -1;
@@ -1194,6 +1168,8 @@ int main(int argc, char **argv)
             return efs_bench_local_main(argc, argv);
         }
     }
+
+    if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],NULL);return 0; }
 
     const char *seed = NULL;
     enum bench_mode mode = BENCH_MODE_NONE;

@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 /*
  * Multi-threaded BLAKE3 throughput microbench.
  *
@@ -234,18 +235,7 @@ static void *worker_main(void *arg)
 
 static void usage(const char *argv0)
 {
-    const char *name = strrchr(argv0, '/');
-    name = name ? name + 1 : argv0;
-    const char *selector = strcmp(name, "efs-bench") == 0 ? " --bench blake3" : "";
-    fprintf(stderr,
-            "Usage: %s%s [--time SEC] [--threads N] [--size BYTES] [--oneshot|--stream]\n"
-            "  --time     sample duration in seconds (default: 3)\n"
-            "  --threads  worker count (default: CPUs in affinity mask)\n"
-            "  --size     bytes hashed per update (default: 65536)\n"
-            "  --stream   one hasher, repeated updates (default; max SIMD)\n"
-            "  --oneshot  init+finalize per buffer (efs fragment-like)\n"
-            "Tip: match --threads to Slurm --cpus-per-task.\n",
-            argv0, selector);
+    efs_cli_help(stderr,argv0,"blake3");
 }
 
 static size_t parse_size(const char *s)
@@ -282,6 +272,7 @@ static void sleep_sec(double sec)
 
 int efs_bench_blake3_main(int argc, char **argv)
 {
+    if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],"blake3");return 0; }
     double duration = 3.0;
     long nthreads = online_cpus();
     size_t buf_len = 65536;
