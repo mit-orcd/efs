@@ -109,7 +109,32 @@ static void malformed_batch(void) {
     mask=0;assert(kv_wal_replay(path,record,NULL)==EFS_ERR_PROTO && mask==0);
     fd=open(path,O_RDONLY);assert(fd>=0);assert(lseek(fd,0,SEEK_END)==24);close(fd);unlink(path);
 }
-int main(void){run(0);run(1);malformed_batch();reservation();allocation_fallback();puts("WAL sticky failures and reopen recovery PASS");}
+static void interior_damage(void) {
+    for(unsigned gap=0;gap<2;gap++) {
+        char path[]="/tmp/efs-wal-interior-XXXXXX";int fd=mkstemp(path);assert(fd>=0);close(fd);
+        struct kv_wal *w;uint64_t seq;
+        struct efs_kv_item item={EFS_KV_PUT,(const uint8_t*)"A",1,(const uint8_t*)"a",1};
+        assert(kv_wal_open(path,EFS_KV_LSM_SYNC,&w)==EFS_OK);
+        assert(kv_wal_append(w,&item,1,&seq)==EFS_OK);uint64_t first=w->bytes;
+        item.key=(const uint8_t*)"B";assert(kv_wal_append(w,&item,1,&seq)==EFS_OK);
+        uint64_t end=w->bytes;kv_wal_close(w);
+        fd=open(path,O_RDWR);assert(fd>=0);
+        if(gap) {
+            uint8_t b[64];assert(end-first<sizeof(b));assert(pread(fd,b,end-first,first)==(ssize_t)(end-first));
+            uint8_t zero[8]={0};assert(pwrite(fd,zero,8,first)==8);
+            assert(pwrite(fd,b,end-first,first+8)==(ssize_t)(end-first));
+        } else {
+            uint8_t bad;assert(pread(fd,&bad,1,0)==1);bad^=1;assert(pwrite(fd,&bad,1,0)==1);
+        }
+        assert(!fdatasync(fd));struct stat before,after;assert(!fstat(fd,&before));close(fd);
+        mask=0;assert(kv_wal_replay(path,record,NULL)==EFS_ERR_PROTO);
+        assert(!stat(path,&after) && before.st_size==after.st_size);
+        fd=open(path,O_RDONLY);assert(fd>=0);uint8_t key;
+        /* B's key is the penultimate byte of its complete frame. */
+        assert(pread(fd,&key,1,(off_t)end+(gap?8:0)-2)==1 && key=='B');close(fd);unlink(path);
+    }
+}
+int main(void){run(0);run(1);malformed_batch();interior_damage();reservation();allocation_fallback();puts("WAL sticky failures and reopen recovery PASS");}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-wal-faults-') as directory:
     p=Path(directory)/'test.c';p.write_text(source)

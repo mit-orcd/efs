@@ -469,6 +469,18 @@ int kv_wal_replay(const char *path,
     /* Never repair after an I/O/callback/structural error: preserve evidence
      * and refuse open. Only the existing torn/CRC-invalid tail rule permits it. */
     if (rc == EFS_OK && repair_tail) {
+        /* A damaged frame followed by nonzero records is not merely an EOF
+         * reservation/torn tail. In particular, older builds could append
+         * acknowledged bytes behind an invalid header. Preserve that evidence
+         * and refuse recovery instead of silently erasing the later writes. */
+        uint8_t tail[4096];
+        size_t got;
+        while (rc==EFS_OK && (got=fread(tail,1,sizeof(tail),f))!=0) {
+            for(size_t j=0;j<got;j++) if(tail[j]) {rc=EFS_ERR_PROTO;break;}
+        }
+        if(ferror(f)) rc=EFS_ERR_IO;
+    }
+    if (rc == EFS_OK && repair_tail) {
         if (ftruncate(fileno(f), valid_end) != 0 ||
             fdatasync(fileno(f)) != 0) rc = EFS_ERR_IO;
     }

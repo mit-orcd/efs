@@ -204,3 +204,29 @@ truncated, missing and mismatched records cannot produce BENCH_OK. Seal sync
 failure reports failure and cleans only the owned incomplete fixture. Ten
 contract tests and twelve two-root sanitizer cases pass.
 [Evidence and limits](../../results/measure/20261008-w93-w96-implementation/w95-cold-principles/README.md).
+
+## W94 remaining activation prerequisite
+
+The per-inode edge mutex orders local RPC calls, but does not make an ambiguous
+HOLD safe: a timed-out OPEN can commit after cleanup CLOSE, and a timed-out
+CLOSE can arrive after a later OPEN. CREATE adoption must not assume those
+legacy edges are sequenced. The safe integration needs guarded lease-operation
+identity and pending-CREATE ownership, with bounded replay/tombstone retirement
+through W72's durable runtime session fence. A new pending claim alone does not
+solve ambiguous edges or client death; a second independent lease per CREATE
+would violate the one-lease/session invariant and add orphanable state.
+
+Server atomicity and rejected-reply cleanup are implemented, but production
+piggyback activation stays blocked on that protocol integration and its lost-
+reply/adoption/last-close/fencing gates. No global open/close lock, age-based
+claim deletion or new unbounded claim table is introduced to declare W94 done.
+
+## W96 detectable interior damage
+
+Recovery now refuses to truncate when nonzero records follow a damaged frame,
+including the historical invalid-header/acknowledged-append sequence. It
+preserves evidence and returns PROTO; ordinary torn/zero reservation tails
+still repair. AMD KV/compaction, Raft/disk tests and Linux/Mac sanitizers pass.
+This is not a general corruption salvage guarantee. The final guard's full
+live cold rerun is pending after isolated timing.
+[Evidence](../../results/measure/20261008-w93-w96-implementation/w96-interior-damage/README.md).
