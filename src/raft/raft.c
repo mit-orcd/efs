@@ -1279,9 +1279,13 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         uint64_t cap = in->prev_index + (uint64_t)in->nentries;
         if (cap > r->commit_index) {
             r->commit_index = in->leader_commit < cap ? in->leader_commit : cap;
-            apply_committed(r);
         }
     }
+    /* A transient state-machine failure leaves last_applied behind commit.
+     * Retry even when this heartbeat proves the same committed prefix;
+     * otherwise a quiet follower can remain unreadable until a new write.
+     * Batched receives still defer apply until their log durability barrier. */
+    apply_committed(r);
     m.success = 1;
     /* prev matched, and every entry in this request is in the log.
      * last_i can still sit past that: an uncommitted tail this request

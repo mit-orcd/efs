@@ -1415,7 +1415,7 @@ static void test_ae_full_window_not_resent_per_propose(void)
 static struct {
     struct efs_raft_store original;
     unsigned depth, barriers, replies, applies, first_ack_applies;
-    int fail_end, fail_append, fail_hard, fail_truncate;
+    int fail_end, fail_append, fail_hard, fail_truncate, fail_apply;
     uint64_t durable, read_context;
 } recv_test;
 static int recv_test_truncate(void *ctx,uint64_t index)
@@ -1464,8 +1464,35 @@ static int recv_test_apply(void *ctx,uint64_t index,uint64_t term,
 {
     (void)ctx;(void)term;(void)cmd;(void)len;
     CHECK(!recv_test.depth && index<=recv_test.durable,"apply after durable boundary");
+    if(recv_test.fail_apply) {
+        int phase=recv_test.fail_apply--;
+        return phase==2?EFS_ERR_IO:EFS_ERR_NOMEM;
+    }
     recv_test.applies++;
     return EFS_OK;
+}
+static void test_follower_apply_retry(void)
+{
+    for(unsigned batch=0;batch<2;batch++) {
+        memset(&recv_test,0,sizeof(recv_test));
+        struct efs_raft_store *store=efs_raft_mem_create();struct efs_raft_store ops=*store;
+        recv_test.original=ops;ops.append=recv_test_append;
+        ops.batch_begin=recv_test_begin;ops.batch_end=recv_test_end;
+        struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
+        cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
+        struct efs_raft *r=efs_raft_new(&cfg);CHECK(r!=NULL,"apply retry follower");
+        struct efs_raft_msg m={0};m.type=EFS_RAFT_MSG_AE_REQ;m.from=0;m.to=1;m.term=2;
+        CHECK(efs_raft_recv(r,&m)==EFS_OK,"retry follower leader");
+        m.nentries=1;m.entries[0].term=2;m.entries[0].cmd=(const uint8_t*)"c";m.entries[0].clen=1;m.leader_commit=1;
+        recv_test.fail_apply=2;
+        int rc=batch?efs_raft_recv_batch(r,&m,1):efs_raft_recv(r,&m);
+        CHECK(rc==(batch?EFS_ERR_IO:EFS_OK) && !efs_raft_applied(r) && !recv_test.applies,"IO cannot advance apply or lose durable ACK");
+        m.prev_index=1;m.prev_term=2;m.nentries=0;
+        CHECK(efs_raft_recv(r,&m)==EFS_OK && !efs_raft_applied(r) && !recv_test.applies,"unchanged commit retries NOMEM without advancing");
+        CHECK(efs_raft_recv(r,&m)==EFS_OK && efs_raft_applied(r)==1 && recv_test.applies==1,"unchanged heartbeat completes stalled durable entry");
+        CHECK(efs_raft_recv(r,&m)==EFS_OK && recv_test.applies==1,"successful apply never repeated");
+        efs_raft_free(r);efs_raft_mem_free(store);
+    }
 }
 static void test_recv_batch(void)
 {
@@ -1549,6 +1576,7 @@ static void test_recv_batch(void)
 
 int main(void)
 {
+    test_follower_apply_retry();
     test_recv_batch();
     test_election_i1();
     test_ae_full_window_not_resent_per_propose();

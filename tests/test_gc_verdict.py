@@ -63,6 +63,12 @@ int main(void){
   assert(core_result(codes[op],EFS_ERR_IO,53)==EFS_ERR_IO);
   assert(core_result(codes[op],EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);
  }
+ /* CREATE's namespace/lease/replay batch may fail after the log is durable.
+  * A follower must retry this index, rather than lose an acknowledged create. */
+ assert(core_result(EFS_MD_CMD_CREATE,EFS_ERR_IO,53)==EFS_ERR_IO);
+ assert(core_result(EFS_MD_CMD_CREATE,EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);
+ assert(core_result(EFS_MD_CMD_CREATE,EFS_ERR_EXIST,53)==EFS_OK);
+ assert(core_result(EFS_MD_CMD_CREATE,EFS_ERR_BUSY,53)==EFS_OK);
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_IO,53)==EFS_ERR_IO);
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);
  assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_BUSY,53)==EFS_OK);
