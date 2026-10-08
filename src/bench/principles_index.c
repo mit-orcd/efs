@@ -712,12 +712,14 @@ int principles_index_collect(struct principles_index *m, uint64_t *removed)
     }
     int saved = errno;
     closedir(d);
-    if (!rc)
-        rc = sync_model(m, m->dir);
+    if (rc) {
+        m->failed = 1;
+        errno = saved;
+        return rc;
+    }
+    rc = sync_model(m, m->dir);
     if (rc)
         m->failed = 1;
-    else
-        errno = saved;
     return rc;
 }
 void principles_index_close(struct principles_index *m)
