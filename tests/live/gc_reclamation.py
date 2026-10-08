@@ -36,6 +36,8 @@ p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
+p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
+p.add_argument('--unique-create',action='store_true',help='16-worker unique O_EXCL, genuine EEXIST and name reuse, then cold exact bytes/reclamation')
 p.add_argument('--create-lease',action='store_true',help='initial CREATE lease atomicity on local and first-use cross-group hashed lanes, cold replay/unlink/close')
 p.add_argument('--fuse-reply-failure',action='store_true',help='reject CREATE/OPEN descriptor replies and prove local handle/server lease cleanup')
 p.add_argument('--tiny-churn',action='store_true',help='tiny/full-fragment fsynced create/overwrite/delete/recreate, cold exact generations and physical reclamation')
@@ -212,6 +214,9 @@ def start():
             cmd += ['--storage',second]
         if i:cmd += ['--join',f'127.0.0.1:{a.port}']
         node_env=dict(env)
+        if a.put_barrier_fault:
+            node_env.update(LD_PRELOAD=str(work/'store-barrier-fault.so'),
+                            EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'))
         if a.compactor_pressure:
             node_env['EFS_RAFT_OBS']='1'
             if i==3:node_env.update(EFS_FAULT_COMPACT_STALL='1',EFS_FAULT_COMPACT_FILE=str(work/'compactor-fault'))
@@ -331,7 +336,7 @@ def drained():
     samples=[group for node in status() for group in node[2:] if group.get('sampled')]
     return {g['group'] for g in samples}=={0,2} and all(g['pending_estimate']==0 and g['reap_seen']==0 and g['orphan_seen']==0 for g in samples)
 
-def chunk_state(ino):
+def chunk_state(ino, allow_absent=False):
     # Query all reachable replicas until a current authoritative reply exists.
     # BUSY/NOTPRIMARY are not a missing chunk or a zero-filled image.
     deadline=time.monotonic()+30
@@ -339,6 +344,8 @@ def chunk_state(ino):
         for node in range(4):
             reply=subprocess.run([str(source/'efs-mgmt'),'raft-getchunks',f'127.0.0.1:{a.port+node}',str(ino)],env=env,capture_output=True,text=True,timeout=10)
             if reply.returncode==0 and 'status=0 ' in reply.stdout:
+                if allow_absent and re.search(r'count=0\b',reply.stdout):
+                    return dict(base_gen=0,spans=0,seq=0,live_spans=0,tombstones=0)
                 match=re.search(r'ci=0 .*base_gen=(\d+).*spans=(\d+) seq=(\d+)',reply.stdout)
                 if match:
                     state=dict(zip(('base_gen','spans','seq'),map(int,match.groups())))
@@ -352,9 +359,28 @@ def chunk_state(ino):
 
 try:
     print('Evidence directory: '+str(work),flush=True)
+    if a.put_barrier_fault:
+        run(['cc','-Wall','-Wextra','-Werror','-shared','-fPIC',source/'tests/live/store_barrier_fault.c','-ldl','-o',work/'store-barrier-fault.so'])
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.put_barrier_fault:
+        from put_barrier_fault import exercise as fail_put_barrier, verify_and_delete as verify_put_barrier
+        barrier=fail_put_barrier(mount,work/'put-barrier-fault',lambda ino:chunk_state(ino,allow_absent=True))
+        assert any('test-store-barrier: refusing fragment fsync' in (work/f'n{i+1}.log').read_text() for i in range(4))
+        unmount();stop(crash=True);start();mount_client()
+        verify_put_barrier(mount)
+        wait(drained,'failed PUT barrier recovery cold bytes and deletion drained',180)
+        (work/'put-barrier-fault.json').write_text(json.dumps(barrier,indent=2))
+        print('failed server PUT barrier: no publication ACK, retained bytes, recovery and exact cold bytes PASS',flush=True)
+    if a.unique_create:
+        from unique_create import exercise as unique_create, verify_and_delete as verify_unique
+        unique=unique_create(mount)
+        unmount();stop(crash=True);start();mount_client()
+        verify_unique(mount)
+        wait(drained,'unique CREATE cold bytes and physical deletion drained',180)
+        (work/'unique-create.json').write_text(json.dumps(unique,indent=2))
+        print('16-worker unique CREATE, real EEXIST, name reuse and exact cold bytes PASS',flush=True)
     if a.fuse_reply_failure:
         from fuse_reply_failure import exercise as reject_replies
         evidence=reject_replies(mount,work,source,a.port,env)

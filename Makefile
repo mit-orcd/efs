@@ -177,9 +177,10 @@ test-report-pressure:
 	python3 tests/test_append_host_authority.py
 	python3 tests/test_report_orphan.py
 
-test-create-errors:
+test-create-errors: $(LIB)
 	python3 tests/test_kv_wal_faults.py
 	python3 tests/test_create_errors.py
+	python3 tests/test_create_retry_identity.py
 	python3 tests/test_open_lease.py
 	python3 tests/test_unlink_verdict.py
 	python3 tests/test_gc_verdict.py
