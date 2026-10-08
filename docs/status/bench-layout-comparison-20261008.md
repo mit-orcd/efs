@@ -53,3 +53,21 @@ per worker during I/O and final required barriers. Timed hard-cap validation is
 performed before final flushing so a slow final barrier cannot mask early cap
 exhaustion. `COMPARISON.md` reports sample medians/ranges and target metrics;
 `results.json` retains the detailed verification/reclamation counters.
+
+
+## Focused longer comparison
+
+[Eight 180-second cases](../../results/measure/20261008-w90-focused-comparison/README.md)
+finished in 27 minutes 35 seconds. Four alternating repeats, 95% occupancy,
+four workers, 1 GiB containers and hot-set locality show median punch throughput
+22,123 versus files 12,157 ops/s (+82%); median write p99 2.591 versus 6.143 ms.
+Every repeat favors punch (1.81–1.83× throughput), with essentially equal final
+allocation and 22% lower worker CPU/op. All 24.6 million operations and final
+verification pass, dead backlog is zero, and scratch is clean. Rare write stalls
+remain in both layouts (worst 533 ms punch, 946 ms files).
+
+This is sufficient repeatability evidence to favor punch for the tested simulator
+workload. Broader workload/device coverage and production integration remain
+separate; two roots on one NVMe do not demonstrate physical target scaling.
+The initially scheduled broad matrix was deliberately stopped in favor of this
+focused comparison and is excluded from the performance conclusion.

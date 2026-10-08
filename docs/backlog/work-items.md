@@ -3415,7 +3415,7 @@ the original record and withdrawn interpretation remain retained.
 starting from `53be1da7f190`. Functional gates pass; initial same-device
 measurements are recorded below. Repeated long-running acceptance remains open.
 
-**Oct 8 simulator follow-up:** [matched simulator comparison](../status/bench-layout-comparison-20261008.md): configurable locality/seed, multiple private targets, alternating repeated layout comparisons and summary metrics. Benchmark-only; production engine/recovery remains outside scope. Plan recorded before implementation; completed with 19 test methods and 16 passing comparison cases. Longer performance and physical multi-device evidence remain open.
+**Oct 8 simulator follow-up:** [matched simulator comparison](../status/bench-layout-comparison-20261008.md): configurable locality/seed, multiple private targets, alternating repeated layout comparisons and summary metrics. Benchmark-only; production engine/recovery remains outside scope. Plan recorded before implementation; completed with 19 test methods and 16 passing comparison cases. Focused longer evidence now records eight 180-second cases: punch delivers 1.81–1.83× files throughput at 95% occupancy/QD4 with lower write p99. [Evidence](../../results/measure/20261008-w90-focused-comparison/README.md). Broader workload coverage and physical multi-device evidence remain open.
 
 **Purpose:** extend the existing finite `--storage-principles` experiments with
 bounded, sustained read/write/retire workloads at 50/80/95 percent of an explicit
