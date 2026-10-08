@@ -1,0 +1,12 @@
+{
+  "mode": "direct",
+  "transport": "tcp",
+  "source": "/data1/efs/warnings-src",
+  "probe_source_sha256": "a944614198118d6991d6d476f049f7fb2cba17a870a58af97695bb58ea000a54",
+  "binary_sha256": {
+    "efsd": "89005240781f11bbbffbc2926e279e134f88a95a84d330a7cfb3a440ca2d2a23",
+    "efs-fuse": "3c0cfaeeed08127cc2b2f56de0b90aaf4b2a1f736a454d1f77b5c47706c6f7b7",
+    "efs-mgmt": "b85eeb890ca2ae910d0894ab295c02392d368ed98b0712cc52606c6684ad46a2",
+    "libefs.a": "0b49cd2fe445c15492cf0fa5572cea3c32c8e834da195a2ae069174a72b723b1"
+  }
+}

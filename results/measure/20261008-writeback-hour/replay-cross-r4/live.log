@@ -1,0 +1,25 @@
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 11399 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+lane bootstrap status=0 generation=1 epoch=0 chunk_size=131072 validation=0
+publication lane: cross_group=1 chunk_index=1
+raft-session status=0 rc=0 primary=2 op=create ssh=1614 shard=1614 epoch=0 state=0 touched=0 index=6
+raft-session status=0 rc=0 primary=2 op=register ssh=1614 shard=868 epoch=0 state=0 touched=0 index=7
+raft-session status=0 rc=0 primary=2 op=establish ssh=1614 shard=868 epoch=0 state=0 touched=0 index=8
+real fragments: eight spans, fold, overwrite, trailer eviction and lost-final-ACK replay PASS
+old immutable generation physically reclaimed; three live fragments retained PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 11888 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+cold exact FUSE bytes before-old-reput PASS
+cold terminal recovery, old-object re-PUT and durable replay-floor refusal PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 12121 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+cold exact FUSE bytes after-old-reput-and-retirement PASS
+cold replay floor: query and resubmit remain retired PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 12496 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+cold exact FUSE bytes after-final-crash PASS
+publication replay: real spans, history eviction, old re-PUT and cold FUSE bytes PASS

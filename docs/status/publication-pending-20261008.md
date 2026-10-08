@@ -25,7 +25,7 @@ into every production flush/REPORT path.
 
 ## AMD direct-I/O/TCP validation
 
-[Raw evidence](../../results/measure/20261008-publication-pending/):
+[Raw evidence](../../results/measure/20261008-publication-pending/README.md):
 
 - Full unit suite passes with `EXTRA_DEFS=-Werror`; no compiler warnings.
 - Additional targeted tests pass after adding the exact W88 eight-span/fold,
@@ -52,7 +52,7 @@ were discarded.
 
 **W88 remains open on the active legacy REPORT path.** Replace that path with
 immutable per-publication ownership and exact per-item results before claiming
-end-to-end protection. Real FUSE gates still owe lost final ACK, overlapping
+end-to-end protection. The production path still owes lost final ACK, overlapping
 later writes, history eviction, retained objects and GC/re-PUT, leader changes,
 partial batches and exact cold bytes. D27 whole-call deadline/fault/RSS and W72
 production sessions remain open. D25 public activation remains disabled.
@@ -64,3 +64,10 @@ command 31 and pending receipt encoding require updated participants; mixed-old
 binary replay/downgrade is not accepted by these tests. The accepted D29
 committed-mapping/apply-pending proof and group/index/term locator work remains
 separate: durable intent admission alone does not establish it.
+
+
+Follow-up [writeback hour](writeback-hour-20261008.md) adds actual immutable
+fragment PUTs and exact cold FUSE reads through eight-span history eviction,
+physical GC, identical old-object re-PUT and durable retirement-floor recovery.
+Same-group and explicitly bootstrapped cross-group typed endpoints pass. These
+staged gates do not activate or close the production REPORT/session integration.

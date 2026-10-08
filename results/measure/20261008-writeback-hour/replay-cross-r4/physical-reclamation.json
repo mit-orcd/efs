@@ -1,0 +1,10 @@
+{
+  "old_generation": 100,
+  "remaining_old_fragments": [],
+  "live_generation": 201,
+  "live_fragments": [
+    "/data1/efs/publication-replay-cross-20261008-r4/n1/data/exports/1/0000/0000/0000/0000/4097/0/1.0.201",
+    "/data1/efs/publication-replay-cross-20261008-r4/n2/data/exports/1/0000/0000/0000/0000/4097/0/1.1.201",
+    "/data1/efs/publication-replay-cross-20261008-r4/n3/data/exports/1/0000/0000/0000/0000/4097/0/1.2.201"
+  ]
+}

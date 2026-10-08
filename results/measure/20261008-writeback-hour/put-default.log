@@ -1,0 +1,2 @@
+round=0 mode=0 rc=-13 elapsed_ms=30002 busy=0 peer_failures=0 PASS
+real TCP PUT: stalled quorum, optional drain, full quorum, TLS and pool cleanup PASS
