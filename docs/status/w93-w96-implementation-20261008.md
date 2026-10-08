@@ -268,3 +268,15 @@ quota-pressure failure is retained separately, with healthy eventual GC drain.
 W94 now has four real process-exit/cold-reopen ownership-edge tests. A fresh
 AMD Linux build and complete `make test` pass with these tests and the final
 W96 interior-damage guard. Production pending ownership remains inactive.
+
+## Final W96 guard live gate
+
+Fresh Linux build/full test and AMD direct/TCP live fixture
+`gc-direct-bk9aqz_4` pass with the final WAL guard. POSIX/peer, rejected replies,
+CREATE lease replay, tiny churn, append/replay/sync/shutdown and second-cold WAL
+tail recovery pass; final physical inventory/quotas are zero and late PUT is
+fenced. Installed service was restored. W94 ownership code/tests additionally
+pass a focused ASan/UBSan executable (normal linked KV library).
+[Full gate evidence](../../results/measure/20261008-w93-w96-implementation/final-live/README.md).
+The quiet two-device W96 performance gate remains open: NUC currently runs a
+million-file generator and its daemons are busy; that workload was preserved.
