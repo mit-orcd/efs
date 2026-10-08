@@ -395,3 +395,14 @@ orders now pass, including exact replay verdicts and safe fresh cleanup of a
 stale pending owner after every earlier outcome is resolved. ASan/UBSan passes.
 This verifies server ownership semantics; production client adoption remains
 inactive pending its session and bounded ambiguous-outcome integration.
+
+
+W95 now has an independent immutable-body/atomic-manifest prototype, with
+versioned conditional deletion, quota admission, checksum-validated recovery,
+recovery stabilization before GC and bounded physical garbage gates. Eighteen
+process-exit cases and 4,800 churn operations pass, alongside shared-segment,
+corruption, stale-delete and read-only recovery checks. The model remains outside
+production EFS storage. The 36 balanced AMD buffered measurements show slower
+individual publications and faster cohorts of 32; sustained comparative churn
+and production format selection remain open. Details and raw measurements:
+[w95-indexed-model-20261008.md](w95-indexed-model-20261008.md).

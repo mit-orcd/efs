@@ -1,5 +1,6 @@
 /* Independent, finite EFS-shaped I/O experiments. No production engine calls. */
 #include "storage_principles.h"
+#include "principles_index.h"
 #include "perf_control.h"
 #include "latency.h"
 #include "efs/checksum.h"
@@ -23,12 +24,14 @@ struct worker {
     uint8_t *buf, *expected;
     uint64_t *pending_start;
     uint64_t ops, syncs, start_us;
+    struct principles_index *index;
+    uint64_t index_start_syncs,index_start_written;
     struct lat_vec lat;
 };
 struct experiment {
     const char *roots[32], *rw, *policy, *persist;
     unsigned nroots, qd, objects, size, logical_size, stride, batch, container_alignment;
-    int container, direct, sync_ancestors, retain, recover;
+    int container, direct, sync_ancestors, retain, recover, indexed;
     uint32_t sealed_mask;
     pthread_mutex_t mu;
     pthread_cond_t ready_cv, go_cv;
@@ -153,6 +156,46 @@ static int flush_batch(struct worker *w, unsigned first, unsigned end)
     }
     return sync_directories(w);
 }
+/* Reuse the existing geometry, payloads, worker start barrier, latency
+ * histogram and retention harness; only publication differs. */
+static void run_indexed_worker(struct worker *w)
+{
+    struct experiment *e=w->e;
+    if(e->recover) {
+        for(unsigned i=0;i<w->count;i++) {
+            uint64_t start=clock_ns(),gen=0;uint32_t n=e->size;
+            if(principles_index_get(w->index,i,w->buf,&n,&gen) || n!=e->size || gen!=1) {w->error=EIO;break;}
+            uint8_t hash[32];efs_hash(w->buf,e->size,hash);
+            if(memcmp(hash,w->expected+(size_t)i*32,32)){w->error=EIO;break;}
+            w->ops++;lat_add(&w->lat,(clock_ns()-start)/1000);
+        }
+        return;
+    }
+    unsigned group=!strcmp(e->persist,"each")?1:e->batch;
+    unsigned bound=(64u<<20)/e->qd/e->size;
+    if(group>bound)group=bound;
+    if(group>w->count)group=w->count;
+    struct principles_change *changes=calloc(group,sizeof(*changes));
+    uint8_t *payload=malloc((size_t)group*e->size);
+    if(!changes || !payload){free(changes);free(payload);w->error=ENOMEM;return;}
+    for(unsigned first=0;first<w->count;first+=group) {
+        unsigned n=w->count-first;if(n>group)n=group;
+        for(unsigned j=0;j<n;j++) {
+            unsigned i=first+j;w->pending_start[i]=clock_ns();pattern(w,i);
+            memcpy(payload+(size_t)j*e->size,w->buf,e->size);
+            changes[j]=(struct principles_change){i,e->size,0,payload+(size_t)j*e->size};
+        }
+        if(principles_index_publish(w->index,changes,n) ||
+           (e->sync_ancestors && sync_directories(w))){w->error=errno?errno:EIO;break;}
+        uint64_t end=clock_ns();
+        for(unsigned j=0;j<n;j++)lat_add(&w->lat,(end-w->pending_start[first+j])/1000);
+        w->ops+=n;
+    }
+    struct principles_index_stats stats;
+    if(principles_index_stats(w->index,&stats))w->error=errno;
+    else w->syncs+=stats.syncs-w->index_start_syncs;
+    free(changes);free(payload);
+}
 static void *run_worker(void *arg)
 {
     struct worker *w = arg; struct experiment *e = w->e;
@@ -162,6 +205,7 @@ static void *run_worker(void *arg)
     int abort = e->abort; pthread_mutex_unlock(&e->mu);
     if (abort) return NULL;
     w->start_us = (clock_ns() - e->release) / 1000;
+    if(e->indexed){run_indexed_worker(w);return NULL;}
     unsigned group = !strcmp(e->persist,"each") ? 1 : e->batch;
     unsigned limit = e->container && !strcmp(e->rw,"delete") && !strcmp(e->policy,"release") ? 1 : w->count;
     unsigned first = 0;
@@ -226,6 +270,11 @@ static void *run_worker(void *arg)
 static uint64_t allocated(struct worker *w)
 {
     struct stat st; uint64_t bytes = 0;
+    if(w->e->indexed) {
+        struct principles_index_stats stats;
+        if(principles_index_stats(w->index,&stats)){w->error=errno?errno:EIO;return 0;}
+        return stats.allocated_bytes;
+    }
     if (w->e->container) {
         if (!stat(w->path,&st)) return (uint64_t)st.st_blocks * 512;
         return 0;
@@ -240,7 +289,8 @@ static int fixture_seal(struct experiment *e, int create)
     for (unsigned i=0;i<e->nroots;i++) {
         char path[4096], expected[256], got[257];
         if (snprintf(path,sizeof(path),"%s/.efs-principles-complete",e->roots[i])>=4096) return -1;
-        int n=snprintf(expected,sizeof(expected),"EFS_PRINCIPLES_V1 %u %u %u %u %u %u %u %u\n",
+        int n=snprintf(expected,sizeof(expected),"%s %u %u %u %u %u %u %u %u\n",
+            e->indexed?"EFS_PRINCIPLES_INDEX_V1":"EFS_PRINCIPLES_V1",
             e->container,e->container_alignment,e->size,e->logical_size,e->objects,e->qd,e->nroots,i);
         if (n<0 || (size_t)n>=sizeof(expected)) return -1;
         int fd=open(path,create?O_WRONLY|O_CREAT|O_EXCL:O_RDONLY,0600);
@@ -291,11 +341,13 @@ int efs_bench_principles_main(int argc, char **argv)
                  "--directory-sync worker|ancestors (default worker; ancestors models production path barriers).\n"
                  "--logical-size BYTES: logical tiny content inside the physical payload (default: payload size).\n"
                  "--direct-io|--no-direct-io; finite one-pass fixtures, not --time loops.\n"
+                 "--indexed: experimental immutable packed segments/manifest; buffered container/alignment=1, durable allocating writes or retained reads only.\n"
                  "--retain: keep a successful durable write fixture; --recover-existing: read-only cold verification.\n"
                  "Recovery requires identical roots, layout, geometry, object count and queue depth.\n"
                  "Payload plus 32-byte checksum tail; direct records use a 4 KiB tail.\n"
                  "each/batch includes required file and directory fsync in wall time."); return 0;
         }
+        if (!strcmp(k,"--indexed")) { e.indexed=1; continue; }
         if (!strcmp(k,"--retain")) { e.retain=1; continue; }
         if (!strcmp(k,"--recover-existing")) { e.recover=1; continue; }
         if (!strcmp(k,"--direct-io")) { e.direct=1; continue; }
@@ -333,6 +385,9 @@ int efs_bench_principles_main(int argc, char **argv)
     } else goto invalid;
     if ((e.retain && (strcmp(e.rw,"write") || !strcmp(e.persist,"none") || e.recover)) ||
         (e.recover && strcmp(e.rw,"read"))) goto invalid;
+    if(e.indexed && (!e.container || e.direct || e.container_alignment!=1 ||
+        e.objects>65536 || (uint64_t)e.size*e.qd>(64u<<20) ||
+        (!e.recover && (strcmp(e.rw,"write") || strcmp(e.policy,"allocating") || !strcmp(e.persist,"none")))))goto invalid;
     for (unsigned i=0;i<e.nroots;i++) {
         if (!e.recover && !empty_root(e.roots[i])) { fprintf(stderr,"principles: scratch root must exist and be empty: %s\n",e.roots[i]); return 1; }
         struct stat a; if (stat(e.roots[i],&a)) return 1;
@@ -369,7 +424,12 @@ int efs_bench_principles_main(int argc, char **argv)
         uint64_t x=i+1;
         for(unsigned k=0;k<e.size;k++) { x^=x<<13;x^=x>>7;x^=x<<17;w[i].buf[k]=(uint8_t)x; }
         for(unsigned j=0;j<w[i].count;j++) { pattern(&w[i],j); memcpy(w[i].expected+(size_t)j*32,w[i].buf+e.size,32); }
-        if (e.container) {
+        if(e.indexed) {
+            w[i].index=principles_index_open(w[i].dir,w[i].count,UINT64_C(1)<<30,!e.recover,e.recover);
+            if(!w[i].index)goto done;
+            struct principles_index_stats stats;if(principles_index_stats(w[i].index,&stats))goto done;
+            w[i].index_start_syncs=stats.syncs;w[i].index_start_written=stats.index_written_bytes;
+        } else if (e.container) {
             if (snprintf(w[i].path,sizeof(w[i].path),"%s/container",w[i].dir)>=4096) goto done;
             w[i].fd=open(w[i].path,(e.recover?O_RDONLY:O_RDWR|O_CREAT|O_EXCL)|(e.direct && strcmp(e.rw,"delete") ? O_DIRECT:0),0600);
             if (w[i].fd<0) goto done;
@@ -416,10 +476,16 @@ int efs_bench_principles_main(int argc, char **argv)
             if(flush_batch(&w[i],0,w[i].count)) failure++;
         }
         after+=allocated(&w[i]);
+        if(w[i].error)failure++;
         /* Independent post-run verification, outside the timed/profiled loop. */
         for(unsigned j=0;j<w[i].count;j++) {
             char path[4096];
-            if(!strcmp(e.rw,"delete")) {
+            if(e.indexed) {
+                uint32_t n=e.size;uint64_t gen=0;uint8_t hash[32];
+                if(principles_index_get(w[i].index,j,w[i].buf,&n,&gen) || n!=e.size || gen!=1){failure++;continue;}
+                efs_hash(w[i].buf,e.size,hash);
+                if(memcmp(hash,w[i].expected+(size_t)j*32,32))failure++;else verified++;
+            } else if(!strcmp(e.rw,"delete")) {
                 if(!e.container) { struct stat st; file_path(&w[i],j,path); if(!stat(path,&st) || errno!=ENOENT) failure++; else verified++; }
                 else if(!strcmp(e.policy,"release")) { struct stat st; if(!stat(w[i].path,&st) || errno!=ENOENT) failure++; else verified++; }
                 else { if(io_record(w[i].fd,w[i].buf,e.stride,(off_t)j*e.stride,1)) failure++;
@@ -437,8 +503,13 @@ int efs_bench_principles_main(int argc, char **argv)
     if(!failure && e.retain && fixture_seal(&e,1)) failure++;
     if(e.retain || e.recover)
         printf("BENCH_NOTE fixture=%s seal=outside_timing recovery=read_only\n",e.recover?"recovered":"retained");
+    if(e.indexed) {
+        uint64_t segments=0,index=0,garbage=0,body_writes=0,index_writes=0;
+        for(unsigned i=0;i<e.qd;i++){struct principles_index_stats stats;if(principles_index_stats(w[i].index,&stats)){failure++;continue;}segments+=stats.segment_bytes;index+=stats.index_bytes;garbage+=stats.garbage_bytes;body_writes+=stats.body_written_bytes;index_writes+=stats.index_written_bytes-w[i].index_start_written;}
+        printf("BENCH_NOTE index_protocol=immutable_segments_snapshot index_bytes=%llu segment_bytes=%llu garbage_bytes=%llu body_written_bytes=%llu index_written_bytes=%llu per_worker_quota_bytes=1073741824 cohort_memory_bound_bytes=67108864\n",(unsigned long long)index,(unsigned long long)segments,(unsigned long long)garbage,(unsigned long long)body_writes,(unsigned long long)index_writes);
+    }
     printf("%s kind=principles model=independent rw=%s layout=%s policy=%s persist=%s directory_sync=%s direct=%d payload_bytes=%u logical_payload_bytes=%u container_alignment=%u record_bytes=%u objects=%u qd=%u paths=%u batch=%u ops=%llu wall_s=%.6f ops_s=%.3f GiB_s=%.6f p50_us=%llu p95_us=%llu p99_us=%llu max_us=%llu latency=%s latency_samples=%llu syncs=%llu allocated_before=%llu allocated_after=%llu reclaimed_allocated_bytes=%llu verified_objects=%llu idle_workers=%llu max_start_us=%llu errors=%d timing=finite_one_pass\n",
-           failure?"BENCH_FAIL":"BENCH_OK",e.rw,e.container?"container":"files",e.policy,e.persist,e.sync_ancestors?"ancestors":"worker",e.direct,e.size,e.logical_size,e.container_alignment,e.stride,e.objects,e.qd,e.nroots,e.batch,
+           failure?"BENCH_FAIL":"BENCH_OK",e.rw,e.indexed?"indexed":(e.container?"container":"files"),e.policy,e.persist,e.sync_ancestors?"ancestors":"worker",e.direct,e.size,e.logical_size,e.container_alignment,e.indexed?e.size+52:e.stride,e.objects,e.qd,e.nroots,e.batch,
            (unsigned long long)ops,wall,ops/wall,(double)ops*e.size/(1ull<<30)/wall,
            (unsigned long long)lat_percentile(&total,50,NULL),(unsigned long long)lat_percentile(&total,95,NULL),(unsigned long long)lat_percentile(&total,99,NULL),(unsigned long long)total.max,
            !strcmp(e.policy,"release")?"container_release":
@@ -458,10 +529,16 @@ done:
     }
     if(rc && !failure) fprintf(stderr,"principles: setup/control failed: %s\n",strerror(errno));
     for(unsigned i=0;i<e.qd;i++) {
+        if(w[i].index)principles_index_close(w[i].index);
         if(w[i].fd>=0) close(w[i].fd);
         if(w[i].dfd>=0) close(w[i].dfd);
         /* Only paths created under validated empty scratch roots are removed. */
-        if(w[i].owns_dir && !(e.retain && rc==0)) { if(e.container) { if(w[i].path[0]) unlink(w[i].path); }
+        if(e.indexed && w[i].owns_dir && !e.retain && rc==0) {
+            DIR *d=opendir(w[i].dir);if(d){struct dirent *entry;while((entry=readdir(d))) {
+                if(!strcmp(entry->d_name,".") || !strcmp(entry->d_name,".."))continue;
+                char path[4096];if(snprintf(path,sizeof(path),"%s/%s",w[i].dir,entry->d_name)<(int)sizeof(path))unlink(path);
+            }closedir(d);rmdir(w[i].dir);}
+        } else if(!e.indexed && w[i].owns_dir && !(e.retain && rc==0)) { if(e.container) { if(w[i].path[0]) unlink(w[i].path); }
             else for(unsigned j=0;j<w[i].count;j++) {char path[4096];if(!file_path(&w[i],j,path)) unlink(path);}
             if(w[i].dir[0]) rmdir(w[i].dir); }
         free(w[i].buf); free(w[i].expected); free(w[i].pending_start);

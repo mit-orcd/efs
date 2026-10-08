@@ -19,7 +19,48 @@ class PrinciplesTests(unittest.TestCase):
         if not ok:
             return p
         row = next(line for line in p.stdout.splitlines() if line.startswith('BENCH_OK '))
-        return dict(re.findall(r'(\w+)=([^\s]+)', row))
+        result=dict(re.findall(r'(\w+)=([^\s]+)', row))
+        for line in p.stdout.splitlines():
+            if line.startswith('BENCH_NOTE index_protocol='):
+                result.update(re.findall(r'(\w+)=([^\s]+)',line))
+        return result
+
+    def test_indexed_durable_geometry_and_cold_read_only(self):
+        for size,persist in itertools.product([1,17,512,65536],['each','batch']):
+            with self.subTest(size=size,persist=persist), tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+                common=['--storage',a,'--storage',b,'--layout','container','--container-alignment','1',
+                        '--indexed','--objects','16','--qd','2','--payload-size',str(size),'--logical-size','1','--no-direct-io']
+                row=self.run_case(*common,'--rw','write','--policy','allocating','--persist',persist,'--batch-size','4','--retain')
+                self.assertEqual(row['layout'],'indexed')
+                self.assertEqual(row['record_bytes'],str(size+52))
+                self.assertEqual(row['latency_samples'],'16')
+                self.assertEqual(row['latency'],'operation_to_durable_completion')
+                self.assertEqual(row['verified_objects'],'16')
+                self.assertGreater(int(row['syncs']),0)
+                cohorts=16 if persist=='each' else 4
+                self.assertEqual(int(row['body_written_bytes']),16*(size+52)+24*cohorts)
+                self.assertEqual(int(row['index_written_bytes']),(48+8*80+32)*cohorts)
+                self.assertEqual(int(row['garbage_bytes']),0)
+                def evidence():
+                    return {str(p):(p.read_bytes(),p.stat().st_mtime_ns) for root in (a,b) for p in Path(root).rglob('*') if p.is_file()}
+                before=evidence()
+                cold=self.run_case(*common,'--rw','read','--policy','populated','--persist','none','--recover-existing')
+                self.assertEqual(cold['verified_objects'],'16')
+                self.assertEqual(cold['syncs'],'0')
+                self.assertEqual(evidence(),before,'cold verification must not rewrite, collect or repair')
+
+    def test_indexed_cleanup_and_refused_modes(self):
+        with tempfile.TemporaryDirectory() as root:
+            base=['--storage',root,'--layout','container','--container-alignment','1','--indexed',
+                  '--objects','16','--qd','2','--payload-size','512']
+            self.run_case(*base,'--rw','write','--policy','allocating','--persist','batch')
+            self.assertEqual(list(Path(root).iterdir()),[])
+            for bad in [('--direct-io',),('--persist','none'),('--layout','files'),
+                        ('--container-alignment','4096'),('--policy','overwrite'),
+                        ('--rw','delete','--policy','tombstone'),('--objects','65537'),
+                        ('--objects','256','--qd','256','--payload-size','1048576')]:
+                self.run_case(*base,'--rw','write','--policy','allocating','--persist','batch',*bad,ok=False)
+                self.assertEqual(list(Path(root).iterdir()),[])
 
     def test_all_layouts_persistence_and_direct_formats(self):
         for layout, direct in itertools.product(['files', 'container'], [False, True]):
