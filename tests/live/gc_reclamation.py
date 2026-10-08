@@ -31,6 +31,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
 p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
@@ -132,7 +133,7 @@ if a.transport == 'rdma':
     env['EFS_RDMA_DEV'] = device
 if a.gc_bulk_gib:
     assert not a.idle_seconds;env['EFS_GC_DBG']='1'
-if a.ior_binary or a.append_sync_boundary:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
+if a.ior_binary or a.append_sync_boundary or a.sync_writes or a.stop_dirty_recovery:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
 if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
 if a.worker_fault:
     assert a.workers and a.client_binary,'worker faults require explicit fault client and --workers'
@@ -338,25 +339,29 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
-    if a.append_sync_boundary:
+    if a.append_sync_boundary or a.sync_writes:
         peer_log=open(work/'sync-peer.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:os.path.ismount(peer_mount) and (peer_mount.stat().st_ino>0),'sync peer mounted',40)
         transport_proof([*servers,client,peer])
         records=[];expected={}
         writer_code="""import os,sys,time,json
-path,flags,size=sys.argv[1],int(sys.argv[2]),int(sys.argv[3])
+path,flags,size,explicit=sys.argv[1],int(sys.argv[2]),int(sys.argv[3]),int(sys.argv[4])
 fd=os.open(path,flags);body=b'w'*size;start=time.monotonic()
-done=0
-while done<size:
- n=os.write(fd,body[done:done+(128<<10)]);assert n>0;done+=n
- os.fsync(fd)
+if explicit:
+ done=0
+ while done<size:
+  n=os.write(fd,body[done:done+(128<<10)]);assert n>0;done+=n
+  os.fsync(fd)
+else:
+ assert os.write(fd,body)==size,'synchronous write short-returned'
 print(json.dumps({'seconds':time.monotonic()-start,'bytes':size}),flush=True)
 assert sys.stdin.readline().strip()=='release'
 os.close(fd)
 """
-        for label,flag in [('fsync',0)]:
-            for append in (True,):
+        modes=([('fsync',0)] if a.append_sync_boundary else [])+([('sync',os.O_SYNC),('dsync',os.O_DSYNC)] if a.sync_writes else [])
+        for label,flag in modes:
+            for append in ((False,True) if a.sync_writes else (True,)):
                 for size in (31,2<<20):
                     name=f'synchronous-{label}-{append}-{size}'
                     path=mount/name;prefix=b'prefix\n' if append else b''
@@ -364,7 +369,7 @@ os.close(fd)
                         if prefix:assert out.write(prefix)==len(prefix)
                         os.fsync(out.fileno())
                     flags=os.O_WRONLY|flag|(os.O_APPEND if append else 0)
-                    writer=subprocess.Popen(['python3','-c',writer_code,str(path),str(flags),str(size)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=env)
+                    writer=subprocess.Popen(['python3','-c',writer_code,str(path),str(flags),str(size),str(int(label=='fsync'))],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=env)
                     try:
                         assert select.select([writer.stdout],[],[],40)[0],'synchronous write exceeded budget'
                         line=writer.stdout.readline();assert line,writer.stderr.read()
@@ -403,9 +408,14 @@ os.close(fd)
         for name,digest in expected.items():
             assert hashlib.sha256((mount/name).read_bytes()).hexdigest()==digest,'synchronous bytes changed after server crash'
             (mount/name).unlink()
-        (work/'append-sync-boundary.json').write_text(json.dumps({'cases':records,'cold_crash_verified':True,'explicit_fsync_before_close':True},indent=2))
+        if a.sync_writes:
+            trace=(work/'fuse.log').read_text(errors='replace')
+            assert len(re.findall(r'sync-write ino=.* rc=0',trace))>=8,'synchronous callback publication trace missing'
+        result={'cases':records,'cold_crash_verified':True,'explicit_fsync_before_close':a.append_sync_boundary,
+                'synchronous_write_before_close':a.sync_writes}
+        (work/('synchronous-writes.json' if a.sync_writes else 'append-sync-boundary.json')).write_text(json.dumps(result,indent=2))
         wait(drained,'synchronous write physical deletion drained')
-        print('Append/fsync across lane groups: peer before close and cold crash bytes PASS',flush=True)
+        print(('O_SYNC/O_DSYNC small/queued/append before close and cold crash bytes' if a.sync_writes else 'Append/fsync across lane groups: peer before close and cold crash bytes')+' PASS',flush=True)
     if a.append_replay_race:
         helper=work/'append-replay-race'
         run(['cc','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
@@ -673,7 +683,7 @@ os.close(fd)
             'bytes':len(body),'failures':failures,'clean_stop_seconds':elapsed,
             'cold_sha256':hashlib.sha256(body).hexdigest(),'forced_discard':False},indent=2))
         target.unlink();wait(drained,'recovered partial body physically reclaimed')
-        print('failed new partial PUT: clean stop drains retained body and exact cold bytes PASS',flush=True)
+        print('failed new partial flush: clean stop drains retained body and exact cold bytes PASS',flush=True)
     if a.shutdown_mutations:
         directory=mount/'shutdown-writes';directory.mkdir()
         acknowledged=[];errors=[];active=threading.Event();finish=threading.Event()

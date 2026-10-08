@@ -3161,6 +3161,24 @@ static int efs_fuse_write_run(const char *path, const char *buf, size_t size,
     return rc;
 }
 
+static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
+                              struct fuse_file_info *fi);
+
+/* Kernel follow-up fsync behavior is not the write callback's contract.
+ * Finish publication before acknowledging an explicitly synchronous write,
+ * after write admission credits are released and within its inherited budget. */
+static int efs_fuse_sync_write_result(int written, struct fuse_file_info *fi)
+{
+    if (written <= 0 || !fi || !(fi->flags & (O_SYNC | O_DSYNC)))
+        return written;
+    int datasync = (fi->flags & O_SYNC) != O_SYNC;
+    int rc = efs_fuse_fsync_ino(0, datasync, fi);
+    if (efs_dcache_trace_on())
+        fprintf(stderr, "sync-write ino=%llu bytes=%d datasync=%d rc=%d\n",
+                (unsigned long long)efs_file_ino(fi, 0), written, datasync, rc);
+    return rc ? rc : written;
+}
+
 static int efs_fuse_write(const char *path, const char *buf, size_t size,
                           off_t offset, struct fuse_file_info *fi)
 {
@@ -3170,6 +3188,7 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
         deadline = previous;
     efs_client_rpc_set_deadline_ms(deadline);
     int rc = efs_client_rpc_past_deadline() ? -EAGAIN : efs_fuse_write_run(path, buf, size, offset, fi);
+    rc = efs_fuse_sync_write_result(rc, fi);
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
@@ -3396,6 +3415,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
         deadline = previous;
     efs_client_rpc_set_deadline_ms(deadline);
     int rc = efs_client_rpc_past_deadline() ? -EAGAIN : efs_fuse_write_buf_run(path, buf, offset, fi);
+    rc = efs_fuse_sync_write_result(rc, fi);
     efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }

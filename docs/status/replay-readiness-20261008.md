@@ -15,7 +15,7 @@ benchmark harness changes belong to this package.
 | W23/W89 | Corrected follower pressure measurement and D30 remedy remain pending; no pressure closure from these runs. |
 | Queue | Dated evidence reconciled below without removing hardware/multi-host obligations. |
 | W71 | `e77e1f13`: production fragment contents, checksum/length and ancestor directory entries are fenced before PUT succeeds. Actual buffered/direct/bounce fault tests and direct/TCP live POSIX/replay/append/GC/restart gates pass. Physical power-loss acceptance remains owed. |
-| W73 | Candidate callback integration tested; large synchronous append exposed the W64 routing blocker. Candidate removed from build sources and preserved as a rejected patch in the evidence directory. No claim of synchronous application-write support. |
+| W73 | Explicit O_SYNC/O_DSYNC callback publication is implemented and accepted in AMD direct/TCP gates after the W64 fix: small/queued, append/non-append, peer-before-close and cold crash bytes pass. Historical rejected candidate evidence remains preserved; hardware power-loss acceptance is W71. |
 | W72/W86 | Real production sessions, touched-authority registration, durable revocation and ticket/storage fences remain pending. |
 | D25 | Remains staged: write-path integration and bounded history/materialization are still required before logical resize activation. |
 
@@ -61,7 +61,7 @@ leaders and lost replies. Keep durable replay and legacy compatibility tests.
 
 W73's proposed explicit write-callback publication is preserved in
 [the unaccepted patch](../../results/measure/20261008-replay-readiness/w73-not-accepted.patch).
-It is **not applied** to the committed FUSE callbacks. The new opt-in live
+It was removed after that failed run. After the coordinated W64 fix, the callback change was reapplied and gated successfully (see W73 acceptance below). The opt-in live
 `--append-sync-boundary` exercises repeated 128 KiB appends with explicit fsync,
 peer visibility before close and cold crash bytes; it does not require W73.
 A single large write followed by fsync passed. Repeated 128 KiB writes
@@ -177,6 +177,35 @@ cold remount reads the exact SHA-256-verified body. No force-discard is used.
 The failed combined run is retained under `shutdown-before-fix`; its failure
 remains recorded rather than being counted as a pass. D27 whole-call recovery
 and small-host memory acceptance are still separate obligations.
+
+## W73 synchronous callback publication — 07:28 UTC
+
+Both production FUSE write entry points now finish flush/REPORT before
+acknowledging positive O_SYNC/O_DSYNC writes. Publication runs after write
+admission credits and append locks are released, within the inherited call
+budget. Publication failure returns an error and retains recovery ownership;
+ordinary writes retain their existing behavior. O_DSYNC currently uses the
+same conservative full-publication fence as O_SYNC.
+
+AMD direct/TCP fixture `/data1/efs/gc-direct-po64tbre` passes 31-byte and 2 MiB
+writes for O_SYNC and O_DSYNC, with and without O_APPEND. A 2 MiB write must
+return all requested bytes; no short result is hidden or retried by the test.
+The peer verifies every body before the writer is allowed to close. Actual
+FUSE callback trace is required, then daemon crash/restart verifies exact
+hashes. Explicit append/fsync and peer sparse extensions run alongside these.
+[All cases](../../results/measure/20261008-replay-readiness/sync-publication-pass/synchronous-writes.json).
+
+The same run passes lost-reply/leader-death append replay, deterministic dirty
+stop recovery, graceful leader shutdown, all **216 POSIX + 64 peer tests**
+(0 failures, 1 POSIX skip), **800 exact cold append records** during GC, physical
+fragment inventory and late-PUT fencing after restart. Full AMD units pass in
+`/tmp/efs-sync-retry-unit.log`; extracted production callback tests also verify
+ordinary-write behavior, both synchronous flags, failure propagation, empty
+writes and inherited deadline restoration.
+[Gate console](../../results/measure/20261008-replay-readiness/sync-publication-pass/console.log).
+The earlier failed candidate remains historical evidence, not an outstanding
+routing failure. Hardware power loss and the final multi-mode matrix are owed;
+D25 remains staged.
 
 ## Evidence
 
