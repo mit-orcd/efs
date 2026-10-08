@@ -169,3 +169,38 @@ No deployed binary changed. Loader remains active, ~16,384 new small files /
 256 MiB at 02:31 EDT; no GiB stage completed. Reserves ~700 GiB /data1 and
 803 GiB /home, hundreds of millions of free inodes. No errors or intervention
 required; continue monitoring before any eventual pause/deployment.
+
+## Oct 8, 02:37 EDT — host background publication smoke passed
+
+Catalog builder commit: `ed2808f2`. The next focused component adds one host
+publisher with N=256 metadata-key writes / T=2000 ms, 200 ms minimum spacing,
+2 s failed-attempt backoff, 256 MiB candidate catalog and 64 MiB memtable-copy
+budgets, plus a cooperative 10 s build deadline. One builder retains at most
+old/candidate catalog generations. Reader callbacks hold a publication mutex;
+publication retires the old image after readers drain. Shutdown cancels/joins
+while the Raft pump remains alive.
+
+Capture records actual per-group applied indexes and terms under the host apply
+mutex, with no scan/fold there. It refuses non-voters, partial group coverage,
+queued/running/partial imports. Post-capture ReadIndex barriers and unchanged
+metadata hints reject asymmetric apply cuts; pending records refuse candidate
+construction. Failures retain prior source/build times and watermarks. A busy
+writer can prevent a consistent cut and exceed T: expose that age/error, never
+claim T as already proven. Only n2/n3 currently cohost all groups; other nodes
+return a dual-host redirect from the internal read API. Distributed assembly on
+clusters without a complete cohost remains a capability limitation.
+
+Private NUC fixture (separate stores and ports 24800–24803) passes initial
+publication, actual Raft CREATE-to-rollup refresh, partial-host refusal and
+restart rebuild. Existing shutdown gate passes 6/6 buffered/direct variants.
+Raw logs and exact binary hashes (rsynced build identifies as unknown) are in
+results/measure/20261008-w92-query-publication. Tiny-fixture timings do not prove
+loaded pin latency, resource bounds or transaction/fault acceptance.
+
+**Next:** versioned bounded query RPC and client virtual interface consumers,
+fresh credential/ancestor validation, explicit stale status and output limits.
+No RPC consumer is wired yet; live `.stats` remains wrong and `.find` still
+walks on misses. Live deployed build remains e9f974b4e148. Do not deploy while
+the loader is active. At 02:36 EDT it has ~19,072 new small files /298 MiB,
+~700 GiB free /data1 and ~803 GiB /home; no GiB stage finished. W91 expiry tests
+remain pending the real expiry interface, as noted above. This task stays open.

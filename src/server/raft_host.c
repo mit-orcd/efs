@@ -344,6 +344,11 @@ struct efs_raft_host {
     pthread_t tid;
     int running;
     int started;
+    pthread_mutex_t query_mu;
+    pthread_t query_tid;
+    int query_running,query_started,query_error;
+    uint64_t query_deadline_ms;
+    struct efs_server_query_view query_view;
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
     int gc_running;
     int gc_started;
@@ -7014,6 +7019,168 @@ static void *host_gc_thread(void *arg)
     return NULL;
 }
 
+/* W92 query publication: only complete dual-group voters can assemble a
+ * namespace today. No scan or rollup runs under the Raft apply mutex or on
+ * a query path. Dirty revisions are refresh hints, never Raft watermarks. */
+#define HOST_QUERY_BYTES (256ULL << 20)
+#define HOST_QUERY_MEMTABLE (64ULL << 20)
+#define HOST_QUERY_N 256
+#define HOST_QUERY_T_MS 2000
+#define HOST_QUERY_BUILD_MS 10000
+static uint64_t query_mono_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC,&ts);
+    return (uint64_t)ts.tv_sec*1000+(uint64_t)ts.tv_nsec/1000000;
+}
+static int host_query_cancel(void *ctx)
+{
+    struct efs_raft_host *h=ctx;
+    return !__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE) ||
+           query_mono_ms()>h->query_deadline_ms;
+}
+/* h->mu held: a pin is atomic with complete local apply dispatch. Import
+ * batches can run outside that mutex, so their blockers must also be tested. */
+static int host_query_capable(struct efs_raft_host *h)
+{
+    uint8_t both[2];host_need_both(both);
+    if (!host_hosts_all(h,both,2) || __atomic_load_n(&h->snap_batch,__ATOMIC_ACQUIRE)) return 0;
+    int clean=1;
+    pthread_mutex_lock(&h->snap_mu);
+    for (int i=0;i<HOST_NGROUPS;i++)
+        if (__atomic_load_n(&h->g[i].import_block,__ATOMIC_ACQUIRE) ||
+            h->g[i].import_state!=SNAP_IMP_IDLE) clean=0;
+    pthread_mutex_unlock(&h->snap_mu);
+    return clean;
+}
+static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
+                              struct efs_server_query_view *view,uint64_t *revisions)
+{
+    *source=NULL;memset(view,0,sizeof(*view));
+    pthread_mutex_lock(&h->mu);
+    int rc=host_query_capable(h) ? EFS_OK : EFS_ERR_NOT_PRIMARY;
+    if (!rc) {
+        view->boot_id=h->boot_id;view->source_ns=now_ns();
+        for (int i=0;i<HOST_NGROUPS;i++) {
+            view->applied[i]=efs_raft_applied(h->g[i].r);
+            view->terms[i]=efs_raft_term(h->g[i].r);
+        }
+        uint64_t started=query_mono_ms();
+        rc=efs_kv_lsm_snapshot_pin(h->kv,HOST_QUERY_MEMTABLE,source);
+        view->pin_ms=query_mono_ms()-started;
+    }
+    pthread_mutex_unlock(&h->mu);
+    if (rc) return rc;
+    rc=efs_kv_lsm_snapshot_revisions(*source,revisions,4096);
+    /* Barriers AFTER capture expose an asynchronously missing participant
+     * prepare/resolve. A changed metadata image refuses this cut; pending
+     * records additionally refuse catalog construction. This deliberately
+     * favors BUSY over publishing a half cross-group transaction. */
+    for (int i=0;i<HOST_NGROUPS && !rc;i++) {
+        int hint=-1;
+        rc=host_read_index(h,h->g[i].group,&hint);
+    }
+    uint64_t after[4096];
+    pthread_mutex_lock(&h->mu);
+    if (!rc && !host_query_capable(h)) rc=EFS_ERR_NOT_PRIMARY;
+    if (!rc) rc=efs_kv_lsm_metadata_revisions(h->kv,after,4096);
+    if (!rc && memcmp(revisions,after,sizeof(after))) rc=EFS_ERR_BUSY;
+    pthread_mutex_unlock(&h->mu);
+    if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
+    return rc;
+}
+static void *host_query_thread(void *ctx)
+{
+    struct efs_raft_host *h=ctx;
+    uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
+    int failed=0;
+    while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
+        usleep(100000);
+        uint64_t now=query_mono_ms(),dirty=0;
+        if (now-last_attempt<200) continue;
+        int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
+        if (rc) continue;
+        for (uint32_t i=0;i<4096;i++) {
+            uint64_t diff=current[i]>=published[i] ? current[i]-published[i] : HOST_QUERY_N;
+            if (diff>=HOST_QUERY_N-dirty) { dirty=HOST_QUERY_N;break; }
+            dirty+=diff;
+        }
+        /* Only this worker changes the published pointer. Readers hold
+         * query_mu; old remains alive throughout the next candidate build. */
+        int initial=h->query_view.catalog==NULL;
+        if (!dirty && !initial) { first_dirty=0;continue; }
+        if (!first_dirty) first_dirty=now;
+        if (!initial && dirty<HOST_QUERY_N && now-first_dirty<HOST_QUERY_T_MS) continue;
+        if (failed && last_attempt && now-last_attempt<HOST_QUERY_T_MS) continue;
+        last_attempt=now;
+        struct efs_kv_lsm_snapshot *source=NULL;
+        struct efs_server_query_view view;
+        uint64_t revisions[4096];
+        h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
+        rc=host_query_source(h,&source,&view,revisions);
+        struct efs_query_catalog *candidate=NULL;
+        if (!rc && !host_query_cancel(h))
+            rc=efs_query_catalog_build(source,h->query_view.catalog,HOST_QUERY_BYTES,host_query_cancel,h,&candidate);
+        else if (!rc) rc=EFS_ERR_BUSY;
+        efs_kv_lsm_snapshot_release(source);
+        if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
+        pthread_mutex_lock(&h->query_mu);
+        h->query_error=rc;failed=rc!=EFS_OK;
+        if (!rc) {
+            struct efs_query_catalog *old=h->query_view.catalog;
+            view.catalog=candidate;view.built_ns=now_ns();
+            view.build_ms=query_mono_ms()-now;
+            view.generation=h->query_view.generation+1;
+            h->query_view=view;
+            struct efs_query_rollup root={0};
+            int root_rc=efs_query_catalog_stats(candidate,EFS_ROOT_INO,&root);
+            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
+                (unsigned long long)view.generation,(unsigned long long)view.applied[0],
+                (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),
+                (unsigned long long)efs_query_catalog_bytes(candidate),(unsigned long long)view.pin_ms,
+                (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
+                (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
+            memcpy(published,revisions,sizeof(published));first_dirty=0;
+            /* query_mu drains readers before retirement; one builder bounds
+             * simultaneous old/candidate generations to two per host. */
+            efs_query_catalog_free(old);
+        }
+        pthread_mutex_unlock(&h->query_mu);
+    }
+    return NULL;
+}
+/* Internal borrowed-view API. The consumer is bounded and may not retain the
+ * pointer. It MUST enforce fresh user permissions/ancestry before returning
+ * bytes. Source and build times do not advance after a failed refresh. */
+int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
+                                 void *ctx,uint16_t *primary_id)
+{
+    struct efs_raft_host *h=g_host;
+    if (primary_id) *primary_id=0;
+    if (!h || !consume) return EFS_ERR_INVAL;
+    uint8_t both[2];host_need_both(both);
+    pthread_mutex_lock(&h->mu);
+    int capable=host_query_capable(h);
+    int peer=capable ? -1 : host_pick_peer(h,both,2,-1);
+    pthread_mutex_unlock(&h->mu);
+    if (!capable) {
+        if (primary_id && peer>=0) *primary_id=(uint16_t)(peer+1);
+        return EFS_ERR_NOT_PRIMARY;
+    }
+    for (int i=0;i<HOST_NGROUPS;i++) {
+        int hint=-1,rc=host_read_index(h,both[i],&hint);
+        if (rc) return rc;
+    }
+    pthread_mutex_lock(&h->mu);
+    capable=host_query_capable(h);
+    pthread_mutex_unlock(&h->mu);
+    if (!capable) return EFS_ERR_BUSY;
+    pthread_mutex_lock(&h->query_mu);
+    int rc=h->query_view.catalog ? consume(ctx,&h->query_view,h->query_error) : EFS_ERR_BUSY;
+    pthread_mutex_unlock(&h->query_mu);
+    return rc;
+}
+
 int server_raft_host_start(struct efsd_server *s)
 {
     struct efs_raft_host *h;
@@ -7050,6 +7217,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
     pthread_mutex_init(&h->snap_mu, NULL);
+    pthread_mutex_init(&h->query_mu,NULL);
     pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
@@ -7141,6 +7309,11 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
+    __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
+    if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
+        __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
+        fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
+    } else h->query_started=1;
     /* GC reaper after the pump: its proposals need the pump to apply. A
      * spawn failure only leaks fragments (logged), never corrupts.
      * EFS_GC_DISABLE is an operational escape hatch (A/B, emergencies):
@@ -7207,6 +7380,13 @@ void server_raft_host_stop(void)
 
     if (!h)
         return;
+    __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
+    if (h->query_started) pthread_join(h->query_tid,NULL);
+    pthread_mutex_lock(&h->query_mu);
+    efs_query_catalog_free(h->query_view.catalog);
+    h->query_view.catalog=NULL;
+    pthread_mutex_unlock(&h->query_mu);
+    pthread_mutex_destroy(&h->query_mu);
     /* Stop the GC reaper first: an in-flight host_propose_wait needs the
      * pump alive to apply, and its peer RPCs need the conn pool. */
     h->gc_running = 0;

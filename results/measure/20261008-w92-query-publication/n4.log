@@ -1,0 +1,6 @@
+2026-10-08T06:34:55.516Z Joined cluster with 4 nodes
+2026-10-08T06:34:55.517Z heartbeat: enabled (2000 ms interval)
+2026-10-08T06:34:55.519Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-08T06:34:55.519Z raft-host: up raft_id=3 n=4 boot=11444589560580555 salt=18215229781900609204 g0=off g2=hosted
+2026-10-08T06:34:55.519Z efsd (no git metadata, branch unknown, built 2026-10-08T06:28:47Z on nuc), build=unknown: node 4 listening on 127.0.0.1:24803, storage=/data1/efs/w92-query-fixture-20261008c/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=0 shared
+2026-10-08T06:34:57.517Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=994 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0

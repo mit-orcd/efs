@@ -183,3 +183,10 @@ layout precedence before stats/find output. Catalog and name-index unit tests
 pass on NUC and focused Mac ASan/UBSan. These are builder foundations; host
 publication, fresh permissions, RPC consumers and live/scale gates remain open.
 See the continuation checkpoint and query-catalog evidence ledger.
+
+Host background publication now has a private four-node smoke gate covering
+Raft mutations, quiet refresh, partial-host refusal and persisted restart
+rebuild. Bounded internal read callbacks are staged; user query RPCs and fresh
+permission checks remain unconnected. Busy writes may refuse a transaction-safe
+cut and exceed T, so expose old publication age/error. Full live and scale gates
+remain open. Details and raw evidence are in the latest continuation checkpoint.

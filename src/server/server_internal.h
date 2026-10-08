@@ -5,6 +5,7 @@
 #include "efs/metadata.h"
 #include "efs/network.h"
 #include "efs/protocol.h"
+#include "efs/query_catalog.h"
 #include <pthread.h>
 #include <time.h>
 
@@ -333,6 +334,16 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                              struct efs_msg_raft_mkfs_reply *out);
 void server_raft_host_status(struct efs_msg_raft_status_reply *out);
 int server_raft_host_active(void);
+/* Borrowed immutable query image; group slots are 0 and 2. Only background
+ * refresh builds catalogs. The callback must enforce fresh authorization and
+ * never retain pointers. Failed refresh preserves source/build watermarks. */
+struct efs_server_query_view {
+    struct efs_query_catalog *catalog;
+    uint64_t boot_id,source_ns,built_ns,generation,applied[2],terms[2],pin_ms,build_ms;
+};
+int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
+                                 void *ctx,uint16_t *primary_id);
+
 /* Leader + ReadIndex + applied KV. No s->lock. Inactive before mkfs
  * and these are never called. NOT_PRIMARY fills primary_id = raft leader
  * node id. */
