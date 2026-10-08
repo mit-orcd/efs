@@ -224,6 +224,23 @@ int main(void)
     CHECK(newer && !efs_query_catalog_find(newer,EFS_ROOT_INO,EFS_NAME_PREFIX,"scope-cache-",100,collect,&f) && f.n==6,
           "scope cache belongs to one query root");
     efs_query_catalog_free(newer);newer=NULL;
+    /* Exercise catalog lookup through a larger, same-shard inode population,
+     * including misses and an older immutable generation. */
+    efs_ino_t indexed[512];
+    for (unsigned i=0;i<512;i++) {
+        char name[32];snprintf(name,sizeof(name),"index-%u",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&indexed[i]),"indexed file");
+    }
+    CHECK(!capture(kv,NULL,&newer),"larger inode catalog");
+    for (unsigned i=0;i<512 && newer;i++) {
+        struct efs_meta_row indexed_row;struct efs_meta_stat indexed_stat;
+        CHECK(!efs_query_catalog_inode(newer,indexed[i],&indexed_row,&indexed_stat) &&
+              indexed_row.ino==indexed[i] && indexed_stat.ino==indexed[i] && !indexed_stat.size,
+              "every indexed inode resolves to its own metadata");
+        CHECK(efs_query_catalog_inode(c,indexed[i],NULL,NULL)==EFS_ERR_NOT_FOUND,"old image excludes new inode");
+    }
+    CHECK(newer && efs_query_catalog_inode(newer,UINT64_MAX,NULL,NULL)==EFS_ERR_NOT_FOUND,"absent inode lookup");
+    efs_query_catalog_free(newer);newer=NULL;
     CHECK(!efs_meta_apply_get_inode(kv,b,&r),"dir for corruption");
     r.parent=a;row_put(kv,&r);
     CHECK(capture(kv,c,&newer)==EFS_ERR_PROTO && !newer,"mismatched parent fails closed");

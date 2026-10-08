@@ -1,0 +1,5 @@
+stats median 0.5885 max 0.7216 errors 0
+ls median 0.6514 max 0.7591 errors 0
+exact median 0.6927 max 0.7656 errors 0
+prefix median 1.2568 max 1.3587 errors 0
+contains median 1.373 max 1.837 errors 0
