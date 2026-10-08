@@ -19,6 +19,18 @@ improvements to `efsd` separately, with production correctness and performance
 validation. No shared storage-engine implementation is required. Consider a
 raw-device experiment only if measurements show a remaining filesystem bottleneck.
 
+## Oct 8 profiling follow-up
+
+The [tiny-file performance plan](../status/tiny-file-performance-plan-20261008.md)
+registers **W95** for the small-payload data persistence/packing experiments
+under P3/P4.1, and **W96** for bounded KV WAL preallocation. Related **W93**
+(Raft durability batching) and **W94** (CREATE plus open lease) address the
+metadata round trips. These are measured follow-up investigations; benchmark
+principles remain independent of the efsd engine, and a successful experiment
+still requires a separately validated production port. The historical W71
+baseline below predates the production persistence barriers present in the
+Oct 8 NUC candidate; use equivalent current durability in comparisons.
+
 ## Existing engine and benchmark baseline
 
 The current production backend stores fragment bodies in files beneath inode

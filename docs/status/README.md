@@ -12,6 +12,15 @@ Implementation and gates remain open; no fixed directory depth or universal
 scratch TTL is selected. D28–D30 are also accepted. The zero decision count
 refers to settled registered asks, not to every remaining implementation detail.
 
+## Tiny-file performance follow-up
+
+[W93–W96: NUC profiling evidence and next experiments](tiny-file-performance-plan-20261008.md)
+register broader Raft group commit, atomic CREATE/open lease, tiny-file data
+persistence/packing, and KV WAL preallocation. All four are open; W93/W94 are
+the recommended first priorities within this set. W95 refines existing P4.1,
+so the earlier grouped count below is retained as a dated baseline rather than
+recomputed by blindly adding four. W90–W92 keep their existing scopes.
+
 ## 1. The task right now
 
 [AMD functional follow-up](amd-functional-gates-20261008.md): append retry ownership,
@@ -23,7 +32,7 @@ full-ancestry and physical-host obligations remain open.
 
 The [memory acceptance follow-up](memory-closure-20261007.md) closes W59/W67.
 The [three-package closure follow-up](allocation-gc-fold-gates-20261007.md) closes D17.
-Current grouped open count: **45**: **15** unfinished correctness/investigation
+Grouped open count before W93–W96 registration: **45**: **15** unfinished correctness/investigation
 packages, **10** implemented/partial awaiting gates, **0** unresolved D28–D30
 decisions and **20** future feature/scaling/performance packages. This Oct 8
 reconciliation moves W71/W73 to awaiting gates, adds W90/W91, settles D28 policy
@@ -136,6 +145,10 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](../backlog/work-items.md#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](../backlog/work-items.md#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](../backlog/work-items.md#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](metadata-scaling.md) |
+| tiny-raft | **W93** · broader durable Raft group commit | performance | open — attribute barriers; bounded cross-request batching and fault gates owed | [work item](../backlog/work-items.md#w93) |
+| tiny-create | **W94** · atomic CREATE plus open lease | performance / lifecycle | open — eliminate separate HOLD with race-safe lease adoption | [work item](../backlog/work-items.md#w94) |
+| tiny-data | **W95** · tiny-file data persistence and packing | performance experiment | open — refines P4.1; independent benchmark principles before production layout | [work item](../backlog/work-items.md#w95) |
+| tiny-kv | **W96** · bounded KV WAL preallocation | performance experiment | open — valid EOF, recovery and KV-specific A/B gates owed | [work item](../backlog/work-items.md#w96) |
 | decisions | **D28** client-death loss policy · **D29** durable publication receipts · **D30** bounded admission/pacing | accepted design | accepted Oct 8: salvage deferred; D29/W88 implementation first, then D30/W23/W89; implementation and acceptance remain open | [contracts and gates](decisions.md#d28d30--accepted-oct-8-2026) |
 | op1 | **W70** · shrink-quota falsely reports background migration | operator observability bug | truthful running-quota reporting implemented; NUC accepted/refused shrink and unchanged-byte gates pass; no migration or persistence claim | [work item](../backlog/work-items.md#w70) |
 
