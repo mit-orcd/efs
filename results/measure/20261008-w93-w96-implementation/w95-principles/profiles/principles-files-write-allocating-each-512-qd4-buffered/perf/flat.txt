@@ -1,0 +1,108 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 202  of event 'cpu-clock'
+# Event count (approx.): 202202202
+#
+# Overhead  Shared Object      Symbol                                     IPC   [IPC Coverage]
+# ........  .................  .........................................  ....................
+#
+    10.40%  [kernel.kallsyms]  [k] filemap_get_folios_tag                 -      -            
+     7.43%  [kernel.kallsyms]  [k] __refill_objects_node                  -      -            
+     5.45%  [kernel.kallsyms]  [k] ext4_match                             -      -            
+     3.96%  [kernel.kallsyms]  [k] native_queued_spin_lock_slowpath       -      -            
+     3.47%  [kernel.kallsyms]  [k] __jbd2_journal_file_buffer             -      -            
+     3.47%  [kernel.kallsyms]  [k] _raw_spin_lock                         -      -            
+     2.97%  [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore            -      -            
+     2.48%  [kernel.kallsyms]  [k] __ext4_check_dir_entry                 -      -            
+     2.48%  [kernel.kallsyms]  [k] crc32c_arch                            -      -            
+     1.98%  [kernel.kallsyms]  [k] balance_dirty_pages_ratelimited_flags  -      -            
+     1.98%  [kernel.kallsyms]  [k] do_get_write_access                    -      -            
+     1.98%  [kernel.kallsyms]  [k] ext4_fill_raw_inode                    -      -            
+     1.98%  [kernel.kallsyms]  [k] ext4_find_dest_de                      -      -            
+     1.49%  [kernel.kallsyms]  [k] crc32_lsb_vpclmul_avx512               -      -            
+     1.49%  [kernel.kallsyms]  [k] ext4_get_group_desc                    -      -            
+     1.49%  [kernel.kallsyms]  [k] jbd2_journal_add_journal_head          -      -            
+     1.49%  [kernel.kallsyms]  [k] jbd2_journal_cancel_revoke             -      -            
+     1.49%  [kernel.kallsyms]  [k] lookup_bh_lru                          -      -            
+     1.49%  [kernel.kallsyms]  [k] memcmp                                 -      -            
+     0.99%  [kernel.kallsyms]  [k] __ext4_handle_dirty_metadata           -      -            
+     0.99%  [kernel.kallsyms]  [k] __filemap_add_folio                    -      -            
+     0.99%  [kernel.kallsyms]  [k] __fput                                 -      -            
+     0.99%  [kernel.kallsyms]  [k] ext4_es_lookup_extent                  -      -            
+     0.99%  [kernel.kallsyms]  [k] folio_mark_accessed                    -      -            
+     0.99%  [kernel.kallsyms]  [k] half_md4_transform.isra.0              -      -            
+     0.99%  [kernel.kallsyms]  [k] insert_inode_locked                    -      -            
+     0.99%  [kernel.kallsyms]  [k] jbd2_journal_put_journal_head          -      -            
+     0.99%  [kernel.kallsyms]  [k] kmem_cache_alloc_noprof                -      -            
+     0.99%  [kernel.kallsyms]  [k] os_xsave                               -      -            
+     0.50%  [kernel.kallsyms]  [k] __alloc_frozen_pages_noprof            -      -            
+     0.50%  [kernel.kallsyms]  [k] __d_lookup                             -      -            
+     0.50%  [kernel.kallsyms]  [k] __es_insert_extent                     -      -            
+     0.50%  [kernel.kallsyms]  [k] __ext4_get_inode_loc                   -      -            
+     0.50%  [kernel.kallsyms]  [k] __ext4_journal_get_write_access        -      -            
+     0.50%  [kernel.kallsyms]  [k] __ext4_journal_start_sb                -      -            
+     0.50%  [kernel.kallsyms]  [k] __ext4_journal_stop                    -      -            
+     0.50%  [kernel.kallsyms]  [k] __ext4_new_inode                       -      -            
+     0.50%  [kernel.kallsyms]  [k] __filemap_get_folio_mpol               -      -            
+     0.50%  [kernel.kallsyms]  [k] __find_get_block_slow                  -      -            
+     0.50%  [kernel.kallsyms]  [k] __jbd2_journal_temp_unlink_buffer      -      -            
+     0.50%  [kernel.kallsyms]  [k] __kmalloc_noprof                       -      -            
+     0.50%  [kernel.kallsyms]  [k] __memcg_slab_post_alloc_hook           -      -            
+     0.50%  [kernel.kallsyms]  [k] __radix_tree_lookup                    -      -            
+     0.50%  [kernel.kallsyms]  [k] __rcu_read_lock                        -      -            
+     0.50%  [kernel.kallsyms]  [k] __rcu_read_unlock                      -      -            
+     0.50%  [kernel.kallsyms]  [k] __wait_on_bit_lock                     -      -            
+     0.50%  [kernel.kallsyms]  [k] _find_next_zero_bit                    -      -            
+     0.50%  [kernel.kallsyms]  [k] _raw_spin_trylock                      -      -            
+     0.50%  [kernel.kallsyms]  [k] _raw_spin_unlock_irq                   -      -            
+     0.50%  [kernel.kallsyms]  [k] bio_associate_blkg_from_css            -      -            
+     0.50%  [kernel.kallsyms]  [k] crc32c                                 -      -            
+     0.50%  [kernel.kallsyms]  [k] do_split                               -      -            
+     0.50%  [kernel.kallsyms]  [k] do_syscall_64                          -      -            
+     0.50%  [kernel.kallsyms]  [k] evm_inode_alloc_security               -      -            
+     0.50%  [kernel.kallsyms]  [k] evm_inode_init_security                -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_add_entry                         -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_bio_write_folio                   -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_block_bitmap_csum_set             -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_da_get_block_prep                 -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_do_update_inode.isra.0            -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_file_write_iter                   -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_fname_setup_filename              -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_map_create_blocks                 -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_mark_iloc_dirty                   -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_put_io_end_defer                  -      -            
+     0.50%  [kernel.kallsyms]  [k] ext4_release_io_end                    -      -            
+     0.50%  [kernel.kallsyms]  [k] fdget                                  -      -            
+     0.50%  [kernel.kallsyms]  [k] folio_clear_dirty_for_io               -      -            
+     0.50%  [kernel.kallsyms]  [k] fscrypt_match_name                     -      -            
+     0.50%  [kernel.kallsyms]  [k] get_cached_acl                         -      -            
+     0.50%  [kernel.kallsyms]  [k] get_random_u32                         -      -            
+     0.50%  [kernel.kallsyms]  [k] get_unused_fd_flags                    -      -            
+     0.50%  [kernel.kallsyms]  [k] hash_name                              -      -            
+     0.50%  [kernel.kallsyms]  [k] inode_set_flags                        -      -            
+     0.50%  [kernel.kallsyms]  [k] jbd2_journal_blocks_per_folio          -      -            
+     0.50%  [kernel.kallsyms]  [k] jbd2_journal_get_write_access          -      -            
+     0.50%  [kernel.kallsyms]  [k] jbd2_write_access_granted              -      -            
+     0.50%  [kernel.kallsyms]  [k] map_id_range_up                        -      -            
+     0.50%  [kernel.kallsyms]  [k] may_lookup                             -      -            
+     0.50%  [kernel.kallsyms]  [k] mempool_alloc_noprof                   -      -            
+     0.50%  [kernel.kallsyms]  [k] percpu_counter_add_batch               -      -            
+     0.50%  [kernel.kallsyms]  [k] refill_obj_stock                       -      -            
+     0.50%  [kernel.kallsyms]  [k] start_this_handle                      -      -            
+     0.50%  [kernel.kallsyms]  [k] strncpy_from_user                      -      -            
+     0.50%  [kernel.kallsyms]  [k] up_read                                -      -            
+     0.50%  [kernel.kallsyms]  [k] update_io_ticks                        -      -            
+     0.50%  [kernel.kallsyms]  [k] wbt_wait                               -      -            
+     0.50%  [kernel.kallsyms]  [k] xas_load                               -      -            
+     0.50%  [nvme]             [k] nvme_queue_rqs                         -      -            
+     0.50%  efs-bench          [.] blake3_compress_in_place_avx512        -      -            
+     0.50%  libc.so.6          [.] __printf_buffer                        -      -            
+     0.50%  libc.so.6          [.] __syscall_cancel                       -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

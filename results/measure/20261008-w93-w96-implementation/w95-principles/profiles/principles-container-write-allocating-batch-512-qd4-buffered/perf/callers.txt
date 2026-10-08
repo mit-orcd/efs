@@ -1,0 +1,2158 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 25  of event 'cpu-clock'
+# Event count (approx.): 25025025
+#
+# Children      Self  Symbol                                     IPC   [IPC Coverage]
+# ........  ........  .........................................  ....................
+#
+   100.00%     0.00%  [.] __clone3 (inlined)                     -      -            
+   100.00%     0.00%  [.] start_thread                           -      -            
+            |
+            ---__clone3 (inlined)
+
+   100.00%     0.00%  [.] run_worker                             -      -            
+            |
+            ---start_thread
+               __clone3 (inlined)
+
+    84.00%     0.00%  [.] __syscall_cancel_arch (inlined)        -      -            
+            |          
+            |--60.00%--__libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --24.00%--fsync
+                       sync_fd (inlined)
+                       flush_batch
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    84.00%     0.00%  [.] entry_SYSCALL_64_after_hwframe         -      -            
+            |
+            ---__syscall_cancel_arch (inlined)
+               |          
+               |--60.00%--__libc_pwrite64 (inlined)
+               |          io_record (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --24.00%--fsync
+                          sync_fd (inlined)
+                          flush_batch
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    84.00%     0.00%  [.] do_syscall_64                          -      -            
+            |
+            ---entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               |          
+               |--60.00%--__libc_pwrite64 (inlined)
+               |          io_record (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --24.00%--fsync
+                          sync_fd (inlined)
+                          flush_batch
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    84.00%     0.00%  [.] x64_sys_call                           -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               |          
+               |--60.00%--__libc_pwrite64 (inlined)
+               |          io_record (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --24.00%--fsync
+                          sync_fd (inlined)
+                          flush_batch
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    60.00%     0.00%  [.] io_record (inlined)                    -      -            
+            |
+            ---run_worker
+               start_thread
+               __clone3 (inlined)
+
+    60.00%     0.00%  [.] __libc_pwrite64 (inlined)              -      -            
+            |
+            ---io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    60.00%     0.00%  [.] __x64_sys_pwrite64                     -      -            
+            |
+            ---x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    60.00%     0.00%  [.] vfs_write                              -      -            
+            |
+            ---__x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    56.00%     0.00%  [.] ext4_file_write_iter                   -      -            
+            |
+            ---vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    56.00%     4.00%  [.] ext4_buffered_write_iter               -      -            
+            |
+            ---ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    48.00%     0.00%  [.] generic_perform_write                  -      -            
+            |
+            ---ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    40.00%     0.00%  [.] ext4_da_write_begin                    -      -            
+            |
+            ---generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    32.00%     0.00%  [.] __filemap_get_folio_mpol               -      -            
+            |
+            ---ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] flush_batch                            -      -            
+            |
+            ---run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] sync_fd (inlined)                      -      -            
+            |
+            ---flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] fsync                                  -      -            
+            |
+            ---sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] __x64_sys_fsync                        -      -            
+            |
+            ---x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] do_fsync                               -      -            
+            |
+            ---__x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] ext4_sync_file                         -      -            
+            |
+            ---do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] file_write_and_wait_range              -      -            
+            |
+            ---ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] filemap_writeback                      -      -            
+            |
+            ---file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] do_writepages                          -      -            
+            |
+            ---filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] ext4_writepages                        -      -            
+            |
+            ---do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    24.00%     0.00%  [.] ext4_do_writepages                     -      -            
+            |
+            ---ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    16.00%     0.00%  [.] efs_hash                               -      -            
+            |
+            ---run_worker
+               start_thread
+               __clone3 (inlined)
+
+    16.00%     0.00%  [.] compress_pre (inlined)                 -      -            
+            |
+            ---blake3_compress_in_place_avx512
+               efs_hash
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    16.00%    16.00%  [.] blake3_compress_in_place_avx512        -      -            
+            |          
+            |--8.00%--_mm_shuffle_epi32 (inlined)
+            |          undiagonalize (inlined)
+            |          compress_pre (inlined)
+            |          blake3_compress_in_place_avx512
+            |          efs_hash
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--4.00%--_mm_xor_si128 (inlined)
+            |          xor_128 (inlined)
+            |          g1 (inlined)
+            |          compress_pre (inlined)
+            |          blake3_compress_in_place_avx512
+            |          efs_hash
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --4.00%--_mm_blend_epi16 (inlined)
+                       compress_pre (inlined)
+                       blake3_compress_in_place_avx512
+                       efs_hash
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    16.00%     0.00%  [.] filemap_add_folio                      -      -            
+            |
+            ---__filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    12.00%     8.00%  [.] __filemap_add_folio                    -      -            
+            |
+            ---filemap_add_folio
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    12.00%    12.00%  [k] _raw_spin_unlock_irqrestore            -      -            
+            |          
+            |--4.00%--rmqueue_bulk
+            |          __rmqueue_pcplist
+            |          rmqueue_pcplist
+            |          rmqueue.isra.0
+            |          get_page_from_freelist
+            |          __alloc_frozen_pages_noprof
+            |          alloc_pages_mpol
+            |          folio_alloc_noprof
+            |          filemap_alloc_folio_noprof
+            |          __filemap_get_folio_mpol
+            |          ext4_da_write_begin
+            |          generic_perform_write
+            |          ext4_buffered_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--4.00%--folio_batch_move_lru
+            |          __folio_batch_add_and_move
+            |          folio_add_lru
+            |          filemap_add_folio
+            |          __filemap_get_folio_mpol
+            |          ext4_da_write_begin
+            |          generic_perform_write
+            |          ext4_buffered_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --4.00%--__folio_mark_dirty
+                       mark_buffer_dirty
+                       block_commit_write
+                       block_write_end
+                       ext4_da_do_write_end.isra.0
+                       ext4_da_write_end
+                       generic_perform_write
+                       ext4_buffered_write_iter
+                       ext4_file_write_iter
+                       vfs_write
+                       __x64_sys_pwrite64
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_pwrite64 (inlined)
+                       io_record (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    12.00%     0.00%  [.] filemap_alloc_folio_noprof             -      -            
+            |
+            ---__filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    12.00%     0.00%  [.] folio_alloc_noprof                     -      -            
+            |
+            ---filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    12.00%     0.00%  [.] alloc_pages_mpol                       -      -            
+            |
+            ---folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    12.00%     0.00%  [.] __alloc_frozen_pages_noprof            -      -            
+            |
+            ---alloc_pages_mpol
+               folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    12.00%     4.00%  [.] get_page_from_freelist                 -      -            
+            |
+            ---__alloc_frozen_pages_noprof
+               alloc_pages_mpol
+               folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    12.00%     0.00%  [.] mpage_map_and_submit_extent            -      -            
+            |
+            ---ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] _mm_shuffle_epi32 (inlined)            -      -            
+            |
+            ---undiagonalize (inlined)
+               compress_pre (inlined)
+               blake3_compress_in_place_avx512
+               efs_hash
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] blk_finish_plug                        -      -            
+            |
+            ---ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] __blk_flush_plug                       -      -            
+            |
+            ---blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] blk_mq_flush_plug_list                 -      -            
+            |
+            ---__blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] blk_mq_dispatch_queue_requests         -      -            
+            |
+            ---blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] blk_rq_dma_map_iter_start              -      -            
+            |
+            ---nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] blk_dma_map_iter_start                 -      -            
+            |
+            ---blk_rq_dma_map_iter_start
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] dma_iova_link                          -      -            
+            |
+            ---blk_dma_map_iter_start
+               blk_rq_dma_map_iter_start
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] iommu_map_nosync                       -      -            
+            |
+            ---dma_iova_link
+               blk_dma_map_iter_start
+               blk_rq_dma_map_iter_start
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] amdv1_map_range                        -      -            
+            |
+            ---iommu_map_nosync
+               dma_iova_link
+               blk_dma_map_iter_start
+               blk_rq_dma_map_iter_start
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] do_map.isra.0                          -      -            
+            |
+            ---amdv1_map_range
+               iommu_map_nosync
+               dma_iova_link
+               blk_dma_map_iter_start
+               blk_rq_dma_map_iter_start
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] __map_single_page2.isra.0              -      -            
+            |
+            ---do_map.isra.0
+               amdv1_map_range
+               iommu_map_nosync
+               dma_iova_link
+               blk_dma_map_iter_start
+               blk_rq_dma_map_iter_start
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] __map_single_page1.isra.0              -      -            
+            |
+            ---__map_single_page2.isra.0
+               do_map.isra.0
+               amdv1_map_range
+               iommu_map_nosync
+               dma_iova_link
+               blk_dma_map_iter_start
+               blk_rq_dma_map_iter_start
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     8.00%  [k] __map_single_page0.isra.0              -      -            
+            |
+            ---__map_single_page1.isra.0
+               __map_single_page2.isra.0
+               do_map.isra.0
+               amdv1_map_range
+               iommu_map_nosync
+               dma_iova_link
+               blk_dma_map_iter_start
+               blk_rq_dma_map_iter_start
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] ext4_block_write_begin                 -      -            
+            |
+            ---ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] mpage_map_one_extent                   -      -            
+            |
+            ---mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] ext4_map_blocks                        -      -            
+            |
+            ---mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] ext4_map_create_blocks                 -      -            
+            |
+            ---ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] undiagonalize (inlined)                -      -            
+            |
+            ---compress_pre (inlined)
+               blake3_compress_in_place_avx512
+               efs_hash
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] nvme_queue_rqs                         -      -            
+            |
+            ---blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] nvme_prep_rq.part.0                    -      -            
+            |
+            ---nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     8.00%     0.00%  [.] nvme_map_data                          -      -            
+            |
+            ---nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] __fsnotify_parent                      -      -            
+            |
+            ---vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] _raw_spin_unlock_irq                   -      -            
+            |
+            ---__filemap_add_folio
+               filemap_add_folio
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] balance_dirty_pages_ratelimited_flags  -      -            
+            |
+            ---balance_dirty_pages_ratelimited
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] __refill_objects_node                  -      -            
+            |
+            ---refill_objects
+               __pcs_replace_empty_main
+               kmem_cache_alloc_noprof
+               alloc_buffer_head
+               folio_alloc_buffers
+               create_empty_buffers
+               ext4_block_write_begin
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] ext4_da_get_block_prep                 -      -            
+            |
+            ---ext4_block_write_begin
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] _mm_blend_epi16 (inlined)              -      -            
+            |
+            ---compress_pre (inlined)
+               blake3_compress_in_place_avx512
+               efs_hash
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] up_write                               -      -            
+            |
+            ---ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] mpage_release_unused_pages             -      -            
+            |
+            ---ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] folio_unlock                           -      -            
+            |
+            ---mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] xas_load                               -      -            
+            |
+            ---filemap_get_entry
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] __es_remove_extent                     -      -            
+            |
+            ---ext4_es_insert_extent
+               ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] kmem_cache_free                        -      -            
+            |
+            ---ext4_es_free_extent
+               __es_remove_extent
+               ext4_es_insert_extent
+               ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] __ext4_journal_get_write_access        -      -            
+            |
+            ---ext4_ext_insert_extent
+               ext4_ext_map_blocks
+               ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] jbd2_journal_add_journal_head          -      -            
+            |
+            ---jbd2_journal_get_write_access
+               __ext4_journal_get_write_access
+               ext4_ext_insert_extent
+               ext4_ext_map_blocks
+               ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] __folio_batch_add_and_move             -      -            
+            |
+            ---folio_add_lru
+               filemap_add_folio
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] __folio_mark_dirty                     -      -            
+            |
+            ---mark_buffer_dirty
+               block_commit_write
+               block_write_end
+               ext4_da_do_write_end.isra.0
+               ext4_da_write_end
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] _mm_xor_si128 (inlined)                -      -            
+            |
+            ---xor_128 (inlined)
+               g1 (inlined)
+               compress_pre (inlined)
+               blake3_compress_in_place_avx512
+               efs_hash
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] __rmqueue_pcplist                      -      -            
+            |
+            ---rmqueue_pcplist
+               rmqueue.isra.0
+               get_page_from_freelist
+               __alloc_frozen_pages_noprof
+               alloc_pages_mpol
+               folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] balance_dirty_pages_ratelimited        -      -            
+            |
+            ---generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] create_empty_buffers                   -      -            
+            |
+            ---ext4_block_write_begin
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] alloc_buffer_head                      -      -            
+            |
+            ---folio_alloc_buffers
+               create_empty_buffers
+               ext4_block_write_begin
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] __pcs_replace_empty_main               -      -            
+            |
+            ---kmem_cache_alloc_noprof
+               alloc_buffer_head
+               folio_alloc_buffers
+               create_empty_buffers
+               ext4_block_write_begin
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     4.00%  [k] kernel_init_pages                      -      -            
+            |
+            ---post_alloc_hook
+               get_page_from_freelist
+               __alloc_frozen_pages_noprof
+               alloc_pages_mpol
+               folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] ext4_da_write_end                      -      -            
+            |
+            ---generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] ext4_da_do_write_end.isra.0            -      -            
+            |
+            ---ext4_da_write_end
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] block_write_end                        -      -            
+            |
+            ---ext4_da_do_write_end.isra.0
+               ext4_da_write_end
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] block_commit_write                     -      -            
+            |
+            ---block_write_end
+               ext4_da_do_write_end.isra.0
+               ext4_da_write_end
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] ext4_es_insert_extent                  -      -            
+            |
+            ---ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] ext4_es_free_extent                    -      -            
+            |
+            ---__es_remove_extent
+               ext4_es_insert_extent
+               ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] ext4_ext_map_blocks                    -      -            
+            |
+            ---ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] ext4_ext_insert_extent                 -      -            
+            |
+            ---ext4_ext_map_blocks
+               ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] filemap_get_entry                      -      -            
+            |
+            ---__filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] folio_add_lru                          -      -            
+            |
+            ---filemap_add_folio
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] folio_alloc_buffers                    -      -            
+            |
+            ---create_empty_buffers
+               ext4_block_write_begin
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] mark_buffer_dirty                      -      -            
+            |
+            ---block_commit_write
+               block_write_end
+               ext4_da_do_write_end.isra.0
+               ext4_da_write_end
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] folio_batch_move_lru                   -      -            
+            |
+            ---__folio_batch_add_and_move
+               folio_add_lru
+               filemap_add_folio
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] g1 (inlined)                           -      -            
+            |
+            ---compress_pre (inlined)
+               blake3_compress_in_place_avx512
+               efs_hash
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] jbd2_journal_get_write_access          -      -            
+            |
+            ---__ext4_journal_get_write_access
+               ext4_ext_insert_extent
+               ext4_ext_map_blocks
+               ext4_map_create_blocks
+               ext4_map_blocks
+               mpage_map_one_extent
+               mpage_map_and_submit_extent
+               ext4_do_writepages
+               ext4_writepages
+               do_writepages
+               filemap_writeback
+               file_write_and_wait_range
+               ext4_sync_file
+               do_fsync
+               __x64_sys_fsync
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               fsync
+               sync_fd (inlined)
+               flush_batch
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] kmem_cache_alloc_noprof                -      -            
+            |
+            ---alloc_buffer_head
+               folio_alloc_buffers
+               create_empty_buffers
+               ext4_block_write_begin
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] post_alloc_hook                        -      -            
+            |
+            ---get_page_from_freelist
+               __alloc_frozen_pages_noprof
+               alloc_pages_mpol
+               folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] refill_objects                         -      -            
+            |
+            ---__pcs_replace_empty_main
+               kmem_cache_alloc_noprof
+               alloc_buffer_head
+               folio_alloc_buffers
+               create_empty_buffers
+               ext4_block_write_begin
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] xor_128 (inlined)                      -      -            
+            |
+            ---g1 (inlined)
+               compress_pre (inlined)
+               blake3_compress_in_place_avx512
+               efs_hash
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] rmqueue.isra.0                         -      -            
+            |
+            ---get_page_from_freelist
+               __alloc_frozen_pages_noprof
+               alloc_pages_mpol
+               folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] rmqueue_pcplist                        -      -            
+            |
+            ---rmqueue.isra.0
+               get_page_from_freelist
+               __alloc_frozen_pages_noprof
+               alloc_pages_mpol
+               folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.00%     0.00%  [.] rmqueue_bulk                           -      -            
+            |
+            ---__rmqueue_pcplist
+               rmqueue_pcplist
+               rmqueue.isra.0
+               get_page_from_freelist
+               __alloc_frozen_pages_noprof
+               alloc_pages_mpol
+               folio_alloc_noprof
+               filemap_alloc_folio_noprof
+               __filemap_get_folio_mpol
+               ext4_da_write_begin
+               generic_perform_write
+               ext4_buffered_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

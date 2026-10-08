@@ -1,0 +1,3150 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 110  of event 'cpu-clock'
+# Event count (approx.): 110110110
+#
+# Children      Self  Symbol                                IPC   [IPC Coverage]
+# ........  ........  ....................................  ....................
+#
+   100.00%     0.00%  [.] __clone3 (inlined)                -      -            
+   100.00%     0.00%  [.] start_thread                      -      -            
+            |
+            ---__clone3 (inlined)
+
+    99.09%     0.00%  [.] run_worker                        -      -            
+            |
+            ---start_thread
+               __clone3 (inlined)
+
+    94.55%     0.00%  [.] __syscall_cancel_arch (inlined)   -      -            
+            |          
+            |--50.00%--__libc_open64 (inlined)
+            |          |          
+            |          |--49.09%--run_worker
+            |          |          start_thread
+            |          |          __clone3 (inlined)
+            |          |          
+            |           --0.91%--open (inlined)
+            |                     open_record (inlined)
+            |                     open_record (inlined)
+            |                     flush_batch
+            |                     run_worker
+            |                     start_thread
+            |                     __clone3 (inlined)
+            |          
+            |--41.82%--__libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--1.82%--__close
+            |          |          
+            |          |--0.91%--sync_directories (inlined)
+            |          |          flush_batch
+            |          |          run_worker
+            |          |          start_thread
+            |          |          __clone3 (inlined)
+            |          |          
+            |           --0.91%--flush_batch
+            |                     run_worker
+            |                     start_thread
+            |                     __clone3 (inlined)
+            |          
+             --0.91%--fsync
+                       sync_fd (inlined)
+                       flush_batch
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    92.73%     0.00%  [.] entry_SYSCALL_64_after_hwframe    -      -            
+            |          
+            |--91.82%--__syscall_cancel_arch (inlined)
+            |          |          
+            |          |--48.18%--__libc_open64 (inlined)
+            |          |          |          
+            |          |          |--47.27%--run_worker
+            |          |          |          start_thread
+            |          |          |          __clone3 (inlined)
+            |          |          |          
+            |          |           --0.91%--open (inlined)
+            |          |                     open_record (inlined)
+            |          |                     open_record (inlined)
+            |          |                     flush_batch
+            |          |                     run_worker
+            |          |                     start_thread
+            |          |                     __clone3 (inlined)
+            |          |          
+            |          |--41.82%--__libc_pwrite64 (inlined)
+            |          |          io_record (inlined)
+            |          |          run_worker
+            |          |          start_thread
+            |          |          __clone3 (inlined)
+            |          |          
+            |          |--0.91%--fsync
+            |          |          sync_fd (inlined)
+            |          |          flush_batch
+            |          |          run_worker
+            |          |          start_thread
+            |          |          __clone3 (inlined)
+            |          |          
+            |           --0.91%--__close
+            |                     flush_batch
+            |                     run_worker
+            |                     start_thread
+            |                     __clone3 (inlined)
+            |          
+             --0.91%--start_thread
+                       __clone3 (inlined)
+
+    92.73%     0.91%  [.] do_syscall_64                     -      -            
+            |
+            ---entry_SYSCALL_64_after_hwframe
+               |          
+               |--91.82%--__syscall_cancel_arch (inlined)
+               |          |          
+               |          |--48.18%--__libc_open64 (inlined)
+               |          |          |          
+               |          |          |--47.27%--run_worker
+               |          |          |          start_thread
+               |          |          |          __clone3 (inlined)
+               |          |          |          
+               |          |           --0.91%--open (inlined)
+               |          |                     open_record (inlined)
+               |          |                     open_record (inlined)
+               |          |                     flush_batch
+               |          |                     run_worker
+               |          |                     start_thread
+               |          |                     __clone3 (inlined)
+               |          |          
+               |          |--41.82%--__libc_pwrite64 (inlined)
+               |          |          io_record (inlined)
+               |          |          run_worker
+               |          |          start_thread
+               |          |          __clone3 (inlined)
+               |          |          
+               |          |--0.91%--fsync
+               |          |          sync_fd (inlined)
+               |          |          flush_batch
+               |          |          run_worker
+               |          |          start_thread
+               |          |          __clone3 (inlined)
+               |          |          
+               |           --0.91%--__close
+               |                     flush_batch
+               |                     run_worker
+               |                     start_thread
+               |                     __clone3 (inlined)
+               |          
+                --0.91%--start_thread
+                          __clone3 (inlined)
+
+    91.82%     0.00%  [.] x64_sys_call                      -      -            
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               |          
+               |--90.91%--__syscall_cancel_arch (inlined)
+               |          |          
+               |          |--48.18%--__libc_open64 (inlined)
+               |          |          |          
+               |          |          |--47.27%--run_worker
+               |          |          |          start_thread
+               |          |          |          __clone3 (inlined)
+               |          |          |          
+               |          |           --0.91%--open (inlined)
+               |          |                     open_record (inlined)
+               |          |                     open_record (inlined)
+               |          |                     flush_batch
+               |          |                     run_worker
+               |          |                     start_thread
+               |          |                     __clone3 (inlined)
+               |          |          
+               |          |--40.91%--__libc_pwrite64 (inlined)
+               |          |          io_record (inlined)
+               |          |          run_worker
+               |          |          start_thread
+               |          |          __clone3 (inlined)
+               |          |          
+               |          |--0.91%--fsync
+               |          |          sync_fd (inlined)
+               |          |          flush_batch
+               |          |          run_worker
+               |          |          start_thread
+               |          |          __clone3 (inlined)
+               |          |          
+               |           --0.91%--__close
+               |                     flush_batch
+               |                     run_worker
+               |                     start_thread
+               |                     __clone3 (inlined)
+               |          
+                --0.91%--start_thread
+                          __clone3 (inlined)
+
+    50.00%     0.00%  [.] __libc_open64 (inlined)           -      -            
+            |          
+            |--49.09%--run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--open (inlined)
+                       open_record (inlined)
+                       open_record (inlined)
+                       flush_batch
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    48.18%     0.00%  [.] __x64_sys_openat                  -      -            
+            |
+            ---x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               |          
+               |--47.27%--run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--open (inlined)
+                          open_record (inlined)
+                          open_record (inlined)
+                          flush_batch
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    48.18%     0.00%  [.] do_sys_openat2                    -      -            
+            |
+            ---__x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               |          
+               |--47.27%--run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--open (inlined)
+                          open_record (inlined)
+                          open_record (inlined)
+                          flush_batch
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    46.36%     0.00%  [.] do_file_open                      -      -            
+            |
+            ---do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               |          
+               |--45.45%--run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--open (inlined)
+                          open_record (inlined)
+                          open_record (inlined)
+                          flush_batch
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    46.36%     0.00%  [.] path_openat                       -      -            
+            |
+            ---do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               |          
+               |--45.45%--run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--open (inlined)
+                          open_record (inlined)
+                          open_record (inlined)
+                          flush_batch
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    41.82%     0.00%  [.] io_record (inlined)               -      -            
+            |
+            ---run_worker
+               start_thread
+               __clone3 (inlined)
+
+    41.82%     0.00%  [.] __libc_pwrite64 (inlined)         -      -            
+            |
+            ---io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    40.91%     0.00%  [.] __x64_sys_pwrite64                -      -            
+            |
+            ---x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    40.91%     0.00%  [.] vfs_write                         -      -            
+            |
+            ---__x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    40.91%     0.00%  [.] ext4_file_write_iter              -      -            
+            |
+            ---vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    40.91%     0.91%  [.] ext4_dio_write_iter               -      -            
+            |
+            ---ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    39.09%     0.00%  [.] iomap_dio_rw                      -      -            
+            |
+            ---ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    39.09%     6.36%  [.] __iomap_dio_rw                    -      -            
+            |
+            ---iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    39.09%     0.00%  [.] open_last_lookups                 -      -            
+            |
+            ---path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    38.18%     0.00%  [.] lookup_open.isra.0                -      -            
+            |
+            ---open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    37.27%     0.00%  [.] ext4_create                       -      -            
+            |
+            ---lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    21.82%     0.00%  [.] ext4_map_blocks                   -      -            
+            |          
+            |--19.09%--ext4_iomap_alloc
+            |          ext4_iomap_begin
+            |          iomap_iter
+            |          __iomap_dio_rw
+            |          iomap_dio_rw
+            |          ext4_dio_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --2.73%--ext4_getblk
+                       ext4_bread
+                       ext4_append
+                       do_split
+                       ext4_dx_add_entry
+                       ext4_add_entry
+                       ext4_add_nondir
+                       ext4_create
+                       lookup_open.isra.0
+                       open_last_lookups
+                       path_openat
+                       do_file_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_open64 (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    20.00%     0.00%  [.] iomap_iter                        -      -            
+            |
+            ---__iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    20.00%     0.00%  [.] ext4_iomap_begin                  -      -            
+            |
+            ---iomap_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    20.00%     0.00%  [.] ext4_iomap_alloc                  -      -            
+            |
+            ---ext4_iomap_begin
+               iomap_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    19.09%     0.00%  [.] ext4_add_nondir                   -      -            
+            |
+            ---ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    18.18%     0.00%  [.] ext4_add_entry                    -      -            
+            |
+            ---ext4_add_nondir
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    18.18%     3.64%  [.] kmem_cache_alloc_noprof           -      -            
+            |          
+            |--6.36%--__es_insert_extent
+            |          |          
+            |          |--3.64%--ext4_es_insert_extent
+            |          |          ext4_map_create_blocks
+            |          |          ext4_map_blocks
+            |          |          ext4_iomap_alloc
+            |          |          ext4_iomap_begin
+            |          |          iomap_iter
+            |          |          __iomap_dio_rw
+            |          |          iomap_dio_rw
+            |          |          ext4_dio_write_iter
+            |          |          ext4_file_write_iter
+            |          |          vfs_write
+            |          |          __x64_sys_pwrite64
+            |          |          x64_sys_call
+            |          |          do_syscall_64
+            |          |          entry_SYSCALL_64_after_hwframe
+            |          |          __syscall_cancel_arch (inlined)
+            |          |          __libc_pwrite64 (inlined)
+            |          |          io_record (inlined)
+            |          |          run_worker
+            |          |          start_thread
+            |          |          __clone3 (inlined)
+            |          |          
+            |           --2.73%--ext4_es_cache_extent
+            |                     ext4_ext_determine_insert_hole
+            |                     ext4_ext_map_blocks
+            |                     ext4_map_query_blocks
+            |                     ext4_map_blocks
+            |                     ext4_iomap_alloc
+            |                     ext4_iomap_begin
+            |                     iomap_iter
+            |                     __iomap_dio_rw
+            |                     iomap_dio_rw
+            |                     ext4_dio_write_iter
+            |                     ext4_file_write_iter
+            |                     vfs_write
+            |                     __x64_sys_pwrite64
+            |                     x64_sys_call
+            |                     do_syscall_64
+            |                     entry_SYSCALL_64_after_hwframe
+            |                     __syscall_cancel_arch (inlined)
+            |                     __libc_pwrite64 (inlined)
+            |                     io_record (inlined)
+            |                     run_worker
+            |                     start_thread
+            |                     __clone3 (inlined)
+            |          
+            |--4.55%--security_inode_alloc
+            |          inode_init_always_gfp
+            |          alloc_inode
+            |          new_inode
+            |          __ext4_new_inode
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--4.55%--ext4_inode_attach_jinode
+            |          ext4_file_open
+            |          do_dentry_open
+            |          vfs_open
+            |          do_open
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--jbd2__journal_start
+            |          __ext4_journal_start_sb
+            |          __ext4_new_inode
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--start_this_handle
+            |          jbd2__journal_start
+            |          __ext4_journal_start_sb
+            |          __ext4_new_inode
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--do_getname
+                       getname_flags
+                       do_sys_openat2
+                       __x64_sys_openat
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_open64 (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    18.18%     0.00%  [.] ext4_map_create_blocks            -      -            
+            |
+            ---ext4_map_blocks
+               |          
+               |--16.36%--ext4_iomap_alloc
+               |          ext4_iomap_begin
+               |          iomap_iter
+               |          __iomap_dio_rw
+               |          iomap_dio_rw
+               |          ext4_dio_write_iter
+               |          ext4_file_write_iter
+               |          vfs_write
+               |          __x64_sys_pwrite64
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_pwrite64 (inlined)
+               |          io_record (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --1.82%--ext4_getblk
+                          ext4_bread
+                          ext4_append
+                          do_split
+                          ext4_dx_add_entry
+                          ext4_add_entry
+                          ext4_add_nondir
+                          ext4_create
+                          lookup_open.isra.0
+                          open_last_lookups
+                          path_openat
+                          do_file_open
+                          do_sys_openat2
+                          __x64_sys_openat
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_open64 (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    17.27%     0.91%  [.] __ext4_new_inode                  -      -            
+            |
+            ---ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    16.36%     0.00%  [.] ext4_dx_add_entry                 -      -            
+            |
+            ---ext4_add_entry
+               ext4_add_nondir
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+    16.36%     0.00%  [.] ext4_ext_map_blocks               -      -            
+            |          
+            |--13.64%--ext4_map_create_blocks
+            |          ext4_map_blocks
+            |          |          
+            |          |--11.82%--ext4_iomap_alloc
+            |          |          ext4_iomap_begin
+            |          |          iomap_iter
+            |          |          __iomap_dio_rw
+            |          |          iomap_dio_rw
+            |          |          ext4_dio_write_iter
+            |          |          ext4_file_write_iter
+            |          |          vfs_write
+            |          |          __x64_sys_pwrite64
+            |          |          x64_sys_call
+            |          |          do_syscall_64
+            |          |          entry_SYSCALL_64_after_hwframe
+            |          |          __syscall_cancel_arch (inlined)
+            |          |          __libc_pwrite64 (inlined)
+            |          |          io_record (inlined)
+            |          |          run_worker
+            |          |          start_thread
+            |          |          __clone3 (inlined)
+            |          |          
+            |           --1.82%--ext4_getblk
+            |                     ext4_bread
+            |                     ext4_append
+            |                     do_split
+            |                     ext4_dx_add_entry
+            |                     ext4_add_entry
+            |                     ext4_add_nondir
+            |                     ext4_create
+            |                     lookup_open.isra.0
+            |                     open_last_lookups
+            |                     path_openat
+            |                     do_file_open
+            |                     do_sys_openat2
+            |                     __x64_sys_openat
+            |                     x64_sys_call
+            |                     do_syscall_64
+            |                     entry_SYSCALL_64_after_hwframe
+            |                     __syscall_cancel_arch (inlined)
+            |                     __libc_open64 (inlined)
+            |                     run_worker
+            |                     start_thread
+            |                     __clone3 (inlined)
+            |          
+             --2.73%--ext4_map_query_blocks
+                       ext4_map_blocks
+                       ext4_iomap_alloc
+                       ext4_iomap_begin
+                       iomap_iter
+                       __iomap_dio_rw
+                       iomap_dio_rw
+                       ext4_dio_write_iter
+                       ext4_file_write_iter
+                       vfs_write
+                       __x64_sys_pwrite64
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_pwrite64 (inlined)
+                       io_record (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    15.45%     0.00%  [.] __pcs_replace_empty_main          -      -            
+            |          
+            |--14.55%--kmem_cache_alloc_noprof
+            |          |          
+            |          |--5.45%--__es_insert_extent
+            |          |          |          
+            |          |          |--3.64%--ext4_es_insert_extent
+            |          |          |          ext4_map_create_blocks
+            |          |          |          ext4_map_blocks
+            |          |          |          ext4_iomap_alloc
+            |          |          |          ext4_iomap_begin
+            |          |          |          iomap_iter
+            |          |          |          __iomap_dio_rw
+            |          |          |          iomap_dio_rw
+            |          |          |          ext4_dio_write_iter
+            |          |          |          ext4_file_write_iter
+            |          |          |          vfs_write
+            |          |          |          __x64_sys_pwrite64
+            |          |          |          x64_sys_call
+            |          |          |          do_syscall_64
+            |          |          |          entry_SYSCALL_64_after_hwframe
+            |          |          |          __syscall_cancel_arch (inlined)
+            |          |          |          __libc_pwrite64 (inlined)
+            |          |          |          io_record (inlined)
+            |          |          |          run_worker
+            |          |          |          start_thread
+            |          |          |          __clone3 (inlined)
+            |          |          |          
+            |          |           --1.82%--ext4_es_cache_extent
+            |          |                     ext4_ext_determine_insert_hole
+            |          |                     ext4_ext_map_blocks
+            |          |                     ext4_map_query_blocks
+            |          |                     ext4_map_blocks
+            |          |                     ext4_iomap_alloc
+            |          |                     ext4_iomap_begin
+            |          |                     iomap_iter
+            |          |                     __iomap_dio_rw
+            |          |                     iomap_dio_rw
+            |          |                     ext4_dio_write_iter
+            |          |                     ext4_file_write_iter
+            |          |                     vfs_write
+            |          |                     __x64_sys_pwrite64
+            |          |                     x64_sys_call
+            |          |                     do_syscall_64
+            |          |                     entry_SYSCALL_64_after_hwframe
+            |          |                     __syscall_cancel_arch (inlined)
+            |          |                     __libc_pwrite64 (inlined)
+            |          |                     io_record (inlined)
+            |          |                     run_worker
+            |          |                     start_thread
+            |          |                     __clone3 (inlined)
+            |          |          
+            |          |--4.55%--security_inode_alloc
+            |          |          inode_init_always_gfp
+            |          |          alloc_inode
+            |          |          new_inode
+            |          |          __ext4_new_inode
+            |          |          ext4_create
+            |          |          lookup_open.isra.0
+            |          |          open_last_lookups
+            |          |          path_openat
+            |          |          do_file_open
+            |          |          do_sys_openat2
+            |          |          __x64_sys_openat
+            |          |          x64_sys_call
+            |          |          do_syscall_64
+            |          |          entry_SYSCALL_64_after_hwframe
+            |          |          __syscall_cancel_arch (inlined)
+            |          |          __libc_open64 (inlined)
+            |          |          run_worker
+            |          |          start_thread
+            |          |          __clone3 (inlined)
+            |          |          
+            |           --4.55%--ext4_inode_attach_jinode
+            |                     ext4_file_open
+            |                     do_dentry_open
+            |                     vfs_open
+            |                     do_open
+            |                     path_openat
+            |                     do_file_open
+            |                     do_sys_openat2
+            |                     __x64_sys_openat
+            |                     x64_sys_call
+            |                     do_syscall_64
+            |                     entry_SYSCALL_64_after_hwframe
+            |                     __syscall_cancel_arch (inlined)
+            |                     __libc_open64 (inlined)
+            |                     run_worker
+            |                     start_thread
+            |                     __clone3 (inlined)
+            |          
+             --0.91%--kmem_cache_alloc_lru_noprof
+                       ext4_alloc_inode
+                       alloc_inode
+                       new_inode
+                       __ext4_new_inode
+                       ext4_create
+                       lookup_open.isra.0
+                       open_last_lookups
+                       path_openat
+                       do_file_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_open64 (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+    15.45%     0.00%  [.] refill_objects                    -      -            
+            |
+            ---__pcs_replace_empty_main
+               |          
+               |--14.55%--kmem_cache_alloc_noprof
+               |          |          
+               |          |--5.45%--__es_insert_extent
+               |          |          |          
+               |          |          |--3.64%--ext4_es_insert_extent
+               |          |          |          ext4_map_create_blocks
+               |          |          |          ext4_map_blocks
+               |          |          |          ext4_iomap_alloc
+               |          |          |          ext4_iomap_begin
+               |          |          |          iomap_iter
+               |          |          |          __iomap_dio_rw
+               |          |          |          iomap_dio_rw
+               |          |          |          ext4_dio_write_iter
+               |          |          |          ext4_file_write_iter
+               |          |          |          vfs_write
+               |          |          |          __x64_sys_pwrite64
+               |          |          |          x64_sys_call
+               |          |          |          do_syscall_64
+               |          |          |          entry_SYSCALL_64_after_hwframe
+               |          |          |          __syscall_cancel_arch (inlined)
+               |          |          |          __libc_pwrite64 (inlined)
+               |          |          |          io_record (inlined)
+               |          |          |          run_worker
+               |          |          |          start_thread
+               |          |          |          __clone3 (inlined)
+               |          |          |          
+               |          |           --1.82%--ext4_es_cache_extent
+               |          |                     ext4_ext_determine_insert_hole
+               |          |                     ext4_ext_map_blocks
+               |          |                     ext4_map_query_blocks
+               |          |                     ext4_map_blocks
+               |          |                     ext4_iomap_alloc
+               |          |                     ext4_iomap_begin
+               |          |                     iomap_iter
+               |          |                     __iomap_dio_rw
+               |          |                     iomap_dio_rw
+               |          |                     ext4_dio_write_iter
+               |          |                     ext4_file_write_iter
+               |          |                     vfs_write
+               |          |                     __x64_sys_pwrite64
+               |          |                     x64_sys_call
+               |          |                     do_syscall_64
+               |          |                     entry_SYSCALL_64_after_hwframe
+               |          |                     __syscall_cancel_arch (inlined)
+               |          |                     __libc_pwrite64 (inlined)
+               |          |                     io_record (inlined)
+               |          |                     run_worker
+               |          |                     start_thread
+               |          |                     __clone3 (inlined)
+               |          |          
+               |          |--4.55%--security_inode_alloc
+               |          |          inode_init_always_gfp
+               |          |          alloc_inode
+               |          |          new_inode
+               |          |          __ext4_new_inode
+               |          |          ext4_create
+               |          |          lookup_open.isra.0
+               |          |          open_last_lookups
+               |          |          path_openat
+               |          |          do_file_open
+               |          |          do_sys_openat2
+               |          |          __x64_sys_openat
+               |          |          x64_sys_call
+               |          |          do_syscall_64
+               |          |          entry_SYSCALL_64_after_hwframe
+               |          |          __syscall_cancel_arch (inlined)
+               |          |          __libc_open64 (inlined)
+               |          |          run_worker
+               |          |          start_thread
+               |          |          __clone3 (inlined)
+               |          |          
+               |           --4.55%--ext4_inode_attach_jinode
+               |                     ext4_file_open
+               |                     do_dentry_open
+               |                     vfs_open
+               |                     do_open
+               |                     path_openat
+               |                     do_file_open
+               |                     do_sys_openat2
+               |                     __x64_sys_openat
+               |                     x64_sys_call
+               |                     do_syscall_64
+               |                     entry_SYSCALL_64_after_hwframe
+               |                     __syscall_cancel_arch (inlined)
+               |                     __libc_open64 (inlined)
+               |                     run_worker
+               |                     start_thread
+               |                     __clone3 (inlined)
+               |          
+                --0.91%--kmem_cache_alloc_lru_noprof
+                          ext4_alloc_inode
+                          alloc_inode
+                          new_inode
+                          __ext4_new_inode
+                          ext4_create
+                          lookup_open.isra.0
+                          open_last_lookups
+                          path_openat
+                          do_file_open
+                          do_sys_openat2
+                          __x64_sys_openat
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_open64 (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    15.45%    13.64%  [k] __refill_objects_node             -      -            
+            |
+            ---refill_objects
+               __pcs_replace_empty_main
+               |          
+               |--14.55%--kmem_cache_alloc_noprof
+               |          |          
+               |          |--5.45%--__es_insert_extent
+               |          |          |          
+               |          |          |--3.64%--ext4_es_insert_extent
+               |          |          |          ext4_map_create_blocks
+               |          |          |          ext4_map_blocks
+               |          |          |          ext4_iomap_alloc
+               |          |          |          ext4_iomap_begin
+               |          |          |          iomap_iter
+               |          |          |          __iomap_dio_rw
+               |          |          |          iomap_dio_rw
+               |          |          |          ext4_dio_write_iter
+               |          |          |          ext4_file_write_iter
+               |          |          |          vfs_write
+               |          |          |          __x64_sys_pwrite64
+               |          |          |          x64_sys_call
+               |          |          |          do_syscall_64
+               |          |          |          entry_SYSCALL_64_after_hwframe
+               |          |          |          __syscall_cancel_arch (inlined)
+               |          |          |          __libc_pwrite64 (inlined)
+               |          |          |          io_record (inlined)
+               |          |          |          run_worker
+               |          |          |          start_thread
+               |          |          |          __clone3 (inlined)
+               |          |          |          
+               |          |           --1.82%--ext4_es_cache_extent
+               |          |                     ext4_ext_determine_insert_hole
+               |          |                     ext4_ext_map_blocks
+               |          |                     ext4_map_query_blocks
+               |          |                     ext4_map_blocks
+               |          |                     ext4_iomap_alloc
+               |          |                     ext4_iomap_begin
+               |          |                     iomap_iter
+               |          |                     __iomap_dio_rw
+               |          |                     iomap_dio_rw
+               |          |                     ext4_dio_write_iter
+               |          |                     ext4_file_write_iter
+               |          |                     vfs_write
+               |          |                     __x64_sys_pwrite64
+               |          |                     x64_sys_call
+               |          |                     do_syscall_64
+               |          |                     entry_SYSCALL_64_after_hwframe
+               |          |                     __syscall_cancel_arch (inlined)
+               |          |                     __libc_pwrite64 (inlined)
+               |          |                     io_record (inlined)
+               |          |                     run_worker
+               |          |                     start_thread
+               |          |                     __clone3 (inlined)
+               |          |          
+               |          |--4.55%--security_inode_alloc
+               |          |          inode_init_always_gfp
+               |          |          alloc_inode
+               |          |          new_inode
+               |          |          __ext4_new_inode
+               |          |          ext4_create
+               |          |          lookup_open.isra.0
+               |          |          open_last_lookups
+               |          |          path_openat
+               |          |          do_file_open
+               |          |          do_sys_openat2
+               |          |          __x64_sys_openat
+               |          |          x64_sys_call
+               |          |          do_syscall_64
+               |          |          entry_SYSCALL_64_after_hwframe
+               |          |          __syscall_cancel_arch (inlined)
+               |          |          __libc_open64 (inlined)
+               |          |          run_worker
+               |          |          start_thread
+               |          |          __clone3 (inlined)
+               |          |          
+               |           --4.55%--ext4_inode_attach_jinode
+               |                     ext4_file_open
+               |                     do_dentry_open
+               |                     vfs_open
+               |                     do_open
+               |                     path_openat
+               |                     do_file_open
+               |                     do_sys_openat2
+               |                     __x64_sys_openat
+               |                     x64_sys_call
+               |                     do_syscall_64
+               |                     entry_SYSCALL_64_after_hwframe
+               |                     __syscall_cancel_arch (inlined)
+               |                     __libc_open64 (inlined)
+               |                     run_worker
+               |                     start_thread
+               |                     __clone3 (inlined)
+               |          
+                --0.91%--kmem_cache_alloc_lru_noprof
+                          ext4_alloc_inode
+                          alloc_inode
+                          new_inode
+                          __ext4_new_inode
+                          ext4_create
+                          lookup_open.isra.0
+                          open_last_lookups
+                          path_openat
+                          do_file_open
+                          do_sys_openat2
+                          __x64_sys_openat
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_open64 (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    11.82%     0.00%  [.] ext4_mb_new_blocks                -      -            
+            |
+            ---ext4_ext_map_blocks
+               ext4_map_create_blocks
+               ext4_map_blocks
+               |          
+               |--10.91%--ext4_iomap_alloc
+               |          ext4_iomap_begin
+               |          iomap_iter
+               |          __iomap_dio_rw
+               |          iomap_dio_rw
+               |          ext4_dio_write_iter
+               |          ext4_file_write_iter
+               |          vfs_write
+               |          __x64_sys_pwrite64
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_pwrite64 (inlined)
+               |          io_record (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--ext4_getblk
+                          ext4_bread
+                          ext4_append
+                          do_split
+                          ext4_dx_add_entry
+                          ext4_add_entry
+                          ext4_add_nondir
+                          ext4_create
+                          lookup_open.isra.0
+                          open_last_lookups
+                          path_openat
+                          do_file_open
+                          do_sys_openat2
+                          __x64_sys_openat
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_open64 (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+    10.00%     0.00%  [.] add_dirent_to_buf                 -      -            
+            |
+            ---ext4_dx_add_entry
+               ext4_add_entry
+               ext4_add_nondir
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     7.27%     0.00%  [.] __ext4_mark_inode_dirty           -      -            
+            |          
+            |--2.73%--ext4_ext_tree_init
+            |          __ext4_new_inode
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--1.82%--ext4_dirty_inode
+            |          __mark_inode_dirty
+            |          ext4_mb_new_blocks
+            |          ext4_ext_map_blocks
+            |          ext4_map_create_blocks
+            |          ext4_map_blocks
+            |          ext4_iomap_alloc
+            |          ext4_iomap_begin
+            |          iomap_iter
+            |          __iomap_dio_rw
+            |          iomap_dio_rw
+            |          ext4_dio_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--ext4_add_nondir
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--add_dirent_to_buf
+            |          ext4_dx_add_entry
+            |          ext4_add_entry
+            |          ext4_add_nondir
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--__ext4_ext_dirty
+                       ext4_ext_insert_extent
+                       ext4_ext_map_blocks
+                       ext4_map_create_blocks
+                       ext4_map_blocks
+                       ext4_iomap_alloc
+                       ext4_iomap_begin
+                       iomap_iter
+                       __iomap_dio_rw
+                       iomap_dio_rw
+                       ext4_dio_write_iter
+                       ext4_file_write_iter
+                       vfs_write
+                       __x64_sys_pwrite64
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_pwrite64 (inlined)
+                       io_record (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     6.36%     0.00%  [.] __es_insert_extent                -      -            
+            |          
+            |--3.64%--ext4_es_insert_extent
+            |          ext4_map_create_blocks
+            |          ext4_map_blocks
+            |          ext4_iomap_alloc
+            |          ext4_iomap_begin
+            |          iomap_iter
+            |          __iomap_dio_rw
+            |          iomap_dio_rw
+            |          ext4_dio_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --2.73%--ext4_es_cache_extent
+                       ext4_ext_determine_insert_hole
+                       ext4_ext_map_blocks
+                       ext4_map_query_blocks
+                       ext4_map_blocks
+                       ext4_iomap_alloc
+                       ext4_iomap_begin
+                       iomap_iter
+                       __iomap_dio_rw
+                       iomap_dio_rw
+                       ext4_dio_write_iter
+                       ext4_file_write_iter
+                       vfs_write
+                       __x64_sys_pwrite64
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_pwrite64 (inlined)
+                       io_record (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     6.36%     0.00%  [.] do_open                           -      -            
+            |
+            ---path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     6.36%     0.91%  [.] do_split                          -      -            
+            |          
+            |--4.55%--ext4_dx_add_entry
+            |          ext4_add_entry
+            |          ext4_add_nondir
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --1.82%--make_indexed_dir
+                       ext4_add_entry
+                       ext4_add_nondir
+                       ext4_create
+                       lookup_open.isra.0
+                       open_last_lookups
+                       path_openat
+                       do_file_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_open64 (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     6.36%     0.00%  [.] iomap_dio_bio_iter                -      -            
+            |
+            ---__iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     6.36%     0.00%  [.] iomap_dio_bio_iter_one            -      -            
+            |
+            ---iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     6.36%     0.00%  [.] new_inode                         -      -            
+            |
+            ---__ext4_new_inode
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     5.45%     0.91%  [.] ext4_find_dest_de                 -      -            
+            |
+            ---add_dirent_to_buf
+               ext4_dx_add_entry
+               ext4_add_entry
+               ext4_add_nondir
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     5.45%     0.00%  [.] vfs_open                          -      -            
+            |
+            ---do_open
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     5.45%     0.00%  [.] do_dentry_open                    -      -            
+            |
+            ---vfs_open
+               do_open
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     5.45%     0.00%  [.] ext4_file_open                    -      -            
+            |
+            ---do_dentry_open
+               vfs_open
+               do_open
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     5.45%     0.00%  [.] alloc_inode                       -      -            
+            |
+            ---new_inode
+               __ext4_new_inode
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.55%     3.64%  [k] ext4_match                        -      -            
+            |          
+            |--2.73%--ext4_find_dest_de
+            |          add_dirent_to_buf
+            |          ext4_dx_add_entry
+            |          ext4_add_entry
+            |          ext4_add_nondir
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --1.82%--add_dirent_to_buf
+                       ext4_dx_add_entry
+                       ext4_add_entry
+                       ext4_add_nondir
+                       ext4_create
+                       lookup_open.isra.0
+                       open_last_lookups
+                       path_openat
+                       do_file_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_open64 (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     4.55%     0.00%  [.] __ext4_journal_start_sb           -      -            
+            |          
+            |--3.64%--__ext4_new_inode
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--ext4_iomap_alloc
+                       ext4_iomap_begin
+                       iomap_iter
+                       __iomap_dio_rw
+                       iomap_dio_rw
+                       ext4_dio_write_iter
+                       ext4_file_write_iter
+                       vfs_write
+                       __x64_sys_pwrite64
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_pwrite64 (inlined)
+                       io_record (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     4.55%     0.00%  [.] ext4_es_insert_extent             -      -            
+            |
+            ---ext4_map_create_blocks
+               ext4_map_blocks
+               ext4_iomap_alloc
+               ext4_iomap_begin
+               iomap_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.55%     4.55%  [k] _raw_spin_unlock_irqrestore       -      -            
+            |          
+            |--1.82%--__mod_timer
+            |          add_timer
+            |          |          
+            |          |--0.91%--schedule_timeout
+            |          |          io_schedule_timeout
+            |          |          blk_io_schedule
+            |          |          __iomap_dio_rw
+            |          |          iomap_dio_rw
+            |          |          ext4_dio_write_iter
+            |          |          ext4_file_write_iter
+            |          |          vfs_write
+            |          |          __x64_sys_pwrite64
+            |          |          x64_sys_call
+            |          |          do_syscall_64
+            |          |          entry_SYSCALL_64_after_hwframe
+            |          |          __syscall_cancel_arch (inlined)
+            |          |          __libc_pwrite64 (inlined)
+            |          |          io_record (inlined)
+            |          |          run_worker
+            |          |          start_thread
+            |          |          __clone3 (inlined)
+            |          |          
+            |           --0.91%--start_this_handle
+            |                     jbd2__journal_start
+            |                     __ext4_journal_start_sb
+            |                     __ext4_new_inode
+            |                     ext4_create
+            |                     lookup_open.isra.0
+            |                     open_last_lookups
+            |                     path_openat
+            |                     do_file_open
+            |                     do_sys_openat2
+            |                     __x64_sys_openat
+            |                     x64_sys_call
+            |                     do_syscall_64
+            |                     entry_SYSCALL_64_after_hwframe
+            |                     __syscall_cancel_arch (inlined)
+            |                     __libc_open64 (inlined)
+            |                     run_worker
+            |                     start_thread
+            |                     __clone3 (inlined)
+            |          
+            |--0.91%--mt76_set_irq_mask
+            |          mt792x_irq_tasklet
+            |          tasklet_action_common
+            |          tasklet_action
+            |          handle_softirqs
+            |          __irq_exit_rcu
+            |          irq_exit_rcu
+            |          common_interrupt
+            |          asm_common_interrupt
+            |          _raw_spin_unlock_irqrestore
+            |          get_partial_node_bulk.isra.0
+            |          __refill_objects_node
+            |          refill_objects
+            |          __pcs_replace_empty_main
+            |          kmem_cache_alloc_noprof
+            |          __es_insert_extent
+            |          ext4_es_cache_extent
+            |          ext4_ext_determine_insert_hole
+            |          ext4_ext_map_blocks
+            |          ext4_map_query_blocks
+            |          ext4_map_blocks
+            |          ext4_iomap_alloc
+            |          ext4_iomap_begin
+            |          iomap_iter
+            |          __iomap_dio_rw
+            |          iomap_dio_rw
+            |          ext4_dio_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--percpu_counter_add_batch
+            |          ext4_mb_mark_diskspace_used
+            |          ext4_mb_new_blocks
+            |          ext4_ext_map_blocks
+            |          ext4_map_create_blocks
+            |          ext4_map_blocks
+            |          ext4_iomap_alloc
+            |          ext4_iomap_begin
+            |          iomap_iter
+            |          __iomap_dio_rw
+            |          iomap_dio_rw
+            |          ext4_dio_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--taskstats_exit
+                       do_exit
+                       __x64_sys_exit
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       start_thread
+                       __clone3 (inlined)
+
+     4.55%     0.00%  [.] ext4_inode_attach_jinode          -      -            
+            |
+            ---ext4_file_open
+               do_dentry_open
+               vfs_open
+               do_open
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.55%     0.00%  [.] ext4_mb_mark_diskspace_used       -      -            
+            |
+            ---ext4_mb_new_blocks
+               ext4_ext_map_blocks
+               ext4_map_create_blocks
+               ext4_map_blocks
+               ext4_iomap_alloc
+               ext4_iomap_begin
+               iomap_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.55%     0.00%  [.] inode_init_always_gfp             -      -            
+            |
+            ---alloc_inode
+               new_inode
+               __ext4_new_inode
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.55%     0.00%  [.] security_inode_alloc              -      -            
+            |
+            ---inode_init_always_gfp
+               alloc_inode
+               new_inode
+               __ext4_new_inode
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     4.55%     1.82%  [k] ext4_mark_iloc_dirty              -      -            
+            |
+            ---__ext4_mark_inode_dirty
+               |          
+               |--1.82%--ext4_dirty_inode
+               |          __mark_inode_dirty
+               |          ext4_mb_new_blocks
+               |          ext4_ext_map_blocks
+               |          ext4_map_create_blocks
+               |          ext4_map_blocks
+               |          ext4_iomap_alloc
+               |          ext4_iomap_begin
+               |          iomap_iter
+               |          __iomap_dio_rw
+               |          iomap_dio_rw
+               |          ext4_dio_write_iter
+               |          ext4_file_write_iter
+               |          vfs_write
+               |          __x64_sys_pwrite64
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_pwrite64 (inlined)
+               |          io_record (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+               |--0.91%--ext4_add_nondir
+               |          ext4_create
+               |          lookup_open.isra.0
+               |          open_last_lookups
+               |          path_openat
+               |          do_file_open
+               |          do_sys_openat2
+               |          __x64_sys_openat
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_open64 (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+               |--0.91%--add_dirent_to_buf
+               |          ext4_dx_add_entry
+               |          ext4_add_entry
+               |          ext4_add_nondir
+               |          ext4_create
+               |          lookup_open.isra.0
+               |          open_last_lookups
+               |          path_openat
+               |          do_file_open
+               |          do_sys_openat2
+               |          __x64_sys_openat
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_open64 (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--__ext4_ext_dirty
+                          ext4_ext_insert_extent
+                          ext4_ext_map_blocks
+                          ext4_map_create_blocks
+                          ext4_map_blocks
+                          ext4_iomap_alloc
+                          ext4_iomap_begin
+                          iomap_iter
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          ext4_dio_write_iter
+                          ext4_file_write_iter
+                          vfs_write
+                          __x64_sys_pwrite64
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_pwrite64 (inlined)
+                          io_record (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+     4.55%     0.00%  [.] jbd2__journal_start               -      -            
+            |
+            ---__ext4_journal_start_sb
+               |          
+               |--3.64%--__ext4_new_inode
+               |          ext4_create
+               |          lookup_open.isra.0
+               |          open_last_lookups
+               |          path_openat
+               |          do_file_open
+               |          do_sys_openat2
+               |          __x64_sys_openat
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_open64 (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--ext4_iomap_alloc
+                          ext4_iomap_begin
+                          iomap_iter
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          ext4_dio_write_iter
+                          ext4_file_write_iter
+                          vfs_write
+                          __x64_sys_pwrite64
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_pwrite64 (inlined)
+                          io_record (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+     3.64%     0.91%  [.] __mark_inode_dirty                -      -            
+            |
+            ---ext4_mb_new_blocks
+               ext4_ext_map_blocks
+               ext4_map_create_blocks
+               ext4_map_blocks
+               ext4_iomap_alloc
+               ext4_iomap_begin
+               iomap_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     3.64%     0.91%  [k] start_this_handle                 -      -            
+            |
+            ---jbd2__journal_start
+               __ext4_journal_start_sb
+               |          
+               |--2.73%--__ext4_new_inode
+               |          ext4_create
+               |          lookup_open.isra.0
+               |          open_last_lookups
+               |          path_openat
+               |          do_file_open
+               |          do_sys_openat2
+               |          __x64_sys_openat
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_open64 (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--ext4_iomap_alloc
+                          ext4_iomap_begin
+                          iomap_iter
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          ext4_dio_write_iter
+                          ext4_file_write_iter
+                          vfs_write
+                          __x64_sys_pwrite64
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_pwrite64 (inlined)
+                          io_record (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+     3.64%     0.00%  [.] blk_finish_plug                   -      -            
+            |
+            ---__iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     3.64%     0.00%  [.] __blk_flush_plug                  -      -            
+            |
+            ---blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     3.64%     0.00%  [.] blk_mq_flush_plug_list            -      -            
+            |
+            ---__blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     3.64%     0.00%  [.] blk_mq_dispatch_queue_requests    -      -            
+            |
+            ---blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     3.64%     0.00%  [.] ext4_append                       -      -            
+            |
+            ---do_split
+               ext4_dx_add_entry
+               ext4_add_entry
+               ext4_add_nondir
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     3.64%     0.00%  [.] nvme_queue_rqs                    -      -            
+            |
+            ---blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     3.64%     3.64%  [k] _raw_spin_lock                    -      -            
+            |          
+            |--0.91%--nvme_queue_rqs
+            |          blk_mq_dispatch_queue_requests
+            |          blk_mq_flush_plug_list
+            |          __blk_flush_plug
+            |          blk_finish_plug
+            |          __iomap_dio_rw
+            |          iomap_dio_rw
+            |          ext4_dio_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--jbd2_journal_get_write_access
+            |          __ext4_journal_get_write_access
+            |          ext4_dx_add_entry
+            |          ext4_add_entry
+            |          ext4_add_nondir
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--ext4_file_open
+            |          do_dentry_open
+            |          vfs_open
+            |          do_open
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--__ext4_handle_dirty_metadata
+                       __ext4_new_inode
+                       ext4_create
+                       lookup_open.isra.0
+                       open_last_lookups
+                       path_openat
+                       do_file_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_open64 (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     3.64%     0.00%  [.] ext4_bread                        -      -            
+            |
+            ---ext4_append
+               do_split
+               ext4_dx_add_entry
+               ext4_add_entry
+               ext4_add_nondir
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     3.64%     0.00%  [.] ext4_getblk                       -      -            
+            |
+            ---ext4_bread
+               ext4_append
+               do_split
+               ext4_dx_add_entry
+               ext4_add_entry
+               ext4_add_nondir
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     2.73%  [.] __syscall_cancel_arch_end         -      -            
+            |          
+            |--1.82%--__libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--__close
+                       sync_directories (inlined)
+                       flush_batch
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     2.73%     2.73%  [.] blake3_compress_in_place_avx512   -      -            
+            |          
+            |--0.91%--_mm_shuffle_ps (inlined)
+            |          compress_pre (inlined)
+            |          blake3_compress_in_place_avx512
+            |          efs_hash
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--_mm_shuffle_epi32 (inlined)
+            |          undiagonalize (inlined)
+            |          compress_pre (inlined)
+            |          blake3_compress_in_place_avx512
+            |          efs_hash
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--_mm_add_epi32 (inlined)
+                       add_128 (inlined)
+                       g2 (inlined)
+                       compress_pre (inlined)
+                       blake3_compress_in_place_avx512
+                       efs_hash
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     2.73%     0.00%  [.] bio_iov_iter_get_pages            -      -            
+            |
+            ---iomap_dio_bio_iter_one
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     2.73%  [k] gup_fast                          -      -            
+            |
+            ---gup_fast_fallback
+               pin_user_pages_fast
+               iov_iter_extract_pages
+               iov_iter_extract_bvecs
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter_one
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] compress_pre (inlined)            -      -            
+            |
+            ---blake3_compress_in_place_avx512
+               efs_hash
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] add_timer                         -      -            
+            |          
+            |--1.82%--start_this_handle
+            |          jbd2__journal_start
+            |          __ext4_journal_start_sb
+            |          __ext4_new_inode
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--schedule_timeout
+                       io_schedule_timeout
+                       blk_io_schedule
+                       __iomap_dio_rw
+                       iomap_dio_rw
+                       ext4_dio_write_iter
+                       ext4_file_write_iter
+                       vfs_write
+                       __x64_sys_pwrite64
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_pwrite64 (inlined)
+                       io_record (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     2.73%     0.00%  [.] __mod_timer                       -      -            
+            |
+            ---add_timer
+               |          
+               |--1.82%--start_this_handle
+               |          jbd2__journal_start
+               |          __ext4_journal_start_sb
+               |          __ext4_new_inode
+               |          ext4_create
+               |          lookup_open.isra.0
+               |          open_last_lookups
+               |          path_openat
+               |          do_file_open
+               |          do_sys_openat2
+               |          __x64_sys_openat
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_open64 (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--schedule_timeout
+                          io_schedule_timeout
+                          blk_io_schedule
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          ext4_dio_write_iter
+                          ext4_file_write_iter
+                          vfs_write
+                          __x64_sys_pwrite64
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_pwrite64 (inlined)
+                          io_record (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+     2.73%     0.00%  [.] bdev_getblk                       -      -            
+            |          
+            |--0.91%--ext4_getblk
+            |          ext4_bread
+            |          ext4_append
+            |          do_split
+            |          ext4_dx_add_entry
+            |          ext4_add_entry
+            |          ext4_add_nondir
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--__ext4_get_inode_loc
+            |          ext4_get_inode_loc
+            |          ext4_reserve_inode_write
+            |          __ext4_mark_inode_dirty
+            |          ext4_ext_tree_init
+            |          __ext4_new_inode
+            |          ext4_create
+            |          lookup_open.isra.0
+            |          open_last_lookups
+            |          path_openat
+            |          do_file_open
+            |          do_sys_openat2
+            |          __x64_sys_openat
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_open64 (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--ext4_read_block_bitmap_nowait
+                       ext4_read_block_bitmap
+                       ext4_mb_mark_context
+                       ext4_mb_mark_diskspace_used
+                       ext4_mb_new_blocks
+                       ext4_ext_map_blocks
+                       ext4_map_create_blocks
+                       ext4_map_blocks
+                       ext4_iomap_alloc
+                       ext4_iomap_begin
+                       iomap_iter
+                       __iomap_dio_rw
+                       iomap_dio_rw
+                       ext4_dio_write_iter
+                       ext4_file_write_iter
+                       vfs_write
+                       __x64_sys_pwrite64
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_pwrite64 (inlined)
+                       io_record (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     2.73%     0.91%  [.] crc32c                            -      -            
+            |          
+            |--0.91%--ext4_group_desc_csum
+            |          ext4_group_desc_csum_set
+            |          ext4_mb_mark_context
+            |          ext4_mb_mark_diskspace_used
+            |          ext4_mb_new_blocks
+            |          ext4_ext_map_blocks
+            |          ext4_map_create_blocks
+            |          ext4_map_blocks
+            |          ext4_iomap_alloc
+            |          ext4_iomap_begin
+            |          iomap_iter
+            |          __iomap_dio_rw
+            |          iomap_dio_rw
+            |          ext4_dio_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+            |--0.91%--ext4_inode_csum
+            |          ext4_inode_csum_set
+            |          ext4_fill_raw_inode
+            |          ext4_do_update_inode.isra.0
+            |          ext4_mark_iloc_dirty
+            |          __ext4_mark_inode_dirty
+            |          ext4_dirty_inode
+            |          __mark_inode_dirty
+            |          ext4_mb_new_blocks
+            |          ext4_ext_map_blocks
+            |          ext4_map_create_blocks
+            |          ext4_map_blocks
+            |          ext4_iomap_alloc
+            |          ext4_iomap_begin
+            |          iomap_iter
+            |          __iomap_dio_rw
+            |          iomap_dio_rw
+            |          ext4_dio_write_iter
+            |          ext4_file_write_iter
+            |          vfs_write
+            |          __x64_sys_pwrite64
+            |          x64_sys_call
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __syscall_cancel_arch (inlined)
+            |          __libc_pwrite64 (inlined)
+            |          io_record (inlined)
+            |          run_worker
+            |          start_thread
+            |          __clone3 (inlined)
+            |          
+             --0.91%--ext4_extent_block_csum_set
+                       __ext4_ext_dirty
+                       ext4_ext_insert_extent
+                       ext4_ext_map_blocks
+                       ext4_map_create_blocks
+                       ext4_map_blocks
+                       ext4_getblk
+                       ext4_bread
+                       ext4_append
+                       do_split
+                       ext4_dx_add_entry
+                       ext4_add_entry
+                       ext4_add_nondir
+                       ext4_create
+                       lookup_open.isra.0
+                       open_last_lookups
+                       path_openat
+                       do_file_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       x64_sys_call
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __syscall_cancel_arch (inlined)
+                       __libc_open64 (inlined)
+                       run_worker
+                       start_thread
+                       __clone3 (inlined)
+
+     2.73%     0.00%  [.] nvme_prep_rq.part.0               -      -            
+            |
+            ---nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] nvme_map_data                     -      -            
+            |
+            ---nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] dma_map_page_attrs                -      -            
+            |
+            ---nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] dma_map_phys                      -      -            
+            |
+            ---dma_map_page_attrs
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.91%  [.] iommu_dma_map_phys                -      -            
+            |
+            ---dma_map_phys
+               dma_map_page_attrs
+               nvme_map_data
+               nvme_prep_rq.part.0
+               nvme_queue_rqs
+               blk_mq_dispatch_queue_requests
+               blk_mq_flush_plug_list
+               __blk_flush_plug
+               blk_finish_plug
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] efs_hash                          -      -            
+            |
+            ---run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] flush_batch                       -      -            
+            |
+            ---run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] ext4_map_query_blocks             -      -            
+            |
+            ---ext4_map_blocks
+               ext4_iomap_alloc
+               ext4_iomap_begin
+               iomap_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] ext4_ext_determine_insert_hole    -      -            
+            |
+            ---ext4_ext_map_blocks
+               ext4_map_query_blocks
+               ext4_map_blocks
+               ext4_iomap_alloc
+               ext4_iomap_begin
+               iomap_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] ext4_es_cache_extent              -      -            
+            |
+            ---ext4_ext_determine_insert_hole
+               ext4_ext_map_blocks
+               ext4_map_query_blocks
+               ext4_map_blocks
+               ext4_iomap_alloc
+               ext4_iomap_begin
+               iomap_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] ext4_ext_tree_init                -      -            
+            |
+            ---__ext4_new_inode
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] ext4_reserve_inode_write          -      -            
+            |
+            ---__ext4_mark_inode_dirty
+               ext4_ext_tree_init
+               __ext4_new_inode
+               ext4_create
+               lookup_open.isra.0
+               open_last_lookups
+               path_openat
+               do_file_open
+               do_sys_openat2
+               __x64_sys_openat
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_open64 (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] find_get_block_common             -      -            
+            |
+            ---bdev_getblk
+               |          
+               |--0.91%--ext4_getblk
+               |          ext4_bread
+               |          ext4_append
+               |          do_split
+               |          ext4_dx_add_entry
+               |          ext4_add_entry
+               |          ext4_add_nondir
+               |          ext4_create
+               |          lookup_open.isra.0
+               |          open_last_lookups
+               |          path_openat
+               |          do_file_open
+               |          do_sys_openat2
+               |          __x64_sys_openat
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_open64 (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+               |--0.91%--__ext4_get_inode_loc
+               |          ext4_get_inode_loc
+               |          ext4_reserve_inode_write
+               |          __ext4_mark_inode_dirty
+               |          ext4_ext_tree_init
+               |          __ext4_new_inode
+               |          ext4_create
+               |          lookup_open.isra.0
+               |          open_last_lookups
+               |          path_openat
+               |          do_file_open
+               |          do_sys_openat2
+               |          __x64_sys_openat
+               |          x64_sys_call
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          __syscall_cancel_arch (inlined)
+               |          __libc_open64 (inlined)
+               |          run_worker
+               |          start_thread
+               |          __clone3 (inlined)
+               |          
+                --0.91%--ext4_read_block_bitmap_nowait
+                          ext4_read_block_bitmap
+                          ext4_mb_mark_context
+                          ext4_mb_mark_diskspace_used
+                          ext4_mb_new_blocks
+                          ext4_ext_map_blocks
+                          ext4_map_create_blocks
+                          ext4_map_blocks
+                          ext4_iomap_alloc
+                          ext4_iomap_begin
+                          iomap_iter
+                          __iomap_dio_rw
+                          iomap_dio_rw
+                          ext4_dio_write_iter
+                          ext4_file_write_iter
+                          vfs_write
+                          __x64_sys_pwrite64
+                          x64_sys_call
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          __syscall_cancel_arch (inlined)
+                          __libc_pwrite64 (inlined)
+                          io_record (inlined)
+                          run_worker
+                          start_thread
+                          __clone3 (inlined)
+
+     2.73%     0.00%  [.] iov_iter_extract_bvecs            -      -            
+            |
+            ---bio_iov_iter_get_pages
+               iomap_dio_bio_iter_one
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] iov_iter_extract_pages            -      -            
+            |
+            ---iov_iter_extract_bvecs
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter_one
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] pin_user_pages_fast               -      -            
+            |
+            ---iov_iter_extract_pages
+               iov_iter_extract_bvecs
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter_one
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+     2.73%     0.00%  [.] gup_fast_fallback                 -      -            
+            |
+            ---pin_user_pages_fast
+               iov_iter_extract_pages
+               iov_iter_extract_bvecs
+               bio_iov_iter_get_pages
+               iomap_dio_bio_iter_one
+               iomap_dio_bio_iter
+               __iomap_dio_rw
+               iomap_dio_rw
+               ext4_dio_write_iter
+               ext4_file_write_iter
+               vfs_write
+               __x64_sys_pwrite64
+               x64_sys_call
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __syscall_cancel_arch (inlined)
+               __libc_pwrite64 (inlined)
+               io_record (inlined)
+               run_worker
+               start_thread
+               __clone3 (inlined)
+
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

@@ -1,0 +1,48 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 35  of event 'cpu-clock'
+# Event count (approx.): 35035035
+#
+# Overhead      Pid:Command    Symbol                                IPC   [IPC Coverage]
+# ........  .................  ....................................  ....................
+#
+     8.57%   831821:efs-bench  [k] __iomap_dio_rw                    -      -            
+     5.71%   831819:efs-bench  [k] mb_set_bits                       -      -            
+     5.71%   831822:efs-bench  [k] native_queued_spin_lock_slowpath  -      -            
+     2.86%   831819:efs-bench  [k] __jbd2_journal_file_buffer        -      -            
+     2.86%   831819:efs-bench  [k] _raw_spin_lock                    -      -            
+     2.86%   831819:efs-bench  [k] _raw_spin_unlock_irqrestore       -      -            
+     2.86%   831819:efs-bench  [k] ext4_block_bitmap                 -      -            
+     2.86%   831819:efs-bench  [k] ext4_get_group_info               -      -            
+     2.86%   831819:efs-bench  [k] jbd2_journal_add_journal_head     -      -            
+     2.86%   831819:efs-bench  [k] lookup_bh_lru                     -      -            
+     2.86%   831819:efs-bench  [k] native_queued_spin_lock_slowpath  -      -            
+     2.86%   831819:efs-bench  [k] os_xsave                          -      -            
+     2.86%   831820:efs-bench  [k] __jbd2_journal_file_buffer        -      -            
+     2.86%   831820:efs-bench  [k] _raw_read_lock                    -      -            
+     2.86%   831820:efs-bench  [k] add_transaction_credits           -      -            
+     2.86%   831820:efs-bench  [.] blake3_compress_in_place          -      -            
+     2.86%   831820:efs-bench  [k] jbd2_journal_cancel_revoke        -      -            
+     2.86%   831820:efs-bench  [k] jbd2_journal_put_journal_head     -      -            
+     2.86%   831820:efs-bench  [k] native_queued_spin_lock_slowpath  -      -            
+     2.86%   831820:efs-bench  [k] queued_read_lock_slowpath         -      -            
+     2.86%   831821:efs-bench  [k] __jbd2_journal_file_buffer        -      -            
+     2.86%   831821:efs-bench  [k] _raw_read_unlock                  -      -            
+     2.86%   831821:efs-bench  [k] bio_associate_blkg_from_css       -      -            
+     2.86%   831821:efs-bench  [k] jbd2_journal_get_write_access     -      -            
+     2.86%   831821:efs-bench  [k] queued_read_lock_slowpath         -      -            
+     2.86%   831822:efs-bench  [k] __iomap_dio_rw                    -      -            
+     2.86%   831822:efs-bench  [k] __jbd2_journal_file_buffer        -      -            
+     2.86%   831822:efs-bench  [k] _raw_spin_lock                    -      -            
+     2.86%   831822:efs-bench  [.] blake3_compress_in_place_avx512   -      -            
+     2.86%   831822:efs-bench  [k] ktime_get_coarse_real_ts64_mg     -      -            
+     2.86%   831822:efs-bench  [k] queued_read_lock_slowpath         -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

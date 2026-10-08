@@ -1,0 +1,132 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 191  of event 'cpu-clock'
+# Event count (approx.): 191191191
+#
+# Overhead      Pid:Command    Symbol                                 IPC   [IPC Coverage]
+# ........  .................  .....................................  ....................
+#
+     3.66%   830598:efs-bench  [k] ext4_match                         -      -            
+     3.14%   830598:efs-bench  [k] __refill_objects_node              -      -            
+     3.14%   830599:efs-bench  [k] __refill_objects_node              -      -            
+     2.62%   830596:efs-bench  [k] __refill_objects_node              -      -            
+     2.62%   830596:efs-bench  [k] _raw_spin_unlock_irqrestore        -      -            
+     2.62%   830599:efs-bench  [k] __iomap_dio_rw                     -      -            
+     2.09%   830596:efs-bench  [k] __iomap_dio_rw                     -      -            
+     2.09%   830598:efs-bench  [k] native_queued_spin_lock_slowpath   -      -            
+     2.09%   830599:efs-bench  [k] __ext4_check_dir_entry             -      -            
+     2.09%   830599:efs-bench  [k] _raw_spin_unlock_irqrestore        -      -            
+     1.57%   830596:efs-bench  [k] _raw_spin_lock                     -      -            
+     1.57%   830596:efs-bench  [k] jbd2_journal_add_journal_head      -      -            
+     1.57%   830597:efs-bench  [k] __ext4_check_dir_entry             -      -            
+     1.57%   830597:efs-bench  [k] __iomap_dio_rw                     -      -            
+     1.57%   830597:efs-bench  [k] __jbd2_journal_file_buffer         -      -            
+     1.57%   830597:efs-bench  [k] __refill_objects_node              -      -            
+     1.57%   830598:efs-bench  [k] __ext4_check_dir_entry             -      -            
+     1.57%   830598:efs-bench  [k] __iomap_dio_rw                     -      -            
+     1.57%   830598:efs-bench  [k] __jbd2_journal_file_buffer         -      -            
+     1.57%   830599:efs-bench  [k] __jbd2_journal_file_buffer         -      -            
+     1.57%   830599:efs-bench  [k] native_queued_spin_lock_slowpath   -      -            
+     1.05%   830596:efs-bench  [k] fscrypt_match_name                 -      -            
+     1.05%   830596:efs-bench  [k] jbd2_journal_get_write_access      -      -            
+     1.05%   830596:efs-bench  [k] memcmp                             -      -            
+     1.05%   830596:efs-bench  [k] native_queued_spin_lock_slowpath   -      -            
+     1.05%   830597:efs-bench  [.] __syscall_cancel_arch_end          -      -            
+     1.05%   830597:efs-bench  [k] _raw_read_unlock                   -      -            
+     1.05%   830597:efs-bench  [k] _raw_spin_lock                     -      -            
+     1.05%   830597:efs-bench  [k] crc32c_arch                        -      -            
+     1.05%   830597:efs-bench  [k] ext4_find_dest_de                  -      -            
+     1.05%   830597:efs-bench  [k] ext4_match                         -      -            
+     1.05%   830597:efs-bench  [k] jbd2_journal_get_write_access      -      -            
+     1.05%   830597:efs-bench  [k] jbd2_journal_grab_journal_head     -      -            
+     1.05%   830598:efs-bench  [k] fscrypt_match_name                 -      -            
+     1.05%   830599:efs-bench  [k] do_get_write_access                -      -            
+     0.52%   830596:efs-bench  [k] __brelse                           -      -            
+     0.52%   830596:efs-bench  [k] __ext4_check_dir_entry             -      -            
+     0.52%   830596:efs-bench  [k] __ext4_new_inode                   -      -            
+     0.52%   830596:efs-bench  [k] __jbd2_journal_file_buffer         -      -            
+     0.52%   830596:efs-bench  [k] __kmalloc_noprof                   -      -            
+     0.52%   830596:efs-bench  [k] bio_iov_iter_get_pages             -      -            
+     0.52%   830596:efs-bench  [.] blake3_compress_in_place_avx512    -      -            
+     0.52%   830596:efs-bench  [k] down_write                         -      -            
+     0.52%   830596:efs-bench  [k] ext4_find_dest_de                  -      -            
+     0.52%   830596:efs-bench  [k] ext4_getblk                        -      -            
+     0.52%   830596:efs-bench  [k] ext4_mark_iloc_dirty               -      -            
+     0.52%   830596:efs-bench  [k] ext4_match                         -      -            
+     0.52%   830596:efs-bench  [k] ext4_mb_initialize_context         -      -            
+     0.52%   830596:efs-bench  [k] ext4_mb_mark_context               -      -            
+     0.52%   830596:efs-bench  [k] inode_set_flags                    -      -            
+     0.52%   830596:efs-bench  [k] jbd2_write_access_granted          -      -            
+     0.52%   830596:efs-bench  [k] kfree                              -      -            
+     0.52%   830596:efs-bench  [k] queued_write_lock_slowpath         -      -            
+     0.52%   830596:efs-bench  [k] start_this_handle                  -      -            
+     0.52%   830597:efs-bench  [k] __d_instantiate                    -      -            
+     0.52%   830597:efs-bench  [k] __ext4_get_inode_loc               -      -            
+     0.52%   830597:efs-bench  [k] __raw_spin_lock_irqsave            -      -            
+     0.52%   830597:efs-bench  [k] __rcu_read_lock                    -      -            
+     0.52%   830597:efs-bench  [k] _raw_spin_unlock_irqrestore        -      -            
+     0.52%   830597:efs-bench  [k] add_dirent_to_buf                  -      -            
+     0.52%   830597:efs-bench  [k] amdv1_map_range                    -      -            
+     0.52%   830597:efs-bench  [k] bh_lru_install                     -      -            
+     0.52%   830597:efs-bench  [k] crc32c                             -      -            
+     0.52%   830597:efs-bench  [k] do_get_write_access                -      -            
+     0.52%   830597:efs-bench  [k] ext4_es_lookup_extent              -      -            
+     0.52%   830597:efs-bench  [k] ext4_map_blocks                    -      -            
+     0.52%   830597:efs-bench  [k] ext4_mark_iloc_dirty               -      -            
+     0.52%   830597:efs-bench  [k] ext4_reserve_inode_write           -      -            
+     0.52%   830597:efs-bench  [k] jbd2_log_wait_commit               -      -            
+     0.52%   830597:efs-bench  [k] jbd2_write_access_granted          -      -            
+     0.52%   830597:efs-bench  [k] memcmp                             -      -            
+     0.52%   830597:efs-bench  [k] native_queued_spin_lock_slowpath   -      -            
+     0.52%   830597:efs-bench  [k] start_this_handle                  -      -            
+     0.52%   830598:efs-bench  [k] __pi_memcpy                        -      -            
+     0.52%   830598:efs-bench  [k] __rcu_read_unlock                  -      -            
+     0.52%   830598:efs-bench  [k] _raw_read_unlock                   -      -            
+     0.52%   830598:efs-bench  [k] _raw_spin_lock                     -      -            
+     0.52%   830598:efs-bench  [k] _raw_spin_unlock_irqrestore        -      -            
+     0.52%   830598:efs-bench  [k] crc32c_arch                        -      -            
+     0.52%   830598:efs-bench  [k] do_get_write_access                -      -            
+     0.52%   830598:efs-bench  [k] ext4fs_dirhash                     -      -            
+     0.52%   830598:efs-bench  [k] fdget                              -      -            
+     0.52%   830598:efs-bench  [k] filemap_get_entry                  -      -            
+     0.52%   830598:efs-bench  [k] jbd2_journal_add_journal_head      -      -            
+     0.52%   830598:efs-bench  [k] jbd2_journal_cancel_revoke         -      -            
+     0.52%   830598:efs-bench  [k] jbd2_journal_dirty_metadata        -      -            
+     0.52%   830598:efs-bench  [k] jbd2_journal_grab_journal_head     -      -            
+     0.52%   830598:efs-bench  [k] jbd2_journal_put_journal_head      -      -            
+     0.52%   830598:efs-bench  [k] jbd2_write_access_granted          -      -            
+     0.52%   830598:efs-bench  [k] lookup_bh_lru                      -      -            
+     0.52%   830598:efs-bench  [k] stop_this_handle                   -      -            
+     0.52%   830598:efs-bench  [k] unlock_buffer                      -      -            
+     0.52%   830598:efs-bench  [k] wbt_track                          -      -            
+     0.52%   830599:efs-bench  [k] __brelse                           -      -            
+     0.52%   830599:efs-bench  [k] __ext4_journal_stop                -      -            
+     0.52%   830599:efs-bench  [k] __ext4_mark_inode_dirty            -      -            
+     0.52%   830599:efs-bench  [k] __iommu_dma_map                    -      -            
+     0.52%   830599:efs-bench  [k] __jbd2_journal_temp_unlink_buffer  -      -            
+     0.52%   830599:efs-bench  [k] _raw_spin_lock                     -      -            
+     0.52%   830599:efs-bench  [k] bh_lru_install                     -      -            
+     0.52%   830599:efs-bench  [k] crc32_lsb_vpclmul_avx512           -      -            
+     0.52%   830599:efs-bench  [k] crc32c_arch                        -      -            
+     0.52%   830599:efs-bench  [k] do_syscall_64                      -      -            
+     0.52%   830599:efs-bench  [k] ext4_es_lookup_extent              -      -            
+     0.52%   830599:efs-bench  [k] ext4_find_dest_de                  -      -            
+     0.52%   830599:efs-bench  [k] ext4_inode_table                   -      -            
+     0.52%   830599:efs-bench  [k] ext4_mark_iloc_dirty               -      -            
+     0.52%   830599:efs-bench  [k] ext4_match                         -      -            
+     0.52%   830599:efs-bench  [k] ext4_mb_add_n_trim                 -      -            
+     0.52%   830599:efs-bench  [k] jbd2_write_access_granted          -      -            
+     0.52%   830599:efs-bench  [k] lookup_bh_lru                      -      -            
+     0.52%   830599:efs-bench  [k] nvme_map_data                      -      -            
+     0.52%   830599:efs-bench  [k] queued_write_lock_slowpath         -      -            
+     0.52%   830599:efs-bench  [k] static_key_count                   -      -            
+     0.52%   830599:efs-bench  [k] stop_this_handle                   -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

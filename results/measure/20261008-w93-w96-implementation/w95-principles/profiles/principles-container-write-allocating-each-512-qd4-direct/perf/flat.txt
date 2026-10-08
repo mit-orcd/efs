@@ -1,0 +1,64 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 142  of event 'cpu-clock'
+# Event count (approx.): 142142142
+#
+# Overhead  Shared Object      Symbol                                 IPC   [IPC Coverage]
+# ........  .................  .....................................  ....................
+#
+    11.27%  [kernel.kallsyms]  [k] native_queued_spin_lock_slowpath   -      -            
+    10.56%  [kernel.kallsyms]  [k] _raw_spin_lock                     -      -            
+     8.45%  [kernel.kallsyms]  [k] __iomap_dio_rw                     -      -            
+     8.45%  [kernel.kallsyms]  [k] __jbd2_journal_file_buffer         -      -            
+     7.04%  [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore        -      -            
+     4.93%  [kernel.kallsyms]  [k] jbd2_journal_add_journal_head      -      -            
+     4.93%  [kernel.kallsyms]  [k] jbd2_journal_cancel_revoke         -      -            
+     2.82%  [kernel.kallsyms]  [k] do_get_write_access                -      -            
+     2.11%  [kernel.kallsyms]  [k] ext4_sb_block_valid                -      -            
+     2.11%  [kernel.kallsyms]  [k] folio_mark_accessed                -      -            
+     2.11%  [kernel.kallsyms]  [k] jbd2_journal_get_write_access      -      -            
+     2.11%  [kernel.kallsyms]  [k] lookup_bh_lru                      -      -            
+     1.41%  [kernel.kallsyms]  [k] __jbd2_journal_temp_unlink_buffer  -      -            
+     1.41%  [kernel.kallsyms]  [k] _raw_read_unlock                   -      -            
+     1.41%  [kernel.kallsyms]  [k] _raw_spin_trylock                  -      -            
+     1.41%  [kernel.kallsyms]  [k] amdv1_map_range                    -      -            
+     1.41%  [kernel.kallsyms]  [k] bio_alloc_bioset                   -      -            
+     1.41%  [kernel.kallsyms]  [k] crc32_lsb_vpclmul_avx512           -      -            
+     1.41%  [kernel.kallsyms]  [k] ext4_mb_mark_context               -      -            
+     1.41%  [kernel.kallsyms]  [k] find_get_block_common              -      -            
+     1.41%  [kernel.kallsyms]  [k] iomap_dio_bio_iter                 -      -            
+     1.41%  [kernel.kallsyms]  [k] jbd2_journal_put_journal_head      -      -            
+     1.41%  [kernel.kallsyms]  [k] unlock_buffer                      -      -            
+     0.70%  [kernel.kallsyms]  [k] __brelse                           -      -            
+     0.70%  [kernel.kallsyms]  [k] __jbd2_journal_force_commit        -      -            
+     0.70%  [kernel.kallsyms]  [k] __pi_memset                        -      -            
+     0.70%  [kernel.kallsyms]  [k] __rcu_read_unlock                  -      -            
+     0.70%  [kernel.kallsyms]  [k] _raw_read_lock                     -      -            
+     0.70%  [kernel.kallsyms]  [k] blk_add_rq_to_plug                 -      -            
+     0.70%  [kernel.kallsyms]  [k] blk_mq_dispatch_queue_requests     -      -            
+     0.70%  [kernel.kallsyms]  [k] blk_mq_start_request               -      -            
+     0.70%  [kernel.kallsyms]  [k] blk_mq_submit_bio                  -      -            
+     0.70%  [kernel.kallsyms]  [k] crc32c_arch                        -      -            
+     0.70%  [kernel.kallsyms]  [k] ext4_es_lookup_extent              -      -            
+     0.70%  [kernel.kallsyms]  [k] ext4_get_group_desc                -      -            
+     0.70%  [kernel.kallsyms]  [k] ext4_iomap_alloc                   -      -            
+     0.70%  [kernel.kallsyms]  [k] gup_fast                           -      -            
+     0.70%  [kernel.kallsyms]  [k] io_schedule                        -      -            
+     0.70%  [kernel.kallsyms]  [k] iov_iter_extract_bvecs             -      -            
+     0.70%  [kernel.kallsyms]  [k] jbd2_journal_file_inode            -      -            
+     0.70%  [kernel.kallsyms]  [k] jbd2_journal_grab_journal_head     -      -            
+     0.70%  [kernel.kallsyms]  [k] jbd2_write_access_granted          -      -            
+     0.70%  [kernel.kallsyms]  [k] kernel_fpu_begin_mask              -      -            
+     0.70%  [kernel.kallsyms]  [k] queued_read_lock_slowpath          -      -            
+     0.70%  [kernel.kallsyms]  [k] queued_write_lock_slowpath         -      -            
+     0.70%  [kernel.kallsyms]  [k] stop_this_handle                   -      -            
+     0.70%  [kernel.kallsyms]  [k] wake_up_bit                        -      -            
+     0.70%  efs-bench          [.] blake3_compress_in_place_avx512    -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

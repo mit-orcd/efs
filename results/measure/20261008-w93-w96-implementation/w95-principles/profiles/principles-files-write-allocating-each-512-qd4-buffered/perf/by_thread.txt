@@ -1,0 +1,48 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+# comm: efs-bench
+#
+# Total Lost Samples: 0
+#
+# Samples: 202  of event 'cpu-clock'
+# Event count (approx.): 202202202
+#
+# Overhead      Pid:Command    Symbol                                     IPC   [IPC Coverage]
+# ........  .................  .........................................  ....................
+#
+     3.47%   828974:efs-bench  [k] filemap_get_folios_tag                 -      -            
+     2.97%   828974:efs-bench  [k] __refill_objects_node                  -      -            
+     2.48%   828971:efs-bench  [k] filemap_get_folios_tag                 -      -            
+     2.48%   828972:efs-bench  [k] __refill_objects_node                  -      -            
+     2.48%   828972:efs-bench  [k] filemap_get_folios_tag                 -      -            
+     1.98%   828971:efs-bench  [k] _raw_spin_lock                         -      -            
+     1.98%   828972:efs-bench  [k] ext4_match                             -      -            
+     1.98%   828973:efs-bench  [k] filemap_get_folios_tag                 -      -            
+     1.49%   828971:efs-bench  [k] ext4_find_dest_de                      -      -            
+     1.49%   828971:efs-bench  [k] ext4_match                             -      -            
+     1.49%   828971:efs-bench  [k] native_queued_spin_lock_slowpath       -      -            
+     1.49%   828972:efs-bench  [k] native_queued_spin_lock_slowpath       -      -            
+     1.49%   828973:efs-bench  [k] _raw_spin_unlock_irqrestore            -      -            
+     1.49%   828973:efs-bench  [k] ext4_match                             -      -            
+     1.49%   828974:efs-bench  [k] __ext4_check_dir_entry                 -      -            
+     1.49%   828974:efs-bench  [k] __jbd2_journal_file_buffer             -      -            
+     1.49%   828974:efs-bench  [k] balance_dirty_pages_ratelimited_flags  -      -            
+     0.99%   828971:efs-bench  [k] __jbd2_journal_file_buffer             -      -            
+     0.99%   828971:efs-bench  [k] __refill_objects_node                  -      -            
+     0.99%   828971:efs-bench  [k] crc32c_arch                            -      -            
+     0.99%   828971:efs-bench  [k] ext4_fill_raw_inode                    -      -            
+     0.99%   828972:efs-bench  [k] do_get_write_access                    -      -            
+     0.99%   828972:efs-bench  [k] ext4_get_group_desc                    -      -            
+     0.99%   828972:efs-bench  [k] jbd2_journal_cancel_revoke             -      -            
+     0.99%   828973:efs-bench  [k] __jbd2_journal_file_buffer             -      -            
+     0.99%   828973:efs-bench  [k] __refill_objects_node                  -      -            
+     0.99%   828973:efs-bench  [k] crc32_lsb_vpclmul_avx512               -      -            
+     0.99%   828973:efs-bench  [k] lookup_bh_lru                          -      -            
+     0.99%   828974:efs-bench  [k] _raw_spin_unlock_irqrestore            -      -            
+     0.99%   828974:efs-bench  [k] insert_inode_locked                    -      -            
+     0.99%   828974:efs-bench  [k] kmem_cache_alloc_noprof                -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#

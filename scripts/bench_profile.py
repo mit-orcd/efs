@@ -81,7 +81,10 @@ def parser():
     p.add_argument('--qds', type=integers, default=integers('1,16,64,256'))
     p.add_argument('--storage-principles', action='store_true',
                    help='select independent EFS-shaped read/write/delete principle experiments; replaces the default modes')
-    p.add_argument('--principles-sizes', type=sizes, default=sizes('64K'), help='principle payload sizes; aligned, 4 KiB..1 MiB')
+    p.add_argument('--principles-sizes', type=sizes, default=sizes('64K'), help='principle physical payload sizes; 1 byte..1 MiB')
+    p.add_argument('--principles-container-alignment', type=int, choices=[1,4096], default=4096, help='packed buffered containers or aligned direct/punchable containers')
+    p.add_argument('--principles-directory-sync', choices=['worker','ancestors'], default='worker', help='independent directory persistence topology')
+    p.add_argument('--principles-logical-size', type=int, help='logical tiny content bytes inside every principle physical payload')
     p.add_argument('--principles-objects', type=int, default=4096, help='total records per finite principle case (not per worker); --time does not apply')
     p.add_argument('--principles-batch', type=int, default=32, help='records per worker synchronization batch')
     p.add_argument('--modes', default=DEFAULT_MODES, help='comma-separated modes; all adds remote modes')
@@ -180,18 +183,26 @@ def cases_for(a, cpus):
             raise ValueError('--principles-objects must be 1..1048576 and at least the largest QD')
         if not 1 <= a.principles_batch <= 1048576:
             raise ValueError('--principles-batch must be 1..1048576')
-        if any(n < 4096 or n > 1048576 or n % 4096 for n in a.principles_sizes):
-            raise ValueError('--principles-sizes must be 4 KiB aligned, 4 KiB..1 MiB')
+        if any(n < 1 or n > 1048576 for n in a.principles_sizes):
+            raise ValueError('--principles-sizes must be 1 byte..1 MiB')
+        if a.principles_logical_size is not None and not 1 <= a.principles_logical_size <= min(a.principles_sizes):
+            raise ValueError('--principles-logical-size must fit every physical payload')
         for size, qd, direct, layout in itertools.product(a.principles_sizes, a.qds, [False, True], ['files', 'container']):
+            if layout == 'container' and direct and a.principles_container_alignment == 1:
+                continue
             variants = [('read', 'populated', 'none')]
             variants += [('write', policy, persist) for policy in ['allocating', 'overwrite'] for persist in ['none', 'each', 'batch']]
-            variants += [('delete', policy, persist) for policy in (['unlink'] if layout == 'files' else ['punch', 'release']) for persist in ['none', 'each', 'batch']]
+            variants += [('delete', policy, persist) for policy in (['unlink'] if layout == 'files' else
+                             ['tombstone' if a.principles_container_alignment == 1 else 'punch', 'release']) for persist in ['none', 'each', 'batch']]
             for rw, policy, persist in variants:
                 add(f'principles-{layout}-{rw}-{policy}-{persist}-{size}-qd{qd}-{"direct" if direct else "buffered"}', 'principles',
                     ['--bench', 'principles', '--layout', layout, '--rw', rw, '--policy', policy,
-                     '--persist', persist, '--payload-size', str(size), '--objects', str(a.principles_objects),
+                     '--persist', persist, '--directory-sync', a.principles_directory_sync,
+                     '--payload-size', str(size), '--objects', str(a.principles_objects),
                      '--qd', str(qd), '--batch-size', str(a.principles_batch),
-                     '--direct-io' if direct else '--no-direct-io'], allocation=policy)
+                     '--direct-io' if direct else '--no-direct-io'] +
+                    (['--logical-size', str(a.principles_logical_size)] if a.principles_logical_size is not None else []) +
+                    (['--container-alignment', str(a.principles_container_alignment)] if layout == 'container' else []), allocation=policy)
     if 'blake3' in modes:
         for size, nt, style in itertools.product(a.hash_sizes, threads, ['oneshot', 'stream']):
             add(f'blake3-{style}-{size}-t{nt}', 'blake3',
@@ -439,7 +450,7 @@ def analyze(output):
         measurements = []
         for m in r.get('metrics', []):
             tag = '/'.join(m[k] for k in ['phase', 'rw', 'layout', 'policy', 'persist', 'paths', 'qd', 'allocation', 'sync', 'write_mode'] if k in m)
-            numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'p50_us', 'p99_lower_us', 'p99_us', 'avg_us', 'max_us', 'lat_samples', 'latency_quality', 'reclaimed_allocated_bytes', 'syncs', 'verified_objects'] if k in m)
+            numbers = ' '.join(f'{k}={m[k]}' for k in ['GiB_s', 'logical_GiB_s', 'ops_s', 'payload_bytes', 'logical_payload_bytes', 'record_bytes', 'container_alignment', 'directory_sync', 'latency', 'latency_samples', 'p50_us', 'p95_us', 'p99_lower_us', 'p99_us', 'avg_us', 'max_us', 'lat_samples', 'latency_quality', 'reclaimed_allocated_bytes', 'syncs', 'verified_objects'] if k in m)
             if baseline_valid(r) and numbers:
                 measurements.append(f'{tag} {numbers}'.strip())
             elif not baseline_valid(r):
@@ -522,7 +533,7 @@ def analyze(output):
              'BLAKE3 reuses per-worker buffers: this measures warm-buffer CPU throughput, not disk bandwidth. Streaming omits per-buffer finalize overhead.',
              'Raw allocating writes fill the window once then overwrite it: allocation_ops and overwrite_ops distinguish first fill from warm overwrites. They are not an append-only allocation ceiling.',
              'Local data writes wrap within the configured bounded working set after filling it; profiles include create and replacement work. Direct local CLI without --window retains append-only writes.',
-             'Storage-principles cases are independent finite one-pass models, not production GC. Delete GiB_s counts payload represented by removed objects, not transferred bytes; p99 for release is per-container. Required syncs are timed for each/batch; none is acceptance only.',
+             'Storage-principles cases are independent finite one-pass models, not production GC. Delete GiB_s counts payload represented by removed objects, not transferred bytes; p99 for release is per-container. Required syncs are timed for each/batch, and latency for every modified record reaches durable cohort completion. none is acceptance only. Logical content, physical payload, record alignment and directory barrier topology are reported separately; packed tombstones retain space until container reclamation.',
              'Buffered storage reads are warm; compare direct-I/O cases and the separate ceiling probe before inferring device limits.', '']
     (output / 'ANALYSIS.md').write_text('\n'.join(text))
     return output / 'ANALYSIS.md'

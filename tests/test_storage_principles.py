@@ -48,6 +48,78 @@ class PrinciplesTests(unittest.TestCase):
                         self.assertEqual(list(Path(a).iterdir()), [])
                         self.assertEqual(list(Path(b).iterdir()), [])
 
+    def test_tiny_logical_payloads_and_physical_fragments(self):
+        for size,logical,layout,direct in itertools.product([1,17,512,65536], [1], ['files','container'], [False,True]):
+            with self.subTest(size=size,layout=layout,direct=direct), tempfile.TemporaryDirectory() as root:
+                row=self.run_case('--storage',root,'--rw','write','--policy','allocating',
+                                  '--persist','batch','--objects','8','--qd','2','--batch-size','4',
+                                  '--layout',layout,'--payload-size',str(size),'--logical-size',str(logical),
+                                  '--direct-io' if direct else '--no-direct-io')
+                self.assertEqual(int(row['payload_bytes']),size)
+                self.assertEqual(int(row['logical_payload_bytes']),logical)
+                expected=(size+32+4095)//4096*4096 if direct or layout=='container' else size+32
+                self.assertEqual(int(row['record_bytes']),expected)
+                self.assertEqual(row['latency_samples'],'8')
+                self.assertEqual(row['latency'],'operation_to_durable_completion')
+                self.assertEqual(row['verified_objects'],'8')
+                self.assertEqual(list(Path(root).iterdir()),[])
+        with tempfile.TemporaryDirectory() as root:
+            self.run_case('--storage',root,'--payload-size','1','--logical-size','2',ok=False)
+            self.assertEqual(list(Path(root).iterdir()),[])
+
+    def test_every_batched_record_waits_for_durable_completion(self):
+        code=r"""
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <unistd.h>
+#include <sys/syscall.h>
+int fsync(int fd) {
+    if(syscall(SYS_gettid)!=getpid())usleep(20000);
+    int (*real)(int)=dlsym(RTLD_NEXT,"fsync");return real(fd);
+}
+"""
+        with tempfile.TemporaryDirectory() as temp, tempfile.TemporaryDirectory() as root:
+            c=Path(temp)/'delay.c';so=Path(temp)/'delay.so';c.write_text(code)
+            subprocess.run(['gcc','-shared','-fPIC',str(c),'-ldl','-o',str(so)],check=True)
+            env=dict(os.environ,LD_PRELOAD=str(so))
+            row=self.run_case('--storage',root,'--layout','container','--rw','write',
+                              '--policy','allocating','--persist','batch','--objects','8','--qd','1',
+                              '--batch-size','4','--payload-size','1',env=env)
+            self.assertEqual(row['latency_samples'],'8')
+            self.assertEqual(row['latency'],'operation_to_durable_completion')
+            self.assertGreaterEqual(int(row['p50_us']),20000)
+            self.assertGreaterEqual(int(row['p95_us']),int(row['p50_us']))
+
+    def test_buffered_packed_records_and_conditional_tombstones(self):
+        for rw,policy in [('write','allocating'),('read','populated'),('delete','tombstone'),('delete','release')]:
+            with self.subTest(rw=rw,policy=policy), tempfile.TemporaryDirectory() as root:
+                row=self.run_case('--storage',root,'--layout','container','--container-alignment','1',
+                                  '--rw',rw,'--policy',policy,'--persist','none' if rw=='read' else 'batch',
+                                  '--objects','128','--qd','2','--batch-size','16','--payload-size','1')
+                self.assertEqual(row['record_bytes'],'33')
+                self.assertEqual(row['verified_objects'],'128')
+                if policy=='tombstone':self.assertGreater(int(row['allocated_after']),0)
+                if policy=='release':self.assertEqual(row['allocated_after'],'0')
+                self.assertEqual(list(Path(root).iterdir()),[])
+        for flags in [('--direct-io',),('--rw','delete','--policy','punch')]:
+            with tempfile.TemporaryDirectory() as root:
+                self.run_case('--storage',root,'--layout','container','--container-alignment','1',*flags,ok=False)
+                self.assertEqual(list(Path(root).iterdir()),[])
+
+    def test_production_ancestor_barriers_are_explicit(self):
+        rows=[]
+        for topology in ['worker','ancestors']:
+            with tempfile.TemporaryDirectory() as root:
+                rows.append(self.run_case('--storage',root,'--layout','container','--rw','write',
+                                          '--policy','allocating','--persist','batch','--objects','8',
+                                          '--qd','1','--batch-size','8','--payload-size','512',
+                                          '--directory-sync',topology))
+        self.assertEqual(rows[0]['directory_sync'],'worker')
+        self.assertEqual(rows[1]['directory_sync'],'ancestors')
+        self.assertEqual(rows[0]['syncs'],'2')
+        self.assertGreater(int(rows[1]['syncs']),int(rows[0]['syncs']))
+        self.assertEqual(rows[0]['latency_samples'],rows[1]['latency_samples'])
+
     def test_delete_batch_reduces_syncs_not_removed_count(self):
         rows = []
         for persist in ['each', 'batch']:
@@ -104,7 +176,7 @@ ssize_t pread(int fd, void *buf, size_t n, off_t off) {
 
     def test_reject_invalid_before_mutation(self):
         with tempfile.TemporaryDirectory() as root:
-            for args in [('--objects', '1', '--qd', '2'), ('--payload-size', '33'),
+            for args in [('--objects', '1', '--qd', '2'), ('--payload-size', '0'),
                          ('--persist', 'bad'), ('--rw', 'delete', '--policy', 'punch'),
                          ('--layout', 'container', '--rw', 'delete', '--policy', 'unlink'),
                          ('--storage', root), ('--time', '1')]:

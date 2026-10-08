@@ -104,3 +104,27 @@ FUSE still uses separate HOLD; enabling the old flag now would retain the
 last-close-before-adoption race. Production legacy mount sessions also lack
 durable revocation integration, so new orphanable CREATE claims must not be
 introduced as a shortcut.
+
+## W95 independent tiny-file principles
+
+The existing independent benchmark now accepts 1-byte through 1-MiB physical
+payloads and separately models tiny logical content inside full fragments.
+Pattern generation is safe below eight bytes; direct/punch records stay aligned.
+Packed buffered containers and conditional tombstones are explicit experiments;
+tombstoned allocation is retained until actual reclamation, never reported freed.
+Directory sync topology can include every ancestor to model current production
+cost. Fixture-directory entries are persisted outside timing before operations.
+
+Every modified record's latency reaches its cohort's successful durability
+barrier; earlier records no longer omit their batch wait. Results/reports expose
+logical/physical geometry, topology, p50/p95/p99 and latency semantics. Existing
+profile harness generates valid tiny/packed cases and rejects invalid direct
+packing/punch combinations. Nine benchmark contract tests, 20 profile tests,
+24 geometry/persistence cases, 12 packed read/write/delete cases and AMD
+ASan/UBSan pass. Eight separate baseline/perf/strace runs produced all three
+requested perf report types. Sampled hot paths are mainly filesystem/locking;
+CPU sample percentages are not wall-time attribution. No production format port.
+
+[Evidence and remaining gates](../../results/measure/20261008-w93-w96-implementation/w95-principles/README.md).
+Mixed churn and durable index/body/ACK/GC crash-phase recovery remain before
+W95 closure. Packing is not an approved backend migration.

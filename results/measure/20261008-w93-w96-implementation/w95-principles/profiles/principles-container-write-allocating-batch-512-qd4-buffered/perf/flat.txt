@@ -1,0 +1,34 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 25  of event 'cpu-clock'
+# Event count (approx.): 25025025
+#
+# Overhead  Shared Object      Symbol                                     IPC   [IPC Coverage]
+# ........  .................  .........................................  ....................
+#
+    16.00%  efs-bench          [.] blake3_compress_in_place_avx512        -      -            
+    12.00%  [kernel.kallsyms]  [k] _raw_spin_unlock_irqrestore            -      -            
+     8.00%  [kernel.kallsyms]  [k] __filemap_add_folio                    -      -            
+     8.00%  [kernel.kallsyms]  [k] __map_single_page0.isra.0              -      -            
+     4.00%  [kernel.kallsyms]  [k] __fsnotify_parent                      -      -            
+     4.00%  [kernel.kallsyms]  [k] __refill_objects_node                  -      -            
+     4.00%  [kernel.kallsyms]  [k] _raw_spin_unlock_irq                   -      -            
+     4.00%  [kernel.kallsyms]  [k] balance_dirty_pages_ratelimited_flags  -      -            
+     4.00%  [kernel.kallsyms]  [k] ext4_buffered_write_iter               -      -            
+     4.00%  [kernel.kallsyms]  [k] ext4_da_get_block_prep                 -      -            
+     4.00%  [kernel.kallsyms]  [k] folio_unlock                           -      -            
+     4.00%  [kernel.kallsyms]  [k] get_page_from_freelist                 -      -            
+     4.00%  [kernel.kallsyms]  [k] jbd2_journal_add_journal_head          -      -            
+     4.00%  [kernel.kallsyms]  [k] kernel_init_pages                      -      -            
+     4.00%  [kernel.kallsyms]  [k] kmem_cache_free                        -      -            
+     4.00%  [kernel.kallsyms]  [k] mpage_release_unused_pages             -      -            
+     4.00%  [kernel.kallsyms]  [k] up_write                               -      -            
+     4.00%  [kernel.kallsyms]  [k] xas_load                               -      -            
+
+
+#
+# (Cannot load tips.txt file, please install perf!)
+#
