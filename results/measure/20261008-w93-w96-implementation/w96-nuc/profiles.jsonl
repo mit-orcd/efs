@@ -1,0 +1,4 @@
+{"root": "/data1/efs/bench", "reserve": 0, "output": "{\"qd\":8,\"records\":4000,\"ops_s\":8508.3,\"p50_us\":871.3,\"p95_us\":1362.5,\"p99_us\":1930.9}\n", "strace": "strace-data1-0.txt"}
+{"root": "/data1/efs/bench", "reserve": 1048576, "output": "{\"qd\":8,\"records\":4000,\"ops_s\":9283.8,\"p50_us\":827.9,\"p95_us\":1203.4,\"p99_us\":1457.9}\n", "strace": "strace-data1-1048576.txt"}
+{"root": "/data2/efs/bench", "reserve": 0, "output": "{\"qd\":8,\"records\":4000,\"ops_s\":226.1,\"p50_us\":33191.2,\"p95_us\":53939.7,\"p99_us\":62696.4}\n", "strace": "strace-data2-0.txt"}
+{"root": "/data2/efs/bench", "reserve": 1048576, "output": "{\"qd\":8,\"records\":4000,\"ops_s\":291.8,\"p50_us\":26265.2,\"p95_us\":39087.4,\"p99_us\":45338.8}\n", "strace": "strace-data2-1048576.txt"}

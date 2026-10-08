@@ -128,3 +128,12 @@ CPU sample percentages are not wall-time attribution. No production format port.
 [Evidence and remaining gates](../../results/measure/20261008-w93-w96-implementation/w95-principles/README.md).
 Mixed churn and durable index/body/ACK/GC crash-phase recovery remain before
 W95 closure. Packing is not an approved backend migration.
+
+## W96 NUC two-device performance follow-up
+
+Three matched pairs on each NUC device improve single-writer rates, but QD8
+results are mixed (including slower candidate pairs). Balanced A/B/B/A repeats
+and separate syscall-count profiles were collected. Unrelated NUC daemons were
+busy during measurement and were preserved. This is not clean universal
+performance acceptance; the remaining gate is an isolated repeat, with no
+claim that reservation always wins. [All measurements and limits](../../results/measure/20261008-w93-w96-implementation/w96-nuc/README.md).
