@@ -3507,3 +3507,175 @@ W92 Oct 8, 03:01 EDT: server catalog/RPC/FUSE integration passes private NUC
 virtual, POSIX 216/0/1, peer 64/64 and restart-oracle gates. Production deployment,
 400 GiB load/checksums and loaded/fault/NFS acceptance remain open. See latest
 find/stats checkpoint; never treat the private fixture as deployed acceptance.
+
+<a id="w93"></a>
+
+## W93 · Broader durable Raft group commit for tiny-file metadata
+
+**Class/status:** performance investigation; registered Oct 8, 2026. Open;
+broader batching is not implemented or accepted. First priority within the
+four [tiny-file follow-ups](../status/tiny-file-performance-plan-20261008.md).
+
+**Evidence:** NUC round 7, `c22754236b38-tiny-r7`, buffered/TCP. In an eight-second
+instrumented window, n3 pump thread 1746498 completed 1,024 Raft `fdatasync`
+calls totaling 7.394 s (mean 7.22 ms). This is one thread's measured syscall
+elapsed time, not a cluster-wide CPU percentage or a per-created-file ratio.
+The trace includes replication/catch-up/background work. See the
+raw trace `round-7/after/follower-sync.txt` and separate profiles retained
+in the isolated worktree; [evidence location](../status/tiny-file-performance-plan-20261008.md#evidence-location).
+
+**Remaining action:** attribute entries, bytes, queue delay and barrier count
+by group and operation. `drain_inbox` drives received messages serially;
+`raft.c:on_ae_req` and the disk batch callbacks already batch within an
+AppendEntries request. Evaluate a bounded durability batch across eligible
+queued requests, with acknowledgements held until the required records and
+hard state are durable. Account for both parity groups sharing one log, term
+changes, conflicting tails, elections, read authority and shutdown. Size/time
+bounds must prevent starvation and growing follower lag. Do not assume that
+removing a sync call leaves a safe acknowledgement path.
+
+**Governing contracts/related work:** preserve Raft durability, W82 read
+authority, W23/W89 and D30 pressure bounds. W19's older CPU-copy measurement
+remains closed; this item concerns persistence waits. W53 remains the separate
+create/close tail regression under large writers; reuse its mixed-load gate.
+
+**Gate:** controlled per-group and mixed-group A/B workloads must show fewer
+barriers per durable entry and a repeatable sustained rate improvement, with
+reported p50/p95/p99 latency, bounded RSS/queues/lag, and no idle-latency
+regression hidden by averages. Run full POSIX/peer and restart/cold-read gates,
+plus faults around append, sync, ACK, term change, conflict/truncation and
+shutdown. An ACK whose records are not durable is a failure. Separate process
+crash coverage from physical power-loss acceptance.
+
+**Forbidden:** acknowledge before durability, combine votes or commit authority
+across groups, discard pending writes, unbounded batching, or claim that the
+existing preallocation experiment closes this item.
+
+<a id="w94"></a>
+
+## W94 · Atomic CREATE and open-lease acquisition
+
+**Class/status:** client/server metadata performance; registered Oct 8, 2026.
+Open; second priority within the tiny-file follow-ups.
+
+**Evidence:** `efs_fuse_create_at` passes flags 0 to CREATE, then
+`efs_open_acquire` sends a separate HOLD for the first local open. The protocol
+and server already recognize `EFS_CREATE_F_HOLD`. Round 7 generator `openat`
+averaged 90.6 ms; that number includes the entire open path and does not
+attribute all latency to HOLD. The client profile contains
+`efs_client_rpc_hold`. Historical Aug 24 piggybacking is not evidence that the
+current open-description lifecycle safely supports it.
+
+**Remaining action:** measure CREATE/HOLD RPC and consensus counts per file;
+combine creation and lease acquisition in the same durable operation and
+adopt the returned lease in the local open-reference table. Resolve the race
+where another local open/last-close can release the same session/inode lease
+before CREATE adopts it. Cover lost replies/retry identity, allocation failure,
+failed FUSE replies, existing-file O_CREAT, O_EXCL and O_TRUNC. Preserve the
+current first-open/last-close semantics, open-unlinked lifetime and lock cleanup.
+This requires an ownership protocol, not just setting the existing flag.
+
+**Governing contracts/related work:** W72 session/fencing integration, W58 and
+W76 namespace retry identity, W69 attribute coherence. The round-6 reuse of the
+CREATE reply inode removes a GETATTR; it does not implement this item. Do not
+restore historical asynchronous-close behavior while reusing historical ideas.
+
+**Gate:** demonstrate one fewer independent HOLD consensus round on successful
+new-file CREATE, with measured open latency and sustained creation throughput.
+Deterministically interleave CREATE reply/adoption with opens, last-close,
+unlink and peer access. Inject lost replies, leader restart and local allocation
+failure; require one create effect, no leaked or prematurely dropped lease,
+and valid reads from open-unlinked descriptors. Full POSIX/peer and applicable
+session/fencing regression gates must pass before production acceptance.
+
+**Forbidden:** skip the lease, enable the flag without proving adoption races,
+weaken close durability or permission/coherence checks, or report the entire
+open latency as a measured saving.
+
+<a id="w95"></a>
+
+## W95 · Tiny-file data persistence and packing principles
+
+**Class/status:** storage performance experiment; registered Oct 8, 2026.
+Open; a concrete tiny-file investigation under the existing P3/P4.1 and
+[storage engine v2 proposal](storage-engine-v2.md), not a second competing
+storage-layout project or an approved production format change.
+
+**Evidence:** round-7 generator close averaged 77.8 ms; n3 fragment syncs
+averaged 22.4 ms (356 calls in its separate trace). The default chunk is
+128 KiB with 64 KiB fragments, while the generator writes 1–512 byte payloads.
+The client profile concentrates sampled CPU in flush/report and fragment
+transfer. Separate traces cannot be divided to infer an exact fragment count
+or write-amplification ratio per file. Measure that explicitly.
+
+**Remaining action:** use independent `efs-bench` principle drivers to compare
+the relevant file-per-fragment workload with bounded shared durable writes,
+packed records/containers, and appropriate small-payload encodings. Keep the
+benchmark independent of the production engine, as requested. Compare equal
+durability and protection semantics, including checksums, pathname/index
+persistence, fsync/close and recovery; include read and conditional delete/GC
+workloads. Measure syscalls, flushes, bytes, physical allocation, space recovery
+and write amplification through create/overwrite/delete churn. A packing
+experiment is not automatic selection of a backend.
+
+**Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
+W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the
+eventual layout decision; W53 supplies the mixed big-writer/tiny-close gate.
+Any production format change needs an explicit compatibility/migration plan.
+Existing NUC data must be retained; the old P4.1 wipe label is not permission
+to wipe it.
+
+**Gate:** representative tiny payload and 64 KiB-fragment baselines, mixed
+large/small I/O, and create/write/overwrite/delete churn with measured latency,
+physical bytes and durable completion. Test failures between body persistence,
+index publication, acknowledgement and GC; require cold verified bytes,
+identity-safe deletion, bounded garbage and correct quota/space accounting.
+Port only a demonstrated principle to efsd, then run production POSIX/peer,
+cold restart and durability/publication gates. Host-write reductions alone
+must not be advertised as measured NAND endurance improvements.
+
+**Forbidden:** put the efsd engine inside the benchmark as a requirement,
+compare buffered unflushed results with durable results as equivalents,
+acknowledge before required persistence, remove pathname barriers without an
+equivalent protocol, or deploy a layout by wiping the preserved test stores.
+
+<a id="w96"></a>
+
+## W96 · Bounded preallocation for the KV write-ahead log
+
+**Class/status:** metadata storage performance experiment; registered Oct 8,
+2026. Open; round 7 preallocates only the Raft log, not the KV WAL.
+
+**Evidence:** the loaded n3 KV WAL sync mean was 12.1 ms before round 7 and
+14.6 ms afterward; the latter contains only 13 calls and different queue
+conditions, so it proves neither a regression nor an expected saving. A
+separate NVMe microbenchmark measured durable 1 KiB appends at 7.1–7.8 ms
+versus 3.9 ms with preallocation. That motivates a KV-specific experiment,
+not a KV throughput claim. See the
+[probe location](../status/tiny-file-performance-plan-20261008.md#evidence-location).
+
+**Remaining action:** inspect `kv_wal.c` append/replay/reset/rotation and
+compaction ownership before porting the principle. Its current O_APPEND path
+would append behind a physically extended zero tail, so it cannot simply reuse
+the Raft allocation call. Keep valid logical end, reserved capacity and the
+durable watermark distinct; use correct offsets and preserve concurrent group
+commit and hold semantics. Bound reservation and unused space, retain checksum
+and torn-tail recovery, and handle allocation failure or unsupported filesystems
+without claiming unwritten bytes durable. Preserve KV durability before the
+saved applied index advances.
+
+**Governing contracts/related work:** W23/W89 compaction/pressure and D30
+resource bounds; the round-7 Raft candidate is supporting evidence only. This
+item neither changes the applied-marker interval nor substitutes for W93.
+
+**Gate:** identical KV batch distributions and sync policies on the two NUC
+devices, repeated A/B throughput and p50/p95/p99 barrier latency, allocated
+bytes and bounded reservations. Cross allocation/reset/rotation boundaries;
+inject short writes, ENOSPC, sync failure and crash/reopen. Acknowledge only
+recoverable records, preserve valid records before a torn tail, and verify
+compaction plus applied-index recovery. Full KV/Raft, POSIX/peer and cold
+restart acceptance is required for a production port.
+
+**Forbidden:** count reserved zeros as records or durable data, keep O_APPEND
+behind a reserved EOF, zero-fill over valid records, remove durability barriers,
+or present the Raft improvement as measured KV acceptance.
