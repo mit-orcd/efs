@@ -22,8 +22,8 @@ does. The normative text is the linked section, never this page.
   `EFS_RDMA_GID_INDEX=<index>` pins a valid local GID; otherwise discovery
   chooses the first nonzero GID. Set these variables for servers and clients.
 - Splice measurement runs may need a larger `fs.pipe-max-size`; splice is
-  disabled by default, so 8 MiB is not a default-mount prerequisite. See the repo
-  [README](../../README.md#requirements-and-build).
+  disabled by default, so 8 MiB is not a default-mount prerequisite.
+  Enable only for explicit measurement; the recorded profile found no gain.
 - Supported FUSE surface (`chmod`/`chown`/`truncate`/`rename`/`utimens`,
   the lookup-only `.stats` virtual file):
   [operations.md § FUSE surface](../operations/operations.md#fuse-surface).

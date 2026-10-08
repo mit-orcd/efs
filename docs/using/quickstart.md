@@ -6,7 +6,9 @@
 
 Run from a built checkout on Linux with libfuse3 and a usable `/dev/fuse`.
 The build requires libibverbs even for TCP; RDMA additionally needs an active
-verbs device. See the [build prerequisites](../../README.md#requirements-and-build).
+verbs device. Python 3.9 or newer and Linux pidfd support are required by the
+process-control wrappers. FUSE needs `fusermount3` and permission to mount at
+the selected path. See the [build prerequisites](../../README.md#build-and-start).
 Use free ports 17432–17434 and three empty storage roots for this disposable
 example; the wrapper retires an existing daemon on a reused port/path.
 

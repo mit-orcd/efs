@@ -40,7 +40,7 @@ listing the path is not enough. Pass `-f` to stay in the foreground.
 Ordinary client stop quiesces mutations, attempts a bounded drain, and refuses
 to detach unresolved writes. If stop fails, keep the servers available and
 resolve the failure. `--force-discard` explicitly permits loss and lazy detach;
-see the [controlled-stop contract](../../README.md#writeback-and-safe-shutdown). Signals and
+see the [controlled-stop contract](#scripts). Signals and
 external unmount bypass that contract.
 
 ## Transport and storage mode
@@ -51,10 +51,18 @@ verbs device/GID settings. Use the same intended transport on servers and
 clients when validating a configuration, including clients remounted during
 cold verification. AMD's release evidence uses RXE software RoCE on one host.
 
-The portal shown in the [README preview](../../README.md#operator-portal-preview)
+The portal shown in the [README preview](../../README.md#portal-preview)
 is an external tool; its code is not shipped in this repository. For bundled
 status inspection use `efs-mgmt status`, process/log inspection and the GC
 counters. “Heal idle” is not proof of an implemented fragment repair owner.
+
+## Upgrades
+
+Upgrade participating daemons and clients together: the build-ID handshake
+rejects incompatible builds. Preserve existing stores and establish format
+compatibility before a migration. `mkfs` initializes an export; it is not a
+format converter. Compile on the target machine class because native CPU
+instructions can make binaries incompatible with a different host.
 
 ## Running the binaries yourself
 

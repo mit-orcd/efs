@@ -11,6 +11,16 @@ is implemented. Use the current status and evidence when assessing a guarantee.
 The illustrated operator portal is maintained separately and is not shipped
 in this repository. Pick the guide below for your task.
 
+## Tools
+
+| Binary | Role |
+| --- | --- |
+| `efsd` | Storage and metadata daemon |
+| `efs-fuse` | Linux FUSE client |
+| `efs-mgmt` | Cluster status, initialization and metadata administration |
+| `efs-query` | Legacy query tool; placeholder results remain [W80](backlog/work-items.md#w80) |
+| `efs-bench` | Local engine/prototype benchmarks and cluster RPC benchmarks |
+
 ## Use it
 
 - **New user** → [using/quickstart.md](using/quickstart.md) — three local servers, mkfs, mount, first file.
