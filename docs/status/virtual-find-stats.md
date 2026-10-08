@@ -111,7 +111,7 @@ coverage; their feature-off soft skips do not validate the cases above.
 No code or feature defaults were changed by this review. No live deployment
 or performance acceptance was performed.
 
-## W90 activation and first repair checkpoint — Oct 8
+## W92 activation and first repair checkpoint — Oct 8
 
 Work proceeds on `devel-find-stats` from committed `devel` e86b85ac in the
 isolated `work/efs-find-stats` checkout. NUC's prior deployed baseline fails
@@ -160,3 +160,12 @@ must retain 50 GiB and 100,000 free inodes. Initial overnight pipeline aborted
 before any population when the capacity regression exhausted query identities;
 do not interpret that aborted run as load or final acceptance evidence.
 Server snapshot/index implementation and its acceptance gates remain open.
+
+Work-item numbering reconciliation: the independently updated main devel docs
+now allocate W90 to scratch-file expiry and W91 to the directory-local .efs
+command interface. This branch's find/stats repair is therefore **W92**. Earlier
+commits, `w90-*` test/load paths and retained evidence keep their historical
+labels; they refer to this repair, not scratch expiry. Do not overwrite or
+import concurrent main-checkout edits while reconciling documentation.
+
+Latest executable continuation state: [Oct 8 checkpoint](find-stats-checkpoint-20261008.md).

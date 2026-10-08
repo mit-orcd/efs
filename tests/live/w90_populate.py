@@ -7,7 +7,7 @@ import argparse,concurrent.futures,hashlib,json,os,signal,threading,time
 from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('mount');p.add_argument('--target-gib',type=int,default=380);p.add_argument('--small-files',type=int,default=131072);p.add_argument('--workers',type=int,default=4);p.add_argument('--control',default='/data1/efs/w90-control');a=p.parse_args()
 root=Path(a.mount)/'w90-scale';control=Path(a.control);control.mkdir(parents=True,exist_ok=True);root.mkdir(exist_ok=True)
-lock=threading.Lock();stop=threading.Event();started=time.monotonic();completed=0;totalbytes=0
+lock=threading.Lock();dir_lock=threading.Lock();known_dirs=set();stop=threading.Event();started=time.monotonic();completed=0;totalbytes=0
 signal.signal(signal.SIGTERM,lambda *_:stop.set());signal.signal(signal.SIGINT,lambda *_:stop.set())
 ledger=open(control/'completed.jsonl','a',buffering=1)
 def check():
@@ -18,7 +18,12 @@ def check():
             stop.set();raise RuntimeError('space/inode reserve reached: '+path)
 def write(item):
     global completed,totalbytes
-    rel,size=item;check();path=root/rel;path.parent.mkdir(parents=True,exist_ok=True)
+    rel,size=item;check();path=root/rel
+    # The loader owns this dedicated tree. Avoid repeating five ancestor
+    # mkdir RPCs for every file; the bounded namespace has ~2K leaf dirs.
+    with dir_lock:
+        if path.parent not in known_dirs:
+            path.parent.mkdir(parents=True,exist_ok=True);known_dirs.add(path.parent)
     if path.exists():
         if path.stat().st_size!=size:raise RuntimeError('existing file size mismatch: '+str(path))
         return

@@ -3438,7 +3438,7 @@ the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
-## W90 · Server-owned .find/.stats snapshots and large namespace acceptance
+## W92 · Server-owned .find/.stats snapshots and large namespace acceptance
 
 Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
 Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
