@@ -4,7 +4,9 @@ Private TCP cluster under /data1/efs/w92-query-fixture-20261008c, ports
 24800–24803. Production /data1/efs/src, stores and mounts unchanged; population
 continues. Four owned daemons terminated cleanly. Stores/logs retained remotely.
 The rsynced offline build has no Git metadata: --version says unknown; exact
-binary SHA256 identities are retained. Source belongs to the companion commit.
+binary SHA256 identities are retained. Source belongs to commit `220cf45a` (catalog component `ed2808f2`).
+The version.o build timestamp is older than the final link; SHA256 is the exact
+artifact identity here. This is not a clean deployed binary/build-ID claim.
 
 `tests/live/query_publication.py` passes: dual-group voters n2/n3 publish an
 initial catalog, actual Raft CREATEs converge to four files during quiet T

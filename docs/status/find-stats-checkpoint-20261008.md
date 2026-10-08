@@ -170,9 +170,9 @@ No deployed binary changed. Loader remains active, ~16,384 new small files /
 803 GiB /home, hundreds of millions of free inodes. No errors or intervention
 required; continue monitoring before any eventual pause/deployment.
 
-## Oct 8, 02:37 EDT — host background publication smoke passed
+## Oct 8, 02:36 EDT — host background publication smoke passed
 
-Catalog builder commit: `ed2808f2`. The next focused component adds one host
+Catalog builder commit: `ed2808f2`; host publisher commit: `220cf45a`. The host component adds one
 publisher with N=256 metadata-key writes / T=2000 ms, 200 ms minimum spacing,
 2 s failed-attempt backoff, 256 MiB candidate catalog and 64 MiB memtable-copy
 budgets, plus a cooperative 10 s build deadline. One builder retains at most
