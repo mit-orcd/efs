@@ -3437,3 +3437,17 @@ with raw logs. This format repair does not establish a follower pressure bound;
 the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
+
+## W90 · Server-owned .find/.stats snapshots and large namespace acceptance
+
+Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
+Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
+NUC target: staged population toward 400 GiB real logical payload, with a large
+small-file namespace, two cold mounts, shard-distributed queries and measured
+node/RPC work. NUC existing data is preserved. No silent limit truncation,
+client-local authoritative stats or rebuild-on-cat acceptance.
+
+Initial baseline: live NUC contains ~20 GiB logical but root `.stats` reports
+all counts/bytes zero; `.find/001.dat` returns the existing file. Existing walk
+silently caps at 65,536 entries and 128 levels. Implementation in progress;
+server index/rollups and large-tree acceptance remain required before closure.

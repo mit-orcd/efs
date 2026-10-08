@@ -523,9 +523,14 @@ static struct {
  * separate dirh representation. Untagged fh remains supported for virtual
  * files and internal calls that have no kernel open description. */
 #define EFS_FILE_FH_TAG (1ULL << 63)
+#define EFS_VIRTUAL_OPEN_BYTES (64u << 20)
+static pthread_mutex_t g_virtual_open_mu = PTHREAD_MUTEX_INITIALIZER;
+static size_t g_virtual_open_bytes;
 struct efs_file_handle {
     efs_ino_t ino;
     struct efs_wb_description *errors;
+    char *snapshot; /* Immutable virtual-file bytes owned by this open. */
+    size_t snapshot_len;
 };
 static struct efs_file_handle *efs_file_handle(const struct fuse_file_info *fi)
 {
@@ -557,10 +562,45 @@ static void efs_file_close(struct fuse_file_info *fi)
 {
     struct efs_file_handle *h = efs_file_handle(fi);
     if (h) {
-        efs_wb_description_close(h->errors);
+        if (h->errors) efs_wb_description_close(h->errors);
+        if (h->snapshot) {
+            pthread_mutex_lock(&g_virtual_open_mu);
+            g_virtual_open_bytes -= h->snapshot_len;
+            pthread_mutex_unlock(&g_virtual_open_mu);
+            free(h->snapshot);
+        }
         free(h);
         fi->fh = 0;
     }
+}
+/* Virtual opens use the same tagged description, without writeback/leases. */
+static int virtual_file_open(struct fuse_file_info *fi, efs_ino_t ino,
+                             const char *text, size_t len)
+{
+    if (!fi) return -EINVAL;
+    struct efs_file_handle *h = calloc(1, sizeof(*h));
+    if (!h) return -ENOMEM;
+    pthread_mutex_lock(&g_virtual_open_mu);
+    if (len > EFS_VIRTUAL_OPEN_BYTES - g_virtual_open_bytes) {
+        pthread_mutex_unlock(&g_virtual_open_mu);
+        free(h);
+        return -ENOMEM;
+    }
+    g_virtual_open_bytes += len;
+    pthread_mutex_unlock(&g_virtual_open_mu);
+    h->snapshot = malloc(len ? len : 1);
+    if (!h->snapshot) {
+        pthread_mutex_lock(&g_virtual_open_mu);
+        g_virtual_open_bytes -= len;
+        pthread_mutex_unlock(&g_virtual_open_mu);
+        free(h);
+        return -ENOMEM;
+    }
+    if (len) memcpy(h->snapshot, text, len);
+    h->snapshot_len = len;
+    h->ino = ino;
+    fi->fh = EFS_FILE_FH_TAG | (uint64_t)(uintptr_t)h;
+    return 0;
 }
 static int efs_file_sync_error(struct fuse_file_info *fi, efs_ino_t ino,
                                 int was_stalled, int rc)
@@ -847,6 +887,11 @@ static int find_out_add(struct find_out *o, const char *prefix, const char *rel)
     int slash = (pl > 0 && prefix[pl - 1] != '/' && rel[0] != '/');
     size_t need = pl + (slash ? 1 : 0) + rl + 1; /* newline */
 
+    /* The legacy newline format cannot represent literal newline names.
+     * Fail explicitly until a versioned escaped output is introduced. */
+    if (strchr(rel, '\n') || strchr(prefix, '\n')) return -EILSEQ;
+    if (need > (16u << 20) || o->len > (16u << 20) - need - 1)
+        return -EOVERFLOW;
     if (o->len + need + 1 > o->cap) {
         size_t ncap = o->cap ? o->cap * 2 : 4096;
         while (ncap < o->len + need + 1)
@@ -963,6 +1008,17 @@ static void find_host_prefix(const char *dir_fuse, char *out, size_t cap)
         snprintf(out, cap, "%s%s", g_mountpoint, df);
 }
 
+static int efs_rc_to_errno(int rc);
+static int check_access(const struct efs_inode *ino, uid_t uid, gid_t gid, int mask);
+static int virtual_access(efs_ino_t ino)
+{
+    struct efs_inode row;
+    int rc = efs_client_stat_ino(ino, &row);
+    if (rc != EFS_OK) return efs_rc_to_errno(rc);
+    const struct fuse_ctx *ctx = ll_ctx();
+    return ctx ? check_access(&row, ctx->uid, ctx->gid, R_OK | X_OK) : 0;
+}
+
 /* READDIR-walk one directory (and recurse into children). Matches are
  * rendered as host-absolute paths under host_prefix. A missing/invalid
  * child is skipped; a failure of the query directory itself is fatal. */
@@ -975,8 +1031,10 @@ static int find_walk_dir(efs_ino_t dir_ino, const char *rel,
     char name_cur[EFS_MAX_NAME];
     struct efs_inode *ents;
 
+    int access = virtual_access(dir_ino);
+    if (access) return access == -EACCES ? EFS_ERR_ACCES : EFS_ERR_IO;
     if (depth > EFS_FIND_WALK_DEPTH)
-        return 0;
+        return -EOVERFLOW;
     ents = malloc(sizeof(*ents) * EFS_READDIR_MAX);
     if (!ents)
         return EFS_ERR_NOMEM;
@@ -1008,7 +1066,7 @@ static int find_walk_dir(efs_ino_t dir_ino, const char *rel,
                 continue;
             if (o->nvisit >= EFS_FIND_WALK_MAX) {
                 free(ents);
-                return 0;
+                return -EOVERFLOW;
             }
             o->nvisit++;
             if (rel[0] == '\0')
@@ -1016,8 +1074,10 @@ static int find_walk_dir(efs_ino_t dir_ino, const char *rel,
             else
                 nwr = snprintf(child_rel, sizeof(child_rel), "%s/%s",
                               rel, ents[i].name);
-            if (nwr < 0 || (size_t)nwr >= sizeof(child_rel))
-                continue;
+            if (nwr < 0 || (size_t)nwr >= sizeof(child_rel)) {
+                free(ents);
+                return -ENAMETOOLONG;
+            }
             if (find_name_match(ents[i].name, type, term, term_len)) {
                 int arc = find_out_add(o, host_prefix, child_rel);
                 if (arc != 0) {
@@ -1085,10 +1145,19 @@ static struct {
     efs_ino_t dir_ino;
     char term[EFS_MAX_NAME]; /* raw pattern, e.g. "*report*" */
     uint64_t ms;
+    uid_t uid;
+    gid_t gid;
     int len;
     char *text;
 } g_find_res[EFS_FIND_RES_N];
 static pthread_mutex_t g_find_res_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static int find_res_caller(int i)
+{
+    const struct fuse_ctx *ctx = ll_ctx();
+    return g_find_res[i].uid == (ctx ? ctx->uid : 0) &&
+           g_find_res[i].gid == (ctx ? ctx->gid : 0);
+}
 
 /* Ensure a fresh cached result for (dir_ino, pattern). Returns 0 on success
  * (result cached, possibly empty), -EINVAL for a bad/short term, -EIO on
@@ -1106,12 +1175,15 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     if (find_query_dir_fuse(query_path, dir_fuse, sizeof(dir_fuse)) != 0)
         return -EINVAL;
 
+    int access = virtual_access(dir_ino);
+    if (access) return access;
+    const struct fuse_ctx *ctx = ll_ctx();
     uint64_t now = stats_now_ms();
     pthread_mutex_lock(&g_find_res_mu);
     for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (g_find_res[i].valid && g_find_res[i].dir_ino == dir_ino &&
+        if (g_find_res[i].valid && find_res_caller(i) && g_find_res[i].dir_ino == dir_ino &&
             strcmp(g_find_res[i].term, pattern) == 0 &&
-            now - g_find_res[i].ms < EFS_FIND_RES_TTL_MS) {
+            (!ctx || ctx->uid == 0) && now - g_find_res[i].ms < EFS_FIND_RES_TTL_MS) {
             pthread_mutex_unlock(&g_find_res_mu);
             return 0;
         }
@@ -1121,9 +1193,11 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     /* Miss: walk the live tree outside the result-cache lock. */
     char *text = NULL;
     int len = 0;
-    if (find_run_query(dir_ino, dir_fuse, type, term, term_len, &text, &len) != 0) {
+    int qrc = find_run_query(dir_ino, dir_fuse, type, term, term_len, &text, &len);
+    if (qrc != 0) {
         free(text);
-        return -EIO;
+        if (qrc == -EOVERFLOW || qrc == -ENAMETOOLONG || qrc == -EILSEQ) return qrc;
+        return efs_rc_to_errno(qrc);
     }
 
     pthread_mutex_lock(&g_find_res_mu);
@@ -1151,6 +1225,8 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     strncpy(g_find_res[slot].term, pattern, EFS_MAX_NAME - 1);
     g_find_res[slot].term[EFS_MAX_NAME - 1] = '\0';
     g_find_res[slot].ms = now;
+    g_find_res[slot].uid = ctx ? ctx->uid : 0;
+    g_find_res[slot].gid = ctx ? ctx->gid : 0;
     g_find_res[slot].text = text; /* takes ownership */
     g_find_res[slot].len = len;
     pthread_mutex_unlock(&g_find_res_mu);
@@ -1161,12 +1237,12 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
 static int find_query_len(efs_ino_t dir_ino, const char *query_path,
                            const char *pattern)
 {
-    if (find_query_ensure(dir_ino, query_path, pattern) != 0)
-        return -1;
+    int rc = find_query_ensure(dir_ino, query_path, pattern);
+    if (rc != 0) return rc;
     pthread_mutex_lock(&g_find_res_mu);
     int len = -1;
     for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (g_find_res[i].valid && g_find_res[i].dir_ino == dir_ino &&
+        if (g_find_res[i].valid && find_res_caller(i) && g_find_res[i].dir_ino == dir_ino &&
             strcmp(g_find_res[i].term, pattern) == 0) {
             len = g_find_res[i].len;
             break;
@@ -1182,12 +1258,12 @@ static int find_query_read(efs_ino_t dir_ino, const char *query_path,
                            const char *pattern,
                            char *buf, size_t size, off_t offset)
 {
-    if (find_query_ensure(dir_ino, query_path, pattern) != 0)
-        return -EINVAL;
+    int rc = find_query_ensure(dir_ino, query_path, pattern);
+    if (rc != 0) return rc;
     pthread_mutex_lock(&g_find_res_mu);
     int n = 0;
     for (int i = 0; i < EFS_FIND_RES_N; i++) {
-        if (!g_find_res[i].valid || g_find_res[i].dir_ino != dir_ino ||
+        if (!g_find_res[i].valid || !find_res_caller(i) || g_find_res[i].dir_ino != dir_ino ||
             strcmp(g_find_res[i].term, pattern) != 0)
             continue;
         if (offset < g_find_res[i].len) {
@@ -1238,7 +1314,7 @@ static int find_query_fill_stat(const struct efs_inode *parent,
 {
     int len = find_query_len(parent->ino, query_path, pattern);
     if (len < 0)
-        return -ENOENT;
+        return len;
     memset(stbuf, 0, sizeof(*stbuf));
     stbuf->st_ino = find_query_ino(parent->ino, pattern);
     stbuf->st_mode = S_IFREG | 0444;
@@ -1544,6 +1620,19 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
 {
     int vk = virt_kind(ino);
     int rc;
+    if (vk == 1 || vk == 2) {
+        int access = virtual_access(virt_parent(ino));
+        if (access) return access;
+    }
+    struct efs_file_handle *vh = efs_file_handle(fi);
+    if ((vk == 1 || vk == 3) && vh && vh->snapshot) {
+        memset(stbuf, 0, sizeof(*stbuf));
+        stbuf->st_ino = ino;
+        stbuf->st_mode = S_IFREG | 0444;
+        stbuf->st_nlink = 1;
+        stat_set_size_blocks(stbuf, vh->snapshot_len, vh->snapshot_len);
+        return 0;
+    }
     if (vk == 1) {
         struct efs_inode parent;
         if (!feature_enabled(EFS_FEATURE_STATS))
@@ -2032,15 +2121,21 @@ static int fuse_odirect_unaligned(const struct fuse_file_info *fi,
 static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
 {
     int vk = virt_kind(ino);
+    if (vk == 1 || vk == 2) {
+        int access = virtual_access(virt_parent(ino));
+        if (access) return access;
+    }
     if (vk == 1) {
         if (!feature_enabled(EFS_FEATURE_STATS))
             return -ENOENT;
         if ((fi->flags & O_ACCMODE) != O_RDONLY)
             return -EACCES;
-        if (fi) {
-            fi->fh = ino;
-            fuse_fi_direct_io(fi);
-        }
+        struct stats_ent snapshot;
+        int rc = stats_snapshot(virt_parent(ino), &snapshot);
+        if (rc) return rc;
+        rc = virtual_file_open(fi, ino, snapshot.text, snapshot.len);
+        if (rc) return rc;
+        fuse_fi_direct_io(fi);
         return 0;
     }
     if (vk == 3) {
@@ -2062,12 +2157,20 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         else
             snprintf(query_path, sizeof(query_path), "%s/%s/%s",
                      dir_fuse, EFS_FIND_NAME, term);
-        if (find_query_len(dir_ino, query_path, term) < 0)
-            return -ENOENT;
-        if (fi) {
-            fi->fh = ino;
-            fuse_fi_direct_io(fi);
+        int rc = find_query_ensure(dir_ino, query_path, term);
+        if (rc) return rc;
+        rc = -EAGAIN; /* Eviction between ensure and pin must not look empty. */
+        pthread_mutex_lock(&g_find_res_mu);
+        for (int i = 0; i < EFS_FIND_RES_N; i++) {
+            if (g_find_res[i].valid && find_res_caller(i) && g_find_res[i].dir_ino == dir_ino &&
+                strcmp(g_find_res[i].term, term) == 0) {
+                rc = virtual_file_open(fi, ino, g_find_res[i].text, g_find_res[i].len);
+                break;
+            }
         }
+        pthread_mutex_unlock(&g_find_res_mu);
+        if (rc) return rc;
+        fuse_fi_direct_io(fi);
         return 0;
     }
     if (vk == 2)
@@ -2122,6 +2225,18 @@ static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offse
                              struct fuse_file_info *fi)
 {
     int vk = virt_kind(ino);
+    if ((vk == 1 || vk == 3) && fi) {
+        if (!feature_enabled(vk == 1 ? EFS_FEATURE_STATS : EFS_FEATURE_FIND))
+            return -ENOENT;
+        struct efs_file_handle *h = efs_file_handle(fi);
+        if (!h || !h->snapshot) return -EBADF;
+        if (offset < 0) return -EINVAL;
+        if ((uint64_t)offset >= h->snapshot_len) return 0;
+        size_t n = h->snapshot_len - (size_t)offset;
+        if (n > size) n = size;
+        memcpy(buf, h->snapshot + offset, n);
+        return (int)n;
+    }
     if (vk == 1) {
         struct stats_ent e;
         if (!feature_enabled(EFS_FEATURE_STATS))
@@ -3463,6 +3578,7 @@ static int efs_fuse_flush_ino(fuse_ino_t ino, struct fuse_file_info *fi)
      * efs_append_flush_report.
      * fi->flags is not O_APPEND on this path. */
     efs_ino_t file = efs_file_ino(fi, (efs_ino_t)ino);
+    if (virt_kind(file)) return 0;
     int was_stalled = efs_wb_inode_stalled(file);
     int rc = efs_append_flush_report(fi, file);
     rc = efs_file_sync_error(fi, file, was_stalled, rc);
@@ -4066,6 +4182,7 @@ static int efs_fuse_truncate_ino(fuse_ino_t ino, off_t size,
 static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
 {
     efs_ino_t fh = efs_file_ino(fi, (efs_ino_t)ino);
+    if (virt_kind(fh)) { efs_file_close(fi); return 0; }
     int leased = 0;
     efs_client_note_meta_change(0);
     efs_file_close(fi);
@@ -4833,6 +4950,8 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
         return -ENAMETOOLONG;
 
     if (virt_kind(parent) == 2) {
+        int access = virtual_access(virt_parent(parent));
+        if (access) return access;
         fuse_ino_t q;
         if (!feature_enabled(EFS_FEATURE_FIND))
             return -ENOENT;
@@ -4857,11 +4976,15 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
         return lookup_fill(up, e, NULL);
     }
     if (strcmp(name, EFS_STATS_NAME) == 0) {
+        int access = virtual_access(parent);
+        if (access) return access;
         if (!feature_enabled(EFS_FEATURE_STATS))
             return -ENOENT;
         return lookup_fill(virt_stats_ino((efs_ino_t)parent), e, NULL);
     }
     if (strcmp(name, EFS_FIND_NAME) == 0) {
+        int access = virtual_access(parent);
+        if (access) return access;
         if (!feature_enabled(EFS_FEATURE_FIND))
             return -ENOENT;
         return lookup_fill(virt_find_ino((efs_ino_t)parent), e, NULL);

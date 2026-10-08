@@ -110,3 +110,27 @@ coverage; their feature-off soft skips do not validate the cases above.
 
 No code or feature defaults were changed by this review. No live deployment
 or performance acceptance was performed.
+
+## W90 activation and first repair checkpoint — Oct 8
+
+Work proceeds on `devel-find-stats` from committed `devel` e86b85ac in the
+isolated `work/efs-find-stats` checkout. NUC's prior deployed baseline fails
+all four new `tests/live/virtual_interfaces.py` gates: open .find output grows
+from 3500 to 3534 bytes after TTL/mutation; peer-created 4096-byte file leaves
+.stats counts zero; invalid pattern returns ENOENT; protected .stats succeeds.
+Raw evidence: results/measure/20261008-w90/baseline.jsonl.
+
+First repair pins immutable bytes in tagged virtual open descriptions, releases
+without normal file leases/writeback, retains per-open size across refresh,
+rejects silent walk depth/entry/path/output limits, preserves query errno,
+and enforces parent/subtree read/search permissions. Non-root legacy query
+cache reuse is disabled pending authorization-safe server query snapshots.
+Open-result bytes have a 64 MiB aggregate limit; query output a 16 MiB limit.
+Literal newline paths fail EILSEQ until a versioned output format exists.
+This is a correctness foundation, NOT closure: client-local stats and legacy
+read-triggered walks still need replacement by server snapshots/indexes.
+
+The first client repair compiles without warnings on NUC. Live fixed gates,
+server architecture, staged 400 GiB population and final acceptance remain
+outstanding at this checkpoint. Feature switches SET_FEATURES are retired in
+current protocol; revisit the older toggle gate wording against current code.
