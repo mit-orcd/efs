@@ -4924,35 +4924,41 @@ static void drain_inbox(struct efs_raft_host *h)
     h->inbox_n = 0;
     pthread_mutex_unlock(&h->inbox_mu);
 
-    for (i = 0; i < n; i++) {
+    /* Bounded, contiguous groups only: no message reordering or extra wait.
+     * The core flushes before term/conflict/read/configuration boundaries. */
+    struct efs_raft_msg msgs[EFS_RAFT_RECV_MAX];
+    uint8_t *commands[EFS_RAFT_RECV_MAX];
+    struct efs_raft *pending = NULL;
+    uint32_t count = 0;
+    uint64_t bytes = 0;
+    for (i = 0; i <= n; i++) {
         struct efs_raft_msg msg;
         uint8_t *cmd = NULL;
         uint32_t cmd_cap = 0;
-        struct efs_raft *r;
-        int rc;
-
-        /* Batched AE: total cmd bytes = len - HDR - 12*nentries <= len - HDR.
-         * Allocate the upper bound (the per-entry headers are slack). */
-        if (local[i].len > EFS_WIRE_RAFT_HDR_LEN)
-            cmd_cap = local[i].len - EFS_WIRE_RAFT_HDR_LEN;
-        if (cmd_cap) {
-            cmd = malloc(cmd_cap);
-            if (!cmd) {
-                free(local[i].buf);
-                continue;
-            }
+        struct efs_raft *r = NULL;
+        int rc = EFS_ERR_INVAL;
+        if (i < n) {
+            if (local[i].len > EFS_WIRE_RAFT_HDR_LEN)
+                cmd_cap = local[i].len - EFS_WIRE_RAFT_HDR_LEN;
+            if (!cmd_cap || (cmd = malloc(cmd_cap)) != NULL)
+                rc = efs_wire_raft_decode(local[i].buf, local[i].len,
+                                           &msg, cmd, cmd_cap);
+            free(local[i].buf);
+            if (rc == EFS_OK) r = group_raft(h, msg.group);
         }
-        rc = efs_wire_raft_decode(local[i].buf, local[i].len, &msg, cmd,
-                                  cmd_cap);
-        free(local[i].buf);
-        if (rc != EFS_OK) {
-            free(cmd);
-            continue;
+        if (count && (r != pending || count == EFS_RAFT_RECV_MAX ||
+                      bytes + cmd_cap > EFS_RAFT_AE_BYTES)) {
+            (void)efs_raft_recv_batch(pending, msgs, count);
+            for (uint32_t j = 0; j < count; j++) free(commands[j]);
+            count = 0;
+            bytes = 0;
         }
-        r = group_raft(h, msg.group);
-        if (r)
-            (void)efs_raft_recv(r, &msg);
-        free(cmd);
+        if (r) {
+            pending = r;
+            msgs[count] = msg;
+            commands[count++] = cmd;
+            bytes += cmd_cap;
+        } else free(cmd);
     }
 }
 

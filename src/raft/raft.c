@@ -4,8 +4,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct recv_replies {
+    struct { int to, success, probe; uint64_t match, read; } reply[EFS_RAFT_RECV_MAX];
+    uint32_t n;
+    uint64_t term, boot;
+};
+
 struct efs_raft {
     int id;
+    struct recv_replies *recv_replies; /* stack-owned, only inside recv_batch */
+    int storage_failed; /* failed deferred persistence requires restart */
     int role;
     int leader;
     uint8_t group;
@@ -289,6 +297,18 @@ static int send_msg(struct efs_raft *r, struct efs_raft_msg *m)
      * for a read-round context; legacy peers echo zero and fail closed. */
     if (m->type == EFS_RAFT_MSG_AE_REQ)
         m->last_log_index = r->read_in_flight == 1 ? r->read_round : 0;
+    if (r->recv_replies) {
+        struct recv_replies *q = r->recv_replies;
+        if (m->type != EFS_RAFT_MSG_AE_REP || q->n == EFS_RAFT_RECV_MAX)
+            return EFS_ERR_INVAL;
+        q->reply[q->n].to = m->to;
+        q->reply[q->n].success = m->success;
+        q->reply[q->n].probe = m->vote_granted;
+        q->reply[q->n].match = m->match_index;
+        q->reply[q->n].read = m->last_log_index;
+        q->n++;
+        return EFS_OK;
+    }
     return r->send(r->net, m);
 }
 
@@ -340,6 +360,8 @@ static void maybe_leave(struct efs_raft *r)
 
 static int apply_committed(struct efs_raft *r)
 {
+    if (r->recv_replies)
+        return EFS_OK;
     while (r->last_applied < r->commit_index) {
         uint64_t idx = r->last_applied + 1;
         uint64_t term = 0;
@@ -1595,6 +1617,8 @@ int efs_raft_tick(struct efs_raft *r)
 {
     if (!r)
         return EFS_ERR_INVAL;
+    if (r->storage_failed)
+        return EFS_ERR_IO;
     r->ticks++;
     if (r->role == EFS_RAFT_LEADER) {
         r->hb_elapsed++;
@@ -1614,6 +1638,8 @@ int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg)
 
     if (!r || !msg)
         return EFS_ERR_INVAL;
+    if (r->storage_failed)
+        return EFS_ERR_IO;
     if (msg->to != r->id)
         return EFS_ERR_INVAL;
     if (msg->from < 0 || msg->from >= EFS_RAFT_MAX_PEERS)
@@ -1639,6 +1665,99 @@ int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg)
     default:
         return EFS_ERR_INVAL;
     }
+}
+
+/* Keep conflict/truncation and hard-state changes outside deferred persistence.
+ * This deliberately starts narrower than all AE traffic: log matching must
+ * already hold and every entry must extend the current tail. */
+static int recv_can_batch(struct efs_raft *r, const struct efs_raft_msg *m,
+                          uint64_t *bytes)
+{
+    uint64_t index, term;
+    *bytes = 0;
+    if (!r->store->batch_begin || !r->store->batch_end ||
+        r->role != EFS_RAFT_FOLLOWER || m->type != EFS_RAFT_MSG_AE_REQ ||
+        m->group != r->group || m->to != r->id || m->from != r->leader ||
+        m->term != r->current_term || !m->nentries ||
+        m->nentries > EFS_RAFT_AE_MAX ||
+        last_log(r, &index, &term) != EFS_OK ||
+        m->prev_index != index || m->prev_term != term)
+        return 0;
+    for (uint32_t i = 0; i < m->nentries; i++) {
+        if (is_cfg_cmd(m->entries[i].cmd, m->entries[i].clen)) return 0;
+        *bytes += m->entries[i].clen;
+    }
+    return *bytes <= EFS_RAFT_AE_BYTES;
+}
+
+static int recv_batch_finish(struct efs_raft *r, int prior)
+{
+    struct recv_replies *q = r->recv_replies;
+    int rc = r->store->batch_end(r->store_ctx);
+    r->recv_replies = NULL;
+    if (rc != EFS_OK || prior != EFS_OK) {
+        /* Never allow a later heartbeat to apply an unproven tail. */
+        r->storage_failed = 1;
+        r->commit_index = r->last_applied;
+        r->role = EFS_RAFT_FOLLOWER;
+        r->leader = -1;
+        r->allow_campaign = 0;
+        r->read_in_flight = 0;
+        return rc != EFS_OK ? rc : prior;
+    }
+    rc = apply_committed(r);
+    if (rc != EFS_OK) return rc;
+    for (uint32_t i = 0; i < q->n; i++) {
+        struct efs_raft_msg reply;
+        memset(&reply, 0, sizeof(reply));
+        reply.type = EFS_RAFT_MSG_AE_REP;
+        reply.to = q->reply[i].to;
+        reply.success = q->reply[i].success;
+        reply.vote_granted = q->reply[i].probe;
+        reply.match_index = q->reply[i].match;
+        reply.last_log_index = q->reply[i].read;
+        reply.from = r->id;
+        reply.group = r->group;
+        reply.term = q->term;
+        reply.boot_id = q->boot;
+        int sent = r->send(r->net, &reply);
+        if (rc == EFS_OK) rc = sent;
+    }
+    return rc;
+}
+
+int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
+                        uint32_t n)
+{
+    struct recv_replies replies = {0};
+    uint64_t total = 0;
+    int rc;
+    if (!r || !msgs || !n || n > EFS_RAFT_RECV_MAX || r->recv_replies)
+        return EFS_ERR_INVAL;
+    if (r->storage_failed) return EFS_ERR_IO;
+    for (uint32_t i = 0; i < n; i++) {
+        uint64_t bytes;
+        int eligible = recv_can_batch(r, &msgs[i], &bytes);
+        if (r->recv_replies && (!eligible || total + bytes > EFS_RAFT_AE_BYTES)) {
+            rc = recv_batch_finish(r, EFS_OK);
+            if (rc != EFS_OK) return rc;
+            replies.n = 0;
+            total = 0;
+            eligible = recv_can_batch(r, &msgs[i], &bytes);
+        }
+        if (eligible && !r->recv_replies) {
+            rc = r->store->batch_begin(r->store_ctx);
+            if (rc != EFS_OK) return rc;
+            replies.term = r->current_term;
+            replies.boot = r->boot_id;
+            r->recv_replies = &replies;
+        }
+        rc = efs_raft_recv(r, &msgs[i]);
+        if (rc != EFS_OK)
+            return r->recv_replies ? recv_batch_finish(r, rc) : rc;
+        if (r->recv_replies) total += bytes;
+    }
+    return r->recv_replies ? recv_batch_finish(r, EFS_OK) : EFS_OK;
 }
 
 int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,

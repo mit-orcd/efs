@@ -59,3 +59,26 @@ Three matched 1-KiB durable-append pairs: QD1 baseline 4016–4163 ops/s vs
 preallocated 6182–6941; QD8 baseline 16727–17161 vs 17816–18046. This supports
 keeping the bounded optimization on AMD, not claiming a NUC/two-device result.
 [Measurements and fixture evidence](../../results/measure/20261008-w93-w96-implementation/w96-preallocation/README.md).
+
+## W93 bounded follower request batching
+
+The host retains inbox order and sends at most 16 contiguous same-group messages
+and 1 MiB to the core. The core only defers stable-term, same-leader, strictly
+extending data appends. Duplicates, conflicts/truncations, configuration changes,
+reads and term changes flush first. No additional batching delay. Replies keep
+the original term/read context; apply and ACK wait for the durable barrier.
+A failed batch fences the instance against later receive/tick until restart.
+
+Deterministic tests prove barrier reduction (three requests / one barrier),
+ACK/apply ordering, byte/count bounds, append/sync faults, duplicate and term
+boundaries. Real disk tests crash with another group's shared hold outstanding:
+all acknowledged cold bytes survive, the other hold is not consumed. AMD
+Raft/core/store tests and local ASan/UBSan pass. Full private AMD fixture
+`gc-direct-qu6dh4p6` passes POSIX 216/0/1, peer 64/64, append/sync/replay/dirty
+stop/shutdown, GC and deliberate WAL repair/second crash. Installed service restored.
+
+Controlled queued-request cost: serial 6382–6579 durable entries/s versus
+49982–50360 batched; p99 readiness-to-ACK 2555–2715 versus 366–416 us.
+These are per-group protocol measurements, not filesystem throughput claims.
+Mixed-group sustained and idle-latency measurements remain before W93 closure.
+[Evidence](../../results/measure/20261008-w93-w96-implementation/w93-batching/README.md).

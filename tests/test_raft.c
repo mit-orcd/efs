@@ -1396,8 +1396,122 @@ static void test_ae_full_window_not_resent_per_propose(void)
     }
 }
 
+
+/* Durable follower request batching: callbacks must never see pending bytes. */
+static struct {
+    struct efs_raft_store original;
+    unsigned depth, barriers, replies, applies;
+    int fail_end, fail_append;
+    uint64_t durable, read_context;
+} recv_test;
+static int recv_test_begin(void *ctx)
+{
+    (void)ctx;recv_test.depth++;return EFS_OK;
+}
+static int recv_test_end(void *ctx)
+{
+    uint64_t term;
+    CHECK(recv_test.depth > 0, "balanced receive batch");
+    if (--recv_test.depth) return EFS_OK;
+    recv_test.barriers++;
+    if (recv_test.fail_end) return EFS_ERR_IO;
+    return recv_test.original.last(ctx, &recv_test.durable, &term);
+}
+static int recv_test_append(void *ctx,uint64_t index,uint64_t term,
+                            const uint8_t *cmd,uint32_t len)
+{
+    if(recv_test.fail_append)return EFS_ERR_IO;
+    int rc=recv_test.original.append(ctx,index,term,cmd,len);
+    if(rc==EFS_OK && !recv_test.depth){recv_test.durable=index;recv_test.barriers++;}
+    return rc;
+}
+static int recv_test_send(void *ctx,const struct efs_raft_msg *m)
+{
+    (void)ctx;
+    CHECK(!recv_test.depth,"no ACK before persistence");
+    CHECK(!m->success || m->match_index<=recv_test.durable,"ACK covers durable bytes only");
+    recv_test.replies++;
+    recv_test.read_context=m->last_log_index;
+    return EFS_OK;
+}
+static int recv_test_apply(void *ctx,uint64_t index,uint64_t term,
+                           const uint8_t *cmd,uint32_t len)
+{
+    (void)ctx;(void)term;(void)cmd;(void)len;
+    CHECK(!recv_test.depth && index<=recv_test.durable,"apply after durable boundary");
+    recv_test.applies++;
+    return EFS_OK;
+}
+static void test_recv_batch(void)
+{
+    for(unsigned failure=0;failure<3;failure++) {
+        memset(&recv_test,0,sizeof(recv_test));
+        struct efs_raft_store *store=efs_raft_mem_create();
+        struct efs_raft_store ops=*store;
+        recv_test.original=ops;
+        ops.append=recv_test_append;ops.batch_begin=recv_test_begin;ops.batch_end=recv_test_end;
+        struct efs_raft_cfg cfg={0};
+        cfg.id=1;cfg.n=3;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
+        cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
+        struct efs_raft *r=efs_raft_new(&cfg);
+        CHECK(r!=NULL,"receive fixture");
+        struct efs_raft_msg msgs[3];memset(msgs,0,sizeof(msgs));
+        msgs[0].type=EFS_RAFT_MSG_AE_REQ;msgs[0].from=0;msgs[0].to=1;msgs[0].term=2;
+        CHECK(efs_raft_recv(r,&msgs[0])==EFS_OK,"establish stable leader");
+        recv_test.replies=0;
+        for(unsigned i=0;i<3;i++) {
+            msgs[i]=msgs[0];msgs[i].prev_index=i;msgs[i].prev_term=i?2:0;
+            msgs[i].nentries=1;msgs[i].entries[0].term=2;
+            msgs[i].entries[0].cmd=(const uint8_t*)"a";msgs[i].entries[0].clen=1;
+            msgs[i].leader_commit=i+1;msgs[i].last_log_index=10+i;
+        }
+        recv_test.fail_end=failure==1;recv_test.fail_append=failure==2;
+        int rc=efs_raft_recv_batch(r,msgs,3);
+        if(failure) {
+            CHECK(rc==EFS_ERR_IO && !recv_test.replies && !recv_test.applies,
+                  "failed batch neither ACKs nor applies");
+            recv_test.fail_end=recv_test.fail_append=0;
+            CHECK(efs_raft_recv(r,&msgs[0])==EFS_ERR_IO && efs_raft_tick(r)==EFS_ERR_IO,
+                  "failed persistence fences later heartbeats and elections");
+        } else {
+            CHECK(rc==EFS_OK && recv_test.barriers==1 && recv_test.replies==3 && recv_test.applies==3,
+                  "three requests share one durable boundary");
+            CHECK(recv_test.read_context==12,"read context preserved");
+            unsigned barriers=recv_test.barriers;
+            /* Duplicate, then a new append, then a higher-term heartbeat:
+             * neither duplicate rewrites nor a term update enters the batch. */
+            msgs[0]=msgs[2];
+            msgs[1]=msgs[2];msgs[1].prev_index=3;msgs[1].prev_term=2;msgs[1].leader_commit=4;
+            msgs[2]=msgs[1];msgs[2].prev_index=4;msgs[2].nentries=0;msgs[2].term=3;
+            CHECK(efs_raft_recv_batch(r,msgs,3)==EFS_OK,"flush before duplicate/term boundary");
+            CHECK(recv_test.barriers==barriers+1 && recv_test.applies==4 && recv_test.replies==6,
+                  "boundary ACKs/apply retain order");
+            /* Two 600-KiB requests must not share a >1-MiB hold. */
+            uint8_t *big=calloc(1,600*1024);
+            CHECK(big!=NULL,"byte-bound fixture");
+            if(big) {
+                barriers=recv_test.barriers;
+                for(unsigned j=0;j<2;j++) {
+                    msgs[j]=msgs[2];msgs[j].nentries=1;msgs[j].prev_index=4+j;
+                    msgs[j].prev_term=j?3:2;msgs[j].leader_commit=5+j;
+                    msgs[j].entries[0].term=3;msgs[j].entries[0].cmd=big;
+                    msgs[j].entries[0].clen=600*1024;
+                }
+                CHECK(efs_raft_recv_batch(r,msgs,2)==EFS_OK && recv_test.barriers==barriers+2,
+                      "byte cap forces separate persistence boundaries");
+                free(big);
+            }
+            CHECK(efs_raft_recv_batch(r,msgs,EFS_RAFT_RECV_MAX+1)==EFS_ERR_INVAL,
+                  "request bound enforced");
+        }
+        CHECK(recv_test.depth==0,"all batch holds released");
+        efs_raft_free(r);efs_raft_mem_free(store);
+    }
+}
+
 int main(void)
 {
+    test_recv_batch();
     test_election_i1();
     test_ae_full_window_not_resent_per_propose();
     test_step_down_no_campaign();

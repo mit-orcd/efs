@@ -652,11 +652,75 @@ static void test_raft_on_disk_store(void)
     rmtree(g_dir);
 }
 
+
+static struct efs_raft_disk *recv_disk;
+static unsigned recv_acks, recv_applies;
+static int durable_recv_send(void *ctx,const struct efs_raft_msg *m)
+{
+    (void)ctx;
+    if(m->success && m->match_index) {
+        uint64_t covered=efs_raft_disk_covered_index(recv_disk,EFS_RAFT_GROUP_SHARD,
+                                                   efs_raft_disk_synced_bytes(recv_disk));
+        CHECK(m->match_index<=covered,"follower ACK covered despite another group's shared hold");
+        recv_acks++;
+    }
+    return EFS_OK;
+}
+static int durable_recv_apply(void *ctx,uint64_t index,uint64_t term,
+                              const uint8_t *cmd,uint32_t len)
+{
+    (void)ctx;(void)term;(void)cmd;(void)len;
+    CHECK(index<=efs_raft_disk_covered_index(recv_disk,EFS_RAFT_GROUP_SHARD,
+                        efs_raft_disk_synced_bytes(recv_disk)),"follower applies durable bytes");
+    recv_applies++;return EFS_OK;
+}
+static void test_recv_batch_crash(void)
+{
+    pid_t child=fork();CHECK(child>=0,"fork receive crash");
+    if(child==0) {
+        recv_disk=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);
+        CHECK(recv_disk!=NULL,"open receive crash disk");if(!recv_disk)_exit(1);
+        struct efs_raft_store *store=efs_raft_disk_group(recv_disk,EFS_RAFT_GROUP_SHARD);
+        struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
+        cfg.store=store;cfg.store_ctx=store;cfg.send=durable_recv_send;cfg.apply=durable_recv_apply;
+        struct efs_raft *r=efs_raft_new(&cfg);CHECK(r!=NULL,"new receive crash follower");
+        if(!r)_exit(1);
+        struct efs_raft_msg msgs[3];memset(msgs,0,sizeof(msgs));
+        msgs[0].type=EFS_RAFT_MSG_AE_REQ;msgs[0].from=0;msgs[0].to=1;msgs[0].term=2;
+        CHECK(efs_raft_recv(r,&msgs[0])==EFS_OK,"establish disk follower leader");
+        CHECK(efs_raft_disk_sync_hold(recv_disk)==EFS_OK,"other group's shared hold");
+        struct efs_raft_store *other=efs_raft_disk_group(recv_disk,EFS_RAFT_GROUP_CTRL);
+        CHECK(st_append(other,1,2,"other")==EFS_OK,"other group's deferred append");
+        for(unsigned i=0;i<3;i++) {
+            msgs[i]=msgs[0];msgs[i].prev_index=i;msgs[i].prev_term=i?2:0;
+            msgs[i].nentries=1;msgs[i].entries[0].term=2;
+            msgs[i].entries[0].cmd=(const uint8_t*)"new";msgs[i].entries[0].clen=3;
+            msgs[i].leader_commit=i+1;
+        }
+        CHECK(efs_raft_recv_batch(r,msgs,3)==EFS_OK,"receive durable batch");
+        CHECK(recv_acks==3 && recv_applies==3,"every successful ACK/apply issued");
+        CHECK(efs_raft_disk_sync_depth(recv_disk)==1,"does not consume another group's hold");
+        _exit(failures?1:0); /* No destructor or shared-hold release can mask the boundary. */
+    }
+    int status=0;if(child>0){waitpid(child,&status,0);CHECK(WIFEXITED(status)&&WEXITSTATUS(status)==0,"child ACK/apply gate");}
+    struct efs_raft_disk *disk=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);
+    CHECK(disk!=NULL,"cold reopen after receive crash");
+    if(disk) {
+        struct efs_raft_store *store=efs_raft_disk_group(disk,EFS_RAFT_GROUP_SHARD);
+        for(unsigned i=1;i<=3;i++)CHECK(st_check(store,i,2,"new"),"ACKed batch bytes survive cold crash");
+        store=efs_raft_disk_group(disk,EFS_RAFT_GROUP_CTRL);
+        CHECK(st_check(store,1,2,"other"),"shared barrier retains other group bytes");
+        efs_raft_disk_close(disk);
+    }
+    rmtree(g_dir);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-raftstore-test-%d", (int)getpid());
     rmtree(g_dir);
 
+    test_recv_batch_crash();
     test_matches_mem();
     test_hold_covers_batch();
     test_reopen();

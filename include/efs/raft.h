@@ -185,6 +185,14 @@ void efs_raft_free(struct efs_raft *r);
 
 int efs_raft_tick(struct efs_raft *r);
 int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg);
+/* Process already queued messages in order. Only contiguous, same-leader,
+ * same-term new appends share persistence; conflicts, reads, elections and
+ * configuration changes flush first. No ACK or apply precedes batch_end.
+ * Caller serializes this exactly as recv. Never waits for more messages. */
+#define EFS_RAFT_RECV_MAX 16u
+int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
+                        uint32_t n);
+
 int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
                      uint64_t *index_out);
 /* Append only. Pair with efs_raft_submit (raise the send ceiling) before
