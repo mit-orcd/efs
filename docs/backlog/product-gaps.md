@@ -15,6 +15,12 @@ Everything here is larger than a queue item and most of it needs a design
 decision first. Nothing on this page is scheduled. Do not start an item here
 without asking.
 
+**Release follow-up:** [v0.2.0-pre-alpha](../status/v020-amd-release.md)
+adds RoCE addressing and records four-mode AMD functional acceptance. It does
+not close the persistence, session, repair or many-group topology gaps. The
+portal shown in the project README is external and is not a shipped product
+surface. Integrity coverage in §1.4 is updated below.
+
 **Oct 7 review note:** the original Sep 18/Oct 1 inventory remains a dated
 baseline, not a complete current source audit. Fault-harness availability and core durability/session/protection/integrity
 gaps below have been checked against public paths; remaining surface claims
@@ -91,16 +97,19 @@ implemented; mount-wide establishment, touched-shard registration and all
 public dependent paths remain [W72](work-items.md#w72). Avoid describing every
 session mechanism as absent or treating the staged endpoint as full activation.
 
-### 1.4 Fragment integrity is verified inconsistently
+### 1.4 Fragment integrity format and repair remain incomplete
 
-Invariant **I25** specifies immutable identity plus payload checksums and
-repair of unavailable fragments. Current PUT hashes are payload-only and the
-server stores the caller's digest. GET rejects a mismatch against a stored
-checksum, but missing checksum evidence causes a fresh payload hash to be
-returned rather than rejection. The parallel preferred-pair receive path
-ignores returned digests; EFS_READ_VERIFY only affects the single-fragment
-helper, not that common path. These trust/coverage gaps are
-[W75](work-items.md#w75). Automatic repair remains [W74](work-items.md#w74).
+The current GET path fails closed on missing/corrupt checksum evidence,
+compares returned digests with the captured metadata view where available,
+and applies optional `EFS_READ_VERIFY=1` payload re-hashing to parallel and
+fallback receive paths. NUC corruption/metadata-digest gates are recorded in
+[W75](work-items.md#w75). The older inventory's fresh-hash fallback and
+parallel-path bypass statements are superseded.
+
+PUT hashes remain payload-based. The identity-bound immutable format and
+repair required by **I25** are still open: do not treat repaired checksum
+coverage as completion of the full integrity/repair design. Automatic fragment
+repair remains [W74](work-items.md#w74).
 
 ### 1.5 Two clients writing disjoint ranges of one chunk — CLOSED
 
@@ -133,8 +142,8 @@ parallel filesystem has and efs does not.
 | IOR / mdtest / IO-500 numbers | **9×4 debug, every phase** | `results/io500/20261001-074905-rdma/` (fresh table, Oct 1): easy-write 5.17 GiB/s, hard-write 0.52, mdtest-easy-write 6.2 kIOPS, easy-stat 24.4 kIOPS, hard-read 0.82 with one read error (W38, open). Sep 30 `20260930-183504-rdma/`: 0 read errors, cold hardscan clean. No stonewall-compliant run yet (debug = 1 s stonewall, same-mount reads). |
 | N-1 shared-file writes that are correct | **gated** | §1.5; `peer_shared_pwrite` concurrent 5/5. |
 | per-file / per-directory layout (`lfs setstripe`-style chunk size, EC profile) | absent | export-wide only; the declared 32× small-write amplification has no opt-out. |
-| a client other than FUSE (kernel module, user-space library, MPI-IO ADIO driver) | absent | FUSE-only. libfuse 3.10.2: ≤128 KiB per request, no `FOPEN_PARALLEL_DIRECT_WRITES`; Linux serializes extending direct writes and `O_CREAT` per inode/dir per mount, so many ranks on one node serialize above efs. Already an open item in [§9](../how-it-works/architecture.md). |
-| the data path on the fast interconnect | **RDMA** (since Sep 28) | `EFS_TRANSPORT=rdma` on the test cluster; zero-copy sends (W39); zero-copy receive is still a design ask. |
+| a client other than FUSE (kernel module, user-space library, MPI-IO ADIO driver) | absent | FUSE-only; the current build requires libfuse3 ≥3.12. Kernel/libfuse concurrency limits depend on the installed versions and mount mode; client-scaling acceptance remains [§9](../how-it-works/architecture.md). |
+| the data path on the fast interconnect | **TCP / native IB / RoCE RDMA** | v0.2.0-pre-alpha AMD RXE functional gates pass; native-IB and cross-host hardware acceptance remain separately scoped. GPU device-memory DMA is unvalidated. |
 | a hardware-relative throughput statement | 1 client: 1.3–1.5 GB/s write (~8–9 % of 16.7 GB/s), 3.6 GB/s cold read, 6.5 GB/s with four readers. 9 clients: 2.5–2.8 GB/s aggregate write (~6 % of 44 GB/s). | derivation in [performance.md](../how-it-works/performance.md#baselines-and-ceilings-current). |
 | MPI-IO hints, collective-buffering guidance, Darshan/instrumentation hooks | absent | — |
 | burst-buffer / tiering / HSM | absent, not designed | flash-only by decision (§1); no policy layer exists either way. |

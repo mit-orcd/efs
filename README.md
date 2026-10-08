@@ -1,153 +1,166 @@
 # efs
 
-A distributed filesystem in C, pre-alpha. Every 128 KiB file chunk is
-stored as **2 data fragments + 1 XOR parity** on three storage nodes; any
-two available valid fragments rebuild a chunk. Automatic fragment repair and
-configurable protection profiles remain open ([W74](docs/backlog/work-items.md#w74)).
-Metadata uses two physical Raft groups over an on-disk ordered KV store; the
-accepted many-group runtime is still an integration goal
-([public-path limits](docs/status/spec-implementation.md)). Clients mount it with FUSE; the
-transport is TCP or RDMA (InfiniBand), chosen at mount time.
+A distributed filesystem written in C, with a Linux FUSE client, Raft
+metadata and erasure-coded storage. **Pre-alpha:** use disposable data while
+correctness, recovery and product features are still being completed.
 
-Goal: ≥ 2³² files, throughput that tracks the hardware, no software
-serialization point — the normative spec is
-[docs/how-it-works/architecture.md](docs/how-it-works/architecture.md).
+The latest tagged checkpoint is **[v0.2.0-pre-alpha](https://github.com/mit-orcd/efs/tree/v0.2.0-pre-alpha)**.
+It adds RoCE support alongside native InfiniBand RDMA and retains TCP.
+The AMD four-node test cluster passed the full POSIX, two-client and cold
+remount suites with direct and buffered storage I/O over both TCP and RDMA.
+[Release evidence and limits](docs/status/v020-amd-release.md).
 
-## What you need
+## What is implemented
 
-- `gcc`, `make`, `pthread`; Blake3 is vendored (`deps/blake3/`).
-- FUSE client: OS **fuse3** (`fuse3-devel` ≥ 3.12, `fusermount3`, kernel
-  `fuse` module).
-- RDMA (optional): `libibverbs`/`librdmacm`; `EFS_TRANSPORT=tcp` works
-  without.
-- `FUSE_CAP_SPLICE_READ` is disabled by default. A larger
-  `fs.pipe-max-size` may be useful for opt-in splice measurements
-  (`EFS_FUSE_SPLICE_READ=1`), but 8 MiB is not a default-mount prerequisite;
-  the recorded splice profile found no gain.
+- File data uses 128 KiB chunks and a fixed **2 data + 1 XOR parity** stripe
+  across three distinct storage nodes. Two available valid fragments can
+  reconstruct a chunk.
+- Metadata uses **two physical Raft groups** over an ordered on-disk KV.
+  The current runtime supports three or four server nodes; many-group
+  metadata leadership remains roadmap work.
+- Linux clients mount through FUSE. Data transport supports TCP, native
+  InfiniBand RDMA and Ethernet/RoCE RDMA.
+- Servers support multiple storage roots, per-node quotas, asynchronous
+  fragment garbage collection, and buffered or direct fragment I/O.
+- Client writeback has bounded body admission, recovery capacity and a
+  controlled drain/unmount operation.
+- `efs-bench` provides engine and RPC benchmarks; profiling is kept separate
+  from the daemon's serving role.
 
-## Build
+The [architecture](docs/how-it-works/architecture.md) describes the accepted
+design. The [implementation review](docs/status/spec-implementation.md) and
+[active queue](docs/status/README.md) distinguish shipped paths, staged work
+and remaining acceptance gates. D25 publication remains staged.
+
+## Requirements and build
+
+Linux with a C compiler, `make`, `pkg-config`, Python 3.9 or newer, and the
+system development libraries for **libfuse3 ≥ 3.12** and **libibverbs**.
+BLAKE3 is vendored. The current Makefile links libibverbs even for TCP-only
+use; an active RDMA device is needed only to use RDMA. FUSE mounts need a
+usable `/dev/fuse`, `fusermount3` and permission to mount at the selected path.
+The process-control wrappers require Linux pidfd support.
 
 ```bash
-make            # efsd efs-fuse efs-mgmt efs-query efs-bench + unit tests
-make test       # unit/model suites; not blanket live-cluster or power-loss acceptance
-make docs-check # the generated docs/how-it-works/architecture-full.md matches its sources
+make             # binaries and compiled test targets; build on the target machine
+make test        # unit/model suites and documentation checks
+make docs-check  # generated architecture documents and internal references
 ```
 
-Builds are `-O3 -g -march=native`. **Build on the machine class that will
-run the binary**: an AVX-512 build host and a Zen2 server give you a daemon
-that dies with SIGILL at startup. On the test cluster that means never
-`make` in the NFS home; the deploy scripts rsync to `/tmp/efs` and build
-there.
+Builds use `-O3 -g -march=native`. Compile on the machine class that will run
+the binaries. Native CPU instructions can make a binary built elsewhere
+incompatible. NFS-specific deployment rules belong to their cluster runbook,
+not to every installation.
 
 | Binary | Role |
-|---|---|
-| `efsd` | storage + metadata server (one per node) |
-| `efs-fuse` | FUSE client |
-| `efs-mgmt` | cluster CLI: `status`, `mkfs`, `raft-status`, `add-node`, `add-storage`, `shrink-quota`, `raft-getchunks`, … |
-| `efs-query` | legacy query; currently returns placeholder zeros ([W80](docs/backlog/work-items.md#w80)) |
-| `efs-bench` | local storage/metadata engines (`--bench`) and seed-based RPC benchmarks |
+| --- | --- |
+| `efsd` | Storage and metadata daemon |
+| `efs-fuse` | Linux FUSE client |
+| `efs-mgmt` | Cluster status, initialization and metadata administration |
+| `efs-query` | Legacy query tool; placeholder results remain [W80](docs/backlog/work-items.md#w80) |
+| `efs-bench` | Local engine/prototype benchmarks and cluster RPC benchmarks |
 
-## Quick start
+## Start a disposable cluster
 
-The quick start moved to
-[docs/using/quickstart.md](docs/using/quickstart.md) (three local servers,
-`mkfs`, mount, first file). More user-facing knobs (mount options,
-environment variables, quotas, `efs-mgmt`, `df`/`du`) are in
-[docs/using/power-user.md](docs/using/power-user.md); the full
-documentation index is [docs/README.md](docs/README.md).
+Follow the [three-node quick start](docs/using/quickstart.md) for explicit
+node IDs, metadata voter count, initialization, mounting and shutdown.
+Use [power-user settings](docs/using/power-user.md) for quotas, cache budgets
+and management commands.
 
-## Controlled client stop
+Transport and storage mode are independent:
 
-Use `scripts/client.sh stop /mnt/efs` with the absolute canonical mount
-pathname (symlink aliases have a different control-channel identity). It quiesces mutations and attempts a
-60-second drain before unmount; unresolved writes leave the daemon and mount
-serving. Failed ordinary unmount resumes mutations. `stop --force-discard
-/mnt/efs` explicitly permits loss and lazy detach, with per-record diagnostics
-from current clients. Normal stop refuses an old client without the control
-channel; deploy the matching binaries and handle that old mount explicitly.
-External unmount, signals and client death bypass this controlled-stop contract.
+- `EFS_TRANSPORT=tcp` selects TCP. `rdma` requires a successful RDMA upgrade;
+  `auto` attempts RDMA when a suitable device is available and permits fallback.
+- Native InfiniBand needs an active port/LID. RoCE needs an active Ethernet
+  verbs device and a usable GID; `EFS_RDMA_DEV` and `EFS_RDMA_GID_INDEX` select
+  them. See [transport setup](docs/using/power-user.md#mounting-and-transport).
+- `efsd --direct-io` uses `O_DIRECT` for fragments; `--no-direct-io` uses the
+  OS page cache and is the daemon default. This is independent of an
+  application's `O_DIRECT` flag and the benchmark-only `--sync` option.
 
-D27 local gates: `make test-wb-recovery test-wb-runtime test-stop-control`.
-For isolated fault testing only, rebuild cleanly with `EFS_FAULTS=1`. Set
-`EFS_FAULT_WITHHOLD=ino:ci`, or write `WITHHOLD ino:ci` to `/tmp/efs/fault`,
-to omit that record before REPORT transmission. An `OFF` file overrides the
-startup environment and permits recovery without restarting. Normal builds
-exclude the hook. Live recovery and contention gates remain pending.
+Upgrade all participating daemons and clients together: the build-ID handshake
+rejects incompatible builds. Preserve existing stores and verify compatibility
+before a migration; `mkfs` initializes an export and is not a format converter.
 
-## The fcstor test cluster
+## Operator portal preview
 
-Four servers (fcstor003–006, port 19810, six NVMe roots each, RDMA) and
-thirteen clients. Three scripts cover every operation; nothing else is
-needed:
+![External cluster portal showing four AMD server processes, two FUSE mounts, RoCE transport, direct I/O, capacity and illustrative I/O counters](docs/images/cluster-portal-amd.png)
+
+**The portal is maintained separately and is not yet included in this repository.**
+This picture illustrates the external operator interface, with example values;
+it is not a benchmark or a live health report. Its four nodes run on one AMD
+host, and `rxe0` supplies software RoCE rather than hardware RDMA offload.
+A “heal idle” badge does not establish automatic fragment repair.
+
+## Test acceptance
+
+The v0.2.0-pre-alpha AMD runs used four daemons and two FUSE mounts on one
+physical host. Each configuration passed:
+
+| Fragment I/O | Transport | POSIX | Two-client | Cold remount verification |
+| --- | --- | --- | --- | --- |
+| Direct | RXE RDMA | 216 pass, 1 skip | 64/64 | 26/26 |
+| Direct | TCP | 216 pass, 1 skip | 64/64 | 26/26 |
+| Buffered | RXE RDMA | 216 pass, 1 skip | 64/64 | 26/26 |
+| Buffered | TCP | 216 pass, 1 skip | 64/64 | 26/26 |
+
+There were zero failures; the skip is unsupported writable `mmap`. Each cold
+verification followed 26 successful prepare cases and a clean client remount.
+Full Linux `make test` also passed. [Logs, process proofs and source/binary
+hashes](results/measure/20261008-v020-amd/README.md) record the tested source.
+These gates establish the recorded functional behavior, not hardware
+power-loss durability, cross-host RoCE performance or native-IB acceptance of
+this release. Historical throughput measurements are in
+[performance.md](docs/how-it-works/performance.md).
+
+See [testing and profiling](docs/how-it-works/testing.md) for local suites,
+cluster-specific drivers, fault tests and measurement rules. Test totals evolve;
+the current suite and retained result files determine the expected inventory.
+
+## Writeback and safe shutdown
+
+A returned buffered write can still belong to client memory. Use application
+flush/close semantics and inspect errors; outstanding persistence and
+synchronous-write gaps are recorded in [W71/W73](docs/status/spec-implementation.md).
+Cold remount success alone does not prove survival of hardware power loss.
 
 ```bash
-bash tests/preflight.sh                                   # read-only health check — run first
-bash tests/cluster.sh stop|start|restart [--clients] [--perf] [--strace]
-bash tests/wipe_cluster.sh && bash tests/cluster.sh start --fresh --clients   # new table (ask first)
+./scripts/client.sh stop /absolute/mount/path
 ```
 
-`cluster.sh` rsyncs, builds on each node, restarts the four servers
-together (the build-ID gate rejects mixed builds), and with `--clients`
-remounts fcstor003–015. Anything that takes more than 10 s runs in a
-detached screen on a cluster node, not in a login-node shell. The rules of
-that cluster — pre-flight, timeouts, what a dead mount looks like, why
-`pkill -f` is forbidden — are in [cluster test operations](docs/operations/cluster-testing.md) and
-[performance measurement](docs/how-it-works/performance.md).
+Normal stop quiesces mutations and attempts a bounded drain before detaching.
+If it refuses, keep the servers available and resolve the pending failure.
+`stop --force-discard /absolute/mount/path` explicitly accepts loss of unresolved
+writes. External unmount, signals and client death bypass the controlled-stop
+contract. Stop every client successfully before stopping storage daemons.
+[Operations](docs/operations/operations.md#scripts) describes process identity
+checks and graceful server retirement.
 
-## Tests and numbers
+## Remaining product work
 
-| Command | Gate |
-|---|---|
-| `make test` | unit suites incl. `test_sim` (deterministic simulator), `test_raft`, `test_kv_lsm`, `test_meta_apply` |
-| `tests/run_tests.sh posix <host>` | POSIX suite 1 vs an XFS baseline — expected **200/201** (`mmap_write_read` SKIP by spec) |
-| `tests/run_tests.sh posix2 <h1> <h2>` | cross-client visibility — expected **63/63** |
-| `tests/run_tests.sh posixpersist` | durability across unmount/remount |
-| `tests/run_tests.sh leaks` | valgrind, client and server |
-| `tests/measure/dd_wall.sh`, `tests/perf/io500/run.sh` | throughput (dd+fsync walls, IO-500 debug); see `docs/how-it-works/testing.md` |
+Automatic reconstruction of lost fragments, protection-debt reporting and
+configurable protection profiles remain open. A chunk with only two surviving
+fragments is not repaired automatically. Metadata quorum is also required for
+authoritative operations; fragment availability alone is not filesystem availability.
+The legacy quota-degraded write path must not be described as an enforced
+all-fragment durable-ACK guarantee.
 
-A write number counts only with the flush inside the clock (`dd
-conv=fsync`, fio `--end_fsync=1`) and only from a mount `findmnt` shows as
-`fuse.efs-fuse`. Current references (Oct 1 2026, RDMA): one client writes
-1.3–1.5 GB/s and reads a cold file at 3.6 GB/s (6.5 GB/s with four
-readers); nine clients write 2.5–2.8 GB/s aggregate; IO-500 9×4 debug
-runs every phase. The table with hardware ceilings is
-[docs/how-it-works/performance.md](docs/how-it-works/performance.md#baselines-and-ceilings-current).
-Results that a document cites live under `results/`
-([results/README.md](results/README.md) has the retention rule).
+Target persistence barriers, mount-wide session fencing, full integrity
+coverage, authentication and fsck remain work in progress. Read the
+[capability inventory](docs/backlog/product-gaps.md),
+[public-path limitations](docs/status/spec-implementation.md), and
+[current queue](docs/status/README.md) before relying on a design guarantee.
 
-## Failure tolerance (one node)
+## Documentation and branches
 
-| If this happens | Reads | Writes |
-|---|---|---|
-| 1 of 3 servers down | yes — any 2 fragments XOR-rebuild the chunk | no — publication needs all `k+f` fragments durable |
-| 2 of 3 servers down | no | no |
-| 1 disk full | yes | yes, until a second node is also full (`ENOSPC`) |
+- [Documentation index](docs/README.md): setup, operation, design and testing.
+- [Architecture](docs/how-it-works/architecture.md): accepted protocols and invariants.
+- [Current status](docs/status/README.md): implementation and remaining gates.
+- [Operations](docs/operations/operations.md): storage, quotas, shutdown and management.
+- [Historical records](docs/archive/README.md): dated investigations and acceptance.
 
-**Pre-alpha caveat: nothing repairs a lost fragment yet.** A chunk that
-drops to 2 of 3 stays that way, so the cluster reads fine while being one
-failure from losing that data, and reports no degradation. Repair and
-degraded publication are specified, not written. Also absent: client-side
-fencing, fsck, authentication. See
-[docs/backlog/product-gaps.md](docs/backlog/product-gaps.md).
-
-## Documentation map
-
-The index is [docs/README.md](docs/README.md). The short version:
-
-| Read this | For |
-|---|---|
-| [docs/using/quickstart.md](docs/using/quickstart.md) | three local servers, `mkfs`, mount, first file |
-| [docs/status/README.md](docs/status/README.md) | the work queue, decisions taken and pending, current numbers — start here before changing code |
-| [docs/status/in-flight.md](docs/status/in-flight.md) | the current handoff block — finish it before taking a queue item |
-| [docs/how-it-works/architecture.md](docs/how-it-works/architecture.md) | the normative spec (invariants, protocols); `docs/how-it-works/protocols/*` for the wire-level detail |
-| [docs/how-it-works/failure-tolerance.md](docs/how-it-works/failure-tolerance.md) | how the node count sets the guarantee and why a healthy write needs every fragment |
-| [docs/operations/operations.md](docs/operations/operations.md) | start/stop, storage layout, quotas, `efs-mgmt`, rejoin, profiling |
-| [docs/how-it-works/testing.md](docs/how-it-works/testing.md) | unit tests, POSIX suites, honest throughput, profiling |
-| [docs/operations/runbooks.md](docs/operations/runbooks.md) | measurement scripts under `tests/measure/` and the numbers they last produced |
-| [docs/how-it-works/developing.md](docs/how-it-works/developing.md) | source layout, task routing, how the spec and the generated docs are kept in sync |
-| [docs/backlog/product-gaps.md](docs/backlog/product-gaps.md) | what is missing before this is a filesystem you could run |
-| [docs/backlog/ideas.md](docs/backlog/ideas.md) | parked ideas and landed scaling history |
-| [docs/archive/project-history.md](docs/archive/project-history.md) | the archive: every roll, gate and root cause since Aug 2026 — search it before re-deriving one |
-| [docs/status/in-flight.md](docs/status/in-flight.md) | current work and handoff |
+Versioned tags identify tested checkpoints. Development continues on `devel`;
+promotion to `main` is a separate step. Merging the branches does not delete
+`devel`. This documentation refresh follows the v0.2.0-pre-alpha tag.
 
 MIT. See [LICENSE](LICENSE).

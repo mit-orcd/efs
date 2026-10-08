@@ -14,14 +14,30 @@ does. The normative text is the linked section, never this page.
   sequence, [operations.md § Scripts](../operations/operations.md#scripts)
   the full usage including `--perf` / `--strace` recorders.
 - `EFS_TRANSPORT=auto|tcp|rdma` — transport; default `auto` (RDMA if
-  InfiniBand is up, else TCP). `rdma` is strict (no TCP fallback).
-  `EFS_RDMA_DEV=<ibdev>` pins the device.
+  an active supported verbs device is available, else TCP). `rdma` requires
+  successful RDMA setup; it does not silently downgrade a failed upgrade.
+  Oversized frames retain the transport's explicit TCP frame path.
+  `EFS_RDMA_DEV=<ibdev>` pins the device. Native InfiniBand uses an active
+  port/LID; RoCE uses an active Ethernet verbs device and nonzero GID.
+  `EFS_RDMA_GID_INDEX=<index>` pins a valid local GID; otherwise discovery
+  chooses the first nonzero GID. Set these variables for servers and clients.
 - Splice measurement runs may need a larger `fs.pipe-max-size`; splice is
   disabled by default, so 8 MiB is not a default-mount prerequisite. See the repo
-  [README](../../README.md#what-you-need).
+  [README](../../README.md#requirements-and-build).
 - Supported FUSE surface (`chmod`/`chown`/`truncate`/`rename`/`utimens`,
   the lookup-only `.stats` virtual file):
   [operations.md § FUSE surface](../operations/operations.md#fuse-surface).
+
+Example for an already configured RXE device (this does not create it):
+
+```bash
+export EFS_TRANSPORT=rdma EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1
+```
+
+The device/index must exist locally; use `rdma link` and inspect its GID table.
+AMD's [four-mode acceptance](../status/v020-amd-release.md) used software RXE,
+not hardware RoCE or cross-host offload. Server `--direct-io` / `--no-direct-io`
+selects fragment I/O independently of transport; buffered is the daemon default.
 
 ## Environment variables (client, unless noted)
 
@@ -33,11 +49,13 @@ does. The normative text is the linked section, never this page.
 | `EFS_DCACHE_BYTES` | soft dirty-body reclaim target in bytes (default 128 MiB); not the hard allocation bound |
 | `EFS_CLIENT_CONNS_PER_NODE` | pooled connections per server node |
 | `EFS_READ_PREFETCH` | read prefetch depth override |
-| `EFS_READ_VERIFY=1` | enable payload re-hashing in the single-fragment helper (off by default); the common parallel pair bypasses this switch ([W75](../backlog/work-items.md#w75)); server GET checks stored digests where present |
+| `EFS_READ_VERIFY=1` | enable payload re-hashing on GET receive paths (off by default); returned digests are checked against the captured metadata view where available; identity-bound integrity/repair remain [W75](../backlog/work-items.md#w75) |
 | `EFS_FUSE_SPLICE_READ` | opt into `FUSE_CAP_SPLICE_READ` for measurement (default off); the recorded profile found no gain, so copy savings are not an accepted result |
 | `EFS_STATS_TTL_MS` | `.stats` rollup cache TTL (default 1000) |
 | `EFS_FEATURES_TTL_MS` | exported-features cache TTL (default 2000) |
 | `EFS_NUMA_NODE` | `=none` disables NUMA pinning at startup; `=N` forces node N |
+| `EFS_MD_RAFT_N` | **server:** voter count, currently 3 or 4 (default 4); node IDs must be 1..N |
+| `EFS_RDMA_DEV` / `EFS_RDMA_GID_INDEX` | **server/client:** verbs device and RoCE GID selection |
 | `EFS_RDMA_SPIN_US` | RDMA completion poll spin before sleeping |
 | `EFS_RDMA_BUFS` | RDMA buffer pool size |
 | `EFS_LOG_TS` | UTC timestamps are enabled by default; `=0` disables the timestamp wrapper |

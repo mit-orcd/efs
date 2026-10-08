@@ -1,6 +1,6 @@
 # Testing and profiling
 
-[Quick start](../../README.md#quick-start) · [Operations](../operations/operations.md) ·
+[Quick start](../using/quickstart.md) · [Operations](../operations/operations.md) ·
 [What to work on](../status/README.md) · [Verification plan](verification.md)
 
 ## `make test`
@@ -15,7 +15,36 @@ simulation, process restart and hardware power loss.
 
 Everything must be green. There is no accepted-failure list.
 
-## Cluster gates
+## Current release acceptance and local POSIX suites
+
+[v0.2.0-pre-alpha AMD acceptance](../status/v020-amd-release.md) records
+four modes: buffered/direct fragment I/O × TCP/RXE RDMA. Each has 216 POSIX
+passes, one unsupported writable-mmap skip, 64 peer passes and 26 cold-remount
+verification passes. Full Linux `make test` passes. These are functional gates,
+not power-loss durability or cross-host hardware-RoCE measurements.
+
+Against two already serving disposable mounts:
+
+```bash
+python3 tests/posix/posix_suite.py /mount/one --jobs 4 --timeout-s 30 --results /tmp/posix.tsv
+python3 tests/posix/posix_2client.py --local /mount/one /mount/two --parent posix-peer --results /tmp/posix2.tsv
+python3 tests/posix/posix_persist.py /mount/one --phase prepare --results /tmp/persist-prepare.tsv
+# Cleanly stop and remount /mount/one with the same intended transport/settings.
+python3 tests/posix/posix_persist.py /mount/one --phase verify --results /tmp/persist-verify.tsv
+```
+
+Do not run verify before a real remount, discard failed writes to obtain a
+pass, or let the remount silently change an RDMA test into TCP. Retain the
+binary/source identity, daemon I/O flags, actual transport and full verdicts.
+Totals evolve with the suite; a historical count is not a fixed test contract.
+
+The site's `~/git/devops/nuc-efs` drivers select NUC/AMD, while
+`~/git/cluster` controls xorinox's VMs. Those directories and the external
+portal are not bundled here. The retained
+[AMD matrix driver and evidence](../../results/measure/20261008-v020-amd/README.md)
+document that environment; they are not a general cluster installer.
+
+## Recorded fcstor cluster gates
 
 The following commands describe the recorded fcstor harness, not a live
 inventory or the NUC/xorinox controller. Verify its configuration and use the

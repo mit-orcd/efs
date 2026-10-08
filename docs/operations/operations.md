@@ -1,6 +1,6 @@
 # Operations
 
-[Quick start](../../README.md#quick-start) ·
+[Quick start](../using/quickstart.md) ·
 [Failure tolerance](../how-it-works/failure-tolerance.md) ·
 [Architecture](../how-it-works/architecture.md) · [Testing](../how-it-works/testing.md)
 
@@ -21,12 +21,14 @@ wrapper accepts leading `--perf` and `--strace`.
 The bind address must be a **real local IP** (not `0.0.0.0`). Peers connect
 back to it.
 
-`server.sh` kills a previous `efsd` on the same path/port before starting.
-It sends SIGTERM and escalates to SIGKILL after about three seconds; this is
-not a guaranteed graceful shutdown ([W65](../backlog/work-items.md#w65)).
-PID-file cleanup currently trusts the saved PID without checking process
-identity ([W78](../backlog/work-items.md#w78)). If `efsd` exits immediately,
-it prints the last log lines.
+`server.sh` retires an existing daemon on the same path/port before starting.
+`scripts/server_processes.py` verifies executable, arguments and saved process
+identity, then uses a Linux pidfd to send SIGTERM and wait up to 60 seconds.
+A timeout retains the process and reports failure; it does not escalate to
+SIGKILL. Stale PID identity is not authority to signal an unrelated process.
+Use explicit `--node-id 1..N` and `EFS_MD_RAFT_N=3|4`: the wrapper's derived
+address ID is not a valid small-cluster Raft configuration. If startup exits
+immediately, the wrapper prints the last log lines.
 
 The client needs **one** server address; it discovers the rest. If it runs on
 the same host as a server, it prefers the local fragment.
@@ -38,18 +40,33 @@ listing the path is not enough. Pass `-f` to stay in the foreground.
 Ordinary client stop quiesces mutations, attempts a bounded drain, and refuses
 to detach unresolved writes. If stop fails, keep the servers available and
 resolve the failure. `--force-discard` explicitly permits loss and lazy detach;
-see the [controlled-stop contract](../../README.md#quick-start). Signals and
+see the [controlled-stop contract](../../README.md#writeback-and-safe-shutdown). Signals and
 external unmount bypass that contract.
+
+## Transport and storage mode
+
+TCP and native-IB/RoCE RDMA are independent of buffered/direct fragment I/O.
+See [transport selection](../using/power-user.md#mounting-and-transport) for
+verbs device/GID settings. Use the same intended transport on servers and
+clients when validating a configuration, including clients remounted during
+cold verification. AMD's release evidence uses RXE software RoCE on one host.
+
+The portal shown in the [README preview](../../README.md#operator-portal-preview)
+is an external tool; its code is not shipped in this repository. For bundled
+status inspection use `efs-mgmt status`, process/log inspection and the GC
+counters. “Heal idle” is not proof of an implemented fragment repair owner.
 
 ## Running the binaries yourself
 
 ```bash
+# Disposable empty roots and free ports; do not reuse an active cluster here.
+export EFS_TRANSPORT=tcp EFS_MD_RAFT_N=3
 ./efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /tmp/efs/s1 &
-./efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /tmp/efs/s2 &
-./efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /tmp/efs/s3 &
+./efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /tmp/efs/s2 --join 127.0.0.1:17432 &
+./efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /tmp/efs/s3 --join 127.0.0.1:17432 &
 
-./efs-mgmt add-node 127.0.0.1:17433 127.0.0.1:17432
-./efs-mgmt add-node 127.0.0.1:17434 127.0.0.1:17432
+# Wait for all three listeners and membership; inspect status before mkfs.
+./efs-mgmt status 127.0.0.1:17432
 ./efs-mgmt mkfs 127.0.0.1:17432
 mkdir -p /mnt/efs
 ./efs-fuse 127.0.0.1:17432 fs /mnt/efs
@@ -85,9 +102,9 @@ data/exports/{export_id}/{d4}/{d3}/{d2}/{d1}/{d0}/{chunk>>10}/{chunk}.{frag}.{ge
 
 Fragment payload length depends on the object; an ordinary full data chunk
 produces 64 KiB fragments. Direct-I/O writes append a 4 KiB tail page holding
-the 32-byte digest; buffered writes append the digest itself. Server reads
-check stored evidence where present, but missing evidence can fall back to
-a fresh hash and common client reads do not validate it ([W75](../backlog/work-items.md#w75)).
+the 32-byte digest; buffered writes append the digest itself. Server GET fails closed on missing/corrupt checksum evidence;
+client GET paths compare replies with captured metadata digests where available.
+Identity-bound fragment format and repair remain [W75](../backlog/work-items.md#w75).
 
 The former advice to wipe an older sidecar store as an upgrade had no verified
 migration gate. Preserve existing stores and establish format compatibility

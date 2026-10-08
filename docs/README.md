@@ -1,6 +1,15 @@
 # efs documentation
 
-Who are you? That picks your file.
+Start with the [project README](../README.md) for implemented capabilities,
+build requirements and product limits. The latest tagged checkpoint is
+[v0.2.0-pre-alpha](status/v020-amd-release.md): four AMD I/O/transport
+configurations passed POSIX, peer and cold remount tests. Its RDMA coverage
+uses software RXE; broader failure/scale acceptance remains in the queue.
+
+The architecture is the accepted design, not a declaration that every path
+is implemented. Use the current status and evidence when assessing a guarantee.
+The illustrated operator portal is maintained separately and is not shipped
+in this repository. Pick the guide below for your task.
 
 ## Use it
 
