@@ -393,8 +393,14 @@ static int find_candidate(void *ctx, const struct efs_name_entry *entry)
     struct find_context *f=ctx;
     struct node *parent=find_node(f->c,entry->parent);
     if (!parent) return EFS_ERR_IO;
+    /* Membership is immutable and independent of a candidate binding. Avoid
+     * KV/directory-layout lookups for names outside the requested subtree. */
+    char path[EFS_MAX_PATH];
+    int rc=efs_query_catalog_path(f->c,entry->parent,f->root,path,sizeof(path));
+    if (rc==EFS_ERR_NOT_FOUND) return EFS_OK;
+    if (rc) return rc;
     struct efs_meta_dentry authoritative;
-    int rc=efs_meta_apply_lookup((struct efs_kv *)&f->c->kv,entry->parent,entry->name,&authoritative);
+    rc=efs_meta_apply_lookup((struct efs_kv *)&f->c->kv,entry->parent,entry->name,&authoritative);
     if (rc==EFS_ERR_NOT_FOUND) return EFS_OK;
     if (rc) return rc;
     if (!entry->dentry.ino || authoritative.ino!=entry->dentry.ino ||
@@ -410,10 +416,6 @@ static int find_candidate(void *ctx, const struct efs_name_entry *entry)
         else if (rc!=EFS_ERR_NOT_FOUND) return rc;
     }
     if (chosen!=f->shard) return EFS_OK;
-    char path[EFS_MAX_PATH];
-    rc=efs_query_catalog_path(f->c,entry->parent,f->root,path,sizeof(path));
-    if (rc==EFS_ERR_NOT_FOUND) return EFS_OK;
-    if (rc) return rc;
     size_t len=strlen(path),nl=strlen(entry->name);
     if (len+nl+(len ? 1 : 0)>=sizeof(path)) return EFS_ERR_NAMETOOLONG;
     if (len) path[len++]='/';
