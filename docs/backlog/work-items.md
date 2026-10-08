@@ -3523,6 +3523,11 @@ callgraphs, strace, timing samples and correctness evidence are retained in the
 [command performance report](../status/efs-command-performance-20261008.md).
 The measurements do not close the separate scale/platform acceptance.
 
+Oct 8 command options add long metadata display, date/size/name ordering and
+server-side type, size and modification-time predicates. [Usage and acceptance](../status/efs-command-options-20261008.md).
+Expiry coverage is explicitly limited to unavailable/refusal behavior; W90
+lifecycle implementation and gates remain open.
+
 Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
 NUC target: staged population toward 400 GiB real logical payload, with a large
 small-file namespace, two cold mounts, shard-distributed queries and measured

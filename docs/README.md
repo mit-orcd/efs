@@ -26,6 +26,8 @@ in this repository. Pick the guide below for your task.
 - **New user** → [using/quickstart.md](using/quickstart.md) — three local servers, mkfs, mount, first file.
 - **Power user / operator of a mount** → [using/power-user.md](using/power-user.md) — mount options, environment variables, quotas, `efs-mgmt`, `df`/`du` semantics.
 
+- **Directory-local commands** → [using/efs-commands.md](using/efs-commands.md) — listing, dates, sorting, search filters, snapshots and limits.
+
 ## How it works
 
 - **Software developer (changing code)** → [how-it-works/developing.md](how-it-works/developing.md) — modularity rules, task routing, what "done" means; [how-it-works/verification.md](how-it-works/verification.md) — the simulator and the gates; [how-it-works/testing.md](how-it-works/testing.md) — test suites and honest measurement.

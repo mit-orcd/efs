@@ -11,7 +11,7 @@ Mount opt-in `EFS_COMMANDS=1` is still independently required.
 
 The server starts no catalog refresh thread, builds/retains no query catalog or
 name indexes, and skips query-specific dirty counters and transaction-fence
-updates. It returns a zero GET_FEATURES mask and rejects both query RPC versions
+updates. It returns a zero GET_FEATURES mask and rejects all supported query RPC versions
 with NOT_FOUND before query reply/auth allocation, ReadIndex or source pinning.
 FUSE uses the server mask as well as mount opt-in to hide synthetic `.efs`.
 Real user `.efs` entries still take precedence. Capability polling is cached
@@ -56,7 +56,7 @@ namespace fits. Pending cross-group mutations can delay a safe initial build.
 ## Validation
 
 The private four-node TCP/buffered fixture runs on → off → on against the same
-stores. It checks both RPC versions are rejected on all disabled nodes, synthetic
+stores. It checks all supported RPC versions are rejected on all disabled nodes, synthetic
 commands disappear despite mount opt-in, feature masks change, normal payload
 create/write/rename/unlink persists, no off-phase publication/refresh occurs,
 and re-enable rebuilds every partition with exact independent count/byte oracle
@@ -107,3 +107,7 @@ its prior config is backed up as `nuc.env.before-server-command-policy-20261008`
 Cold production stats succeeded, and the existing tiny-files screen resumed
 into `/data1/efs/mnt/tiny-policy-a9f0a842`. Runtime devops configuration must be
 preserved/reconciled during a later driver-side devops sync.
+
+The [command-options build](efs-command-options-20261008.md) extends these gates
+to filtered-query wire v3; all three versions are refused while server commands
+are disabled. Earlier named-build evidence above covered v1/v2.

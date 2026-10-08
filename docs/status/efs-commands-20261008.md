@@ -6,7 +6,8 @@ those already-tested fixes. The separate `/Users/mike/git/efs` checkout is
 untouched. W91 owns command infrastructure; W92 owns replacement find/stats
 semantics and acceptance. Neither work item is closed by this checkpoint.
 
-Latest follow-up: [refresh/scan/memory repairs and expanded gates](efs-command-followups-20261008.md).
+Latest options and expiry coverage: [dates, sorting and filters](efs-command-options-20261008.md).
+Earlier follow-up: [refresh/scan/memory repairs and expanded gates](efs-command-followups-20261008.md).
 Historical measurements below retain their original build identity.
 
 ## Implemented interface

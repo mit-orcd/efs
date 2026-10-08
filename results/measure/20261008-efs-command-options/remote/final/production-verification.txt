@@ -1,0 +1,35 @@
+version 127.0.0.1:17432 efsd ae91a7f7-command-options-2 (branch devel-find-stats, built 2026-10-08T18:52:50Z on nuc)
+node 1 root=1 salt=1898367047478964614 groups=2
+  group 0 hosted=1 role=LEADER leader=0 term=308 commit=2488909 applied=2488909 voters=0x7 joint=0
+  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0
+version 127.0.0.1:17433 efsd ae91a7f7-command-options-2 (branch devel-find-stats, built 2026-10-08T18:52:50Z on nuc)
+node 2 root=1 salt=1898367047478964614 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=308 commit=2488909 applied=2488909 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=1 term=346 commit=2084617 applied=2084617 voters=0xe joint=0
+version 127.0.0.1:17434 efsd ae91a7f7-command-options-2 (branch devel-find-stats, built 2026-10-08T18:52:50Z on nuc)
+node 3 root=1 salt=1898367047478964614 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=308 commit=2488909 applied=2488909 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=1 term=346 commit=2084617 applied=2084617 voters=0xe joint=0
+version 127.0.0.1:17435 efsd ae91a7f7-command-options-2 (branch devel-find-stats, built 2026-10-08T18:52:50Z on nuc)
+node 4 root=0 salt=1898367047478964614 groups=2
+  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=1 term=346 commit=2084617 applied=2084617 voters=0xe joint=0
+924f33fe833bd53450c78a1f0b9b9de0a6fb1712693a588bdd24a34aeda4cc7f  /proc/3009692/exe
+924f33fe833bd53450c78a1f0b9b9de0a6fb1712693a588bdd24a34aeda4cc7f  /proc/3010543/exe
+924f33fe833bd53450c78a1f0b9b9de0a6fb1712693a588bdd24a34aeda4cc7f  /proc/3011567/exe
+924f33fe833bd53450c78a1f0b9b9de0a6fb1712693a588bdd24a34aeda4cc7f  /proc/3012709/exe
+602b2064c3f8d10305ea916ea23a7053583e3308e8174bac23670921ffc1eeee  /proc/3014040/exe
+602b2064c3f8d10305ea916ea23a7053583e3308e8174bac23670921ffc1eeee  /proc/3014087/exe
+924f33fe833bd53450c78a1f0b9b9de0a6fb1712693a588bdd24a34aeda4cc7f  /data1/efs/src/efsd
+602b2064c3f8d10305ea916ea23a7053583e3308e8174bac23670921ffc1eeee  /data1/efs/src/efs-fuse
+28f52979486c75ff7c240651d3b93b32e606ac1d9be6e9c6a34f1845d489e2c5  /data1/efs/command-options/final/rollback/efsd
+ee4cf4942b5fad8cc2a5086de8fabc8cd3b8d309776755dae48deaca49d333da  /data1/efs/command-options/final/rollback/efs-fuse
+/data1/efs/mnt is a mountpoint
+/data1/efs/mnt2 is a mountpoint
+3014122 python3 ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 1000000 --workers 2 /data1/efs/mnt/tiny-command-options
+Filesystem           Size  Used Avail Use% Mounted on
+/dev/sda             745G  115G  631G  16% /data1
+/dev/mapper/rl-home  843G   97G  747G  12% /home
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi        15Gi       540Mi       199Mi        15Gi        15Gi
+Swap:             0B          0B          0B

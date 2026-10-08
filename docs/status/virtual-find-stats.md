@@ -6,7 +6,8 @@ Python command source and the separate versioned query path. Real user entries
 named `.find`, `.stats` or `.efs` must remain available. Compatibility with the
 legacy synthetic paths is not required.
 
-The [latest profiling report](efs-command-performance-20261008.md),
+The [command-options and expiry-test report](efs-command-options-20261008.md),
+[latest profiling report](efs-command-performance-20261008.md),
 [policy/catch-up report](efs-command-policy-20261008.md) and
 [command checkpoint](efs-commands-20261008.md) record implemented
 command/query infrastructure, tests, activation and remaining acceptance.

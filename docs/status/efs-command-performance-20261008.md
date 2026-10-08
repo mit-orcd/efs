@@ -1,6 +1,8 @@
 # W91/W92 — `.efs` command profiling and optimization
 
-Latest deployed candidate: **56127784-perf-r9**, after nine completed rounds.
+Latest profiling candidate: **56127784-perf-r9**, after nine completed rounds.
+The subsequent [command-options deployment](efs-command-options-20261008.md)
+adds dates, sorting and filters; the profiling figures below retain their build identity.
 The continuation results and current generator directory are recorded at the end.
 
 This investigation uses the `devel-find-stats` worktree and the existing NUC

@@ -12,6 +12,12 @@ Implementation and gates remain open; no fixed directory depth or universal
 scratch TTL is selected. D28–D30 are also accepted. The zero decision count
 refers to settled registered asks, not to every remaining implementation detail.
 
+## Command options and expiry coverage
+
+[W91/W92 options and W90 test status](efs-command-options-20261008.md) records
+long listings, dates, sorting and server-side predicates. Expiry remains
+unimplemented; unavailable/refusal tests are not lifecycle acceptance.
+
 ## Tiny-file performance follow-up
 
 [W93–W96: NUC profiling evidence and next experiments](tiny-file-performance-plan-20261008.md)

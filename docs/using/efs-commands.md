@@ -1,0 +1,103 @@
+# Directory-local EFS commands
+
+On an enabled Linux EFS mount, each directory has a lookup-only `.efs/` command
+directory. Commands operate on that containing directory, regardless of your
+current working directory. `.efs/ls` lists immediate children; `.efs/find`
+searches names recursively. Hidden user entries are included. Real user `.efs`
+entries take precedence. Python 3 is required; on a noexec mount, invoke a command
+with `python3 /path/.efs/COMMAND`.
+
+```sh
+# Detailed listing, newest first, readable sizes and UTC dates
+.efs/ls -l --human-readable --sort mtime
+
+# Directories first, with short relative paths
+.efs/ls --dirs-first --relative
+
+# Large log files, largest first
+.efs/find .log --match suffix --type file --min-size 100MiB \
+  -l --human-readable --sort size
+
+# Files modified in the last two days; empty literal matches all names
+.efs/find '' --type file --modified-within 2d \
+  -l --sort mtime --time-style relative
+
+# Exact date interval, independent of the client's local timezone
+.efs/find report --modified-after 2026-10-01T00:00:00Z \
+  --modified-before 2026-10-08T00:00:00Z --json
+```
+
+## Display and ordering
+
+Both `ls` and `find` accept:
+
+| Option | Behavior |
+| --- | --- |
+| `-l`, `--long` | Permissions, numeric `uid:gid`, logical size, modification date, path |
+| `--human-readable` | Long-list sizes in B, KiB, MiB, GiB, etc. |
+| `--sort name\|mtime\|size` | Default raw-byte name/path order; newest or largest first for the other keys |
+| `-r`, `--reverse` | Reverse the chosen order, including path tie-breaks |
+| `--time-style iso\|relative\|full` | Long-list UTC date/minute, relative age, or full UTC nanosecond timestamp |
+| `--relative` | Paths relative to the directory containing `.efs` |
+| `--json` | Structured entries, raw relative `path_hex`, metadata and snapshot status |
+| `-0`, `--print0` | NUL-separated paths for scripts; combines with `--relative` |
+| `-h`, `--help` | Command-specific help |
+
+`ls --dirs-first` keeps directories first even with reverse sorting. Ties in
+size or modification time use raw relative path bytes for deterministic output;
+sorting is case-sensitive and independent of locale. Dates are modification
+times, not creation dates or expiry deadlines. Relative ages use one client
+clock sample taken when the command starts. Numeric IDs avoid dependence on
+local account-name lookup or mismatched name services.
+
+`--long` cannot combine with JSON or NUL output. Readable sizes and time styles
+require `--long`. JSON always retains raw integer sizes/timestamps and relative
+path bytes, so it rejects the redundant `--relative` option. Sorting applies to
+all output forms. Human-readable names escape terminal controls and invalid
+Unicode; use NUL output or JSON for exact filename bytes. Output without
+`--relative` uses absolute paths in the invoking client's mount.
+
+## Find predicates
+
+The required pattern is a literal **filename** match, not a shell glob or path
+expression. `--match exact|prefix|suffix|contains` selects its interpretation;
+contains is the default. Quote shell metacharacters. Use `''` with contains or
+prefix to request all names, subject to the normal limits.
+
+| Option | Behavior |
+| --- | --- |
+| `--type file\|dir\|symlink` | Select entry type; symlinks are not followed |
+| `--min-size SIZE` | Inclusive minimum logical bytes |
+| `--max-size SIZE` | Inclusive maximum logical bytes |
+| `--modified-after TIMESTAMP` | Modification time strictly greater than the timestamp |
+| `--modified-before TIMESTAMP` | Modification time strictly less than the timestamp |
+| `--modified-within DURATION` | Strictly between command-start time minus duration and command-start time; excludes future dates |
+
+All predicates combine with AND. Within can narrow explicit date bounds; an
+empty interval or reversed size range is an argument error. Size filters apply
+to the selected entry's logical size; use `--type file` for regular-file sizes.
+Values are bytes or explicit units: B, KiB/MiB/GiB/TiB (powers of 1024) and
+KB/MB/GB/TB (powers of 1000). Fractional quantities such as `1.5GiB` must resolve
+to whole bytes. Durations are positive integers with s/m/h/d/w suffixes; days
+are 24 hours. Timestamps require ISO date and time plus `Z` or a numeric timezone
+offset, and accept up to nine fractional digits. Pre-epoch values are refused.
+
+## Snapshots, limits and expiry
+
+Dates, sizes and filters use the published **server metadata snapshot**. They
+may lag ordinary writes; the status on stderr and JSON snapshot fields report
+freshness. Filtering does not issue a stat RPC per result or download the tree.
+Sorting happens after complete result validation on the client. Opening a result
+pins immutable bytes; this does not promise a globally atomic live-tree view.
+
+Normal authorization, output, candidate-visit, memory and deadline bounds still
+apply. Filtering reduces emitted bytes but does not bypass scan limits or grant
+access to protected descendants. Exceeding a limit fails explicitly, without
+partial successful output. The literal pattern limit remains 120 filename bytes;
+reply size is bounded at 16 MiB. Extra metadata increases bytes per entry.
+
+Expiry is **unavailable**. These commands do not set deadlines, renew files or
+schedule deletion. Expiry arguments are rejected, not silently ignored. See the
+[expiry test status](../status/efs-command-options-20261008.md#expiry-testing).
+For activation and restart/catch-up behavior, see
+[server policy](../status/efs-command-policy-20261008.md).
