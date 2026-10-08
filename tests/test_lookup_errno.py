@@ -12,6 +12,7 @@ code=r'''
 #include <errno.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <pthread.h>
 typedef uint64_t fuse_ino_t;
 struct fuse_entry_param {uint64_t ino;};
 static struct {uint64_t export_id;} g_client={1};
@@ -22,7 +23,14 @@ static int failure,adopted;
 static int virt_kind(fuse_ino_t n){(void)n;return 0;}
 static int feature_enabled(int n){(void)n;return 1;}
 static fuse_ino_t virt_parent(fuse_ino_t n){return n;}
-static fuse_ino_t vq_intern(fuse_ino_t n,const char*s){(void)s;return n;}
+static fuse_ino_t vq_intern(fuse_ino_t n,const char*s,uint64_t version,size_t len){(void)s;(void)version;(void)len;return n;}
+static int virtual_access(fuse_ino_t n){(void)n;return 0;}
+static int find_query_ensure(fuse_ino_t n,const char*s,const char*name){(void)n;(void)s;(void)name;return EFS_ERR_NOT_FOUND;}
+#define EFS_FIND_RES_N 1
+static pthread_mutex_t g_find_res_mu=PTHREAD_MUTEX_INITIALIZER;
+static struct {int valid;fuse_ino_t dir_ino;char term[256];char *text;size_t len;} g_find_res[EFS_FIND_RES_N];
+static int find_res_caller(int i){(void)i;return 0;}
+static uint64_t virtual_version(const char*s,size_t len){(void)s;(void)len;return 0;}
 static fuse_ino_t virt_stats_ino(fuse_ino_t n){return n;}
 static fuse_ino_t virt_find_ino(fuse_ino_t n){return n;}
 static int lookup_fill(fuse_ino_t n,struct fuse_entry_param*e,void*p){(void)n;(void)e;(void)p;return 0;}

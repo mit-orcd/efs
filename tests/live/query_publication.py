@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Private TCP fixture: background query publication/startup/shutdown smoke.
 
-This is NOT .find/.stats RPC, permissions, fault or large-tree acceptance.
+Optional EFS_QUERY_RPC/FUSE/POSIX gates cover real query consumers; this is
+not large-tree, hardware durability or deployment acceptance.
 Keeps raw stores/logs in a caller-provided NEW directory. Never touches a
 running cluster or mounts; terminates only the subprocesses it starts.
 """
 import os
+import argparse
 from pathlib import Path
 import re
 import socket
@@ -14,7 +16,19 @@ import sys
 import time
 
 source=Path(__file__).resolve().parents[2]
-work=Path(sys.argv[1]).resolve()
+parser=argparse.ArgumentParser(description=__doc__)
+parser.add_argument('work',type=Path)
+parser.add_argument('--mode',choices=('direct','buffered'),default='direct')
+parser.add_argument('--mount',type=Path)
+parser.add_argument('--peer-mount',type=Path)
+args=parser.parse_args()
+assert bool(args.mount)==bool(args.peer_mount),'both mount paths required together'
+work=args.work.resolve()
+mount_paths=[args.mount,args.peer_mount] if args.mount else [work/'mnt1',work/'mnt2']
+for mount in mount_paths:
+    if mount.exists():
+        assert mount.is_dir() and not os.path.ismount(mount) and not any(mount.iterdir()),'mount must be empty and unmounted'
+io_flag='--direct-io' if args.mode=='direct' else '--no-direct-io'
 work.mkdir(parents=True,exist_ok=False)
 logs=[];procs=[];fuse_procs=[];mounts=[]
 env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
@@ -31,7 +45,7 @@ for base in range(24800,25000,4):
         for sock in held:sock.close()
 else:
     raise RuntimeError('no free fixture port range')
-print(f'fixture={work} ports={base}-{base+3}',flush=True)
+print(f'fixture={work} ports={base}-{base+3} mode={args.mode} transport=tcp',flush=True)
 def run(*args):
     return subprocess.run([str(source/'efs-mgmt'),*map(str,args)],env=env,text=True,
                           stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=8)
@@ -51,7 +65,7 @@ try:
         log=(work/f'n{node}.log').open('w');logs.append(log)
         args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
               '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
-              '--quota','1G','--writers','0','--no-direct-io']
+              '--quota','1G','--writers','0',io_flag]
         if node>1:args+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
         wait_for(lambda: 'listening' in (work/f'n{node}.log').read_text(),10)
@@ -99,7 +113,7 @@ try:
     expected_root='root_rc=0 files=4 dirs=0 logical=0'
     if os.environ.get('EFS_QUERY_FUSE')=='1':
         for index in (1,2):
-            mount=work/f'mnt{index}';mount.mkdir();mounts.append(mount)
+            mount=mount_paths[index-1].resolve();mount.mkdir(exist_ok=True);mounts.append(mount)
             log=(work/f'fuse{index}.log').open('w');logs.append(log)
             fuse_procs.append(subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
                                                 'w92-private',str(mount)],env=env,stdout=log,stderr=log))
@@ -140,7 +154,7 @@ try:
         log=(work/f'n{node}-restart.log').open('w');logs.append(log)
         args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
               '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
-              '--quota','1G','--writers','0','--no-direct-io']
+              '--quota','1G','--writers','0',io_flag]
         if node>1:args+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
         wait_for(lambda: 'listening' in (work/f'n{node}-restart.log').read_text(),10)

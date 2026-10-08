@@ -53,6 +53,9 @@ static void dcache_img_to_rdcache(efs_ino_t ino,uint32_t ci,uint8_t *p,uint32_t 
 '''+function((root/'src/client/writer_state.c').read_text(),'efs_writer_state_report')+'\n'+function(w,'dcache_cycle_sent')+'\n'+function(w,'dcache_cycle_verdict')+'\n'+function(w,'dcache_note_committed')+r'''
 struct fuse_file_info {uint64_t fh;};
 '''+handles+r'''
+static int virtual_refs,virtual_closed;
+static void vq_open_size(efs_ino_t ino,size_t len,int delta) {(void)ino;(void)len;virtual_refs+=delta;}
+static void vq_closed(efs_ino_t ino) {(void)ino;virtual_closed++;}
 static void prepare_cycle(uint32_t ci,uint64_t mutation,uint64_t seq) {
     struct dcache_ent *e=&slots[ci];
     e->ino=42;e->ci=ci;e->mutation=mutation;e->object_seq=seq;
@@ -65,6 +68,13 @@ static void send_cycle(uint32_t ci,uint64_t seq) {
     dcache_cycle_sent(&r,seq);
 }
 int main(void) {
+    struct fuse_file_info query={0};char text[]="snapshot";
+    assert(!virtual_file_open(&query,1ULL<<60,text,8));
+    assert(virtual_refs==1 && g_virtual_open_bytes==8);
+    text[0]='X';assert(!memcmp(efs_file_handle(&query)->snapshot,"snapshot",8));
+    assert(!efs_file_handle(&query)->errors);
+    efs_file_close(&query);
+    assert(!query.fh && !virtual_refs && virtual_closed==1 && !g_virtual_open_bytes);
     struct fuse_file_info d1={0},d2={0},d3={0};
     assert(!efs_file_open(&d1,42));assert(!efs_file_open(&d2,42));
     assert(d1.fh!=d2.fh&&efs_file_ino(&d1,0)==42);
