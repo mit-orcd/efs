@@ -1,0 +1,10 @@
+./tests/test_erasure
+test_erasure: OK
+./tests/test_placement
+test_placement: OK
+./tests/test_lock
+test_lock: OK
+./tests/test_stage_evict
+test_stage_evict: OK
+./tests/test_conn_fd
+test_conn_fd: OK

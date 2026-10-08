@@ -1,0 +1,11 @@
+unmounting /data1/efs/mnt
+Unmounting /data1/efs/mnt
+Unmounted /data1/efs/mnt
+unmounting /data1/efs/mnt2
+Unmounting /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+stopping n1 (pid 1052642)
+stopping n2 (pid 1052689)
+stopping n3 (pid 1052741)
+stopping n4 (pid 1052859)
+amd-efs stopped

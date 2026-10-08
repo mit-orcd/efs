@@ -1,0 +1,11 @@
+{
+  "mode": "buffered",
+  "roots": [
+    "/data1/efs/gc-buffered-3ohdte4d/n1",
+    "/data1/efs/gc-buffered-3ohdte4d/n2",
+    "/data2/efs/gc-buffered-aw4_ys28/n3",
+    "/data2/efs/gc-buffered-aw4_ys28/n4"
+  ],
+  "port": 20200,
+  "source_tree_sha256": "f9ab7d8b93a6aeaaa4cbe6d73d64548481d1f0078049aad28c4dd916d8898028"
+}

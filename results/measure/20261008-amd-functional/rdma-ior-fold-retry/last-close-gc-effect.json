@@ -1,0 +1,16 @@
+{
+  "ino": 65537,
+  "before": {
+    "passes": 181,
+    "removed_fragments": 23253,
+    "reclaimed_payload_bytes": 1523908608,
+    "data_usage_bytes": 30474240
+  },
+  "after": {
+    "passes": 185,
+    "removed_fragments": 23472,
+    "reclaimed_payload_bytes": 1538260992,
+    "data_usage_bytes": 16121856
+  },
+  "remaining_target_fragments": 0
+}

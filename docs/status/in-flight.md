@@ -3,7 +3,7 @@
 [Status index](README.md) · [Decisions](decisions.md) ·
 [Architecture](../how-it-works/architecture.md)
 
-Reviewed Oct 7, 2026. Historical rollout facts are in the
+Reviewed Oct 8, 2026. Historical rollout facts are in the
 [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md);
 previous handoff text is [archived](../archive/handoff-20261007.md).
 Do not use a historical cluster address, binary hash or mount as current state.
@@ -64,10 +64,25 @@ Oct 8 hardening compares the complete UUID, session epoch and reservation length
 requires a fresh authoritative read before a cache replay, and refuses cursor overflow.
 AMD direct-I/O/TCP passes full units, POSIX 216/0/1 skip, peer 64/64 and cold
 durability 26/26 in both phases. These checks do not close durable replay.
+A real 32-request identical-reserve gate then reproduced duplicate allocation
+(offset 8 instead of 0). Per-inode nonblocking reservation ownership fixes that
+race; the repaired gate checks exact offsets and cold extent. W87's original
+NUC fixture contains missing W1S0002/W0S0004 records, beyond first-record loss.
+AMD buffered broad POSIX/peer and mixed append/GC with 800 exact cold records
+pass; this is acceptance evidence, not a proven single cause for W87.
+
+**Oct 8 AMD package:** [evidence](amd-functional-gates-20261008.md).
+Functional cycles use direct I/O/TCP; only transport/buffered-specific gates
+change modes. W84's exact 144-participant coordinator crashes pass; the finite
+ancestry product limit remains open. RDMA eager send-slot registration caused
+a 1 GiB whole-fixture OOM. Lazy registration keeps the 32-slot pipeline and passes
+the same 1 GiB recovery gate with zero OOM events; the allocation budgets did not
+increase. No benchmark source or harness was changed.
 
 **W65 — shutdown:** the historical NUC SIGTERM failures are superseded for TCP
 by the [six active-write stop/recovery gates](tcp-five-gates-20261007.md).
-RDMA acceptance is now being exercised on AMD RXE; hardware RoCE/native IB
+AMD RXE active-write, idle/partial TCP reader and connection-churn stop gates
+now pass with exact acknowledged bytes after cold restart. Hardware RoCE/native IB
 remain separate platform obligations.
 
 ## Additional public-contract findings

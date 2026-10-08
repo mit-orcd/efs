@@ -1,0 +1,13 @@
+unmounting /data1/efs/mnt2
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 1213912 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+unmounting /data1/efs/mnt
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1217084 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+stopping n1 (pid 1213464)
+stopping n2 (pid 1213534)
+stopping n3 (pid 1213596)
+stopping n4 (pid 1213807)
+amd-efs stopped

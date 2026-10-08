@@ -1,0 +1,7 @@
+Result=oom-kill
+ControlGroup=
+MemoryPeak=1073741824
+Oct 08 00:43:59 amd-395 systemd[2297]: Started run-p1140149-i1188770.scope - [systemd-run] /usr/bin/env EFS_RDMA_DEV=rxe0 EFS_RDMA_GID_INDEX=1 python3 tests/live/gc_reclamation.py --mode direct --transport rdma --root /data1/efs --root /data1/efs --mount /data1/efs/mnt --peer-mount /data1/efs/mnt2 --port 28432 --append-replay-race --shutdown-mutations --pressure --publication-pressure --drain-pressure --production-budgets --memory-limit-bytes 1073741824 --client-binary /data1/efs/functional-src/efs-fuse.
+Oct 08 00:44:22 amd-395 systemd[2297]: run-p1140149-i1188770.scope: The kernel OOM killer killed some processes in this unit.
+Oct 08 00:44:22 amd-395 systemd[2297]: run-p1140149-i1188770.scope: Failed with result 'oom-kill'.
+Oct 08 00:44:22 amd-395 systemd[2297]: run-p1140149-i1188770.scope: Consumed 3.621s CPU time over 22.834s wall clock time, 1G memory peak.

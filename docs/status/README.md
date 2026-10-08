@@ -6,6 +6,11 @@
 
 ## 1. The task right now
 
+[AMD functional follow-up](amd-functional-gates-20261008.md): append retry ownership,
+RXE memory/shutdown, exact namespace crash boundaries and cold physical GC.
+Short functional cycles default to direct-I/O/TCP. Remaining durable append,
+full-ancestry and physical-host obligations remain open.
+
 [Version0.2.0 AMD release acceptance](v020-amd-release.md): devel-roce-rdma merged into devel; full POSIX, peer and cold durability suites pass for direct/buffered × TCP/RXE RDMA. Hardware RoCE/native-IB and broader roadmap obligations are not closed by this release.
 
 The [memory acceptance follow-up](memory-closure-20261007.md) closes W59/W67.

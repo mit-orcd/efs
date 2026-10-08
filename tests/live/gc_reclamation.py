@@ -24,8 +24,14 @@ import time
 
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--mode', choices=('buffered', 'direct'), required=True)
+p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
+               help='TCP by default; use RDMA only for transport-specific gates')
 p.add_argument('--root', action='append', default=[])
+p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
+p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
+p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
 p.add_argument('--integrity', action='store_true')
 p.add_argument('--namespace', action='store_true')
 p.add_argument('--namespace-boundary', action='store_true')
@@ -39,6 +45,7 @@ p.add_argument('--drain-pressure',action='store_true',help='physically exhaust r
 p.add_argument('--memory-limit-bytes',type=int,help='require an inherited cgroup memory ceiling and verify no OOM events')
 p.add_argument('--publication-pressure',action='store_true',help='retain failed REPORT bodies until bounded admission refuses, then recover')
 p.add_argument('--namespace-max',action='store_true',help='exact ancestry limit, over-limit refusal and restart recovery')
+p.add_argument('--namespace-max-fault',action='store_true',help='kill exact 144-participant namespace coordinator before/after COMMIT')
 p.add_argument('--shutdown-mutations',action='store_true',help='gracefully stop a metadata leader during fsynced file creation; verify acknowledged bytes after restart')
 p.add_argument('--opid', action='store_true')
 p.add_argument('--opid-restart',action='store_true',help='restart all owned servers between lost commit reply and replay')
@@ -99,8 +106,10 @@ work = Path(tempfile.mkdtemp(prefix='gc-'+a.mode+'-', dir=parents[0]))
 other = Path(tempfile.mkdtemp(prefix='gc-'+a.mode+'-', dir=parents[1]))
 roots = [work/'n1',work/'n2',other/'n3',other/'n4']
 data_roots=[root/('storage'+str(i)) for root in roots for i in range(2)] if a.storage_roots==2 else roots
-mount = work/'mnt'
-mount.mkdir()
+mount = a.mount.resolve() if a.mount else work/'mnt'
+if a.mount:
+    assert mount.is_dir() and not os.path.ismount(mount) and not any(mount.iterdir()), 'mount path must be empty and unmounted'
+else:mount.mkdir()
 digest=hashlib.sha256()
 inputs=[source/'Makefile'] + [x for folder in ('src','include') for x in (source/folder).rglob('*') if x.suffix in ('.c','.h')]
 for path in sorted(inputs):
@@ -113,7 +122,11 @@ for path in sorted(inputs):
     "binary_sha256":{name:hashlib.sha256((a.server_binary if name=='efsd' and a.server_binary else a.client_binary if name=='efs-fuse' and a.client_binary else source/name).read_bytes()).hexdigest()
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
-env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT='tcp')
+env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT=a.transport)
+if a.transport == 'rdma':
+    device = env.get('EFS_RDMA_DEV', 'rxe0')
+    assert (Path('/sys/class/infiniband')/device).is_dir(), 'RDMA device absent; gate not run'
+    env['EFS_RDMA_DEV'] = device
 if a.gc_bulk_gib:
     assert not a.idle_seconds;env['EFS_GC_DBG']='1'
 if a.ior_binary:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
@@ -134,14 +147,18 @@ if a.lookup_barrier:
 if a.put_reply_fault:
     assert a.client_binary,'PUT reply fault requires explicit fault client'
 if a.opid_failover:assert a.opid and not a.opid_restart
-if a.namespace_boundary_fault:
-    assert a.namespace_boundary and a.namespace and a.server_binary
+if a.namespace_max_fault:
+    assert a.namespace_max and a.server_binary
+if a.namespace_boundary_fault or a.namespace_max_fault:
+    if a.namespace_boundary_fault:assert a.namespace_boundary and a.namespace and a.server_binary
     env['EFS_FAULT_TXN_BARRIER']=str(work/'txn-barrier')
 servers=[]
 client=None
 peer=None
-peer_mount=work/"peer"
-peer_mount.mkdir()
+peer_mount=a.peer_mount.resolve() if a.peer_mount else work/'peer'
+if a.peer_mount:
+    assert peer_mount != mount and peer_mount.is_dir() and not os.path.ismount(peer_mount) and not any(peer_mount.iterdir()), 'peer mount must be distinct, empty and unmounted'
+else:peer_mount.mkdir()
 handles=[]
 extra_clients=[]
 blocked=None
@@ -208,6 +225,26 @@ def mount_client():
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
         return subprocess.run(['timeout','2','stat',str(mount)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
     wait(ready,'client serving',40)
+    transport_proof([*servers,client])
+
+def transport_proof(processes):
+    if a.transport == 'rdma':
+        # Fail instead of silently accepting a TCP fallback. Check the active
+        # clients and servers, including each cold restart in this harness.
+        proof=[]
+        for proc in processes:
+            devices=[]
+            for fd in (Path('/proc')/str(proc.pid)/'fd').iterdir():
+                try:
+                    target=os.readlink(fd)
+                except FileNotFoundError:
+                    continue
+                if '/dev/infiniband/uverbs' in target:
+                    devices.append(target)
+            assert devices, ('RDMA process has no verbs device',proc.pid)
+            proof.append({'pid':proc.pid,'verbs_devices':sorted(set(devices))})
+        with (work/'rdma-runtime.jsonl').open('a') as out:
+            out.write(json.dumps(proof)+'\n')
 
 def unmount():
     global client
@@ -298,6 +335,23 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.append_replay_race:
+        helper=work/'append-replay-race'
+        run(['cc','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+             source/'tests/live/append_replay_race.c','-pthread','-o',helper])
+        path=mount/'append-identical-rpc'
+        fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
+        try:
+            result=subprocess.run([str(helper),str(a.port),str(os.fstat(fd).st_ino)],
+                                  capture_output=True,text=True,timeout=120,env=env)
+            (work/'append-replay-race.log').write_text(result.stdout+result.stderr)
+            assert result.returncode==0,result.stdout+result.stderr
+            assert os.pwrite(fd,b'append-A',0)==8;os.fsync(fd)
+        finally:os.close(fd)
+        unmount();stop();start();mount_client()
+        assert path.read_bytes()==b'append-A','reserve replay changed the cold file extent'
+        path.unlink();wait(drained,'identical append RPC physical deletion drained')
+        print('32 identical concurrent APPEND RPCs and exact cold extent PASS',flush=True)
     if a.full_node:
         endpoint=f'127.0.0.1:{a.port}'
         result=run([source/'efs-mgmt','shrink-quota',endpoint,str((1<<30)-(64<<10))],capture_output=True,text=True)
@@ -524,9 +578,29 @@ try:
         node=leaders[0];proc=servers[node]
         command=Path(f'/proc/{proc.pid}/cmdline').read_bytes().split(b'\0')[:-1]
         assert thread.is_alive(),'writer finished before the shutdown signal'
-        before_stop=len(acknowledged)
-        started=time.monotonic();proc.terminate();proc.wait(timeout=10)
-        elapsed=time.monotonic()-started;assert proc.returncode==0,proc.returncode
+        stalled=[];churn_stop=threading.Event()
+        def connection_churn():
+            while not churn_stop.is_set():
+                try:
+                    with socket.create_connection(('127.0.0.1',a.port+node),timeout=.1):pass
+                except OSError:pass
+                churn_stop.wait(.005)
+        churn=threading.Thread(target=connection_churn,daemon=True)
+        try:
+            for index in range(32):
+                sock=socket.create_connection(('127.0.0.1',a.port+node),timeout=1)
+                stalled.append(sock)
+                if index%2:sock.sendall(b'\0\0')
+            churn.start()
+            assert thread.is_alive(),'writer finished before reader/churn shutdown'
+            before_stop=len(acknowledged)
+            started=time.monotonic();proc.terminate();proc.wait(timeout=10)
+            elapsed=time.monotonic()-started;assert proc.returncode==0,proc.returncode
+        finally:
+            churn_stop.set()
+            if churn.is_alive():churn.join(2)
+            assert not churn.is_alive(),'connection churn did not retire'
+            for sock in stalled:sock.close()
         finish.set();thread.join(60);assert not thread.is_alive(),'mutation worker did not finish'
         log=open(work/f'n{node+1}.log','ab');handles.append(log)
         servers[node]=subprocess.Popen(command,env=env,stdout=log,stderr=log)
@@ -539,7 +613,7 @@ try:
         unmount();stop();start();mount_client()
         for index,digest in acknowledged:
             assert hashlib.sha256((directory/str(index)).read_bytes()).hexdigest()==digest,(node,index)
-        record={'leader_node':node+1,'shutdown_seconds':elapsed,'acknowledged_before_stop':before_stop,'acknowledged_files':len(acknowledged),'writer_active_at_signal':True,'errors':errors,'cold_bytes_verified':True,'returncode':proc.returncode}
+        record={'leader_node':node+1,'shutdown_seconds':elapsed,'acknowledged_before_stop':before_stop,'acknowledged_files':len(acknowledged),'writer_active_at_signal':True,'errors':errors,'cold_bytes_verified':True,'returncode':proc.returncode,'idle_tcp_readers':16,'partial_tcp_frames':16,'connection_churn_at_signal':True,'data_transport':a.transport}
         (work/'shutdown-mutations.json').write_text(json.dumps(record,indent=2))
         for path in directory.iterdir():path.unlink()
         directory.rmdir();wait(drained,'shutdown mutation deletion drains',180)
@@ -668,8 +742,11 @@ try:
             # Large scattered writes retain more immutable generations than
             # their logical size. Observe bounded queue drain, then inspect
             # the physical inventory once instead of repeatedly scanning it.
-            wait(drained,'IOR GC records drained',1800)
-            assert not files(ino),'IOR GC drained but physical fragments remain'
+            # Queue counters describe the last sampled GC pass and may
+            # still be zero immediately after unlink. Require actual
+            # physical absence as well; scan only when queues appear empty.
+            wait(lambda:drained() and not files(ino),
+                 'IOR GC records and physical fragments drained',1800)
             records.append({'ranks':ranks,'segments':a.ior_segments,'records':ranks*a.ior_segments,'bytes':47008*ranks*a.ior_segments,'write_seconds':write_seconds,'verify_seconds':verify_seconds,'cold_hardscan_bad':0,'cold_hardscan_short':0})
             print(f'actual IOR hard ranks={ranks} cold verify/hardscan and deletion PASS',flush=True)
         records_meta={'independent_fuse_clients':a.ior_clients,'physical_client_hosts':1,'ior_binary':str(a.ior_binary),'ior_sha256':hashlib.sha256(a.ior_binary.read_bytes()).hexdigest(),'mpi_run_sha256':hashlib.sha256(a.mpi_run.read_bytes()).hexdigest(),'cases':records}
@@ -884,7 +961,51 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
         unmount();stop();start();mount_client()
         assert last.stat().st_ino==saved
         recovered=mount/'max-recovered';os.rename(last,recovered)
-        assert recovered.stat().st_ino==saved;os.rmdir(recovered)
+        assert recovered.stat().st_ino==saved
+        if a.namespace_max_fault:
+            outcomes=[]
+            destination=chain[-2]/'moved'
+            for stage in ('prepare','commit'):
+                barrier=work/'txn-barrier';ready=work/'txn-barrier.ready'
+                barrier.write_text(stage);errors=[]
+                def move_max():
+                    try:os.rename(recovered,destination)
+                    except OSError as error:errors.append(str(error))
+                thread=threading.Thread(target=move_max,daemon=True);thread.start()
+                wait(ready.exists,'maximum namespace '+stage+' barrier reached',30)
+                proof=ready.read_text()
+                (work/f'namespace-max-{stage}-barrier.txt').write_text(proof)
+                assert int(re.search(r'parts=(\d+)',proof).group(1))==144,proof
+                pid=int(re.search(r'pid=(\d+)',proof).group(1))
+                node=next(i for i,proc in enumerate(servers) if proc.pid==pid)
+                proc=servers[node];command=Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')[:-1]
+                proc.kill();proc.wait();barrier.unlink();ready.unlink()
+                log=open(work/f'n{node+1}.log','ab');handles.append(log)
+                servers[node]=subprocess.Popen(command,env=env,stdout=log,stderr=log)
+                thread.join(60);assert not thread.is_alive(),'maximum namespace retry did not finish'
+                unmount();stop();start();mount_client()
+                def authoritative_names():
+                    try:
+                        observed=[path for path in (recovered,destination) if path.exists()]
+                        assert len(observed)==1,observed
+                        assert observed[0].stat().st_ino==saved
+                        if stage=='commit':assert observed[0]==destination,'durable COMMIT lost'
+                        return observed[0]
+                    except OSError as error:
+                        assert error.errno in (5,16),error
+                        return None
+                observed=None;deadline=time.monotonic()+30
+                while observed is None and time.monotonic()<deadline:
+                    observed=authoritative_names()
+                    if observed is None:time.sleep(.1)
+                assert observed is not None,'maximum namespace authority did not recover'
+                outcomes.append({'stage':stage,'proof':proof,'coordinator':node+1,
+                                 'syscall_errors':errors,'cold_inode':saved,
+                                 'destination_committed':observed==destination})
+                (work/'namespace-max-fault.json').write_text(json.dumps(outcomes,indent=2))
+                if observed==destination:os.rename(destination,recovered)
+            print('exact 144-participant prepared/committed coordinator death and cold atomic recovery PASS',flush=True)
+        os.rmdir(recovered)
         for directory in reversed(chain):os.rmdir(directory)
         (work/'namespace-max.json').write_text(json.dumps({'accepted_depth':len(chain)-1,'refused_depth':len(chain),'refusal_seconds':elapsed,'restart_verified':True},indent=2))
         print(f'namespace actual envelope: depth={len(chain)-1} accepted, depth={len(chain)} refused in {elapsed:.3f}s, restart recovery PASS',flush=True)
@@ -1271,6 +1392,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
     peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
     wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+    transport_proof([peer])
     fold=mount/'peer-fold';f1=os.open(fold,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
     os.write(f1,b'\0'*(128*1024));os.fsync(f1)
     f2=os.open(peer_mount/'peer-fold',os.O_RDWR)
@@ -1383,6 +1505,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        transport_proof([peer])
         run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','gc-posix-peer','--results',work/'posix2.tsv'],timeout=600)
         run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
         wait(drained,'POSIX server deletion queues drained',180)
@@ -1392,6 +1515,55 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         (work/'posix-gc-effect.json').write_text(json.dumps({
             'before': posix_checkpoint, 'after': after_posix}, indent=2))
         print('POSIX deletes advance GC passes and physical removal counters PASS',flush=True)
+    if a.append_audit:
+        from collections import Counter
+        path=mount/'append-cold-audit';path.touch()
+        garbage=mount/'append-garbage';garbage.mkdir()
+        for index in range(128):
+            with (garbage/str(index)).open('xb',buffering=0) as out:
+                out.write(bytes([index])*4096);os.fsync(out.fileno())
+        before=totals(status());gate=threading.Barrier(5);errors=[]
+        writers=4;count=200
+        def record(writer,index):return f'W{writer:02d}S{index:04d}\n'.encode()
+        def append_writer(writer):
+            gate.wait()
+            fd=os.open(path,os.O_WRONLY|os.O_APPEND) if writer%2 else None
+            try:
+                for index in range(count):
+                    active_fd=fd if fd is not None else os.open(path,os.O_WRONLY|os.O_APPEND)
+                    try:
+                        body=record(writer,index)
+                        assert os.write(active_fd,body)==len(body)
+                        if index%13==0:os.fsync(active_fd)
+                    finally:
+                        if fd is None:os.close(active_fd)
+                    # Keep appends active across several background GC passes.
+                    time.sleep(.01)
+                if fd is not None:os.fsync(fd)
+            except BaseException as error:errors.append(repr(error))
+            finally:
+                if fd is not None:os.close(fd)
+        def delete_during_append():
+            gate.wait()
+            for target in garbage.iterdir():target.unlink()
+            garbage.rmdir()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+            jobs=[pool.submit(append_writer,writer) for writer in range(writers)]
+            jobs.append(pool.submit(delete_during_append))
+            for job in jobs:job.result(timeout=120)
+        assert not errors,errors
+        warm=path.read_bytes();expected=Counter(record(writer,index) for writer in range(writers) for index in range(count))
+        assert Counter(warm.splitlines(keepends=True))==expected,'warm append records lost/duplicated'
+        after=totals(status());assert after['passes']>before['passes'],(before,after)
+        unmount();stop();start();mount_client()
+        cold=path.read_bytes();assert cold==warm,'cold append bytes changed'
+        assert Counter(cold.splitlines(keepends=True))==expected,'cold append records lost/duplicated'
+        evidence={'writers':writers,'records_per_writer':count,'exact_cold_records':writers*count,
+                  'sha256':hashlib.sha256(cold).hexdigest(),'before_gc':before,'after_gc':after,
+                  'mixed_per_record_close_and_persistent_descriptions':True}
+        (work/'append-cold-audit.json').write_text(json.dumps(evidence,indent=2))
+        path.unlink();wait(drained,'append audit physical deletion drained',180)
+        print('mixed concurrent append/GC and exact 800 cold records PASS',flush=True)
     unmount();stop()
     start()
     # No user fragment remains, even on a restart. Physical scan is independent

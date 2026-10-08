@@ -1459,6 +1459,11 @@ this document is the invariant they are measured against.
 
 ### 1. The task right now
 
+[AMD functional follow-up](../status/amd-functional-gates-20261008.md): append retry ownership,
+RXE memory/shutdown, exact namespace crash boundaries and cold physical GC.
+Short functional cycles default to direct-I/O/TCP. Remaining durable append,
+full-ancestry and physical-host obligations remain open.
+
 [Version0.2.0 AMD release acceptance](../status/v020-amd-release.md): devel-roce-rdma merged into devel; full POSIX, peer and cold durability suites pass for direct/buffered × TCP/RXE RDMA. Hardware RoCE/native-IB and broader roadmap obligations are not closed by this release.
 
 The [memory acceptance follow-up](../status/memory-closure-20261007.md) closes W59/W67.
@@ -1672,7 +1677,7 @@ Spark performance measurement still owed. Grouped open counts are now
 
 *Source: `status/in-flight.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
 
-Reviewed Oct 7, 2026. Historical rollout facts are in the
+Reviewed Oct 8, 2026. Historical rollout facts are in the
 [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md);
 previous handoff text is [archived](../archive/handoff-20261007.md).
 Do not use a historical cluster address, binary hash or mount as current state.
@@ -1733,10 +1738,25 @@ Oct 8 hardening compares the complete UUID, session epoch and reservation length
 requires a fresh authoritative read before a cache replay, and refuses cursor overflow.
 AMD direct-I/O/TCP passes full units, POSIX 216/0/1 skip, peer 64/64 and cold
 durability 26/26 in both phases. These checks do not close durable replay.
+A real 32-request identical-reserve gate then reproduced duplicate allocation
+(offset 8 instead of 0). Per-inode nonblocking reservation ownership fixes that
+race; the repaired gate checks exact offsets and cold extent. W87's original
+NUC fixture contains missing W1S0002/W0S0004 records, beyond first-record loss.
+AMD buffered broad POSIX/peer and mixed append/GC with 800 exact cold records
+pass; this is acceptance evidence, not a proven single cause for W87.
+
+**Oct 8 AMD package:** [evidence](../status/amd-functional-gates-20261008.md).
+Functional cycles use direct I/O/TCP; only transport/buffered-specific gates
+change modes. W84's exact 144-participant coordinator crashes pass; the finite
+ancestry product limit remains open. RDMA eager send-slot registration caused
+a 1 GiB whole-fixture OOM. Lazy registration keeps the 32-slot pipeline and passes
+the same 1 GiB recovery gate with zero OOM events; the allocation budgets did not
+increase. No benchmark source or harness was changed.
 
 **W65 — shutdown:** the historical NUC SIGTERM failures are superseded for TCP
 by the [six active-write stop/recovery gates](../status/tcp-five-gates-20261007.md).
-RDMA acceptance is now being exercised on AMD RXE; hardware RoCE/native IB
+AMD RXE active-write, idle/partial TCP reader and connection-churn stop gates
+now pass with exact acknowledged bytes after cold restart. Hardware RoCE/native IB
 remain separate platform obligations.
 
 ### Additional public-contract findings
@@ -3879,6 +3899,9 @@ project-history.md "START-HERE closed items".**
 
 ### W54 · a fold's GC deletes the live base (queue row 0i)
 
+**Oct 8 AMD follow-up:** AMD direct-I/O/RXE real four-rank IOR verifies 12,000 records by cold IOR read and independent hardscan, zero bad/short; two-peer folds, physical GC, unavailable-member ledger retention, restart/quota and late-PUT fences pass. The harness now requires actual fragment absence alongside sampled queue counters. One FUSE client/one host is not the nine-physical-host gate.
+See [the package evidence](../status/amd-functional-gates-20261008.md).
+
 **TCP scope follow-up (Oct 7):** supported NUC fold/GC/cold-read gates pass. RDMA is deferred at the user’s request; nine physical hosts remain owed, so W54/W38 is not closed. See [five-package ledger](../status/tcp-five-gates-20261007.md).
 
 **Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/allocation-gc-fold-gates-20261007.md).
@@ -3960,6 +3983,9 @@ performed. Next code item in the agreed sequence is W38.
 
 
 ### W38 · ior-hard fold tombstone without the span's bytes (queue row 0e)
+
+**Oct 8 AMD follow-up:** AMD direct-I/O/RXE real IOR, independent cold hardscan and authoritative fold transitions pass with physical GC/restart and retained live bytes. The nine-physical-host obligation remains. The IOR gate was corrected to wait for physical deletion as well as sampled-empty GC queues.
+See [the package evidence](../status/amd-functional-gates-20261008.md).
 
 **TCP scope follow-up (Oct 7):** RDMA deferred; nine physical hosts remain owed. Actual nine-process IOR cold verification and physical GC/restart pass on NUC. See [ledger](../status/tcp-five-gates-20261007.md).
 
@@ -4188,6 +4214,9 @@ as accepted on that build. [Raw evidence](../archive/queue-review-20261007-round
 
 
 ### W59 · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains (queue row 0p)
+
+**Oct 8 AMD follow-up:** AMD RXE whole-fixture 1 GiB stress initially OOMed during publication recovery. Commit `ec5e0387` lazily registers/reuses send slots while preserving 32-slot capacity. The same 256+64 MiB cache/drain settings now pass at 596.8 MiB whole-fixture peak with zero OOM events, retained sparse writes and same-mount recovery.
+See [the package evidence](../status/amd-functional-gates-20261008.md).
 
 **Current status — closed (Oct 7 memory follow-up):** NUC direct/buffered
 live publication failure plus physically exhausted recovery scratch passes
@@ -4517,6 +4546,9 @@ results dirs; move this plan's finished rows to project-history.
 
 ### W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 8 AMD follow-up:** Real 32 simultaneous identical APPEND RPCs reproduced duplicate reservation (offset 8/end 16). Commit `311c4e4e` uses nonblocking per-inode reserve/reply ownership, with routing outside the lock. The repaired real-RPC gate and exact cold extent pass; durable restart/leader-change receipts remain open.
+See [the package evidence](../status/amd-functional-gates-20261008.md).
+
 **Class:** correctness / recovery. **Status:** open; indexed Oct 7, 2026.
 
 **Evidence/current state:** The host-local replay race is fixed in ec1500ec, but reservation replay/failover is not a durable protocol. The round-20 first-record-loss trace remains unresolved evidence.
@@ -4539,6 +4571,9 @@ in both phases pass. The cache is still volatile: leader-change/restart receipts
 bounded retirement and the original W87 broad-load acceptance remain open.
 
 ### W65 · Daemon exceeds graceful shutdown wait (queue row 0u)
+
+**Oct 8 AMD follow-up:** AMD RXE active fsynced writes, 16 idle TCP readers, 16 partial TCP frames and connection churn pass graceful leader stop and exact cold acknowledged-byte verification. Earlier RXE stops pass too. This extends supported-TCP evidence to software RXE, not hardware RoCE/native IB.
+See [the package evidence](../status/amd-functional-gates-20261008.md).
 
 **Closed for supported TCP (Oct 7):** six writer-active-at-signal leader SIGTERM fixtures pass, three direct and three buffered. All acknowledged fsynced bytes verify after full restart/cold remount; physical GC and quota drain also pass. RDMA is deferred, not tested. This supersedes earlier open TCP mutation gates below. See [ledger](../status/tcp-five-gates-20261007.md).
 
@@ -4587,6 +4622,9 @@ signals (63–215 ms); handlers still drain before teardown.
 <a id="w67"></a>
 
 ### W67 · Sparse dirty writes and bounded body admission (queue row mem1)
+
+**Oct 8 AMD follow-up:** The AMD RXE memory follow-up fixes eager transport-send registration (`ec5e0387`), with production 256+64 MiB body/drain budgets unchanged. Actual 1 GiB/no-swap failed-publication/scratch exhaustion, eight concurrent sparse writers, cold bytes and physical reclaim pass. See W59 for the original failing transport footprint.
+See [the package evidence](../status/amd-functional-gates-20261008.md).
 
 **Current status — closed (Oct 7 memory follow-up):** NUC direct/buffered
 live publication failure plus physically exhausted recovery scratch passes
@@ -5188,6 +5226,9 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 
 ### W84 · Namespace guard bounds reject supported deep/spread-directory work
 
+**Oct 8 AMD follow-up:** AMD direct-I/O/TCP now passes exact 144-participant coordinator death at both PREPARE and COMMIT, including cold atomic recovery. The existing depth 143 acceptance/depth 144 bounded refusal also passes. Full-ancestry versus a supported finite transaction envelope remains a product decision; no universal 143-depth promise follows from this fixture.
+See [the package evidence](../status/amd-functional-gates-20261008.md).
+
 **TCP recovery follow-up (Oct 7):** ancestry guards now use the144-record envelope; depth143 succeeds and depth144 refuses safely within the8-second budget. Full64-lane removal/replacement and prepared/committed coordinator death (66 participants) pass cold. The fault gate found and repaired FUSE error-to-ENOENT mapping and split dentry/inode LOOKUP absence. Exact144-participant crash acceptance and an approved finite full-ancestry limit remain open. See [ledger](../status/tcp-five-gates-20261007.md).
 
 **Envelope follow-up (Oct 7):** the shared transaction capacity is now 144:
@@ -5328,6 +5369,9 @@ first-send optimization still respects D7 and retries never falsely assert NEW.
 <a id="w87"></a>
 
 ### W87 · Buffered concurrent append loses records under broader load
+
+**Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.
+See [the package evidence](../status/amd-functional-gates-20261008.md).
 
 **Class/state:** correctness investigation; failure recorded in the Oct 7 [GC checkpoint](../status/gc-implementation-20261007.md#tests-and-limits). Fixture `/data1/efs/gc-buffered-3ohdte4d` reportedly passed focused GC checks but failed both broad POSIX concurrent-append cases with missing records. Ten isolated repeats subsequently passed; they do not erase the original failure. Raw remote fixture logs were not inspected in this round.
 

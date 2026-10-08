@@ -1,0 +1,58 @@
+{
+  "leader_node": 1,
+  "shutdown_seconds": 0.11350821599990013,
+  "acknowledged_before_stop": 51,
+  "acknowledged_files": 51,
+  "writer_active_at_signal": true,
+  "errors": [
+    "[Errno 5] Input/output error"
+  ],
+  "cold_bytes_verified": true,
+  "returncode": 0
+}{
+  "hard_body_bytes": 268435456,
+  "drain_bytes": 67108864,
+  "effective_budget_trace": [
+    [
+      "268435456",
+      "67108864",
+      "33554432"
+    ],
+    [
+      "268435456",
+      "67108864",
+      "33554432"
+    ],
+    [
+      "268435456",
+      "67108864",
+      "33554432"
+    ],
+    [
+      "268435456",
+      "67108864",
+      "33554432"
+    ],
+    [
+      "268435456",
+      "67108864",
+      "33554432"
+    ]
+  ],
+  "files": 8,
+  "writes": 256,
+  "retry_count": 0,
+  "peak_rss_kib": 295092,
+  "before_delete": {
+    "passes": 59,
+    "removed_fragments": 6271,
+    "reclaimed_payload_bytes": 410976256,
+    "data_usage_bytes": 50331648
+  },
+  "after_delete": {
+    "passes": 61,
+    "removed_fragments": 7039,
+    "reclaimed_payload_bytes": 461307904,
+    "data_usage_bytes": 0
+  }
+}
