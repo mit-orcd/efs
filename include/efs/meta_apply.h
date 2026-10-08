@@ -150,6 +150,21 @@ int efs_meta_execute_append(const struct efs_meta_append_plan *plan,
                              const struct efs_txid *t,
                              const struct efs_meta_append_ops *ops, void *ctx);
 
+/* Capture the existing completion state machine without writing the KV,
+ * then commit its exact images across all affected lane authorities. Caller
+ * supplies fresh authoritative views and the normal transaction transport. */
+int efs_meta_finish_append(struct efs_kv *kv, efs_ino_t ino, uint64_t offset,
+                            int outcome, const struct efs_txid *t,
+                            const struct efs_meta_append_ops *ops, void *ctx);
+
+/* Closed bursts retain DONE records until bounded cleanup. Pending returns
+ * 0/1 or an error. Prune never removes records while an OPEN cursor exists. */
+int efs_meta_append_prune_pending(struct efs_kv *kv, efs_ino_t ino);
+int efs_meta_prune_append(struct efs_kv *kv, efs_ino_t ino,
+                           const struct efs_txid *t,
+                           const struct efs_meta_append_ops *ops, void *ctx,
+                           unsigned *removed);
+
 /* Atomic single-authority fence, for the future serialized TRUNCATE path.
  * Caller owns Raft apply serialization and cross-authority coordination.
  * This does not replace the current public truncate command by itself. */

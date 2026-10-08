@@ -20,7 +20,7 @@ static int decide(void *ctx,const struct efs_txid *t,const struct efs_txn_parts 
 { return efs_txn_decide(ctx,efs_txn_coordinator(t,p),t,d); }
 static int resolve(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
 {
- for(unsigned i=0;i<p->n;++i){int rc=efs_txn_resolve(ctx,t,p->shard[i],d);if(rc)return rc;}
+ for(unsigned i=0;i<p->n;++i){int rc=efs_txn_resolve(ctx,t,p->shard[i],d);if(rc){fprintf(stderr,"resolve shard=%u rc=%d\n",p->shard[i],rc);return rc;}}
  return EFS_OK;
 }
 static const struct efs_meta_append_ops ops={prepare,decide,resolve};
@@ -45,8 +45,9 @@ static void fixture(struct efs_kv *kv,efs_ino_t *ino,uint64_t *gen)
  assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
  p=publication(*ino,*gen,1,200,20);assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
 }
+static struct efs_txn_parts last_parts;
 static int lost_decision(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
-{assert(decide(ctx,t,p,d)==EFS_OK);return EFS_ERR_IO;}
+{last_parts=*p;assert(decide(ctx,t,p,d)==EFS_OK);return EFS_ERR_IO;}
 static void unit(void)
 {
  struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen,off=999;
@@ -136,6 +137,50 @@ static void bounds_and_pending(void)
  q=identity(18,17);assert(efs_meta_capture_append(kv,ino,UINT64_MAX,&q,decision,kv,b)==EFS_ERR_INVAL);
  assert(efs_meta_apply_check(kv)==EFS_OK);free(a);free(b);efs_kv_mem_free(kv);
 }
+static void completion(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen;
+ fixture(kv,&ino,&gen);struct efs_meta_append_plan *a=malloc(sizeof(*a));assert(a);
+ struct efs_txid t={{100}};struct efs_opid_req q;
+ for(unsigned i=1;i<=200;++i){
+  q=identity(i,i-1);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK);
+  t.bytes[0]=i;t.bytes[1]=1;assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_OK);
+ }
+ /* Reverse completion retains frontier dependencies, then the final
+  * transaction retains DONE rows and clears BOTH groups. */
+ for(unsigned i=200;i>1;--i){
+  t.bytes[0]=i;t.bytes[1]=2;
+  assert(efs_meta_finish_append(kv,ino,200+(i-1)*8,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_OK);
+ }
+ unsigned removed=999;t.bytes[0]=222;t.bytes[1]=6;
+ assert(efs_meta_append_prune_pending(kv,ino)==0);
+ assert(efs_meta_prune_append(kv,ino,&t,&ops,kv,&removed)==EFS_OK && removed==0);
+ uint64_t wm,frontier;uint32_t open;
+ assert(efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)==EFS_OK && open==1 && frontier==200);
+ struct efs_meta_append_ops lost={prepare,lost_decision,resolve};t.bytes[0]=1;
+ assert(efs_meta_finish_append(kv,ino,200,EFS_META_APPEND_ABORTED_HOLE,&t,&lost,kv)==EFS_ERR_IO);
+ assert(efs_meta_finish_append(kv,ino,200,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_ERR_BUSY);
+ assert(resolve(kv,&t,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
+ assert(efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)==EFS_OK && !open && !wm);
+ struct efs_meta_stat st;assert(efs_meta_apply_getattr(kv,ino,decision,kv,&st)==EFS_OK && st.size==1800);
+ /* No stale foreign-lane append_bar can block an ordinary extension. */
+ struct efs_meta_pub p=publication(ino,gen,65,1900,77);p.lane_local=1;
+ assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+ q=identity(201,200);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_ERR_BUSY);
+ unsigned total=0,pages=0;
+ while(efs_meta_append_prune_pending(kv,ino)==1) {
+  unsigned removed=0;t.bytes[0]=++pages;t.bytes[1]=5;
+  assert(efs_meta_prune_append(kv,ino,&t,&ops,kv,&removed)==EFS_OK && removed>0 && removed<=8);
+  total+=removed;
+ }
+ assert(total==200 && pages==25);
+ q=identity(201,200);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK && a->offset==1900);
+ t.bytes[0]=201;t.bytes[1]=3;assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_OK);
+ t.bytes[1]=4;assert(efs_meta_finish_append(kv,ino,1900,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_OK);
+ /* Lost reply replay of a completed reservation is an exact no-op. */
+ assert(efs_meta_finish_append(kv,ino,1900,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_apply_check(kv)==EFS_OK);free(a);efs_kv_mem_free(kv);
+}
 static void recovery(int committed)
 {
  char dir[]="/tmp/efs-append-txn-XXXXXX";assert(mkdtemp(dir));
@@ -164,9 +209,26 @@ static void recovery(int committed)
  if(committed)assert(off==200);
  uint64_t wm,frontier;uint32_t open;
  assert(efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)==EFS_OK && open==(unsigned)committed);
+ if(committed) {
+  struct efs_meta_append_ops lost={prepare,lost_decision,resolve};
+  t.bytes[0]=91;
+  assert(efs_meta_finish_append(kv,ino,200,EFS_META_APPEND_ABORTED_HOLE,&t,&lost,kv)==EFS_ERR_IO);
+  efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+  assert(efs_txn_resolve(kv,&t,efs_kv_lane_shard(ino,1),EFS_TXN_COMMIT)==EFS_OK);
+  efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+  assert(resolve(kv,&t,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
+  assert(efs_meta_append_prune_pending(kv,ino)==1);
+  unsigned removed=99;t.bytes[0]=92;
+  assert(efs_meta_prune_append(kv,ino,&t,&lost,kv,&removed)==EFS_ERR_IO && !removed);
+  efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+  assert(resolve(kv,&t,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
+  assert(efs_meta_append_prune_pending(kv,ino)==0);
+  assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_OK && off==200);
+  struct efs_meta_stat st;assert(efs_meta_apply_getattr(kv,ino,decision,kv,&st)==EFS_OK && st.size==208);
+ }
  efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
  closedir(d);assert(!rmdir(dir));
 }
 int main(void)
-{unit();bounds_and_pending();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{unit();bounds_and_pending();completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

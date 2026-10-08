@@ -101,6 +101,28 @@ raw reservation scans. Then wire ACK-bearing APPEND to dual-host capture/commit,
 retaining legacy decoding, and run `--append-sync-boundary`, lost-reply/leader
 churn, mixed append/non-append extension and broad POSIX/peer gates before W73.
 
+## W64 bounded completion prerequisite — 07:06 UTC
+
+Coordinated completion now captures the existing frontier/hole state machine
+without mutating the source KV, then commits exact inode, cursor, target
+reservation and active-lane images. Closing a burst clears all lane barriers
+and the cursor atomically but retains DONE rows. Separate transactions prune
+eight DONE rows per page, guarded by exact inode/cursor images; cleanup refuses
+to run while any OPEN reservation remains. New reservation capture refuses to
+start a fresh burst until old DONE rows are gone, including after truncate.
+Durable reservation receipts survive this cleanup.
+
+This avoids overflowing the resolver's fixed 48-item participant batch when a
+large burst closes. A 200-reservation reverse-order test completes, including
+lost COMMIT acknowledgement, then prunes in 25 bounded pages. Abrupt LSM exit,
+partial foreign-lane resolution, reopened completion and reopened prune commits
+recover exact size and original reservation reply. AMD targeted tests,
+ASan/UBSan and the full unit/document suite pass. The bounded image and
+per-participant checks also refuse future oversized plans before PREPARE.
+[Source hashes and gates](../../results/measure/20261008-replay-readiness/append-completion-tests.json).
+Production routing integration and the live append/fsync reproducer are next;
+this prerequisite alone does not close W64 or activate D25.
+
 ## Evidence
 
 [Recorded evidence](../../results/measure/20261008-replay-readiness/README.md)

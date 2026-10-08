@@ -47,7 +47,7 @@ else
 BLAKE3_ARCH_SRCS =
 endif
 
-COMMON_SRCS = $(COMMON_DIR)/publication.c $(COMMON_DIR)/publication_ack.c \
+COMMON_SRCS = src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/publication_ack.c \
               $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/log_ts.c \
               $(COMMON_DIR)/version.c \
