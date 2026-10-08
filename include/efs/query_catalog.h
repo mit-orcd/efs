@@ -26,6 +26,10 @@ int efs_query_catalog_inode(const struct efs_query_catalog *catalog, efs_ino_t i
                              struct efs_meta_row *row, struct efs_meta_stat *stat);
 int efs_query_catalog_stats(const struct efs_query_catalog *catalog, efs_ino_t ino,
                              struct efs_query_rollup *out);
+/* Copy the chosen directory edge for fresh ancestry/name validation. Root
+ * and detached directories have no edge and return NOT_FOUND. */
+int efs_query_catalog_directory_link(const struct efs_query_catalog *catalog,
+                                       efs_ino_t ino,struct efs_name_entry *out);
 /* Source-relative directory path, no mount prefix; root gives empty string.
  * NOT_FOUND means outside root; NAMETOOLONG and cycles fail explicitly. */
 int efs_query_catalog_path(const struct efs_query_catalog *catalog,

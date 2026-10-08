@@ -1,10 +1,10 @@
 # W92 find/stats continuation checkpoint — Oct 8, 01:53 EDT
 
-This work is **in progress, not accepted**. `.stats` still reports zero for
-peer-created files. Server-owned rollups and query serving have not been integrated. Offline snapshot
-and name-index components are implemented below.
-Legacy `.find` still walks on query misses and errors at its explicit limits.
-Do not close the task on the strength of ordinary POSIX smoke passes.
+This work is **in progress, not accepted**. Server catalog publication and
+versioned query RPC/FUSE consumers are now implemented and pass private NUC
+fixtures (latest section below). The production NUC still runs e9f974b4e148:
+its `.stats` remains incorrect and its `.find` still uses the old client walk.
+Do not confuse private fixture passes with deployed or scale acceptance.
 
 ## Source and deployment
 
@@ -204,3 +204,44 @@ walks on misses. Live deployed build remains e9f974b4e148. Do not deploy while
 the loader is active. At 02:36 EDT it has ~19,072 new small files /298 MiB,
 ~700 GiB free /data1 and ~803 GiB /home; no GiB stage finished. W91 expiry tests
 remain pending the real expiry interface, as noted above. This task stays open.
+
+
+## Oct 8, 03:01 EDT — RPC and virtual consumers pass private NUC gates
+
+Implemented v1 query messages 123/124, bounded raw replies with source/build
+watermarks, full credential groups, server authorization/ancestry checks and
+client consumers. `.stats` uses server rollups; `.find` searches immutable
+server indexes. No client namespace walk or aggregate rebuild remains in these
+new query paths. Every new fetch revalidates server authorization; open bytes
+remain immutable. Stats/index source timestamps are separately exposed (same
+catalog cut), along with boot/generation/applied vectors and refresh error.
+
+Private final fixture `w92-query-fixture-20261008l` passes all nine virtual
+interface gates, raw RPC errors/redirect/no-query-rebuild gates, full POSIX
+216/0/1 skip (13.7 s), peer 64/64 (6.0 s), and restart rebuild against an
+independent syscall oracle. Exact binary SHA256 and source/evidence ledger:
+results/measure/20261008-w92-query-rpc. Unknown offline build IDs are recorded
+honestly; no clean production build/deployment is implied.
+
+A real same-parent rename validation bug was fixed by rechecking directory
+name bindings, not merely the parent inode. Strict path validation exposed
+nameless local cache rows: server now returns canonical export-relative paths
+and FUSE prepends only its mountpoint. The full-path snapshot assertion passes.
+A restart harness used an obsolete four-file expectation and later a stale
+stats snapshot; retained failures and the independent final oracle are explained
+in the evidence ledger. Client result-cache allocation is now capped at 64 MiB,
+with two admitted find computations; server replies at 64 MiB/eight requests,
+8192 checked dirs, five-second deadline and explicit visit/output limits.
+
+**Next action:** safely pause/drain population, cleanly unmount (no force-discard),
+stop only the four main PIDs, deploy a clean committed branch build, restart
+TCP/buffered preserving stores, validate cold main mounts and measured loaded
+catalog pin/build/lock/RSS, then resume loader and run main POSIX/peer and fault/
+scale gates. Do not invoke devops/stop.sh blindly: it contains force-discard and
+kill -9 fallbacks that conflict with this task's preservation requirement.
+Main /Users/mike/git/efs remains untouched. Current main loader PID 2388751 is
+active, ~29,568 new small files /462 MiB at 03:00 EDT, ~698 GiB free /data1 and
+802 GiB /home. No GiB stage completed yet. Production is still e9f974b4e148.
+Expiry/W91 lifecycle tests still await the actual expiry interface; do not fake
+expiration by test-owned unlink. NFS gateway, large output-pressure, concurrent
+transactions, outage/leader/import and final data checks remain open.

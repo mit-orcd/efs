@@ -3451,3 +3451,8 @@ Initial baseline: live NUC contains ~20 GiB logical but root `.stats` reports
 all counts/bytes zero; `.find/001.dat` returns the existing file. Existing walk
 silently caps at 65,536 entries and 128 levels. Implementation in progress;
 server index/rollups and large-tree acceptance remain required before closure.
+
+W92 Oct 8, 03:01 EDT: server catalog/RPC/FUSE integration passes private NUC
+virtual, POSIX 216/0/1, peer 64/64 and restart-oracle gates. Production deployment,
+400 GiB load/checksums and loaded/fault/NFS acceptance remain open. See latest
+find/stats checkpoint; never treat the private fixture as deployed acceptance.

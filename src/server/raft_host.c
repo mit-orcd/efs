@@ -7181,6 +7181,210 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     return rc;
 }
 
+#define HOST_QUERY_AUTH_N 8192
+#define HOST_QUERY_REPLY_BYTES (64ULL << 20)
+static uint64_t query_reply_bytes;
+static uint32_t query_requests;
+struct query_allocation { uint64_t bytes; };
+void server_raft_host_query_reply_free(void *reply)
+{
+    if (!reply) return;
+    struct query_allocation *a=(struct query_allocation *)reply-1;
+    __atomic_sub_fetch(&query_reply_bytes,a->bytes,__ATOMIC_RELAXED);
+    __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);free(a);
+}
+struct query_auth {
+    int valid;
+    struct efs_meta_row row;
+};
+struct query_request {
+    struct efs_raft_host *h;
+    const struct efs_msg_query_snapshot *req;
+    struct efs_msg_query_snapshot_reply *reply;
+    const struct efs_server_query_view *view;
+    struct query_auth *auth;
+    uint32_t auth_count,len;
+    uint64_t deadline;
+    char *text;
+    char root_path[EFS_MAX_PATH];
+};
+static int query_access(const struct efs_msg_query_snapshot *q,const struct efs_meta_row *r,int mask)
+{
+    if (!q->uid) return EFS_OK;
+    int group=q->gid==r->gid;
+    for (uint32_t i=0;i<q->ngroups && !group;i++) group=q->groups[i]==r->gid;
+    uint32_t perm=q->uid==r->uid ? (r->mode>>6)&7 : group ? (r->mode>>3)&7 : r->mode&7;
+    return (perm & (uint32_t)mask)==(uint32_t)mask ? EFS_OK : EFS_ERR_ACCES;
+}
+static int query_directory_binding(struct query_request *q,efs_ino_t ino)
+{
+    if (ino==EFS_ROOT_INO) return EFS_OK;
+    struct efs_name_entry link;
+    int rc=efs_query_catalog_directory_link(q->view->catalog,ino,&link);
+    if (rc) return rc;
+    struct efs_meta_dentry current;
+    rc=efs_meta_apply_lookup_tx(q->h->kv,link.parent,link.name,host_txn_coord,q->h,&current);
+    if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
+    if (rc) return rc;
+    return current.ino==ino && current.generation==link.dentry.generation ? EFS_OK : EFS_ERR_BUSY;
+}
+static int query_auth_dir(struct query_request *q,efs_ino_t ino,int mask,struct efs_meta_row **out)
+{
+    if (query_mono_ms()>q->deadline) return EFS_ERR_BUSY;
+    uint32_t start=(uint32_t)((ino^(ino>>32))*2654435761U)%HOST_QUERY_AUTH_N;
+    for (uint32_t i=0;i<HOST_QUERY_AUTH_N;i++) {
+        struct query_auth *a=&q->auth[(start+i)%HOST_QUERY_AUTH_N];
+        if (a->valid && a->row.ino!=ino) continue;
+        if (!a->valid) {
+            struct efs_meta_row cached;
+            int rc=efs_query_catalog_inode(q->view->catalog,ino,&cached,NULL);
+            if (rc==EFS_ERR_NOT_FOUND) {
+                struct efs_meta_row fresh;
+                rc=efs_meta_apply_get_inode_tx(q->h->kv,ino,host_txn_coord,q->h,&fresh);
+                return rc ? rc : EFS_ERR_BUSY; /* New directory waits for publication. */
+            }
+            if (rc) return rc;
+            rc=efs_meta_apply_get_inode_tx(q->h->kv,ino,host_txn_coord,q->h,&a->row);
+            if (rc) return rc;
+            if (!S_ISDIR(a->row.mode) || !a->row.nlink) return EFS_ERR_NOT_FOUND;
+            if (a->row.generation!=cached.generation || a->row.parent!=cached.parent) return EFS_ERR_BUSY;
+            rc=query_directory_binding(q,ino);
+            if (rc) return rc;
+            a->valid=1;q->auth_count++;
+        }
+        int rc=query_access(q->req,&a->row,mask);
+        if (!rc && out) *out=&a->row;
+        return rc;
+    }
+    return EFS_ERR_OVERFLOW;
+}
+static int query_ancestry(struct query_request *q,efs_ino_t dir,efs_ino_t root,int mask)
+{
+    for (uint32_t steps=0;steps<HOST_QUERY_AUTH_N;steps++) {
+        struct efs_meta_row *r=NULL;
+        int rc=query_auth_dir(q,dir,mask,&r);
+        if (rc) return rc;
+        if (dir==root) return EFS_OK;
+        if (dir==EFS_ROOT_INO || !r->parent || r->parent==dir) return EFS_ERR_BUSY;
+        dir=r->parent;
+    }
+    return EFS_ERR_OVERFLOW;
+}
+static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *relative)
+{
+    struct query_request *q=ctx;
+    int rc=query_ancestry(q,entry->parent,q->req->root,5);
+    if (rc) return rc;
+    /* A moved/deleted entry must not be rendered with stale ancestry while
+     * using fresh permissions. A concurrent mutation refuses the whole result. */
+    struct efs_meta_dentry fresh;
+    rc=efs_meta_apply_lookup_tx(q->h->kv,entry->parent,entry->name,host_txn_coord,q->h,&fresh);
+    if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
+    if (rc) return rc;
+    if (fresh.ino!=entry->dentry.ino || fresh.generation!=entry->dentry.generation) return EFS_ERR_BUSY;
+    if (strchr(relative,'\n') || strchr(q->root_path,'\n')) return EFS_ERR_ILSEQ;
+    size_t prefix=strlen(q->root_path),n=strlen(relative),sep=prefix ? 1 : 0;
+    if (prefix+sep+n+1>q->req->max_output-q->len) return EFS_ERR_OVERFLOW;
+    if (prefix) { memcpy(q->text+q->len,q->root_path,prefix);q->len+=(uint32_t)prefix;q->text[q->len++]='/'; }
+    memcpy(q->text+q->len,relative,n);q->len+=(uint32_t)n;q->text[q->len++]='\n';
+    return EFS_OK;
+}
+static int query_consume(void *ctx,const struct efs_server_query_view *view,int refresh_error)
+{
+    struct query_request *q=ctx;
+    q->view=view;
+    int rc=query_auth_dir(q,q->req->root,5,NULL);
+    if (!rc) rc=query_ancestry(q,q->req->root,EFS_ROOT_INO,1);
+    if (rc) return rc;
+    struct efs_meta_row *root=NULL;
+    rc=query_auth_dir(q,q->req->root,5,&root);
+    if (rc) return rc;
+    struct efs_msg_query_snapshot_reply *r=q->reply;
+    r->boot_id=view->boot_id;r->generation=view->generation;
+    r->source_ns=view->source_ns;r->built_ns=view->built_ns;
+    memcpy(r->applied,view->applied,sizeof(r->applied));memcpy(r->terms,view->terms,sizeof(r->terms));
+    r->refresh_error=refresh_error;r->uid=root->uid;r->gid=root->gid;
+    r->mtime=root->base_mtime;r->atime=root->base_atime;r->ctime=root->base_ctime;
+    if (q->req->operation==EFS_QUERY_STATS) {
+        struct efs_query_rollup s;
+        rc=efs_query_catalog_stats(view->catalog,q->req->root,&s);
+        if (!rc) {
+            /* Directory aggregate policy: totals of all descendant entries;
+             * queried directory requires read/search, ancestors search. No
+             * descendant names or individual protected contents are exposed. */
+            int n=snprintf(q->text,q->req->max_output,
+                "imm_files=%llu\nimm_dirs=%llu\nimm_bytes=%llu\nimm_tmin=%llu\nimm_tmax=%llu\n"
+                "tree_files=%llu\ntree_dirs=%llu\ntree_bytes=%llu\ntree_tmin=%llu\ntree_tmax=%llu\n"
+                "as_of=%llu.%09llu\nstats_as_of_ns=%llu\nindex_as_of_ns=%llu\n"
+                "snapshot_boot=%llu\nsnapshot_generation=%llu\nsource_g0=%llu\nsource_g2=%llu\nrefresh_error=%d\n",
+                (unsigned long long)s.imm_files,(unsigned long long)s.imm_dirs,(unsigned long long)s.imm_bytes,
+                (unsigned long long)s.imm_tmin,(unsigned long long)s.imm_tmax,(unsigned long long)s.tree_files,
+                (unsigned long long)s.tree_dirs,(unsigned long long)s.tree_bytes,(unsigned long long)s.tree_tmin,
+                (unsigned long long)s.tree_tmax,(unsigned long long)(view->source_ns/1000000000),
+                (unsigned long long)(view->source_ns%1000000000),(unsigned long long)view->source_ns,
+                (unsigned long long)view->source_ns,(unsigned long long)view->boot_id,
+                (unsigned long long)view->generation,(unsigned long long)view->applied[0],
+                (unsigned long long)view->applied[1],refresh_error);
+            if (n<0 || (uint32_t)n>=q->req->max_output) rc=EFS_ERR_OVERFLOW;
+            else q->len=(uint32_t)n;
+        }
+    } else {
+        rc=efs_query_catalog_path(view->catalog,q->req->root,EFS_ROOT_INO,q->root_path,sizeof(q->root_path));
+        if (!rc) rc=efs_query_catalog_find(view->catalog,q->req->root,q->req->match,q->req->term,
+                                           q->req->visit_budget,query_emit,q);
+    }
+    /* Recheck authorization/ancestry just before delivery. Open result bytes
+     * then remain immutable; later chmod does not rewrite an already-open FD. */
+    for (uint32_t i=0;i<HOST_QUERY_AUTH_N && !rc;i++) if (q->auth[i].valid) {
+        if (query_mono_ms()>q->deadline) { rc=EFS_ERR_BUSY;break; }
+        struct efs_meta_row now;
+        rc=efs_meta_apply_get_inode_tx(q->h->kv,q->auth[i].row.ino,host_txn_coord,q->h,&now);
+        if (!rc && (now.generation!=q->auth[i].row.generation || now.parent!=q->auth[i].row.parent ||
+            now.mode!=q->auth[i].row.mode || now.uid!=q->auth[i].row.uid || now.gid!=q->auth[i].row.gid || !now.nlink))
+            rc=EFS_ERR_BUSY;
+        if (!rc) rc=query_directory_binding(q,now.ino);
+    }
+    r->checked_dirs=q->auth_count;
+    if (!rc) r->text_len=q->len;
+    return rc;
+}
+int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,void **out,uint32_t *len)
+{
+    if (out) *out=NULL;
+    if (!req || !out || !len || req->version!=EFS_QUERY_VERSION || !req->root ||
+        req->operation>EFS_QUERY_FIND || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
+        !req->max_output || req->max_output>EFS_QUERY_MAX_OUTPUT ||
+        !req->visit_budget || req->visit_budget>EFS_QUERY_MAX_VISITS ||
+        !memchr(req->term,0,sizeof(req->term))) return EFS_ERR_INVAL;
+    if (req->operation==EFS_QUERY_FIND && (strlen(req->term)<EFS_FIND_MIN_TERM || strchr(req->term,'/') || strchr(req->term,'*')))
+        return EFS_ERR_INVAL;
+    if (__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)>8) {
+        __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_BUSY;
+    }
+    uint64_t bytes=sizeof(struct query_allocation)+sizeof(struct efs_msg_query_snapshot_reply)+req->max_output;
+    uint64_t before=__atomic_load_n(&query_reply_bytes,__ATOMIC_RELAXED);
+    for (;;) {
+        if (bytes>HOST_QUERY_REPLY_BYTES-before) {
+            __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_BUSY;
+        }
+        if (__atomic_compare_exchange_n(&query_reply_bytes,&before,before+bytes,0,__ATOMIC_RELAXED,__ATOMIC_RELAXED)) break;
+    }
+    struct query_allocation *a=calloc(1,bytes);
+    if (!a) { __atomic_sub_fetch(&query_reply_bytes,bytes,__ATOMIC_RELAXED);__atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_NOMEM; }
+    a->bytes=bytes;
+    struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
+    struct query_request q={0};
+    q.h=g_host;q.req=req;q.reply=reply;q.text=(char *)(reply+1);q.deadline=query_mono_ms()+5000;
+    q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
+    reply->version=EFS_QUERY_VERSION;
+    int rc=q.auth ? server_raft_host_query_read(query_consume,&q,&reply->primary_id) : EFS_ERR_NOMEM;
+    free(q.auth);
+    reply->status=rc;
+    if (rc) reply->text_len=0; /* never deliver a partial result as success */
+    *out=reply;*len=sizeof(*reply)+reply->text_len;
+    return EFS_OK;
+}
+
 int server_raft_host_start(struct efsd_server *s)
 {
     struct efs_raft_host *h;

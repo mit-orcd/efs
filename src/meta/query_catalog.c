@@ -337,6 +337,13 @@ int efs_query_catalog_stats(const struct efs_query_catalog *c, efs_ino_t ino, st
     if (!S_ISDIR(n->row.mode)) return EFS_ERR_INVAL;
     *out=n->rollup;return EFS_OK;
 }
+int efs_query_catalog_directory_link(const struct efs_query_catalog *c,efs_ino_t ino,struct efs_name_entry *out)
+{
+    if (!c || !out) return EFS_ERR_INVAL;
+    struct node *n=find_node(c,ino);
+    if (!n || !n->link) return EFS_ERR_NOT_FOUND;
+    *out=*n->link;return EFS_OK;
+}
 int efs_query_catalog_path(const struct efs_query_catalog *c, efs_ino_t dir, efs_ino_t root, char *out, size_t cap)
 {
     if (!c || !out || !cap) return EFS_ERR_INVAL;

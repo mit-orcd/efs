@@ -87,6 +87,10 @@ int main(void)
     char path[128];
     CHECK(!efs_query_catalog_path(c,b,EFS_ROOT_INO,path,sizeof(path)) && !strcmp(path,"a/b"),"relative ancestry");
     CHECK(efs_query_catalog_path(c,a,b,path,sizeof(path))==EFS_ERR_NOT_FOUND,"outside scope");
+    struct efs_name_entry binding;
+    CHECK(!efs_query_catalog_directory_link(c,b,&binding) && binding.parent==a && !strcmp(binding.name,"b"),
+          "directory binding retained for fresh same-parent rename validation");
+    CHECK(efs_query_catalog_directory_link(c,EFS_ROOT_INO,&binding)==EFS_ERR_NOT_FOUND,"root has no directory binding");
     CHECK(efs_query_catalog_path(c,b,EFS_ROOT_INO,path,3)==EFS_ERR_NAMETOOLONG,"path limit");
     struct found f={0};
     CHECK(!efs_query_catalog_find(c,a,EFS_NAME_EXACT,"report.dat",1,collect,&f) && f.n==1 &&
@@ -105,6 +109,8 @@ int main(void)
     CHECK(!efs_query_catalog_stats(newer,a,&stat) && !stat.tree_files && !stat.tree_dirs && !stat.tree_bytes,"moved source empty");
     CHECK(!efs_query_catalog_stats(c,a,&stat) && stat.tree_files==2,"old catalog immutable");
     CHECK(!efs_query_catalog_path(newer,b,EFS_ROOT_INO,path,sizeof(path)) && !strcmp(path,"moved"),"move changes path");
+    CHECK(!efs_query_catalog_directory_link(newer,b,&binding) && binding.parent==EFS_ROOT_INO && !strcmp(binding.name,"moved"),
+          "new directory binding names moved subtree");
     efs_query_catalog_free(c);c=newer;newer=NULL;
     /* APPEND_CUR alone changes visible frontier without changing inode/lane. */
     uint8_t cur[24]={0};be64(cur,10000);be64(cur+8,6000);cur[19]=1;

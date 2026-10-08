@@ -190,3 +190,11 @@ rebuild. Bounded internal read callbacks are staged; user query RPCs and fresh
 permission checks remain unconnected. Busy writes may refuse a transaction-safe
 cut and exceed T, so expose old publication age/error. Full live and scale gates
 remain open. Details and raw evidence are in the latest continuation checkpoint.
+
+
+The v1 RPC and FUSE consumers are now connected on this branch and pass a private
+NUC fixture: nine virtual gates, full POSIX/peer and persisted restart against an
+independent oracle. Same-parent name binding and canonical path rendering defects
+were fixed. Main NUC is **not yet deployed**; its old stats/walk behavior remains.
+See the latest checkpoint and query-rpc evidence for explicit budgets, aggregate
+permission policy, retained failures and pending loaded/scale/fault/NFS gates.

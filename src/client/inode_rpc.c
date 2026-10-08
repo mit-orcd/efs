@@ -1759,3 +1759,49 @@ int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
     }
     return EFS_OK;
 }
+
+int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
+                                    struct efs_msg_query_snapshot_reply *reply,char **text)
+{
+    if (!req || !reply || !text) return EFS_ERR_INVAL;
+    *text=NULL;memset(reply,0,sizeof(*reply));
+    efs_node_id_t target=0,skip=0;
+    int last=EFS_ERR_BUSY;
+    for (unsigned attempt=0;attempt<16;attempt++) {
+        if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        efs_node_id_t nid=target;
+        struct efs_conn *conn=target ? efs_client_conn_get(target) : raft_dual_voter_conn(&nid,skip);
+        if (!conn) last=EFS_ERR_NET;
+        else {
+            uint8_t type=0;void *payload=NULL;uint32_t len=0;
+            if (efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT,req,sizeof(*req)) ||
+                efs_conn_recv_msg(conn,&type,&payload,&len)) {
+                efs_client_conn_drop(nid,conn);free(payload);last=EFS_ERR_NET;
+            } else {
+                efs_client_conn_release(nid,conn);
+                if (type!=EFS_MSG_QUERY_SNAPSHOT_REPLY || len<sizeof(*reply)) { free(payload);return EFS_ERR_PROTO; }
+                memcpy(reply,payload,sizeof(*reply));
+                if (reply->version!=EFS_QUERY_VERSION || reply->text_len>req->max_output ||
+                    len!=sizeof(*reply)+reply->text_len || (reply->status && reply->text_len)) {
+                    free(payload);return EFS_ERR_PROTO;
+                }
+                last=reply->status;
+                if (!last) {
+                    *text=malloc((size_t)reply->text_len+1);
+                    if (!*text) { free(payload);return EFS_ERR_NOMEM; }
+                    if (memchr((uint8_t *)payload+sizeof(*reply),0,reply->text_len)) {
+                        free(*text);*text=NULL;free(payload);return EFS_ERR_PROTO;
+                    }
+                    memcpy(*text,(uint8_t *)payload+sizeof(*reply),reply->text_len);
+                    (*text)[reply->text_len]=0;free(payload);return EFS_OK;
+                }
+                free(payload);
+                if (last!=EFS_ERR_BUSY && last!=EFS_ERR_NOT_PRIMARY && last!=EFS_ERR_NO_QUORUM) return last;
+                target=last==EFS_ERR_NOT_PRIMARY && reply->primary_id<=EFS_MAX_NODES ? reply->primary_id : 0;
+                skip=target ? 0 : nid;
+            }
+        }
+        if (attempt+1<16 && rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
+    }
+    return last;
+}
