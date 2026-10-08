@@ -40,3 +40,22 @@ KV preallocation and its performance/recovery gates remain separate work.
   payloads, durable completion latency and mixed churn; keep production separate.
 - W96: bounded KV preallocation, recovery/reset/compaction/fault gates and matched
   performance measurements after the recovery prerequisite.
+
+## W96 bounded preallocation
+
+Linux durable WALs reserve EOF in bounded 1 MiB increments and write at the
+logical valid EOF with pwrite. NOSYNC and other platforms retain exact growth.
+Allocation failures disable the optimization and fall back to ordinary writes;
+partial writes or failed barriers still fence the instance. Replay removes
+reserved padding; reset clears physical and logical lengths together.
+
+Focused AMD KV/Raft-store and fault tests pass, including unsupported allocation,
+ENOSPC fallback, multiple reservation boundaries, reset/reopen, partial-write and
+sync faults. Local ASan/UBSan passes. Private AMD `gc-direct-i0zfg2cp` passes
+POSIX 216/0/1, peer 64/64, zero-tail repair and a second crash after new fsynced
+files, plus final empty physical inventory. Installed service restored.
+
+Three matched 1-KiB durable-append pairs: QD1 baseline 4016–4163 ops/s vs
+preallocated 6182–6941; QD8 baseline 16727–17161 vs 17816–18046. This supports
+keeping the bounded optimization on AMD, not claiming a NUC/two-device result.
+[Measurements and fixture evidence](../../results/measure/20261008-w93-w96-implementation/w96-preallocation/README.md).

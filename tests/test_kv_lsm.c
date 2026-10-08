@@ -439,6 +439,11 @@ static void test_torn_tail(void)
         if (!kv) return;
         CHECK(put_s(kv, "good", "yes") == EFS_OK, "durable prefix");
         efs_kv_lsm_close(kv);
+        /* A normal reopen also discards any reserved zero EOF. */
+        kv = open_store(EFS_KV_LSM_SYNC, 0);
+        CHECK(kv && get_is(kv, "good", "yes") == EFS_OK, "normal reserved EOF recovery");
+        if (!kv) return;
+        efs_kv_lsm_close(kv);
         char path[600]; struct stat before, after;
         snprintf(path, sizeof(path), "%s/wal", g_dir);
         CHECK(!stat(path, &before), "prefix length");

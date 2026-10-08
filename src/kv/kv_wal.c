@@ -6,6 +6,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/stat.h>
+#ifdef __linux__
+#include <linux/falloc.h>
+#endif
+
+#ifndef EFS_KV_WAL_RESERVE_BYTES
+#define EFS_KV_WAL_RESERVE_BYTES (1024ull * 1024ull)
+#endif
 
 int kv_buf_set(struct kv_buf *b, const uint8_t *src, uint32_t n)
 {
@@ -33,6 +41,8 @@ void kv_buf_free(struct kv_buf *b)
 struct kv_wal {
     int fd;
     int sync_mode;
+    uint64_t bytes, allocated_bytes; /* Valid EOF never includes reserved zeros. */
+    int prealloc_off;
     pthread_mutex_t mu;
     pthread_cond_t cv;
     /* Group commit: appended counts records written, synced counts records
@@ -78,10 +88,10 @@ static uint32_t get_u32(const uint8_t *p)
            ((uint32_t)p[3] << 24);
 }
 
-static int write_all(int fd, const uint8_t *p, size_t n)
+static int write_all(int fd, const uint8_t *p, size_t n, uint64_t off)
 {
     while (n) {
-        ssize_t k = write(fd, p, n);
+        ssize_t k = pwrite(fd, p, n, (off_t)off);
         if (k < 0) {
             if (errno == EINTR)
                 continue;
@@ -91,8 +101,31 @@ static int write_all(int fd, const uint8_t *p, size_t n)
             return EFS_ERR_IO;
         p += (size_t)k;
         n -= (size_t)k;
+        off += (uint64_t)k;
     }
     return EFS_OK;
+}
+
+/* Bounded EOF reservation amortizes small durable append allocation. Recovery
+ * truncates the zero tail before reopen. Unsupported/full allocation is only
+ * an optimization failure: ordinary exact writes still decide admission. */
+static void wal_reserve(struct kv_wal *w, uint64_t end)
+{
+#ifdef __linux__
+    const uint64_t chunk = EFS_KV_WAL_RESERVE_BYTES;
+    uint64_t reserve;
+    if (!chunk || w->prealloc_off || w->sync_mode != EFS_KV_LSM_SYNC ||
+        end <= w->allocated_bytes || end > INT64_MAX - chunk) return;
+    reserve = (end + chunk - 1) & ~(chunk - 1);
+    int rc;
+    do { rc = fallocate(w->fd, 0, (off_t)w->allocated_bytes,
+                         (off_t)(reserve - w->allocated_bytes)); }
+    while (rc < 0 && errno == EINTR);
+    if (rc == 0) w->allocated_bytes = reserve;
+    else w->prealloc_off = 1;
+#else
+    (void)w; (void)end;
+#endif
 }
 
 int kv_wal_open(const char *path, int sync_mode, struct kv_wal **out)
@@ -105,11 +138,16 @@ int kv_wal_open(const char *path, int sync_mode, struct kv_wal **out)
     if (!w)
         return EFS_ERR_NOMEM;
     w->sync_mode = sync_mode;
-    w->fd = open(path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    w->fd = open(path, O_WRONLY | O_CREAT, 0644);
     if (w->fd < 0) {
         free(w);
         return EFS_ERR_IO;
     }
+    struct stat st;
+    if (fstat(w->fd, &st) != 0 || st.st_size < 0) {
+        close(w->fd); free(w); return EFS_ERR_IO;
+    }
+    w->bytes = w->allocated_bytes = (uint64_t)st.st_size;
     if (pthread_mutex_init(&w->mu, NULL) != 0) {
         close(w->fd);
         free(w);
@@ -246,13 +284,20 @@ int kv_wal_append(struct kv_wal *w, const struct efs_kv_item *items, uint32_t n,
         pthread_mutex_unlock(&w->mu);
         return rc;
     }
-    rc = write_all(w->fd, w->rec, len);
+    if (w->bytes > INT64_MAX - (uint64_t)len) {
+        pthread_mutex_unlock(&w->mu);
+        return EFS_ERR_IO;
+    }
+    wal_reserve(w, w->bytes + len);
+    rc = write_all(w->fd, w->rec, len, w->bytes);
     if (rc != EFS_OK) {
         w->io_failed = 1;
         pthread_cond_broadcast(&w->cv);
         pthread_mutex_unlock(&w->mu);
         return rc;
     }
+    w->bytes += len;
+    if (w->allocated_bytes < w->bytes) w->allocated_bytes = w->bytes;
     mine = ++w->appended;
     *out_seq = mine;
     /* Hold defers fsync to kv_wal_hold(0). Memtable apply still happens
@@ -311,9 +356,10 @@ int kv_wal_reset(struct kv_wal *w, uint64_t applied)
         rc = EFS_ERR_IO;
     else if (w->sync_mode == EFS_KV_LSM_SYNC && fsync(w->fd) != 0)
         rc = EFS_ERR_IO;
-    if (rc == EFS_OK)
+    if (rc == EFS_OK) {
         w->synced = w->appended;
-    else
+        w->bytes = w->allocated_bytes = 0;
+    } else
         w->io_failed = 1;
     pthread_mutex_unlock(&w->mu);
     return rc;
