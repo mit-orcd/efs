@@ -1181,10 +1181,206 @@ static void test_flush_with_unapplied_wal(void)
     }
 }
 
+static int snapshot_is(struct efs_kv_lsm_snapshot *s, const char *key,
+                         const char *value)
+{
+    uint8_t buf[256];
+    uint32_t n=sizeof(buf);
+    int rc=efs_kv_lsm_snapshot_get(s,(const uint8_t *)key,strlen(key),buf,&n);
+    if (rc!=EFS_OK) return rc;
+    return n==strlen(value) && !memcmp(buf,value,n) ? EFS_OK : EFS_ERR_PROTO;
+}
+
+struct snapshot_reader {
+    struct efs_kv_lsm_snapshot *s;
+    struct efs_kv *live;
+    int bad;
+};
+static int snapshot_reenter(void *user, const uint8_t *key, uint32_t kl,
+                            const uint8_t *value, uint32_t vl)
+{
+    struct snapshot_reader *r=user;
+    (void)key;(void)kl;(void)value;(void)vl;
+    /* Neither scan callbacks nor re-entrant reads may hold the live lock. */
+    if (snapshot_is(r->s,"p/a","new") || put_s(r->live,"late","later"))
+        r->bad++;
+    return 0;
+}
+static void *snapshot_reader_thread(void *user)
+{
+    struct snapshot_reader *r=user;
+    for (int i=0;i<100;i++) {
+        struct acc a;
+        memset(&a,0,sizeof(a));
+        if (snapshot_is(r->s,"p/a","new") ||
+            efs_kv_lsm_snapshot_scan(r->s,(const uint8_t *)"p/",2,NULL,0,acc_cb,&a) ||
+            strcmp(a.buf,"p/a,p/c,")) r->bad++;
+    }
+    return NULL;
+}
+static void *snapshot_batch_writer(void *user)
+{
+    struct efs_kv *kv=user;
+    for (int i=1;i<=100;i++) {
+        char value[16];
+        int n=snprintf(value,sizeof(value),"%d",i);
+        struct efs_kv_item items[]={
+            {EFS_KV_PUT,(const uint8_t *)"pair/a",6,(const uint8_t *)value,(uint32_t)n},
+            {EFS_KV_PUT,(const uint8_t *)"pair/b",6,(const uint8_t *)value,(uint32_t)n}
+        };
+        if (efs_kv_batch(kv,items,2)) return (void *)1;
+        usleep(1000);
+    }
+    return NULL;
+}
+static void test_snapshot_batch_cut(void)
+{
+    rmtree(g_dir);
+    struct efs_kv *kv=open_store(EFS_KV_LSM_NOSYNC,0);
+    CHECK(kv!=NULL,"open atomic snapshot test");
+    if (!kv) return;
+    CHECK(!put_s(kv,"pair/a","0") && !put_s(kv,"pair/b","0"),"initialize pair");
+    pthread_t thread;
+    int made=pthread_create(&thread,NULL,snapshot_batch_writer,kv)==0;
+    CHECK(made,"start snapshot batch writer");
+    for (int i=0;i<100 && made;i++) {
+        struct efs_kv_lsm_snapshot *s=NULL;
+        CHECK(!efs_kv_lsm_snapshot_pin(kv,1<<20,&s),"pin while batches apply");
+        if (!s) break;
+        uint8_t a[16],b[16];uint32_t an=sizeof(a),bn=sizeof(b);
+        CHECK(!efs_kv_lsm_snapshot_get(s,(const uint8_t *)"pair/a",6,a,&an) &&
+              !efs_kv_lsm_snapshot_get(s,(const uint8_t *)"pair/b",6,b,&bn) &&
+              an==bn && !memcmp(a,b,an),"snapshot never observes half a KV batch");
+        efs_kv_lsm_snapshot_release(s);
+        usleep(1000);
+    }
+    if (made) {
+        void *result=NULL;
+        CHECK(!pthread_join(thread,&result) && !result,"join snapshot batch writer");
+    }
+    efs_kv_lsm_close(kv);
+}
+
+static void test_full_snapshot(void)
+{
+    struct efs_kv_lsm_snapshot *s=NULL,*failed=NULL;
+    struct efs_kv *kv;
+    struct acc a;
+    uint8_t buf[4];
+    uint32_t n=1;
+    rmtree(g_dir);
+    kv=open_store(EFS_KV_LSM_NOSYNC,0);
+    CHECK(kv!=NULL,"open full snapshot");
+    if (!kv) return;
+    CHECK(put_s(kv,"p/a","old")==EFS_OK,"base a");
+    CHECK(put_s(kv,"p/b","base")==EFS_OK,"base b");
+    CHECK(put_s(kv,"p/c","old")==EFS_OK,"base c");
+    CHECK(efs_kv_lsm_flush(kv)==EFS_OK,"base flush");
+    CHECK(efs_kv_lsm_compact(kv)==EFS_OK,"base compact");
+    CHECK(put_s(kv,"p/a","new")==EFS_OK,"unflushed override");
+    CHECK(efs_kv_del(kv,(const uint8_t *)"p/b",3)==EFS_OK,"unflushed delete");
+    CHECK(put_s(kv,"p/c","")==EFS_OK,"unflushed empty value");
+    CHECK(efs_kv_lsm_snapshot_pin(kv,1,&failed)==EFS_ERR_BUSY && !failed,
+          "snapshot budget is explicit");
+    CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&s)==EFS_OK,"pin unflushed state");
+    if (!s) { efs_kv_lsm_close(kv);return; }
+    CHECK(snapshot_is(s,"p/a","new")==EFS_OK,"snapshot includes memtable override");
+    CHECK(snapshot_is(s,"p/b","")==EFS_ERR_NOT_FOUND,"snapshot applies tombstone");
+    CHECK(snapshot_is(s,"p/c","")==EFS_OK,"snapshot preserves empty value");
+    CHECK(snapshot_is(s,"p","")==EFS_ERR_NOT_FOUND,"prefix is not exact key");
+    CHECK(efs_kv_lsm_snapshot_get(s,(const uint8_t *)"p/a",3,buf,&n)==EFS_ERR_INVAL && n==3,
+          "snapshot get reports required size");
+    CHECK(put_s(kv,"p/a","later")==EFS_OK,"live overwrite");
+    CHECK(put_s(kv,"p/b","restored")==EFS_OK,"live recreation");
+    CHECK(efs_kv_del(kv,(const uint8_t *)"p/c",3)==EFS_OK,"live delete");
+    CHECK(efs_kv_lsm_flush(kv)==EFS_OK,"live flush");
+    CHECK(efs_kv_lsm_compact(kv)==EFS_OK,"live compact");
+    memset(&a,0,sizeof(a));
+    CHECK(efs_kv_lsm_snapshot_scan(s,(const uint8_t *)"p/",2,(const uint8_t *)"p/b",3,acc_cb,&a)==EFS_OK,
+          "snapshot paged seek");
+    CHECK(!strcmp(a.buf,"p/c,"),"snapshot pagination preserves deletion");
+    struct snapshot_reader re={s,kv,0};
+    CHECK(efs_kv_lsm_snapshot_scan(s,(const uint8_t *)"p/",2,NULL,0,snapshot_reenter,&re)==EFS_OK && !re.bad,
+          "snapshot callback may read itself and write live KV");
+    pthread_t threads[4];
+    struct snapshot_reader readers[4];
+    int made=0;
+    for (int i=0;i<4;i++) {
+        readers[i]=(struct snapshot_reader){s,kv,0};
+        if (pthread_create(&threads[i],NULL,snapshot_reader_thread,&readers[i])) break;
+        made++;
+    }
+    CHECK(made==4,"start concurrent snapshot readers");
+    for (int i=0;i<made;i++) {
+        CHECK(!pthread_join(threads[i],NULL) && !readers[i].bad,"concurrent snapshot reader stable");
+    }
+    CHECK(snapshot_is(s,"late","")==EFS_ERR_NOT_FOUND,"snapshot excludes callback mutations");
+    efs_kv_lsm_snapshot_release(s);
+    /* An IO-poisoned engine must not present partially applied state. */
+    struct kv_lsm *l=kv->ctx;
+    pthread_mutex_lock(&l->mu);l->io_failed=1;pthread_mutex_unlock(&l->mu);
+    CHECK(efs_kv_lsm_snapshot_pin(kv,1<<20,&failed)==EFS_ERR_IO && !failed,"poisoned snapshot refused");
+    pthread_mutex_lock(&l->mu);l->io_failed=0;pthread_mutex_unlock(&l->mu);
+    efs_kv_lsm_close(kv);
+}
+
+static void test_metadata_dirty_hints(void)
+{
+    rmtree(g_dir);
+    struct efs_kv *kv=open_store(EFS_KV_LSM_NOSYNC,0);
+    CHECK(kv!=NULL,"open dirty hints");
+    if (!kv) return;
+    uint64_t before[4096],after[4096],pinned[4096];
+    uint8_t inode[]={0,3,EFS_KV_KIND_INODE,1};
+    uint8_t dent[]={0,3,EFS_KV_KIND_DENTRY,2};
+    uint8_t intent[]={0,4,EFS_KV_KIND_INTENT,3};
+    uint8_t chunk[]={0,3,EFS_KV_KIND_CHUNK,4};
+    struct efs_kv_item items[]={
+        {EFS_KV_PUT,inode,sizeof(inode),(const uint8_t *)"i",1},
+        {EFS_KV_PUT,dent,sizeof(dent),(const uint8_t *)"d",1},
+        {EFS_KV_PUT,intent,sizeof(intent),(const uint8_t *)"t",1},
+        {EFS_KV_PUT,chunk,sizeof(chunk),(const uint8_t *)"c",1}
+    };
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,before,4096),"initial hints");
+    CHECK(!before[3] && !before[4],"hints start cold");
+    CHECK(!efs_kv_batch(kv,items,4),"dirty metadata and chunk batch");
+    struct efs_kv_lsm_snapshot *s=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,1<<20,&s),"pin dirty source");
+    if (!s) { efs_kv_lsm_close(kv);return; }
+    CHECK(!efs_kv_lsm_snapshot_revisions(s,pinned,4096) && pinned[3]==2 && pinned[4]==1,
+          "snapshot revisions include inode/dentry/intent, exclude payload maps");
+    CHECK(!efs_kv_del(kv,dent,sizeof(dent)),"dirty delete");
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,after,4096) && after[3]==3 && after[4]==1,
+          "delete advances only its shard");
+    CHECK(!efs_kv_lsm_snapshot_revisions(s,before,4096) && !memcmp(before,pinned,sizeof(before)),
+          "snapshot revision does not advance with live changes");
+    struct kv_lsm *l=kv->ctx;
+    pthread_mutex_lock(&l->mu);l->fail_next_batch=1;pthread_mutex_unlock(&l->mu);
+    CHECK(efs_kv_batch(kv,items,4)==EFS_ERR_IO,"failed batch");
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,before,4096) && !memcmp(before,after,sizeof(before)),
+          "rejected batch cannot advance dirty hints");
+    efs_kv_lsm_snapshot_release(s);
+    efs_kv_lsm_close(kv);
+    kv=open_store(EFS_KV_LSM_NOSYNC,0);
+    CHECK(kv!=NULL,"reopen dirty hints");
+    if (kv) {
+        CHECK(!efs_kv_lsm_metadata_revisions(kv,before,4096) && !before[3] && !before[4],
+              "hints reset on reopen and require initial index rebuild");
+        CHECK(get_is(kv,(const char *)"absent","")==EFS_ERR_NOT_FOUND,"reopened reads work");
+        efs_kv_lsm_close(kv);
+    }
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-kvlsm-%d", (int)getpid());
     rmtree(g_dir);
+    if (getenv("EFS_TEST_KV_SNAPSHOT_ONLY")) {
+        test_full_snapshot();
+        test_snapshot_batch_cut();
+        test_metadata_dirty_hints();
+        goto report;
+    }
 
     test_semantics();
     test_reopen_wal();
@@ -1199,12 +1395,16 @@ int main(void)
     test_l1_grows();
     test_flush_nowait();
     test_pinned_view();
+    test_full_snapshot();
+    test_snapshot_batch_cut();
+    test_metadata_dirty_hints();
     test_compact_crash();
     test_sync_hold();
     test_partitioned_flush();
     test_view_export_overlap();
     test_flush_with_unapplied_wal();
 
+report:
     rmtree(g_dir);
     if (failures) {
         fprintf(stderr, "test_kv_lsm: %d failure(s)\n", failures);

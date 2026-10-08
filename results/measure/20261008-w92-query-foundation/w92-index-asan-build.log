@@ -1,0 +1,25 @@
+src/kv/kv_snap.c:316:50: warning: incompatible pointer types passing 'uint8_t *' (aka 'unsigned char *') to parameter of type 'int (* _Nonnull)(void *, const void *, const void *)' [-Wincompatible-pointer-types]
+  316 |         qsort_r(c.k, c.n, sizeof(*c.k), ref_cmp, c.arena);
+      |                                                  ^~~~~~~
+/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_stdlib.h:372:22: note: passing argument to parameter '__compar' here
+  372 |             int (* _Nonnull __compar)(void *, const void *, const void *));
+      |                             ^
+src/kv/kv_snap.c:314:53: warning: null passed to a callee that requires a non-null argument [-Wnonnull]
+  314 |         qsort_r(items, n, sizeof(*items), item_cmp, NULL);
+      |                                                     ^~~~
+/Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_null.h:26:14: note: expanded from macro 'NULL'
+   26 | #define NULL ((void*)0)
+      |              ^~~~~~~~~~
+src/kv/kv_snap.c:573:53: warning: null passed to a callee that requires a non-null argument [-Wnonnull]
+  573 |         qsort_r(items, n, sizeof(*items), item_cmp, NULL);
+      |                                                     ^~~~
+/Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_null.h:26:14: note: expanded from macro 'NULL'
+   26 | #define NULL ((void*)0)
+      |              ^~~~~~~~~~
+src/kv/kv_snap.c:575:50: warning: null passed to a callee that requires a non-null argument [-Wnonnull]
+  575 |         qsort_r(loc, ln, sizeof(*loc), item_cmp, NULL);
+      |                                                  ^~~~
+/Library/Developer/CommandLineTools/usr/lib/clang/21/include/__stddef_null.h:26:14: note: expanded from macro 'NULL'
+   26 | #define NULL ((void*)0)
+      |              ^~~~~~~~~~
+4 warnings generated.

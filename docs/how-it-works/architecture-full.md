@@ -1574,7 +1574,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | root cause proven on native and EFS storage: default os.link requests follow; explicit no-follow works; test correction and full reruns owed | [evidence and fix](../status/amd-link-symlink.md) |
-| virtual-io | **`.find` / `.stats` — server snapshots and safe reads** | correctness / performance / access control | open — client-local stats, read-triggered walks, per-open consistency, permissions and explicit limits need fixes; N/T server refresh design retained | [fix scope and acceptance](../status/virtual-find-stats.md) |
+| virtual-io | **W92 · `.find` / `.stats` — server snapshots and safe reads** | correctness / performance / access control | in progress — immutable reads, permission/error handling and query-slot recovery repaired; server stats/index and large-tree acceptance remain open | [fix scope and acceptance](../status/virtual-find-stats.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
@@ -5511,6 +5511,25 @@ with raw logs. This format repair does not establish a follower pressure bound;
 the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
+
+### W92 · Server-owned .find/.stats snapshots and large namespace acceptance
+
+Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
+Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
+NUC target: staged population toward 400 GiB real logical payload, with a large
+small-file namespace, two cold mounts, shard-distributed queries and measured
+node/RPC work. NUC existing data is preserved. No silent limit truncation,
+client-local authoritative stats or rebuild-on-cat acceptance.
+
+Initial baseline: live NUC contains ~20 GiB logical but root `.stats` reports
+all counts/bytes zero; `.find/001.dat` returns the existing file. Existing walk
+silently caps at 65,536 entries and 128 levels. Implementation in progress;
+server index/rollups and large-tree acceptance remain required before closure.
+
+W92 Oct 8, 03:01 EDT: server catalog/RPC/FUSE integration passes private NUC
+virtual, POSIX 216/0/1, peer 64/64 and restart-oracle gates. Production deployment,
+400 GiB load/checksums and loaded/fault/NFS acceptance remain open. See latest
+find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 
 ## Appendix 5 — Naming

@@ -617,7 +617,8 @@ void efs_kv_lsm_scan_stats(struct efs_kv_scan_stats *out, int reset)
         memset(&t_scan_stats, 0, sizeof(t_scan_stats));
 }
 
-static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
+static int merge_scan(struct kv_lsm *l, int private_read,
+                      const uint8_t *prefix, uint32_t plen,
                       const uint8_t *start, uint32_t slen,
                       int (*cb)(void *user, const uint8_t *key, uint32_t klen,
                                 const uint8_t *val, uint32_t vlen),
@@ -663,6 +664,7 @@ static int merge_scan(struct kv_lsm *l, const uint8_t *prefix, uint32_t plen,
         rc = kv_seg_iter_open(sl->seg, &src[nsrc].it);
         if (rc != EFS_OK)
             goto out;
+        kv_seg_iter_set_private(src[nsrc].it,private_read);
         rc = kv_seg_iter_seek(src[nsrc].it, seek, seek_len);
         if (rc != EFS_OK)
             goto out;
@@ -724,6 +726,22 @@ out:
 
 /* --- efs_kv_ops ------------------------------------------------------ */
 
+static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
+{
+    if (len<3) return;
+    uint32_t shard=((uint32_t)key[0]<<8)|key[1];
+    if (shard>EFS_KV_SHARD_MASK) return;
+    switch (key[2]) {
+    case EFS_KV_KIND_INODE: case EFS_KV_KIND_DENTRY: case EFS_KV_KIND_LANE:
+    case EFS_KV_KIND_INTENT: case EFS_KV_KIND_GUARD: case EFS_KV_KIND_REDUCE:
+    case EFS_KV_KIND_DECISION: case EFS_KV_KIND_PVER: case EFS_KV_KIND_DSEQ:
+    case EFS_KV_KIND_EXPORT: case EFS_KV_KIND_APPEND_CUR:
+        l->metadata_revision[shard]++;
+        break;
+    default: break;
+    }
+}
+
 static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
 {
     struct kv_lsm *l = ctx;
@@ -772,6 +790,8 @@ static int lsm_batch(void *ctx, const struct efs_kv_item *items, uint32_t n)
          * now disagrees with what a restart would rebuild. */
         if (rc != EFS_OK)
             l->io_failed = 1;
+        else
+            metadata_dirty(l,items[i].key,items[i].klen);
     }
     /* mu prevents the next batch from applying until this flush returns.
      * Publish the fully applied WAL watermark first, so reset cannot erase
@@ -865,7 +885,7 @@ static int lsm_scan_from(void *ctx, const uint8_t *prefix, uint32_t plen,
     if (!l || !cb || (plen > 0 && !prefix) || (slen > 0 && !start))
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&l->mu);
-    rc = merge_scan(l, prefix, plen, start, slen, cb, user);
+    rc = merge_scan(l, 0, prefix, plen, start, slen, cb, user);
     pthread_mutex_unlock(&l->mu);
     return rc;
 }
@@ -1267,6 +1287,138 @@ void efs_kv_lsm_view_unpin(struct efs_kv_lsm_view *v)
         kv_seg_unpin(v->seg[i]);
     free(v->seg);
     free(v);
+}
+
+/* Background readers need the memtable too. Keep the existing segment-only
+ * API for Raft export/fence callers. Full snapshots share immutable segment
+ * indexes and pinned fds; scan iterators bypass mutable live point caches. */
+struct efs_kv_lsm_snapshot {
+    struct kv_lsm input; /* merge_scan uses only mt, l0 and n_l0 */
+    struct kv_seg **pinned;
+    uint32_t npinned;
+};
+
+void efs_kv_lsm_snapshot_release(struct efs_kv_lsm_snapshot *s)
+{
+    if (!s) return;
+    for (uint32_t i=0;i<s->npinned;i++)
+        kv_seg_unpin(s->pinned[i]);
+    kv_mtab_clear(&s->input.mt);
+    free(s->input.l0);
+    free(s->pinned);
+    free(s);
+}
+
+int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
+                            struct efs_kv_lsm_snapshot **out)
+{
+    struct kv_lsm *l;
+    struct efs_kv_lsm_snapshot *s;
+    uint32_t count;
+    int rc=EFS_OK;
+    if (out) *out=NULL;
+    if (!out || !kv || kv->ops!=&lsm_ops || !kv->ctx)
+        return EFS_ERR_INVAL;
+    l=kv->ctx;
+    s=calloc(1,sizeof(*s));
+    if (!s) return EFS_ERR_NOMEM;
+    pthread_mutex_lock(&l->mu);
+    if (l->io_failed) { rc=EFS_ERR_IO; goto unlock; }
+    if (l->mt.bytes>mt_limit) { rc=EFS_ERR_BUSY; goto unlock; }
+    count=l->n_l0+l->n_l1;
+    s->pinned=calloc(count ? count : 1,sizeof(*s->pinned));
+    s->input.l0=calloc(count ? count : 1,sizeof(*s->input.l0));
+    if (!s->pinned || !s->input.l0) { rc=EFS_ERR_NOMEM; goto unlock; }
+    for (uint32_t i=0;i<count;i++) {
+        s->pinned[i]=i<l->n_l0 ? l->l0[i].seg : l->l1[i-l->n_l0].seg;
+        kv_seg_pin(s->pinned[i]);
+        s->npinned++;
+        seg_slot_set(&s->input.l0[s->input.n_l0],s->pinned[i]);
+        s->input.n_l0++;
+    }
+    if (l->mt.n) {
+        s->input.mt.e=calloc(l->mt.n,sizeof(*s->input.mt.e));
+        s->input.mt.pfx=malloc(l->mt.n*sizeof(*s->input.mt.pfx));
+        if (!s->input.mt.e || !s->input.mt.pfx) {
+            rc=EFS_ERR_NOMEM; goto unlock;
+        }
+        s->input.mt.cap=l->mt.n;
+    }
+    memcpy(s->input.metadata_revision,l->metadata_revision,
+           sizeof(l->metadata_revision));
+    /* Entries are already sorted, so each insertion is an append. */
+    for (uint32_t i=0;i<l->mt.n;i++) {
+        const struct kv_ent *e=l->mt.e[i];
+        rc=kv_mtab_set(&s->input.mt,e->op,e->key,e->klen,e->val,e->vlen);
+        if (rc!=EFS_OK) break;
+    }
+unlock:
+    pthread_mutex_unlock(&l->mu);
+    if (rc!=EFS_OK) { efs_kv_lsm_snapshot_release(s); return rc; }
+    *out=s;
+    return EFS_OK;
+}
+
+int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)
+{
+    if (!kv || kv->ops!=&lsm_ops || !kv->ctx || !out || n<4096)
+        return EFS_ERR_INVAL;
+    struct kv_lsm *l=kv->ctx;
+    pthread_mutex_lock(&l->mu);
+    int rc=l->io_failed ? EFS_ERR_IO : EFS_OK;
+    if (rc==EFS_OK) memcpy(out,l->metadata_revision,sizeof(l->metadata_revision));
+    pthread_mutex_unlock(&l->mu);
+    return rc;
+}
+int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
+                                  uint64_t *out, uint32_t n)
+{
+    if (!s || !out || n<4096) return EFS_ERR_INVAL;
+    memcpy(out,s->input.metadata_revision,sizeof(s->input.metadata_revision));
+    return EFS_OK;
+}
+
+int efs_kv_lsm_snapshot_scan(struct efs_kv_lsm_snapshot *s,
+                             const uint8_t *prefix, uint32_t plen,
+                             const uint8_t *start, uint32_t slen,
+                             int (*cb)(void *, const uint8_t *, uint32_t,
+                                       const uint8_t *, uint32_t), void *user)
+{
+    if (!s || !cb || (plen && !prefix) || (slen && !start))
+        return EFS_ERR_INVAL;
+    return merge_scan(&s->input,1,prefix,plen,start,slen,cb,user);
+}
+
+struct snapshot_get {
+    uint32_t klen;
+    uint8_t *val;
+    uint32_t *vlen;
+    int rc;
+};
+static int snapshot_capture(void *user, const uint8_t *key, uint32_t klen,
+                             const uint8_t *val, uint32_t vlen)
+{
+    struct snapshot_get *g=user;
+    (void)key;
+    if (klen!=g->klen) return 1; /* longer prefix match is not this key */
+    if (*g->vlen<vlen || (vlen && !g->val)) g->rc=EFS_ERR_INVAL;
+    else {
+        if (vlen) memcpy(g->val,val,vlen);
+        g->rc=EFS_OK;
+    }
+    *g->vlen=vlen;
+    return 1;
+}
+int efs_kv_lsm_snapshot_get(struct efs_kv_lsm_snapshot *s,
+                            const uint8_t *key, uint32_t klen,
+                            uint8_t *val, uint32_t *vlen)
+{
+    struct snapshot_get g={klen,val,vlen,EFS_ERR_NOT_FOUND};
+    if (!s || !key || !klen || !vlen) return EFS_ERR_INVAL;
+    /* Iterator-only reads bypass mutable live point caches, so concurrent
+     * scans/gets and callback re-entry are safe without copying indexes. */
+    int rc=efs_kv_lsm_snapshot_scan(s,key,klen,key,klen,snapshot_capture,&g);
+    return rc==EFS_OK || rc==1 ? g.rc : rc;
 }
 
 /* Group export of a pinned view. Private segment opens: the live block

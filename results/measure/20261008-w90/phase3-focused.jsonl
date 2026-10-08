@@ -1,0 +1,8 @@
+{"case": "snapshot", "status": "PASS", "seconds": 5.642}
+{"root": "/data1/efs/mnt/w90-gates-2331060", "results": [{"case": "snapshot", "status": "PASS", "seconds": 5.642}]}
+{"case": "fd_capacity", "status": "FAIL", "error": "AssertionError(80)", "traceback": "Traceback (most recent call last):\n  File \"/data1/efs/w90-gates.py\", line 10, in gate\n    try:fn();results.append(dict(case=name,status='PASS',seconds=round(time.monotonic()-t,3)))\n        ^^^^\n  File \"/data1/efs/w90-gates.py\", line 58, in fd_capacity\n    assert bounded and len(fds)>=20,len(fds)\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 80\n"}
+{"root": "/data1/efs/mnt/w90-gates-2331575", "results": [{"case": "fd_capacity", "status": "FAIL", "error": "AssertionError(80)", "traceback": "Traceback (most recent call last):\n  File \"/data1/efs/w90-gates.py\", line 10, in gate\n    try:fn();results.append(dict(case=name,status='PASS',seconds=round(time.monotonic()-t,3)))\n        ^^^^\n  File \"/data1/efs/w90-gates.py\", line 58, in fd_capacity\n    assert bounded and len(fds)>=20,len(fds)\n           ^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 80\n"}]}
+{"case": "permissions", "status": "PASS", "seconds": 0.005}
+{"root": "/data1/efs/mnt/w90-gates-2331576", "results": [{"case": "permissions", "status": "PASS", "seconds": 0.005}]}
+{"case": "invalid", "status": "PASS", "seconds": 0.0}
+{"root": "/data1/efs/mnt/w90-gates-2331033", "results": [{"case": "invalid", "status": "PASS", "seconds": 0.0}]}

@@ -865,6 +865,7 @@ struct kv_seg_iter {
      * 64-lane file pulled 28 MiB through pread (Sep 30, fcstor004
      * strace: 1048576-byte preads, 150 µs each, ~4 ms per stat). */
     int seq;
+    int private_read;
     uint8_t *ra;
     uint64_t ra_off;
     uint32_t ra_len;
@@ -874,6 +875,11 @@ void kv_seg_iter_set_seq(struct kv_seg_iter *it, int seq)
 {
     if (it)
         it->seq = seq;
+}
+
+void kv_seg_iter_set_private(struct kv_seg_iter *it, int private_read)
+{
+    if (it) it->private_read=private_read;
 }
 
 int kv_seg_iter_open(struct kv_seg *s, struct kv_seg_iter **out)
@@ -913,7 +919,7 @@ static int iter_load(struct kv_seg_iter *it)
     it->blk = p;
     /* A block a point get just read is in the segment's slots; iterators
      * run under the LSM lock like the install that filled them. */
-    {
+    if (!it->private_read) {
         struct seg_cslot *c = &it->s->cslot[it->bi % KV_SEG_CACHE_SLOTS];
 
         if (c->valid && c->bi == it->bi && c->len == r->len &&

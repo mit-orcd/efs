@@ -1067,6 +1067,18 @@ send_reply:
                               sizeof(r));
             break;
         }
+        case EFS_MSG_QUERY_SNAPSHOT: {
+            void *reply=NULL;uint32_t reply_len=0;
+            int rc=payload_len==sizeof(struct efs_msg_query_snapshot) ?
+                server_raft_host_query_snapshot(payload,&reply,&reply_len) : EFS_ERR_INVAL;
+            if (rc) {
+                struct efs_msg_query_snapshot_reply failure;
+                memset(&failure,0,sizeof(failure));failure.version=EFS_QUERY_VERSION;failure.status=rc;
+                efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,&failure,sizeof(failure));
+            } else efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,reply,reply_len);
+            server_raft_host_query_reply_free(reply);
+            break;
+        }
         case EFS_MSG_QUERY_STATS: {
             uint8_t status = EFS_QUERY_STATS_UNSUPPORTED;
             efs_conn_send_msg(conn, EFS_MSG_QUERY_STATS_REPLY, &status, 1);

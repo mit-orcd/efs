@@ -1,0 +1,4 @@
+c11bc95c4c8bf724317b96eaabd86906bfcf7815081012b3d027d94dfb2f5d4b  /data1/efs/w92-build/efsd
+136651d81c8807a555800dcaba8b20ad52334ea3b32df9d83f5cb0e4f9a39eac  /data1/efs/w92-build/efs-mgmt
+efsd (no git metadata, branch unknown, built 2026-10-08T06:28:47Z on nuc)
+efs-mgmt (no git metadata, branch unknown, built 2026-10-08T06:28:47Z on nuc)

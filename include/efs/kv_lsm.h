@@ -76,6 +76,39 @@ void efs_kv_lsm_view_unpin(struct efs_kv_lsm_view *v);
  * have been pinned after a memtable flush. Does not take the LSM lock. */
 int efs_kv_lsm_view_export(struct efs_kv_lsm_view *v, uint8_t group,
                            const char *path);
+/* Full applied-state snapshot for background metadata/index work. Unlike a
+ * segment view, this includes a private copy of the live memtable (including
+ * tombstones), captured atomically with the pinned segment set. No flush or
+ * WAL write is required. mt_limit bounds memtable copying under the KV lock;
+ * BUSY means that budget was exceeded, IO means the engine is poisoned.
+ * This is a local KV cut, not a cross-group Raft/transaction watermark.
+ * Call from a background worker. Release snapshots promptly: compaction's old
+ * segment files remain pinned. scans/gets may run concurrently and callbacks
+ * may read the snapshot or mutate the live KV without taking its lock.
+ * The caller must join all readers before release. */
+struct efs_kv_lsm_snapshot;
+int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
+                            struct efs_kv_lsm_snapshot **out);
+int efs_kv_lsm_snapshot_scan(struct efs_kv_lsm_snapshot *s,
+                             const uint8_t *prefix, uint32_t plen,
+                             const uint8_t *start, uint32_t slen,
+                             int (*cb)(void *, const uint8_t *, uint32_t,
+                                       const uint8_t *, uint32_t), void *user);
+int efs_kv_lsm_snapshot_get(struct efs_kv_lsm_snapshot *s,
+                            const uint8_t *key, uint32_t klen,
+                            uint8_t *val, uint32_t *vlen);
+void efs_kv_lsm_snapshot_release(struct efs_kv_lsm_snapshot *s);
+/* Dirty hints for incremental index refresh. Arrays have 4096 entries. They
+ * count applied writes to inode/dentry/lane and transaction metadata families,
+ * not user operations. Reset on engine open/recovery; zero is not proof of an
+ * empty/rebuilt shard. The index must rebuild once per server boot. Snapshot
+ * hints belong to the same local KV cut as its data. Failed/poisoned state is
+ * never presented as a fresh snapshot or an advanced index watermark. */
+int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n);
+int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
+                                  uint64_t *out, uint32_t n);
+
+
 /* Block until background compaction has caught up (n_l0 below the
  * trigger and no compaction in progress). */
 int efs_kv_lsm_quiesce(struct efs_kv *kv);

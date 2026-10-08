@@ -345,6 +345,11 @@ struct efs_raft_host {
     pthread_t tid;
     int running;
     int started;
+    pthread_mutex_t query_mu;
+    pthread_t query_tid;
+    int query_running,query_started,query_error;
+    uint64_t query_deadline_ms;
+    struct efs_server_query_view query_view;
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
     int gc_running;
     int gc_started;
@@ -7013,6 +7018,372 @@ static void *host_gc_thread(void *arg)
     return NULL;
 }
 
+/* W92 query publication: only complete dual-group voters can assemble a
+ * namespace today. No scan or rollup runs under the Raft apply mutex or on
+ * a query path. Dirty revisions are refresh hints, never Raft watermarks. */
+#define HOST_QUERY_BYTES (256ULL << 20)
+#define HOST_QUERY_MEMTABLE (64ULL << 20)
+#define HOST_QUERY_N 256
+#define HOST_QUERY_T_MS 2000
+#define HOST_QUERY_BUILD_MS 10000
+static uint64_t query_mono_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC,&ts);
+    return (uint64_t)ts.tv_sec*1000+(uint64_t)ts.tv_nsec/1000000;
+}
+static int host_query_cancel(void *ctx)
+{
+    struct efs_raft_host *h=ctx;
+    return !__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE) ||
+           query_mono_ms()>h->query_deadline_ms;
+}
+/* h->mu held: a pin is atomic with complete local apply dispatch. Import
+ * batches can run outside that mutex, so their blockers must also be tested. */
+static int host_query_capable(struct efs_raft_host *h)
+{
+    uint8_t both[2];host_need_both(both);
+    if (!host_hosts_all(h,both,2) || __atomic_load_n(&h->snap_batch,__ATOMIC_ACQUIRE)) return 0;
+    int clean=1;
+    pthread_mutex_lock(&h->snap_mu);
+    for (int i=0;i<HOST_NGROUPS;i++)
+        if (__atomic_load_n(&h->g[i].import_block,__ATOMIC_ACQUIRE) ||
+            h->g[i].import_state!=SNAP_IMP_IDLE) clean=0;
+    pthread_mutex_unlock(&h->snap_mu);
+    return clean;
+}
+static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
+                              struct efs_server_query_view *view,uint64_t *revisions)
+{
+    *source=NULL;memset(view,0,sizeof(*view));
+    pthread_mutex_lock(&h->mu);
+    int rc=host_query_capable(h) ? EFS_OK : EFS_ERR_NOT_PRIMARY;
+    if (!rc) {
+        view->boot_id=h->boot_id;view->source_ns=now_ns();
+        for (int i=0;i<HOST_NGROUPS;i++) {
+            view->applied[i]=efs_raft_applied(h->g[i].r);
+            view->terms[i]=efs_raft_term(h->g[i].r);
+        }
+        uint64_t started=query_mono_ms();
+        rc=efs_kv_lsm_snapshot_pin(h->kv,HOST_QUERY_MEMTABLE,source);
+        view->pin_ms=query_mono_ms()-started;
+    }
+    pthread_mutex_unlock(&h->mu);
+    if (rc) return rc;
+    rc=efs_kv_lsm_snapshot_revisions(*source,revisions,4096);
+    /* Barriers AFTER capture expose an asynchronously missing participant
+     * prepare/resolve. A changed metadata image refuses this cut; pending
+     * records additionally refuse catalog construction. This deliberately
+     * favors BUSY over publishing a half cross-group transaction. */
+    for (int i=0;i<HOST_NGROUPS && !rc;i++) {
+        int hint=-1;
+        rc=host_read_index(h,h->g[i].group,&hint);
+    }
+    uint64_t after[4096];
+    pthread_mutex_lock(&h->mu);
+    if (!rc && !host_query_capable(h)) rc=EFS_ERR_NOT_PRIMARY;
+    if (!rc) rc=efs_kv_lsm_metadata_revisions(h->kv,after,4096);
+    if (!rc && memcmp(revisions,after,sizeof(after))) rc=EFS_ERR_BUSY;
+    pthread_mutex_unlock(&h->mu);
+    if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
+    return rc;
+}
+static void *host_query_thread(void *ctx)
+{
+    struct efs_raft_host *h=ctx;
+    uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
+    int failed=0;
+    while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
+        usleep(100000);
+        uint64_t now=query_mono_ms(),dirty=0;
+        if (now-last_attempt<200) continue;
+        int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
+        if (rc) continue;
+        for (uint32_t i=0;i<4096;i++) {
+            uint64_t diff=current[i]>=published[i] ? current[i]-published[i] : HOST_QUERY_N;
+            if (diff>=HOST_QUERY_N-dirty) { dirty=HOST_QUERY_N;break; }
+            dirty+=diff;
+        }
+        /* Only this worker changes the published pointer. Readers hold
+         * query_mu; old remains alive throughout the next candidate build. */
+        int initial=h->query_view.catalog==NULL;
+        if (!dirty && !initial) { first_dirty=0;continue; }
+        if (!first_dirty) first_dirty=now;
+        if (!initial && dirty<HOST_QUERY_N && now-first_dirty<HOST_QUERY_T_MS) continue;
+        if (failed && last_attempt && now-last_attempt<HOST_QUERY_T_MS) continue;
+        last_attempt=now;
+        struct efs_kv_lsm_snapshot *source=NULL;
+        struct efs_server_query_view view;
+        uint64_t revisions[4096];
+        h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
+        rc=host_query_source(h,&source,&view,revisions);
+        struct efs_query_catalog *candidate=NULL;
+        if (!rc && !host_query_cancel(h))
+            rc=efs_query_catalog_build(source,h->query_view.catalog,HOST_QUERY_BYTES,host_query_cancel,h,&candidate);
+        else if (!rc) rc=EFS_ERR_BUSY;
+        efs_kv_lsm_snapshot_release(source);
+        if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
+        pthread_mutex_lock(&h->query_mu);
+        h->query_error=rc;failed=rc!=EFS_OK;
+        if (!rc) {
+            struct efs_query_catalog *old=h->query_view.catalog;
+            view.catalog=candidate;view.built_ns=now_ns();
+            view.build_ms=query_mono_ms()-now;
+            view.generation=h->query_view.generation+1;
+            h->query_view=view;
+            struct efs_query_rollup root={0};
+            int root_rc=efs_query_catalog_stats(candidate,EFS_ROOT_INO,&root);
+            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
+                (unsigned long long)view.generation,(unsigned long long)view.applied[0],
+                (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),
+                (unsigned long long)efs_query_catalog_bytes(candidate),(unsigned long long)view.pin_ms,
+                (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
+                (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
+            memcpy(published,revisions,sizeof(published));first_dirty=0;
+            /* query_mu drains readers before retirement; one builder bounds
+             * simultaneous old/candidate generations to two per host. */
+            efs_query_catalog_free(old);
+        }
+        pthread_mutex_unlock(&h->query_mu);
+    }
+    return NULL;
+}
+/* Internal borrowed-view API. The consumer is bounded and may not retain the
+ * pointer. It MUST enforce fresh user permissions/ancestry before returning
+ * bytes. Source and build times do not advance after a failed refresh. */
+int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
+                                 void *ctx,uint16_t *primary_id)
+{
+    struct efs_raft_host *h=g_host;
+    if (primary_id) *primary_id=0;
+    if (!h || !consume) return EFS_ERR_INVAL;
+    uint8_t both[2];host_need_both(both);
+    pthread_mutex_lock(&h->mu);
+    int capable=host_query_capable(h);
+    int peer=capable ? -1 : host_pick_peer(h,both,2,-1);
+    pthread_mutex_unlock(&h->mu);
+    if (!capable) {
+        if (primary_id && peer>=0) *primary_id=(uint16_t)(peer+1);
+        return EFS_ERR_NOT_PRIMARY;
+    }
+    for (int i=0;i<HOST_NGROUPS;i++) {
+        int hint=-1,rc=host_read_index(h,both[i],&hint);
+        if (rc) return rc;
+    }
+    pthread_mutex_lock(&h->mu);
+    capable=host_query_capable(h);
+    pthread_mutex_unlock(&h->mu);
+    if (!capable) return EFS_ERR_BUSY;
+    pthread_mutex_lock(&h->query_mu);
+    int rc=h->query_view.catalog ? consume(ctx,&h->query_view,h->query_error) : EFS_ERR_BUSY;
+    pthread_mutex_unlock(&h->query_mu);
+    return rc;
+}
+
+#define HOST_QUERY_AUTH_N 8192
+#define HOST_QUERY_REPLY_BYTES (64ULL << 20)
+static uint64_t query_reply_bytes;
+static uint32_t query_requests;
+struct query_allocation { uint64_t bytes; };
+void server_raft_host_query_reply_free(void *reply)
+{
+    if (!reply) return;
+    struct query_allocation *a=(struct query_allocation *)reply-1;
+    __atomic_sub_fetch(&query_reply_bytes,a->bytes,__ATOMIC_RELAXED);
+    __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);free(a);
+}
+struct query_auth {
+    int valid;
+    struct efs_meta_row row;
+};
+struct query_request {
+    struct efs_raft_host *h;
+    const struct efs_msg_query_snapshot *req;
+    struct efs_msg_query_snapshot_reply *reply;
+    const struct efs_server_query_view *view;
+    struct query_auth *auth;
+    uint32_t auth_count,len;
+    uint64_t deadline;
+    char *text;
+    char root_path[EFS_MAX_PATH];
+};
+static int query_access(const struct efs_msg_query_snapshot *q,const struct efs_meta_row *r,int mask)
+{
+    if (!q->uid) return EFS_OK;
+    int group=q->gid==r->gid;
+    for (uint32_t i=0;i<q->ngroups && !group;i++) group=q->groups[i]==r->gid;
+    uint32_t perm=q->uid==r->uid ? (r->mode>>6)&7 : group ? (r->mode>>3)&7 : r->mode&7;
+    return (perm & (uint32_t)mask)==(uint32_t)mask ? EFS_OK : EFS_ERR_ACCES;
+}
+static int query_directory_binding(struct query_request *q,efs_ino_t ino)
+{
+    if (ino==EFS_ROOT_INO) return EFS_OK;
+    struct efs_name_entry link;
+    int rc=efs_query_catalog_directory_link(q->view->catalog,ino,&link);
+    if (rc) return rc;
+    struct efs_meta_dentry current;
+    rc=efs_meta_apply_lookup_tx(q->h->kv,link.parent,link.name,host_txn_coord,q->h,&current);
+    if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
+    if (rc) return rc;
+    return current.ino==ino && current.generation==link.dentry.generation ? EFS_OK : EFS_ERR_BUSY;
+}
+static int query_auth_dir(struct query_request *q,efs_ino_t ino,int mask,struct efs_meta_row **out)
+{
+    if (query_mono_ms()>q->deadline) return EFS_ERR_BUSY;
+    uint32_t start=(uint32_t)((ino^(ino>>32))*2654435761U)%HOST_QUERY_AUTH_N;
+    for (uint32_t i=0;i<HOST_QUERY_AUTH_N;i++) {
+        struct query_auth *a=&q->auth[(start+i)%HOST_QUERY_AUTH_N];
+        if (a->valid && a->row.ino!=ino) continue;
+        if (!a->valid) {
+            struct efs_meta_row cached;
+            int rc=efs_query_catalog_inode(q->view->catalog,ino,&cached,NULL);
+            if (rc==EFS_ERR_NOT_FOUND) {
+                struct efs_meta_row fresh;
+                rc=efs_meta_apply_get_inode_tx(q->h->kv,ino,host_txn_coord,q->h,&fresh);
+                return rc ? rc : EFS_ERR_BUSY; /* New directory waits for publication. */
+            }
+            if (rc) return rc;
+            rc=efs_meta_apply_get_inode_tx(q->h->kv,ino,host_txn_coord,q->h,&a->row);
+            if (rc) return rc;
+            if (!S_ISDIR(a->row.mode) || !a->row.nlink) return EFS_ERR_NOT_FOUND;
+            if (a->row.generation!=cached.generation || a->row.parent!=cached.parent) return EFS_ERR_BUSY;
+            rc=query_directory_binding(q,ino);
+            if (rc) return rc;
+            a->valid=1;q->auth_count++;
+        }
+        int rc=query_access(q->req,&a->row,mask);
+        if (!rc && out) *out=&a->row;
+        return rc;
+    }
+    return EFS_ERR_OVERFLOW;
+}
+static int query_ancestry(struct query_request *q,efs_ino_t dir,efs_ino_t root,int mask)
+{
+    for (uint32_t steps=0;steps<HOST_QUERY_AUTH_N;steps++) {
+        struct efs_meta_row *r=NULL;
+        int rc=query_auth_dir(q,dir,mask,&r);
+        if (rc) return rc;
+        if (dir==root) return EFS_OK;
+        if (dir==EFS_ROOT_INO || !r->parent || r->parent==dir) return EFS_ERR_BUSY;
+        dir=r->parent;
+    }
+    return EFS_ERR_OVERFLOW;
+}
+static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *relative)
+{
+    struct query_request *q=ctx;
+    int rc=query_ancestry(q,entry->parent,q->req->root,5);
+    if (rc) return rc;
+    /* A moved/deleted entry must not be rendered with stale ancestry while
+     * using fresh permissions. A concurrent mutation refuses the whole result. */
+    struct efs_meta_dentry fresh;
+    rc=efs_meta_apply_lookup_tx(q->h->kv,entry->parent,entry->name,host_txn_coord,q->h,&fresh);
+    if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
+    if (rc) return rc;
+    if (fresh.ino!=entry->dentry.ino || fresh.generation!=entry->dentry.generation) return EFS_ERR_BUSY;
+    if (strchr(relative,'\n') || strchr(q->root_path,'\n')) return EFS_ERR_ILSEQ;
+    size_t prefix=strlen(q->root_path),n=strlen(relative),sep=prefix ? 1 : 0;
+    if (prefix+sep+n+1>q->req->max_output-q->len) return EFS_ERR_OVERFLOW;
+    if (prefix) { memcpy(q->text+q->len,q->root_path,prefix);q->len+=(uint32_t)prefix;q->text[q->len++]='/'; }
+    memcpy(q->text+q->len,relative,n);q->len+=(uint32_t)n;q->text[q->len++]='\n';
+    return EFS_OK;
+}
+static int query_consume(void *ctx,const struct efs_server_query_view *view,int refresh_error)
+{
+    struct query_request *q=ctx;
+    q->view=view;
+    int rc=query_auth_dir(q,q->req->root,5,NULL);
+    if (!rc) rc=query_ancestry(q,q->req->root,EFS_ROOT_INO,1);
+    if (rc) return rc;
+    struct efs_meta_row *root=NULL;
+    rc=query_auth_dir(q,q->req->root,5,&root);
+    if (rc) return rc;
+    struct efs_msg_query_snapshot_reply *r=q->reply;
+    r->boot_id=view->boot_id;r->generation=view->generation;
+    r->source_ns=view->source_ns;r->built_ns=view->built_ns;
+    memcpy(r->applied,view->applied,sizeof(r->applied));memcpy(r->terms,view->terms,sizeof(r->terms));
+    r->refresh_error=refresh_error;r->uid=root->uid;r->gid=root->gid;
+    r->mtime=root->base_mtime;r->atime=root->base_atime;r->ctime=root->base_ctime;
+    if (q->req->operation==EFS_QUERY_STATS) {
+        struct efs_query_rollup s;
+        rc=efs_query_catalog_stats(view->catalog,q->req->root,&s);
+        if (!rc) {
+            /* Directory aggregate policy: totals of all descendant entries;
+             * queried directory requires read/search, ancestors search. No
+             * descendant names or individual protected contents are exposed. */
+            int n=snprintf(q->text,q->req->max_output,
+                "imm_files=%llu\nimm_dirs=%llu\nimm_bytes=%llu\nimm_tmin=%llu\nimm_tmax=%llu\n"
+                "tree_files=%llu\ntree_dirs=%llu\ntree_bytes=%llu\ntree_tmin=%llu\ntree_tmax=%llu\n"
+                "as_of=%llu.%09llu\nstats_as_of_ns=%llu\nindex_as_of_ns=%llu\n"
+                "snapshot_boot=%llu\nsnapshot_generation=%llu\nsource_g0=%llu\nsource_g2=%llu\nrefresh_error=%d\n",
+                (unsigned long long)s.imm_files,(unsigned long long)s.imm_dirs,(unsigned long long)s.imm_bytes,
+                (unsigned long long)s.imm_tmin,(unsigned long long)s.imm_tmax,(unsigned long long)s.tree_files,
+                (unsigned long long)s.tree_dirs,(unsigned long long)s.tree_bytes,(unsigned long long)s.tree_tmin,
+                (unsigned long long)s.tree_tmax,(unsigned long long)(view->source_ns/1000000000),
+                (unsigned long long)(view->source_ns%1000000000),(unsigned long long)view->source_ns,
+                (unsigned long long)view->source_ns,(unsigned long long)view->boot_id,
+                (unsigned long long)view->generation,(unsigned long long)view->applied[0],
+                (unsigned long long)view->applied[1],refresh_error);
+            if (n<0 || (uint32_t)n>=q->req->max_output) rc=EFS_ERR_OVERFLOW;
+            else q->len=(uint32_t)n;
+        }
+    } else {
+        rc=efs_query_catalog_path(view->catalog,q->req->root,EFS_ROOT_INO,q->root_path,sizeof(q->root_path));
+        if (!rc) rc=efs_query_catalog_find(view->catalog,q->req->root,q->req->match,q->req->term,
+                                           q->req->visit_budget,query_emit,q);
+    }
+    /* Recheck authorization/ancestry just before delivery. Open result bytes
+     * then remain immutable; later chmod does not rewrite an already-open FD. */
+    for (uint32_t i=0;i<HOST_QUERY_AUTH_N && !rc;i++) if (q->auth[i].valid) {
+        if (query_mono_ms()>q->deadline) { rc=EFS_ERR_BUSY;break; }
+        struct efs_meta_row now;
+        rc=efs_meta_apply_get_inode_tx(q->h->kv,q->auth[i].row.ino,host_txn_coord,q->h,&now);
+        if (!rc && (now.generation!=q->auth[i].row.generation || now.parent!=q->auth[i].row.parent ||
+            now.mode!=q->auth[i].row.mode || now.uid!=q->auth[i].row.uid || now.gid!=q->auth[i].row.gid || !now.nlink))
+            rc=EFS_ERR_BUSY;
+        if (!rc) rc=query_directory_binding(q,now.ino);
+    }
+    r->checked_dirs=q->auth_count;
+    if (!rc) r->text_len=q->len;
+    return rc;
+}
+int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,void **out,uint32_t *len)
+{
+    if (out) *out=NULL;
+    if (!req || !out || !len || req->version!=EFS_QUERY_VERSION || !req->root ||
+        req->operation>EFS_QUERY_FIND || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
+        !req->max_output || req->max_output>EFS_QUERY_MAX_OUTPUT ||
+        !req->visit_budget || req->visit_budget>EFS_QUERY_MAX_VISITS ||
+        !memchr(req->term,0,sizeof(req->term))) return EFS_ERR_INVAL;
+    if (req->operation==EFS_QUERY_FIND && (strlen(req->term)<EFS_FIND_MIN_TERM || strchr(req->term,'/') || strchr(req->term,'*')))
+        return EFS_ERR_INVAL;
+    if (__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)>8) {
+        __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_BUSY;
+    }
+    uint64_t bytes=sizeof(struct query_allocation)+sizeof(struct efs_msg_query_snapshot_reply)+req->max_output;
+    uint64_t before=__atomic_load_n(&query_reply_bytes,__ATOMIC_RELAXED);
+    for (;;) {
+        if (bytes>HOST_QUERY_REPLY_BYTES-before) {
+            __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_BUSY;
+        }
+        if (__atomic_compare_exchange_n(&query_reply_bytes,&before,before+bytes,0,__ATOMIC_RELAXED,__ATOMIC_RELAXED)) break;
+    }
+    struct query_allocation *a=calloc(1,bytes);
+    if (!a) { __atomic_sub_fetch(&query_reply_bytes,bytes,__ATOMIC_RELAXED);__atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_NOMEM; }
+    a->bytes=bytes;
+    struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
+    struct query_request q={0};
+    q.h=g_host;q.req=req;q.reply=reply;q.text=(char *)(reply+1);q.deadline=query_mono_ms()+5000;
+    q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
+    reply->version=EFS_QUERY_VERSION;
+    int rc=q.auth ? server_raft_host_query_read(query_consume,&q,&reply->primary_id) : EFS_ERR_NOMEM;
+    free(q.auth);
+    reply->status=rc;
+    if (rc) reply->text_len=0; /* never deliver a partial result as success */
+    *out=reply;*len=sizeof(*reply)+reply->text_len;
+    return EFS_OK;
+}
+
 int server_raft_host_start(struct efsd_server *s)
 {
     struct efs_raft_host *h;
@@ -7049,6 +7420,7 @@ int server_raft_host_start(struct efsd_server *s)
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
     pthread_mutex_init(&h->snap_mu, NULL);
+    pthread_mutex_init(&h->query_mu,NULL);
     pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
@@ -7140,6 +7512,11 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
+    __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
+    if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
+        __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
+        fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
+    } else h->query_started=1;
     /* GC reaper after the pump: its proposals need the pump to apply. A
      * spawn failure only leaks fragments (logged), never corrupts.
      * EFS_GC_DISABLE is an operational escape hatch (A/B, emergencies):
@@ -7206,6 +7583,13 @@ void server_raft_host_stop(void)
 
     if (!h)
         return;
+    __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
+    if (h->query_started) pthread_join(h->query_tid,NULL);
+    pthread_mutex_lock(&h->query_mu);
+    efs_query_catalog_free(h->query_view.catalog);
+    h->query_view.catalog=NULL;
+    pthread_mutex_unlock(&h->query_mu);
+    pthread_mutex_destroy(&h->query_mu);
     /* Stop the GC reaper first: an in-flight host_propose_wait needs the
      * pump alive to apply, and its peer RPCs need the conn pool. */
     h->gc_running = 0;

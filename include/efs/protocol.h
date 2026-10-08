@@ -175,6 +175,8 @@ enum efs_msg_type {
     EFS_MSG_GC_STATUS_REPLY = 120,
     EFS_MSG_GC_INODE = 121,
     EFS_MSG_GC_INODE_REPLY = 122,
+    EFS_MSG_QUERY_SNAPSHOT = 123,
+    EFS_MSG_QUERY_SNAPSHOT_REPLY = 124,
 };
 
 /* Trusted reaper only: all lanes swept and no remaining open lease.
@@ -530,6 +532,35 @@ struct efs_user_stat {
 /* Current QUERY_STATS_REPLY is one byte: logical query integration is
  * unavailable. Legacy struct replies are not authoritative statistics. */
 #define EFS_QUERY_STATS_UNSUPPORTED 1u
+
+/* W92 v1 bounded server snapshots. Paths are export-relative UTF8/raw bytes,
+ * newline separated; newline names fail ILSEQ. No partial-success replies.
+ * Credentials use the same trusted mount boundary as inode RPCs; this does
+ * not introduce an authentication protocol. Unknown versions fail explicitly. */
+#define EFS_QUERY_VERSION 1
+#define EFS_QUERY_GROUPS 128
+#define EFS_QUERY_MAX_OUTPUT (16u << 20)
+#define EFS_QUERY_MAX_VISITS 1000000u
+#define EFS_QUERY_STATS 0
+#define EFS_QUERY_FIND 1
+struct efs_msg_query_snapshot {
+    uint32_t version,operation;
+    efs_ino_t root;
+    uint32_t uid,gid,ngroups,match;
+    uint32_t max_output,visit_budget;
+    uint32_t groups[EFS_QUERY_GROUPS];
+    char term[EFS_MAX_NAME];
+};
+struct efs_msg_query_snapshot_reply {
+    uint32_t version;
+    int32_t status,refresh_error;
+    uint16_t primary_id,reserved;
+    uint32_t text_len,uid,gid,checked_dirs;
+    uint64_t boot_id,generation,source_ns,built_ns,applied[2],terms[2];
+    uint64_t mtime,atime,ctime;
+    /* text_len bytes immediately follow; no terminating NUL on wire. */
+};
+
 
 struct efs_msg_query_stats_reply {
     uint64_t total_files;
