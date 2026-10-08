@@ -48,6 +48,7 @@ p.add_argument('--memory-limit-bytes',type=int,help='require an inherited cgroup
 p.add_argument('--publication-pressure',action='store_true',help='retain failed REPORT bodies until bounded admission refuses, then recover')
 p.add_argument('--namespace-max',action='store_true',help='exact ancestry limit, over-limit refusal and restart recovery')
 p.add_argument('--namespace-max-fault',action='store_true',help='kill exact 144-participant namespace coordinator before/after COMMIT')
+p.add_argument('--stop-dirty-recovery',action='store_true',help='retain a new partial dirty body through failed fsync and cleanly drain after restart')
 p.add_argument('--shutdown-mutations',action='store_true',help='gracefully stop a metadata leader during fsynced file creation; verify acknowledged bytes after restart')
 p.add_argument('--opid', action='store_true')
 p.add_argument('--opid-restart',action='store_true',help='restart all owned servers between lost commit reply and replay')
@@ -650,6 +651,29 @@ os.close(fd)
             path.unlink()
         (work/'memo-mutations.json').write_text(json.dumps({'files':32,'immediate_stat_checks':mutations},indent=2))
         print('immediate post-mutation lookup/stat gate PASS',flush=True)
+    if a.stop_dirty_recovery:
+        target=mount/'stop-new-partial';body=b'new partial body retained through PUT failure'
+        fd=os.open(target,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+        assert os.write(fd,body)==len(body)
+        stop()
+        failures=[]
+        try:
+            try:os.fsync(fd)
+            except OSError as error:failures.append({'call':'fsync','errno':error.errno})
+            else:raise AssertionError('offline fsync falsely acknowledged a new partial body')
+        finally:
+            try:os.close(fd)
+            except OSError as error:failures.append({'call':'close','errno':error.errno})
+        start()
+        started=time.monotonic();unmount();elapsed=time.monotonic()-started
+        assert elapsed<30,'recovered new partial body did not cleanly drain'
+        stop();start();mount_client()
+        assert target.read_bytes()==body,'clean stop lost the retained partial body'
+        (work/'stop-dirty-recovery.json').write_text(json.dumps({
+            'bytes':len(body),'failures':failures,'clean_stop_seconds':elapsed,
+            'cold_sha256':hashlib.sha256(body).hexdigest(),'forced_discard':False},indent=2))
+        target.unlink();wait(drained,'recovered partial body physically reclaimed')
+        print('failed new partial PUT: clean stop drains retained body and exact cold bytes PASS',flush=True)
     if a.shutdown_mutations:
         directory=mount/'shutdown-writes';directory.mkdir()
         acknowledged=[];errors=[];active=threading.Event();finish=threading.Event()

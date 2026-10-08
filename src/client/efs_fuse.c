@@ -4122,13 +4122,14 @@ static int efs_control_drain(uint64_t deadline, int force)
             continue;
         }
         efs_buf_drain_enter();
-        int data_rc = efs_dcache_flush_all();
+        int data_rc = efs_dcache_drain_pending();
         int report_rc = efs_client_report_dirty(1);
         efs_buf_drain_leave();
         struct efs_report_pressure pressure;
         efs_client_report_pressure_stats(&pressure);
         if (data_rc == EFS_OK && report_rc == EFS_OK &&
             !pressure.pending_records && !pressure.reserved_records &&
+            !pressure.inflight_records &&
             !efs_dcache_pending_records(NULL)) {
             result = 0;
             break;

@@ -11,7 +11,7 @@ benchmark harness changes belong to this package.
 | --- | --- |
 | W64 | `9ddcf7a2`: durable inode-shard reservation receipts, bounded ACK retirement and exact replay. Full AMD units, lost committed replies, 32 concurrent identical requests, explicit inode-leader death, cold replay and exact bytes pass. Coordinated EOF/routing and bounded completion now pass AMD direct/TCP append/fsync, peer extension, leader-death replay, POSIX and cold-byte gates (details below). Legacy requests retain their old reserve path; D25 remains staged. |
 | W88 | Production REPORT identity and receipt authority must replace evictable trailer history before activation. Actual host/FUSE eviction, overlapping writes, GC/re-PUT and cold bytes remain required. |
-| D27/0a | `011ae854`: hostname resolution now respects inherited RPC deadlines; at most eight detached NSS jobs retain their own completion state. Hung NSS, saturation, late completion, FD cleanup and thread-creation faults pass, including AMD ASan/UBSan. Whole-write fault/recovery and small-host RSS acceptance remain open. |
+| D27/0a | `011ae854`: hostname resolution now respects inherited RPC deadlines; at most eight detached NSS jobs retain their own completion state. Hung NSS, saturation, late completion, FD cleanup and thread-creation faults pass, including AMD ASan/UBSan. Explicit stop now drains new partial bodies through the per-inode recovery path and waits for detached REPORT ownership; offline fsync/close, recovery, graceful leader stop and cold bytes pass below. Whole-write fault/recovery and small-host RSS acceptance remain open. |
 | W23/W89 | Corrected follower pressure measurement and D30 remedy remain pending; no pressure closure from these runs. |
 | Queue | Dated evidence reconciled below without removing hardware/multi-host obligations. |
 | W71 | `e77e1f13`: production fragment contents, checksum/length and ancestor directory entries are fenced before PUT succeeds. Actual buffered/direct/bounce fault tests and direct/TCP live POSIX/replay/append/GC/restart gates pass. Physical power-loss acceptance remains owed. |
@@ -150,6 +150,33 @@ PUT: clean stop retained a new partial dirty body until its 60-second deadline.
 That failure is being addressed separately, not counted as a passed shutdown
 gate. Physical power loss, multi-host transport acceptance, production session
 fencing, bounded transaction-history retirement and D25 activation remain owed.
+
+## D27 explicit-stop recovery — 07:20 UTC
+
+The combined gate initially failed clean stop after a leader restart. The
+pressure-reclaim flush intentionally skips unpublished partial chunks; using
+it for stop left a failed new partial write dirty until the 60-second deadline.
+Explicit stop now snapshots at most 64 distinct dirty inodes per pass and
+uses the same per-inode flush/recovery path as close/fsync. It holds no cache
+mutex during network I/O, retains failures, and inherits the stop deadline.
+REPORT then releases that page before the next pass. Stop also waits for
+`inflight_records`, not only records still in the pending queue.
+
+AMD units cover bounded pages, duplicate inodes, unlocked I/O, failure
+retention, expiry, detached REPORT ownership and deadline restoration. The
+full unit suite passes (`/tmp/efs-stop-dirty-unit.log`). The complete direct/TCP
+append/replay/POSIX/GC run now passes graceful leader shutdown and exact cold
+acknowledged bytes; a second run validates the final in-flight ownership check.
+[Shutdown evidence](../../results/measure/20261008-replay-readiness/stop-flight-pass/shutdown-mutations.json).
+
+The new deterministic `--stop-dirty-recovery` gate stops all four private
+daemons after a new partial write. Both fsync and close return **EIO**. After
+restart, clean stop drains the retained **45 bytes in 0.270 seconds**, and a
+cold remount reads the exact SHA-256-verified body. No force-discard is used.
+[Recovery evidence](../../results/measure/20261008-replay-readiness/stop-partial-pass/stop-dirty-recovery.json).
+The failed combined run is retained under `shutdown-before-fix`; its failure
+remains recorded rather than being counted as a pass. D27 whole-call recovery
+and small-host memory acceptance are still separate obligations.
 
 ## Evidence
 

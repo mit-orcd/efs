@@ -6001,6 +6001,34 @@ int efs_dcache_flush_ino(efs_ino_t ino)
     return rc;
 }
 
+/* Explicit stop is different from pressure reclaim: it must flush new
+ * partial chunks too. Reuse the per-inode close/fsync path, which owns merge
+ * observations and waits for in-flight PUT windows. Snapshot a bounded page
+ * without holding cache locks during network I/O; the control loop retries
+ * after REPORT releases this page. Mutations are already quiesced. */
+int efs_dcache_drain_pending(void)
+{
+    efs_ino_t inodes[64];unsigned count=0;
+    dcache_ensure();
+    for(uint32_t slot=0;slot<DCACHE_SLOTS && count<64;++slot) {
+        pthread_mutex_lock(dcache_mu(slot));
+        for(struct dcache_ent *e=&g_dcache.e[slot];e && count<64;e=e->next) {
+            if(!e->ino || !e->dirty || !e->data)continue;
+            unsigned i;
+            for(i=0;i<count;++i)if(inodes[i]==e->ino)break;
+            if(i==count)inodes[count++]=e->ino;
+        }
+        pthread_mutex_unlock(dcache_mu(slot));
+    }
+    int rc=EFS_OK;
+    for(unsigned i=0;i<count;++i) {
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        int one=efs_dcache_flush_ino(inodes[i]);
+        if(rc==EFS_OK && one!=EFS_OK)rc=one;
+    }
+    return rc;
+}
+
 int efs_dcache_flush_all(void)
 {
     return dcache_flush_all_slots();
