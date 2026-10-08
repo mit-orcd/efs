@@ -184,7 +184,15 @@ void efs_client_node_note_fail(efs_node_id_t node_id)
     if (idx < 0)
         return;
     int64_t now = monotonic_ms();
+    uint64_t deadline = efs_client_rpc_deadline_ms();
+    if (deadline && now >= (int64_t)deadline)
+        return; /* send/receive cancellation is not a peer-health verdict */
     pthread_mutex_lock(&g_client.conn_lock[idx]);
+    now = monotonic_ms();
+    if (deadline && now >= (int64_t)deadline) {
+        pthread_mutex_unlock(&g_client.conn_lock[idx]);
+        return;
+    }
     /* Already in cooldown: do not refresh. Active PUTs would otherwise
      * keep pushing down_until forward forever and never re-probe. */
     if (g_client.node_down_until_ms[idx] > now) {
@@ -339,11 +347,16 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                 pthread_mutex_lock(&g_client.conn_lock[idx]);
                 g_client.conn_busy[idx][free_slot] = 0;
                 now = monotonic_ms();
-                if (g_client.node_fail_streak[idx] < 1000)
-                    g_client.node_fail_streak[idx]++;
-                if (g_client.node_fail_streak[idx] >= EFS_NODE_DOWN_FAILS &&
-                    g_client.node_down_until_ms[idx] <= now)
-                    g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
+                /* A caller budget can expire during DNS/connect/upgrade.
+                 * That is local cancellation, not evidence the peer is down.
+                 * Still count genuine connect failures inside the budget. */
+                if (!outer || now < (int64_t)outer) {
+                    if (g_client.node_fail_streak[idx] < 1000)
+                        g_client.node_fail_streak[idx]++;
+                    if (g_client.node_fail_streak[idx] >= EFS_NODE_DOWN_FAILS &&
+                        g_client.node_down_until_ms[idx] <= now)
+                        g_client.node_down_until_ms[idx] = now + EFS_NODE_DOWN_MS;
+                }
                 pthread_cond_signal(&g_client.conn_cv[idx]);
                 pthread_mutex_unlock(&g_client.conn_lock[idx]);
                 return NULL;
