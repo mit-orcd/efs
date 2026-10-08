@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess,tempfile
 root=Path(__file__).resolve().parents[1];s=(root/'src/common/network.c').read_text()
-a=s.index('static int connect_sockaddr(');b=s.index('\nint efs_connect_tcp(',a)
+a=s.index('static int connect_sockaddr(');b=s.index('\n}',a)+2
 code=r'''
 #include "efs/network.h"
 #include <stdint.h>

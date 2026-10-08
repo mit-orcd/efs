@@ -132,6 +132,123 @@ failed:;
     return -1;
 }
 
+/* NSS resolution can outlive a write's entire deadline. Detached work owns
+ * its buffers and notification pipe until both worker and caller release it.
+ * At most eight jobs (including timed-out NSS calls) may exist; never cancel
+ * inside libc or retain a pointer to a caller's stack. NSS stays serialized. */
+#define EFS_RESOLVER_JOBS 8u
+struct resolver_job {
+    unsigned refs;
+    int done, have;
+    int pipefd[2];
+    uint64_t end_ms;
+    char host[256], service[8];
+    struct sockaddr_in address;
+};
+static unsigned resolver_jobs;
+static pthread_mutex_t resolver_nss_mu = PTHREAD_MUTEX_INITIALIZER;
+
+static uint64_t resolver_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+static void resolver_release(struct resolver_job *job)
+{
+    if (__atomic_sub_fetch(&job->refs, 1, __ATOMIC_ACQ_REL)) return;
+    close(job->pipefd[0]); close(job->pipefd[1]);
+    free(job);
+    __atomic_sub_fetch(&resolver_jobs, 1, __ATOMIC_RELEASE);
+}
+
+static void *resolver_worker(void *arg)
+{
+    struct resolver_job *job = arg;
+    struct addrinfo hints = {0}, *res = NULL;
+    hints.ai_family = AF_INET; hints.ai_socktype = SOCK_STREAM;
+    pthread_mutex_lock(&resolver_nss_mu);
+    /* Queued work whose caller already expired need not enter NSS at all. */
+    if (resolver_now_ms() < job->end_ms &&
+        !getaddrinfo(job->host, job->service, &hints, &res) &&
+        res && res->ai_addr && res->ai_addrlen >= sizeof(job->address) &&
+        res->ai_addr->sa_family == AF_INET) {
+        memcpy(&job->address, res->ai_addr, sizeof(job->address));
+        job->have = 1;
+    }
+    if (res) freeaddrinfo(res);
+    pthread_mutex_unlock(&resolver_nss_mu);
+    __atomic_store_n(&job->done, 1, __ATOMIC_RELEASE);
+    const char ready = 1;
+    ssize_t sent;
+    do { sent = write(job->pipefd[1], &ready, 1); } while (sent < 0 && errno == EINTR);
+    resolver_release(job);
+    return NULL;
+}
+
+static int resolve_ipv4_deadline(const char *host, uint16_t port,
+                                  struct sockaddr_in *out)
+{
+    uint64_t end = resolver_now_ms() + EFS_CONNECT_TIMEOUT_SEC * 1000;
+    if (net_deadline_ms && net_deadline_ms < end) end = net_deadline_ms;
+    if (resolver_now_ms() >= end) { errno = ETIMEDOUT; return -1; }
+    if (strlen(host) >= sizeof(((struct resolver_job *)0)->host)) {
+        errno = ENAMETOOLONG; return -1;
+    }
+    unsigned live = __atomic_load_n(&resolver_jobs, __ATOMIC_ACQUIRE);
+    for (;;) {
+        if (live >= EFS_RESOLVER_JOBS) { errno = EAGAIN; return -1; }
+        if (__atomic_compare_exchange_n(&resolver_jobs, &live, live + 1, 1,
+                                        __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) break;
+    }
+    struct resolver_job *job = calloc(1, sizeof(*job));
+    if (!job) {
+        __atomic_sub_fetch(&resolver_jobs, 1, __ATOMIC_RELEASE);
+        return -1;
+    }
+    if (pipe2(job->pipefd, O_NONBLOCK | O_CLOEXEC)) {
+        int saved = errno; free(job);
+        __atomic_sub_fetch(&resolver_jobs, 1, __ATOMIC_RELEASE);
+        errno = saved; return -1;
+    }
+    job->refs = 2; job->end_ms = end;
+    strcpy(job->host, host);
+    snprintf(job->service, sizeof(job->service), "%u", port);
+    pthread_t thread;
+    pthread_attr_t attr;
+    int rc = pthread_attr_init(&attr);
+    if (!rc) {
+        rc = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+        if (!rc) rc = pthread_attr_setstacksize(&attr, 1024 * 1024);
+        if (!rc) rc = pthread_create(&thread, &attr, resolver_worker, job);
+        pthread_attr_destroy(&attr);
+    }
+    if (rc) {
+        resolver_release(job); resolver_release(job);
+        errno = rc; return -1;
+    }
+    struct pollfd pfd = {.fd = job->pipefd[0], .events = POLLIN};
+    int failure = ETIMEDOUT, have = 0;
+    for (;;) {
+        uint64_t now = resolver_now_ms();
+        if (now >= end) break;
+        if (__atomic_load_n(&job->done, __ATOMIC_ACQUIRE)) {
+            have = job->have;
+            if (have) *out = job->address;
+            else failure = EHOSTUNREACH;
+            break;
+        }
+        rc = poll(&pfd, 1, (int)(end - now));
+        if (rc < 0 && errno == EINTR) continue;
+        if (rc < 0) { failure = errno; break; }
+        if (!rc) break;
+    }
+    resolver_release(job);
+    if (!have) { errno = failure; return -1; }
+    return 0;
+}
+
 int efs_connect_tcp(const char *host, uint16_t port)
 {
     efs_net_init();
@@ -140,8 +257,8 @@ int efs_connect_tcp(const char *host, uint16_t port)
 
     /* Numeric IPv4 only on the hot path. Engaging's NSS corrupts under
      * concurrent getaddrinfo (heartbeat SEGV in freeaddrinfo / ai_next).
-     * Cluster membership should advertise IB IPs; hostnames are resolved
-     * once under a lock below for rare non-numeric cases. */
+     * Cluster membership should advertise IPs; rare hostnames use bounded,
+     * serialized NSS work below without blocking the caller past its budget. */
     struct in_addr addr4;
     if (inet_pton(AF_INET, host, &addr4) == 1) {
         struct sockaddr_in sa;
@@ -152,34 +269,8 @@ int efs_connect_tcp(const char *host, uint16_t port)
         return connect_sockaddr((struct sockaddr *)&sa, sizeof(sa));
     }
 
-    char port_str[8];
-    snprintf(port_str, sizeof(port_str), "%u", port);
-
-    struct addrinfo hints, *res = NULL;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET; /* IPv4-only; matches Engaging IB usage */
-    hints.ai_socktype = SOCK_STREAM;
-
-    static pthread_mutex_t gai_mu = PTHREAD_MUTEX_INITIALIZER;
     struct sockaddr_in sa;
-    int have = 0;
-
-    pthread_mutex_lock(&gai_mu);
-    int rc = getaddrinfo(host, port_str, &hints, &res);
-    if (rc == 0 && res && res->ai_addr &&
-        res->ai_addrlen >= sizeof(struct sockaddr_in) &&
-        res->ai_addr->sa_family == AF_INET) {
-        memcpy(&sa, res->ai_addr, sizeof(sa));
-        have = 1;
-    }
-    if (res)
-        freeaddrinfo(res);
-    pthread_mutex_unlock(&gai_mu);
-
-    if (!have) {
-        fprintf(stderr, "efs_connect_tcp: cannot resolve '%s'\n", host);
-        return -1;
-    }
+    if (resolve_ipv4_deadline(host, port, &sa)) return -1;
     return connect_sockaddr((struct sockaddr *)&sa, sizeof(sa));
 }
 
