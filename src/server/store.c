@@ -1100,6 +1100,53 @@ static int finish_shard_write(int fd, size_t bytes, int sync_write, int direct)
     return rc == 0 ? EFS_OK : EFS_ERR_IO;
 }
 
+#ifndef EFS_BENCH_BUILD
+/* A fragment ACK protects both its contents and its pathname. Sync every
+ * ancestor after the file barrier: an earlier failed/retried PUT may have
+ * created directories without ever acknowledging their persistence. No
+ * directory cache or O_DIRECT completion substitutes for this barrier. */
+static int sync_fragment_parents(const char *path)
+{
+    char parent[8192];
+    size_t n = strlen(path);
+    if (!n || n >= sizeof(parent)) return EFS_ERR_INVAL;
+    memcpy(parent, path, n + 1);
+    char *slash = strrchr(parent, '/');
+    if (!slash) strcpy(parent, ".");
+    else if (slash == parent) parent[1] = '\0';
+    else *slash = '\0';
+    for (;;) {
+        int fd, rc;
+        do { fd = open(parent, O_RDONLY | O_DIRECTORY | O_CLOEXEC); }
+        while (fd < 0 && errno == EINTR);
+        if (fd < 0) return EFS_ERR_IO;
+        do { rc = fsync(fd); } while (rc < 0 && errno == EINTR);
+        int closed = close(fd);
+        if (rc < 0 || closed < 0) return EFS_ERR_IO;
+        if (!strcmp(parent, "/") || !strcmp(parent, ".")) break;
+        slash = strrchr(parent, '/');
+        if (!slash) strcpy(parent, ".");
+        else if (slash == parent) parent[1] = '\0';
+        else *slash = '\0';
+    }
+    return EFS_OK;
+}
+#endif
+
+static int finish_fragment_put(struct shard_io_arg *a, int fd, size_t bytes)
+{
+#ifdef EFS_BENCH_BUILD
+    /* Benchmark sync remains opt-in and keeps its existing O_SYNC semantics. */
+    return finish_shard_write(fd, bytes, a->sync_write, a->direct);
+#else
+    /* Production PUT ACKs must be durable for both buffered and direct I/O.
+     * Production does not open O_SYNC, so always establish an explicit file
+     * barrier, including same-length direct writes and checksum tails. */
+    int rc = finish_shard_write(fd, bytes, 1, 0);
+    return rc == EFS_OK ? sync_fragment_parents(a->path) : rc;
+#endif
+}
+
 static void *shard_io_thread(void *arg)
 {
     struct shard_io_arg *a = arg;
@@ -1204,8 +1251,7 @@ static void *shard_io_thread(void *arg)
                         a->result = EFS_ERR_IO;
                         return NULL;
                     }
-                    a->result = finish_shard_write(fd, (size_t)a->len + 4096,
-                                                   a->sync_write, 1);
+                    a->result = finish_fragment_put(a, fd, (size_t)a->len + 4096);
                     return NULL;
                 }
                 wbuf = a->buf;
@@ -1267,13 +1313,8 @@ static void *shard_io_thread(void *arg)
                 }
                 written += EFS_HASH_SIZE;
             }
-            /* Do not fsync per shard PUT. A single FUSE dd MiB becomes
-             * ~24 fragment PUTs × 4 disks = ~96 fsyncs and caps single-stream
-             * bandwidth well below 1 GiB/s. Durability relies on the page
-             * cache until process exit / umount (same model as many parallel
-             * FS clients); add an explicit fsync RPC later if needed. */
         }
-        a->result = finish_shard_write(fd, written, a->sync_write, a->direct);
+        a->result = finish_fragment_put(a, fd, written);
     } else {
         uint32_t got = 0;
         a->result = read_file_bytes(a->path, a->buf, a->len, &got,
