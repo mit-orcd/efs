@@ -270,8 +270,9 @@ this list, before it ships.
   the client owns those bytes and they are not yet durable. **The
   guarantee:** the bytes that *this client's* `write()`s to a file
   returned before an `fsync`/`fdatasync` call are durable **when that call
-  returns 0**, or when an `O_SYNC`/`O_DSYNC`/`-o sync` write returns (the
-  §7.3 publication machine; `O_SYNC` is specified, not wired yet). An
+  returns 0**, or when an `O_SYNC`/`O_DSYNC` write returns (the §7.3
+  publication machine; both callbacks explicitly publish before replying).
+  Mount `-o sync` acceptance remains separately owed under W73. An
   `fsync` drains this client's pending publishes of the file that precede
   it — one in flight, or retrying on contention, is awaited; it never
   waits for another client's writes. A transient failure of that drain
@@ -1507,9 +1508,13 @@ from their dated runs, not a live cluster inventory.
   are implemented; strict whole-call timing, fault recovery and RSS gates remain
   open. Bounded DNS ownership is implemented; accepted-job lifetime and live
   fault/recovery acceptance still limit whole-write deadline claims.
-- **W64:** durable append failover replay remains open. Oct 8 cache-identity,
-  authority and cursor-overflow hardening passes AMD direct-I/O/TCP functional
-  gates; restart-safe receipts remain required.
+- **W64:** durable receipts, coordinated EOF/reservation/completion and bounded
+  DONE cleanup pass AMD direct-I/O/TCP replay, leader-death, append/fsync,
+  peer-extension and cold-byte gates. Production session fencing and broader
+  failover acceptance remain open; see the [readiness ledger](../status/replay-readiness-20261008.md).
+- **W73:** O_SYNC/O_DSYNC callbacks explicitly publish before replying; small,
+  queued and cross-lane append cases pass before close and after crash/restart.
+  Mount-sync and final buffered/RXE acceptance remain owed.
 - **W65:** supported TCP shutdown acceptance is recorded in the five-package
   round; AMD RXE shutdown acceptance is being exercised separately.
 
@@ -1554,7 +1559,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; Xorinox full-tree gate owed | [evidence and remaining gates](../status/fuse-memory.md) |
 | 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w61) |
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w62) |
-| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — atomic inode-shard receipts, bounded ACK retirement and fail-closed retired retries implemented; AMD replay/leader-death gates pass; cross-group append routing/EOF remains open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
+| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | root cause proven on native and EFS storage: default os.link requests follow; explicit no-follow works; test correction and full reruns owed | [evidence and fix](../status/amd-link-symlink.md) |
 | virtual-io | **`.find` / `.stats` — server snapshots and safe reads** | correctness / performance / access control | open — client-local stats, read-triggered walks, per-open consistency, permissions and explicit limits need fixes; N/T server refresh design retained | [fix scope and acceptance](../status/virtual-find-stats.md) |
@@ -1586,7 +1591,7 @@ positions do not assign an execution order or override the active handoff.
 | --- | --- | --- | --- | --- |
 | spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | implemented barrier — file and pathname fsync before production PUT ACK; fault/live gates pass, hardware power-loss gate owed | [evidence and gate](#w71) |
 | spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | open — metadata primitives exist; mounted HOLD/FLOCK and session lifecycle remain legacy | [evidence and gate](#w72) |
-| spec3 | **W73** · synchronous application-write publication | integration | staged — explicit callback candidate exposed cross-group append routing failure; integration not accepted | [evidence and gate](#w73) |
+| spec3 | **W73** · synchronous application-write publication | integration | implemented — explicit O_SYNC/O_DSYNC publication passes AMD direct/TCP small/queued/append, peer-before-close and cold crash gates; mount-sync and final mode matrix owed | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | fixed 2+1; no automatic repair/profile cutover; accepted design exceeds current capability | [evidence and gate](#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: 512 concurrent identity owners refuse saturation safely; all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
@@ -4559,6 +4564,17 @@ results dirs; move this plan's finished rows to project-history.
 
 ### W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 8 coordinated-authority acceptance:** `593becf3`, `3a2033d8` and
+`dc9fded0` coordinate one authoritative EOF and identical reservation images
+across shard groups, complete lane barriers atomically and prune DONE rows in
+bounded pages. Capture/OPEN queries stream rather than copying entire bursts.
+AMD direct/TCP repeated append+fsync, peer extension, lost replies, 32 identical
+requests, explicit inode-leader death, cold exact bytes, 216 POSIX/64 peer tests
+and 800 concurrent append records during GC pass. The cross-group redirect
+cycle below is corrected. Production sessions/unknown-outcome recovery and
+broader failover/mode acceptance remain open; D25 is not activated.
+See the [readiness ledger](../status/replay-readiness-20261008.md).
+
 **Oct 8 durable-receipt continuation:** Production ACK-bearing append requests
 now select inode-shard receipts committed atomically with reservation creation.
 The client holds identity across the entire FUSE BUSY loop and sends a safe
@@ -4577,7 +4593,7 @@ See [the package evidence](../status/amd-functional-gates-20261008.md).
 
 **Class:** correctness / recovery. **Status:** open; indexed Oct 7, 2026.
 
-**Evidence/current state:** The host-local replay race is fixed in ec1500ec, but reservation replay/failover is not a durable protocol. The round-20 first-record-loss trace remains unresolved evidence.
+**Historical evidence:** The host-local replay race was fixed in ec1500ec; durable receipts and coordinated authority were added in the Oct 8 continuations above. The round-20 first-record-loss trace remains unresolved evidence; these passes do not identify its sole cause.
 
 **Home:** [current detail](#appendix-2--in-flight--the-current-handoff-block).
 
@@ -4844,34 +4860,39 @@ publication primitives or reclaiming state before revocation completes.
 
 <a id="w73"></a>
 
-### W73 · Synchronous application-write publication is not explicitly wired (queue row spec3)
+### W73 · Synchronous application-write publication and acceptance (queue row spec3)
 
-**Class:** synchronous-write integration. **Status:** staged, not accepted.
+**Class:** synchronous-write integration. **Status:** implemented in `8bf38bfa`;
+AMD direct/TCP accepted; mount-sync and final mode/durability gates remain.
 
-**Oct 8:** explicit callback publication passed helper checks and the first
-live cases, then a 2 MiB O_SYNC+O_APPEND write short-returned after the first
-published callback. The next APPEND reserve hit W64's cross-group redirect
-cycle (single-group inode leader versus dual-host follower). Candidate code
-was removed from production sources and preserved with the failed trace in
-the [readiness ledger](../status/replay-readiness-20261008.md). Fix coordinated
-append authority first; do not accept W73 by omitting append cases.
+Both production FUSE write callbacks now flush/publish positive O_SYNC/O_DSYNC
+writes before replying, after admission credits and append locks are released
+and within the inherited call budget. Publication failure returns an error and
+retains ownership. O_DSYNC conservatively uses the full publication fence.
+Ordinary buffered writes retain their existing publication contract.
 
-**Evidence:** both `efs_fuse_write_admitted` and
-`efs_fuse_write_buf_admitted` can accept dirty data/queued jobs and return bytes;
-they check O_APPEND/O_DIRECT but do not dispatch publication on O_SYNC/O_DSYNC.
-The spec already marks O_SYNC unwired. Engine benchmark O_SYNC is a separate
-build/option and does not implement the application's flags. A kernel may
-issue follow-up FUSE fsync requests: this review did not trace the real kernel
-sequence, so the finding does not prove every O_SYNC syscall returns early.
+**Oct 8 acceptance:** 31-byte and 2 MiB writes, append and non-append, pass for
+both flags. The test requires the entire syscall byte count and verifies bytes
+from a peer before allowing close, requires the actual callback trace, then
+crashes/restarts the private daemons and verifies exact hashes. The same run
+passes 216 POSIX/64 peer tests, replay/leader death, dirty-stop recovery,
+graceful shutdown and 800 exact cold append records during GC. Full AMD units
+and failure/deadline helper checks pass. [Evidence](../status/replay-readiness-20261008.md).
 
-**Change/gate:** trace both write callbacks under O_SYNC, O_DSYNC and the
-supported mount-sync behavior. Either demonstrate correct kernel-driven
-publication for each supported path or wire it explicitly. A successful
-synchronous syscall must satisfy publication plus W71's target durability;
-exercise stalled publication, PUT failure, append and buffered/direct paths.
+**Historical failure:** the initial 2 MiB O_SYNC+O_APPEND candidate exposed
+W64's cross-group redirect cycle and was removed. It was reapplied only after
+authoritative coordinated append fixed that gate; the rejected patch and
+failure trace remain in the readiness evidence.
+
+**Remaining gates:** supported mount `-o sync`, final buffered/direct × TCP/RXE
+matrix. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
+crash now pass for partial bodies; W71 retains
+hardware power-loss acceptance. Software RXE on one AMD host is not physical
+multi-host or hardware RDMA proof.
 
 **Forbidden:** claiming support from flag retention or engine --sync; requiring
-ordinary buffered writes to publish; closing without real syscall evidence.
+ordinary buffered writes to publish; treating clean process-crash recovery as
+hardware power-loss proof.
 
 <a id="w74"></a>
 
@@ -6262,8 +6283,8 @@ proof that the production REPORT path carries them.
 
 This runs at synchronization/publication, not at every ordinary buffered
 `write()` return. Under the accepted consistency contract, `fsync`/last
-`flush` and supported synchronous writes wait for this boundary. Public
-implementation limitations are W71/W73 in the linked scope review.
+`flush` and supported synchronous writes wait for this boundary. Current implementation and remaining
+acceptance gates are W71/W73 in the linked scope review.
 
 ```text
 1. allocate chunk generation G
@@ -6310,15 +6331,17 @@ re-striped and the degraded mark cleared (rebuild scheduling in
 [performance.md](#appendix-12--performance--multi-raft-runtime--hot-path-contract)). Degraded publication is never used
 just because a target is slow — only because it is unavailable.
 
-A returned `write()` is **not** durable or cross-client visible. Bytes
+A returned ordinary buffered `write()` is **not** durable or cross-client visible. Bytes
 land in the client dcache; same-client read-your-writes hold. Publication
-(the machine above) runs at `fsync`, last `close`, or `O_SYNC`/`O_DSYNC`/
-`-o sync`. That is POSIX and every production PFS. The stronger
+(the machine above) runs at `fsync`, each `flush`, or an `O_SYNC`/`O_DSYNC`
+write callback. Mount `-o sync` remains specified with acceptance owed under W73. The stronger
 "`write()` publishes" alternative was measured ([project-history.md](../archive/project-history.md) "START-HERE closed items", W2) and
 rejected: a peer sees none of an un-`fsync`ed 4 KiB write, and `kill -9`
 of `efs-fuse` loses a 64 MiB acknowledged `write()`. `O_SYNC` is the
-specified write-through path; it is not wired yet. `fsync()` covers the
-client-side dirty set plus the publication quorum.
+explicit write-through path, along with O_DSYNC; both callbacks publish before
+replying. `fsync()` covers the client-side dirty set plus the publication quorum.
+AMD direct/TCP callback, peer-before-close and process-crash gates pass; final
+mode acceptance and hardware power-loss proof remain W73/W71 obligations.
 
 ### Partial-chunk and concurrent writers (same file)
 

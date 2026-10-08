@@ -240,8 +240,9 @@ this list, before it ships.
   the client owns those bytes and they are not yet durable. **The
   guarantee:** the bytes that *this client's* `write()`s to a file
   returned before an `fsync`/`fdatasync` call are durable **when that call
-  returns 0**, or when an `O_SYNC`/`O_DSYNC`/`-o sync` write returns (the
-  §7.3 publication machine; `O_SYNC` is specified, not wired yet). An
+  returns 0**, or when an `O_SYNC`/`O_DSYNC` write returns (the §7.3
+  publication machine; both callbacks explicitly publish before replying).
+  Mount `-o sync` acceptance remains separately owed under W73. An
   `fsync` drains this client's pending publishes of the file that precede
   it — one in flight, or retrying on contention, is awaited; it never
   waits for another client's writes. A transient failure of that drain

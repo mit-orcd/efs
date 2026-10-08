@@ -53,9 +53,13 @@ from their dated runs, not a live cluster inventory.
   are implemented; strict whole-call timing, fault recovery and RSS gates remain
   open. Bounded DNS ownership is implemented; accepted-job lifetime and live
   fault/recovery acceptance still limit whole-write deadline claims.
-- **W64:** durable append failover replay remains open. Oct 8 cache-identity,
-  authority and cursor-overflow hardening passes AMD direct-I/O/TCP functional
-  gates; restart-safe receipts remain required.
+- **W64:** durable receipts, coordinated EOF/reservation/completion and bounded
+  DONE cleanup pass AMD direct-I/O/TCP replay, leader-death, append/fsync,
+  peer-extension and cold-byte gates. Production session fencing and broader
+  failover acceptance remain open; see the [readiness ledger](replay-readiness-20261008.md).
+- **W73:** O_SYNC/O_DSYNC callbacks explicitly publish before replying; small,
+  queued and cross-lane append cases pass before close and after crash/restart.
+  Mount-sync and final buffered/RXE acceptance remain owed.
 - **W65:** supported TCP shutdown acceptance is recorded in the five-package
   round; AMD RXE shutdown acceptance is being exercised separately.
 
@@ -100,7 +104,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; Xorinox full-tree gate owed | [evidence and remaining gates](fuse-memory.md) |
 | 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](../backlog/work-items.md#w61) |
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](../backlog/work-items.md#w62) |
-| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — atomic inode-shard receipts, bounded ACK retirement and fail-closed retired retries implemented; AMD replay/leader-death gates pass; cross-group append routing/EOF remains open ([ledger](replay-readiness-20261008.md)) | [work item](../backlog/work-items.md#w64) |
+| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](replay-readiness-20261008.md)) | [work item](../backlog/work-items.md#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](../backlog/work-items.md#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | root cause proven on native and EFS storage: default os.link requests follow; explicit no-follow works; test correction and full reruns owed | [evidence and fix](amd-link-symlink.md) |
 | virtual-io | **`.find` / `.stats` — server snapshots and safe reads** | correctness / performance / access control | open — client-local stats, read-triggered walks, per-open consistency, permissions and explicit limits need fixes; N/T server refresh design retained | [fix scope and acceptance](virtual-find-stats.md) |
@@ -132,7 +136,7 @@ positions do not assign an execution order or override the active handoff.
 | --- | --- | --- | --- | --- |
 | spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | implemented barrier — file and pathname fsync before production PUT ACK; fault/live gates pass, hardware power-loss gate owed | [evidence and gate](../backlog/work-items.md#w71) |
 | spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | open — metadata primitives exist; mounted HOLD/FLOCK and session lifecycle remain legacy | [evidence and gate](../backlog/work-items.md#w72) |
-| spec3 | **W73** · synchronous application-write publication | integration | staged — explicit callback candidate exposed cross-group append routing failure; integration not accepted | [evidence and gate](../backlog/work-items.md#w73) |
+| spec3 | **W73** · synchronous application-write publication | integration | implemented — explicit O_SYNC/O_DSYNC publication passes AMD direct/TCP small/queued/append, peer-before-close and cold crash gates; mount-sync and final mode matrix owed | [evidence and gate](../backlog/work-items.md#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | fixed 2+1; no automatic repair/profile cutover; accepted design exceeds current capability | [evidence and gate](../backlog/work-items.md#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](../backlog/work-items.md#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: 512 concurrent identity owners refuse saturation safely; all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](../backlog/work-items.md#w76) |

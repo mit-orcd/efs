@@ -103,8 +103,8 @@ proof that the production REPORT path carries them.
 
 This runs at synchronization/publication, not at every ordinary buffered
 `write()` return. Under the accepted consistency contract, `fsync`/last
-`flush` and supported synchronous writes wait for this boundary. Public
-implementation limitations are W71/W73 in the linked scope review.
+`flush` and supported synchronous writes wait for this boundary. Current implementation and remaining
+acceptance gates are W71/W73 in the linked scope review.
 
 ```text
 1. allocate chunk generation G
@@ -151,15 +151,17 @@ re-striped and the degraded mark cleared (rebuild scheduling in
 [performance.md](../performance.md)). Degraded publication is never used
 just because a target is slow — only because it is unavailable.
 
-A returned `write()` is **not** durable or cross-client visible. Bytes
+A returned ordinary buffered `write()` is **not** durable or cross-client visible. Bytes
 land in the client dcache; same-client read-your-writes hold. Publication
-(the machine above) runs at `fsync`, last `close`, or `O_SYNC`/`O_DSYNC`/
-`-o sync`. That is POSIX and every production PFS. The stronger
+(the machine above) runs at `fsync`, each `flush`, or an `O_SYNC`/`O_DSYNC`
+write callback. Mount `-o sync` remains specified with acceptance owed under W73. The stronger
 "`write()` publishes" alternative was measured ([project-history.md](../../archive/project-history.md) "START-HERE closed items", W2) and
 rejected: a peer sees none of an un-`fsync`ed 4 KiB write, and `kill -9`
 of `efs-fuse` loses a 64 MiB acknowledged `write()`. `O_SYNC` is the
-specified write-through path; it is not wired yet. `fsync()` covers the
-client-side dirty set plus the publication quorum.
+explicit write-through path, along with O_DSYNC; both callbacks publish before
+replying. `fsync()` covers the client-side dirty set plus the publication quorum.
+AMD direct/TCP callback, peer-before-close and process-crash gates pass; final
+mode acceptance and hardware power-loss proof remain W73/W71 obligations.
 
 ## Partial-chunk and concurrent writers (same file)
 

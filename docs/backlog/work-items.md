@@ -2561,6 +2561,17 @@ results dirs; move this plan's finished rows to project-history.
 
 ## W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 8 coordinated-authority acceptance:** `593becf3`, `3a2033d8` and
+`dc9fded0` coordinate one authoritative EOF and identical reservation images
+across shard groups, complete lane barriers atomically and prune DONE rows in
+bounded pages. Capture/OPEN queries stream rather than copying entire bursts.
+AMD direct/TCP repeated append+fsync, peer extension, lost replies, 32 identical
+requests, explicit inode-leader death, cold exact bytes, 216 POSIX/64 peer tests
+and 800 concurrent append records during GC pass. The cross-group redirect
+cycle below is corrected. Production sessions/unknown-outcome recovery and
+broader failover/mode acceptance remain open; D25 is not activated.
+See the [readiness ledger](../status/replay-readiness-20261008.md).
+
 **Oct 8 durable-receipt continuation:** Production ACK-bearing append requests
 now select inode-shard receipts committed atomically with reservation creation.
 The client holds identity across the entire FUSE BUSY loop and sends a safe
@@ -2579,7 +2590,7 @@ See [the package evidence](../status/amd-functional-gates-20261008.md).
 
 **Class:** correctness / recovery. **Status:** open; indexed Oct 7, 2026.
 
-**Evidence/current state:** The host-local replay race is fixed in ec1500ec, but reservation replay/failover is not a durable protocol. The round-20 first-record-loss trace remains unresolved evidence.
+**Historical evidence:** The host-local replay race was fixed in ec1500ec; durable receipts and coordinated authority were added in the Oct 8 continuations above. The round-20 first-record-loss trace remains unresolved evidence; these passes do not identify its sole cause.
 
 **Home:** [current detail](../status/in-flight.md).
 
@@ -2846,34 +2857,39 @@ publication primitives or reclaiming state before revocation completes.
 
 <a id="w73"></a>
 
-## W73 · Synchronous application-write publication is not explicitly wired (queue row spec3)
+## W73 · Synchronous application-write publication and acceptance (queue row spec3)
 
-**Class:** synchronous-write integration. **Status:** staged, not accepted.
+**Class:** synchronous-write integration. **Status:** implemented in `8bf38bfa`;
+AMD direct/TCP accepted; mount-sync and final mode/durability gates remain.
 
-**Oct 8:** explicit callback publication passed helper checks and the first
-live cases, then a 2 MiB O_SYNC+O_APPEND write short-returned after the first
-published callback. The next APPEND reserve hit W64's cross-group redirect
-cycle (single-group inode leader versus dual-host follower). Candidate code
-was removed from production sources and preserved with the failed trace in
-the [readiness ledger](../status/replay-readiness-20261008.md). Fix coordinated
-append authority first; do not accept W73 by omitting append cases.
+Both production FUSE write callbacks now flush/publish positive O_SYNC/O_DSYNC
+writes before replying, after admission credits and append locks are released
+and within the inherited call budget. Publication failure returns an error and
+retains ownership. O_DSYNC conservatively uses the full publication fence.
+Ordinary buffered writes retain their existing publication contract.
 
-**Evidence:** both `efs_fuse_write_admitted` and
-`efs_fuse_write_buf_admitted` can accept dirty data/queued jobs and return bytes;
-they check O_APPEND/O_DIRECT but do not dispatch publication on O_SYNC/O_DSYNC.
-The spec already marks O_SYNC unwired. Engine benchmark O_SYNC is a separate
-build/option and does not implement the application's flags. A kernel may
-issue follow-up FUSE fsync requests: this review did not trace the real kernel
-sequence, so the finding does not prove every O_SYNC syscall returns early.
+**Oct 8 acceptance:** 31-byte and 2 MiB writes, append and non-append, pass for
+both flags. The test requires the entire syscall byte count and verifies bytes
+from a peer before allowing close, requires the actual callback trace, then
+crashes/restarts the private daemons and verifies exact hashes. The same run
+passes 216 POSIX/64 peer tests, replay/leader death, dirty-stop recovery,
+graceful shutdown and 800 exact cold append records during GC. Full AMD units
+and failure/deadline helper checks pass. [Evidence](../status/replay-readiness-20261008.md).
 
-**Change/gate:** trace both write callbacks under O_SYNC, O_DSYNC and the
-supported mount-sync behavior. Either demonstrate correct kernel-driven
-publication for each supported path or wire it explicitly. A successful
-synchronous syscall must satisfy publication plus W71's target durability;
-exercise stalled publication, PUT failure, append and buffered/direct paths.
+**Historical failure:** the initial 2 MiB O_SYNC+O_APPEND candidate exposed
+W64's cross-group redirect cycle and was removed. It was reapplied only after
+authoritative coordinated append fixed that gate; the rejected patch and
+failure trace remain in the readiness evidence.
+
+**Remaining gates:** supported mount `-o sync`, final buffered/direct × TCP/RXE
+matrix. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
+crash now pass for partial bodies; W71 retains
+hardware power-loss acceptance. Software RXE on one AMD host is not physical
+multi-host or hardware RDMA proof.
 
 **Forbidden:** claiming support from flag retention or engine --sync; requiring
-ordinary buffered writes to publish; closing without real syscall evidence.
+ordinary buffered writes to publish; treating clean process-crash recovery as
+hardware power-loss proof.
 
 <a id="w74"></a>
 
