@@ -33,4 +33,4 @@ with tempfile.TemporaryDirectory(prefix='efs-txn-parts-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-O3','-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('Transaction parts: exact 64-participant wire, canaries, short output, invalid counts and null pointers PASS')
+print('Transaction parts: exact configured-capacity participant wire, canaries, short output, invalid counts and null pointers PASS')

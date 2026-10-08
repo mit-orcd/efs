@@ -8608,11 +8608,14 @@ static int host_prep(struct efs_raft_host *h, uint32_t shard, int kind,
                      const uint8_t *key, uint32_t klen, uint64_t expected,
                      int op, const uint8_t *val, uint32_t vlen, int *hint)
 {
-    uint8_t cmd[HOST_CMD_MAX];
+    uint8_t cmd[EFS_TXN_PREPARE_MAX];
     uint32_t n;
 
+    if (!p || !p->n || p->n > EFS_TXN_MAX_PART ||
+        klen > EFS_KV_KEY_MAX || vlen > EFS_TXN_VALUE_MAX)
+        return EFS_ERR_INVAL;
     n = pack_prep(cmd, kind, t, p, key, klen, expected, op, val, vlen);
-    if (n > HOST_CMD_MAX)
+    if (n > sizeof(cmd))
         return EFS_ERR_INVAL;
     return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);
 }
@@ -8623,11 +8626,14 @@ static int host_prep_async(struct efs_raft_host *h, uint32_t shard, int kind,
                            int op, const uint8_t *val, uint32_t vlen,
                            struct host_idx_ref *ref, int *hint)
 {
-    uint8_t cmd[HOST_CMD_MAX];
+    uint8_t cmd[EFS_TXN_PREPARE_MAX];
     uint32_t n;
 
+    if (!p || !p->n || p->n > EFS_TXN_MAX_PART ||
+        klen > EFS_KV_KEY_MAX || vlen > EFS_TXN_VALUE_MAX)
+        return EFS_ERR_INVAL;
     n = pack_prep(cmd, kind, t, p, key, klen, expected, op, val, vlen);
-    if (n > HOST_CMD_MAX)
+    if (n > sizeof(cmd))
         return EFS_ERR_INVAL;
     ref->group = efs_raft_shard_group(shard);
     return host_propose(h, ref->group, cmd, n, &ref->idx, &ref->term,
@@ -8642,11 +8648,14 @@ static int host_prep_raw(struct efs_raft_host *h, uint32_t shard, int kind,
                          const uint8_t *key, uint32_t klen, const uint8_t *pay,
                          uint32_t plen, struct host_idx_ref *ref, int *hint)
 {
-    uint8_t cmd[HOST_CMD_MAX];
+    uint8_t cmd[EFS_TXN_PREPARE_MAX];
     uint32_t n;
 
+    if (!p || !p->n || p->n > EFS_TXN_MAX_PART ||
+        klen > EFS_KV_KEY_MAX || plen > 9u + 2u * EFS_TXN_VALUE_MAX)
+        return EFS_ERR_INVAL;
     n = pack_prep_raw(cmd, kind, t, p, key, klen, pay, plen);
-    if (n > HOST_CMD_MAX)
+    if (n > sizeof(cmd))
         return EFS_ERR_INVAL;
     if (!ref)
         return host_propose_wait(h, efs_raft_shard_group(shard), cmd, n, hint);

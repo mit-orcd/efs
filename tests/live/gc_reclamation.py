@@ -598,22 +598,16 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
             assert len(witnesses)==64
             boundary=mount/'full-lane-boundary';boundary_ino=spread(boundary)
             wait(drained,'namespace boundary prior GC drained')
-            def commit_sum():
-                groups={}
-                for node in range(4):
-                    text=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+node}'],capture_output=True,text=True).stdout
-                    for group,index in re.findall(r'group (\d+) hosted=1 .*?commit=(\d+)',text):
-                        groups[group]=max(groups.get(group,0),int(index))
-                return sum(groups.values())
-            time.sleep(1);before_admission=commit_sum()
-            for node in range(4):
-                reply=run([source/'efs-mgmt','raft-rmdir',f'127.0.0.1:{a.port+node}','1',boundary.name],capture_output=True,text=True).stdout
-                if 'status=7' not in reply:break
-            assert 'status=5' in reply,reply
-            after_admission=commit_sum()
-            assert boundary.stat().st_ino==boundary_ino
-            assert after_admission-before_admission<8,(before_admission,after_admission,reply)
-            print('over-envelope rmdir rejects before PREPARE/DROP and preserves directory PASS',flush=True)
+            os.rmdir(boundary)
+            replacement=mount/'full-lane-replacement';spread(replacement)
+            incoming=mount/'full-lane-incoming';incoming.mkdir();saved=incoming.stat().st_ino
+            os.rename(incoming,replacement)
+            assert replacement.stat().st_ino==saved
+            unmount();stop();start();mount_client()
+            assert not boundary.exists() and replacement.stat().st_ino==saved
+            os.rmdir(replacement)
+            (work/'namespace-full-lanes.json').write_text(json.dumps({'lanes':64,'rmdir':True,'replacement':True,'restart_verified':True},indent=2))
+            print('64-lane empty directory removal/replacement and restart PASS',flush=True)
 
     if a.namespace_max:
         # Find the actual participant envelope before the separate 64-hop cap.

@@ -310,6 +310,7 @@ test: all
 	./tests/test_sim
 	./tests/test_txn
 	python3 tests/test_txn_parts_bounds.py
+	python3 tests/test_prepare_bounds.py
 	python3 tests/test_namespace_bounds.py
 	python3 tests/test_rename_budget.py
 	./tests/test_session

@@ -3,6 +3,7 @@
 
 #include "efs/common.h"
 #include "efs/kv.h"
+#include "efs/kv_key.h"
 #include "efs/opid.h"
 #include "efs/fence_view.h"
 
@@ -14,13 +15,17 @@
  * (I16). */
 
 #define EFS_TXN_ID_LEN   16
-/* A file's 64 lane shards include its inode shard (lane 0). Namespace
- * coordinators use the same bounded participant envelope. */
-#define EFS_TXN_MAX_PART 64
+/* Namespace work can require 64 directory lanes, 64 ancestry shards,
+ * and fixed parent/dentry/op-id participants. Preserve every predicate.
+ * The one-byte wire count remains unchanged; older binaries must not
+ * participate in transactions exceeding their 64-participant capacity. */
+#define EFS_TXN_MAX_PART 144
 #define EFS_TXN_NAMESPACE_MAX_PART EFS_TXN_MAX_PART
 #define EFS_TXN_PARTS_BYTES (1u + 4u * EFS_TXN_MAX_PART)
 #define EFS_TXN_VALUE_MAX (8u + 16u * EFS_FENCE_HISTORY_MAX)
 #define EFS_TXN_RECORD_MAX (16u + EFS_TXN_PARTS_BYTES + 14u + EFS_TXN_VALUE_MAX)
+/* Largest PREPARE: command/kind/txid, participants, key and exact CAS pair. */
+#define EFS_TXN_PREPARE_MAX (18u + EFS_TXN_PARTS_BYTES + 2u + EFS_KV_KEY_MAX + 13u + 2u * EFS_TXN_VALUE_MAX)
 #define EFS_TXN_ABSENT UINT32_MAX
 
 #define EFS_TXN_EXCL       1

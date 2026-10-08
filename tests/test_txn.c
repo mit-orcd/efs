@@ -990,7 +990,7 @@ static void test_full_fence_transaction(void)
                   EFS_TXN_PUT, packed, hn) == EFS_OK &&
                   efs_txn_apply_prepare(kv, EFS_TXN_EXCL_VALUE, &t, &parts,
                                         keys[j + 1], lens[j + 1], wire, wn) == EFS_OK,
-              "full fence prepare 520-byte history with 64-participant envelope");
+              "full fence prepare 520-byte history with maximum-participant envelope");
     }
     ctx.kv = kv; ctx.fail = 0;
     for (uint32_t j = 0; j < KEYS; ++j) {
@@ -1023,7 +1023,7 @@ static void test_full_fence_transaction(void)
         CHECK(efs_txn_scan_pending(kv, parts.shard[parts.n - 1], pending, 2, &count) == EFS_OK &&
                   count == 1 && pending[0].parts.n == parts.n &&
                   !memcmp(pending[0].parts.shard, parts.shard, sizeof(parts.shard)),
-              "recovery retains all 64 participant identities");
+              "recovery retains all configured participant identities");
         ctx.fail = 1; n = sizeof(out);
         CHECK(efs_txn_read(kv, keys[KEYS - 3], lens[KEYS - 3], coord_ok, &ctx,
                            out, &n) == EFS_ERR_IO, "unreachable decision fails closed");

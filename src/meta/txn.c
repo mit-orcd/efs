@@ -5,7 +5,7 @@
 #include "efs/meta_apply.h"
 #include <string.h>
 
-/* Full histories plus a 64-participant EXCL envelope, with fixed bounds.
+/* Full histories plus a 144-participant EXCL envelope, with fixed bounds.
  * Data values and durable intent envelopes have separate limits. */
 #define VAL_MAX EFS_TXN_RECORD_MAX
 #define KEY_MAX EFS_KV_KEY_MAX
