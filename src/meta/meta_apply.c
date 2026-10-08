@@ -1254,7 +1254,7 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
                              const char *name, const struct efs_opid_req *q,
                              int from_log, efs_ino_t want_ino, int want_layout,
                              const uint8_t *lease_uuid, uint32_t lease_epoch,
-                             efs_ino_t *out)
+                             uint64_t lease_token, efs_ino_t *out)
 {
     struct efs_meta_dentry dent;
     struct efs_meta_row row, parent_row;
@@ -1266,6 +1266,7 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
     uint32_t kd = 0, ki = 0, ka = 0;
     struct efs_kv_item it[10];
     uint8_t k_lease[EFS_KV_KEY_MAX], lease_one = 1;
+    uint8_t lease_pending[EFS_LEASE_PENDING_VALUE_LEN];
     uint32_t lease_len = 0;
     uint32_t n = 0, shard;
     efs_ino_t next = 0, ino;
@@ -1338,6 +1339,8 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         if (hit < 0)
             return hit;
         if (hit) {
+            if (lease_token && rep.rc == EFS_OK && !rep.ino)
+                return EFS_ERR_STALE; /* retired reply cannot grant adoption */
             if (out)
                 *out = rep.ino;
             return rep.rc;
@@ -1482,6 +1485,8 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         rc = opid_item(kv, shard, q, &rep, k_opid, v_opid, &it[n]);
         if (rc < 0)
             return rc;
+        if (lease_token && rc != 1)
+            return EFS_ERR_BUSY; /* pending ownership requires a durable verdict */
         n += (uint32_t)rc;
     }
 
@@ -1489,8 +1494,13 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         rc = efs_kv_key_lease(shard, ino, row.generation, lease_uuid,
                                lease_epoch, k_lease, &lease_len);
         if (rc != EFS_OK) return rc;
+        if (lease_token) {
+            rc = efs_lease_pending_value(lease_token, lease_pending);
+            if (rc != EFS_OK) return rc;
+        }
         it[n++] = (struct efs_kv_item){EFS_KV_PUT, k_lease, lease_len,
-                                      &lease_one, 1};
+                         lease_token ? lease_pending : &lease_one,
+                         lease_token ? EFS_LEASE_PENDING_VALUE_LEN : 1};
     }
 
     rc = meta_write_batch(kv, it, n);
@@ -1505,7 +1515,7 @@ int efs_meta_apply_create_file(struct efs_kv *kv, const struct efs_meta_attrs *a
                                efs_ino_t parent, uint32_t mode,
                                const char *name, efs_ino_t *out)
 {
-    return create_file_batch(kv, at, parent, mode, name, NULL, 0, 0, -1, NULL, 0, out);
+    return create_file_batch(kv, at, parent, mode, name, NULL, 0, 0, -1, NULL, 0, 0, out);
 }
 
 int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
@@ -1519,14 +1529,14 @@ int efs_meta_apply_create_file_op(struct efs_kv *kv, const struct efs_opid *op,
         return EFS_ERR_INVAL;
     memset(&q, 0, sizeof(q));
     q.id = *op;
-    return create_file_batch(kv, at, parent, mode, name, &q, 0, 0, -1, NULL, 0, out);
+    return create_file_batch(kv, at, parent, mode, name, &q, 0, 0, -1, NULL, 0, 0, out);
 }
 
 int efs_meta_apply_create_file_log(struct efs_kv *kv, const struct efs_meta_attrs *at,
                                    efs_ino_t parent, uint32_t mode,
                                    const char *name, efs_ino_t *out)
 {
-    return create_file_batch(kv, at, parent, mode, name, NULL, 1, 0, -1, NULL, 0, out);
+    return create_file_batch(kv, at, parent, mode, name, NULL, 1, 0, -1, NULL, 0, 0, out);
 }
 
 int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
@@ -1537,7 +1547,7 @@ int efs_meta_apply_create_file_log_op(struct efs_kv *kv,
                                       efs_ino_t *out)
 {
     return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
-                             ino ? layout : -1, NULL, 0, out);
+                             ino ? layout : -1, NULL, 0, 0, out);
 }
 
 int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_attrs *at,
@@ -1548,7 +1558,7 @@ int efs_meta_apply_create_file_log_at(struct efs_kv *kv, const struct efs_meta_a
     if (!ino)
         return EFS_ERR_INVAL;
     return create_file_batch(kv, at, parent, mode, name, NULL, 1, ino,
-                             (int)layout, NULL, 0, out);
+                             (int)layout, NULL, 0, 0, out);
 }
 
 /* Namespace, inode, replay verdict and initial lease share one KV batch.
@@ -1562,7 +1572,26 @@ int efs_meta_apply_create_file_log_lease(struct efs_kv *kv,
                                          efs_ino_t *out)
 {
     return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
-                             ino ? layout : -1, uuid, epoch, out);
+                             ino ? layout : -1, uuid, epoch, 0, out);
+}
+
+/* Staged pending ownership: identity and token come from the same durable
+ * CREATE request. No server wire path calls this until runtime sessions and
+ * guarded HOLD adoption are integrated. Replay never reacquires ownership. */
+int efs_meta_apply_create_file_log_pending(struct efs_kv *kv,
+                                         const struct efs_meta_attrs *at,
+                                         efs_ino_t parent, uint32_t mode,
+                                         const char *name, efs_ino_t ino,
+                                         int layout, const struct efs_opid_req *q,
+                                         const uint8_t *uuid, uint32_t epoch,
+                                         efs_ino_t *out)
+{
+    if (!q || !efs_opid_req_valid(q) || q->ack >= q->id.seq || !uuid || !epoch ||
+        q->id.session_epoch != epoch ||
+        memcmp(q->id.client_uuid, uuid, EFS_OPID_UUID_LEN) != 0)
+        return EFS_ERR_INVAL;
+    return create_file_batch(kv, at, parent, mode, name, q, 1, ino,
+                             ino ? layout : -1, uuid, epoch, q->id.seq, out);
 }
 
 static int mkdir_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,

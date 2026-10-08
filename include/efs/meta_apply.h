@@ -543,6 +543,15 @@ int efs_meta_apply_create_file_log_lease(struct efs_kv *kv,
                                          int layout, const struct efs_opid_req *q,
                                          const uint8_t *uuid, uint32_t epoch,
                                          efs_ino_t *out);
+/* Staged pending-CREATE variant. q must identify this exact lease session;
+ * its sequence is the pending token. Not activated by production RPCs. */
+int efs_meta_apply_create_file_log_pending(struct efs_kv *kv,
+                                         const struct efs_meta_attrs *at,
+                                         efs_ino_t parent, uint32_t mode,
+                                         const char *name, efs_ino_t ino,
+                                         int layout, const struct efs_opid_req *q,
+                                         const uint8_t *uuid, uint32_t epoch,
+                                         efs_ino_t *out);
 int efs_meta_apply_mkdir_log_op(struct efs_kv *kv, const struct efs_meta_attrs *at,
                                 efs_ino_t parent, uint32_t mode, const char *name,
                                 efs_ino_t ino, int layout,

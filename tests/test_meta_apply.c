@@ -5548,8 +5548,19 @@ static int create_batch_fault(void *ctx,const struct efs_kv_item *items,uint32_t
     if(create_batch_fail)return EFS_ERR_IO;
     return create_batch_original(ctx,items,n);
 }
+static int test_create_lease_apply(int pending, struct efs_kv *kv,
+                                    const struct efs_opid_req *q,
+                                    const uint8_t *uuid, efs_ino_t *out)
+{
+    if (pending)
+        return efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,
+                                      "atomic",0,-1,q,uuid,1,out);
+    return efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,
+                                      "atomic",0,-1,q,uuid,1,out);
+}
 static void test_create_initial_lease_atomic(void)
 {
+  for (int pending = 0; pending < 2; pending++) {
     struct efs_kv *kv=efs_kv_mem_create();
     CHECK(kv!=NULL,"atomic create KV");
     CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"atomic create init");
@@ -5557,28 +5568,66 @@ static void test_create_initial_lease_atomic(void)
     create_batch_original=ops.batch;ops.batch=create_batch_fault;
     const struct efs_kv_ops *original=kv->ops;kv->ops=&ops;
     uint8_t uuid[EFS_OPID_UUID_LEN]={5};
-    struct efs_opid_req q={0};q.id.client_uuid[0]=3;q.id.session_epoch=1;q.id.seq=1;
+    struct efs_opid_req q={0};memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=1;
     efs_ino_t ino=0;struct efs_meta_dentry dent;struct efs_opid_reply reply;
+    if (pending) {
+        CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,
+              "atomic",0,-1,NULL,uuid,1,&ino)==EFS_ERR_INVAL,
+              "pending CREATE requires durable request identity");
+        CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,
+              "atomic",0,-1,&q,uuid,2,&ino)==EFS_ERR_INVAL,
+              "pending CREATE refuses mismatched lease session");
+        struct efs_opid_req invalid = q;
+        invalid.ack = invalid.id.seq;
+        CHECK(test_create_lease_apply(1,kv,&invalid,uuid,&ino)==EFS_ERR_INVAL,
+              "pending CREATE refuses pre-acknowledged sequence");
+        invalid = q; invalid.id.seq = EFS_OPID_BITMAP_BITS + 1;
+        CHECK(test_create_lease_apply(1,kv,&invalid,uuid,&ino)==EFS_ERR_BUSY,
+              "pending CREATE refuses exhausted replay window");
+        CHECK(efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,
+              "replay pressure cannot create unprotected pending ownership");
+    }
     create_batch_calls=0;create_batch_fail=1;
-    CHECK(efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,"atomic",0,-1,&q,uuid,1,&ino)==EFS_ERR_IO,
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&ino)==EFS_ERR_IO,
           "failed combined CREATE reports error");
     CHECK(create_batch_calls==1 && create_lease_items==1,"lease shares the sole atomic namespace batch");
     CHECK(efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,"no name after failed combined batch");
     CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&reply)==0,"failed batch records no successful replay verdict");
     create_batch_fail=0;create_batch_calls=0;
-    CHECK(efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,"atomic",0,-1,&q,uuid,1,&ino)==EFS_OK && ino,
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&ino)==EFS_OK && ino,
           "combined create succeeds after retry");
     CHECK(create_batch_calls==1 && create_lease_items==1 && efs_lease_any(kv,ino,1)==1,
           "created inode already protected by atomic lease");
     CHECK(efs_meta_apply_unlink(kv,1,"atomic",T0+1)==EFS_OK,"unlink held created inode");
     struct efs_meta_row row;
     CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK && row.nlink==0,"open-unlinked inode survives");
-    CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK && efs_lease_any(kv,ino,1)==0,"close initial lease");
+    if (pending) {
+        CHECK(efs_lease_pending_close(kv,ino,1,uuid,1,q.id.seq+1,1)==EFS_ERR_STALE,
+              "atomic pending token comes from CREATE sequence");
+        CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK && efs_lease_any(kv,ino,1)==1,
+              "normal close preserves atomic pending ownership");
+        CHECK(efs_lease_pending_close(kv,ino,1,uuid,1,q.id.seq,1)==EFS_OK,
+              "matching cleanup releases atomic pending token");
+    } else CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK,"close initial lease");
+    CHECK(efs_lease_any(kv,ino,1)==0,"initial ownership removed");
     create_batch_calls=0;efs_ino_t replay=0;
-    CHECK(efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,"atomic",0,-1,&q,uuid,1,&replay)==EFS_OK && replay==ino,
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&replay)==EFS_OK && replay==ino,
           "CREATE replay returns original inode after unlink");
     CHECK(!create_batch_calls && efs_lease_any(kv,ino,1)==0,"old replay does not recreate a closed lease");
+    if (pending) {
+        struct efs_opid_req later = q;
+        later.id.seq++; later.ack = q.id.seq;
+        efs_ino_t new_ino = 0;
+        CHECK(test_create_lease_apply(1,kv,&later,uuid,&new_ino)==EFS_OK && new_ino,
+              "later CREATE retires old replay receipt");
+        replay = 0;
+        CHECK(test_create_lease_apply(1,kv,&q,uuid,&replay)==EFS_ERR_STALE && !replay,
+              "retired CREATE receipt cannot grant unknown adoption");
+        CHECK(efs_lease_any(kv,new_ino,1)==1,
+              "retired old request cannot affect later CREATE ownership");
+    }
     kv->ops=original;efs_kv_destroy(kv);
+  }
 }
 
 int main(void)

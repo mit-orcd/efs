@@ -206,24 +206,26 @@ static void test_pending_cold_edges(void)
     struct efs_kv_lsm_cfg cfg = {0};
     uint8_t uuid[EFS_OPID_UUID_LEN], key[EFS_KV_KEY_MAX];
     uint32_t klen = 0;
-    const efs_ino_t ino = EFS_ROOT_INO;
-    const uint64_t token = UINT64_C(0xfedcba9876543210);
+    efs_ino_t ino = 0;
+    const uint64_t token = 1;
     uuid_of(uuid, 10);
-    CHECK(mkdtemp(dir) != NULL, "pending cold directory");
-    CHECK(efs_kv_key_lease(efs_kv_inode_shard(ino), ino, 1, uuid, 1,
-                         key, &klen) == EFS_OK, "pending cold key");
+    if (!mkdtemp(dir)) { CHECK(0, "pending cold directory"); return; }
     for (unsigned phase = 0; phase < 4; phase++) {
         pid_t pid = fork();
         CHECK(pid >= 0, "pending cold fork");
         if (pid < 0) break;
         if (pid == 0) {
             struct efs_kv *kv = efs_kv_lsm_open(dir, &cfg);
-            uint8_t value[EFS_LEASE_PENDING_VALUE_LEN];
             int rc = kv ? EFS_OK : EFS_ERR_IO;
             if (rc == EFS_OK && phase == 0) {
                 rc = efs_meta_apply_init(kv, T0);
-                if (rc == EFS_OK) rc = efs_lease_pending_value(token, value);
-                if (rc == EFS_OK) rc = efs_kv_put(kv, key, klen, value, sizeof(value));
+                struct efs_opid_req q = {0};
+                memcpy(q.id.client_uuid, uuid, sizeof(uuid));
+                q.id.session_epoch = 1; q.id.seq = token;
+                if (rc == EFS_OK)
+                    rc = efs_meta_apply_create_file_log_pending(kv, &g_at,
+                           EFS_ROOT_INO, S_IFREG|0600, "cold-pending", 0, -1,
+                           &q, uuid, 1, &ino);
             } else if (rc == EFS_OK && phase == 1) {
                 rc = efs_lease_open(kv, ino, 1, uuid, 1);
             } else if (rc == EFS_OK && phase == 2) {
@@ -239,6 +241,15 @@ static void test_pending_cold_edges(void)
         struct efs_kv *kv = efs_kv_lsm_open(dir, &cfg);
         CHECK(kv != NULL, "recover pending cold edge");
         if (!kv) break;
+        if (phase == 0) {
+            struct efs_meta_dentry dent;
+            int rc = efs_meta_apply_lookup(kv, EFS_ROOT_INO, "cold-pending", &dent);
+            CHECK(rc == EFS_OK, "cold CREATE namespace persisted with ownership");
+            if (rc != EFS_OK) { efs_kv_lsm_close(kv); break; }
+            ino = dent.ino;
+            CHECK(efs_kv_key_lease(efs_kv_inode_shard(ino), ino, 1, uuid, 1,
+                                 key, &klen) == EFS_OK, "pending cold key");
+        }
         uint8_t value[EFS_LEASE_PENDING_VALUE_LEN], expected[EFS_LEASE_PENDING_VALUE_LEN];
         uint32_t len = sizeof(value);
         int rc = efs_kv_get(kv, key, klen, value, &len);

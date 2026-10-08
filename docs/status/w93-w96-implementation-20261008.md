@@ -280,3 +280,17 @@ pass a focused ASan/UBSan executable (normal linked KV library).
 [Full gate evidence](../../results/measure/20261008-w93-w96-implementation/final-live/README.md).
 The quiet two-device W96 performance gate remains open: NUC currently runs a
 million-file generator and its daemons are busy; that workload was preserved.
+
+## W94 pending ownership in the atomic CREATE batch
+
+The staged pending helper derives its token/session from the CREATE identity
+and writes ownership with namespace/inode/replay state in one batch. Pending
+mutation refuses exhausted replay windows, invalid/pre-acknowledged identities
+and retired verdicts that cannot identify an inode. Injected failure/retry,
+late replay and cold atomic CREATE/ownership tests pass. The exact final Linux
+full suite passes; session/metadata sanitizer coverage passes. Shared-helper
+legacy integration additionally passes full direct/TCP live POSIX/peer and cold
+recovery in `gc-direct-6tmcbm26`, before the final pending-only guards.
+[Evidence](../../results/measure/20261008-w93-w96-implementation/w94-atomic-pending/README.md).
+No production caller activates pending ownership. Cross-group pending composition,
+sequenced HOLD edges, client adoption and runtime-session cleanup remain open.

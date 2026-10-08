@@ -1,0 +1,266 @@
+[
+  [
+    {
+      "node": 1,
+      "stage": 0,
+      "group": 0,
+      "exports": 1,
+      "passes": 4,
+      "elapsed_ms": 0,
+      "last_pass_age_ms": 883,
+      "last_delete_age_ms": 2901
+    },
+    {
+      "data_usage_bytes": 0,
+      "removed_fragments": 2,
+      "unlinked_file_bytes": 139264,
+      "reclaimed_payload_bytes": 131072,
+      "delete_errors": 0,
+      "mismatches": 0,
+      "sweep_errors": 0,
+      "reap_errors": 0,
+      "ack_errors": 0,
+      "scan_errors": 0,
+      "missing_exports": 0
+    },
+    {
+      "group": 0,
+      "sampled": 1,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "group": 2,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "ops": 0,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 0,
+      "avg_us": 0
+    },
+    {
+      "ops": 2,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 27,
+      "avg_us": 13
+    },
+    {
+      "ops": 20,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 3395,
+      "avg_us": 169
+    }
+  ],
+  [
+    {
+      "node": 2,
+      "stage": 0,
+      "group": 2,
+      "exports": 0,
+      "passes": 4,
+      "elapsed_ms": 0,
+      "last_pass_age_ms": 578,
+      "last_delete_age_ms": 18446744073709551615
+    },
+    {
+      "data_usage_bytes": 0,
+      "removed_fragments": 0,
+      "unlinked_file_bytes": 0,
+      "reclaimed_payload_bytes": 0,
+      "delete_errors": 0,
+      "mismatches": 0,
+      "sweep_errors": 0,
+      "reap_errors": 0,
+      "ack_errors": 0,
+      "scan_errors": 0,
+      "missing_exports": 0
+    },
+    {
+      "group": 0,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "group": 2,
+      "sampled": 1,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "ops": 0,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 0,
+      "avg_us": 0
+    },
+    {
+      "ops": 0,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 0,
+      "avg_us": 0
+    },
+    {
+      "ops": 16,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 535,
+      "avg_us": 33
+    }
+  ],
+  [
+    {
+      "node": 3,
+      "stage": 0,
+      "group": 0,
+      "exports": 1,
+      "passes": 4,
+      "elapsed_ms": 0,
+      "last_pass_age_ms": 330,
+      "last_delete_age_ms": 2900
+    },
+    {
+      "data_usage_bytes": 0,
+      "removed_fragments": 2,
+      "unlinked_file_bytes": 139264,
+      "reclaimed_payload_bytes": 131072,
+      "delete_errors": 0,
+      "mismatches": 0,
+      "sweep_errors": 0,
+      "reap_errors": 0,
+      "ack_errors": 0,
+      "scan_errors": 0,
+      "missing_exports": 0
+    },
+    {
+      "group": 0,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "group": 2,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "ops": 0,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 0,
+      "avg_us": 0
+    },
+    {
+      "ops": 2,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 74,
+      "avg_us": 37
+    },
+    {
+      "ops": 20,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 3798,
+      "avg_us": 189
+    }
+  ],
+  [
+    {
+      "node": 4,
+      "stage": 0,
+      "group": 0,
+      "exports": 1,
+      "passes": 4,
+      "elapsed_ms": 0,
+      "last_pass_age_ms": 174,
+      "last_delete_age_ms": 2898
+    },
+    {
+      "data_usage_bytes": 0,
+      "removed_fragments": 2,
+      "unlinked_file_bytes": 139264,
+      "reclaimed_payload_bytes": 131072,
+      "delete_errors": 0,
+      "mismatches": 0,
+      "sweep_errors": 0,
+      "reap_errors": 0,
+      "ack_errors": 0,
+      "scan_errors": 0,
+      "missing_exports": 0
+    },
+    {
+      "group": 0,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "group": 2,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "ops": 0,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 0,
+      "avg_us": 0
+    },
+    {
+      "ops": 2,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 27,
+      "avg_us": 13
+    },
+    {
+      "ops": 20,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 3665,
+      "avg_us": 183
+    }
+  ]
+]
