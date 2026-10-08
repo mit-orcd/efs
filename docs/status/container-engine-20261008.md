@@ -105,3 +105,10 @@ See [P4.1 profiling checkpoint](container-profiling-20261008.md) for syscall
 reductions, five CPU profiling rounds and repeated original/optimized measurements.
 Direct durable overwrite remains about 22.5 MiB/s. Buffered read/delete metadata
 stalls persist; historical A/B numbers above do not establish a storage speedup.
+
+## Proposed modularization
+
+The [built-in engine modules proposal](storage-engine-modules-proposal-20261008.md)
+documents a lean daemon interface, ownership boundaries, benchmark reuse, effort
+and acceptance gates. This is a future refactor; the current implementation still
+uses explicit engine branches. Dynamic `.so` loading is deferred.
