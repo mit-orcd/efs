@@ -101,3 +101,18 @@ schedule deletion. Expiry arguments are rejected, not silently ignored. See the
 [expiry test status](../status/efs-command-options-20261008.md#expiry-testing).
 For activation and restart/catch-up behavior, see
 [server policy](../status/efs-command-policy-20261008.md).
+
+Human status on stderr uses relative freshness, for example:
+
+```text
+Results as of 15 seconds ago; complete for this snapshot. Background refresh may lag recent writes.
+Snapshot 17444155377256343:280; no refresh error recorded; expiry unavailable.
+```
+
+The first snapshot number identifies the server instance; the second is its
+published catalog generation. Freshness measures time since source metadata was
+captured, not time since the command ran or a guarantee that all cluster writes
+were included. Completeness is scoped to that snapshot, not an atomic live-tree
+view. Refresh failures are shown explicitly while retaining the last available
+snapshot. A server timestamp ahead of the client reports unknown freshness
+rather than a misleading zero age. JSON keeps the exact timestamp and identity.

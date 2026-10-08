@@ -56,6 +56,32 @@ class Commands(unittest.TestCase):
         return subprocess.run([sys.executable, os.fspath(path), *args], cwd="/",
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
+    def test_snapshot_freshness_status(self):
+        from unittest.mock import patch
+        import contextlib
+        import io
+        result = envelope("stats")
+        now = 2000000000000000
+        for seconds, expected in ((15, "15 seconds ago"), (14400, "4 hours ago"),
+                                  (259200, "3 days ago"), (0, "just now"),
+                                  (-60, "unknown (server timestamp is ahead of client clock)")):
+            result["snapshot"]["source_ns"] = now - seconds * 1000000000
+            stderr = io.StringIO()
+            with patch.object(commands, "read_result", return_value=result), \
+                 patch.object(commands.time, "time_ns", return_value=now), \
+                 patch.object(commands.sys, "argv", [str(self.directory / "stats")]), \
+                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+                self.assertEqual(commands.main([], str(self.directory / "stats")), 0)
+            self.assertIn("Results as of " + expected, stderr.getvalue())
+            self.assertIn("complete for this snapshot", stderr.getvalue())
+            self.assertIn("Background refresh may lag recent writes", stderr.getvalue())
+        result["snapshot"]["refresh_error"] = 5
+        with patch.object(commands, "read_result", return_value=result), \
+             patch.object(commands.sys, "argv", [str(self.directory / "stats")]), \
+             contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
+            self.assertEqual(commands.main([], str(self.directory / "stats")), 0)
+        self.assertIn("refresh error 5; showing the last available snapshot", stderr.getvalue())
+
     def test_embedded_source_matches_python(self):
         lines = (SOURCE.parent / 'source.h').read_text().splitlines()[2:]
         literal = ''.join(json.loads(line.rstrip(';')) for line in lines)

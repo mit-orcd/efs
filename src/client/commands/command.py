@@ -385,9 +385,16 @@ def main(argv=None, script_path=None):
         sys.stdout.buffer.write(b"".join(rendered))
     # NUL output is exclusively paths; status always goes to stderr.
     snap = result["snapshot"]
-    age = max(0, time.time_ns() - snap["source_ns"]) / 1e9
-    print("snapshot %d:%d, source age %.3fs, complete; refresh_error=%d; expiry unavailable" %
-          (snap["boot_id"], snap["generation"], age, snap["refresh_error"]), file=sys.stderr)
+    status_now = time.time_ns()
+    freshness = format_mtime(snap["source_ns"], "relative", status_now)
+    if snap["source_ns"] > status_now:
+        freshness = "unknown (server timestamp is ahead of client clock)"
+    print("Results as of %s; complete for this snapshot. "
+          "Background refresh may lag recent writes." % freshness, file=sys.stderr)
+    refresh = ("no refresh error recorded" if snap["refresh_error"] == 0 else
+               "refresh error %d; showing the last available snapshot" % snap["refresh_error"])
+    print("Snapshot %d:%d; %s; expiry unavailable." %
+          (snap["boot_id"], snap["generation"], refresh), file=sys.stderr)
     return 0
 
 
