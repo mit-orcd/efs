@@ -34,6 +34,7 @@ int efs_client_rpc_hold(efs_export_id_t ex, efs_ino_t ino, int open, uint64_t ow
 }
 static efs_ino_t efs_file_ino(struct fuse_file_info *fi, efs_ino_t fallback) { return fi->fh ? fi->fh : fallback; }
 static void efs_file_close(struct fuse_file_info *fi) { fi->fh = 0; }
+static int virt_kind(fuse_ino_t ino) { return (ino & (7ULL << 60)) != 0; }
 int efs_client_note_meta_change(int force) { (void)force; return EFS_OK; }
 void efs_client_stage_evict_ino(efs_ino_t ino) { (void)ino; }
 static int flock_armed_take(efs_ino_t ino, uint64_t *owner) { (void)ino; (void)owner; return 0; }
@@ -53,6 +54,9 @@ static void resume(void) {
     pthread_mutex_lock(&gate); unblock = 1; pthread_cond_broadcast(&cv); pthread_mutex_unlock(&gate);
 }
 int main(void) {
+    struct fuse_file_info query = {.fh = 1ULL << 60};
+    assert(!efs_fuse_release_ino(query.fh, &query));
+    assert(!query.fh && !holds && !drops && !g_open_refs);
     assert(efs_open_acquire(42) == EFS_OK);
     assert(efs_open_acquire(42) == EFS_OK && holds == 1);
     release(); assert(drops == 0); release(); assert(drops == 1 && !g_open_refs);
