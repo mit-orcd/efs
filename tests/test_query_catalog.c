@@ -195,6 +195,20 @@ int main(void)
     CHECK(!efs_kv_del(kv,pending,sizeof(pending)),"clear pending");
     CHECK(!efs_kv_lsm_transaction_revision(kv,&live) && live>fence,
           "resolve deletion changes fence after pending records disappear");
+    uint64_t revisions_before[4096],revisions_after[4096];
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,revisions_before,4096),"tracking baseline");
+    fence=live;
+    efs_kv_lsm_query_tracking(kv,0);
+    CHECK(!efs_kv_put(kv,pending,sizeof(pending),(const uint8_t *)"x",1),"disabled transaction marker");
+    CHECK(!efs_kv_del(kv,pending,sizeof(pending)),"disabled transaction resolve");
+    CHECK(!efs_meta_apply_get_inode(kv,b,&r),"disabled ordinary row");row_put(kv,&r);
+    CHECK(!efs_kv_lsm_metadata_revisions(kv,revisions_after,4096) &&
+          !memcmp(revisions_before,revisions_after,sizeof(revisions_before)),"disabled tracking leaves all hints unchanged");
+    CHECK(!efs_kv_lsm_transaction_revision(kv,&live) && live==fence,"disabled tracking leaves transaction fence unchanged");
+    efs_kv_lsm_query_tracking(kv,1);
+    CHECK(!capture(kv,NULL,&newer),"reenable builds authoritative image without dirty history");
+    CHECK(newer && efs_query_catalog_rebuilt(newer)==4096,"reenable requires full initial build");
+    efs_query_catalog_free(newer);newer=NULL;
     CHECK(!efs_meta_apply_get_inode(kv,b,&r),"dir for corruption");
     r.parent=a;row_put(kv,&r);
     CHECK(capture(kv,c,&newer)==EFS_ERR_PROTO && !newer,"mismatched parent fails closed");

@@ -728,7 +728,7 @@ out:
 
 static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
 {
-    if (len<3) return;
+    if (!l->query_tracking || len<3) return;
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];
     if (shard>EFS_KV_SHARD_MASK) return;
     if (key[2]==EFS_KV_KIND_INTENT || key[2]==EFS_KV_KIND_GUARD ||
@@ -972,6 +972,7 @@ struct efs_kv *efs_kv_lsm_open(const char *dir, const struct efs_kv_lsm_cfg *cfg
         return NULL;
     kv = calloc(1, sizeof(*kv));
     l = calloc(1, sizeof(*l));
+    if (l) l->query_tracking=1;
     if (!kv || !l) {
         free(kv);
         free(l);
@@ -1362,6 +1363,15 @@ unlock:
     if (rc!=EFS_OK) { efs_kv_lsm_snapshot_release(s); return rc; }
     *out=s;
     return EFS_OK;
+}
+
+void efs_kv_lsm_query_tracking(struct efs_kv *kv,int enabled)
+{
+    if (!kv || kv->ops!=&lsm_ops || !kv->ctx) return;
+    struct kv_lsm *l=kv->ctx;
+    pthread_mutex_lock(&l->mu);
+    l->query_tracking=enabled!=0;
+    pthread_mutex_unlock(&l->mu);
 }
 
 int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n)

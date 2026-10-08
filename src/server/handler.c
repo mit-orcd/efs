@@ -1058,10 +1058,10 @@ send_reply:
          * recv timeout (the client GET_FEATURES poll is 2 s x node_count,
          * which wedged every .stats/.find stat for ~16 s). */
         case EFS_MSG_GET_FEATURES: {
-            /* No per-export feature state in the KV yet; defaults apply. */
+            /* Server startup policy applies to this metadata namespace. */
             struct efs_msg_features_reply r;
             memset(&r, 0, sizeof(r));
-            r.features = EFS_FEATURES_DEFAULT;
+            r.features = server_raft_host_query_features();
             r.status = EFS_FEATURES_OK;
             efs_conn_send_msg(conn, EFS_MSG_GET_FEATURES_REPLY, &r,
                               sizeof(r));

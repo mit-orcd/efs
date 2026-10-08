@@ -18,7 +18,8 @@ include synthetic entries. Existing real `.efs` entries take precedence;
 collision diagnostics are bounded to avoid flooding logs. `.find` and `.stats`
 are now ordinary user names, replacing the previous synthetic interfaces.
 
-Initial activation is **explicit per mounted export**: start its `efs-fuse`
+Server startup policy is documented in [disablement and catch-up](efs-command-policy-20261008.md).
+Initial client activation is **explicit per mounted export**: start its `efs-fuse`
 process with `EFS_COMMANDS=1`. Default is off; the setting must be supplied on
 subsequent mount restarts. This is an initial mount configuration, not a new
 persistent, server-enforced export-policy management API. Persisted operator

@@ -40,3 +40,14 @@ def query(port,q,raw=None):
     assert r.version==(q.version if raw is None and q.version in (1,2) else 1) and r.text_len==len(text),(r.version,r.text_len,len(text))
     assert not r.status or not text,'partial failure delivered bytes'
     return r,text
+
+def features(port):
+    body=b'w92-private'.ljust(256,b'\0')
+    with socket.create_connection(('127.0.0.1',port),7) as s:
+        s.sendall(struct.pack('!I',len(body)+1)+bytes([39])+body)
+        n=struct.unpack('!I',receive(s,4))[0]
+        payload=receive(s,n)
+    assert len(payload)==9 and payload[0]==40,payload
+    mask=struct.unpack('@I',payload[1:5])[0]
+    assert payload[5]==0,payload
+    return mask

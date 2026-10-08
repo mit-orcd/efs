@@ -3506,6 +3506,13 @@ publication/payload oracle, publisher loss/rejoin, noexec, cold opt-out and rest
 oracle. [Evidence and remaining acceptance](../status/efs-command-followups-20261008.md).
 This does not close 400 GiB, persistent remote export-policy or NFS/macOS gates.
 
+Server startup disablement now uses `EFS_COMMANDS_SERVER=0` on every daemon:
+no query worker/catalog, no dirty tracking, zero advertised query features and
+both query versions refused. Re-enable rebuilds all partitions from current
+persisted metadata, without an accumulated query-index queue. See
+[policy and catch-up gates](../status/efs-command-policy-20261008.md).
+This is distinct from future live replicated per-export policy transitions.
+
 Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
 NUC target: staged population toward 400 GiB real logical payload, with a large
 small-file namespace, two cold mounts, shard-distributed queries and measured

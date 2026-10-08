@@ -40,13 +40,13 @@ static inline void efs_cli_help(FILE *out,const char *program,const char *topic)
         syntax="--node-id ID --addr ADDRESS --port PORT --storage PATH [options]";
         options="--node-id ID          Node identifier\n--addr ADDRESS        Listen address\n--port PORT           Listen port\n--storage PATH        Storage roots; repeat or separate with commas\n--quota SIZE          Storage quota; accepts K, M, G and T suffixes\n--direct-io           Use O_DIRECT for fragment I/O\n--no-direct-io        Use buffered fragment I/O (default)\n--writers N           Shared writer threads; 0 runs writes inline\n--join HOST:PORT      Join an existing cluster\n--meta-storage PATH   Raft/KV root (default: first storage root)\n--no-persist          Disable cluster configuration persistence\n--perf               Record a CPU profile\n--strace             Record system calls";
         examples="efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1";
-        notes="Metadata root changes do not move existing mdraft data.\nStorage roots use least-queue write placement across paths.";
+        notes="Metadata root changes do not move existing mdraft data.\nStorage roots use least-queue write placement across paths.\nEFS_COMMANDS_SERVER=0 disables query workers, tracking and query RPCs.\nSet the same policy on every node; changes require graceful restart.\nDefault: enabled. Re-enabling rebuilds from current persisted metadata.";
     } else if (!strcmp(name,"efs-fuse")) {
         summary="Mount an EFS export";
         syntax="NODE:PORT [NODE:PORT ...] EXPORT MOUNTPOINT [options]";
         options="-o OPTIONS           FUSE mount options\n--perf               Record a CPU profile\n--strace             Record system calls\n--stop MOUNTPOINT    Drain and stop a mounted client\n--resume MOUNTPOINT  Resume a drained client";
         examples="efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt\nEFS_COMMANDS=1 efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt";
-        notes="One node address is enough; the client discovers the other nodes.\nEFS_COMMANDS=1 enables directory-local .efs commands on this mount.\nThose commands require Python 3 on the machine executing them.\nUse --stop MOUNTPOINT --force-discard only to discard pending writes.\nUse --help-fuse for the underlying FUSE option reference.";
+        notes="One node address is enough; the client discovers the other nodes.\nEFS_COMMANDS=1 enables .efs on this mount when server policy allows it.\nThose commands require Python 3 on the machine executing them.\nUse --stop MOUNTPOINT --force-discard only to discard pending writes.\nUse --help-fuse for the underlying FUSE option reference.";
     } else if (!strcmp(name,"efs-query")) {
         summary="Query the legacy server statistics endpoint";
         syntax="[--raw] NODE:PORT";

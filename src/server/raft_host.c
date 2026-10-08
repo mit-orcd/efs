@@ -347,7 +347,7 @@ struct efs_raft_host {
     int started;
     pthread_mutex_t query_mu;
     pthread_t query_tid;
-    int query_running,query_started,query_error;
+    int query_running,query_started,query_error,query_enabled;
     uint64_t query_deadline_ms;
     struct efs_server_query_view query_view;
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
@@ -7195,6 +7195,7 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     struct efs_raft_host *h=g_host;
     if (primary_id) *primary_id=0;
     if (!h || !consume) return EFS_ERR_INVAL;
+    if (!h->query_enabled) return EFS_ERR_NOT_FOUND;
     uint8_t both[2];host_need_both(both);
     pthread_mutex_lock(&h->mu);
     int capable=host_query_capable(h);
@@ -7462,9 +7463,16 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
     if (!rc) r->text_len=q->len;
     return rc;
 }
+/* Startup policy is immutable for a process; change it on every node and
+ * restart gracefully. It gates both wire versions, not only synthetic paths. */
+uint32_t server_raft_host_query_features(void)
+{
+    return g_host && g_host->query_enabled && g_host->query_started ? EFS_FEATURES_DEFAULT : 0;
+}
 int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,void **out,uint32_t *len)
 {
     if (out) *out=NULL;
+    if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
     if (!req || !out || !len || (req->version!=EFS_QUERY_VERSION && req->version!=EFS_QUERY_COMMAND_VERSION) || !req->root ||
         req->operation>(req->version==EFS_QUERY_VERSION ? EFS_QUERY_FIND : EFS_QUERY_LS) || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
         !req->max_output || req->max_output>EFS_QUERY_MAX_OUTPUT ||
@@ -7514,6 +7522,12 @@ int server_raft_host_start(struct efsd_server *s)
      * starts — there is no env gate. */
     if (!s || g_host)
         return EFS_ERR_INVAL;
+    const char *commands=getenv("EFS_COMMANDS_SERVER");
+    if (commands && strcmp(commands,"0") && strcmp(commands,"1")) {
+        fprintf(stderr,"raft-host: EFS_COMMANDS_SERVER must be 0 or 1\n");
+        return EFS_ERR_INVAL;
+    }
+    int query_enabled=!commands || !strcmp(commands,"1");
     ns = getenv("EFS_MD_RAFT_N");
     if (ns && ns[0]) {
         n = atoi(ns);
@@ -7532,6 +7546,7 @@ int server_raft_host_start(struct efsd_server *s)
     if (!h)
         return EFS_ERR_NOMEM;
     h->s = s;
+    h->query_enabled=query_enabled;
     h->raft_id = (int)s->id - 1;
     h->n = n;
     h->boot_id = make_boot_id();
@@ -7616,6 +7631,7 @@ int server_raft_host_start(struct efsd_server *s)
     }
     h->tx_running = 1;
     h->running = 1;
+    efs_kv_lsm_query_tracking(h->kv,h->query_enabled);
     g_host = h;
     if (efsd_pthread_create(&h->tid, host_pump, h) != 0) {
         fprintf(stderr, "raft-host: pump thread failed\n");
@@ -7630,11 +7646,13 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
-    __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
-    if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
-        __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
-        fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
-    } else h->query_started=1;
+    if (h->query_enabled) {
+        __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
+        if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
+            __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
+            fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
+        } else h->query_started=1;
+    } else fprintf(stderr,"raft-host: .efs server queries disabled; no catalog worker or query tracking\n");
     /* GC reaper after the pump: its proposals need the pump to apply. A
      * spawn failure only leaks fragments (logged), never corrupts.
      * EFS_GC_DISABLE is an operational escape hatch (A/B, emergencies):

@@ -1,0 +1,18 @@
+2026-10-08T17:20:13.518Z Loaded 4 persisted cluster node(s) from /data1/efs/commands-policy-final2-20261008/n3/meta/cluster_nodes.bin
+2026-10-08T17:20:13.518Z   persisted node 1: 127.0.0.1:24800
+2026-10-08T17:20:13.518Z   persisted node 2: 127.0.0.1:24801
+2026-10-08T17:20:13.518Z   persisted node 3: 127.0.0.1:24802
+2026-10-08T17:20:13.518Z   persisted node 4: 127.0.0.1:24803
+2026-10-08T17:20:13.525Z Joined cluster with 4 nodes
+2026-10-08T17:20:13.525Z heartbeat: enabled (2000 ms interval)
+2026-10-08T17:20:13.903Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-08T17:20:13.903Z kv-obs: mt_bytes=2811518 l0_bytes=0 l0=0 l1=0
+2026-10-08T17:20:13.903Z raft-host: up raft_id=2 n=4 boot=10661727218988787 salt=15656061170009699485 g0=hosted g2=hosted
+2026-10-08T17:20:13.903Z efsd 1509e6e1-policy-a9f0a842 (branch devel-find-stats, built 2026-10-08T17:18:45Z on nuc), build=1509e6e1-policy-a9f0a842: node 3 listening on 127.0.0.1:24802, storage=/data1/efs/commands-policy-final2-20261008/n3 (1 paths, stripe=none), used=28180480, quota=1073741824, direct_io=off, writers=0 shared
+2026-10-08T17:20:14.024Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-08T17:20:14.541Z raft-host: applied session index=24108 kind=8 shard=0 ino=7256
+2026-10-08T17:20:14.548Z raft-host: applied session index=24112 kind=9 shard=0 ino=7256
+2026-10-08T17:20:14.552Z raft-host: applied session index=24115 kind=8 shard=0 ino=11352
+2026-10-08T17:20:14.557Z raft-host: applied session index=24119 kind=9 shard=0 ino=11352
+2026-10-08T17:20:14.574Z raft-host: applied session index=10858 kind=8 shard=0 ino=6647
+2026-10-08T17:20:14.579Z raft-host: applied session index=10860 kind=9 shard=0 ino=6647

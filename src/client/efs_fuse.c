@@ -572,7 +572,8 @@ static fuse_ino_t virt_commands_ino(efs_ino_t parent)
 static int commands_enabled(void)
 {
     const char *v=getenv("EFS_COMMANDS");
-    return v && !strcmp(v,"1");
+    return v && !strcmp(v,"1") &&
+           (features_current() & EFS_FEATURES_DEFAULT)==EFS_FEATURES_DEFAULT;
 }
 static int command_script(const char *term)
 {
@@ -701,12 +702,12 @@ static void vq_open_size(efs_ino_t ino, size_t len, int delta)
     }
     pthread_mutex_unlock(&g_vq_mu);
 }
-static int vq_pinned_size(efs_ino_t ino, size_t *len)
+static int vq_pinned_size(efs_ino_t ino, size_t *len, int open_only)
 {
     int found=0;
     pthread_mutex_lock(&g_vq_mu);
     for (int i=0; i<EFS_VQ_N; i++) if (g_vq[i].valid &&
-        g_vq[i].nodeid==ino) {
+        g_vq[i].nodeid==ino && (!open_only || g_vq[i].nopen)) {
         *len=g_vq[i].open_size; found=1; break;
     }
     pthread_mutex_unlock(&g_vq_mu);
@@ -1496,6 +1497,16 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
         stat_set_size_blocks(stbuf, vh->snapshot_len, vh->snapshot_len);
         return 0;
     }
+    /* Linux can omit fi for fstat. A genuinely open virtual inode keeps
+     * its immutable attributes even after server feature disablement. */
+    if (vk==3) {
+        size_t length;char term[EFS_MAX_NAME];efs_ino_t directory;
+        if (vq_pinned_size(ino,&length,1) && !vq_lookup(ino,&directory,term,sizeof(term))) {
+            memset(stbuf,0,sizeof(*stbuf));stbuf->st_ino=ino;
+            stbuf->st_mode=S_IFREG | (command_script(term) ? 0555 : 0444);
+            stbuf->st_nlink=1;stat_set_size_blocks(stbuf,length,length);return 0;
+        }
+    }
     if (vk == 1) {
         struct efs_inode parent;
         if (!feature_enabled(EFS_FEATURE_STATS))
@@ -1536,7 +1547,7 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
         if (efs_client_stat_ino(dir_ino, &parent) != EFS_OK)
             return -ENOENT;
         size_t pinned_len;
-        if (vq_pinned_size(ino, &pinned_len)) {
+        if (vq_pinned_size(ino, &pinned_len, 0)) {
             memset(stbuf, 0, sizeof(*stbuf));
             stbuf->st_ino=ino; stbuf->st_mode=S_IFREG | 0444; stbuf->st_nlink=1;
             stbuf->st_uid=parent.uid; stbuf->st_gid=parent.gid;
@@ -2116,9 +2127,8 @@ static int efs_fuse_read_ino(fuse_ino_t ino, char *buf, size_t size, off_t offse
 {
     int vk = virt_kind(ino);
     if ((vk == 1 || vk == 3) && fi) {
-        if (vk==3 && !commands_enabled()) return -ENOENT;
-        if (!feature_enabled(vk == 1 ? EFS_FEATURE_STATS : EFS_FEATURE_FIND))
-            return -ENOENT;
+        /* Startup policy revokes new queries, not bytes already owned by an
+         * authorized descriptor. No server/index work is needed for this read. */
         struct efs_file_handle *h = efs_file_handle(fi);
         if (!h || !h->snapshot) return -EBADF;
         if (offset < 0) return -EINVAL;

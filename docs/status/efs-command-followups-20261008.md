@@ -5,6 +5,9 @@ Branch `devel-find-stats`; clean NUC candidate
 checkout is untouched. Source patch/build identity and raw fixture evidence:
 [results](../../results/measure/20261008-efs-followups/).
 
+Latest: [server startup disablement and catch-up](efs-command-policy-20261008.md).
+Persistent remote per-export transitions below remain distinct.
+
 ## Repairs
 
 - Refresh now fences **transaction activity**, rather than every metadata write,

@@ -30,7 +30,7 @@ for mount in mount_paths:
         assert mount.is_dir() and not os.path.ismount(mount) and not any(mount.iterdir()),'mount must be empty and unmounted'
 io_flag='--direct-io' if args.mode=='direct' else '--no-direct-io'
 work.mkdir(parents=True,exist_ok=False)
-logs=[];procs=[];fuse_procs=[];mounts=[]
+logs=[];procs=[];fuse_procs=[];mounts=[];held_stream=None
 env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
 if os.environ.get('EFS_QUERY_FUSE')=='1': env['EFS_COMMANDS']='1'
 # Reserve consecutive candidates while checking; no unrelated process is killed.
@@ -222,13 +222,76 @@ try:
             total_bytes+=sum(os.lstat(Path(directory)/name).st_size for name in files)
         expected_root=f'root_rc=0 files={total_files} dirs={total_dirs} logical={total_bytes}'
         print('restart oracle '+expected_root,flush=True)
-        for mount in mounts:subprocess.run(['fusermount3','-u',str(mount)],check=True,timeout=10)
-        for proc in fuse_procs:proc.wait(10);assert proc.returncode==0,proc.returncode
-        fuse_procs.clear();mounts.clear()
+        if os.environ.get('EFS_QUERY_POLICY')=='1':
+            for attempt in range(8):
+                try:
+                    held_stream=open(mounts[0]/'.efs/.query/v1.stats','rb')
+                    break
+                except OSError:
+                    if attempt==7: raise
+                    time.sleep(.1)
+            held_bytes=held_stream.read();held_size=os.fstat(held_stream.fileno()).st_size
+        else:
+            for mount in mounts:subprocess.run(['fusermount3','-u',str(mount)],check=True,timeout=10)
+            for proc in fuse_procs:proc.wait(10);assert proc.returncode==0,proc.returncode
+            fuse_procs.clear();mounts.clear()
     for proc in procs:proc.terminate()
     for proc in procs:
         proc.wait(8);assert proc.returncode==0,'first fixture shutdown'
     procs.clear()
+    if os.environ.get('EFS_QUERY_POLICY')=='1':
+        disabled_env=dict(env,EFS_COMMANDS_SERVER='0')
+        for node in range(1,5):
+            log=(work/f'n{node}-off.log').open('w');logs.append(log)
+            args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
+                  '--port',str(base+node-1),'--storage',str(work/f'n{node}'),
+                  '--quota','1G','--writers','0',io_flag]
+            if node>1:args+=['--join',f'127.0.0.1:{base}']
+            procs.append(subprocess.Popen(args,env=disabled_env,stdout=log,stderr=log))
+            wait_for(lambda:'listening' in (work/f'n{node}-off.log').read_text(),10)
+        from query_rpc import request,query,features
+        for node in range(4):
+            assert features(base+node)==0,('disabled feature mask',node)
+            for version in (1,2):
+                reply,text=query(base+node,request(version=version))
+                assert reply.status==-3 and not text,('disabled RPC succeeded',node,version,reply.status)
+        offmount=work/'server-off';offmount.mkdir();mounts.append(offmount)
+        log=(work/'server-off-fuse.log').open('w');logs.append(log)
+        proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
+                               'w92-private',str(offmount)],env=env,stdout=log,stderr=log)
+        fuse_procs.append(proc)
+        wait_for(lambda:os.path.ismount(offmount),20)
+        assert not os.path.lexists(offmount/'.efs'),'server opt-out did not hide client commands'
+        wait_for(lambda:not os.path.lexists(mounts[0]/'.efs'),10)
+        held_stream.seek(0)
+        assert held_stream.read()==held_bytes,'disablement rewrote delivered snapshot bytes'
+        assert os.fstat(held_stream.fileno()).st_size==held_size
+        held_stream.close();held_stream=None
+        print('existing mount hides commands; authorized old descriptor retains immutable bytes PASS',flush=True)
+        changed=offmount/'while-disabled';changed.mkdir()
+        (changed/'gone').write_bytes(b'deleted during disabled interval')
+        (changed/'gone').unlink()
+        (changed/'old').write_bytes(b'current payload after disabled interval')
+        (changed/'old').rename(changed/'renamed')
+        (changed/'sub').mkdir()
+        (changed/'sub/new').write_bytes(b'new payload')
+        total_files=total_dirs=total_bytes=0
+        for directory,dirs,files in os.walk(offmount):
+            total_dirs+=len(dirs);total_files+=len(files)
+            total_bytes+=sum(os.lstat(Path(directory)/name).st_size for name in files)
+        expected_root=f'root_rc=0 files={total_files} dirs={total_dirs} logical={total_bytes}'
+        for mount in mounts:subprocess.run(['fusermount3','-u',str(mount)],check=True,timeout=10)
+        for proc in fuse_procs:proc.wait(10);assert proc.returncode==0
+        fuse_procs.clear();mounts.clear()
+        for node in range(1,5):
+            text=(work/f'n{node}-off.log').read_text()
+            assert 'no catalog worker or query tracking' in text
+            assert 'query-publish:' not in text and 'query-refresh:' not in text
+        for proc in procs:proc.terminate()
+        for proc in procs:proc.wait(10);assert proc.returncode==0
+        procs.clear()
+        print('server-off: both RPC versions refused, client hidden, mutations persisted, no catalog publications PASS',flush=True)
+    env['EFS_COMMANDS_SERVER']='1'
     for node in range(1,5):
         log=(work/f'n{node}-restart.log').open('w');logs.append(log)
         args=[str(source/'efsd'),'--node-id',str(node),'--addr','127.0.0.1',
@@ -242,7 +305,20 @@ try:
                    for line in (work/f'n{node}-restart.log').read_text().splitlines() if 'query-publish:' in line)
     wait_for(lambda:rebuilt(2) and rebuilt(3))
     print('restart rebuild from persisted metadata PASS',flush=True)
+    if os.environ.get('EFS_QUERY_POLICY')=='1':
+        import json
+        for node in (2,3):
+            assert features(base+node-1)==3,('reenabled feature mask',node)
+            reply,text=query(base+node-1,request(version=2,max_output=65536,operation=1,
+                                              match=1,term=b''))
+            assert reply.status==0,(reply.status,text)
+            paths={bytes.fromhex(e['path_hex']) for e in json.loads(text)['entries']}
+            assert b'while-disabled/renamed' in paths and b'while-disabled/sub/new' in paths,paths
+            assert b'while-disabled/gone' not in paths and b'while-disabled/old' not in paths,paths
+        print('on/off/on: full persisted rebuild, exact stats oracle and current renamed/new/deleted paths PASS',flush=True)
+
 finally:
+    if held_stream:held_stream.close()
     for mount in mounts:
         subprocess.run(['fusermount3','-u',str(mount)],timeout=10,check=False)
     for proc in fuse_procs:

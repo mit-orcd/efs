@@ -1,0 +1,25 @@
+2026-10-08T17:20:12.914Z Loaded 4 persisted cluster node(s) from /data1/efs/commands-policy-final2-20261008/n1/meta/cluster_nodes.bin
+2026-10-08T17:20:12.915Z   persisted node 1: 127.0.0.1:24800
+2026-10-08T17:20:12.915Z   persisted node 2: 127.0.0.1:24801
+2026-10-08T17:20:12.915Z   persisted node 3: 127.0.0.1:24802
+2026-10-08T17:20:12.915Z   persisted node 4: 127.0.0.1:24803
+2026-10-08T17:20:12.922Z Trying to rejoin via persisted peer 127.0.0.1:24801 (node 2)...
+2026-10-08T17:20:12.922Z Cannot connect to peer 127.0.0.1:24801
+2026-10-08T17:20:12.922Z Failed to rejoin via 127.0.0.1:24801
+2026-10-08T17:20:12.922Z Trying to rejoin via persisted peer 127.0.0.1:24802 (node 3)...
+2026-10-08T17:20:12.922Z Cannot connect to peer 127.0.0.1:24802
+2026-10-08T17:20:12.922Z Failed to rejoin via 127.0.0.1:24802
+2026-10-08T17:20:12.922Z Trying to rejoin via persisted peer 127.0.0.1:24803 (node 4)...
+2026-10-08T17:20:12.922Z Cannot connect to peer 127.0.0.1:24803
+2026-10-08T17:20:12.922Z Failed to rejoin via 127.0.0.1:24803
+2026-10-08T17:20:12.922Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-08T17:20:12.922Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-08T17:20:12.922Z heartbeat: enabled (2000 ms interval)
+2026-10-08T17:20:13.014Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-08T17:20:13.014Z kv-obs: mt_bytes=1127919 l0_bytes=0 l0=0 l1=0
+2026-10-08T17:20:13.014Z raft-host: up raft_id=0 n=4 boot=10661719008446849 salt=10164509264790316064 g0=hosted g2=off
+2026-10-08T17:20:13.014Z efsd 1509e6e1-policy-a9f0a842 (branch devel-find-stats, built 2026-10-08T17:18:45Z on nuc), build=1509e6e1-policy-a9f0a842: node 1 listening on 127.0.0.1:24800, storage=/data1/efs/commands-policy-final2-20261008/n1 (1 paths, stripe=none), used=28311552, quota=1073741824, direct_io=off, writers=0 shared
+2026-10-08T17:20:14.456Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-08T17:20:14.491Z raft-host: gc-pass ms=473 orphan=1 reap=431 frag=40 spread=0 recover=0 fscans=3 fsegs=0 fkeys=6917 femit=578 ftomb=6339 scans=6 segs=0 keys=21587 emit=3722 tomb=17865 reap_scan=0 reap_sweep=247 reap_fence=183 reap_done=0
+2026-10-08T17:20:14.574Z raft-host: applied session index=10858 kind=8 shard=0 ino=6647
+2026-10-08T17:20:14.579Z raft-host: applied session index=10860 kind=9 shard=0 ino=6647
