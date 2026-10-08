@@ -1734,6 +1734,43 @@ static void lock_wait_signal_locked(struct efs_raft_host *h, efs_ino_t ino);
  * ESTABLISH; 10.5c-35c hosts the revocation barrier (BEGIN / FENCE_LOC /
  * ACK / FINISH / LEASE_DROP). Last close reclaims a nlink=0 inode (I19).
  * Apply never stalls the log. */
+/* Required close effects remain replayable after the guarded verdict batch.
+ * Apply does not advance until persistence failures in these effects recover. */
+static int host_lease_close_effects(struct efs_raft_host *h,efs_ino_t ino,uint64_t gen)
+{
+    int rc=EFS_OK,held=efs_lease_any(h->kv,ino,gen);
+    if(held<0)return held;
+    if(!held) {
+        /* The kernel sends no implicit flock UNLOCK on final close. */
+        int lr=efs_lock_drop_file(h->kv,ino,gen);
+        if(lr!=EFS_OK && lr!=EFS_ERR_NOT_FOUND)rc=lr;
+        /* Abandoned reservations must resolve as holes before reclaim. */
+        int dr=efs_meta_apply_append_drain_file(h->kv,ino);
+        if(dr!=EFS_OK && dr!=EFS_ERR_NOT_FOUND)rc=dr;
+        pthread_mutex_lock(&h->wait_mu);
+        lock_wait_signal_locked(h,ino);
+        pthread_mutex_unlock(&h->wait_mu);
+    }
+    int r2=efs_meta_apply_reclaim(h->kv,ino);
+    if(r2!=EFS_OK && r2!=EFS_ERR_BUSY && r2!=EFS_ERR_NOT_FOUND)rc=r2;
+    return rc;
+}
+static int host_unpack_lease_edge(const uint8_t *cmd,uint32_t clen,
+                                   struct efs_opid_req *q,efs_ino_t *ino,
+                                   uint64_t *gen,unsigned *flags,uint64_t *token)
+{
+    if(clen!=EFS_MD_SESS_LEASE_EDGE_LEN || cmd[0]!=EFS_MD_CMD_SESSION ||
+       (cmd[1]!=EFS_MD_SESS_LEASE_EDGE && cmd[1]!=EFS_MD_SESS_LEASE_PROBE))
+        return EFS_ERR_INVAL;
+    memset(q,0,sizeof(*q));memcpy(q->id.client_uuid,cmd+2,EFS_OPID_UUID_LEN);
+    q->id.session_epoch=rd32be(cmd+18);q->id.seq=rd64be(cmd+22);q->ack=rd64be(cmd+30);
+    *ino=rd64be(cmd+38);*gen=rd64be(cmd+46);*flags=rd32be(cmd+54);*token=rd64be(cmd+58);
+    if(!*ino || !*gen || !efs_opid_req_valid(q) || !q->id.session_epoch || q->ack>=q->id.seq ||
+       !*flags || (*flags&~7u) || (*flags&3u)==3u ||
+       !!(*flags&EFS_LEASE_EDGE_CLEAR_PENDING)!=!!*token)return EFS_ERR_INVAL;
+    return EFS_OK;
+}
+
 static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
 {
@@ -1742,7 +1779,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     uint32_t shard = 0;
     efs_ino_t ino = 0;
     uint64_t gen = 0;
-    int rc = EFS_ERR_PROTO;
+    int rc = EFS_ERR_PROTO, required_failure = 0;
 
     if (clen < HOST_SESS_HDR_LEN)
         return EFS_OK;
@@ -1827,32 +1864,23 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         gen = rd64be(cmd + 30);
         rc = efs_lease_close(h->kv, ino, gen, uuid, epoch);
         if (rc == EFS_OK) {
-            int r2;
-            /* Last close of the inode drops its locks: the kernel never
-             * relays a flock UNLOCK on close, so the last-lease edge is the
-             * only close-to-release signal (§7.6). */
-            if (efs_lease_any(h->kv, ino, gen) == 0) {
-                int lr = efs_lock_drop_file(h->kv, ino, gen);
-                int dr;
-
-                if (lr != EFS_OK && lr != EFS_ERR_NOT_FOUND)
-                    rc = lr;
-                /* Same edge for orphaned append reservations: the writer
-                 * that reserved them is gone, so they can never complete —
-                 * resolve as holes or the frontier wedges and the records
-                 * accumulate without bound (§7.3 ABORTED_HOLE). */
-                dr = efs_meta_apply_append_drain_file(h->kv, ino);
-                if (dr != EFS_OK && dr != EFS_ERR_NOT_FOUND)
-                    rc = dr;
-                pthread_mutex_lock(&h->wait_mu);
-                lock_wait_signal_locked(h, ino);
-                pthread_mutex_unlock(&h->wait_mu);
-            }
-            r2 = efs_meta_apply_reclaim(h->kv, ino);
-            if (r2 != EFS_OK && r2 != EFS_ERR_BUSY && r2 != EFS_ERR_NOT_FOUND)
-                rc = r2;
+            rc=host_lease_close_effects(h,ino,gen);
+            required_failure=rc!=EFS_OK;
         }
         break;
+    case EFS_MD_SESS_LEASE_EDGE: {
+        struct efs_opid_req q;unsigned flags;uint64_t token;
+        rc=host_unpack_lease_edge(cmd,clen,&q,&ino,&gen,&flags,&token);
+        if(rc==EFS_OK) {
+            shard=efs_kv_inode_shard(ino);
+            rc=efs_lease_guarded_edge(h->kv,ino,gen,&q,flags,token);
+            if(rc==EFS_OK && (flags&(EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING))) {
+                rc=host_lease_close_effects(h,ino,gen);
+                required_failure=rc!=EFS_OK;
+            }
+        }
+        break;
+    }
     case EFS_MD_SESS_RECLAIM:
         if (clen < 26)
             return EFS_OK;
@@ -1861,6 +1889,11 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         break;
     default:
         return EFS_OK;
+    }
+    if (required_failure) {
+        fprintf(stderr,"raft-host: required lease cleanup rc=%d index=%llu ino=%llu\n",
+                rc,(unsigned long long)index,(unsigned long long)ino);
+        return rc;
     }
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
         rc == EFS_ERR_STALE)
@@ -7851,6 +7884,23 @@ static int host_session_establish_admit(struct efs_raft_host *h,
     return (salt & (1ull<<40)) ? EFS_OK : EFS_ERR_BUSY;
 }
 
+/* A result lookup always crosses ReadIndex; seeing a durable verdict locally
+ * is insufficient while apply may still owe last-close cleanup. */
+static int host_lease_edge_result(struct efs_raft_host *h,const uint8_t *cmd,
+                                   uint32_t clen,uint8_t group,int *hint,uint64_t *known)
+{
+    struct efs_opid_req q;efs_ino_t ino;uint64_t gen,token;unsigned flags;
+    int rc=host_unpack_lease_edge(cmd,clen,&q,&ino,&gen,&flags,&token);
+    if(rc!=EFS_OK)return rc;
+    if(group!=efs_raft_shard_group(efs_kv_inode_shard(ino)))return EFS_ERR_INVAL;
+    rc=host_read_index(h,group,hint);
+    if(rc!=EFS_OK)return rc;
+    int verdict=EFS_ERR_BUSY;
+    rc=efs_lease_guarded_probe(h->kv,ino,gen,&q,flags,token,&verdict);
+    *known=rc==1;
+    return rc==1?verdict:(rc==0?EFS_ERR_BUSY:rc);
+}
+
 static int host_dir_migrate(struct efs_raft_host *h, efs_ino_t dir,
                             const uint8_t *cmd, uint32_t clen, int *hint);
 
@@ -7880,6 +7930,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
+    if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
+       (cmd[1]==EFS_MD_SESS_LEASE_EDGE || cmd[1]==EFS_MD_SESS_LEASE_PROBE)) {
+        struct efs_opid_req q;efs_ino_t ino;uint64_t gen,token;unsigned flags;
+        rc=host_unpack_lease_edge(cmd,clen,&q,&ino,&gen,&flags,&token);
+        if(rc!=EFS_OK || group!=efs_raft_shard_group(efs_kv_inode_shard(ino))) {
+            out->rc=EFS_ERR_INVAL;return;
+        }
+    }
     if (clen >= HOST_CFG_LEN && cmd[0] == EFS_MD_CMD_CFG) {
         rc = host_cfg(h, group, cmd, clen, &hint);
         {
@@ -7891,6 +7949,18 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         out->index = idx;
         if (hint >= 0)
             out->leader_hint = hint;
+        return;
+    }
+    if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_PROBE) {
+        if(!host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
+            if(rc!=EFS_OK)out->rc=rc;
+            return;
+        }
+        rc=host_lease_edge_result(h,cmd,clen,group,&hint,&salt);
+        struct host_view v;host_view_get(h,group,&v);
+        out->rc=rc;out->salt=salt;out->index=v.applied;
+        if(hint>=0)out->leader_hint=hint;
         return;
     }
     if (clen >= HOST_SESS_HDR_LEN && cmd[0] == EFS_MD_CMD_SESSION &&
@@ -7990,7 +8060,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * 2-byte gap per forwarded reserve). It also let a forwarded txn
          * PREP's BUSY/STALE verdict read as OK. */
         rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
+        if(rc==EFS_OK && clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
+           cmd[1]==EFS_MD_SESS_LEASE_EDGE)
+            rc=host_lease_edge_result(h,cmd,clen,group,&hint,&salt);
     }
+    out->salt=salt;
     out->rc = rc;
     out->index = idx;
     out->term = term; /* 0 unless the PUBLISH branch proposed without waiting */

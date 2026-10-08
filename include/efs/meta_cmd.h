@@ -35,6 +35,14 @@
 #define EFS_MD_SESS_LEASE_CLOSE 9
 #define EFS_MD_SESS_LEASE_DROP  10
 #define EFS_MD_SESS_RECLAIM     11
+#define EFS_MD_SESS_LEASE_EDGE  12 /* staged guarded edge, fixed 66-byte command */
+#define EFS_MD_SESS_LEASE_PROBE 13 /* host-only ReadIndex; never a log command */
+/* Both use [tag:1][sub:1][uuid:16][epoch:4][seq:8][ack:8]
+ * [ino:8][generation:8][edge_flags:4][pending_token:8]. Route to the
+ * inode shard group. Reply rc is the stored verdict; salt=1 means known.
+ * Unknown PROBE returns BUSY/salt=0 and cannot acquire or retire ownership.
+ * Requires an explicitly established session; production FUSE is not active. */
+#define EFS_MD_SESS_LEASE_EDGE_LEN 66u
 #define EFS_MD_CMD_DIR    11 /* matches sim SIM_CMD_DIR; layout-epoch */
 #define EFS_MD_DIR_BEGIN   1
 #define EFS_MD_DIR_MIGRATE 2

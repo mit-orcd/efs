@@ -35,6 +35,7 @@ p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer ove
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
+p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--create-lease',action='store_true',help='initial CREATE lease atomicity on local and first-use cross-group hashed lanes, cold replay/unlink/close')
 p.add_argument('--fuse-reply-failure',action='store_true',help='reject CREATE/OPEN descriptor replies and prove local handle/server lease cleanup')
 p.add_argument('--tiny-churn',action='store_true',help='tiny/full-fragment fsynced create/overwrite/delete/recreate, cold exact generations and physical reclamation')
@@ -377,6 +378,75 @@ try:
         print(f'{a.tiny_mixed_files} tiny CREATE/close under bounded large writers; exact cold bytes and reclaim PASS',flush=True)
         if a.tiny_mixed_only:
             raise SystemExit(0)  # finally still drains all owned processes
+    if a.guarded_leases:
+        helper=work/'lease-edges'
+        run(['cc','-Wall','-Wextra','-I'+str(source/'include'),source/'tests/live/lease_edges.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
+        # Error constants are extracted from the build header, not host errno.
+        header=(source/'include/efs/common.h').read_text()
+        def error(name):
+            return int(re.search(r'#define\s+'+name+r'\s+(-?\d+)',header).group(1))
+        stale=error('EFS_ERR_STALE');missing=error('EFS_ERR_NOT_FOUND');busy=error('EFS_ERR_BUSY')
+        path=mount/'guarded-lease';body=b'guarded lease cold payload'*100
+        with path.open('wb') as f:f.write(body);f.flush();os.fsync(f.fileno())
+        ino=path.stat().st_ino
+        # These fresh CREATE rows have initial generation 1 (no truncate/reuse).
+        attr=run([helper,str(a.port),str(ino)],capture_output=True,text=True).stdout
+        gen=int(re.search(r'gen=(\d+)',attr).group(1))
+        uuid=os.urandom(16).hex();records=[]
+        def edge(seq,ack,flags,probe=0,expected=0,discard=0):
+            result=run([helper,str(a.port),str(ino),str(gen),uuid,str(seq),str(ack),str(flags),str(probe),str(expected),str(discard)],capture_output=True,text=True).stdout
+            records.append({'seq':seq,'ack':ack,'flags':flags,'probe':probe,'expected':expected,'discard':discard,'result':result.strip()})
+            return result
+        shard=int(re.search(r'shard=(\d+)',attr).group(1))
+        edge(1,0,1,probe=1,expected=busy)
+        for operation,extra in [('create',['1']),('register',[str(shard),'1']),('establish',[str(shard),'1'])]:
+            run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,*extra])
+        edge(1,0,1,probe=1,expected=busy)
+        edge(2,0,2);edge(1,0,1,expected=stale)
+        # Send to the known leader so the intentionally lost reply is a commit.
+        # Try each node; querying does not repeat or create the original effect.
+        for node in range(4):
+            run([helper,str(a.port+node),str(ino),str(gen),uuid,'3','0','1','0','0','1'])
+            try:
+                edge(3,0,1,probe=1)
+                break
+            except subprocess.CalledProcessError:
+                if node==3:raise
+        unmount();stop(crash=True);start();mount_client()
+        assert path.read_bytes()==body
+        edge(3,0,1,probe=1)
+        path.unlink()
+        attr=run([helper,str(a.port),str(ino)],capture_output=True,text=True).stdout
+        assert 'nlink=0' in attr,attr
+        edge(4,3,2);edge(4,3,2,probe=1)
+        unmount();stop(crash=True);start();mount_client()
+        edge(4,3,2,probe=1)
+        edge(5,4,1,expected=missing);edge(3,0,1,expected=stale)
+        wait(lambda:not files(ino),'guarded last-close physical reclaim',180)
+        # A read-only unknown query must never acquire ownership.
+        path=mount/'guarded-probe-only';path.write_bytes(b'probe only')
+        ino=path.stat().st_ino;gen=1
+        edge(6,5,1,probe=1,expected=busy)
+        path.unlink()
+        def reclaimed():
+            attr=run([helper,str(a.port),str(ino)],capture_output=True,text=True).stdout
+            return 'status=1 ' in attr
+        wait(reclaimed,'unknown probe acquires no inode ownership',30)
+        # Durable administrative revocation clears a real active edge and
+        # rejects delayed old-epoch requests; a disconnect alone does not.
+        path=mount/'guarded-fenced';path.write_bytes(b'fenced owner')
+        ino=path.stat().st_ino;gen=1
+        attr=run([helper,str(a.port),str(ino)],capture_output=True,text=True).stdout
+        shard=int(re.search(r'shard=(\d+)',attr).group(1))
+        for operation in ('register','establish'):
+            run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,str(shard),'1'])
+        edge(6,5,1);path.unlink()
+        run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','fence',uuid])
+        edge(7,6,1,expected=stale)
+        wait(reclaimed,'durably fenced active lease inode reclaimed',60)
+        wait(lambda:not files(ino),'durably fenced physical fragments reclaimed',180)
+        (work/'guarded-leases.json').write_text(json.dumps(records,indent=2))
+        print('guarded lease reorder/lost-reply/read-only probe/cold replay/final-close reclaim PASS',flush=True)
     if a.create_lease:
         helper=work/'create-lease'
         run(['cc','-I'+str(source/'include'),source/'tests/live/create_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
