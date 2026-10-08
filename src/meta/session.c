@@ -3,7 +3,9 @@
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
 #include "efs/opid.h"
+#include "efs/checksum.h"
 #include <string.h>
+#include <sys/stat.h>
 
 static void be32(uint8_t *p, uint32_t v)
 {
@@ -397,6 +399,7 @@ static int lease_value_read(struct efs_kv *kv,const uint8_t *key,uint32_t klen,
     uint32_t n=EFS_LEASE_PENDING_VALUE_LEN;*flags=0;*token=0;
     int rc=efs_kv_get(kv,key,klen,value,&n);
     if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if((rc==EFS_ERR_INVAL || rc==EFS_ERR_NOMEM) && n>EFS_LEASE_PENDING_VALUE_LEN)return EFS_ERR_PROTO;
     if(rc!=EFS_OK)return rc;
     if(n==1 && value[0]==1){*flags=LEASE_NORMAL;return EFS_OK;}
     if(n!=EFS_LEASE_PENDING_VALUE_LEN || value[0]!=2 ||
@@ -489,8 +492,16 @@ static int any_cb(void *user, const uint8_t *key, uint32_t klen,
     (void)user;
     (void)key;
     (void)klen;
-    (void)val;
-    (void)vlen;
+    /* A validated guarded closed record is a replay tombstone, not ownership.
+     * Malformed/unknown values conservatively protect the inode. */
+    if (vlen == 18 && val[0] == 3 && val[1] == 0) {
+        uint64_t seq = 0, token = 0;
+        for (unsigned i = 0; i < 8; i++) {
+            seq = (seq << 8) | val[2+i];
+            token = (token << 8) | val[10+i];
+        }
+        if (seq && !token) return 0;
+    }
     return 1;
 }
 
@@ -589,4 +600,214 @@ int efs_lease_drop_session(struct efs_kv *kv, uint32_t shard,
         if (!acc.full)
             return EFS_OK;
     }
+}
+
+/* Inactive W94 edge protocol. A separate bounded window is necessary: ordinary
+ * namespace acknowledgements must not drop a CLOSE receipt before its lease
+ * tombstone is retired. The client ack is contiguous across all its requests;
+ * it is never inferred from time or from the largest completed request. */
+#define EDGE_SLOTS EFS_OPID_REPLY_CACHE
+#define EDGE_VALUE 18u
+#define EDGE_WINDOW_MAX (13u + EDGE_SLOTS * 60u)
+struct edge_reply {
+    uint64_t seq, ino, gen;
+    int rc;
+    uint8_t digest[32];
+};
+struct edge_window {
+    uint64_t floor;
+    unsigned count;
+    struct edge_reply replies[EDGE_SLOTS];
+};
+struct edge_lease {
+    uint8_t flags;
+    uint64_t seq, token;
+};
+static uint64_t edge_rd64(const uint8_t *p)
+{
+    return ((uint64_t)rd32(p) << 32) | rd32(p+4);
+}
+static void edge_be64(uint8_t *p, uint64_t n)
+{
+    be32(p, (uint32_t)(n >> 32)); be32(p+4, (uint32_t)n);
+}
+static int edge_window_key(uint32_t shard, const uint8_t *uuid, uint32_t epoch,
+                           uint8_t *key, uint32_t *len)
+{
+    int rc = efs_kv_key_opid(shard, uuid, epoch, key, len);
+    if (rc == EFS_OK) key[2] = EFS_KV_KIND_LEASE_EDGE;
+    return rc;
+}
+static int edge_window_load(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                            struct edge_window *w)
+{
+    uint8_t value[EDGE_WINDOW_MAX]; uint32_t len = sizeof(value);
+    memset(w, 0, sizeof(*w));
+    int rc = efs_kv_get(kv, key, klen, value, &len);
+    if (rc == EFS_ERR_NOT_FOUND) return EFS_OK;
+    if (rc != EFS_OK) return rc;
+    if (len < 13 || value[0] != 1) return EFS_ERR_PROTO;
+    w->floor = edge_rd64(value+1); w->count = rd32(value+9);
+    if (w->count > EDGE_SLOTS || len != 13u + w->count*60u) return EFS_ERR_PROTO;
+    for (unsigned i = 0; i < w->count; i++) {
+        const uint8_t *p = value+13+i*60; struct edge_reply *r = &w->replies[i];
+        r->seq=edge_rd64(p); r->rc=(int)rd32(p+8);
+        r->ino=edge_rd64(p+12); r->gen=edge_rd64(p+20);
+        memcpy(r->digest,p+28,32);
+        if (r->seq <= w->floor || r->seq-w->floor > EFS_OPID_BITMAP_BITS ||
+            !r->ino || !r->gen || (r->rc!=EFS_OK && r->rc!=EFS_ERR_STALE &&
+                                   r->rc!=EFS_ERR_NOT_FOUND && r->rc!=EFS_ERR_INVAL)) return EFS_ERR_PROTO;
+        for (unsigned j=0;j<i;j++) if(w->replies[j].seq==r->seq) return EFS_ERR_PROTO;
+    }
+    return EFS_OK;
+}
+static uint32_t edge_window_pack(const struct edge_window *w, uint8_t *value)
+{
+    value[0]=1; edge_be64(value+1,w->floor); be32(value+9,w->count);
+    for(unsigned i=0;i<w->count;i++) {
+        uint8_t *p=value+13+i*60; const struct edge_reply *r=&w->replies[i];
+        edge_be64(p,r->seq); be32(p+8,(uint32_t)r->rc);
+        edge_be64(p+12,r->ino); edge_be64(p+20,r->gen); memcpy(p+28,r->digest,32);
+    }
+    return 13+w->count*60;
+}
+static int edge_lease_load(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
+                           struct edge_lease *lease)
+{
+    uint8_t v[EDGE_VALUE]; uint32_t n=sizeof(v);
+    memset(lease,0,sizeof(*lease));
+    int rc=efs_kv_get(kv,key,klen,v,&n);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if(rc!=EFS_OK)return rc;
+    if(n==1 && v[0]==1) {lease->flags=LEASE_NORMAL;return EFS_OK;}
+    if(n==EFS_LEASE_PENDING_VALUE_LEN && v[0]==2) {
+        lease->flags=v[1];lease->token=edge_rd64(v+2);
+        if(!(lease->flags&LEASE_PENDING) || !lease->token)return EFS_ERR_PROTO;
+    } else if(n==EDGE_VALUE && v[0]==3) {
+        lease->flags=v[1];lease->seq=edge_rd64(v+2);lease->token=edge_rd64(v+10);
+        if(!lease->seq || !!(lease->flags&LEASE_PENDING)!=!!lease->token)return EFS_ERR_PROTO;
+    } else return EFS_ERR_PROTO;
+    return (lease->flags&~(LEASE_NORMAL|LEASE_PENDING))?EFS_ERR_PROTO:EFS_OK;
+}
+static void edge_lease_pack(const struct edge_lease *lease,uint8_t v[EDGE_VALUE])
+{
+    v[0]=3;v[1]=lease->flags;edge_be64(v+2,lease->seq);edge_be64(v+10,lease->token);
+}
+int efs_lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+                          const struct efs_opid_req *q,unsigned flags,uint64_t token)
+{
+    uint32_t shard=efs_kv_inode_shard(ino),wklen=0,lklen=0;
+    uint8_t wkey[EFS_KV_KEY_MAX],lkey[EFS_KV_KEY_MAX],digest[32],identity[32]={0};
+    struct edge_window window;
+    if(!kv || !ino || !gen || !q || !efs_opid_req_valid(q) || !q->id.session_epoch ||
+       q->ack>=q->id.seq || !flags || (flags&~7u) ||
+       (flags&(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLOSE))==3u ||
+       !!(flags&EFS_LEASE_EDGE_CLEAR_PENDING)!=!!token)return EFS_ERR_INVAL;
+    int rc=efs_session_accept(kv,shard,q->id.client_uuid,q->id.session_epoch);
+    if(rc!=EFS_OK)return rc;
+    rc=edge_window_key(shard,q->id.client_uuid,q->id.session_epoch,wkey,&wklen);
+    if(rc==EFS_OK)rc=edge_window_load(kv,wkey,wklen,&window);
+    if(rc!=EFS_OK)return rc;
+    for (unsigned i=0;i<window.count;i++)
+        if (efs_kv_inode_shard(window.replies[i].ino)!=shard) return EFS_ERR_PROTO;
+    edge_be64(identity,ino);edge_be64(identity+8,gen);be32(identity+16,flags);
+    edge_be64(identity+20,token);be32(identity+28,UINT32_C(0x4c454153));
+    efs_hash(identity,sizeof(identity),digest);
+    if(q->id.seq<=window.floor)return EFS_ERR_STALE;
+    for(unsigned i=0;i<window.count;i++)if(window.replies[i].seq==q->id.seq)
+        return memcmp(window.replies[i].digest,digest,32)?EFS_ERR_PROTO:window.replies[i].rc;
+
+    /* At most 16 old closed rows are considered, and all retirement is atomic
+     * with the new floor/effect. A later OPEN on the same key is preserved. */
+    struct efs_kv_item items[EDGE_SLOTS+2];uint32_t count=0;
+    uint8_t retired[EDGE_SLOTS][EFS_KV_KEY_MAX];uint32_t rlen[EDGE_SLOTS];
+    uint64_t floor=q->ack>window.floor?q->ack:window.floor;
+    if(q->id.seq-floor>EFS_OPID_BITMAP_BITS)return EFS_ERR_BUSY;
+    unsigned keep=0;
+    for(unsigned i=0;i<window.count;i++) {
+        struct edge_reply reply=window.replies[i];
+        if(reply.seq>floor){window.replies[keep++]=reply;continue;}
+        rc=efs_kv_key_lease(shard,reply.ino,reply.gen,q->id.client_uuid,
+                            q->id.session_epoch,retired[count],&rlen[count]);
+        struct edge_lease old;
+        if(rc==EFS_OK)rc=edge_lease_load(kv,retired[count],rlen[count],&old);
+        if(rc!=EFS_OK)return rc;
+        if(!old.flags && old.seq==reply.seq) {
+            items[count]=(struct efs_kv_item){EFS_KV_DEL,retired[count],rlen[count],NULL,0};
+            count++;
+        }
+    }
+    window.count=keep;window.floor=floor;
+    if(window.count==EDGE_SLOTS)return EFS_ERR_BUSY;
+    rc=efs_kv_key_lease(shard,ino,gen,q->id.client_uuid,q->id.session_epoch,lkey,&lklen);
+    struct edge_lease lease;
+    if(rc==EFS_OK)rc=edge_lease_load(kv,lkey,lklen,&lease);
+    if(rc!=EFS_OK)return rc;
+    int verdict=EFS_OK;
+    if(q->id.seq<=lease.seq || (lease.token && q->id.seq<=lease.token))verdict=EFS_ERR_STALE;
+    if(verdict==EFS_OK && (flags&EFS_LEASE_EDGE_CLEAR_PENDING) &&
+       (!(lease.flags&LEASE_PENDING) || lease.token!=token))verdict=EFS_ERR_STALE;
+    if(verdict==EFS_OK && (flags&EFS_LEASE_EDGE_OPEN)) {
+        struct efs_meta_row row;
+        verdict=efs_meta_apply_get_inode(kv,ino,&row);
+        if(verdict==EFS_OK && row.generation!=gen)verdict=EFS_ERR_STALE;
+        if(verdict==EFS_OK && S_ISDIR(row.mode))verdict=EFS_ERR_INVAL;
+        if(verdict!=EFS_OK && verdict!=EFS_ERR_NOT_FOUND && verdict!=EFS_ERR_STALE &&
+           verdict!=EFS_ERR_INVAL)return verdict;
+    }
+    uint8_t lvalue[EDGE_VALUE],wvalue[EDGE_WINDOW_MAX];
+    if(verdict==EFS_OK) {
+        if(flags&EFS_LEASE_EDGE_OPEN)lease.flags|=LEASE_NORMAL;
+        if(flags&EFS_LEASE_EDGE_CLOSE)lease.flags&=~LEASE_NORMAL;
+        if(flags&EFS_LEASE_EDGE_CLEAR_PENDING){lease.flags&=~LEASE_PENDING;lease.token=0;}
+        lease.seq=q->id.seq;edge_lease_pack(&lease,lvalue);
+        items[count++]=(struct efs_kv_item){EFS_KV_PUT,lkey,lklen,lvalue,sizeof(lvalue)};
+    }
+    struct edge_reply *reply=&window.replies[window.count++];
+    reply->seq=q->id.seq;reply->ino=ino;reply->gen=gen;reply->rc=verdict;
+    memcpy(reply->digest,digest,32);
+    uint32_t wn=edge_window_pack(&window,wvalue);
+    items[count++]=(struct efs_kv_item){EFS_KV_PUT,wkey,wklen,wvalue,wn};
+    rc=efs_kv_batch(kv,items,count);
+    return rc==EFS_OK?verdict:rc;
+}
+int efs_lease_guarded_retire(struct efs_kv *kv,uint32_t shard,
+                            const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch)
+{
+    int rc=efs_session_reclaimable(kv,shard,uuid,epoch);
+    if(rc==EFS_OK)rc=efs_lease_drop_session(kv,shard,uuid,epoch);
+    uint8_t key[EFS_KV_KEY_MAX];uint32_t len=0;
+    if(rc==EFS_OK)rc=edge_window_key(shard,uuid,epoch,key,&len);
+    if(rc==EFS_OK)rc=efs_kv_del(kv,key,len);
+    return rc==EFS_ERR_NOT_FOUND?EFS_OK:rc;
+}
+
+int efs_lease_guarded_probe(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+                           const struct efs_opid_req *q,unsigned flags,uint64_t token,
+                           int *verdict)
+{
+    if(!kv || !verdict || !ino || !gen || !q || !efs_opid_req_valid(q) ||
+       !q->id.session_epoch || q->ack>=q->id.seq || !flags || (flags&~7u) ||
+       (flags&(EFS_LEASE_EDGE_OPEN|EFS_LEASE_EDGE_CLOSE))==3u ||
+       !!(flags&EFS_LEASE_EDGE_CLEAR_PENDING)!=!!token)return EFS_ERR_INVAL;
+    uint32_t shard=efs_kv_inode_shard(ino),klen=0;
+    int rc=efs_session_accept(kv,shard,q->id.client_uuid,q->id.session_epoch);
+    uint8_t key[EFS_KV_KEY_MAX],identity[32]={0},digest[32];
+    struct edge_window window;
+    if(rc==EFS_OK)rc=edge_window_key(shard,q->id.client_uuid,q->id.session_epoch,key,&klen);
+    if(rc==EFS_OK)rc=edge_window_load(kv,key,klen,&window);
+    if(rc!=EFS_OK)return rc;
+    for(unsigned i=0;i<window.count;i++)
+        if(efs_kv_inode_shard(window.replies[i].ino)!=shard)return EFS_ERR_PROTO;
+    if(q->id.seq<=window.floor)return EFS_ERR_STALE;
+    edge_be64(identity,ino);edge_be64(identity+8,gen);be32(identity+16,flags);
+    edge_be64(identity+20,token);be32(identity+28,UINT32_C(0x4c454153));
+    efs_hash(identity,sizeof(identity),digest);
+    for(unsigned i=0;i<window.count;i++) {
+        const struct edge_reply *reply=&window.replies[i];
+        if(reply->seq!=q->id.seq)continue;
+        if(memcmp(reply->digest,digest,32))return EFS_ERR_PROTO;
+        *verdict=reply->rc;return 1;
+    }
+    return 0;
 }

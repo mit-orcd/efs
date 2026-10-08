@@ -77,6 +77,29 @@ int efs_lease_pending_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                             const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
                             uint64_t token, int release_normal);
 
+/* Staged sequenced edges: callers must serialize local ownership and resolve
+ * unknown CREATE outcomes before abandoning a known pending token. There are
+ * at most 16 unacknowledged edge verdicts/closed records per session/shard.
+ * Every effect, replay verdict and acknowledged tombstone retirement shares
+ * one KV batch. No production wire path uses this API yet. Legacy edge APIs
+ * reject its versioned records; do not mix protocols for one lease session. */
+#define EFS_LEASE_EDGE_OPEN 1u
+#define EFS_LEASE_EDGE_CLOSE 2u
+#define EFS_LEASE_EDGE_CLEAR_PENDING 4u
+int efs_lease_guarded_edge(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                          const struct efs_opid_req *q, unsigned flags,
+                          uint64_t pending_token);
+/* Read-only replay lookup after the caller's authoritative ReadIndex.
+ * 1 fills verdict, 0 is not recorded, negative means stale/invalid evidence.
+ * Does not acquire ownership, advance acknowledgements or retire anything. */
+int efs_lease_guarded_probe(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                           const struct efs_opid_req *q, unsigned flags,
+                           uint64_t pending_token, int *verdict);
+/* Requires the completed global barrier AND local rejection floor, then
+ * removes old ownership before forgetting its replay floor. */
+int efs_lease_guarded_retire(struct efs_kv *kv, uint32_t shard,
+                            const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
+
 int efs_lease_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 int efs_lease_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,

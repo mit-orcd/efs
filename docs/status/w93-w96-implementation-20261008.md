@@ -6,6 +6,15 @@ initial checkpoint. Functional gates use AMD direct-I/O/TCP, one host/four
 processes. Installed stores and binaries are preserved and service restored
 between private fixtures. No physical power-loss or distributed-RDMA proof.
 
+## Current state
+
+| Item | Completed | Still open |
+|---|---|---|
+| W93 | Bounded batching, durability/fault/cold/full Linux/live gates and balanced long controls | Preserve regression coverage; W53 close tails remain separate |
+| W94 | Atomic server lease, rejected replies, pending ownership/atomic CREATE, bounded sequenced-edge and cold tests | Wire/client ownership/recovery integration, production runtime sessions and activation gates |
+| W95 | Tiny/durable timing, independent retained/cold/crash tests and production churn | Indexed packing model and any P4.1 production-layout selection |
+| W96 | Tail/interior-damage recovery, reservation/fallback/fault and final full live gates | Quiet NUC two-device performance acceptance; unrelated workload retained |
+
 ## W96 recovery prerequisite
 
 Fixed replay leaving discarded bytes in front of later acknowledged writes.
@@ -294,3 +303,21 @@ recovery in `gc-direct-6tmcbm26`, before the final pending-only guards.
 [Evidence](../../results/measure/20261008-w93-w96-implementation/w94-atomic-pending/README.md).
 No production caller activates pending ownership. Cross-group pending composition,
 sequenced HOLD edges, client adoption and runtime-session cleanup remain open.
+
+## W94 bounded sequenced-edge state machine
+
+Inactive guarded edges now enforce per-file sequence ordering and exact request
+payloads, with read-only durable-verdict probes. One lease key retains pending/
+normal ownership or a closed replay record. A separate session/shard window
+holds at most 16 verdicts (973 encoded bytes); contiguous ACK retirement, effect
+and verdict share one KV batch. Old CLOSE cannot drop a newer OPEN, and closed
+records do not block inode reclamation. Floors retire only after the global
+barrier and local rejection floor, with old ownership removed first.
+
+All 24 arrival orders, pressure/fault/malformed/epoch tests and cold edge/floor
+recovery pass. Exact full Linux tests and focused sanitizers pass. Shared scan
+integration passes full live `gc-direct-ofxe2t00` with service restored; the final
+read-only probe/negative checks are additionally covered by the exact unit suite.
+[Evidence and activation limits](../../results/measure/20261008-w93-w96-implementation/w94-guarded-edges/README.md).
+Wire/client handoff, unknown-CREATE recovery and production sessions remain;
+these server primitives do not activate piggyback ownership or D25.
