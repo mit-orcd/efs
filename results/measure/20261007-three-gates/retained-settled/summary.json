@@ -1,0 +1,299 @@
+{
+  "elapsed_seconds": 186.29547862199252,
+  "source_fixture": "/data1/efs/gc-direct-kbglf4b1",
+  "before_gc": [
+    "node=1 stage=0 group=0 exports=1 passes=4 elapsed_ms=0 last_pass_age_ms=354 last_delete_age_ms=2080\ndata_usage_bytes=4194304 removed_fragments=10 unlinked_file_bytes=696320 reclaimed_payload_bytes=655360 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=10 bytes=0 errors=0 us_sum=62 avg_us=6\ngc_io=dir_sync ops=82 bytes=0 errors=0 us_sum=1631 avg_us=19\n",
+    "node=2 stage=0 group=0 exports=1 passes=4 elapsed_ms=0 last_pass_age_ms=27 last_delete_age_ms=18446744073709551615\ndata_usage_bytes=4194304 removed_fragments=0 unlinked_file_bytes=0 reclaimed_payload_bytes=0 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=dir_sync ops=58 bytes=0 errors=0 us_sum=374 avg_us=6\n",
+    "node=3 stage=0 group=0 exports=1 passes=4 elapsed_ms=0 last_pass_age_ms=243 last_delete_age_ms=2072\ndata_usage_bytes=4194304 removed_fragments=10 unlinked_file_bytes=696320 reclaimed_payload_bytes=655360 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=10 bytes=0 errors=0 us_sum=79 avg_us=7\ngc_io=dir_sync ops=54 bytes=0 errors=0 us_sum=84379 avg_us=1562\n",
+    "node=4 stage=0 group=2 exports=1 passes=4 elapsed_ms=0 last_pass_age_ms=155 last_delete_age_ms=2054\ndata_usage_bytes=3538944 removed_fragments=12 unlinked_file_bytes=835584 reclaimed_payload_bytes=786432 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=12 bytes=0 errors=0 us_sum=112 avg_us=9\ngc_io=dir_sync ops=85 bytes=0 errors=0 us_sum=73517 avg_us=864\n"
+  ],
+  "after_gc": [
+    "node=1 stage=0 group=0 exports=1 passes=189 elapsed_ms=0 last_pass_age_ms=825 last_delete_age_ms=594\ndata_usage_bytes=6815744 removed_fragments=80 unlinked_file_bytes=5570560 reclaimed_payload_bytes=5242880 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=80 bytes=0 errors=0 us_sum=411 avg_us=5\ngc_io=dir_sync ops=425 bytes=0 errors=0 us_sum=14327 avg_us=33\n",
+    "node=2 stage=0 group=0 exports=1 passes=186 elapsed_ms=0 last_pass_age_ms=163 last_delete_age_ms=251\ndata_usage_bytes=4849664 removed_fragments=70 unlinked_file_bytes=4874240 reclaimed_payload_bytes=4587520 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=1 pending_estimate=0 reap_seen=20 orphan_seen=0 capped=0 first_reap_ino=5875 observed_age_ms=1267\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=70 bytes=0 errors=0 us_sum=343 avg_us=4\ngc_io=dir_sync ops=399 bytes=0 errors=0 us_sum=12429 avg_us=31\n",
+    "node=3 stage=0 group=0 exports=1 passes=189 elapsed_ms=0 last_pass_age_ms=117 last_delete_age_ms=242\ndata_usage_bytes=6160384 removed_fragments=60 unlinked_file_bytes=4177920 reclaimed_payload_bytes=3932160 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=60 bytes=0 errors=0 us_sum=368 avg_us=6\ngc_io=dir_sync ops=350 bytes=0 errors=0 us_sum=874662 avg_us=2499\n",
+    "node=4 stage=0 group=2 exports=1 passes=186 elapsed_ms=0 last_pass_age_ms=8 last_delete_age_ms=205\ndata_usage_bytes=6160384 removed_fragments=62 unlinked_file_bytes=4317184 reclaimed_payload_bytes=4063232 delete_errors=0 mismatches=0 sweep_errors=0 reap_errors=0 ack_errors=0 scan_errors=0 missing_exports=0\ngroup=0 sampled=0 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngroup=2 sampled=1 pending_estimate=0 reap_seen=0 orphan_seen=0 capped=0 first_reap_ino=0 observed_age_ms=18446744073709551615\ngc_io=checksum_read ops=0 bytes=0 errors=0 us_sum=0 avg_us=0\ngc_io=unlink ops=62 bytes=0 errors=0 us_sum=468 avg_us=7\ngc_io=dir_sync ops=386 bytes=0 errors=0 us_sum=829786 avg_us=2149\n"
+  ],
+  "metadata_samples": [
+    "mkdir              min    10.593 med    32.719 max    67.365 ms\ncreate+1B+close    min    36.765 med    44.342 max    59.251 ms\nappend+close       min    54.029 med    60.650 max    82.655 ms\nstat               min     0.137 med     0.146 max     3.197 ms\nunlink             min     7.408 med    12.264 max    16.570 ms\nrmdir              min     9.207 med    35.740 max    72.385 ms\n",
+    "mkdir              min     0.659 med    15.877 max    61.409 ms\ncreate+1B+close    min     2.311 med     3.073 max     5.506 ms\nappend+close       min     5.168 med     6.530 max    11.134 ms\nstat               min     0.094 med     0.096 max     0.661 ms\nunlink             min     0.447 med     0.584 max     0.790 ms\nrmdir              min     0.421 med    16.938 max    63.952 ms\n",
+    "mkdir              min     0.620 med    16.657 max    55.386 ms\ncreate+1B+close    min     2.238 med     2.946 max     3.406 ms\nappend+close       min     4.209 med     5.574 max    11.715 ms\nstat               min     0.092 med     0.096 max     0.801 ms\nunlink             min     0.452 med     0.604 max     0.751 ms\nrmdir              min     0.494 med    18.149 max    69.781 ms\n"
+  ],
+  "slow_passes": [
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:01.048Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=4 keys=97 emit=0 tomb=97"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:02.121Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:03.196Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=42 emit=0 tomb=42"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:04.269Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=28 keys=36 emit=0 tomb=36"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:05.343Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:06.415Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=4 keys=36 emit=0 tomb=36"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:07.489Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:08.564Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=109 emit=0 tomb=109"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:09.638Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=36 emit=0 tomb=36"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:10.712Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:11.785Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=51 emit=0 tomb=51"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:12.857Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=36 emit=0 tomb=36"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:13.930Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=36 emit=0 tomb=36"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:15.003Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=45 emit=0 tomb=45"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:16.077Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:17.150Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=45 emit=0 tomb=45"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:18.224Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=34 keys=45 emit=0 tomb=45"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:19.298Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=42 emit=0 tomb=42"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:20.373Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:21.447Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:22.521Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=64 keys=42 emit=0 tomb=42"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:23.594Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=76 keys=48 emit=0 tomb=48"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:24.669Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=115 keys=36 emit=0 tomb=36"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:25.744Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=118 keys=42 emit=0 tomb=42"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:26.818Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=175 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:27.893Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=61 keys=45 emit=0 tomb=45"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:28.967Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=109 keys=51 emit=0 tomb=51"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:30.041Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=61 keys=48 emit=0 tomb=48"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:31.115Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=97 keys=39 emit=0 tomb=39"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:32.190Z raft-host: gc-pass ms=70 reap=0 frag=0 spread=0 recover=70 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=103 keys=48 emit=0 tomb=48"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:33.263Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=45 emit=0 tomb=45"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:08:34.337Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=1 keys=42 emit=0 tomb=42"
+    },
+    {
+      "node": 2,
+      "line": "2026-10-08T01:11:05.133Z raft-host: gc-pass ms=1104 reap=1089 frag=3 spread=0 recover=11 fscans=1 fsegs=1 fkeys=8435 femit=40 ftomb=8395 scans=36 segs=8 keys=8580 emit=60 tomb=8520"
+    },
+    {
+      "node": 3,
+      "line": "2026-10-08T01:10:59.591Z raft-host: gc-pass ms=16 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0"
+    },
+    {
+      "node": 3,
+      "line": "2026-10-08T01:11:04.131Z raft-host: gc-pass ms=525 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0"
+    },
+    {
+      "node": 3,
+      "line": "2026-10-08T01:11:05.180Z raft-host: gc-pass ms=45 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=0 segs=0 keys=0 emit=0 tomb=0"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:00.921Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=193 emit=0 tomb=193"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:01.994Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:03.070Z raft-host: gc-pass ms=70 reap=0 frag=0 spread=0 recover=70 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=174 keys=123 emit=0 tomb=123"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:04.142Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=75 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:05.217Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=126 emit=0 tomb=126"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:06.290Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=123 emit=0 tomb=123"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:07.364Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=108 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:08.439Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:09.513Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:10.586Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:11.659Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=193 emit=0 tomb=193"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:12.731Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:13.803Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:14.876Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:15.950Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:17.024Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=18 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:18.098Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=3 keys=123 emit=0 tomb=123"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:19.171Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:20.245Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=3 keys=196 emit=0 tomb=196"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:21.318Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:22.393Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=87 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:23.466Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=75 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:24.540Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:25.615Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=3 keys=126 emit=0 tomb=126"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:26.689Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=193 emit=0 tomb=193"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:27.764Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=123 emit=0 tomb=123"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:28.837Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:29.912Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:30.985Z raft-host: gc-pass ms=68 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=6 keys=123 emit=0 tomb=123"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:32.059Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=36 keys=266 emit=0 tomb=266"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:33.133Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:08:34.207Z raft-host: gc-pass ms=69 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=120 emit=0 tomb=120"
+    },
+    {
+      "node": 4,
+      "line": "2026-10-08T01:11:04.283Z raft-host: gc-pass ms=1393 reap=1377 frag=12 spread=0 recover=1 fscans=1 fsegs=1 fkeys=41271 femit=40 ftomb=41231 scans=13 segs=1 keys=41487 emit=62 tomb=41425"
+    }
+  ]
+}

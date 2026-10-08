@@ -1,0 +1,26 @@
+{
+  "idle_committed_commands": {},
+  "idle_gc_ack_entries": 0,
+  "idle_new_entries": 0,
+  "live_files": 4096,
+  "elapsed_seconds": 3600.000093562994,
+  "cpu_percent": [
+    0.6788888712447568,
+    1.0955555270823736,
+    1.1008333047229832,
+    0.6816666489503409
+  ],
+  "slow_gc_passes": [],
+  "before_raft": [
+    "node 1 root=1 salt=13520509085972295475 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=2 term=1 commit=16387 applied=16387 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "node 2 root=1 salt=13520509085972295475 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=2 term=1 commit=16387 applied=16387 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=1 commit=2 applied=2 voters=0xe joint=0\n",
+    "node 3 root=1 salt=13520509085972295475 groups=2\n  group 0 hosted=1 role=LEADER leader=2 term=1 commit=16387 applied=16387 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=1 commit=2 applied=2 voters=0xe joint=0\n",
+    "node 4 root=0 salt=13520509085972295475 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=1 commit=2 applied=2 voters=0xe joint=0\n"
+  ],
+  "after_raft": [
+    "node 1 root=1 salt=13520509085972295475 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=2 term=1 commit=16387 applied=16387 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "node 2 root=1 salt=13520509085972295475 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=2 term=1 commit=16387 applied=16387 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=1 commit=2 applied=2 voters=0xe joint=0\n",
+    "node 3 root=1 salt=13520509085972295475 groups=2\n  group 0 hosted=1 role=LEADER leader=2 term=1 commit=16387 applied=16387 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=1 commit=2 applied=2 voters=0xe joint=0\n",
+    "node 4 root=0 salt=13520509085972295475 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=1 commit=2 applied=2 voters=0xe joint=0\n"
+  ]
+}

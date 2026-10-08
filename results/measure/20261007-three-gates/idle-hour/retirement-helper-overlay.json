@@ -1,0 +1,6 @@
+{
+  "commit": "c47c6f63",
+  "sha256": "d43ca044e939b59ba8d0408eac2d79e4375bf2771cfb62cd7d0e88e268a84b88",
+  "updated_utc": "2026-10-08T00:43:54.085346+00:00",
+  "scope": "Python retirement helper; applied during running test before remaining stops. Storage/client C binaries and loaded harness are unchanged."
+}

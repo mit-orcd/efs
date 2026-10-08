@@ -1,0 +1,70 @@
+{
+  "mode": "direct",
+  "roots": [
+    "/data1/efs/gc-direct-fa4aux1l/n1",
+    "/data1/efs/gc-direct-fa4aux1l/n2",
+    "/data2/efs/gc-direct-6x8bffwh/n3",
+    "/data2/efs/gc-direct-6x8bffwh/n4"
+  ],
+  "real_roots": [
+    "/data1/efs/gc-direct-fa4aux1l/n1",
+    "/data1/efs/gc-direct-fa4aux1l/n2",
+    "/home/efs/additional-work-dir/gc-direct-6x8bffwh/n3",
+    "/home/efs/additional-work-dir/gc-direct-6x8bffwh/n4"
+  ],
+  "port": 25990,
+  "gates": {
+    "mode": "direct",
+    "root": [],
+    "posix": false,
+    "integrity": false,
+    "namespace": false,
+    "namespace_boundary": false,
+    "namespace_cycles": false,
+    "mount_label": "default",
+    "workers": false,
+    "pressure": false,
+    "production_budgets": false,
+    "drain_pressure": false,
+    "memory_limit_bytes": null,
+    "publication_pressure": false,
+    "namespace_max": false,
+    "opid": false,
+    "opid_restart": false,
+    "ior_binary": "/data1/efs/gate-tools/bin/ior",
+    "mpi_run": "/data1/efs/gate-tools/bin/mpiexec.hydra",
+    "ior_clients": 9,
+    "ior_ranks": [
+      36
+    ],
+    "ior_segments": 3000,
+    "fold_audit": true,
+    "sequential": false,
+    "memo": false,
+    "rename_cache": false,
+    "mixed_reads": false,
+    "ecrawl_binary": null,
+    "allocation": false,
+    "compactor_pressure": false,
+    "du_audit": false,
+    "lookup_barrier": false,
+    "storage_roots": 1,
+    "put_reply_fault": false,
+    "opid_failover": false,
+    "report_audit": false,
+    "server_binary": null,
+    "client_binary": null,
+    "worker_fault": null,
+    "gc_bulk_gib": null,
+    "idle_seconds": 0,
+    "full_node": false,
+    "port": 25990
+  },
+  "source_tree_sha256": "c06f31c13a8205f74d32233acbcee17e3f8efa294f017c01594115376223b9a8",
+  "test_script_sha256": "17d721bb255ba8b51fdf5c54ca05dac156134059b02e9974c006a1e3f38a7281",
+  "binary_sha256": {
+    "efsd": "22b3980f3a520b1cb13eac1c584f5f9431310141fea06920b19d46c4884d280f",
+    "efs-fuse": "f5d0b7cc0a8950d332973b82b0bca3b1b2867fb12cd825bffb0778b3e8d2b226",
+    "efs-mgmt": "073fa58809e7eac863cced286087024ec88a8804b0243fdf3c42f155996a8b8d"
+  }
+}

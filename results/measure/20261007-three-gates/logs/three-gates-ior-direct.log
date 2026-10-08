@@ -1,0 +1,32 @@
+Evidence directory: /data1/efs/gc-direct-uy9gzgxy
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=13208247674827922580
+client serving PASS
+GC after IOR hard writes PASS
+Unmounting /data1/efs/gc-direct-uy9gzgxy/mnt
+Retiring drained efs-fuse PID 693537 for /data1/efs/gc-direct-uy9gzgxy/mnt
+Unmounted /data1/efs/gc-direct-uy9gzgxy/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-uy9gzgxy/mnt
+Retiring drained efs-fuse PID 694793 for /data1/efs/gc-direct-uy9gzgxy/mnt
+Unmounted /data1/efs/gc-direct-uy9gzgxy/mnt
+client serving PASS
+IOR physical deletion PASS
+actual IOR hard ranks=4 cold verify/hardscan and deletion PASS
+GC after IOR hard writes PASS
+Unmounting /data1/efs/gc-direct-uy9gzgxy/mnt
+Unmounted /data1/efs/gc-direct-uy9gzgxy/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-uy9gzgxy/mnt
+Retiring drained efs-fuse PID 719010 for /data1/efs/gc-direct-uy9gzgxy/mnt
+Unmounted /data1/efs/gc-direct-uy9gzgxy/mnt
+client serving PASS
+Traceback (most recent call last):
+  File "/data1/efs/three-gates-ior-src/tests/live/gc_reclamation.py", line 537, in <module>
+    wait(lambda:not files(ino),'IOR physical deletion',600)
+  File "/data1/efs/three-gates-ior-src/tests/live/gc_reclamation.py", line 155, in wait
+    raise AssertionError(label+' timed out')
+AssertionError: IOR physical deletion timed out

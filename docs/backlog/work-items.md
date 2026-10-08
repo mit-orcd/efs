@@ -1091,7 +1091,9 @@ What to implement:
 
 > **Current status (Oct 2 2026; a document claim — the cited gate directory is the evidence):** steps 1–2 DONE (Sep 29, `present_chunks`/`present_extra`, `ll_setattr` reads `size` from the row). The residual — `st_blocks` is 0 for files this client did not write — is **D17, decided Oct 2** (per-lane present-chunk count in the lane stamp), plan row E.
 >
-> **Remaining action:** implementation landed; the ecrawl false-positive gate remains owed. D17 landed Oct 4 (dev cluster): lane stamps carry a present-chunk count, getattr sums it into the row image, the client takes the max with its local table; `du` on a non-writing client = size/512 (16 unit suites + posix2 two-client PASS; the ecrawl false-positive check is owed to 19810, which is down).
+> **D17 closure (Oct 7):** the actual ecrawl false-positive gate passes on NUC direct and buffered private four-node TCP fixtures: dense files zero false positives, true sparse files two, errors zero. Cold non-writing-client dense, partial-tail, truncated, empty and sparse allocation counts pass. See [the acceptance ledger](../status/allocation-gc-fold-gates-20261007.md). The under-1-ms idle stat performance claim is separate and is not established by these allocation correctness tests.
+>
+> **Historical remaining action (superseded for D17):** implementation landed; the ecrawl false-positive gate remained owed. D17 landed Oct 4 (dev cluster): lane stamps carry a present-chunk count, getattr sums it into the row image, the client takes the max with its local table; `du` on a non-writing client = size/512 (16 unit suites + posix2 two-client PASS; the ecrawl false-positive check is owed to 19810, which is down).
 >
 > **Governing decision:** D17.
 >
@@ -1912,6 +1914,8 @@ project-history.md "START-HERE closed items".**
 
 ## W54 · a fold's GC deletes the live base (queue row 0i)
 
+**Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/allocation-gc-fold-gates-20261007.md).
+
 **Gate follow-up (Oct 7):** NUC direct/buffered authoritative chunk views
 observe eight fold transitions and verify cold bytes after physical GC/restart.
 Historical cold IOR-hard/hardscan and nine-host acceptance remain. See the
@@ -1987,6 +1991,8 @@ performed. Next code item in the agreed sequence is W38.
 
 
 ## W38 · ior-hard fold tombstone without the span's bytes (queue row 0e)
+
+**Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/allocation-gc-fold-gates-20261007.md).
 
 **Oct 5 implementation checkpoint — IN TREE, uncommitted; deterministic
 local regressions pass, historical IOR gate pending.** Two unsafe paths were
@@ -2442,6 +2448,8 @@ Rows P1.1 and P1.2 are DONE (archive index); P1.3 (D29) is an ask — its row te
 Rows P2.1 and P2.4 are DONE (archive index); P2.2 and P2.3 follow as sections below; P2.5 (D30) is an ask — its row text is in [../status/decisions.md](../status/decisions.md).
 
 ## P2.2 · D26 — the GC pass (performance plan row)
+
+**Oct 7 acceptance follow-up:** 10 GiB logical deletion reclaims 245760 fragments / 15 GiB payload to zero physical usage. The retained-table probe after a 180-second startup wait still has a transient 1393-ms active pass (1377 ms reap; 41271 fragment keys, 41231 tombstones), and create/append medians 44.342/60.650 ms before returning near baseline. D26/W44 remain open for retained-table latency; do not equate drained namespace or queues with this gate. [Ledger](../status/allocation-gc-fold-gates-20261007.md).
 
 **Item.** **D26** GC pass
 

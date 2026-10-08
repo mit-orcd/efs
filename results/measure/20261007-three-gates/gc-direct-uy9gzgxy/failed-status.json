@@ -1,0 +1,266 @@
+[
+  [
+    {
+      "node": 1,
+      "stage": 0,
+      "group": 0,
+      "exports": 1,
+      "passes": 1032,
+      "elapsed_ms": 0,
+      "last_pass_age_ms": 223,
+      "last_delete_age_ms": 8
+    },
+    {
+      "data_usage_bytes": 2408579072,
+      "removed_fragments": 51517,
+      "unlinked_file_bytes": 3587231744,
+      "reclaimed_payload_bytes": 3376218112,
+      "delete_errors": 0,
+      "mismatches": 0,
+      "sweep_errors": 0,
+      "reap_errors": 0,
+      "ack_errors": 0,
+      "scan_errors": 0,
+      "missing_exports": 0
+    },
+    {
+      "group": 0,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "group": 2,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "ops": 39620,
+      "bytes": 1267840,
+      "errors": 0,
+      "us_sum": 13735846,
+      "avg_us": 346
+    },
+    {
+      "ops": 51517,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 1588917,
+      "avg_us": 30
+    },
+    {
+      "ops": 48585,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 18636475,
+      "avg_us": 383
+    }
+  ],
+  [
+    {
+      "node": 2,
+      "stage": 4,
+      "group": 2,
+      "exports": 1,
+      "passes": 359,
+      "elapsed_ms": 3154,
+      "last_pass_age_ms": 4158,
+      "last_delete_age_ms": 5
+    },
+    {
+      "data_usage_bytes": 2296053760,
+      "removed_fragments": 53262,
+      "unlinked_file_bytes": 3708739584,
+      "reclaimed_payload_bytes": 3490578432,
+      "delete_errors": 0,
+      "mismatches": 0,
+      "sweep_errors": 0,
+      "reap_errors": 0,
+      "ack_errors": 0,
+      "scan_errors": 0,
+      "missing_exports": 0
+    },
+    {
+      "group": 0,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "group": 2,
+      "sampled": 1,
+      "pending_estimate": 28539,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "ops": 41367,
+      "bytes": 1323744,
+      "errors": 0,
+      "us_sum": 14941448,
+      "avg_us": 361
+    },
+    {
+      "ops": 53262,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 1544410,
+      "avg_us": 28
+    },
+    {
+      "ops": 50747,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 14851325,
+      "avg_us": 292
+    }
+  ],
+  [
+    {
+      "node": 3,
+      "stage": 4,
+      "group": 0,
+      "exports": 1,
+      "passes": 506,
+      "elapsed_ms": 4165,
+      "last_pass_age_ms": 5168,
+      "last_delete_age_ms": 2
+    },
+    {
+      "data_usage_bytes": 2407333888,
+      "removed_fragments": 51542,
+      "unlinked_file_bytes": 3588972544,
+      "reclaimed_payload_bytes": 3377856512,
+      "delete_errors": 0,
+      "mismatches": 0,
+      "sweep_errors": 0,
+      "reap_errors": 0,
+      "ack_errors": 0,
+      "scan_errors": 0,
+      "missing_exports": 0
+    },
+    {
+      "group": 0,
+      "sampled": 1,
+      "pending_estimate": 96336,
+      "reap_seen": 1,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 8193,
+      "observed_age_ms": 600796
+    },
+    {
+      "group": 2,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "ops": 39646,
+      "bytes": 1268672,
+      "errors": 0,
+      "us_sum": 49092872,
+      "avg_us": 1238
+    },
+    {
+      "ops": 51542,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 1760325,
+      "avg_us": 34
+    },
+    {
+      "ops": 48622,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 416825596,
+      "avg_us": 8572
+    }
+  ],
+  [
+    {
+      "node": 4,
+      "stage": 0,
+      "group": 0,
+      "exports": 1,
+      "passes": 1031,
+      "elapsed_ms": 0,
+      "last_pass_age_ms": 218,
+      "last_delete_age_ms": 20
+    },
+    {
+      "data_usage_bytes": 2286485504,
+      "removed_fragments": 53409,
+      "unlinked_file_bytes": 3718975488,
+      "reclaimed_payload_bytes": 3500212224,
+      "delete_errors": 0,
+      "mismatches": 0,
+      "sweep_errors": 0,
+      "reap_errors": 0,
+      "ack_errors": 0,
+      "scan_errors": 0,
+      "missing_exports": 0
+    },
+    {
+      "group": 0,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "group": 2,
+      "sampled": 0,
+      "pending_estimate": 0,
+      "reap_seen": 0,
+      "orphan_seen": 0,
+      "capped": 0,
+      "first_reap_ino": 0,
+      "observed_age_ms": 18446744073709551615
+    },
+    {
+      "ops": 41496,
+      "bytes": 1327872,
+      "errors": 0,
+      "us_sum": 47562483,
+      "avg_us": 1146
+    },
+    {
+      "ops": 53409,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 1916099,
+      "avg_us": 35
+    },
+    {
+      "ops": 50869,
+      "bytes": 0,
+      "errors": 0,
+      "us_sum": 460332183,
+      "avg_us": 9049
+    }
+  ]
+]

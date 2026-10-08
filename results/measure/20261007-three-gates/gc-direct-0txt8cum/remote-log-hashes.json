@@ -1,0 +1,42 @@
+[
+  {
+    "name": "n1.log",
+    "bytes": 24952,
+    "sha256": "e4c8bda85d8bc94dad053bce1bd377d4e4371e5d9ab9959487de2b22e56bdd51"
+  },
+  {
+    "name": "n2.log",
+    "bytes": 27294,
+    "sha256": "01e6c7f76ee899628c6710284e2a3c7b9780c5f67459d183db40856ed7c9c52c"
+  },
+  {
+    "name": "n3.log",
+    "bytes": 19138,
+    "sha256": "b37da6ba66db1495b921510dc1bae2f9fdbb02795bfc7eef0eb4ca2432fd85df"
+  },
+  {
+    "name": "n4.log",
+    "bytes": 9194,
+    "sha256": "e6779c911167bfaf7621b03eab2cc5e5559e918a798cb8ff11ea05fab56a27f9"
+  },
+  {
+    "name": "fuse.log",
+    "bytes": 6194,
+    "sha256": "14bb632d7c4d0c76a8d410e001ac2977eb6a91e70568c7ad0a222da0b247bfc6"
+  },
+  {
+    "name": "ecrawl-allocation-dense.log",
+    "bytes": 786,
+    "sha256": "5ddf7cda99ae61bf5e96a63c08f1a1781487081e3d07ba5b91c463486b409fc2"
+  },
+  {
+    "name": "ecrawl-allocation-sparse.log",
+    "bytes": 795,
+    "sha256": "1e7b683cc7ca8746b65bab6aaf97d033710ef55bf4a89f89a729f713ee659e2f"
+  },
+  {
+    "name": "peer-fuse.log",
+    "bytes": 863,
+    "sha256": "030d4cef6be77f1bf31237e50decd67be43f80e45a0c9cfc1277880f4780f3ce"
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "ecrawl_direct": 0,
+  "ecrawl_buffered": 0,
+  "ior_nine_clients": 0,
+  "ior_buffered_repeat": 0,
+  "ior_direct_original": 1,
+  "ior_direct_correct_build_drain": 0,
+  "bulk_10GiB_original": 1,
+  "bulk_1GiB_correct_build_repeat": 0,
+  "clean_linux_make_test": 0,
+  "idle_hour": 0,
+  "retained_settled": 0
+}

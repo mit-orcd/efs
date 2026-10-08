@@ -1,0 +1,17 @@
+{
+  "ior_binary": "/data1/efs/gate-tools/bin/ior",
+  "ior_sha256": "446a12f1013d9654689123c291bc5b309acf7db29c58afa80d3491683724accd",
+  "mpi_run_sha256": "bd2b7442aa408d9ba70010d554c900f84aa4ea5869ffdb84eddf5ad5d0805806",
+  "cases": [
+    {
+      "ranks": 4,
+      "segments": 3000,
+      "records": 12000,
+      "bytes": 564096000,
+      "write_seconds": 6.908488376997411,
+      "verify_seconds": 6.088610973994946,
+      "cold_hardscan_bad": 0,
+      "cold_hardscan_short": 0
+    }
+  ]
+}

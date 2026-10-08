@@ -1,0 +1,44 @@
+[
+  {
+    "name": "dense",
+    "size": 1048576,
+    "blocks": 2048,
+    "cold_stat_ms": 0.66276
+  },
+  {
+    "name": "dense-tail",
+    "size": 131073,
+    "blocks": 257,
+    "cold_stat_ms": 1.116749
+  },
+  {
+    "name": "dense-small",
+    "size": 4096,
+    "blocks": 8,
+    "cold_stat_ms": 0.677488
+  },
+  {
+    "name": "sparse",
+    "size": 1073745920,
+    "blocks": 256,
+    "cold_stat_ms": 0.662064
+  },
+  {
+    "name": "sparse-16g",
+    "size": 17179873280,
+    "blocks": 256,
+    "cold_stat_ms": 16.580849
+  },
+  {
+    "name": "empty",
+    "size": 0,
+    "blocks": 0,
+    "cold_stat_ms": 0.363931
+  },
+  {
+    "name": "dense-shrunk",
+    "size": 1000,
+    "blocks": 2,
+    "cold_stat_ms": 0.27084
+  }
+]

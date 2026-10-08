@@ -1,0 +1,47 @@
+[
+  {
+    "name": "n1.log",
+    "bytes": 37094,
+    "sha256": "54ac55ac08fe522ae6e6d541e1348c37c668efb38a130e4607eb4359ca8c05fd"
+  },
+  {
+    "name": "n2.log",
+    "bytes": 112728,
+    "sha256": "e13f60aaca1901b03ed29b3d8afeef99597977a06a0f2958e961e53303cd196c"
+  },
+  {
+    "name": "n3.log",
+    "bytes": 35576,
+    "sha256": "ef7286d62c83bfece8cfd280e4c8cba8fc647e298b06ad8ef84e35dfe23abb16"
+  },
+  {
+    "name": "n4.log",
+    "bytes": 22831,
+    "sha256": "897adb75dcaec68ccc0a70bfa4bd0277ac4e692648629e37c67245f01912b381"
+  },
+  {
+    "name": "fuse.log",
+    "bytes": 6931285,
+    "sha256": "6a5f5317f3335951635afc100ce43fe7f10a0cab1b89160325ddd6b412960507"
+  },
+  {
+    "name": "ior-4-write.log",
+    "bytes": 1984,
+    "sha256": "3393dc557b263450460c5b0d81e667f1e240fa5d39c35e6bdd20d686b250870c"
+  },
+  {
+    "name": "ior-4-cold-verify.log",
+    "bytes": 1987,
+    "sha256": "c3bc5ad381182f09b6bcc047c2537c26f3b1c4ffac039b213127085d03a84d01"
+  },
+  {
+    "name": "ior-4-hardscan.log",
+    "bytes": 142,
+    "sha256": "89524eb9d7619b5d068bd6e9b0859b7cd96c1b8e7933da19f563a6ed1e921599"
+  },
+  {
+    "name": "peer-fuse.log",
+    "bytes": 7190,
+    "sha256": "7a818c3fdac9439e6ac93bc56c8e2b257e1e4db1e6f55902973502263e981cac"
+  }
+]

@@ -1,0 +1,153 @@
+{
+  "ino": 8193,
+  "states": [
+    {
+      "base_gen": 13020330934952382306,
+      "spans": 0,
+      "seq": 0,
+      "live_spans": 0,
+      "tombstones": 0
+    },
+    {
+      "base_gen": 14355620611663903146,
+      "spans": 0,
+      "seq": 0,
+      "live_spans": 0,
+      "tombstones": 0
+    },
+    {
+      "base_gen": 14355620611663903146,
+      "spans": 1,
+      "seq": 3,
+      "live_spans": 1,
+      "tombstones": 0
+    },
+    {
+      "base_gen": 2317108919069808917,
+      "spans": 1,
+      "seq": 3,
+      "live_spans": 0,
+      "tombstones": 1
+    },
+    {
+      "base_gen": 2317108919069808917,
+      "spans": 2,
+      "seq": 5,
+      "live_spans": 1,
+      "tombstones": 1
+    },
+    {
+      "base_gen": 2384929955481450056,
+      "spans": 2,
+      "seq": 5,
+      "live_spans": 0,
+      "tombstones": 2
+    },
+    {
+      "base_gen": 2384929955481450056,
+      "spans": 3,
+      "seq": 7,
+      "live_spans": 1,
+      "tombstones": 2
+    },
+    {
+      "base_gen": 3515981743280287233,
+      "spans": 3,
+      "seq": 7,
+      "live_spans": 0,
+      "tombstones": 3
+    },
+    {
+      "base_gen": 3515981743280287233,
+      "spans": 4,
+      "seq": 9,
+      "live_spans": 1,
+      "tombstones": 3
+    },
+    {
+      "base_gen": 9447943283898868333,
+      "spans": 4,
+      "seq": 9,
+      "live_spans": 0,
+      "tombstones": 4
+    },
+    {
+      "base_gen": 9447943283898868333,
+      "spans": 5,
+      "seq": 11,
+      "live_spans": 1,
+      "tombstones": 4
+    },
+    {
+      "base_gen": 6988392741612737508,
+      "spans": 5,
+      "seq": 11,
+      "live_spans": 0,
+      "tombstones": 5
+    },
+    {
+      "base_gen": 6988392741612737508,
+      "spans": 6,
+      "seq": 13,
+      "live_spans": 1,
+      "tombstones": 5
+    },
+    {
+      "base_gen": 9608905324380642124,
+      "spans": 6,
+      "seq": 13,
+      "live_spans": 0,
+      "tombstones": 6
+    },
+    {
+      "base_gen": 9608905324380642124,
+      "spans": 7,
+      "seq": 15,
+      "live_spans": 1,
+      "tombstones": 6
+    },
+    {
+      "base_gen": 13744337410836557118,
+      "spans": 7,
+      "seq": 15,
+      "live_spans": 0,
+      "tombstones": 7
+    },
+    {
+      "base_gen": 13744337410836557118,
+      "spans": 8,
+      "seq": 17,
+      "live_spans": 1,
+      "tombstones": 7
+    },
+    {
+      "base_gen": 7227877189194647758,
+      "spans": 8,
+      "seq": 17,
+      "live_spans": 0,
+      "tombstones": 8
+    },
+    {
+      "base_gen": 14683784422082352269,
+      "spans": 8,
+      "seq": 17,
+      "live_spans": 0,
+      "tombstones": 8
+    },
+    {
+      "base_gen": 7861564330528318804,
+      "spans": 8,
+      "seq": 17,
+      "live_spans": 0,
+      "tombstones": 8
+    },
+    {
+      "base_gen": 8493177587164308023,
+      "spans": 8,
+      "seq": 17,
+      "live_spans": 0,
+      "tombstones": 8
+    }
+  ],
+  "folds": 8
+}
