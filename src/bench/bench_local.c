@@ -214,6 +214,14 @@ static void stop_perf_recorder(void)
     }
 }
 
+/* These optional probes must not silently discard a shell failure. */
+static void bench_shell_command(const char *command)
+{
+    int status = system(command);
+    if (status != 0)
+        fprintf(stderr, "bench command failed: status=%d command=%s\n", status, command);
+}
+
 static void perf_print_top(const char *perf_path)
 {
     char cmd[EFS_MAX_PATH + 160];
@@ -221,7 +229,7 @@ static void perf_print_top(const char *perf_path)
              "perf report --stdio --no-children --percent-limit=2 -i '%s' "
              "2>/dev/null | grep -E '^\\s+[0-9]+\\.[0-9]+%%' | head -8 | "
              "sed 's/^/PERF_TOP/'", perf_path);
-    (void)system(cmd);
+    bench_shell_command(cmd);
 }
 
 /* ---- ceiling probe: fio when present, else the same shapes in-process ---- */
@@ -243,21 +251,21 @@ static void ceil_fio(const char *root)
              "--ioengine=psync --size=1G --end_fsync=1 --directory='%s' "
              "--filename=ceilfile --minimal 2>/dev/null | "
              "sed 's/^/FIO_CEIL wseq64k /'", root);
-    (void)system(cmd);
+    bench_shell_command(cmd);
     /* Sequential 64 KiB O_DIRECT read of the same file. */
     snprintf(cmd, sizeof(cmd),
              "fio --name=ceil_rseq --rw=read --bs=64k --direct=1 "
              "--ioengine=psync --size=1G --directory='%s' "
              "--filename=ceilfile --minimal 2>/dev/null | "
              "sed 's/^/FIO_CEIL rseq64k /'", root);
-    (void)system(cmd);
+    bench_shell_command(cmd);
     /* Preallocate the metadata file without per-op fsync (a 64 MiB
      * fsync-per-write fill would take minutes on a slow disk). */
     snprintf(cmd, sizeof(cmd),
              "fio --name=ceil_pre --rw=write --bs=1m --direct=1 "
              "--ioengine=psync --size=64m --directory='%s' "
              "--filename=ceilmeta >/dev/null 2>&1", root);
-    (void)system(cmd);
+    bench_shell_command(cmd);
     /* Metadata shape: small synchronous writes (WAL/log append shape),
      * bounded by runtime so a slow disk cannot stretch the bench. */
     snprintf(cmd, sizeof(cmd),
@@ -265,16 +273,16 @@ static void ceil_fio(const char *root)
              "--ioengine=psync --size=64m --runtime=20 --time_based "
              "--directory='%s' --filename=ceilmeta --minimal 2>/dev/null | "
              "sed 's/^/FIO_CEIL wsync4k /'", root);
-    (void)system(cmd);
+    bench_shell_command(cmd);
     /* Metadata shape: random 4 KiB reads of a segment block. */
     snprintf(cmd, sizeof(cmd),
              "fio --name=ceil_rrand --rw=randread --bs=4k --direct=1 "
              "--ioengine=psync --size=64m --directory='%s' "
              "--filename=ceilmeta --minimal 2>/dev/null | "
              "sed 's/^/FIO_CEIL rrand4k /'", root);
-    (void)system(cmd);
+    bench_shell_command(cmd);
     snprintf(cmd, sizeof(cmd), "rm -f '%s'/ceilfile '%s'/ceilmeta*", root, root);
-    (void)system(cmd);
+    bench_shell_command(cmd);
     printf("FIO_CEIL end\n");
     fflush(stdout);
 }

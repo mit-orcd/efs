@@ -42,6 +42,17 @@
  * stack-overflow SIGSEGV can still report instead of dying silently. */
 static char g_efs_fuse_altstack[256 * 1024];
 
+/* Crash diagnostics are best effort: retry interruption, but a short/error
+ * stderr write cannot be recovered here. Preserve the interrupted errno. */
+static void efs_fuse_diagnostic_write(const void *data, size_t len)
+{
+    int saved_errno = errno;
+    ssize_t written;
+    do { written = write(STDERR_FILENO, data, len); }
+    while (written < 0 && errno == EINTR);
+    errno = saved_errno;
+}
+
 static void efs_fuse_fatal_signal(int sig)
 {
     const char *name = "signal";
@@ -60,7 +71,7 @@ static void efs_fuse_fatal_signal(int sig)
                      "efs-fuse: fatal %s (%d) — mount will go ENOTCONN\n", name,
                      sig);
     if (n > 0)
-        (void)write(STDERR_FILENO, buf, (size_t)n);
+        efs_fuse_diagnostic_write(buf, (size_t)n);
     /* Best-effort stack for kill/fault debugging (may allocate; last resort). */
     {
         void *frames[48];
@@ -92,7 +103,7 @@ static void efs_fuse_stack_signal(int sig)
     while (__atomic_test_and_set(&g_efs_fuse_dump_lock, __ATOMIC_ACQUIRE))
         sched_yield();
     if (n > 0)
-        (void)write(STDERR_FILENO, hdr, (size_t)n);
+        efs_fuse_diagnostic_write(hdr, (size_t)n);
     backtrace_symbols_fd(frames, nf, STDERR_FILENO);
     __atomic_clear(&g_efs_fuse_dump_lock, __ATOMIC_RELEASE);
 }
@@ -108,7 +119,7 @@ static void efs_fuse_stack_broadcast(int sig)
                      g_client.idx_mu.__data.__lock,
                      g_client.idx_mu.__data.__nusers);
     if (n > 0)
-        (void)write(STDERR_FILENO, hdr, (size_t)n);
+        efs_fuse_diagnostic_write(hdr, (size_t)n);
     for (int i = 0; i < EFS_DIR_LOCKS; i++) {
         if (!g_client.dir_lock[i].__data.__lock &&
             !g_client.dir_lock[i].__data.__owner)
@@ -118,7 +129,7 @@ static void efs_fuse_stack_broadcast(int sig)
                      g_client.dir_lock[i].__data.__owner,
                      g_client.dir_lock[i].__data.__lock);
         if (n > 0)
-            (void)write(STDERR_FILENO, hdr, (size_t)n);
+            efs_fuse_diagnostic_write(hdr, (size_t)n);
     }
     DIR *d = opendir("/proc/self/task");
     if (d) {
@@ -133,7 +144,7 @@ static void efs_fuse_stack_broadcast(int sig)
         closedir(d);
     }
     efs_fuse_stack_signal(SIGUSR2);
-    (void)write(STDERR_FILENO, "STACKDUMP end\n", 14);
+    efs_fuse_diagnostic_write("STACKDUMP end\n", 14);
 }
 
 static void efs_fuse_install_crash_handlers(void)
@@ -4554,7 +4565,12 @@ static void efs_fuse_note_serving(void)
     if (fd >= 0) {
         g_fuse_ready_wr = -1;
         char c = 'R';
-        (void)write(fd, &c, 1);
+        ssize_t written;
+        do { written = write(fd, &c, 1); }
+        while (written < 0 && errno == EINTR);
+        if (written != 1)
+            fprintf(stderr, "fuse readiness notification failed: %s\n",
+                    written < 0 ? strerror(errno) : "short write");
         close(fd);
     }
     fprintf(stderr, "fuse serving\n");
@@ -6724,7 +6740,9 @@ static int efs_fuse_bench_run(const char *kind, double time_sec)
                  "2>/dev/null | grep -E '^\\s+[0-9]+\\.[0-9]+%%' | head -8 | "
                  "sed 's/^/PERF_TOP/'",
                  g_perf_path);
-        (void)system(cmd);
+        int report_status = system(cmd);
+        if (report_status != 0)
+            fprintf(stderr, "perf report command failed: status=%d\n", report_status);
         printf("perf report: %s\n", g_perf_path);
     }
     return rc;

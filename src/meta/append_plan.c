@@ -37,8 +37,9 @@ static int finish_record(struct finish_capture *c,const uint8_t *key,uint32_t n,
     }
     if(c->count==c->capacity) {
         uint32_t cap=c->capacity?c->capacity*2:16;
-        if(cap<c->capacity || (size_t)cap>SIZE_MAX/sizeof(*c->images))return EFS_ERR_NOMEM;
-        struct finish_image *images=realloc(c->images,(size_t)cap*sizeof(*images));
+        size_t bytes=(size_t)cap*sizeof(*c->images);
+        if(cap<c->capacity || bytes/sizeof(*c->images)!=cap)return EFS_ERR_NOMEM;
+        struct finish_image *images=realloc(c->images,bytes);
         if(!images)return EFS_ERR_NOMEM;
         c->images=images;c->capacity=cap;
     }

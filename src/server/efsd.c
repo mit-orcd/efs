@@ -25,6 +25,17 @@ struct efsd_server *g_server = NULL;
 /* Alternate stack so SIGSEGV from stack overflow can still report. */
 static char g_efsd_altstack[256 * 1024];
 
+/* Crash diagnostics are best effort: retry interruption, but a short/error
+ * stderr write cannot be recovered here. Preserve the interrupted errno. */
+static void efsd_diagnostic_write(const void *data, size_t len)
+{
+    int saved_errno = errno;
+    ssize_t written;
+    do { written = write(STDERR_FILENO, data, len); }
+    while (written < 0 && errno == EINTR);
+    errno = saved_errno;
+}
+
 static void efsd_fatal_signal(int sig)
 {
     const char *name = "signal";
@@ -41,7 +52,7 @@ static void efsd_fatal_signal(int sig)
     char buf[160];
     int n = snprintf(buf, sizeof(buf), "efsd: fatal %s (%d)\n", name, sig);
     if (n > 0)
-        (void)write(STDERR_FILENO, buf, (size_t)n);
+        efsd_diagnostic_write(buf, (size_t)n);
     {
         void *frames[64];
         int nf = backtrace(frames, 64);

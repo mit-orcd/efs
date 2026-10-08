@@ -1102,9 +1102,11 @@ static int run_meta_bench(const char *seed, const char *export_name,
         snprintf(hot, sizeof(hot), "%s.hotpath.txt", perf_path);
         snprintf(cmd, sizeof(cmd),
                  "perf report --stdio --no-children --percent-limit 0.4 -i '%s' "
-                 "> '%s' 2>/dev/null || true",
+                 "> '%s' 2>/dev/null",
                  perf_path, report);
-        (void)system(cmd);
+        int report_status = system(cmd);
+        if (report_status != 0)
+            fprintf(stderr, "perf report command failed: status=%d\n", report_status);
         FILE *in = fopen(report, "r");
         FILE *out = fopen(hot, "w");
         if (out) {
@@ -1504,9 +1506,11 @@ int main(int argc, char **argv)
         snprintf(hot, sizeof(hot), "%s.hotpath.txt", perf_path);
         snprintf(cmd, sizeof(cmd),
                  "perf report --stdio --no-children --percent-limit 0.4 -i '%s' "
-                 "> '%s' 2>/dev/null || true",
+                 "> '%s' 2>/dev/null",
                  perf_path, report);
-        (void)system(cmd);
+        int report_status = system(cmd);
+        if (report_status != 0)
+            fprintf(stderr, "perf report command failed: status=%d\n", report_status);
         FILE *in = fopen(report, "r");
         FILE *out = fopen(hot, "w");
         if (out) {

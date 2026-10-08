@@ -5045,8 +5045,12 @@ static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
 static void host_pump_kick(struct efs_raft_host *h)
 {
     uint64_t one = 1;
-    if (h->pump_efd >= 0)
-        (void)write(h->pump_efd, &one, sizeof(one)); /* EAGAIN: already lit */
+    if (h->pump_efd >= 0) {
+        ssize_t written;
+        do { written = write(h->pump_efd, &one, sizeof(one)); }
+        while (written < 0 && errno == EINTR);
+        /* EAGAIN is already lit; otherwise the bounded timer still wakes us. */
+    }
 }
 
 /* EFS_RAFT_OBS: log every term/role change (election churn has no other
@@ -5352,8 +5356,12 @@ static void *host_pump(void *arg)
         memset(&pfd, 0, sizeof(pfd));
         pfd.fd = h->pump_efd;
         pfd.events = POLLIN;
-        if (poll(&pfd, 1, HOST_TICK_US / 1000) > 0 && (pfd.revents & POLLIN))
-            (void)read(h->pump_efd, &sink, sizeof(sink));
+        if (poll(&pfd, 1, HOST_TICK_US / 1000) > 0 && (pfd.revents & POLLIN)) {
+            ssize_t drained;
+            do { drained = read(h->pump_efd, &sink, sizeof(sink)); }
+            while (drained < 0 && errno == EINTR);
+            /* A raced/nonblocking empty read needs no work before the tick. */
+        }
     }
     /* Final index, unthrottled, so a clean stop restarts without replay. */
     {
