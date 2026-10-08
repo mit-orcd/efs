@@ -416,3 +416,22 @@ normal and ASan/UBSan gates. The full regression suite is repeated after adding
 these gates. W95 still selects no production layout; that migration remains P4.1.
 Current implementation/testing uses AMD as requested. The earlier NUC comparison
 is historical evidence and does not change the current test target.
+
+
+W94 transaction ownership follow-up: a staged exact-value session-row intent
+keeps local fencing/establishment behind prepared transaction resolution. The
+same atomic RESOLVE batch can publish the pending lease and release its guard;
+IO failure preserves both. COMMIT/ABORT, stale retries and eight process-exit
+phases pass. A blocked FENCE_LOC now returns BUSY through the real apply-result
+ring without blocking later RESOLVE. The AMD wire gate confirms BUSY, resolution
+and successful retry. Production session admission/draining, all pending-CREATE
+namespace paths and bounded client adoption remain required before activation.
+[Protocol and limits](w94-transaction-owner-20261008.md).
+
+The transaction-owner repeat `gc-direct-4w2ud3yu` passed the complete AMD
+direct-I/O/TCP live gate and restored installed four-daemon/two-mount service.
+POSIX/peer, guarded ownership, atomic CREATE, append/sync/replay, dirty stop,
+physical GC/quota and two-crash WAL recovery all pass. Focused session
+ASan/UBSan and the full Linux test target pass. The sanitizer repeat corrected
+an erroneous test-fixture destructor; no production leak was implicated.
+[Retained evidence](../../results/measure/20261008-w93-w96-review/w94-transaction-owner/live.log).

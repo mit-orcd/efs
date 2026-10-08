@@ -1895,6 +1895,10 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                 rc,(unsigned long long)index,(unsigned long long)ino);
         return rc;
     }
+    /* A blocked local fence is not a completed revocation barrier. Preserve
+     * its business verdict in the apply ring so the coordinator cannot ACK it. */
+    if (cmd[1] == EFS_MD_SESS_FENCE_LOC)
+        return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
         rc == EFS_ERR_STALE)
         rc = EFS_OK;
@@ -2237,6 +2241,11 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP)
               ? EFS_OK
               : rc;
+    /* FENCE_LOC BUSY must let a later RESOLVE drain the owner intent. It is
+     * a rejected command, not a retryable storage failure at this log index. */
+    if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
+        cmd[1] == EFS_MD_SESS_FENCE_LOC && rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
+        ret = EFS_OK;
     /* Storage failure must retry this entry on every replica, rather than
      * advance a follower past cleanup it did not durably perform. */
     if ((cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||

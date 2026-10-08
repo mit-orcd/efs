@@ -4,6 +4,7 @@
 #include "efs/meta_apply.h"
 #include "efs/opid.h"
 #include "efs/checksum.h"
+#include "efs/txn.h"
 #include <string.h>
 #include <sys/stat.h>
 
@@ -131,6 +132,11 @@ static int store_local(struct efs_kv *kv, uint32_t shard, const uint8_t *uuid,
     rc = efs_kv_key_sess_local(shard, uuid, key, &klen);
     if (rc != EFS_OK)
         return rc;
+    /* A prepared owner may still publish its pending lease. Do not advance
+     * the rejection floor/established epoch past it and later let RESOLVE
+     * overwrite the fence with its older snapshot. The host must drain it. */
+    rc = efs_txn_key_exclusive(kv, key, klen);
+    if (rc != EFS_OK) return rc;
     be32(val, loc->established);
     be32(val + 4, loc->reject_below);
     return efs_kv_put(kv, key, klen, val, EFS_SESS_LOCAL_VAL);
@@ -387,6 +393,37 @@ int efs_session_accept(struct efs_kv *kv, uint32_t shard,
     if (loc.established != epoch)
         return EFS_ERR_BUSY;
     return EFS_OK;
+}
+
+int efs_session_prepare_owner(struct efs_kv *kv, uint32_t shard,
+                              const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+                              const struct efs_txid *txid, const struct efs_txn_parts *parts)
+{
+    if (!kv || !uuid || !epoch || !txid || !parts || !parts->n || parts->n > EFS_TXN_MAX_PART ||
+        shard >= EFS_SESSION_BITS)
+        return EFS_ERR_INVAL;
+    unsigned found = 0;
+    for (unsigned i = 0; i < parts->n; i++)
+        if (parts->shard[i] == shard)
+            found++;
+    if (found != 1)
+        return EFS_ERR_INVAL;
+    int rc = efs_session_accept(kv, shard, uuid, epoch);
+    if (rc != EFS_OK)
+        return rc;
+    struct efs_sess_local local;
+    rc = load_local(kv, shard, uuid, &local);
+    if (rc != EFS_OK)
+        return rc;
+    uint8_t key[EFS_KV_KEY_MAX], value[EFS_SESS_LOCAL_VAL];
+    uint32_t len = 0;
+    rc = efs_kv_key_sess_local(shard, uuid, key, &len);
+    if (rc != EFS_OK)
+        return rc;
+    be32(value, local.established);
+    be32(value + 4, local.reject_below);
+    return efs_txn_prepare_excl_value(kv, txid, parts, key, len, value, sizeof(value), EFS_TXN_PUT,
+                                      value, sizeof(value));
 }
 
 /* Version 2: normal-open bit + pending-CREATE bit + exact token. There are

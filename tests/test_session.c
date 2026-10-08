@@ -1,5 +1,6 @@
 /* Isolated session + open-lease SM. No sockets, no Raft. */
 #include "efs/session.h"
+#include "efs/txn.h"
 #include "efs/meta_apply.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -608,8 +609,180 @@ static void test_pending_adoption_permutations(void)
     CHECK(tested==120,"all five pending/adoption edge permutations covered");
 }
 
+static void test_prepared_owner_fence(void)
+{
+    for (unsigned commit = 0; commit < 2; commit++) {
+        struct efs_kv *kv = efs_kv_mem_create();
+        CHECK(kv != NULL, "owner fence kv");
+        if (!kv)
+            continue;
+        uint8_t uuid[EFS_OPID_UUID_LEN];
+        uuid_of(uuid, 201 + commit);
+        struct efs_txid tx = {{0}}, other = {{0}};
+        tx.bytes[15] = 1;
+        other.bytes[15] = 2;
+        struct efs_txn_parts parts = {.n = 1, .shard = {7}};
+        CHECK(efs_session_create(kv, uuid, 1) == EFS_OK, "owner global session");
+        CHECK(efs_session_register(kv, uuid, 1, 7) == EFS_OK, "owner register");
+        CHECK(efs_session_establish(kv, 7, uuid, 1) == EFS_OK, "owner establish");
+        CHECK(efs_session_prepare_owner(kv, 8, uuid, 1, &tx, &parts) == EFS_ERR_INVAL,
+              "owner must be participant");
+        CHECK(efs_session_prepare_owner(kv, 7, uuid, 1, &tx, &parts) == EFS_OK,
+              "prepare owner guard");
+        CHECK(efs_session_prepare_owner(kv, 7, uuid, 1, &tx, &parts) == EFS_OK,
+              "owner retry idempotent");
+        CHECK(efs_session_prepare_owner(kv, 7, uuid, 1, &other, &parts) == EFS_ERR_BUSY,
+              "concurrent owner no wait");
+        uint8_t lease_key[EFS_KV_KEY_MAX], pending[EFS_LEASE_PENDING_VALUE_LEN];
+        uint32_t lease_len = 0;
+        CHECK(efs_kv_key_lease(7, 7, 1, uuid, 1, lease_key, &lease_len) == EFS_OK,
+              "prepared lease key");
+        CHECK(efs_lease_pending_value(1, pending) == EFS_OK, "prepared pending value");
+        CHECK(efs_txn_prepare_excl_value(kv, &tx, &parts, lease_key, lease_len, NULL,
+                                         EFS_TXN_ABSENT, EFS_TXN_PUT, pending,
+                                         sizeof(pending)) == EFS_OK,
+              "lease and owner same transaction");
+        CHECK(efs_lease_any(kv, 7, 1) == 0, "prepared lease not materialized before commit");
+        CHECK(efs_session_begin_fence(kv, uuid) == EFS_OK, "begin owner fence");
+        CHECK(efs_session_fence_local(kv, 7, uuid, 2) == EFS_ERR_BUSY,
+              "prepared owner blocks fence ACK");
+        CHECK(efs_session_establish(kv, 7, uuid, 2) == EFS_ERR_BUSY,
+              "new establish cannot overwrite prepared guard");
+        CHECK(efs_session_reclaimable(kv, 7, uuid, 1) == EFS_ERR_BUSY,
+              "cannot retire unresolved owner");
+        const struct efs_kv_ops *saved_ops = kv->ops;
+        struct efs_kv_ops fault_ops = *saved_ops;
+        guarded_batch_original = fault_ops.batch;
+        fault_ops.batch = guarded_batch_fault;
+        kv->ops = &fault_ops;
+        guarded_batch_fail = 1;
+        CHECK(efs_txn_resolve(kv, &tx, 7, commit ? EFS_TXN_COMMIT : EFS_TXN_ABORT) == EFS_ERR_IO,
+              "failed resolve keeps owner and effect atomic");
+        guarded_batch_fail = 0;
+        kv->ops = saved_ops;
+        CHECK(efs_session_fence_local(kv, 7, uuid, 2) == EFS_ERR_BUSY,
+              "failed resolve cannot release guard early");
+        CHECK(efs_lease_any(kv, 7, 1) == 0, "failed resolve publishes no pending lease");
+        CHECK(efs_txn_resolve(kv, &tx, 7, commit ? EFS_TXN_COMMIT : EFS_TXN_ABORT) == EFS_OK,
+              "drain prepared owner");
+        CHECK(efs_lease_any(kv, 7, 1) == (int)commit, "resolved owner and lease agree");
+        CHECK(efs_session_fence_local(kv, 7, uuid, 2) == EFS_OK,
+              "floor only after transaction resolution");
+        CHECK(efs_txn_resolve(kv, &tx, 7, commit ? EFS_TXN_COMMIT : EFS_TXN_ABORT) == EFS_OK,
+              "late resolve idempotent");
+        CHECK(efs_session_accept(kv, 7, uuid, 1) == EFS_ERR_STALE,
+              "late resolve cannot roll floor back");
+        CHECK(efs_session_prepare_owner(kv, 7, uuid, 1, &other, &parts) == EFS_ERR_STALE,
+              "fenced owner cannot prepare");
+        CHECK(efs_session_ack_fence(kv, uuid, 7) == EFS_OK, "ack drained shard");
+        CHECK(efs_session_finish_fence(kv, uuid) == EFS_OK, "finish drained owner barrier");
+        CHECK(efs_session_reclaimable(kv, 7, uuid, 1) == EFS_OK, "fully drained owner may retire");
+        CHECK(efs_lease_drop_session(kv, 7, uuid, 1) == EFS_OK,
+              "drop committed owner after complete barrier");
+        CHECK(efs_lease_any(kv, 7, 1) == 0, "no ownership survives completed revocation");
+        efs_kv_mem_free(kv);
+    }
+}
+
+static void test_prepared_owner_cold(void)
+{
+    for (unsigned commit = 0; commit < 2; commit++) {
+        char dir[] = "/tmp/efs-prepared-owner-XXXXXX";
+        if (!mkdtemp(dir)) {
+            CHECK(0, "cold owner root");
+            return;
+        }
+        struct efs_kv_lsm_cfg cfg = {0};
+        uint8_t uuid[EFS_OPID_UUID_LEN];
+        uuid_of(uuid, 211 + commit);
+        struct efs_txid tx = {{0}};
+        tx.bytes[15] = 9;
+        struct efs_txn_parts parts = {.n = 1, .shard = {7}};
+        for (unsigned phase = 0; phase < 4; phase++) {
+            pid_t pid = fork();
+            CHECK(pid >= 0, "cold owner fork");
+            if (pid < 0)
+                break;
+            if (!pid) {
+                struct efs_kv *kv = efs_kv_lsm_open(dir, &cfg);
+                if (!kv)
+                    _exit(2);
+                if (!phase) {
+                    CHECK(efs_session_create(kv, uuid, 1) == EFS_OK, "cold owner create");
+                    CHECK(efs_session_register(kv, uuid, 1, 7) == EFS_OK, "cold owner register");
+                    CHECK(efs_session_establish(kv, 7, uuid, 1) == EFS_OK, "cold owner establish");
+                    CHECK(efs_session_prepare_owner(kv, 7, uuid, 1, &tx, &parts) == EFS_OK,
+                          "cold prepare owner");
+                    uint8_t key[EFS_KV_KEY_MAX], value[EFS_LEASE_PENDING_VALUE_LEN];
+                    uint32_t len = 0;
+                    CHECK(efs_kv_key_lease(7, 7, 1, uuid, 1, key, &len) == EFS_OK,
+                          "cold lease key");
+                    CHECK(efs_lease_pending_value(9, value) == EFS_OK, "cold lease value");
+                    CHECK(efs_txn_prepare_excl_value(kv, &tx, &parts, key, len, NULL,
+                                                     EFS_TXN_ABSENT, EFS_TXN_PUT, value,
+                                                     sizeof(value)) == EFS_OK,
+                          "cold pending lease intent");
+                } else if (phase == 1) {
+                    CHECK(efs_session_begin_fence(kv, uuid) == EFS_OK, "cold begin fence");
+                    CHECK(efs_session_fence_local(kv, 7, uuid, 2) == EFS_ERR_BUSY,
+                          "cold prepared guard blocks fence");
+                } else if (phase == 2) {
+                    CHECK(efs_txn_resolve(kv, &tx, 7, commit ? EFS_TXN_COMMIT : EFS_TXN_ABORT) ==
+                              EFS_OK,
+                          "cold resolve owner");
+                    CHECK(efs_lease_any(kv, 7, 1) == (int)commit, "cold resolved lease exact");
+                    CHECK(efs_session_fence_local(kv, 7, uuid, 2) == EFS_OK,
+                          "cold floor after resolve");
+                    CHECK(efs_session_ack_fence(kv, uuid, 7) == EFS_OK, "cold ACK");
+                    CHECK(efs_session_finish_fence(kv, uuid) == EFS_OK, "cold finish");
+                    CHECK(efs_lease_drop_session(kv, 7, uuid, 1) == EFS_OK, "cold drop");
+                } else {
+                    CHECK(efs_txn_resolve(kv, &tx, 7, commit ? EFS_TXN_COMMIT : EFS_TXN_ABORT) ==
+                              EFS_OK,
+                          "cold delayed resolve");
+                    CHECK(efs_session_accept(kv, 7, uuid, 1) == EFS_ERR_STALE,
+                          "cold floor retained");
+                    CHECK(efs_lease_any(kv, 7, 1) == 0,
+                          "cold delayed resolve cannot restore lease");
+                }
+                _exit(failures ? 1 : 0); /* deliberately no LSM close/checkpoint */
+            }
+            int status = 0;
+            CHECK(waitpid(pid, &status, 0) == pid && WIFEXITED(status) && WEXITSTATUS(status) == 0,
+                  "cold owner acknowledged phase");
+            struct efs_kv *kv = efs_kv_lsm_open(dir, &cfg);
+            CHECK(kv != NULL, "cold owner reopen");
+            if (!kv)
+                break;
+            CHECK(efs_lease_any(kv, 7, 1) == 0, "cold no early/retired ownership");
+            if (phase < 2)
+                CHECK(efs_session_fence_local(kv, 7, uuid, 2) == EFS_ERR_BUSY,
+                      "cold owner barrier survived process exit");
+            else
+                CHECK(efs_session_accept(kv, 7, uuid, 1) == EFS_ERR_STALE,
+                      "cold revocation survived process exit");
+            efs_kv_lsm_close(kv);
+        }
+        DIR *owned = opendir(dir);
+        CHECK(owned != NULL, "cold owner cleanup");
+        if (owned) {
+            struct dirent *de;
+            while ((de = readdir(owned)))
+                if (strcmp(de->d_name, ".") && strcmp(de->d_name, "..")) {
+                    char path[1024];
+                    snprintf(path, sizeof(path), "%s/%s", dir, de->d_name);
+                    CHECK(!unlink(path), "cold owner remove file");
+                }
+            closedir(owned);
+            CHECK(!rmdir(dir), "cold owner remove root");
+        }
+    }
+}
+
 int main(void)
 {
+    test_prepared_owner_fence();
+    test_prepared_owner_cold();
     test_pending_adoption_permutations();
     test_guarded_edge_permutations();
     test_guarded_malformed_ownership();

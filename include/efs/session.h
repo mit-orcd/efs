@@ -64,6 +64,18 @@ int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,
 int efs_session_accept(struct efs_kv *kv, uint32_t shard,
                        const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 
+/* Staged transaction ownership barrier. Prepare before any pending-CREATE
+ * effect, on every affected participant, using the SAME txid/participant set.
+ * An EXCL exact-value intent keeps local epoch/floor changes behind resolution.
+ * Host must stop new owner admission on global FENCING and resolve outstanding
+ * transactions before retrying FENCE_LOC/acknowledging the barrier. This helper
+ * neither coordinates that drain nor activates production pending CREATE. */
+struct efs_txid;
+struct efs_txn_parts;
+int efs_session_prepare_owner(struct efs_kv *kv, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+    const struct efs_txid *txid, const struct efs_txn_parts *parts);
+
 /* Staged W94 ownership encoding, not yet activated on the wire. Compose this
  * value into the SAME CREATE KV/transaction batch; never acquire it later.
  * One key remains one (FileID, session) lease. Calls run under shard apply

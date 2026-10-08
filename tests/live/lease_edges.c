@@ -5,14 +5,93 @@
 #include "efs/session.h"
 #include "efs/kv_key.h"
 #include "efs/raft.h"
+#include "efs/txn.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 static void be(uint8_t *p,uint64_t v,unsigned n){while(n){p[--n]=(uint8_t)v;v>>=8;}}
+static void owner_rpc(unsigned port, const uint8_t *payload, unsigned length, int expected)
+{
+    for (unsigned a = 0; a < 120; a++) {
+        int fd = efs_connect_tcp("127.0.0.1", port + a % 4);
+        if (fd < 0) {
+            usleep(10000);
+            continue;
+        }
+        efs_set_recv_timeout(fd, 1000);
+        efs_set_send_timeout(fd, 1000);
+        int rc = efs_send_msg(fd, EFS_MSG_RAFT_MKFS, payload, length);
+        uint8_t type = 0;
+        void *body = NULL;
+        uint32_t len = 0;
+        if (!rc)
+            rc = efs_recv_msg(fd, &type, &body, &len);
+        close(fd);
+        if (rc) {
+            free(body);
+            usleep(10000);
+            continue;
+        }
+        assert(type == EFS_MSG_RAFT_MKFS_REPLY && len == sizeof(struct efs_msg_raft_mkfs_reply));
+        struct efs_msg_raft_mkfs_reply reply;
+        memcpy(&reply, body, sizeof(reply));
+        free(body);
+        if (reply.rc == EFS_ERR_NOT_PRIMARY) {
+            usleep(10000);
+            continue;
+        }
+        printf("owner command=%u rc=%d expected=%d\n", payload[1], reply.rc, expected);
+        assert(reply.rc == expected);
+        return;
+    }
+    assert(!"owner RPC deadline");
+}
+static void owner_fence(unsigned port, const char *hex, unsigned shard)
+{
+    uint8_t uuid[16], p[1024] = {0}, key[EFS_KV_KEY_MAX], value[8] = {0};
+    uint32_t klen = 0, n = 0;
+    assert(strlen(hex) == 32);
+    for (unsigned i = 0; i < 16; i++) {
+        unsigned b;
+        assert(sscanf(hex + 2 * i, "%2x", &b) == 1);
+        uuid[i] = b;
+    }
+    assert(efs_kv_key_sess_local(shard, uuid, key, &klen) == EFS_OK);
+    be(value, 1, 4);
+    p[0] = efs_raft_shard_group(shard);
+    p[1] = EFS_MD_CMD_PREPARE;
+    p[2] = EFS_TXN_EXCL_VALUE;
+    memcpy(p + 3, uuid, 16);
+    p[19] = 1;
+    be(p + 20, shard, 4);
+    be(p + 24, klen, 2);
+    memcpy(p + 26, key, klen);
+    assert(efs_txn_encode_excl_value(p + 26 + klen, sizeof(p) - 26 - klen, &n, value, 8,
+                                     EFS_TXN_PUT, value, 8) == EFS_OK);
+    owner_rpc(port, p, 26 + klen + n, EFS_OK);
+    uint8_t fence[27] = {0};
+    fence[0] = p[0];
+    fence[1] = EFS_MD_CMD_SESSION;
+    fence[2] = EFS_MD_SESS_FENCE_LOC;
+    memcpy(fence + 3, uuid, 16);
+    be(fence + 19, 2, 4);
+    be(fence + 23, shard, 4);
+    owner_rpc(port, fence, sizeof(fence), EFS_ERR_BUSY);
+    uint8_t resolve[23] = {0};
+    resolve[0] = p[0];
+    resolve[1] = EFS_MD_CMD_RESOLVE;
+    memcpy(resolve + 2, uuid, 16);
+    be(resolve + 18, shard, 4);
+    resolve[22] = EFS_TXN_ABORT;
+    owner_rpc(port, resolve, sizeof(resolve), EFS_OK);
+    owner_rpc(port, fence, sizeof(fence), EFS_OK);
+    puts("prepared owner blocks wire fence ACK; resolution releases barrier PASS");
+}
 int main(int argc,char **argv)
 {
+ if(argc==5&&!strcmp(argv[1],"--owner-fence")){owner_fence(atoi(argv[2]),argv[3],atoi(argv[4]));return 0;}
  if(argc==3){
   unsigned port=atoi(argv[1]);struct efs_msg_inode_getattr q={0};q.export_id=1;q.ino=strtoull(argv[2],0,10);
   for(unsigned a=0;a<120;a++){

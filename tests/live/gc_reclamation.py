@@ -401,6 +401,12 @@ try:
         edge(1,0,1,probe=1,expected=busy)
         for operation,extra in [('create',['1']),('register',[str(shard),'1']),('establish',[str(shard),'1'])]:
             run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,*extra])
+        owner_uuid=os.urandom(16).hex()
+        for operation,extra in [('create',['1']),('register',[str(shard),'1']),('establish',[str(shard),'1'])]:
+            run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,owner_uuid,*extra])
+        owner_result=run([helper,'--owner-fence',str(a.port),owner_uuid,str(shard)],capture_output=True,text=True).stdout
+        (work/'prepared-owner-wire.txt').write_text(owner_result)
+        run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','fence',owner_uuid])
         edge(1,0,1,probe=1,expected=busy)
         edge(2,0,2);edge(1,0,1,expected=stale)
         # Send to the known leader so the intentionally lost reply is a commit.
