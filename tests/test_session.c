@@ -200,6 +200,42 @@ static void test_pending_create_ownership(void)
 
 /* Exit without closing the engine after each acknowledged ownership edge.
  * Recovery must preserve the token and the independent normal-owner bit. */
+static void test_negative_create_cold(void)
+{
+    char dir[]="/tmp/efs-negative-create-XXXXXX";
+    struct efs_kv_lsm_cfg cfg={0};uint8_t uuid[EFS_OPID_UUID_LEN];uuid_of(uuid,23);
+    CHECK(mkdtemp(dir)!=NULL,"negative cold directory");
+    struct efs_opid_req q={0};memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=1;
+    for(unsigned phase=0;phase<2;phase++) {
+        pid_t pid=fork();CHECK(pid>=0,"negative cold fork");if(pid<0)break;
+        if(!pid) {
+            struct efs_kv *kv=efs_kv_lsm_open(dir,&cfg);int rc=kv?EFS_OK:EFS_ERR_IO;efs_ino_t ino=0;
+            if(!phase) {
+                if(!rc)rc=efs_meta_apply_init(kv,T0);
+                if(!rc)rc=efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"conflict",&ino);
+                if(!rc) {
+                    rc=efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"conflict",0,-1,&q,uuid,1,&ino);
+                    if(rc==EFS_ERR_EXIST)rc=EFS_OK;
+                }
+            } else if(!rc)rc=efs_meta_apply_unlink(kv,1,"conflict",T0+1);
+            _exit(rc==EFS_OK?0:1);
+        }
+        int status=0;CHECK(waitpid(pid,&status,0)==pid && WIFEXITED(status) && !WEXITSTATUS(status),"negative CREATE/delete acknowledged before crash");
+        struct efs_kv *kv=efs_kv_lsm_open(dir,&cfg);CHECK(kv!=NULL,"negative verdict cold reopen");if(!kv)break;
+        efs_ino_t ino=0;struct efs_meta_dentry dent;
+        CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"conflict",0,-1,&q,uuid,1,&ino)==EFS_ERR_EXIST && !ino,"cold negative retry cannot create pending lease");
+        CHECK(efs_meta_apply_lookup(kv,1,"conflict",&dent)==(phase?EFS_ERR_NOT_FOUND:EFS_OK),"cold negative retry preserves namespace");
+        efs_kv_lsm_close(kv);
+    }
+    DIR *d=opendir(dir);if(d) {
+        struct dirent *e;while((e=readdir(d))!=NULL) {
+            if(!strcmp(e->d_name,".") || !strcmp(e->d_name,".."))continue;
+            char path[1024];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);CHECK(!unlink(path),"remove negative cold file");
+        }
+        closedir(d);CHECK(!rmdir(dir),"remove negative cold directory");
+    }
+}
+
 static void test_pending_cold_edges(void)
 {
   for (unsigned guarded=0;guarded<2;guarded++) {
@@ -505,6 +541,7 @@ int main(void)
     test_guarded_lease_edges();
     test_guarded_pending_and_fence();
     test_guarded_window_bound();
+    test_negative_create_cold();
     test_pending_cold_edges();
     test_pending_create_ownership();
     test_register_and_fence();
