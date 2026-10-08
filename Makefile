@@ -259,6 +259,7 @@ docs-check:
 	python3 docs/check-architecture.py
 
 test: all
+	python3 tests/test_lookup_errno.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
 	python3 tests/test_opid_admission.py
