@@ -1,0 +1,180 @@
+diff --git a/src/client/efs_fuse.c b/src/client/efs_fuse.c
+index 249fe66e..a6a16944 100644
+--- a/src/client/efs_fuse.c
++++ b/src/client/efs_fuse.c
+@@ -3161,6 +3161,24 @@ static int efs_fuse_write_run(const char *path, const char *buf, size_t size,
+     return rc;
+ }
+ 
++static int efs_fuse_fsync_ino(fuse_ino_t ino, int isdatasync,
++                              struct fuse_file_info *fi);
++
++/* Kernel follow-up fsync behavior is not the write callback's contract.
++ * Finish publication before acknowledging an explicitly synchronous write,
++ * after write admission credits are released and within its inherited budget. */
++static int efs_fuse_sync_write_result(int written, struct fuse_file_info *fi)
++{
++    if (written <= 0 || !fi || !(fi->flags & (O_SYNC | O_DSYNC)))
++        return written;
++    int datasync = (fi->flags & O_SYNC) != O_SYNC;
++    int rc = efs_fuse_fsync_ino(0, datasync, fi);
++    if (efs_dcache_trace_on())
++        fprintf(stderr, "sync-write ino=%llu bytes=%d datasync=%d rc=%d\n",
++                (unsigned long long)efs_file_ino(fi, 0), written, datasync, rc);
++    return rc ? rc : written;
++}
++
+ static int efs_fuse_write(const char *path, const char *buf, size_t size,
+                           off_t offset, struct fuse_file_info *fi)
+ {
+@@ -3170,6 +3188,7 @@ static int efs_fuse_write(const char *path, const char *buf, size_t size,
+         deadline = previous;
+     efs_client_rpc_set_deadline_ms(deadline);
+     int rc = efs_client_rpc_past_deadline() ? -EAGAIN : efs_fuse_write_run(path, buf, size, offset, fi);
++    rc = efs_fuse_sync_write_result(rc, fi);
+     efs_client_rpc_set_deadline_ms(previous);
+     return rc;
+ }
+@@ -3396,6 +3415,7 @@ static int efs_fuse_write_buf(const char *path, struct fuse_bufvec *buf,
+         deadline = previous;
+     efs_client_rpc_set_deadline_ms(deadline);
+     int rc = efs_client_rpc_past_deadline() ? -EAGAIN : efs_fuse_write_buf_run(path, buf, offset, fi);
++    rc = efs_fuse_sync_write_result(rc, fi);
+     efs_client_rpc_set_deadline_ms(previous);
+     return rc;
+ }
+diff --git a/tests/live/gc_reclamation.py b/tests/live/gc_reclamation.py
+index ccf6dc95..e97ad2c2 100644
+--- a/tests/live/gc_reclamation.py
++++ b/tests/live/gc_reclamation.py
+@@ -18,6 +18,7 @@ import signal
+ import threading
+ import socket
+ import subprocess
++import select
+ import tempfile
+ from raft_tail import commands as raft_commands
+ import time
+@@ -30,6 +31,7 @@ p.add_argument('--root', action='append', default=[])
+ p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
+ p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
+ p.add_argument('--posix', action='store_true')
++p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC bytes visible to a cold peer before descriptor close')
+ p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
+ p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
+ p.add_argument('--integrity', action='store_true')
+@@ -129,7 +131,7 @@ if a.transport == 'rdma':
+     env['EFS_RDMA_DEV'] = device
+ if a.gc_bulk_gib:
+     assert not a.idle_seconds;env['EFS_GC_DBG']='1'
+-if a.ior_binary:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
++if a.ior_binary or a.sync_writes:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
+ if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
+ if a.worker_fault:
+     assert a.workers and a.client_binary,'worker faults require explicit fault client and --workers'
+@@ -335,6 +337,52 @@ try:
+     start()
+     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
+     mount_client()
++    if a.sync_writes:
++        peer_log=open(work/'sync-peer.log','ab');handles.append(peer_log)
++        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
++        wait(lambda:os.path.ismount(peer_mount) and (peer_mount.stat().st_ino>0),'sync peer mounted',40)
++        transport_proof([*servers,client,peer])
++        records=[];expected={}
++        writer_code="""import os,sys,time,json
++path,flags,size=sys.argv[1],int(sys.argv[2]),int(sys.argv[3])
++fd=os.open(path,flags);body=b'w'*size;start=time.monotonic()
++assert os.write(fd,body)==size
++print(json.dumps({'seconds':time.monotonic()-start,'bytes':size}),flush=True)
++assert sys.stdin.readline().strip()=='release'
++os.close(fd)
++"""
++        for label,flag in [('sync',os.O_SYNC),('dsync',os.O_DSYNC)]:
++            for append in (False,True):
++                for size in (31,2<<20):
++                    name=f'synchronous-{label}-{append}-{size}'
++                    path=mount/name;prefix=b'prefix\n' if append else b''
++                    with path.open('xb',buffering=0) as out:
++                        if prefix:assert out.write(prefix)==len(prefix)
++                        os.fsync(out.fileno())
++                    flags=os.O_WRONLY|flag|(os.O_APPEND if append else 0)
++                    writer=subprocess.Popen(['python3','-c',writer_code,str(path),str(flags),str(size)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=env)
++                    try:
++                        assert select.select([writer.stdout],[],[],40)[0],'synchronous write exceeded budget'
++                        line=writer.stdout.readline();assert line,writer.stderr.read()
++                        record=json.loads(line)
++                        body=prefix+b'w'*size
++                        assert (peer_mount/name).read_bytes()==body,'synchronous bytes not published before close'
++                        record.update(name=name,append=append,flag=label,verified_before_close=True)
++                        records.append(record);expected[name]=hashlib.sha256(body).hexdigest()
++                        writer.stdin.write('release\n');writer.stdin.flush()
++                        assert writer.wait(timeout=10)==0,writer.stderr.read()
++                    finally:
++                        if writer.poll() is None:writer.kill();writer.wait()
++        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
++        unmount();stop(crash=True);start();mount_client()
++        for name,digest in expected.items():
++            assert hashlib.sha256((mount/name).read_bytes()).hexdigest()==digest,'synchronous bytes changed after server crash'
++            (mount/name).unlink()
++        trace=(work/'fuse.log').read_text(errors='replace')
++        assert len(re.findall(r'sync-write ino=.* rc=0',trace))>=8,'FUSE sync-write publication trace missing'
++        (work/'synchronous-writes.json').write_text(json.dumps({'cases':records,'cold_crash_verified':True,'trace_before_reply':True},indent=2))
++        wait(drained,'synchronous write physical deletion drained')
++        print('O_SYNC/O_DSYNC small/queued/append publication before close and cold crash bytes PASS',flush=True)
+     if a.append_replay_race:
+         helper=work/'append-replay-race'
+         run(['cc','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+diff --git a/tests/test_write_budget.py b/tests/test_write_budget.py
+index 58a4118e..700b7782 100644
+--- a/tests/test_write_budget.py
++++ b/tests/test_write_budget.py
+@@ -12,20 +12,37 @@ code=r'''
+ #include <sys/types.h>
+ #include <errno.h>
+ #include <assert.h>
+-struct fuse_file_info {int unused;};struct fuse_bufvec {int unused;};
+-static uint64_t deadline,seen,now=1000;static int calls;
++#include <fcntl.h>
++#include <stdio.h>
++struct fuse_file_info {int flags;};struct fuse_bufvec {int unused;};
++static uint64_t deadline,seen,now=1000;static int calls,write_result=-EIO,sync_calls,sync_result,sync_data;
++static int efs_dcache_trace_on(void) {return 0;}
++static uint64_t efs_file_ino(struct fuse_file_info *fi,int unused) {(void)fi;(void)unused;return 42;}
++static int efs_fuse_fsync_ino(int ino,int data,struct fuse_file_info *fi) {(void)ino;(void)fi;assert(deadline==seen);sync_calls++;sync_data=data;return sync_result;}
+ static uint64_t stats_now_ms(void) {return now;}
+ static uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
+ static void efs_client_rpc_set_deadline_ms(uint64_t d) {deadline=d;}
+ static int efs_client_rpc_past_deadline(void) {return deadline&&now>=deadline;}
+-static int efs_fuse_write_run(const char *p,const char *b,size_t n,off_t o,struct fuse_file_info *f) {(void)p;(void)b;(void)n;(void)o;(void)f;seen=deadline;calls++;return -EIO;}
+-static int efs_fuse_write_buf_run(const char *p,struct fuse_bufvec *b,off_t o,struct fuse_file_info *f) {(void)p;(void)b;(void)o;(void)f;seen=deadline;calls++;return -EIO;}
+-'''+fn('efs_fuse_write')+fn('efs_fuse_write_buf')+r'''
++static int efs_fuse_write_run(const char *p,const char *b,size_t n,off_t o,struct fuse_file_info *f) {(void)p;(void)b;(void)n;(void)o;(void)f;seen=deadline;calls++;return write_result;}
++static int efs_fuse_write_buf_run(const char *p,struct fuse_bufvec *b,off_t o,struct fuse_file_info *f) {(void)p;(void)b;(void)o;(void)f;seen=deadline;calls++;return write_result;}
++'''+fn('efs_fuse_sync_write_result')+fn('efs_fuse_write')+fn('efs_fuse_write_buf')+r'''
+ int main(void) {
+  assert(efs_fuse_write(NULL,NULL,1,0,NULL)==-EIO&&seen==31000&&!deadline);
+  deadline=1100;assert(efs_fuse_write_buf(NULL,NULL,0,NULL)==-EIO&&seen==1100&&deadline==1100);
+  deadline=1000;assert(efs_fuse_write(NULL,NULL,1,0,NULL)==-EAGAIN&&deadline==1000&&calls==2);
+  assert(efs_fuse_write_buf(NULL,NULL,0,NULL)==-EAGAIN&&deadline==1000&&calls==2);
++ deadline=0;write_result=4096;struct fuse_file_info fi={0};
++ assert(efs_fuse_write(NULL,NULL,4096,0,&fi)==4096 && !sync_calls && !deadline);
++ fi.flags=O_DSYNC;
++ assert(efs_fuse_write(NULL,NULL,4096,0,&fi)==4096 && sync_calls==1 && sync_data && !deadline);
++ fi.flags=O_SYNC|O_APPEND;
++ assert(efs_fuse_write_buf(NULL,NULL,0,&fi)==4096 && sync_calls==2 && !sync_data && !deadline);
++ sync_result=-EIO;
++ assert(efs_fuse_write(NULL,NULL,4096,0,&fi)==-EIO && sync_calls==3 && !deadline);
++ sync_result=0;write_result=-ENOSPC;
++ assert(efs_fuse_write_buf(NULL,NULL,0,&fi)==-ENOSPC && sync_calls==3);
++ write_result=0;
++ assert(efs_fuse_write(NULL,NULL,0,0,&fi)==0 && sync_calls==3);
+  return 0;
+ }
+ '''
+@@ -33,4 +50,4 @@ with tempfile.TemporaryDirectory(prefix='efs-write-budget-') as d:
+  p=Path(d)/'t.c';p.write_text(code)
+  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror',str(p),'-o',str(p.with_suffix(''))],check=True)
+  subprocess.run([str(p.with_suffix(''))],check=True)
+-print('write call budgets: both entries, nested restoration and expired refusal PASS')
++print('write call budgets: both entries, nested restoration, synchronous publication/failure and expired refusal PASS')

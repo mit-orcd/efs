@@ -18,6 +18,7 @@ import signal
 import threading
 import socket
 import subprocess
+import select
 import tempfile
 from raft_tail import commands as raft_commands
 import time
@@ -30,6 +31,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
 p.add_argument('--append-audit', action='store_true', help='mixed append descriptions during physical GC, then exact cold records')
 p.add_argument('--integrity', action='store_true')
@@ -129,7 +131,7 @@ if a.transport == 'rdma':
     env['EFS_RDMA_DEV'] = device
 if a.gc_bulk_gib:
     assert not a.idle_seconds;env['EFS_GC_DBG']='1'
-if a.ior_binary:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
+if a.ior_binary or a.append_sync_boundary:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
 if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
 if a.worker_fault:
     assert a.workers and a.client_binary,'worker faults require explicit fault client and --workers'
@@ -335,6 +337,53 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.append_sync_boundary:
+        peer_log=open(work/'sync-peer.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:os.path.ismount(peer_mount) and (peer_mount.stat().st_ino>0),'sync peer mounted',40)
+        transport_proof([*servers,client,peer])
+        records=[];expected={}
+        writer_code="""import os,sys,time,json
+path,flags,size=sys.argv[1],int(sys.argv[2]),int(sys.argv[3])
+fd=os.open(path,flags);body=b'w'*size;start=time.monotonic()
+done=0
+while done<size:
+ n=os.write(fd,body[done:done+(128<<10)]);assert n>0;done+=n
+ os.fsync(fd)
+print(json.dumps({'seconds':time.monotonic()-start,'bytes':size}),flush=True)
+assert sys.stdin.readline().strip()=='release'
+os.close(fd)
+"""
+        for label,flag in [('fsync',0)]:
+            for append in (True,):
+                for size in (31,2<<20):
+                    name=f'synchronous-{label}-{append}-{size}'
+                    path=mount/name;prefix=b'prefix\n' if append else b''
+                    with path.open('xb',buffering=0) as out:
+                        if prefix:assert out.write(prefix)==len(prefix)
+                        os.fsync(out.fileno())
+                    flags=os.O_WRONLY|flag|(os.O_APPEND if append else 0)
+                    writer=subprocess.Popen(['python3','-c',writer_code,str(path),str(flags),str(size)],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,env=env)
+                    try:
+                        assert select.select([writer.stdout],[],[],40)[0],'synchronous write exceeded budget'
+                        line=writer.stdout.readline();assert line,writer.stderr.read()
+                        record=json.loads(line)
+                        body=prefix+b'w'*size
+                        assert (peer_mount/name).read_bytes()==body,'synchronous bytes not published before close'
+                        record.update(name=name,append=append,flag=label,verified_before_close=True)
+                        records.append(record);expected[name]=hashlib.sha256(body).hexdigest()
+                        writer.stdin.write('release\n');writer.stdin.flush()
+                        assert writer.wait(timeout=10)==0,writer.stderr.read()
+                    finally:
+                        if writer.poll() is None:writer.kill();writer.wait()
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        unmount();stop(crash=True);start();mount_client()
+        for name,digest in expected.items():
+            assert hashlib.sha256((mount/name).read_bytes()).hexdigest()==digest,'synchronous bytes changed after server crash'
+            (mount/name).unlink()
+        (work/'append-sync-boundary.json').write_text(json.dumps({'cases':records,'cold_crash_verified':True,'explicit_fsync_before_close':True},indent=2))
+        wait(drained,'synchronous write physical deletion drained')
+        print('Append/fsync across lane groups: peer before close and cold crash bytes PASS',flush=True)
     if a.append_replay_race:
         helper=work/'append-replay-race'
         run(['cc','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(source/'include'),

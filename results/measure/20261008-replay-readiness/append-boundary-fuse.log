@@ -1,0 +1,48 @@
+2026-10-08T06:00:24.215Z efs-fuse (no git metadata, branch unknown, built 2026-10-08T05:58:47Z on amd-395), build=unknown: starting export=default mount=/data1/efs/mnt
+2026-10-08T06:00:24.215Z Discovered 4 cluster nodes from 127.0.0.1:20190
+2026-10-08T06:00:24.215Z   node id=1 127.0.0.1:20190
+2026-10-08T06:00:24.215Z   node id=2 127.0.0.1:20191
+2026-10-08T06:00:24.215Z   node id=3 127.0.0.1:20192
+2026-10-08T06:00:24.215Z   node id=4 127.0.0.1:20193
+2026-10-08T06:00:24.215Z fetching metadata...
+2026-10-08T06:00:24.215Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T06:00:24.215Z export id=1 name=default
+2026-10-08T06:00:24.215Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T06:00:24.218Z efs-fuse: workers max=10 idle=10
+2026-10-08T06:00:24.219Z fuse serving
+2026-10-08T06:00:24.730Z dcache ino=4097 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=1 r=[0,7)
+2026-10-08T06:00:24.732Z dcache ino=4097 ci=0 put-record obj=378e581065fae658 seq=1 | dirty=0 hb=0 bg=0 obj=378e581065fae658 oseq=1 sseq=1 r=[0,7)
+2026-10-08T06:00:24.732Z dcache ino=4097 ci=0 install len=131072 seq=1 | dirty=0 hb=0 bg=0 obj=378e581065fae658 oseq=1 sseq=1 r=[0,7)
+2026-10-08T06:00:24.733Z report ino=4097 ci=0 only=4097 sync=1 rc=0
+2026-10-08T06:00:24.733Z report-irec ino=4097 size=7 only=4097 sync=1 rc=0
+2026-10-08T06:00:24.733Z release ino=4097 begin
+2026-10-08T06:00:24.734Z release ino=4097 rc=0
+2026-10-08T06:00:24.747Z append-reserve ino=4097 seq=2 start=7 end=38 len=31
+2026-10-08T06:00:24.748Z dcache ino=4097 ci=0 snap-copy | dirty=1 hb=1 bg=0 obj=0 oseq=1 sseq=2 r=[7,38)
+2026-10-08T06:00:24.749Z dcache ino=4097 ci=0 put-record obj=3fce12b83bde71c seq=2 | dirty=0 hb=1 bg=0 obj=3fce12b83bde71c oseq=2 sseq=2 r=[7,38)
+2026-10-08T06:00:24.749Z dcache ino=4097 ci=0 install len=131072 seq=2 | dirty=0 hb=1 bg=0 obj=3fce12b83bde71c oseq=2 sseq=2 r=[7,38)
+2026-10-08T06:00:24.751Z report ino=4097 ci=0 only=4097 sync=1 rc=0
+2026-10-08T06:00:24.751Z report-irec ino=4097 size=38 only=4097 sync=1 rc=0
+2026-10-08T06:00:24.755Z release ino=4097 begin
+2026-10-08T06:00:24.756Z release ino=4097 rc=0
+2026-10-08T06:00:24.761Z dcache ino=8193 ci=0 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=3 r=[0,7)
+2026-10-08T06:00:24.762Z dcache ino=8193 ci=0 put-record obj=e689f1a6a0f9e3e2 seq=3 | dirty=0 hb=0 bg=0 obj=e689f1a6a0f9e3e2 oseq=3 sseq=3 r=[0,7)
+2026-10-08T06:00:24.762Z dcache ino=8193 ci=0 install len=131072 seq=3 | dirty=0 hb=0 bg=0 obj=e689f1a6a0f9e3e2 oseq=3 sseq=3 r=[0,7)
+2026-10-08T06:00:24.763Z report ino=8193 ci=0 only=8193 sync=1 rc=0
+2026-10-08T06:00:24.763Z report-irec ino=8193 size=7 only=8193 sync=1 rc=0
+2026-10-08T06:00:24.763Z release ino=8193 begin
+2026-10-08T06:00:24.764Z release ino=8193 rc=0
+2026-10-08T06:00:24.778Z append-reserve ino=8193 seq=4 start=7 end=131079 len=131072
+2026-10-08T06:00:24.778Z dcache ino=8193 ci=0 snap-copy | dirty=1 hb=1 bg=0 obj=0 oseq=3 sseq=4 r=[7,131072)
+2026-10-08T06:00:24.780Z dcache ino=8193 ci=1 snap-copy | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=5 r=[0,7)
+2026-10-08T06:00:24.785Z dcache ino=8193 ci=0 put-record obj=f68753235b9ca366 seq=4 | dirty=0 hb=1 bg=0 obj=f68753235b9ca366 oseq=4 sseq=4 r=[7,131072)
+2026-10-08T06:00:24.785Z dcache ino=8193 ci=1 put-record obj=8a67dfc7367b8cdb seq=5 | dirty=0 hb=0 bg=0 obj=8a67dfc7367b8cdb oseq=5 sseq=5 r=[0,7)
+2026-10-08T06:00:24.786Z dcache ino=8193 ci=0 install len=131072 seq=4 | dirty=0 hb=1 bg=0 obj=f68753235b9ca366 oseq=4 sseq=4 r=[7,131072)
+2026-10-08T06:00:24.786Z dcache ino=8193 ci=1 install len=131072 seq=5 | dirty=0 hb=0 bg=0 obj=8a67dfc7367b8cdb oseq=5 sseq=5 r=[0,7)
+2026-10-08T06:00:24.789Z report ino=8193 ci=0 only=8193 sync=1 rc=0
+2026-10-08T06:00:24.789Z report ino=8193 ci=1 only=8193 sync=1 rc=0
+2026-10-08T06:00:24.789Z report-irec ino=8193 size=131079 only=8193 sync=1 rc=0
+2026-10-08T06:00:24.790Z append_rsv ino=8193 len=131072 rc=-15 ns=0 start=0
+2026-10-08T06:00:24.847Z release ino=8193 begin
+2026-10-08T06:00:24.849Z release ino=8193 rc=0
+2026-10-08T06:00:24.927Z report-irec ino=1 size=0 only=0 sync=1 rc=0

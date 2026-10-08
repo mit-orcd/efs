@@ -532,6 +532,7 @@ node hosts many.
 | open lease | `inode_shard(ino)` | `(FileID, session_id)` | shard Raft |
 | POSIX locks | `inode_shard(ino)` | `(FileID, start, end, owner)` | shard Raft |
 | append reservations, `reservation_watermark` | `inode_shard(ino)` | `(FileID)` | shard Raft |
+| append reservation receipts / retirement floor | `inode_shard(ino)` | `(ino, client_uuid, session_epoch)` | same batch as reservation; client contiguous ACK retires results |
 | transaction decision | `participant[hash(txid) % participant_count]` | `(txid)` | shard Raft |
 | membership / desired placement | control-plane group | — | control Raft (RF = 2f+1) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |

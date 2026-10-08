@@ -8,6 +8,16 @@ Reviewed Oct 8, 2026. Historical rollout facts are in the
 previous handoff text is [archived](../archive/handoff-20261007.md).
 Do not use a historical cluster address, binary hash or mount as current state.
 
+## Authorized next packages
+
+The user authorized replay/writeback correctness followed by durability and
+production activation readiness while offline. Follow the
+[Oct 8 implementation ledger](replay-readiness-20261008.md), with direct-I/O/TCP
+for short functional cycles and a four-mode batch gate. Benchmark sources and
+harnesses are outside this work. Open decisions D28/D29/D30 are not resolved
+by this authorization; measure prerequisites and retain staged work where
+its correctness gates are incomplete.
+
 ## Active correctness work
 
 Follow-up round 1 implements W82 fresh read rounds and correlated acknowledgements.
@@ -54,7 +64,8 @@ per-description errors, retained snapshots, completed-cycle stall detection,
 WITHHOLD faults and controlled stop exist. Strict whole-call timing, remaining
 legacy PUT coverage, recorded fault/recovery/contention and small-host RSS
 acceptance remain owed. Accepted workers retain caller-owned completion state;
-a timeout must not free it. DNS resolution remains outside connection bounds.
+a timeout must not free it. DNS resolution now has bounded ownership/deadlines in `011ae854`; the
+[readiness ledger](replay-readiness-20261008.md) records its tests.
 D28 salvage is undecided. Keep the D27 decision's fault-before-publication gates.
 
 **W64 — append:** host-local replay races were fixed in `ec1500ec`; replay
@@ -88,8 +99,8 @@ remain separate platform obligations.
 ## Additional public-contract findings
 
 The [source review](spec-implementation.md) indexes W71–W77. In particular,
-W71's production fragment ACK lacks a persistence barrier; a successful
-healthy fsync/restart test does not establish power-loss durability. W75
+W71 now has production file/pathname barriers in `e77e1f13`; fault and live
+checks pass, but physical power-loss durability remains an acceptance obligation. W75
 records missing integrity evidence and the parallel-read verification bypass.
 These are source findings, not a diagnosis of the GC incident or a new
 production acceptance result. The queue and detailed gates govern follow-up.

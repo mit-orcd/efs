@@ -2561,6 +2561,19 @@ results dirs; move this plan's finished rows to project-history.
 
 ## W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 8 durable-receipt continuation:** Production ACK-bearing append requests
+now select inode-shard receipts committed atomically with reservation creation.
+The client holds identity across the entire FUSE BUSY loop and sends a safe
+contiguous acknowledgement. Window exhaustion refuses allocation; retired
+identities fail STALE. AMD memory/LSM abrupt-exit tests and initial actual-host
+lost-reply, cold replay, exact-byte, full POSIX/peer and GC checks pass. Explicit
+leader-death replay and full units now pass. A W73 candidate exposed a
+single-group inode-leader / dual-host redirect cycle after cross-group lanes
+activate. That blocker and remaining EOF authority are tracked in the
+[implementation ledger](../status/replay-readiness-20261008.md). Legacy suffixes
+remain legacy; mount-session fencing and stream-floor reclamation require W72.
+Concurrent cross-lane EOF/failover coverage remains required before closure.
+
 **Oct 8 AMD follow-up:** Real 32 simultaneous identical APPEND RPCs reproduced duplicate reservation (offset 8/end 16). Commit `311c4e4e` uses nonblocking per-inode reserve/reply ownership, with routing outside the lock. The repaired real-RPC gate and exact cold extent pass; durable restart/leader-change receipts remain open.
 See [the package evidence](../status/amd-functional-gates-20261008.md).
 
@@ -2769,8 +2782,17 @@ fix; claiming migration/repair from an IN_PROGRESS enum name alone.
 
 ## W71 · Fragment PUT success is not a durable persistence acknowledgement (queue row spec1)
 
-**Class:** durability correctness. **Status:** open, source finding Oct 7;
-no power-loss reproduction or deployment change in this review.
+**Class:** durability correctness. **Status:** implemented, hardware acceptance open.
+
+**Oct 8:** `e77e1f13` establishes a production file barrier and ancestor
+pathname barriers before PUT success for buffered/direct/bounce paths, including
+repeated writes. Actual production fault tests refuse success on file/directory
+flush and close failure, retry EINTR, and verify ordering. AMD direct/TCP full
+units and private live POSIX/peer, replay/leader-death, 800-record cold append,
+active shutdown and physical GC/restart pass. Bench O_SYNC remains opt-in.
+Installed service binaries were not upgraded. Physical power-loss behavior
+and any future barrier-batching optimization remain separate acceptance work.
+See the [ledger](../status/replay-readiness-20261008.md).
 
 **Evidence:** `src/server/store.c:server_write_fragment_to_path` zero-initializes
 `shard_io_arg`; `sync_write` is assigned only under `EFS_BENCH_BUILD`.
@@ -2826,8 +2848,15 @@ publication primitives or reclaiming state before revocation completes.
 
 ## W73 · Synchronous application-write publication is not explicitly wired (queue row spec3)
 
-**Class:** synchronous-write integration. **Status:** specified, no explicit
-O_SYNC/O_DSYNC publication in the inspected FUSE write callbacks.
+**Class:** synchronous-write integration. **Status:** staged, not accepted.
+
+**Oct 8:** explicit callback publication passed helper checks and the first
+live cases, then a 2 MiB O_SYNC+O_APPEND write short-returned after the first
+published callback. The next APPEND reserve hit W64's cross-group redirect
+cycle (single-group inode leader versus dual-host follower). Candidate code
+was removed from production sources and preserved with the failed trace in
+the [readiness ledger](../status/replay-readiness-20261008.md). Fix coordinated
+append authority first; do not accept W73 by omitting append cases.
 
 **Evidence:** both `efs_fuse_write_admitted` and
 `efs_fuse_write_buf_admitted` can accept dirty data/queued jobs and return bytes;

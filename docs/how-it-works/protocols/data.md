@@ -622,6 +622,16 @@ writes share an inode.
   ever considers it — P3: the stale write is harmless, not prevented. Its
   candidate fragments are orphans (L7); old-epoch *lane* state is discarded
   with the bump.
+- **Append replay results are durable.** The production ACK-bearing request
+  carries UUID, epoch, sequence and a contiguous client acknowledgement.
+  Its inode-shard receipt and reservation are one KV batch. Results bind the
+  requested length and exact offset. At most sixteen unretired results occupy
+  each inode/session window; exhaustion refuses admission before moving EOF.
+  ACK retirement retains a durable replay floor. A retry whose exact result
+  was retired fails STALE rather than fabricating offset zero. Receipt streams
+  survive resize and are removed with the dead, unheld inode. Session-wide
+  reclamation still depends on W72; a timer cannot authorize it. Older
+  suffixes retain their legacy guarantees. See [the acceptance ledger](../../status/replay-readiness-20261008.md).
 - **O_APPEND is a serialized reservation sequence feeding a parallel data
   path.** EOF allocation is the one same-file serialization the semantics
   truly require, and it lives on `inode_shard(ino)`:

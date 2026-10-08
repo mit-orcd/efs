@@ -562,6 +562,7 @@ node hosts many.
 | open lease | `inode_shard(ino)` | `(FileID, session_id)` | shard Raft |
 | POSIX locks | `inode_shard(ino)` | `(FileID, start, end, owner)` | shard Raft |
 | append reservations, `reservation_watermark` | `inode_shard(ino)` | `(FileID)` | shard Raft |
+| append reservation receipts / retirement floor | `inode_shard(ino)` | `(ino, client_uuid, session_epoch)` | same batch as reservation; client contiguous ACK retires results |
 | transaction decision | `participant[hash(txid) % participant_count]` | `(txid)` | shard Raft |
 | membership / desired placement | control-plane group | — | control Raft (RF = 2f+1) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |
@@ -1504,7 +1505,8 @@ from their dated runs, not a live cluster inventory.
   disabled. Follow [the handoff](#appendix-2--in-flight--the-current-handoff-block) for the remaining activation gates.
 - **D27/0a — writeback recovery:** runtime ownership/error/stop foundations
   are implemented; strict whole-call timing, fault recovery and RSS gates remain
-  open. DNS resolution and accepted-job lifetime still limit deadline claims.
+  open. Bounded DNS ownership is implemented; accepted-job lifetime and live
+  fault/recovery acceptance still limit whole-write deadline claims.
 - **W64:** durable append failover replay remains open. Oct 8 cache-identity,
   authority and cursor-overflow hardening passes AMD direct-I/O/TCP functional
   gates; restart-safe receipts remain required.
@@ -1541,7 +1543,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; RDMA deferred | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
+| 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
 | 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — found Oct 5 on the xorinox test cluster (write via the nfsd re-export from a macOS client); trigger not isolated | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
 | 0l | **W56** · root-level rename leaves a ghost name in the renaming client's local lookup | correctness | fixed in `f8fef814` — exact old directory-name cache eviction across parent/hash tabs; closed: NUC full POSIX/two-client and 64 root-rename reuse repeats pass; xorinox running binary matches cb5e86de containing the fix (Oct 7) | [full text](#w56--root-level-rename-leaves-a-ghost-name-in-the-renaming-clients-local-lookup-queue-row-0l) |
@@ -1552,12 +1554,12 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; Xorinox full-tree gate owed | [evidence and remaining gates](../status/fuse-memory.md) |
 | 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w61) |
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w62) |
-| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | open — host-local replay race fixed in `ec1500ec`; durable failover replay remains unresolved | [work item](#w64) |
+| 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — atomic inode-shard receipts, bounded ACK retirement and fail-closed retired retries implemented; AMD replay/leader-death gates pass; cross-group append routing/EOF remains open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | root cause proven on native and EFS storage: default os.link requests follow; explicit no-follow works; test correction and full reruns owed | [evidence and fix](../status/amd-link-symlink.md) |
 | virtual-io | **`.find` / `.stats` — server snapshots and safe reads** | correctness / performance / access control | open — client-local stats, read-triggered walks, per-open consistency, permissions and explicit limits need fixes; N/T server refresh design retained | [fix scope and acceptance](../status/virtual-find-stats.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
-| 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; RDMA deferred | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
+| 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
 | 0b | **W27** · REPORT identity from the staging table | correctness | closed: owned-PUT predicate shared by both builders; nonzero unowned observations rejected; 2048-file cold copy/trace and GC/restart pass | [full text](#w27--report-identity-from-the-staging-table-queue-row-0b) |
 | 0g | **W43** · large truncate is refused; logical truncate = **D25** (decided) | correctness | explicit failure is implemented; `3a1b4a52` makes oversized legacy truncate fail atomically; D25 metadata/read/resize foundations exist, but FUSE publication, live-file sweep and public activation remain open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-3--decisions--taken-and-pending-register-d1d31) |
@@ -1582,9 +1584,9 @@ positions do not assign an execution order or override the active handoff.
 
 | review ID | finding | classification | review state | evidence / gate |
 | --- | --- | --- | --- | --- |
-| spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | open — fsync publication does not issue a separate target flush; no power-loss gate established | [evidence and gate](#w71) |
+| spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | implemented barrier — file and pathname fsync before production PUT ACK; fault/live gates pass, hardware power-loss gate owed | [evidence and gate](#w71) |
 | spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | open — metadata primitives exist; mounted HOLD/FLOCK and session lifecycle remain legacy | [evidence and gate](#w72) |
-| spec3 | **W73** · synchronous application-write publication | integration | no explicit O_SYNC/O_DSYNC handling; real kernel/FUSE sequencing must be verified | [evidence and gate](#w73) |
+| spec3 | **W73** · synchronous application-write publication | integration | staged — explicit callback candidate exposed cross-group append routing failure; integration not accepted | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | fixed 2+1; no automatic repair/profile cutover; accepted design exceeds current capability | [evidence and gate](#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
 | spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: 512 concurrent identity owners refuse saturation safely; all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
@@ -1682,6 +1684,16 @@ Reviewed Oct 8, 2026. Historical rollout facts are in the
 previous handoff text is [archived](../archive/handoff-20261007.md).
 Do not use a historical cluster address, binary hash or mount as current state.
 
+### Authorized next packages
+
+The user authorized replay/writeback correctness followed by durability and
+production activation readiness while offline. Follow the
+[Oct 8 implementation ledger](../status/replay-readiness-20261008.md), with direct-I/O/TCP
+for short functional cycles and a four-mode batch gate. Benchmark sources and
+harnesses are outside this work. Open decisions D28/D29/D30 are not resolved
+by this authorization; measure prerequisites and retain staged work where
+its correctness gates are incomplete.
+
 ### Active correctness work
 
 Follow-up round 1 implements W82 fresh read rounds and correlated acknowledgements.
@@ -1728,7 +1740,8 @@ per-description errors, retained snapshots, completed-cycle stall detection,
 WITHHOLD faults and controlled stop exist. Strict whole-call timing, remaining
 legacy PUT coverage, recorded fault/recovery/contention and small-host RSS
 acceptance remain owed. Accepted workers retain caller-owned completion state;
-a timeout must not free it. DNS resolution remains outside connection bounds.
+a timeout must not free it. DNS resolution now has bounded ownership/deadlines in `011ae854`; the
+[readiness ledger](../status/replay-readiness-20261008.md) records its tests.
 D28 salvage is undecided. Keep the D27 decision's fault-before-publication gates.
 
 **W64 — append:** host-local replay races were fixed in `ec1500ec`; replay
@@ -1762,8 +1775,8 @@ remain separate platform obligations.
 ### Additional public-contract findings
 
 The [source review](../status/spec-implementation.md) indexes W71–W77. In particular,
-W71's production fragment ACK lacks a persistence barrier; a successful
-healthy fsync/restart test does not establish power-loss durability. W75
+W71 now has production file/pathname barriers in `e77e1f13`; fault and live
+checks pass, but physical power-loss durability remains an acceptance obligation. W75
 records missing integrity evidence and the parallel-read verification bypass.
 These are source findings, not a diagnosis of the GC incident or a new
 production acceptance result. The queue and detailed gates govern follow-up.
@@ -4546,6 +4559,19 @@ results dirs; move this plan's finished rows to project-history.
 
 ### W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 8 durable-receipt continuation:** Production ACK-bearing append requests
+now select inode-shard receipts committed atomically with reservation creation.
+The client holds identity across the entire FUSE BUSY loop and sends a safe
+contiguous acknowledgement. Window exhaustion refuses allocation; retired
+identities fail STALE. AMD memory/LSM abrupt-exit tests and initial actual-host
+lost-reply, cold replay, exact-byte, full POSIX/peer and GC checks pass. Explicit
+leader-death replay and full units now pass. A W73 candidate exposed a
+single-group inode-leader / dual-host redirect cycle after cross-group lanes
+activate. That blocker and remaining EOF authority are tracked in the
+[implementation ledger](../status/replay-readiness-20261008.md). Legacy suffixes
+remain legacy; mount-session fencing and stream-floor reclamation require W72.
+Concurrent cross-lane EOF/failover coverage remains required before closure.
+
 **Oct 8 AMD follow-up:** Real 32 simultaneous identical APPEND RPCs reproduced duplicate reservation (offset 8/end 16). Commit `311c4e4e` uses nonblocking per-inode reserve/reply ownership, with routing outside the lock. The repaired real-RPC gate and exact cold extent pass; durable restart/leader-change receipts remain open.
 See [the package evidence](../status/amd-functional-gates-20261008.md).
 
@@ -4754,8 +4780,17 @@ fix; claiming migration/repair from an IN_PROGRESS enum name alone.
 
 ### W71 · Fragment PUT success is not a durable persistence acknowledgement (queue row spec1)
 
-**Class:** durability correctness. **Status:** open, source finding Oct 7;
-no power-loss reproduction or deployment change in this review.
+**Class:** durability correctness. **Status:** implemented, hardware acceptance open.
+
+**Oct 8:** `e77e1f13` establishes a production file barrier and ancestor
+pathname barriers before PUT success for buffered/direct/bounce paths, including
+repeated writes. Actual production fault tests refuse success on file/directory
+flush and close failure, retry EINTR, and verify ordering. AMD direct/TCP full
+units and private live POSIX/peer, replay/leader-death, 800-record cold append,
+active shutdown and physical GC/restart pass. Bench O_SYNC remains opt-in.
+Installed service binaries were not upgraded. Physical power-loss behavior
+and any future barrier-batching optimization remain separate acceptance work.
+See the [ledger](../status/replay-readiness-20261008.md).
 
 **Evidence:** `src/server/store.c:server_write_fragment_to_path` zero-initializes
 `shard_io_arg`; `sync_write` is assigned only under `EFS_BENCH_BUILD`.
@@ -4811,8 +4846,15 @@ publication primitives or reclaiming state before revocation completes.
 
 ### W73 · Synchronous application-write publication is not explicitly wired (queue row spec3)
 
-**Class:** synchronous-write integration. **Status:** specified, no explicit
-O_SYNC/O_DSYNC publication in the inspected FUSE write callbacks.
+**Class:** synchronous-write integration. **Status:** staged, not accepted.
+
+**Oct 8:** explicit callback publication passed helper checks and the first
+live cases, then a 2 MiB O_SYNC+O_APPEND write short-returned after the first
+published callback. The next APPEND reserve hit W64's cross-group redirect
+cycle (single-group inode leader versus dual-host follower). Candidate code
+was removed from production sources and preserved with the failed trace in
+the [readiness ledger](../status/replay-readiness-20261008.md). Fix coordinated
+append authority first; do not accept W73 by omitting append cases.
 
 **Evidence:** both `efs_fuse_write_admitted` and
 `efs_fuse_write_buf_admitted` can accept dirty data/queued jobs and return bytes;
@@ -6739,6 +6781,16 @@ writes share an inode.
   ever considers it — P3: the stale write is harmless, not prevented. Its
   candidate fragments are orphans (L7); old-epoch *lane* state is discarded
   with the bump.
+- **Append replay results are durable.** The production ACK-bearing request
+  carries UUID, epoch, sequence and a contiguous client acknowledgement.
+  Its inode-shard receipt and reservation are one KV batch. Results bind the
+  requested length and exact offset. At most sixteen unretired results occupy
+  each inode/session window; exhaustion refuses admission before moving EOF.
+  ACK retirement retains a durable replay floor. A retry whose exact result
+  was retired fails STALE rather than fabricating offset zero. Receipt streams
+  survive resize and are removed with the dead, unheld inode. Session-wide
+  reclamation still depends on W72; a timer cannot authorize it. Older
+  suffixes retain their legacy guarantees. See [the acceptance ledger](../status/replay-readiness-20261008.md).
 - **O_APPEND is a serialized reservation sequence feeding a parallel data
   path.** EOF allocation is the one same-file serialization the semantics
   truly require, and it lives on `inode_shard(ino)`:
