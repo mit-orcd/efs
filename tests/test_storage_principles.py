@@ -148,7 +148,15 @@ int fsync(int fd) {
 #include <sys/syscall.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stdio.h>
+#include <string.h>
 int fsync(int fd) {
+    if (getenv("FAIL_SEAL_SYNC")) {
+        char path[512], link[64];
+        snprintf(link,sizeof(link),"/proc/self/fd/%d",fd);
+        ssize_t n=readlink(link,path,sizeof(path)-1);
+        if(n>0) {path[n]=0;if(strstr(path,"/.efs-principles-complete")) {errno=EIO;return -1;}}
+    }
     if (getenv("FAIL_WORKER_SYNC") && syscall(SYS_gettid) != getpid()) {
         errno=EIO; return -1;
     }
@@ -173,6 +181,39 @@ ssize_t pread(int fd, void *buf, size_t n, off_t off) {
                     self.assertIn('BENCH_FAIL', p.stdout)
                     self.assertNotIn('BENCH_OK', p.stdout)
                     self.assertEqual(list(Path(root).iterdir()), [])
+            with tempfile.TemporaryDirectory() as root:
+                env=dict(os.environ,LD_PRELOAD=str(so),FAIL_SEAL_SYNC='1')
+                p=self.run_case('--storage',root,'--rw','write','--policy','allocating',
+                                '--persist','batch','--objects','4','--qd','1','--retain',ok=False,env=env)
+                self.assertIn('BENCH_FAIL',p.stdout)
+                self.assertNotIn('BENCH_OK',p.stdout)
+                self.assertEqual(list(Path(root).iterdir()),[])
+
+    def test_retained_durable_fixture_cold_verification(self):
+        for layout,direct in itertools.product(['files','container'],[False,True]):
+            with self.subTest(layout=layout,direct=direct), tempfile.TemporaryDirectory() as a, tempfile.TemporaryDirectory() as b:
+                flags=['--storage',a,'--storage',b,'--layout',layout,'--payload-size','512',
+                       '--objects','12','--qd','4','--direct-io' if direct else '--no-direct-io']
+                self.run_case(*flags,'--rw','write','--policy','allocating','--persist','batch','--retain')
+                before={str(p):p.read_bytes() for root in [a,b] for p in Path(root).rglob('*') if p.is_file()}
+                row=self.run_case(*flags,'--recover-existing')
+                self.assertEqual(row['verified_objects'],'12')
+                after={str(p):p.read_bytes() for root in [a,b] for p in Path(root).rglob('*') if p.is_file()}
+                self.assertEqual(before,after)
+                self.run_case(*flags,'--recover-existing','--objects','8',ok=False)
+                target=next(p for p in Path(a).rglob('*') if p.is_file() and p.name!='.efs-principles-complete')
+                data=target.read_bytes();target.write_bytes(bytes([data[0]^1])+data[1:])
+                self.run_case(*flags,'--recover-existing',ok=False)
+                self.assertEqual(target.read_bytes(),bytes([data[0]^1])+data[1:])
+                target.write_bytes(data[:-1])
+                self.run_case(*flags,'--recover-existing',ok=False)
+                self.assertEqual(target.read_bytes(),data[:-1])
+                target.unlink()
+                self.run_case(*flags,'--recover-existing',ok=False)
+        with tempfile.TemporaryDirectory() as root:
+            self.run_case('--storage',root,'--retain',ok=False)
+            self.run_case('--storage',root,'--recover-existing',ok=False)
+            self.assertEqual(list(Path(root).iterdir()),[])
 
     def test_reject_invalid_before_mutation(self):
         with tempfile.TemporaryDirectory() as root:

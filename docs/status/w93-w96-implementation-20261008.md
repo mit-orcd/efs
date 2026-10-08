@@ -194,3 +194,13 @@ acceptance despite lower median latency in some samples. A four-request bound
 experiment did not establish a fix, so no default-bound change was made.
 [All samples and contamination limits](../../results/measure/20261008-w93-w96-implementation/w93-mixed-load/README.md).
 The subsequent durable-ACK-before-apply change is being measured separately.
+
+## W95 independent cold-process verification
+
+The principles benchmark can now retain successful durable write fixtures and
+verify them read-only from another process with exact geometry seals. Default
+empty-root cleanup is unchanged. Failed recovery preserves evidence; corrupt,
+truncated, missing and mismatched records cannot produce BENCH_OK. Seal sync
+failure reports failure and cleans only the owned incomplete fixture. Ten
+contract tests and twelve two-root sanitizer cases pass.
+[Evidence and limits](../../results/measure/20261008-w93-w96-implementation/w95-cold-principles/README.md).
