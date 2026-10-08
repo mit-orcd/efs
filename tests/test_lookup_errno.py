@@ -31,7 +31,10 @@ static pthread_mutex_t g_find_res_mu=PTHREAD_MUTEX_INITIALIZER;
 static struct {int valid;fuse_ino_t dir_ino;char term[256];char *text;size_t len;} g_find_res[EFS_FIND_RES_N];
 static int find_res_caller(int i){(void)i;return 0;}
 static uint64_t virtual_version(const char*s,size_t len){(void)s;(void)len;return 0;}
-static fuse_ino_t virt_stats_ino(fuse_ino_t n){return n;}
+static int commands_enabled(void){return 0;}
+static int command_script(const char*s){(void)s;return 0;}
+static const char efs_command_source[]="test";
+static fuse_ino_t virt_commands_ino(fuse_ino_t n){return n;}
 static fuse_ino_t virt_find_ino(fuse_ino_t n){return n;}
 static int lookup_fill(fuse_ino_t n,struct fuse_entry_param*e,void*p){(void)n;(void)e;(void)p;return 0;}
 static int efs_client_stat_local(efs_ino_t n,struct efs_inode*out){out->ino=n;out->mode=S_IFDIR|0755;return 0;}
