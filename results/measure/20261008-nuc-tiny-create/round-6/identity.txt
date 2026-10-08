@@ -1,0 +1,6 @@
+7b4e0008914d3f275e334f90e82cae6fc0c9980b1574947d1aec22ee74eeced9  /data1/efs/src/efsd
+b602976283c6c190d07183d98dede7f53e28e4f61048878e38850ba41b1460c9  /data1/efs/src/efs-fuse
+4176e6875ba5b90a91a849021b0b7cd849f2ecf3f4a9fa0f06a7fb29a0337f8a  /data1/efs/src/src/client/ops.c
+0f07aa1055e51dd24b5879ab3c99322eab27480c786d5b11c97e1019954c8c2f  /data1/efs/src/src/client/efs_fuse.c
+4a9f0b8bbc00f85cf164e0d4da7ce048b84c8b27fdb66ba779fd714c88db50ce  /data1/efs/src/src/client/client_internal.h
+version 127.0.0.1:17432 efsd c2275423-tiny-r6 (branch devel-find-stats, built 2026-10-08T15:00:54Z on nuc)

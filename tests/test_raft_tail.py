@@ -27,4 +27,10 @@ with tempfile.TemporaryDirectory(prefix='efs-tail-test-') as d:
     try:commands(p,{0:2})
     except ValueError:pass
     else:raise AssertionError('bad CRC was accepted')
+    p.write_bytes(header+entry(0,1,1,b'A')+bytes(4096))
+    assert commands(p,{0:1})=={(0,1):(1,b'A')}
+    with p.open('ab') as out:out.write(b'not padding')
+    try:commands(p,{0:1})
+    except ValueError:pass
+    else:raise AssertionError('nonzero garbage after padding was accepted')
 print('Raft tail: CRC, committed bounds, groups, replacement and torn append PASS')

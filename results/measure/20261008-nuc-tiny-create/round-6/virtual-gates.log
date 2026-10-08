@@ -1,0 +1,10 @@
+{"case": "recovery", "status": "PASS", "seconds": 7.725}
+{"case": "snapshot", "status": "PASS", "seconds": 7.559}
+{"case": "stats", "status": "PASS", "seconds": 2.366}
+{"case": "stats_mutations", "status": "PASS", "seconds": 11.296}
+{"case": "invalid", "status": "PASS", "seconds": 0.0}
+{"case": "permissions", "status": "PASS", "seconds": 0.007}
+{"case": "nested_authorization", "status": "PASS", "seconds": 4.613}
+{"case": "name_limits", "status": "PASS", "seconds": 5.201}
+{"case": "fd_capacity", "status": "PASS", "seconds": 0.12}
+{"root": "/data1/efs/tiny-r6-validation-20261008/mnt1/w90-gates-1636743", "results": [{"case": "recovery", "status": "PASS", "seconds": 7.725}, {"case": "snapshot", "status": "PASS", "seconds": 7.559}, {"case": "stats", "status": "PASS", "seconds": 2.366}, {"case": "stats_mutations", "status": "PASS", "seconds": 11.296}, {"case": "invalid", "status": "PASS", "seconds": 0.0}, {"case": "permissions", "status": "PASS", "seconds": 0.007}, {"case": "nested_authorization", "status": "PASS", "seconds": 4.613}, {"case": "name_limits", "status": "PASS", "seconds": 5.201}, {"case": "fd_capacity", "status": "PASS", "seconds": 0.12}]}

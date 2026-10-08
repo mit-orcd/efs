@@ -391,6 +391,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 
 $(filter src/client/%.o,$(COMMON_OBJS)) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ): src/client/client_internal.h include/efs/wb_recovery.h
 src/client/efs_fuse.o: src/client/reply_buffers.h src/client/stop_control.h
+src/raft/raft_disk.o src/raft/raft_log.o: src/raft/raft_disk_internal.h
 
 tests/test_store_durability: tests/test_store_durability.c src/server/store.c src/server/server_internal.h src/bench/writer.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o $(LIB) $(LDFLAGS)

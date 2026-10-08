@@ -50,7 +50,7 @@ struct efs_raft_store *efs_raft_disk_group(struct efs_raft_disk *d,
  * truncations made dead. Called automatically as the log grows; exposed for
  * tests. */
 int efs_raft_disk_rotate(struct efs_raft_disk *d);
-/* Bytes currently in the log file (tests assert rotation actually shrinks). */
+/* Valid record bytes, excluding any preallocated zero tail. */
 uint64_t efs_raft_disk_bytes(const struct efs_raft_disk *d);
 
 /* Defer log fsync across a burst of appends. Nested. The release that

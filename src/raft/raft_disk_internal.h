@@ -91,7 +91,9 @@ struct efs_raft_disk {
     char dir[RAFT_DISK_PATH_MAX];
     int fd;
     int sync_mode;
-    uint64_t bytes;      /* file length */
+    uint64_t bytes;      /* end of valid records, excluding reserved zero tail */
+    uint64_t allocated_bytes; /* physical file length, possibly preallocated */
+    int prealloc_off;    /* unsupported/full filesystem: ordinary append */
     uint64_t live_bytes; /* records a rotation would keep */
     uint64_t check_at;   /* recompute live_bytes only past here (amortized) */
     struct raft_disk_group *g[RAFT_DISK_MAX_GROUPS];

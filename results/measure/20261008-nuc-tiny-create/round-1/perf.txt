@@ -1,0 +1,31 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 796  of event 'cycles:P'
+# Event count (approx.): 6073705287
+#
+# Overhead  Command  Shared Object      Symbol                                     
+# ........  .......  .................  ...........................................
+#
+     3.37%  efsd     libc.so.6          [.] __memmove_evex_unaligned_erms
+            |          
+             --3.28%--__memmove_evex_unaligned_erms
+                       |          
+                        --2.34%--lsm_batch
+
+     3.31%  efsd     efsd               [.] cache_get
+            |          
+             --2.80%--cache_get
+                       efs_txn_read_ex
+                       efs_meta_apply_getattr
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+
+
+#
+# (Tip: Limit to show entries above 5% only: perf report --percent-limit 5)
+#

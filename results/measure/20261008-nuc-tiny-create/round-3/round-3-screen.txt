@@ -1,0 +1,46 @@
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/efs/./tiny_files.py", line 136, in <module>
+    main()
+  File "/home/efs/./tiny_files.py", line 118, in main
+    with Progress(target) as progress, ThreadPoolExecutor(max_workers=args.workers) as executor:
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/concurrent/futures/_base.py", line 647, in __exit__
+    self.shutdown(wait=True)
+  File "/usr/lib64/python3.12/concurrent/futures/thread.py", line 239, in shutdown
+    t.join()
+  File "/usr/lib64/python3.12/threading.py", line 1149, in join
+    self._wait_for_tstate_lock()
+  File "/usr/lib64/python3.12/threading.py", line 1169, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+^CException ignored in: <module 'threading' from '/usr/lib64/python3.12/threading.py'>
+Traceback (most recent call last):
+  File "/usr/lib64/python3.12/threading.py", line 1602, in _shutdown
+    atexit_call()
+  File "/usr/lib64/python3.12/concurrent/futures/thread.py", line 31, in _python_exit
+    t.join()
+  File "/usr/lib64/python3.12/threading.py", line 1149, in join
+    self._wait_for_tstate_lock()
+  File "/usr/lib64/python3.12/threading.py", line 1169, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt:
+
+efs@nuc:~$ ^C
+efs@nuc:~$ ^C
+efs@nuc:~$
+efs@nuc:~$
+efs@nuc:~$
+efs@nuc:~$ ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 1000000 --workers 8 /data1/efs/mnt/tiny-files4
+25,457/1,000,000 files (2.5%), 740.1 s, 34 files/sTerminated
+efs@nuc:~$ cd /home/efs && ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 1000000 --workers 8 /data1/efs/mnt/tiny-profile-r1
+7,879/1,000,000 files (0.8%), 67.0 s, 118 files/sTerminated
+efs@nuc:~$ cd /home/efs && ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 1000000 --workers 8 /data1/efs/mnt/tiny-profile-r2
+5,721/1,000,000 files (0.6%), 90.0 s, 64 files/s Terminated
+efs@nuc:~$ cd /home/efs && ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 1000000 --workers 8 /data1/efs/mnt/tiny-profile-r3
+5,594/1,000,000 files (0.6%), 30.0 s, 186 files/s
