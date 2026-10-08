@@ -15,6 +15,7 @@ code=r'''
 static uint64_t deadline;static unsigned calls,gens,invalidations,reprobes;static int terminal=EFS_ERR_NET;
 static uint64_t report_clock_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 static uint64_t efs_client_rpc_deadline_ms(void){return deadline;}
+static void efs_client_rpc_set_deadline_ms(uint64_t d){deadline=d;}
 static int efs_client_rpc_past_deadline(void){return deadline&&report_clock_ms()>=deadline;}
 static uint64_t new_chunk_object_gen(uint32_t c){(void)c;gens++;return 77;}
 static int efs_client_node_is_down(efs_node_id_t n){(void)n;return 0;}
@@ -23,8 +24,8 @@ static void efs_client_conn_invalidate_node(efs_node_id_t n){(void)n;invalidatio
 static void efs_client_nodes_force_reprobe(void){reprobes++;}
 const char *efs_strerror(int rc){(void)rc;return "injected";}
 static int put_fragments_parallel_once(efs_ino_t ino,uint32_t ci,const efs_node_id_t *nodes,const uint8_t **fragments,uint32_t len,const uint8_t checksums[3][EFS_HASH_SIZE],int *failed,uint64_t gen,int first)
-{(void)ino;(void)ci;(void)nodes;(void)fragments;(void)len;(void)checksums;assert(gen==77&&first==(calls==0));calls++;for(unsigned i=0;i<3;i++)failed[i]=2;usleep(5000);return terminal;}
-'''+fn('report_retry_pause')+fn('efs_client_put_fragments_parallel')+r'''
+{(void)ino;(void)ci;(void)nodes;(void)fragments;(void)len;(void)checksums;assert(gen==77&&first==(calls==0));assert(deadline);calls++;for(unsigned i=0;i<3;i++)failed[i]=2;usleep(5000);return terminal;}
+'''+fn('report_retry_pause')+fn('put_fragments_parallel_run')+fn('efs_client_put_fragments_parallel')+r'''
 int main(void){
  efs_node_id_t nodes[3]={1,2,3};const uint8_t *fragments[3]={0};const uint8_t checksums[3][EFS_HASH_SIZE]={{0}};uint64_t object=99;
  uint64_t start=report_clock_ms();deadline=start;
@@ -37,6 +38,8 @@ int main(void){
  assert(efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,&object)==EFS_ERR_QUOTA && calls==1);
  calls=gens=0;terminal=EFS_OK;deadline=report_clock_ms()+100;
  assert(efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,&object)==EFS_OK && calls==1);
+ calls=gens=0;terminal=EFS_ERR_QUOTA;deadline=0;
+ assert(efs_client_put_fragments_parallel(1,0,nodes,fragments,1,checksums,&object)==EFS_ERR_QUOTA && calls==1 && !deadline);
  return 0;
 }
 '''

@@ -2739,7 +2739,7 @@ static void reroute_untried_fragments(efs_node_id_t nodes[EFS_NUM_FRAGMENTS])
     }
 }
 
-int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
+static int put_fragments_parallel_run(efs_ino_t ino, uint32_t chunk_index,
                                       efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
                                       const uint8_t *fragments[EFS_NUM_FRAGMENTS],
                                       uint32_t frag_len,
@@ -2828,6 +2828,24 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
             if (pause_rc != EFS_OK) return pause_rc;
         }
     }
+    return rc;
+}
+
+/* Legacy reclaim/direct paths may enter without a request budget. Bound the
+ * entire object retry cycle, not each attempt, and restore the caller's TLS. */
+int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
+                                      efs_node_id_t nodes[EFS_NUM_FRAGMENTS],
+                                      const uint8_t *fragments[EFS_NUM_FRAGMENTS],
+                                      uint32_t frag_len,
+                                      const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
+                                      uint64_t *object_out)
+{
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    if (!previous)
+        efs_client_rpc_set_deadline_ms(report_clock_ms() + EFS_IO_TIMEOUT_MS);
+    int rc = put_fragments_parallel_run(ino, chunk_index, nodes, fragments,
+                                        frag_len, checksums, object_out);
+    efs_client_rpc_set_deadline_ms(previous);
     return rc;
 }
 
