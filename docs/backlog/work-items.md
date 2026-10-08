@@ -3513,8 +3513,9 @@ persisted metadata, without an accumulated query-index queue. See
 [policy and catch-up gates](../status/efs-command-policy-20261008.md).
 This is distinct from future live replicated per-export policy transitions.
 
-Five successive NUC command profiling rounds target immutable KV searches, Python
-import lookups, redundant root reads and scoped-search ancestry work. Raw perf
+Seven successive NUC command profiling rounds target immutable KV searches, Python
+import lookups, redundant root reads, scoped-search ancestry, compact inode lookup
+and native path validation. Raw perf
 callgraphs, strace, timing samples and correctness evidence are retained in the
 [command performance report](../status/efs-command-performance-20261008.md).
 The measurements do not close the separate scale/platform acceptance.

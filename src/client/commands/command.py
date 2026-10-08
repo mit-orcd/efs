@@ -93,9 +93,17 @@ def validate_result(result, command):
         if not isinstance(entry, dict) or not isinstance(entry.get("path_hex"), str):
             raise ValueError("invalid query entry")
         encoded = entry["path_hex"]
-        if len(encoded) > 8192 or len(encoded) % 2 or any(c not in "0123456789abcdef" for c in encoded):
+        if len(encoded) > 8192 or len(encoded) % 2:
             raise ValueError("invalid encoded filename")
-        path = bytes.fromhex(encoded)
+        try:
+            path = bytes.fromhex(encoded)
+        except ValueError:
+            raise ValueError("invalid encoded filename") from None
+        # C-level decode/re-encode enforces the same canonical lowercase hex
+        # grammar without a Python callback for every character. fromhex alone
+        # would also accept whitespace and uppercase, which the wire forbids.
+        if path.hex() != encoded:
+            raise ValueError("invalid encoded filename")
         # A compromised/malformed reply must never escape the command's scope.
         if not path or path.startswith(b"/") or b"\0" in path or any(
                 part in (b"", b".", b"..") for part in path.split(b"/")):

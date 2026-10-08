@@ -1,12 +1,15 @@
 # W91/W92 — `.efs` command profiling and optimization
 
+Latest deployed candidate: **fcdda898-perf-r7**, after seven completed rounds.
+The continuation results and current generator directory are recorded at the end.
+
 This investigation uses the `devel-find-stats` worktree and the existing NUC
 TCP/buffered cluster, with its stores and historical generator trees preserved.
 It does not close the separate 400 GiB capacity or platform acceptance items.
 
 ## Method
 
-Five successive candidate builds are measured on the same frozen
+The first five successive candidate builds were measured on the same frozen
 `/data1/efs/mnt/tiny-files4` subtree (25,725 files at baseline), while the eight
 worker generator writes a separate fresh tree. Each round measures three
 untraced invocations each of stats, ls, exact find, prefix find and contains
@@ -107,7 +110,7 @@ unchanged. The failed run is retained as `gates-output-cap-failure.log`, and a
 fresh full fixture is required before deployment. This was not a server limit
 bypass or truncated-success fix.
 
-## Final results and deployed state
+## First five rounds: results and deployed state
 
 All five rounds completed. Untraced wall-clock medians in seconds, three samples
 per cell, with eight concurrent generator workers:
@@ -134,7 +137,7 @@ permissions and transaction fences; these five rounds do not eliminate all work.
 Each round built `efsd` and `efs-fuse` with candidate ID
 `e38bdf1f-perf-rN` (`N=1..5`), branch `devel-find-stats`. These are exact embedded
 candidate identifiers rather than commit SHAs; retained patches and build logs
-record the source progression. Production now runs **e38bdf1f-perf-r5** on all
+record the source progression. At completion of round 5, production ran **e38bdf1f-perf-r5** on all
 four nodes and both FUSE mounts. Management binaries were not changed by these
 command-specific deployments. Installed and rollback binary SHA-256 hashes,
 node versions, current Raft roles, mounts and capacity are recorded in
@@ -158,9 +161,94 @@ The independent production subtree walk exactly matched **25,725 returned paths,
 25,725 files and 99 directories**, including duplicate-path rejection and a
 sorted raw-path SHA-256 digest. See `round5/production-oracle.json`. No stores or
 historical generator trees were removed. Both `/data1/efs/mnt` and `mnt2` are up;
-screen `tiny_files` now generates into `/data1/efs/mnt/tiny-command-perf-final`.
+At that checkpoint, screen `tiny_files` generated into `/data1/efs/mnt/tiny-command-perf-final`.
 Final observed headroom: 654 GiB free on `/data1`, about 18 GiB available RAM.
 
 The full fixture is acceptance for these focused changes, not the still-open
 400 GiB real-payload, broader fault-matrix, NFS/macOS or live replicated per-export
 policy gates. W90 expiry and the independent W93–W96 tiny-file work are unchanged.
+
+## Additional requested rounds 6–7
+
+The user requested two more measured rounds after the first five completed.
+A fresh pre-round-6 capture on the running round-5 binary found loaded medians
+of stats 1.357 s, ls 1.247 s, exact 1.280 s, prefix 2.032 s and contains 2.480 s.
+All 15 invocations passed. The namespace had grown to 625,473 files and 2,727
+directories, so the earlier round-5 table is historical, not a same-load baseline
+for the continuation. Additional quiet comparisons separate search cost from
+refresh/write contention. The same frozen 25,725-file subtree is queried.
+
+Round 6 adds a compact immutable inode lookup table. It avoids binary searches
+through large metadata rows during path construction, inode emission and rollup
+building, and removes the now-unnecessary whole-node-array sort. The table stores
+node indices, uses a mixed inode hash and resolves collisions by probing; at most
+half the slots are occupied. Allocation/overflow checks count the entire table
+against the existing catalog cap, cancellation is checked during construction,
+and failed candidates leave the published catalog intact. At this namespace
+size the table requires 8 MiB per catalog. A 512-file same-shard regression gate
+checks every lookup, absent keys and old-generation immutability.
+
+Round 6 passed catalog units, raw query protocol/limits, two-mount permissions,
+immutable descriptors and persisted restart gates before deployment. Its loaded
+medians were stats 0.589 s, ls 0.651 s, exact 0.693 s, prefix 1.257 s and contains
+1.373 s. All 15 succeeded. The post-round-6 quiet capture (stored as round 7's
+before capture) showed catalog inode lookup at 4.34% and ancestry at 3.76% of
+sampled server CPU. These percentages describe that search capture, not all
+work on the host.
+
+Round 7 targets the Python wrapper. Its cProfile capture of the real prefix
+command showed 1,829,751 generator calls checking hex characters and 0.572 s
+instrumented time in result validation. Native `bytes.fromhex` plus canonical
+`bytes.hex` round-trip validation replaces the per-character Python loop.
+The length cap, lowercase-only grammar, whitespace rejection, path scope rules
+and whole-result validation before output are preserved. Regression tests place
+malformed second entries after valid ones to prove no partial output, including
+uppercase, whitespace, non-ASCII, odd-length and oversized encodings.
+
+An alternating 12-pair benchmark validates the identical saved 25,725-path result
+with old and new code, checking identical path lists each time. Median validation
+time fell from **0.112840 s to 0.039235 s (2.88×)**. This is validation-only timing,
+not an end-to-end command latency claim. cProfile has instrumentation overhead;
+loaded command timing continues to be collected separately without tracing.
+
+The complete round-7 fixture passed catalog units, 16 Python/codec tests, POSIX
+**216 passed / 0 failed / 1 skipped (16.1 s)** and peer **64/64 (10.2 s)**. Raw
+protocol/limits, fresh permissions, immutable output, loaded publication/payload,
+publisher loss/rejoin, noexec, cold opt-out and server on/off/on gates all passed.
+The independent persisted restart oracle contained 7,592 files, 12 directories
+and 1,939,523 logical bytes before the off-phase mutations.
+
+
+## Completed continuation: rounds 6–7
+
+Untraced medians in seconds; three samples per command under eight-worker load:
+
+| Candidate | Stats | ls | Find exact | Find prefix | Find contains |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Fresh round-5 baseline | 1.357 | 1.247 | 1.280 | 2.032 | 2.480 |
+| 6: compact inode table | 0.589 | 0.651 | 0.693 | 1.257 | 1.373 |
+| 7: native hex validation | 0.619 | 0.716 | 0.773 | 1.028 | 1.228 |
+
+All 30 new timed invocations passed with unchanged entry counts (plus all 15 in
+the fresh baseline). Small-command latency increased slightly in round 7; the
+hex change targets large results, and the loaded timings vary with write/refresh
+contention. Six-query quiet prefix medians were **0.600 s before round 6,
+0.465 s after round 6, and 0.350 s after round 7**. The wrapper cProfile function
+call count dropped from 2,217,574 to 387,823; instrumented validation time fell
+from 0.572 s to 0.153 s. Prefer the alternating identical-input benchmark above
+for the isolated validation speedup.
+
+All four daemons and both FUSE mounts now use candidate **fcdda898-perf-r7**.
+Round 6 used **fcdda898-perf-r6**. Candidate IDs, build logs, source patches,
+raw perf and strace captures, Python profiles and binary SHA-256 hashes are in
+`round6-before/`, `round6/` and `round7/`. The final fixture's full raw logs and
+suite TSVs are in `round7-fixture/`; source stores remain on NUC. Exact wrapper
+JSON inputs/outputs are retained as gzip files; decompress `wrapper-before.json.gz`
+to replay `wrapper-benchmark.py`. Uncompressed originals remain on NUC.
+
+The independent production oracle again matched **25,725 paths, 25,725 files
+and 99 directories**, with the same sorted path digest as round 5. Both production
+mounts remain up and the generator is running in screen `tiny_files` against
+`/data1/efs/mnt/tiny-command-perf-final7`. Final headroom was 644 GiB on `/data1`
+and about 17 GiB available RAM. Existing data and previous test trees are retained.
+The original W92 scale/platform/remote-policy acceptance remains open.

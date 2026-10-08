@@ -1,0 +1,35 @@
+Thu Oct  8 14:16:51 2026    /data1/efs/command-perf/round7/wrapper-after.prof
+
+         387823 function calls (387602 primitive calls) in 0.409 seconds
+
+   Ordered by: internal time
+   List reduced from 369 to 25 due to restriction <25>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.203    0.203    0.203    0.203 {built-in method _io.open}
+        1    0.075    0.075    0.153    0.153 find:71(validate_result)
+        1    0.020    0.020    0.020    0.020 encoder.py:205(iterencode)
+        1    0.018    0.018    0.018    0.018 decoder.py:344(raw_decode)
+    25726    0.016    0.000    0.028    0.000 {built-in method builtins.any}
+    97131    0.012    0.000    0.012    0.000 find:108(<genexpr>)
+    25725    0.007    0.000    0.007    0.000 {method 'split' of 'bytes' objects}
+    25728    0.007    0.000    0.007    0.000 {method 'startswith' of 'bytes' objects}
+    25725    0.007    0.000    0.007    0.000 {built-in method fromhex}
+    25726    0.007    0.000    0.007    0.000 {method 'hex' of 'bytes' objects}
+    52037    0.006    0.000    0.006    0.000 {built-in method builtins.isinstance}
+52095/52046    0.006    0.000    0.006    0.000 {built-in method builtins.len}
+    25852    0.005    0.000    0.005    0.000 {method 'get' of 'dict' objects}
+    26366    0.005    0.000    0.005    0.000 {method 'append' of 'list' objects}
+        1    0.002    0.002    0.409    0.409 find:1(<module>)
+       11    0.002    0.000    0.002    0.000 {method 'read' of '_io.BufferedReader' objects}
+        3    0.001    0.000    0.001    0.000 {method 'decode' of 'bytes' objects}
+        6    0.001    0.000    0.001    0.000 {built-in method posix.lstat}
+       10    0.001    0.000    0.001    0.000 {built-in method marshal.loads}
+        2    0.001    0.000    0.001    0.000 {built-in method builtins.print}
+    45/43    0.000    0.000    0.001    0.000 {built-in method builtins.__build_class__}
+        4    0.000    0.000    0.000    0.000 {built-in method _imp.create_dynamic}
+    26/14    0.000    0.000    0.001    0.000 _parser.py:512(_parse)
+        1    0.000    0.000    0.403    0.403 find:174(main)
+        1    0.000    0.000    0.224    0.224 find:55(read_result)
+
+

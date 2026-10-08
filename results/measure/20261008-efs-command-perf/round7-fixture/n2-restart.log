@@ -1,0 +1,15 @@
+2026-10-08T18:15:03.062Z Loaded 4 persisted cluster node(s) from /data1/efs/command-perf-fixture-r7-20261008/n2/meta/cluster_nodes.bin
+2026-10-08T18:15:03.062Z   persisted node 1: 127.0.0.1:24800
+2026-10-08T18:15:03.062Z   persisted node 2: 127.0.0.1:24801
+2026-10-08T18:15:03.062Z   persisted node 3: 127.0.0.1:24802
+2026-10-08T18:15:03.062Z   persisted node 4: 127.0.0.1:24803
+2026-10-08T18:15:03.063Z Joined cluster with 4 nodes
+2026-10-08T18:15:03.064Z heartbeat: enabled (2000 ms interval)
+2026-10-08T18:15:03.166Z kv-obs: mt_bytes=812840 l0_bytes=22510 l0=12 l1=59
+2026-10-08T18:15:03.166Z raft-host: up raft_id=1 n=4 boot=11932397360419334 salt=1814963608510779123 g0=hosted g2=hosted
+2026-10-08T18:15:03.166Z efsd fcdda898-perf-r7 (branch devel-find-stats, built 2026-10-08T18:13:44Z on nuc), build=fcdda898-perf-r7: node 2 listening on 127.0.0.1:24801, storage=/data1/efs/command-perf-fixture-r7-20261008/n2 (1 paths, stripe=none), used=720896, quota=1073741824, direct_io=off, writers=0 shared
+2026-10-08T18:15:03.672Z query-refresh: rc=-13 cap_mib=1024 initial=1 elapsed_ms=406
+2026-10-08T18:15:04.181Z raft-host: gc-pass ms=11 orphan=10 reap=0 frag=0 spread=0 recover=0 fscans=2 fsegs=2 fkeys=117 femit=0 ftomb=117 scans=8 segs=146 keys=9150 emit=8194 tomb=956 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-08T18:15:05.064Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=883 passes=2 sampled=3 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-08T18:15:05.201Z raft-host: gc-pass ms=14 orphan=14 reap=0 frag=0 spread=0 recover=0 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=6 segs=86 keys=9043 emit=8196 tomb=847 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-08T18:15:05.392Z query-publish: generation=1 g0=31027 g2=35605 rebuilt=4096 bytes=15755865 pin_ms=1 build_ms=110 root_rc=0 files=7594 dirs=14 logical=1939573

@@ -1,0 +1,128 @@
+{
+  "medians": {
+    "before": 0.11283972949604504,
+    "after": 0.039235463496879674
+  },
+  "samples": [
+    {
+      "implementation": "before",
+      "seconds": 0.1179794369963929,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.04217522800900042,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.04015573702054098,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11428069602698088,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11283303200616501,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.03894347997265868,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.03875927199260332,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11101455599418841,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11212355899624527,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.039120161993196234,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.039351268991595134,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11167356697842479,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11285860699717887,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.03901124399271794,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.039350765000563115,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11937864101491868,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11619188499753363,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.040396211988991126,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.03935874899616465,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11284642698592506,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11259187498944812,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.03891982400091365,
+      "entries": 25725
+    },
+    {
+      "implementation": "after",
+      "seconds": 0.03874358398024924,
+      "entries": 25725
+    },
+    {
+      "implementation": "before",
+      "seconds": 0.11133997500292026,
+      "entries": 25725
+    }
+  ]
+}

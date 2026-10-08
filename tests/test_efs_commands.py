@@ -146,6 +146,20 @@ class Commands(unittest.TestCase):
             with self.subTest(path=path), self.assertRaises(ValueError):
                 commands.validate_result(envelope("find", [path]), "find")
 
+    def test_canonical_hex_and_no_partial_output(self):
+        path = self.result("ls", [b"valid"])
+        for encoded in ("0", "GG", "FF", "61 62", "61\n62", "\t61", "６１", "61" * 4097):
+            with self.subTest(encoded=encoded[:20]):
+                result = envelope("ls", [b"valid", b"second"])
+                result["entries"][1]["path_hex"] = encoded
+                with self.assertRaises(ValueError):
+                    commands.validate_result(result, "ls")
+                path.write_text(json.dumps(result))
+                p = self.run_command("ls", "-0")
+                self.assertEqual(p.returncode, 1, p.stderr)
+                self.assertEqual(p.stdout, b"")
+        self.assertEqual(commands.validate_result(envelope("ls", [b"raw-\xff\n"]), "ls"), [b"raw-\xff\n"])
+
     def test_invalid_pattern(self):
         for term in (b"a/b", b"a\0b", b"x" * 121):
             with self.assertRaises(ValueError):
