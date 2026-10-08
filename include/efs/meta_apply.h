@@ -864,6 +864,15 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
                                   const struct efs_opid *op,
                                   efs_txn_coord_fn coord, void *ctx,
                                   uint64_t *off_out);
+/* Durable append path: receipt and reservation commit in one batch on the
+ * inode shard. ACK retires only client-known results; retired retries fail
+ * closed. Window exhaustion refuses admission before moving the cursor.
+ * Production wiring must carry q unchanged across retries. */
+int efs_meta_apply_append_reserve_durable(struct efs_kv *, efs_ino_t, uint64_t,
+                                         const struct efs_opid_req *,
+                                         efs_txn_coord_fn, void *, uint64_t *);
+int efs_meta_append_result(struct efs_kv *, efs_ino_t, uint64_t,
+                           const struct efs_opid_req *, uint64_t *);
 int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
                                   int outcome);
 /* Hosted path has no op-id yet (zero UUID). The reserved eof rides the

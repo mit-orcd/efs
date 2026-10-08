@@ -1588,7 +1588,13 @@ void efs_client_setup_ino_namespace(void)
     g_client.ino_namespace = tag << 40;
     g_client.ino_counter = 1;
     if (!g_client.flock_token) {
-        g_client.flock_token = tag ^ ((uint64_t)getpid() << 1);
+        /* Append receipt identity must remain distinct across many mounts;
+         * the old 23-bit inode namespace tag is too small for this purpose. */
+        struct efs_opid mount_id;
+        if (efs_client_publication_id(1, &mount_id) == EFS_OK)
+            memcpy(&g_client.flock_token, mount_id.client_uuid, 8);
+        else
+            g_client.flock_token = tag ^ ((uint64_t)getpid() << 1);
         if (!g_client.flock_token)
             g_client.flock_token = 1;
     }

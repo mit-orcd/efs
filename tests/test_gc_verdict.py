@@ -8,8 +8,9 @@ def function(name):
     m = re.search(r'^static [^\n;]*\b'+name+r'\([^;]+?\)\n\{', text, re.M)
     if not m: raise RuntimeError(name)
     return text[m.start():text.index('\n}', m.end())+2]
+append_len=re.search(r'^#define HOST_APPEND_RSV_LEN (\d+)',text,re.M).group(1)
 apply=text[text.index('static int host_apply(void *app'):];apply=apply[apply.index('    ret = (cmd[0]'):apply.index('    if (a0) {')]
-source = r'''
+source = '#define HOST_APPEND_RSV_LEN '+append_len+'\n'+r'''
 #include "efs/common.h"
 #include "efs/meta_apply.h"
 #include "efs/protocol.h"
@@ -40,7 +41,7 @@ int efs_meta_apply_lane_sweep(struct efs_kv*k,efs_ino_t i,uint64_t g,uint8_t l){
 int efs_meta_apply_orphan_reclaim(struct efs_kv*k,efs_ino_t i,uint64_t g){(void)k;assert(i==42&&g==7);return verdict;}
 int efs_meta_apply_reap_done(struct efs_kv*k,efs_ino_t i,uint64_t g){(void)k;assert(i==42&&g==7);return verdict;}
 int efs_meta_apply_gc_ack(struct efs_kv*k,const struct efs_gc_ack_item*p,uint32_t n){(void)k;assert(n==1&&p->ino==42&&p->gen==7&&p->lane==3&&p->ci==8&&p->frag==2);return verdict;}
-''' + '\n'.join(function(n) for n in ('apply_lane_sweep_cmd','apply_reap_done_cmd','apply_orphan_reap_cmd','apply_gc_ack_cmd','host_bg_propose','host_gc_propose')) + '\nstatic int core_result(uint8_t opcode,int rc){uint8_t cmd[1]={opcode};int ret;\n'+apply+'\nreturn ret;}\n' + r'''
+''' + '\n'.join(function(n) for n in ('apply_lane_sweep_cmd','apply_reap_done_cmd','apply_orphan_reap_cmd','apply_gc_ack_cmd','host_bg_propose','host_gc_propose')) + '\nstatic int core_result(uint8_t opcode,int rc,uint32_t clen){uint8_t cmd[1]={opcode};int ret;\n'+apply+'\nreturn ret;}\n' + r'''
 int main(void){
  struct server s={0};struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.s=&s,.r={1}};
  uint8_t cmd[25]={EFS_MD_CMD_LANE_SWEEP};cmd[8]=42;cmd[16]=7;cmd[17]=3;
@@ -58,10 +59,14 @@ int main(void){
  assert(apply_gc_ack_cmd(&h,ack,24,41)==EFS_ERR_PROTO);
  for(unsigned op=0;op<4;op++){
   uint8_t codes[]={EFS_MD_CMD_LANE_SWEEP,EFS_MD_CMD_REAP_DONE,EFS_MD_CMD_GC_ACK,EFS_MD_CMD_ORPHAN_REAP};
-  assert(core_result(codes[op],EFS_ERR_BUSY)==EFS_OK);
-  assert(core_result(codes[op],EFS_ERR_IO)==EFS_ERR_IO);
-  assert(core_result(codes[op],EFS_ERR_NOMEM)==EFS_ERR_NOMEM);
+  assert(core_result(codes[op],EFS_ERR_BUSY,53)==EFS_OK);
+  assert(core_result(codes[op],EFS_ERR_IO,53)==EFS_ERR_IO);
+  assert(core_result(codes[op],EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);
  }
+ assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_IO,53)==EFS_ERR_IO);
+ assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);
+ assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_BUSY,53)==EFS_OK);
+ assert(core_result(EFS_MD_CMD_APPEND_RSV,EFS_ERR_IO,45)==EFS_OK);
  verdict=0;durable=EFS_ERR_IO;assert(host_gc_propose(&h,0,cmd,18)==EFS_ERR_IO);
  puts("GC apply decoders and durable local/forwarded verdict propagation PASS");
 }

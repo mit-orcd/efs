@@ -341,17 +341,43 @@ try:
              source/'tests/live/append_replay_race.c','-pthread','-o',helper])
         path=mount/'append-identical-rpc'
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_RDWR,0o600)
-        try:
-            result=subprocess.run([str(helper),str(a.port),str(os.fstat(fd).st_ino)],
+        ino_replay=os.fstat(fd).st_ino
+        def replay(label,sequence=1,ack=0,length=8,verdict=0,offset=0):
+            result=subprocess.run([str(helper),str(a.port),str(ino_replay),
+                                   str(sequence),str(ack),str(length),str(verdict),str(offset)],
                                   capture_output=True,text=True,timeout=120,env=env)
-            (work/'append-replay-race.log').write_text(result.stdout+result.stderr)
+            (work/('append-replay-'+label+'.log')).write_text(result.stdout+result.stderr)
             assert result.returncode==0,result.stdout+result.stderr
+        try:
+            replay('initial')
             assert os.pwrite(fd,b'append-A',0)==8;os.fsync(fd)
         finally:os.close(fd)
         unmount();stop();start();mount_client()
+        replay('cold-retry')
+        group=0 if ino_replay & 1 else 2
+        leaders=[]
+        for node in range(4):
+            text=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+node}'],capture_output=True,text=True).stdout
+            if re.search(r'group '+str(group)+r' .*role=LEADER',text):leaders.append(node)
+        assert len(leaders)==1,leaders
+        dead=leaders[0];servers[dead].kill();servers[dead].wait(timeout=10)
+        replay('leader-death')
+        (work/'append-leader-death.json').write_text(json.dumps({'group':group,'killed_node':dead+1,'same_identity_replayed':True,'offset':0},indent=2))
+        unmount();stop();start();mount_client()
         assert path.read_bytes()==b'append-A','reserve replay changed the cold file extent'
+        # ACK frees the original receipt; old requests must fail closed.
+        replay('acknowledged-next',2,1,8,0,8)
+        replay('retired',1,0,8,11,0) # EFS_INODE_RPC_STALE
+        replay('changed-payload',2,1,9,6,0) # EFS_INODE_RPC_INVAL
+        fd=os.open(path,os.O_WRONLY)
+        try:assert os.pwrite(fd,b'append-B',8)==8;os.fsync(fd)
+        finally:os.close(fd)
+        unmount();stop();start();mount_client()
+        replay('cold-next',2,1,8,0,8)
+        replay('cold-retired',1,0,8,11,0)
+        assert path.read_bytes()==b'append-Aappend-B','durable replay duplicated or changed bytes'
         path.unlink();wait(drained,'identical append RPC physical deletion drained')
-        print('32 identical concurrent APPEND RPCs and exact cold extent PASS',flush=True)
+        print('durable append lost replies, 32 identical RPCs, ACK retirement and exact cold bytes PASS',flush=True)
     if a.full_node:
         endpoint=f'127.0.0.1:{a.port}'
         result=run([source/'efs-mgmt','shrink-quota',endpoint,str((1<<30)-(64<<10))],capture_output=True,text=True)

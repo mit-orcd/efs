@@ -2875,36 +2875,23 @@ static off_t append_end_offset(efs_ino_t ino)
  * cannot merge two GET+PUTs). Their close REPORT resolves nopen. On
  * success, drop cached copies of the tail so a later flush merges the
  * published peer. Does not fall back to an unreserved local end. */
-/* Append deduplication is session-wide, while append mutexes are per inode.
- * Never reuse a sequence on concurrent files or after exhaustion. */
-static uint64_t append_next_sequence(void)
-{
-    uint64_t old = __atomic_load_n(&g_client.append_opid_seq, __ATOMIC_RELAXED);
-    for (;;) {
-        if (old == UINT64_MAX)
-            return 0;
-        uint64_t next = old + 1;
-        if (__atomic_compare_exchange_n(&g_client.append_opid_seq, &old, next,
-                                        1, __ATOMIC_RELAXED, __ATOMIC_RELAXED))
-            return next;
-    }
-}
-
 static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
 {
     uint64_t ns = 0, start = 0, seq;
+    struct efs_opid_req q;
+    int slot;
     int rc = EFS_ERR_BUSY;
 
-    seq = append_next_sequence();
-    if (!seq)
-        return -EOVERFLOW;
+    slot = efs_client_append_begin(&q);
+    if (slot < 0) return -EAGAIN;
+    seq = q.id.seq;
     /* Foreign uuid is BUSY until their close REPORT. 2 ms × 15000 was
      * 500 reserve RPCs/s that stalled the live appender (B's 45 s SSH
      * timeout while A was still writing). Back off; cap ~20 s. */
     {
         int delay_us = 2000;
         for (int attempt = 0; attempt < 400; attempt++) {
-            rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, seq,
+            rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, &q,
                                                &ns, &start);
             if (rc == EFS_OK && ns >= len)
                 break;
@@ -2923,6 +2910,7 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
             pthread_mutex_lock(append_mu(ino));
         }
     }
+    efs_client_append_end(slot);
     /* Never fall back to an unreserved local end: under 9-way that
      * overlapped another process's reservation and dropped ~40 lines.
      * Do not clamp to local_end either — that overwrites a peer's

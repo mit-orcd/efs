@@ -258,6 +258,30 @@ static void opid_end(int slot)
     pthread_mutex_unlock(&opid_mu);
 }
 
+/* A reservation identity lives across the entire FUSE BUSY retry loop,
+ * not just one transport attempt. Share namespace's contiguous-ACK tracker;
+ * append's distinct KV kind keeps its result namespace separate. Legacy
+ * REPORT resolution still identifies appenders by flock_token. */
+int efs_client_append_begin(struct efs_opid_req *q)
+{
+    int slot = opid_begin(q);
+    if (slot < 0) return slot;
+    pthread_mutex_lock(&opid_mu);
+    if (!g_client.flock_token) {
+        memcpy(&g_client.flock_token, g_client.opid_uuid, 8);
+        if (!g_client.flock_token) g_client.flock_token = 1;
+    }
+    memset(q->id.client_uuid, 0, EFS_OPID_UUID_LEN);
+    memcpy(q->id.client_uuid, &g_client.flock_token, 8);
+    pthread_mutex_unlock(&opid_mu);
+    return slot;
+}
+
+void efs_client_append_end(int slot)
+{
+    opid_end(slot);
+}
+
 /* Append the wire suffix after `slen` bytes of struct; new length. */
 static uint32_t opid_suffix(uint8_t *buf, uint32_t slen, const struct efs_opid_req *q)
 {
@@ -1351,28 +1375,33 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
  * new_size_out is this reservation's end; start_out is the reserved
  * offset (reply atime) when the host stamped reserved+len. */
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
-                                  uint64_t len, uint64_t seq,
+                                  uint64_t len, const struct efs_opid_req *q,
                                   uint64_t *new_size_out, uint64_t *start_out)
 {
-    uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_APPEND_OPID_LEN];
+    uint8_t buf[sizeof(struct efs_msg_inode_append) + EFS_APPEND_ACK_LEN];
     struct efs_msg_inode_append *req = (struct efs_msg_inode_append *)buf;
     uint8_t *su = buf + sizeof(*req);
-    uint32_t epoch = 1;
     struct efs_msg_inode_reply r;
     int rc;
 
-    if (!g_client.flock_token) {
-        g_client.flock_token = ((uint64_t)getpid() << 1) ^ 1ull;
-        if (!g_client.flock_token)
-            g_client.flock_token = 1;
-    }
+    if (!efs_opid_req_valid(q) || q->ack >= q->id.seq)
+        return EFS_ERR_INVAL;
     memset(buf, 0, sizeof(buf));
     req->export_id = export_id;
     req->ino = ino;
     req->len = len;
-    memcpy(su, &g_client.flock_token, sizeof(g_client.flock_token));
-    memcpy(su + EFS_OPID_UUID_LEN, &epoch, 4);
-    memcpy(su + EFS_SESS_WIRE_LEN, &seq, 8);
+    struct efs_opid_req current = *q;
+    /* BUSY may have released the per-inode append lock. Refresh only the
+     * retirement watermark; preserve this operation's UUID/epoch/sequence. */
+    pthread_mutex_lock(&opid_mu);
+    uint64_t low = q->id.seq;
+    for (int i = 0; i < EFS_OPID_INFLIGHT; i++) {
+        uint64_t pending = g_client.opid_inflight[i];
+        if (pending && pending < low) low = pending;
+    }
+    if (low - 1 > current.ack) current.ack = low - 1;
+    pthread_mutex_unlock(&opid_mu);
+    efs_opid_req_pack(&current, su);
     rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_APPEND, buf, sizeof(buf),
                              EFS_MSG_INODE_APPEND_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)

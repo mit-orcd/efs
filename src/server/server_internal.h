@@ -378,7 +378,7 @@ void server_raft_host_xattr(efs_ino_t ino, uint8_t op, uint32_t flags,
                             struct efs_msg_xattr_reply *out, uint32_t *out_len);
 void server_raft_host_append(efs_ino_t ino, uint64_t len,
                              const uint8_t *sess_uuid, uint32_t sess_epoch,
-                             uint64_t op_seq, struct efs_msg_inode_reply *out);
+                             uint64_t op_seq, const uint64_t *ack, struct efs_msg_inode_reply *out);
 void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
                            const char *new_name, const struct efs_opid_req *q,
                            struct efs_msg_inode_reply *out);

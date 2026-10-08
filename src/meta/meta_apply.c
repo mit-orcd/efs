@@ -52,6 +52,7 @@ static int meta_write_check(struct efs_kv *kv, const uint8_t *key, uint32_t kl)
         lane_key[2] = EFS_KV_KIND_LANE;
         return efs_txn_key_exclusive(kv, lane_key, sizeof(lane_key));
     case EFS_KV_KIND_APPEND_CUR:
+    case EFS_KV_KIND_APPEND_RECEIPT:
     case EFS_KV_KIND_APPEND_RSV: {
         uint8_t inode_key[11];
         if (kl < 19)
@@ -5710,6 +5711,23 @@ int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
         if (!rp.full)
             break;
     }
+    if (drop_row || efs_meta_apply_get_inode(kv, ino, &row) == EFS_ERR_NOT_FOUND) {
+        for (;;) {
+            struct efs_kv_item rit[32];
+            uint8_t keys[32][EFS_KV_KEY_MAX], prefix[EFS_KV_KEY_MAX];
+            uint32_t plen = 0;
+            struct rsv_purge rp = {.it = rit, .keys = keys, .cap = 32};
+            rc = efs_kv_key_inode(ish, ino, prefix, &plen);
+            if (rc != EFS_OK) return rc;
+            prefix[2] = EFS_KV_KIND_APPEND_RECEIPT;
+            rc = efs_kv_scan_prefix(kv, prefix, plen, rsv_purge_cb, &rp);
+            if (rc < 0) return rc;
+            if (!rp.found) break;
+            rc = meta_write_batch(kv, rit, rp.n);
+            if (rc != EFS_OK) return rc;
+            if (!rp.full) break;
+        }
+    }
     rc = efs_kv_key_append_cur(ish, ino, gen, k_cur, &kc);
     if (rc == EFS_OK)
         rc = efs_kv_key_reap(efs_kv_anchor_shard(ish), ino, k_reap, &kr);
@@ -6834,10 +6852,52 @@ int efs_meta_apply_append_foreign(struct efs_kv *kv, efs_ino_t ino,
     return append_foreign_open(kv, ino, row.generation, uuid);
 }
 
-int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
+/* Unlike directory windows, append's result must bind the requested length
+ * and must never turn a retired success into an invented offset zero. Keep
+ * this window on the inode's group, in a separate identity namespace. */
+static int append_receipt_load(struct efs_kv *kv, efs_ino_t ino,
+                               const struct efs_opid_req *q, uint8_t *key,
+                               uint32_t *kl, uint8_t *value, uint32_t *vl)
+{
+    int rc;
+    if (!kv || !ino || !q || !efs_opid_req_valid(q) ||
+        !q->id.session_epoch || q->ack >= q->id.seq)
+        return EFS_ERR_INVAL;
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, key, kl);
+    if (rc != EFS_OK) return rc;
+    key[2] = EFS_KV_KIND_APPEND_RECEIPT;
+    memcpy(key + *kl, q->id.client_uuid, EFS_OPID_UUID_LEN);
+    *kl += EFS_OPID_UUID_LEN;
+    be32(key + *kl, q->id.session_epoch); *kl += 4;
+    rc = efs_kv_get(kv, key, *kl, value, vl);
+    if (rc == EFS_ERR_NOT_FOUND) { *vl = 0; return EFS_OK; }
+    return rc;
+}
+
+int efs_meta_append_result(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
+                           const struct efs_opid_req *q, uint64_t *off)
+{
+    uint8_t key[EFS_KV_KEY_MAX], value[EFS_OPID_VAL_MAX];
+    uint32_t kl = 0, vl = sizeof(value);
+    struct efs_opid_reply rep;
+    int rc;
+    if (!len || !off) return EFS_ERR_INVAL;
+    rc = append_receipt_load(kv, ino, q, key, &kl, value, &vl);
+    if (rc != EFS_OK) return rc;
+    rc = efs_opid_probe(value, vl, &q->id, &rep);
+    if (rc <= 0) return rc < 0 ? rc : EFS_ERR_NOT_FOUND;
+    if (!rep.ino) return EFS_ERR_STALE; /* retired, exact offset unavailable */
+    if (rep.ino != len) return EFS_ERR_INVAL;
+    if (rep.rc == EFS_OK) *off = rep.extra;
+    return rep.rc;
+}
+
+static int append_reserve_inner(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
                                   const struct efs_opid *op,
+                                  const struct efs_opid_req *durable,
                                   efs_txn_coord_fn coord, void *ctx,
                                   uint64_t *off_out)
+
 {
     struct efs_meta_row row;
     struct efs_opid_reply rep;
@@ -6851,14 +6911,20 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
     struct efs_kv_item it[EFS_META_LANES + 4];
     uint32_t kc = 0, kr = 0, n = 0, i;
+    uint8_t receipt_cur[EFS_OPID_VAL_MAX];
+    uint32_t receipt_kl = 0, receipt_vl = sizeof(receipt_cur);
     int rc, hit;
 
     if (!kv || !op || !coord || !off_out || ino == 0 || len == 0)
         return EFS_ERR_INVAL;
     /* APPEND's window (sim; production APPEND carries seq 0) lives on the
      * session shard, not a dentry shard. */
-    hit = efs_meta_apply_opid_probe(kv, efs_kv_session_shard(op->client_uuid),
-                                    op, &rep);
+    if (durable) {
+        rc = efs_meta_append_result(kv, ino, len, durable, off_out);
+        if (rc != EFS_ERR_NOT_FOUND) return rc;
+    }
+    hit = durable ? 0 : efs_meta_apply_opid_probe(kv,
+                    efs_kv_session_shard(op->client_uuid), op, &rep);
     if (hit < 0)
         return hit;
     if (hit) {
@@ -6932,7 +6998,20 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
                          append_bar_set, &cur.watermark, it, &n, k_ln, v_ln);
     if (rc != EFS_OK)
         return rc;
-    if (opid_hosted(op)) {
+    if (durable) {
+        uint32_t packed = sizeof(v_opid);
+        rc = append_receipt_load(kv, ino, durable, k_opid, &receipt_kl,
+                                 receipt_cur, &receipt_vl);
+        if (rc != EFS_OK) return rc;
+        memset(&rep, 0, sizeof(rep));
+        rep.rc = EFS_OK; rep.ino = len; rep.extra = eof;
+        rc = efs_opid_fold(receipt_cur, receipt_vl, op->client_uuid,
+                           op->session_epoch, durable, &rep, v_opid, &packed);
+        if (rc == EFS_ERR_NOMEM) return EFS_ERR_BUSY;
+        if (rc != EFS_OK) return rc;
+        it[n].op = EFS_KV_PUT; it[n].key = k_opid;
+        it[n].klen = receipt_kl; it[n].val = v_opid; it[n].vlen = packed; n++;
+    } else if (opid_hosted(op)) {
         struct efs_opid_req q;
 
         memset(&q, 0, sizeof(q));
@@ -6952,6 +7031,24 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
         return rc;
     *off_out = eof;
     return EFS_OK;
+}
+
+int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
+                                  const struct efs_opid *op,
+                                  efs_txn_coord_fn coord, void *ctx,
+                                  uint64_t *off_out)
+{
+    return append_reserve_inner(kv, ino, len, op, NULL, coord, ctx, off_out);
+}
+
+int efs_meta_apply_append_reserve_durable(struct efs_kv *kv, efs_ino_t ino,
+                                         uint64_t len,
+                                         const struct efs_opid_req *q,
+                                         efs_txn_coord_fn coord, void *ctx,
+                                         uint64_t *off_out)
+{
+    if (!q) return EFS_ERR_INVAL;
+    return append_reserve_inner(kv, ino, len, &q->id, q, coord, ctx, off_out);
 }
 
 int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
@@ -7677,6 +7774,17 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
         if (efs_kv_inode_shard(r.ino) != (((uint32_t)key[0] << 8) | key[1])) {
             c->rc = EFS_ERR_PROTO;
             return 1;
+        }
+        return 0;
+    }
+    if (key[2] == EFS_KV_KIND_APPEND_RECEIPT) {
+        struct efs_opid_window window;
+        if (klen != 31 || !rd64(key + 3) || !rd32(key + 27) ||
+            efs_kv_inode_shard(rd64(key + 3)) != (((uint32_t)key[0] << 8) | key[1]) ||
+            efs_opid_window_unpack(&window, val, vlen) != EFS_OK ||
+            memcmp(window.client_uuid, key + 11, EFS_OPID_UUID_LEN) ||
+            window.session_epoch != rd32(key + 27)) {
+            c->rc = EFS_ERR_PROTO; return 1;
         }
         return 0;
     }

@@ -65,9 +65,7 @@ struct efs_client {
     uint64_t ino_counter;
     /* Per-mount token for cluster flock / open-hold (not a POSIX lock owner). */
     uint64_t flock_token;
-    /* Monotonic APPEND op-id seq (never 0). Retries of one reserve reuse it. */
-    uint64_t append_opid_seq;
-    /* I16 directory op-id (§7.9): per-mount identity, one monotonic seq
+    /* I16 namespace/append op-id (§7.9): per-mount identity, one monotonic seq
      * space, and the in-flight set that yields the contiguous ack the
      * server windows reclaim by. A slot is held from the first send of an
      * RPC to its final return; every retry inside reuses the same seq. */
@@ -280,8 +278,10 @@ int efs_client_rpc_link(efs_export_id_t export_id, efs_ino_t src_ino,
                         struct efs_inode *out);
 /* Cross-client O_APPEND reservation. end = reserved+len (reply size);
  * start is reply atime when the host stamped this reservation. */
+int efs_client_append_begin(struct efs_opid_req *);
+void efs_client_append_end(int slot);
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
-                                  uint64_t len, uint64_t seq,
+                                  uint64_t len, const struct efs_opid_req *q,
                                   uint64_t *new_size_out, uint64_t *start_out);
 int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
                         uint64_t owner);

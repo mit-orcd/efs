@@ -732,8 +732,10 @@ struct efs_msg_inode_link {
  * watermark. offset = inode.size - len. Two concurrent reserves must
  * not share an offset.
  * Optional suffix: EFS_SESS_WIRE_LEN (uuid[16] + native uint32 epoch)
- * or EFS_APPEND_OPID_LEN (that plus native uint64 seq). seq!=0 makes
- * a retried reserve I16 (same offset). Absent keeps the zero stand-in.
+ * or EFS_APPEND_OPID_LEN (that plus native uint64 seq: legacy host cache).
+ * EFS_APPEND_ACK_LEN adds native uint64 contiguous ACK and selects atomic
+ * durable reservation receipts on the inode shard. Retired identities fail
+ * closed; a full receipt window refuses allocation. Absent is legacy.
  * Do not grow this struct. */
 struct efs_msg_inode_append {
     efs_export_id_t export_id;
@@ -777,6 +779,7 @@ struct efs_msg_inode_hold {
 #define EFS_FLOCK_RANGE_LEN 16u
 #define EFS_SESS_WIRE_LEN 20u
 #define EFS_APPEND_OPID_LEN (EFS_SESS_WIRE_LEN + 8u)
+#define EFS_APPEND_ACK_LEN (EFS_APPEND_OPID_LEN + 8u) /* contiguous client ACK */
 /* Directory mutations (INODE_CREATE incl. mkdir, INODE_UNLINK incl.
  * rmdir, INODE_LINK, INODE_RENAME_AT) take an optional EFS_OPID_WIRE_LEN
  * suffix (opid.h: uuid[16] + native u32 epoch + native u64 seq + native
