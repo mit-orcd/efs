@@ -6893,6 +6893,8 @@ int efs_meta_apply_append_reserve(struct efs_kv *kv, efs_ino_t ino, uint64_t len
             return rc;
     }
     eof = max_u64(phys, cur.watermark);
+    if (len > UINT64_MAX - eof || cur.nopen == UINT32_MAX)
+        return EFS_ERR_INVAL;
     if (cur.nopen == 0)
         cur.frontier = eof;
     cur.watermark = eof + len;

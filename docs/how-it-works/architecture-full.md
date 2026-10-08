@@ -1500,8 +1500,11 @@ from their dated runs, not a live cluster inventory.
 - **D27/0a — writeback recovery:** runtime ownership/error/stop foundations
   are implemented; strict whole-call timing, fault recovery and RSS gates remain
   open. DNS resolution and accepted-job lifetime still limit deadline claims.
-- **W64/W65:** durable append failover replay and slow daemon shutdown are
-  unresolved findings from the [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
+- **W64:** durable append failover replay remains open. Oct 8 cache-identity,
+  authority and cursor-overflow hardening passes AMD direct-I/O/TCP functional
+  gates; restart-safe receipts remain required.
+- **W65:** supported TCP shutdown acceptance is recorded in the five-package
+  round; AMD RXE shutdown acceptance is being exercised separately.
 
 Latest continuation service acceptance: isolated `24fae5c1`, direct I/O, full
 Linux units, POSIX 216/0/1 skip, peer 64/64, persistence 26/26 in each phase.
@@ -1726,10 +1729,15 @@ D28 salvage is undecided. Keep the D27 decision's fault-before-publication gates
 **W64 — append:** host-local replay races were fixed in `ec1500ec`; replay
 across leader changes is not durable merely because concurrent repeats pass.
 The round-20 first-record-loss trace remains evidence, not a proven sole cause.
+Oct 8 hardening compares the complete UUID, session epoch and reservation length,
+requires a fresh authoritative read before a cache replay, and refuses cursor overflow.
+AMD direct-I/O/TCP passes full units, POSIX 216/0/1 skip, peer 64/64 and cold
+durability 26/26 in both phases. These checks do not close durable replay.
 
-**W65 — shutdown:** nuc n1 exceeded the ten-second SIGTERM wait twice after
-clean client drains and was SIGKILLed by the rollout tooling. Capture userspace
-stacks during a controlled stop; do not label graceful daemon shutdown accepted.
+**W65 — shutdown:** the historical NUC SIGTERM failures are superseded for TCP
+by the [six active-write stop/recovery gates](../status/tcp-five-gates-20261007.md).
+RDMA acceptance is now being exercised on AMD RXE; hardware RoCE/native IB
+remain separate platform obligations.
 
 ### Additional public-contract findings
 
@@ -4521,6 +4529,14 @@ results dirs; move this plan's finished rows to project-history.
 
 
 <a id="w65"></a>
+
+**Oct 8 AMD hardening:** host-local replay now compares all UUID bytes and the
+session epoch, rejects a changed reservation length, and requires fresh inode/lane
+authority before answering a cached offset. Metadata refuses overflow without
+advancing the append cursor. Production-helper regression tests and AMD
+direct-I/O/TCP full units, POSIX 216/0/1 skip, peer 64/64 and durability 26/26
+in both phases pass. The cache is still volatile: leader-change/restart receipts,
+bounded retirement and the original W87 broad-load acceptance remain open.
 
 ### W65 · Daemon exceeds graceful shutdown wait (queue row 0u)
 

@@ -2981,6 +2981,25 @@ static void test_append_reserve(void)
                   wm == 64 && nopen == 1,
               "zero uuid watermark");
     }
+    {
+        uint64_t watermark, frontier;
+        uint32_t nopen;
+        mkop(&op, 7, 6);
+        CHECK(efs_meta_apply_append_reserve(kv, ino, UINT64_MAX, &op,
+                                           coord_fn, &cc, &off2) == EFS_ERR_INVAL,
+              "overflowing reserve refused");
+        CHECK(efs_meta_apply_append_state(kv, ino, &watermark, &frontier,
+                                         &nopen) == EFS_OK &&
+                  watermark == 516 && nopen == 1,
+              "overflow refusal leaves reservation state intact");
+        CHECK(efs_meta_apply_append_resolve(kv, ino, off,
+                                           EFS_META_APPEND_COMPLETED) == EFS_OK,
+              "prior reservation still resolves after overflow refusal");
+        CHECK(efs_meta_apply_append_reserve(kv, ino, 16, &op,
+                                           coord_fn, &cc, &off2) == EFS_OK &&
+                  off2 == 516,
+              "same identity may retry a refused reserve");
+    }
     CHECK(efs_meta_apply_check(kv) == EFS_OK, "check");
     efs_kv_mem_free(kv);
 }

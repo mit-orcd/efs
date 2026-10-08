@@ -60,10 +60,15 @@ D28 salvage is undecided. Keep the D27 decision's fault-before-publication gates
 **W64 — append:** host-local replay races were fixed in `ec1500ec`; replay
 across leader changes is not durable merely because concurrent repeats pass.
 The round-20 first-record-loss trace remains evidence, not a proven sole cause.
+Oct 8 hardening compares the complete UUID, session epoch and reservation length,
+requires a fresh authoritative read before a cache replay, and refuses cursor overflow.
+AMD direct-I/O/TCP passes full units, POSIX 216/0/1 skip, peer 64/64 and cold
+durability 26/26 in both phases. These checks do not close durable replay.
 
-**W65 — shutdown:** nuc n1 exceeded the ten-second SIGTERM wait twice after
-clean client drains and was SIGKILLed by the rollout tooling. Capture userspace
-stacks during a controlled stop; do not label graceful daemon shutdown accepted.
+**W65 — shutdown:** the historical NUC SIGTERM failures are superseded for TCP
+by the [six active-write stop/recovery gates](tcp-five-gates-20261007.md).
+RDMA acceptance is now being exercised on AMD RXE; hardware RoCE/native IB
+remain separate platform obligations.
 
 ## Additional public-contract findings
 

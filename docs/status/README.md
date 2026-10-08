@@ -47,8 +47,11 @@ from their dated runs, not a live cluster inventory.
 - **D27/0a — writeback recovery:** runtime ownership/error/stop foundations
   are implemented; strict whole-call timing, fault recovery and RSS gates remain
   open. DNS resolution and accepted-job lifetime still limit deadline claims.
-- **W64/W65:** durable append failover replay and slow daemon shutdown are
-  unresolved findings from the [30-round ledger](../../results/measure/20261007-roadmap-rounds/SUMMARY.md).
+- **W64:** durable append failover replay remains open. Oct 8 cache-identity,
+  authority and cursor-overflow hardening passes AMD direct-I/O/TCP functional
+  gates; restart-safe receipts remain required.
+- **W65:** supported TCP shutdown acceptance is recorded in the five-package
+  round; AMD RXE shutdown acceptance is being exercised separately.
 
 Latest continuation service acceptance: isolated `24fae5c1`, direct I/O, full
 Linux units, POSIX 216/0/1 skip, peer 64/64, persistence 26/26 in each phase.

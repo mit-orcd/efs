@@ -453,13 +453,15 @@ struct efs_raft_host {
     uint64_t obs_opid_replay;
     /* Set by apply_append_rsv_cmd; host_apply copies it into the ring. */
     uint64_t apply_extra;
-    /* In-memory I16 for APPEND: a retried RPC with the same (ino,token,seq)
+    /* In-memory I16 for APPEND: a retried RPC with the same (ino,uuid,epoch,seq)
      * must not propose a second reservation (that left a 6-byte hole).
      * Not in the Raft cmd — 400 unique seqs in the op-id window is NOMEM. */
     struct {
-        uint64_t token;
+        uint8_t uuid[EFS_OPID_UUID_LEN];
+        uint32_t epoch;
         uint64_t seq;
         efs_ino_t ino;
+        uint64_t len;
         uint64_t off;
     } ap_rep[512];
     uint32_t ap_rep_i;
@@ -4359,48 +4361,47 @@ static int pack_append_rsv_cmd(uint8_t *out, uint32_t *len, efs_ino_t ino,
     return EFS_OK;
 }
 
+/* 0 = exact replay, NOT_FOUND = cache miss, INVAL = reused identity
+ * with a different payload. A payload mismatch must never allocate again. */
 static int host_append_replay_get(struct efs_raft_host *h, efs_ino_t ino,
-                                  const uint8_t *uuid, uint64_t seq,
-                                  uint64_t *off_out)
+                                  const uint8_t *uuid, uint32_t epoch,
+                                  uint64_t seq, uint64_t len, uint64_t *off_out)
 {
-    uint64_t token = 0;
     uint32_t i;
 
     if (!h || !uuid || seq == 0 || !off_out)
-        return -1;
-    memcpy(&token, uuid, sizeof(token));
-    if (!token)
-        return -1;
+        return EFS_ERR_NOT_FOUND;
     pthread_mutex_lock(&h->mu);
     for (i = 0; i < 512; i++) {
         if (h->ap_rep[i].seq == seq && h->ap_rep[i].ino == ino &&
-            h->ap_rep[i].token == token) {
-            *off_out = h->ap_rep[i].off;
+            h->ap_rep[i].epoch == epoch &&
+            memcmp(h->ap_rep[i].uuid, uuid, EFS_OPID_UUID_LEN) == 0) {
+            int rc = h->ap_rep[i].len == len ? EFS_OK : EFS_ERR_INVAL;
+            if (rc == EFS_OK)
+                *off_out = h->ap_rep[i].off;
             pthread_mutex_unlock(&h->mu);
-            return 0;
+            return rc;
         }
     }
     pthread_mutex_unlock(&h->mu);
-    return -1;
+    return EFS_ERR_NOT_FOUND;
 }
 
 static void host_append_replay_put(struct efs_raft_host *h, efs_ino_t ino,
-                                   const uint8_t *uuid, uint64_t seq,
-                                   uint64_t off)
+                                   const uint8_t *uuid, uint32_t epoch,
+                                   uint64_t seq, uint64_t len, uint64_t off)
 {
-    uint64_t token = 0;
     uint32_t i;
 
     if (!h || !uuid || seq == 0)
         return;
-    memcpy(&token, uuid, sizeof(token));
-    if (!token)
-        return;
     pthread_mutex_lock(&h->mu);
     i = h->ap_rep_i++ & 511u;
-    h->ap_rep[i].token = token;
+    memcpy(h->ap_rep[i].uuid, uuid, EFS_OPID_UUID_LEN);
+    h->ap_rep[i].epoch = epoch;
     h->ap_rep[i].seq = seq;
     h->ap_rep[i].ino = ino;
+    h->ap_rep[i].len = len;
     h->ap_rep[i].off = off;
     pthread_mutex_unlock(&h->mu);
 }
@@ -11036,9 +11037,19 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
     }
     if (!host_append_primary(h, ig, out))
         return;
-    if (sess_uuid && op_seq &&
-        host_append_replay_get(h, ino, sess_uuid, op_seq, &reserved) == 0) {
-        rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
+    rc = host_read_inode_lanes(h, ino, &hint);
+    if (rc != EFS_OK) {
+        set_inode_rc(out, rc, hint);
+        return;
+    }
+    if (!host_append_primary(h, ig, out))
+        return;
+    rc = sess_uuid && op_seq
+        ? host_append_replay_get(h, ino, sess_uuid, sess_epoch, op_seq, len,
+                                 &reserved) : EFS_ERR_NOT_FOUND;
+    if (rc != EFS_ERR_NOT_FOUND) {
+        if (rc == EFS_OK)
+            rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
         set_inode_rc(out, rc, hint);
         if (rc == EFS_OK) {
             stat_to_inode(&st, &out->inode);
@@ -11047,9 +11058,7 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
         }
         return;
     }
-    rc = host_read_inode_lanes(h, ino, &hint);
-    if (rc == EFS_OK)
-        rc = efs_meta_apply_get_inode(h->kv, ino, &row);
+    rc = efs_meta_apply_get_inode(h->kv, ino, &row);
     if (rc == EFS_OK && !S_ISREG(row.mode))
         rc = EFS_ERR_INVAL;
     /* Do not session-accept here: leftover-1 FUSE has no session record,
@@ -11076,7 +11085,8 @@ void server_raft_host_append(efs_ino_t ino, uint64_t len,
     if (rc == EFS_OK)
         rc = host_propose_wait_ex(h, ig, cmd, clen, &hint, &reserved);
     if (rc == EFS_OK && sess_uuid && op_seq)
-        host_append_replay_put(h, ino, sess_uuid, op_seq, reserved);
+        host_append_replay_put(h, ino, sess_uuid, sess_epoch, op_seq, len,
+                               reserved);
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, ino, host_txn_coord, h, &st);
     /* Hollow apply is a BUSY retry, not a campaign ban. Marking the
