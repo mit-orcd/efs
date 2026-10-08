@@ -137,3 +137,15 @@ and separate syscall-count profiles were collected. Unrelated NUC daemons were
 busy during measurement and were preserved. This is not clean universal
 performance acceptance; the remaining gate is an isolated repeat, with no
 claim that reservation always wins. [All measurements and limits](../../results/measure/20261008-w93-w96-implementation/w96-nuc/README.md).
+
+## W93 follower failure and committed-prefix protection
+
+Expanded tests reproduced application of an unmatched follower tail. Commit now
+stops at the prefix proven by the request, remains monotonic, and rejects any
+conflict that would truncate committed entries. Hard-state, truncate, append
+and batch durability failures fence the instance until restart; no success
+reply or apply escapes those failures. Focused AMD tests and local sanitizers
+pass. Full private AMD direct/TCP fixture `gc-direct-aw0f7val` passes POSIX
+216/0/1, peer 64/64, append/replay/fsync, held CREATE, shutdown, two cold WAL
+recovery cycles and empty final physical GC inventory. Installed service restored.
+[Evidence](../../results/measure/20261008-w93-w96-implementation/w93-fault-recovery/live.log).

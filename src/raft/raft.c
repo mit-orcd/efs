@@ -207,9 +207,21 @@ static int is_cfg_cmd(const uint8_t *cmd, uint32_t clen)
     return 0;
 }
 
+static void fence_storage(struct efs_raft *r)
+{
+    r->storage_failed = 1;
+    r->commit_index = r->last_applied;
+    r->role = EFS_RAFT_FOLLOWER;
+    r->leader = -1;
+    r->allow_campaign = 0;
+    r->read_in_flight = 0;
+}
+
 static int save_hard(struct efs_raft *r)
 {
-    return r->store->save_hard(r->store_ctx, r->current_term, r->voted_for);
+    int rc = r->store->save_hard(r->store_ctx, r->current_term, r->voted_for);
+    if (rc != EFS_OK) fence_storage(r);
+    return rc;
 }
 
 static int save_cfg(struct efs_raft *r)
@@ -345,7 +357,7 @@ static int maybe_step_down(struct efs_raft *r, uint64_t term)
     r->vote_bits = 0;
     r->read_in_flight = 0;
     reset_election(r);
-    save_hard(r);
+    if (save_hard(r) != EFS_OK) return EFS_ERR_IO;
     return 1;
 }
 
@@ -1096,7 +1108,7 @@ static int on_vote_req(struct efs_raft *r, const struct efs_raft_msg *in)
     int grant = 0;
     int rc;
 
-    maybe_step_down(r, in->term);
+    if (maybe_step_down(r, in->term) < 0) return EFS_ERR_IO;
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_VOTE_REP;
     m.to = in->from;
@@ -1123,7 +1135,7 @@ static int on_vote_req(struct efs_raft *r, const struct efs_raft_msg *in)
 
 static int on_vote_rep(struct efs_raft *r, const struct efs_raft_msg *in)
 {
-    maybe_step_down(r, in->term);
+    if (maybe_step_down(r, in->term) < 0) return EFS_ERR_IO;
     if (r->role != EFS_RAFT_CANDIDATE || in->term != r->current_term)
         return EFS_OK;
     if (in->vote_granted) {
@@ -1141,7 +1153,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
     uint64_t last_i = 0, last_t = 0, pt = 0;
     int rc;
 
-    maybe_step_down(r, in->term);
+    if (maybe_step_down(r, in->term) < 0) return EFS_ERR_IO;
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_AE_REP;
     m.to = in->from;
@@ -1177,14 +1189,20 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         return send_msg(r, &m);
     }
     rc = log_term(r, in->prev_index, &pt);
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) {
+        fence_storage(r);
+        return rc;
+    }
     if ((in->prev_index > 0 && rc != EFS_OK) || pt != in->prev_term) {
         if (getenv("EFS_RAFT_AE_DBG"))
             fprintf(stderr, "AE_REQ REJECT prev_term: pt=%llu in_prev_term=%llu rc=%d prev_idx=%llu\n",
                     (unsigned long long)pt, (unsigned long long)in->prev_term, rc,
                     (unsigned long long)in->prev_index);
         if (in->prev_index > r->snap_idx) {
-            r->store->truncate_from(r->store_ctx, in->prev_index);
-            reload_cfg_from_log(r);
+            if (in->prev_index <= r->commit_index) return EFS_ERR_PROTO;
+            rc = r->store->truncate_from(r->store_ctx, in->prev_index);
+            if (rc == EFS_OK) rc = reload_cfg_from_log(r);
+            if (rc != EFS_OK) { fence_storage(r); return rc; }
         }
         m.success = 0;
         last_log(r, &last_i, &last_t);
@@ -1197,8 +1215,10 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         int batch = in->nentries > 1 && r->store->batch_begin &&
                     r->store->batch_end;
 
-        if (batch && r->store->batch_begin(r->store_ctx) != EFS_OK)
-            batch = 0;
+        if (batch) {
+            rc = r->store->batch_begin(r->store_ctx);
+            if (rc != EFS_OK) { fence_storage(r); return rc; }
+        }
         for (i = 0; i < in->nentries; i++, idx++) {
             uint64_t et = 0;
             rc = log_term(r, idx, &et);
@@ -1209,12 +1229,26 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                  * duplicated 128-entry batch was ~30 ms of pump time under
                  * h->mu, which is how a behind follower fell over. */
                 continue;
+            if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) {
+                if (batch) (void)r->store->batch_end(r->store_ctx);
+                fence_storage(r);
+                return rc;
+            }
             if (rc == EFS_OK) {
                 /* Conflict at idx: drop it and everything after, then take
                  * the leader's entry. (Same rule as the single-entry path,
                  * applied per batched entry.) */
-                r->store->truncate_from(r->store_ctx, idx);
-                reload_cfg_from_log(r);
+                if (idx <= r->commit_index) {
+                    if (batch) (void)r->store->batch_end(r->store_ctx);
+                    return EFS_ERR_PROTO;
+                }
+                rc = r->store->truncate_from(r->store_ctx, idx);
+                if (rc == EFS_OK) rc = reload_cfg_from_log(r);
+                if (rc != EFS_OK) {
+                    if (batch) (void)r->store->batch_end(r->store_ctx);
+                    fence_storage(r);
+                    return rc;
+                }
             }
             rc = r->store->append(r->store_ctx, idx, in->entries[i].term,
                                   in->entries[i].cmd, in->entries[i].clen);
@@ -1224,24 +1258,29 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
                             (unsigned long long)idx, i, rc);
                 if (batch)
                     (void)r->store->batch_end(r->store_ctx);
+                fence_storage(r);
                 return rc;
             }
             install_log_cfg(r, in->entries[i].cmd, in->entries[i].clen, idx);
         }
         if (batch) {
             rc = r->store->batch_end(r->store_ctx);
-            if (rc != EFS_OK)
-                return rc;
+            if (rc != EFS_OK) { fence_storage(r); return rc; }
         }
-        last_log(r, &last_i, &last_t);
+        rc = last_log(r, &last_i, &last_t);
+        if (rc != EFS_OK) { fence_storage(r); return rc; }
         if (getenv("EFS_RAFT_AE_DBG"))
             fprintf(stderr, "AE_REQ ACCEPT nent=%u new_last=%llu\n",
                     in->nentries, (unsigned long long)last_i);
     }
     if (in->leader_commit > r->commit_index) {
-        uint64_t cap = last_i;
-        r->commit_index = in->leader_commit < cap ? in->leader_commit : cap;
-        apply_committed(r);
+        /* A probe may match only an old prefix while our uncommitted tail
+         * differs from the leader. Never apply beyond this request's proof. */
+        uint64_t cap = in->prev_index + (uint64_t)in->nentries;
+        if (cap > r->commit_index) {
+            r->commit_index = in->leader_commit < cap ? in->leader_commit : cap;
+            apply_committed(r);
+        }
     }
     m.success = 1;
     /* prev matched, and every entry in this request is in the log.
@@ -1257,7 +1296,7 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
 
 static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
 {
-    maybe_step_down(r, in->term);
+    if (maybe_step_down(r, in->term) < 0) return EFS_ERR_IO;
     if (r->role != EFS_RAFT_LEADER || in->term != r->current_term)
         return EFS_OK;
     if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
@@ -1375,7 +1414,7 @@ static int on_snap_req(struct efs_raft *r, const struct efs_raft_msg *in)
     uint32_t plen = 0, ulen = 0;
     int done, rc;
 
-    maybe_step_down(r, in->term);
+    if (maybe_step_down(r, in->term) < 0) return EFS_ERR_IO;
     memset(&m, 0, sizeof(m));
     m.type = EFS_RAFT_MSG_SNAP_REP;
     m.to = in->from;
@@ -1472,7 +1511,7 @@ static int on_snap_rep(struct efs_raft *r, const struct efs_raft_msg *in)
 {
     int rc;
 
-    maybe_step_down(r, in->term);
+    if (maybe_step_down(r, in->term) < 0) return EFS_ERR_IO;
     if (r->role != EFS_RAFT_LEADER || in->term != r->current_term)
         return EFS_OK;
     if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
@@ -1697,12 +1736,7 @@ static int recv_batch_finish(struct efs_raft *r, int prior)
     r->recv_replies = NULL;
     if (rc != EFS_OK || prior != EFS_OK) {
         /* Never allow a later heartbeat to apply an unproven tail. */
-        r->storage_failed = 1;
-        r->commit_index = r->last_applied;
-        r->role = EFS_RAFT_FOLLOWER;
-        r->leader = -1;
-        r->allow_campaign = 0;
-        r->read_in_flight = 0;
+        fence_storage(r);
         return rc != EFS_OK ? rc : prior;
     }
     rc = apply_committed(r);

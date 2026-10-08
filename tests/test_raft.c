@@ -1255,12 +1255,26 @@ static void test_ae_reply_match_stops_at_prev(void)
     ae.term = 4;
     ae.prev_index = 1;
     ae.prev_term = 1;
-    ae.leader_commit = 1;
+    ae.leader_commit = 2; /* Leader committed its own replacement at index 2. */
     CHECK(efs_raft_recv(n.r[1], &ae) == EFS_OK, "empty ae");
     CHECK(n.cap_n == 1, "one reply");
     CHECK(n.cap_ok == 1, "prev matched");
     CHECK(n.cap_match == 1, "match stops at prev, not the stale tail");
     CHECK(app.last != 'S', "stale command was not applied");
+    CHECK(efs_raft_commit(n.r[1])==1 && app.n==1,"commit stops at request-proven prefix");
+    ae.nentries=1;ae.entries[0].term=4;ae.entries[0].cmd=(const uint8_t*)"R";ae.entries[0].clen=1;
+    CHECK(efs_raft_recv(n.r[1],&ae)==EFS_OK && efs_raft_commit(n.r[1])==2 && app.last=='R',
+          "matched replacement commits after stale tail truncation");
+    ae.nentries=0;ae.leader_commit=3;
+    CHECK(efs_raft_recv(n.r[1],&ae)==EFS_OK && efs_raft_commit(n.r[1])==2,
+          "short-prefix probe never rolls commit backward");
+    ae.prev_term=99;
+    CHECK(efs_raft_recv(n.r[1],&ae)==EFS_ERR_PROTO,"reject conflict with committed prev without truncation");
+    ae.prev_term=1;ae.nentries=1;ae.entries[0].term=99;
+    CHECK(efs_raft_recv(n.r[1],&ae)==EFS_ERR_PROTO,"reject replacement of committed entry");
+    uint64_t last_index=0,last_term=0;
+    CHECK(st->last(st,&last_index,&last_term)==EFS_OK && last_index==2 && last_term==4,
+          "committed bytes remain intact after malformed conflicts");
     efs_raft_free(n.r[1]);
     efs_raft_mem_free(st);
 }
@@ -1401,9 +1415,19 @@ static void test_ae_full_window_not_resent_per_propose(void)
 static struct {
     struct efs_raft_store original;
     unsigned depth, barriers, replies, applies;
-    int fail_end, fail_append;
+    int fail_end, fail_append, fail_hard, fail_truncate;
     uint64_t durable, read_context;
 } recv_test;
+static int recv_test_truncate(void *ctx,uint64_t index)
+{
+    if(recv_test.fail_truncate)return EFS_ERR_IO;
+    return recv_test.original.truncate_from(ctx,index);
+}
+static int recv_test_hard(void *ctx,uint64_t term,int32_t voted)
+{
+    if(recv_test.fail_hard)return EFS_ERR_IO;
+    return recv_test.original.save_hard(ctx,term,voted);
+}
 static int recv_test_begin(void *ctx)
 {
     (void)ctx;recv_test.depth++;return EFS_OK;
@@ -1444,12 +1468,13 @@ static int recv_test_apply(void *ctx,uint64_t index,uint64_t term,
 }
 static void test_recv_batch(void)
 {
-    for(unsigned failure=0;failure<3;failure++) {
+    for(unsigned failure=0;failure<7;failure++) {
         memset(&recv_test,0,sizeof(recv_test));
         struct efs_raft_store *store=efs_raft_mem_create();
         struct efs_raft_store ops=*store;
         recv_test.original=ops;
         ops.append=recv_test_append;ops.batch_begin=recv_test_begin;ops.batch_end=recv_test_end;
+        ops.save_hard=recv_test_hard;ops.truncate_from=recv_test_truncate;
         struct efs_raft_cfg cfg={0};
         cfg.id=1;cfg.n=3;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
         cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
@@ -1466,11 +1491,21 @@ static void test_recv_batch(void)
             msgs[i].leader_commit=i+1;msgs[i].last_log_index=10+i;
         }
         recv_test.fail_end=failure==1;recv_test.fail_append=failure==2;
+        recv_test.fail_hard=failure==3 || failure==4;
+        recv_test.fail_truncate=failure>=5;
+        if(failure>=5){
+            CHECK(recv_test.original.append(store,1,1,(const uint8_t*)"old",3)==EFS_OK,"conflicting tail seed");
+            recv_test.durable=1;
+        }
+        if(failure==5){msgs[0].prev_index=1;msgs[0].prev_term=9;msgs[0].nentries=0;msgs[0].leader_commit=0;}
+        if(failure==3)msgs[0].term=3; /* higher-term persistence fails */
+        if(failure==4){msgs[0].type=EFS_RAFT_MSG_VOTE_REQ;msgs[0].from=2;}
+
         int rc=efs_raft_recv_batch(r,msgs,3);
         if(failure) {
             CHECK(rc==EFS_ERR_IO && !recv_test.replies && !recv_test.applies,
                   "failed batch neither ACKs nor applies");
-            recv_test.fail_end=recv_test.fail_append=0;
+            recv_test.fail_end=recv_test.fail_append=recv_test.fail_hard=recv_test.fail_truncate=0;
             CHECK(efs_raft_recv(r,&msgs[0])==EFS_ERR_IO && efs_raft_tick(r)==EFS_ERR_IO,
                   "failed persistence fences later heartbeats and elections");
         } else {

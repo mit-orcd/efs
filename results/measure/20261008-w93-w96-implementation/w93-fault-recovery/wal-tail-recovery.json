@@ -1,0 +1,32 @@
+{
+  "wals": [
+    {
+      "path": "/data1/efs/gc-direct-aw0f7val/n1/mdraft/kv/wal",
+      "valid_bytes": 10485760,
+      "injected_tail_bytes": 8
+    },
+    {
+      "path": "/data1/efs/gc-direct-aw0f7val/n2/mdraft/kv/wal",
+      "valid_bytes": 17825792,
+      "injected_tail_bytes": 8
+    },
+    {
+      "path": "/data1/efs/gc-direct-f8tpwe6i/n3/mdraft/kv/wal",
+      "valid_bytes": 17825792,
+      "injected_tail_bytes": 8
+    },
+    {
+      "path": "/data1/efs/gc-direct-f8tpwe6i/n4/mdraft/kv/wal",
+      "valid_bytes": 7032887,
+      "injected_tail_bytes": 8
+    }
+  ],
+  "acknowledged_bytes": [
+    131072,
+    131072
+  ],
+  "cold_sha256": [
+    "0b4dfb271ea6b1c666a02fecff5c702c22ddc365d52891f3e7bd62031264d917",
+    "41e4868ba51940d65411cdc94af04be2ee0583458602d1025d90f5e466fbcc9c"
+  ]
+}
