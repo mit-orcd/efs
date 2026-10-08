@@ -89,3 +89,21 @@ Devops now propagates configurable transport/device/GID settings across SSH
 and to both daemons and mounts; AMD defaults to RDMA/direct, NUC to TCP.
 The portal was restarted on its existing AMD port 6060 and live API verified
 all six process badges. RXE remains software RoCE, not hardware offload.
+
+## AMD root migration to /data1/efs
+
+Moved the installed cluster from /home/efs/efs to /data1/efs after cleanly
+stopping both mounts and all four daemons. Updated devops and portal AMD
+configuration and the user logrotate cron paths. Existing metadata and stores
+were moved without reformatting. Both paths use the same ext4 NVMe filesystem.
+Four nodes restart healthy with strict RXE RDMA and direct I/O.
+
+Mounts currently blocked by Ubuntu AppArmor fusermount3: kernel audit reports
+failed mntpnt match for /data1/efs/mnt. Root setup prepared at
+/data1/efs/devops/allow-data1-fuse.sh adds narrowly scoped mount/umount rules
+for mnt and mnt2 in /etc/apparmor.d/local/fusermount3, reloads the profile,
+and starts the cluster as efs. Root setup executed successfully; both mounts now live. Subsequent full
+POSIX gates passed: 216 pass / 0 fail / 1 skip in 19.1s, and two-mount
+POSIX2 64/64 in 8.2s. Evidence in /data1/efs/logs/posix-20261007-231719.tsv
+and posix2c-20261007-231738.tsv. All six processes run from /data1/efs/src;
+live portal confirms RoCE / RDMA and direct I/O on all four nodes. Portal restarted on 6060 with new paths.
