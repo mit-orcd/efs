@@ -3405,3 +3405,67 @@ with raw logs. This format repair does not establish a follower pressure bound;
 the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
+
+
+<a id="w90"></a>
+
+## W90 · Independent steady-state storage churn benchmark
+
+**Class/state:** benchmark enhancement; implemented Oct 8, 2026 on `devel-bench`,
+starting from `53be1da7f190`. Functional gates pass; initial same-device
+measurements are recorded below. Repeated long-running acceptance remains open.
+
+**Purpose:** extend the existing finite `--storage-principles` experiments with
+bounded, sustained read/write/retire workloads at 50/80/95 percent of an explicit
+experiment-local capacity. This is store occupancy, not filling the host disk.
+Compare files and containers with matched payload, checksum, persistence and
+completion semantics. See the [storage experiment plan](storage-engine-v2.md).
+
+**Scope:** benchmark-only modules and tests; a deterministic live-object model,
+preconditioning, bounded reclamation backlog/reserve, independently verified
+payloads, bounded duration/work, and separate warmup/measurement phases. Report
+foreground p50/p99/max, operation/byte throughput, actual allocated/reusable
+capacity, reclamation backlog, application copy bytes and memory. Unsynced
+acceptance and durable completion must remain distinct. Host-write telemetry is
+not NAND write amplification. Do not assume whole containers can be retired
+while any live object remains.
+
+**Isolation:** work in the separate `devel-bench` checkout. Keep shared CLI,
+Makefile and profiling-harness integration small and defer it until the new
+module/model is validated. Production store, GC authority, FUSE, Raft, transport,
+wire format and cluster services are outside this item. Use private scratch roots;
+no writes to live EFS fragment roots. Reconcile concurrent changes before merge.
+
+**Gate:** deterministic model and integrity tests, bounded/no-progress failure
+cases, capacity accounting through reuse/reclamation, matched files/container
+and persistence-policy functional runs on Linux, then repeated same-device
+50/80/95-percent mixed-load measurements with source hashes, commands, raw
+results, error counters and foreground latency. No zero-work, unbounded backlog,
+omitted persistence or corrupted-payload run can pass. Recovery/crash experiments
+and production promotion are separately scoped follow-ups.
+
+**Relation:** contributes evidence to P3 and the W34/P4.1 layout investigation.
+It does not close W44 production GC latency, W71 durability, W75 integrity or
+W87 append correctness; production fixes and their acceptance gates remain
+separate work.
+
+**Implementation:** independent `--bench churn` module and `--storage-churn`
+matrix driver compare immutable files, fixed-slot hole punching and append
+containers with survivor compaction. Private-directory filestreams, container
+preallocation and extent hints are explicit opt-in variations. See the
+[invocation and measurement contract](../how-it-works/storage-churn.md).
+
+**Validation:** Linux build, 54 layout/occupancy/I/O/persistence combinations,
+parallel workers, preallocation, root protection, injected sync failure and
+payload corruption pass. The baseline uses 128 KiB payloads, 1 GiB logical
+containers and 2 GiB data-slot capacity at 50/80/95% occupancy. Its 24,000-operation
+cases establish functional and preliminary performance evidence, not endurance
+or sustained production GC acceptance.
+
+**Evidence:** [xorinox results](../../results/measure/20261008-w90-xorinox/README.md)
+retain 35 passing performance cases, exact commands, raw results, manifests,
+measured source archive and validation logs. The 128 KiB/95% repeats favor punch
+over files and expose heavy compaction copying/pauses. The 64 KiB gap is smaller.
+Private-directory filestreams improved throughput in three runs but increased
+write p99; preallocation reserved the additional spare capacity. These are
+independent model results, not production GC or durability acceptance.

@@ -525,3 +525,11 @@ separates population from timing and retains individual observations. Preserve
 older numbers as historical measurements; use the corrected method for a new
 steady-state tail-latency gate. CPU samples and aggregate syscall time do not
 measure the fraction of wall time waiting.
+
+
+## Independent mixed storage churn
+
+The [W90 storage churn guide](storage-churn.md) documents 1 GiB container versus
+small-file comparisons, matched persistence, bounded 50/80/95-percent model
+occupancy, verification and result interpretation. This is an independent
+benchmark with a volatile index, not production GC or a recovery acceptance gate.

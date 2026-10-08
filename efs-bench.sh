@@ -3,4 +3,8 @@
 # Run from any directory; arguments and paths are passed without shell evaluation.
 set -euo pipefail
 root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [[ "${1:-}" == "--storage-churn" ]]; then
+    shift
+    exec python3 "$root/scripts/bench_churn.py" "$@"
+fi
 exec python3 "$root/scripts/bench_profile.py" "$@"

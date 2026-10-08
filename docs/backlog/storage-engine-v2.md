@@ -135,6 +135,41 @@ sectors. Keep filesystem free-space headroom; any SSD-GC benefit also depends
 on discard delivery or device provisioning. Preserve metadata checksums,
 ordering and required persistence barriers rather than trading them for numbers.
 
+## W90 xorinox follow-up (Oct 8, 2026)
+
+The AMD USB observations above remain historical evidence. The independent
+[W90 workload](work-items.md#w90) now runs on xorinox under the private
+`/data1/efs/bench/w90-20261008/` root. This host has XFS on `/dev/nvme1n1`,
+a 4 TB HP SSD FX900 Pro, 4 KiB blocks and 16 allocation groups, with
+`noatime,logbufs=8,logbsize=256k` already set. About 3.3 TiB was free before
+measurement. No cluster services or global mount options were changed.
+
+| Opportunity | Current experiment / next step |
+|---|---|
+| 1 GiB containers vs 128 KiB files | Implemented matched files, fixed-slot punch/reuse, and append/survivor-compaction workloads; each payload has an identical 4 KiB checksum tail. |
+| Explicit preallocation | Opt-in container-only `--preallocate`; compare sparse allocation and unwritten-extent conversion with reserved extents. |
+| Extent-size hints | Opt-in `--extent-hint 1048576` or `8388608`; measure allocation overhead, waste and fragmentation before choosing a hint. |
+| Hole punching | Implemented aligned per-record retirement/reuse; investigate larger coalesced ranges separately. |
+| Filestream allocator | Opt-in `--filestreams` on private worker directories; compare local allocator behavior without changing the host mount. |
+| Batched parent sync | Implemented bounded batches; individual replacement-file bodies still require separate flushes. No durable index is modeled. |
+| Internal noatime | Already enabled on this host; no additional change tested. |
+| Journal buffers / size | Already eight buffers and 256 KiB, the maximum documented size; no larger-size proposal here. |
+| Reflink | Defer until a real cloning workload exists; later writes to shared extents incur COW. |
+| Periodic TRIM | Separate device/host investigation; no global discard or trim action in W90. |
+| External log / realtime device | Requires separate provisioning and recovery tests; outside this benchmark. |
+
+The [35-case xorinox evidence](../../results/measure/20261008-w90-xorinox/README.md)
+includes 128 KiB and 64 KiB results, repeated 95% baselines, and separate XFS
+variations. Filestreams improved throughput in three runs while increasing write
+p99. Preallocation reserved the extra spare container. High-occupancy append
+compaction incurred substantial survivor copying; the layout gap depends on
+payload size. These observations do not select a production default.
+
+For invocation and interpretation, see [storage churn](../how-it-works/storage-churn.md).
+These changes implement a bounded workload model, not a new production backend.
+XFS option semantics follow the [kernel XFS documentation](https://www.kernel.org/doc/html/latest/admin-guide/xfs.html)
+and [xfs_io manual](https://man7.org/linux/man-pages/man8/xfs_io.8.html).
+
 ## Proposed storage engine v2
 
 One candidate experiment uses large XFS files containing immutable fragment

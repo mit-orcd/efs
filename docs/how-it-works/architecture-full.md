@@ -1562,6 +1562,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | P2.2 | **D26** · the GC pass | performance | in tree + gated (dev cluster, Oct 4): per-anchor pending-GC watermark maintained in the apply, derived once per recovery/import, `zero_if` clamp on a drained pass; `test_gc_watermark`; live: 514 records/pass drain, 10 idle min with no `gc-pass` line; Oct 7 10-GiB physical reclamation passes; retained-table active GC latency regression remains (1393-ms pass); idle-hour/committed-tail results in the acceptance ledger | [full text](#p22--d26--the-gc-pass-performance-plan-row) · [D26](#appendix-3--decisions--taken-and-pending-register-d1d31) |
 | P2.3 | **W23** · stalled-compactor test | performance | strict W89 samples pass; NUC engine reaches production 1 GiB L0 cap; deferred idle drain and unapplied WAL-tail durability repaired; universal follower memory/lag bound remains open | [full text](#p23--w23--the-stalled-compactor-test-performance-plan-row) · [run](../../results/measure/20261005-040810-w23-stalled-compactor/SUMMARY.txt) |
 | P3 | `efs-bench --bench data/meta`, then `efs-fuse --bench` | performance | tools implemented; Oct 7 corrected histogram/window coverage and metadata result validation are recorded in the latency/benchmark checkpoints; named six-NVMe fcstor storage curve and two-host client ladder remain owed | [server plan](#single-node-storage-bench-efsd---bench--asked-oct-2-2026-user-queue-position-after-w41--d23--d17--d26-in-plan-after-the-oct-1-2200z-review-its-number-decides-the-fragment-layout-w40-and-zero-copy-receive) · [client plan](#client-bench-efs-fuse---bench--asked-oct-2-2026-user-after-efsd---bench) · [original run](../../results/measure/20261005-045140-p3-benches/SUMMARY.txt) · [latency validation](../../results/measure/20261007-latency-validation/SUMMARY.md) · [benchmark validation](../../results/measure/20261007-bench-hot-path-review/SUMMARY.md) |
+| bench-churn | **W90** · independent steady-state storage churn benchmark | benchmark enhancement | implemented on `devel-bench`; functional gates pass; initial matched 50/80/95-percent evidence, repeated sustained acceptance pending; no production changes | [work item](#w90) |
 | P4.1–P4.4 | fragment on-disk layout (**wipe**), W40 FUSE write copy, RDMA zero-copy receive, 9-client scaling | performance | deferred until P3's numbers | [full text](#p4--deferred-until-p3s-numbers-long-one-is-a-wipe) |
 | meta-scale | **W66** · metadata leadership distribution and topology-independent routing | scalability | open — Oct 5 implementation gap recorded; correctness work first, then baseline measurement and staged multi-Raft implementation | [evidence, phases and gates](../status/metadata-scaling.md) |
 | — | **D28** (who owns acknowledged bytes across client death) · **D29** (a REPORT receipt for "committed, apply pending") · **D30** (the remedy for compaction-induced apply lag) | ask | ask — not code until the user decides | [decisions.md](#appendix-3--decisions--taken-and-pending-register-d1d31) |
@@ -5364,6 +5365,70 @@ the original record and withdrawn interpretation remain retained.
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
 
+<a id="w90"></a>
+
+### W90 · Independent steady-state storage churn benchmark
+
+**Class/state:** benchmark enhancement; implemented Oct 8, 2026 on `devel-bench`,
+starting from `53be1da7f190`. Functional gates pass; initial same-device
+measurements are recorded below. Repeated long-running acceptance remains open.
+
+**Purpose:** extend the existing finite `--storage-principles` experiments with
+bounded, sustained read/write/retire workloads at 50/80/95 percent of an explicit
+experiment-local capacity. This is store occupancy, not filling the host disk.
+Compare files and containers with matched payload, checksum, persistence and
+completion semantics. See the [storage experiment plan](../backlog/storage-engine-v2.md).
+
+**Scope:** benchmark-only modules and tests; a deterministic live-object model,
+preconditioning, bounded reclamation backlog/reserve, independently verified
+payloads, bounded duration/work, and separate warmup/measurement phases. Report
+foreground p50/p99/max, operation/byte throughput, actual allocated/reusable
+capacity, reclamation backlog, application copy bytes and memory. Unsynced
+acceptance and durable completion must remain distinct. Host-write telemetry is
+not NAND write amplification. Do not assume whole containers can be retired
+while any live object remains.
+
+**Isolation:** work in the separate `devel-bench` checkout. Keep shared CLI,
+Makefile and profiling-harness integration small and defer it until the new
+module/model is validated. Production store, GC authority, FUSE, Raft, transport,
+wire format and cluster services are outside this item. Use private scratch roots;
+no writes to live EFS fragment roots. Reconcile concurrent changes before merge.
+
+**Gate:** deterministic model and integrity tests, bounded/no-progress failure
+cases, capacity accounting through reuse/reclamation, matched files/container
+and persistence-policy functional runs on Linux, then repeated same-device
+50/80/95-percent mixed-load measurements with source hashes, commands, raw
+results, error counters and foreground latency. No zero-work, unbounded backlog,
+omitted persistence or corrupted-payload run can pass. Recovery/crash experiments
+and production promotion are separately scoped follow-ups.
+
+**Relation:** contributes evidence to P3 and the W34/P4.1 layout investigation.
+It does not close W44 production GC latency, W71 durability, W75 integrity or
+W87 append correctness; production fixes and their acceptance gates remain
+separate work.
+
+**Implementation:** independent `--bench churn` module and `--storage-churn`
+matrix driver compare immutable files, fixed-slot hole punching and append
+containers with survivor compaction. Private-directory filestreams, container
+preallocation and extent hints are explicit opt-in variations. See the
+[invocation and measurement contract](storage-churn.md).
+
+**Validation:** Linux build, 54 layout/occupancy/I/O/persistence combinations,
+parallel workers, preallocation, root protection, injected sync failure and
+payload corruption pass. The baseline uses 128 KiB payloads, 1 GiB logical
+containers and 2 GiB data-slot capacity at 50/80/95% occupancy. Its 24,000-operation
+cases establish functional and preliminary performance evidence, not endurance
+or sustained production GC acceptance.
+
+**Evidence:** [xorinox results](../../results/measure/20261008-w90-xorinox/README.md)
+retain 35 passing performance cases, exact commands, raw results, manifests,
+measured source archive and validation logs. The 128 KiB/95% repeats favor punch
+over files and expose heavy compaction copying/pauses. The 64 KiB gap is smaller.
+Private-directory filestreams improved throughput in three runs but increased
+write p99; preallocation reserved the additional spare capacity. These are
+independent model results, not production GC or durability acceptance.
+
+
 ## Appendix 5 — Naming
 
 *Source: `how-it-works/naming.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
@@ -8176,6 +8241,14 @@ separates population from timing and retains individual observations. Preserve
 older numbers as historical measurements; use the corrected method for a new
 steady-state tail-latency gate. CPU samples and aggregate syscall time do not
 measure the fraction of wall time waiting.
+
+
+### Independent mixed storage churn
+
+The [W90 storage churn guide](storage-churn.md) documents 1 GiB container versus
+small-file comparisons, matched persistence, bounded 50/80/95-percent model
+occupancy, verification and result interpretation. This is an independent
+benchmark with a volatile index, not production GC or a recovery acceptance gate.
 
 
 ## Appendix 13 — Development — modularity constraint
