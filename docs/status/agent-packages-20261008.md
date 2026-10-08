@@ -1,8 +1,9 @@
-# Three-agent packages — Oct 8, 2026
+# Four-agent packages — Oct 8, 2026
 
 User scope: close outstanding gates, fix known bugs, and fix W66. No .efs
 feature development, container hardening, or new benchmark features.
-All three branches start from the same merged devel checkpoint.
+The first three branches start at 3e1d4c6e. The fourth starts at the
+follow-up documentation commit; production code is identical at all four bases.
 
 ## devel-gate-closure
 
@@ -48,6 +49,25 @@ Preserve quorum freshness, linearizability and durable ACK ordering. A stall fix
 alone does not close W66: follow the staged topology-independent routing and
 leadership-distribution plan; no unvalidated topology or 1000-client claims.
 Primary ownership: raft_host routing/read-index/pump sections and Raft core.
+
+## devel-compaction-pressure
+
+Own D30/W23/W89 bounded admission and stalled-compactor acceptance. Begin with
+accepted D30 in decision-contracts.md and the current W23/W89 evidence; the
+historical shifted TSV output cannot establish a memory or follower-lag bound.
+Reproduce a stalled follower under real L0-cap pressure, using validated samples
+for RSS, L0 bytes, queued bytes, commit/apply lag and healthy-quorum progress.
+Implement bounded pre-proposal admission and KV pressure signals where missing,
+with explicit overload outcomes and recovery/cleanup reserves. Preserve already
+committed work and durable ACKs; resume and verify convergence plus exact cold
+acknowledged bytes. Cover follower recovery, leader change, cancellation and
+failed persistence. Record actual bounds and outstanding obligations before
+closing anything. Do not lower the cap just to claim production-cap acceptance.
+Primary ownership: KV/LSM compaction-pressure paths, W23 measurement scripts,
+validated sample reducers and isolated pressure tests. Coordinate any required
+Raft pacing/admission interface with devel-w66 before changing Raft core or
+raft_host; do not independently redesign the pump. Coordinate append/replay
+stress coverage with devel-gate-closure. No .efs or container work.
 
 ## Shared operating rules
 
