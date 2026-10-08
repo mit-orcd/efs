@@ -1,0 +1,5 @@
+owner command=5 rc=0 expected=0
+owner command=9 rc=-13 expected=-13
+owner command=7 rc=0 expected=0
+owner command=9 rc=0 expected=0
+prepared owner blocks wire fence ACK; resolution releases barrier PASS
