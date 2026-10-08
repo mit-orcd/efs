@@ -543,8 +543,11 @@ int efs_meta_apply_create_file_log_lease(struct efs_kv *kv,
                                          int layout, const struct efs_opid_req *q,
                                          const uint8_t *uuid, uint32_t epoch,
                                          efs_ino_t *out);
-/* Staged pending-CREATE variant. q must identify this exact lease session;
- * its sequence is the pending token. Not activated by production RPCs. */
+/* Staged pending-CREATE variant. q identifies this exact lease session and
+ * its sequence is the pending token. Serialized apply checks local admission
+ * before replay/negative verdicts; caller must obtain authoritative global
+ * ACTIVE/REGISTER admission. Cross-group intents also need the transaction
+ * owner barrier. Not activated by production RPCs. */
 int efs_meta_apply_create_file_log_pending(struct efs_kv *kv,
                                          const struct efs_meta_attrs *at,
                                          efs_ino_t parent, uint32_t mode,

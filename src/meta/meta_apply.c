@@ -1331,6 +1331,13 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         shard = efs_kv_dentry_shard(parent, name, lay);
         dseq_lane = lay == EFS_META_LAYOUT_LOCAL ? 0 : efs_kv_dir_lane(name);
     }
+    /* Pending ownership is a session mutation, including negative verdicts
+     * and replays. Check inside serialized apply, before the replay fast path:
+     * an earlier local fence must prevent any old-epoch CREATE claim. */
+    if (lease_token) {
+        rc = efs_session_accept(kv, shard, lease_uuid, lease_epoch);
+        if (rc != EFS_OK) return rc;
+    }
     /* I16: a replay of an op this window already recorded returns the
      * recorded verdict and touches nothing. */
     if (q) {

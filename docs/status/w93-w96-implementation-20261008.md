@@ -435,3 +435,11 @@ physical GC/quota and two-crash WAL recovery all pass. Focused session
 ASan/UBSan and the full Linux test target pass. The sanitizer repeat corrected
 an erroneous test-fixture destructor; no production leak was implicated.
 [Retained evidence](../../results/measure/20261008-w93-w96-review/w94-transaction-owner/live.log).
+
+Pending-CREATE apply admission is now checked before replay/negative verdicts.
+A missing local establishment returns BUSY without a name or receipt; an old
+epoch behind the rejection floor returns STALE even with a retained successful
+receipt. Delayed CREATE after eight real process-exit/reopen phases cannot restore
+retired ownership. AMD normal metadata/session, session+metadata ASan/UBSan and
+the full Linux test target pass. KV dependencies in the sanitizer run remain
+normally compiled. No production pending-CREATE RPC or FUSE adoption is enabled.

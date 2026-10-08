@@ -5566,6 +5566,7 @@ static void test_pending_create_negative_replay(void)
     CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"atomic",&existing)==EFS_OK,"existing name");
     uint8_t uuid[EFS_OPID_UUID_LEN]={19};struct efs_opid_req q={0};
     memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=1;
+    CHECK(efs_session_create(kv,uuid,1)==EFS_OK&&efs_session_register(kv,uuid,1,1)==EFS_OK&&efs_session_establish(kv,1,uuid,1)==EFS_OK,"negative pending session admission");
     struct efs_kv_ops ops=*kv->ops;const struct efs_kv_ops *original=kv->ops;
     create_batch_original=ops.batch;ops.batch=create_batch_fault;kv->ops=&ops;
     create_batch_fail=1;create_batch_calls=0;
@@ -5581,7 +5582,7 @@ static void test_pending_create_negative_replay(void)
     CHECK(!create_batch_calls && efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,"negative replay cannot recreate removed name");
     q.id.seq=2;q.ack=1;
     CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_OK && out,"new request can create after negative retirement");
-    kv->ops=original;efs_kv_destroy(kv);
+    kv->ops=original;efs_kv_mem_free(kv);
 }
 static void test_create_initial_lease_atomic(void)
 {
@@ -5596,6 +5597,8 @@ static void test_create_initial_lease_atomic(void)
     struct efs_opid_req q={0};memcpy(q.id.client_uuid,uuid,sizeof(uuid));q.id.session_epoch=1;q.id.seq=1;
     efs_ino_t ino=0;struct efs_meta_dentry dent;struct efs_opid_reply reply;
     if (pending) {
+        create_batch_fail=0;
+        CHECK(efs_session_create(kv,uuid,1)==EFS_OK&&efs_session_register(kv,uuid,1,1)==EFS_OK&&efs_session_establish(kv,1,uuid,1)==EFS_OK,"atomic pending session admission");
         CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,
               "atomic",0,-1,NULL,uuid,1,&ino)==EFS_ERR_INVAL,
               "pending CREATE requires durable request identity");

@@ -43,3 +43,13 @@ returns BUSY, and resolution permits the successful retry. Full direct-I/O/TCP
 POSIX/peer, ownership, GC and two-crash WAL gates pass; installed service restored.
 Session normal/sanitizer checks and the full Linux target pass. No NUC test ran.
 [Wire evidence](../../results/measure/20261008-w93-w96-review/w94-fence-validation/prepared-owner-wire.txt).
+
+
+Pending-CREATE apply now checks the established local session and rejection
+floor before replay lookup or recording a negative verdict. A retained old
+successful receipt behind a persisted floor cannot grant adoption, and delayed
+CREATE after revocation cannot install another pending claim. Tests cover absent
+admission, exact successful ownership, full revocation, retained old receipts,
+and delayed CREATE after real process-exit/reopen. This closes a staged primitive
+prerequisite; global owner admission and cross-group preparation/draining remain
+host integration requirements. No production RPC or FUSE flag is enabled.
