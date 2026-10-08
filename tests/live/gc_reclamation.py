@@ -31,6 +31,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DSYNC callback failure retains bytes for later fsync recovery')
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
 p.add_argument('--append-sync-boundary',action='store_true',help='append/fsync across lane groups, peer visibility and cold crash bytes')
 p.add_argument('--append-replay-race', action='store_true', help='32 identical concurrent APPEND RPCs allocate once')
@@ -133,7 +134,7 @@ if a.transport == 'rdma':
     env['EFS_RDMA_DEV'] = device
 if a.gc_bulk_gib:
     assert not a.idle_seconds;env['EFS_GC_DBG']='1'
-if a.ior_binary or a.append_sync_boundary or a.sync_writes or a.stop_dirty_recovery:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
+if a.ior_binary or a.append_sync_boundary or a.sync_writes or a.stop_dirty_recovery or a.sync_write_fault:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
 if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
 if a.worker_fault:
     assert a.workers and a.client_binary,'worker faults require explicit fault client and --workers'
@@ -661,6 +662,36 @@ os.close(fd)
             path.unlink()
         (work/'memo-mutations.json').write_text(json.dumps({'files':32,'immediate_stat_checks':mutations},indent=2))
         print('immediate post-mutation lookup/stat gate PASS',flush=True)
+    if a.sync_write_fault:
+        records=[];expected={}
+        for label,flag in [('sync',os.O_SYNC),('dsync',os.O_DSYNC)]:
+            name='synchronous-offline-'+label;target=mount/name
+            body=b'synchronous callback retains this partial body'
+            fd=os.open(target,os.O_CREAT|os.O_EXCL|os.O_WRONLY|flag,0o600)
+            stop();errors=[]
+            try:
+                try:os.write(fd,body)
+                except OSError as error:
+                    assert error.errno==5,error;errors.append({'call':'write','errno':error.errno})
+                else:raise AssertionError('offline synchronous write falsely succeeded')
+                trace=(work/'fuse.log').read_text(errors='replace')
+                assert re.search(r'sync-write ino=.* bytes='+str(len(body))+r' .* rc=-5',trace),'write did not reach the synchronous publication failure boundary'
+                start()
+                for attempt in range(3):
+                    try:os.fsync(fd);break
+                    except OSError as error:
+                        assert error.errno==5 and attempt<2,error
+                        errors.append({'call':'recovery-fsync','errno':error.errno})
+            finally:os.close(fd)
+            expected[name]=hashlib.sha256(body).hexdigest()
+            records.append({'flag':label,'bytes':len(body),'errors':errors,'recovery_fsync_succeeded':True})
+        unmount();stop(crash=True);start();mount_client()
+        for name,digest in expected.items():
+            assert hashlib.sha256((mount/name).read_bytes()).hexdigest()==digest,'synchronous failed-write recovery lost bytes'
+            (mount/name).unlink()
+        (work/'synchronous-write-fault.json').write_text(json.dumps({'cases':records,'cold_crash_verified':True,'actual_callback_failure_traced':True},indent=2))
+        wait(drained,'synchronous failed-write recovery physically reclaimed')
+        print('O_SYNC/O_DSYNC offline callback failure retains exact bytes for fsync and cold recovery PASS',flush=True)
     if a.stop_dirty_recovery:
         target=mount/'stop-new-partial';body=b'new partial body retained through PUT failure'
         fd=os.open(target,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)

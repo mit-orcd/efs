@@ -20,3 +20,11 @@ not sufficient source identities. W64 code is `9ddcf7a2`; persistence code is
 combined unit checks include it. Process restart is not physical power loss.
 See [the task ledger](../../../docs/status/replay-readiness-20261008.md) for
 remaining W64/W88, D27, W72/W86 and D25 obligations.
+
+The historical failures above preceded the accepted coordinated append fix.
+Subsequent `append-authority-pass`, `shutdown-recovery-pass`, `stop-flight-pass`,
+`stop-partial-pass`, `sync-publication-pass`, `streaming-append-pass` and
+`append-budget-pass` contain the passing production reruns. `shutdown-before-fix`
+preserves the partial-body drain failure that was corrected. `sync-fault-pass`
+proves actual O_SYNC/O_DSYNC publication errors retain bytes for fsync recovery
+and a subsequent cold crash. See the ledger for exact scope and remaining gates.

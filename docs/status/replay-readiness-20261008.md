@@ -251,6 +251,20 @@ passes on this final code. [Unit evidence](../../results/measure/20261008-replay
 This closes this retry-loop timing gap; durable unknown-outcome ownership and
 whole-write fault/RSS acceptance remain D27/W72/W88 work.
 
+## W73 failed synchronous publication recovery — 07:43 UTC
+
+The live gate now cuts off all four private daemons after opening a synchronous
+file, then submits a 46-byte partial body through each O_SYNC/O_DSYNC callback.
+Both writes return EIO; the actual callback trace proves the body was accepted
+before publication failed. After daemon recovery, fsync succeeds without
+resubmitting the write. A further daemon crash/restart preserves exact bytes
+for both flags, and delete/reclamation returns physical inventory to zero.
+This closes the live failed-publication retention gate for these two callback
+paths. Mount-sync, the final operating-mode matrix and hardware power-loss
+acceptance remain owed. AMD installed service was restored direct-I/O/TCP.
+[Failure/recovery evidence](../../results/measure/20261008-replay-readiness/sync-fault-pass/synchronous-write-fault.json),
+[live console](../../results/measure/20261008-replay-readiness/sync-fault-pass/console.log).
+
 ## Evidence
 
 [Recorded evidence](../../results/measure/20261008-replay-readiness/README.md)
