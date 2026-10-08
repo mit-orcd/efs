@@ -215,6 +215,78 @@ ssize_t pread(int fd, void *buf, size_t n, off_t off) {
             self.run_case('--storage',root,'--recover-existing',ok=False)
             self.assertEqual(list(Path(root).iterdir()),[])
 
+    def test_crash_phases_preserve_recoverability_and_evidence(self):
+        code=r"""
+#define _GNU_SOURCE
+#include <dlfcn.h>
+#include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/syscall.h>
+#include <unistd.h>
+static int sealed;
+static int phase(const char *p) {const char *s=getenv("CRASH_PHASE");return s&&!strcmp(s,p);}
+static int worker(void) {return syscall(SYS_gettid)!=getpid();}
+static int path_of(int fd,char *path,size_t cap) {
+ char link[64];snprintf(link,sizeof(link),"/proc/self/fd/%d",fd);
+ ssize_t n=readlink(link,path,cap-1);if(n<0)return 0;path[n]=0;return 1;
+}
+ssize_t pwrite(int fd,const void *buf,size_t n,off_t off) {
+ ssize_t (*real)(int,const void*,size_t,off_t)=dlsym(RTLD_NEXT,"pwrite");
+ ssize_t rc=real(fd,buf,n,off);
+ if(rc>0&&worker()&&phase("body-write"))_exit(88);
+ return rc;
+}
+int fsync(int fd) {
+ int (*real)(int)=dlsym(RTLD_NEXT,"fsync");int rc=real(fd);char path[512];
+ if(!rc&&path_of(fd,path,sizeof(path))) {
+  if(worker()&&(strstr(path,".frag")||strstr(path,"/container"))&&phase("body-sync"))_exit(88);
+  if(strstr(path,"/.efs-principles-complete")) {sealed=1;if(phase("seal-sync"))_exit(88);}
+  else if(sealed&&!worker()&&phase("seal-dir-sync"))_exit(88);
+ }
+ return rc;
+}
+int unlink(const char *path) {
+ int (*real)(const char*)=dlsym(RTLD_NEXT,"unlink");int rc=real(path);
+ if(!rc&&worker()&&phase("gc-unlink"))_exit(88);
+ return rc;
+}
+static int report(const char *fmt,va_list ap,int flag) {
+ va_list peek;va_copy(peek,ap);int ack=0;
+ if(strstr(fmt,"kind=principles model=independent"))ack=!strcmp(va_arg(peek,const char*),"BENCH_OK");
+ va_end(peek);int rc;
+ if(flag<0) {int (*real)(const char*,va_list)=dlsym(RTLD_NEXT,"vprintf");rc=real(fmt,ap);}
+ else {int (*real)(int,const char*,va_list)=dlsym(RTLD_NEXT,"__vprintf_chk");rc=real(flag,fmt,ap);}
+ if(ack&&phase("ack")){fflush(stdout);_exit(88);}return rc;
+}
+int printf(const char *fmt,...) {
+ va_list ap;va_start(ap,fmt);int rc=report(fmt,ap,-1);va_end(ap);return rc;
+}
+int __printf_chk(int flag,const char *fmt,...) {
+ va_list ap;va_start(ap,fmt);int rc=report(fmt,ap,flag);va_end(ap);return rc;
+}
+"""
+        with tempfile.TemporaryDirectory() as temp:
+            c=Path(temp)/'crash.c';so=Path(temp)/'crash.so';c.write_text(code)
+            subprocess.run(['gcc','-shared','-fPIC','-Wall','-Wextra','-Werror',str(c),'-ldl','-o',str(so)],check=True)
+            for layout,phase in itertools.product(['files','container'],['body-write','body-sync','seal-sync','seal-dir-sync','ack','gc-unlink']):
+                with self.subTest(layout=layout,phase=phase),tempfile.TemporaryDirectory() as root:
+                    flags=['--storage',root,'--layout',layout,'--payload-size','512','--objects','8','--qd','1']
+                    env=dict(os.environ,LD_PRELOAD=str(so),CRASH_PHASE=phase)
+                    if phase=='gc-unlink':
+                        # Container release is one unlink; file delete checks each identity first.
+                        operation=['--rw','delete','--policy','release' if layout=='container' else 'unlink','--persist','batch']
+                    else:operation=['--rw','write','--policy','allocating','--persist','batch','--retain']
+                    p=self.run_case(*flags,*operation,ok=False,env=env)
+                    self.assertEqual(p.returncode,88,p.stdout+p.stderr)
+                    self.assertEqual('BENCH_OK' in p.stdout,phase=='ack')
+                    before={str(p):p.read_bytes() for p in Path(root).rglob('*') if p.is_file()}
+                    self.run_case(*flags,'--recover-existing',ok=phase in ['seal-sync','seal-dir-sync','ack'])
+                    after={str(p):p.read_bytes() for p in Path(root).rglob('*') if p.is_file()}
+                    self.assertEqual(before,after)
+
     def test_reject_invalid_before_mutation(self):
         with tempfile.TemporaryDirectory() as root:
             for args in [('--objects', '1', '--qd', '2'), ('--payload-size', '0'),

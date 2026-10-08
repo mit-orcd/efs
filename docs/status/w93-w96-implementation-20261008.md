@@ -230,3 +230,14 @@ still repair. AMD KV/compaction, Raft/disk tests and Linux/Mac sanitizers pass.
 This is not a general corruption salvage guarantee. The final guard's full
 live cold rerun is pending after isolated timing.
 [Evidence](../../results/measure/20261008-w93-w96-implementation/w96-interior-damage/README.md).
+
+## W95 independent process-crash phases
+
+Twelve independent file/container cases now crash after body write/sync,
+fixture-seal sync/parent publication, printed acknowledgement and GC unlink.
+Incomplete unsealed fixtures are rejected read-only; complete sealed data
+survives cold verification, and every printed success is recoverable. Evidence
+is preserved after failed recovery. All eleven contract tests pass.
+[Evidence and model limits](../../results/measure/20261008-w93-w96-implementation/w95-crash-phases/README.md).
+This covers the existing fixed-geometry principles model, not a production
+packed-index protocol or a selected/migrated backend.
