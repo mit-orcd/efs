@@ -46,6 +46,20 @@ def permissions():
             except OSError as e:assert e.errno==errno.EACCES,e
             else:raise AssertionError('protected query succeeded: '+str(q))
     finally:os.chmod(d,0o700)
-gate('snapshot',snapshot);gate('stats',stats);gate('invalid',invalid);gate('permissions',permissions)
+def fd_capacity():
+    d=root/'capacity';d.mkdir();(d/'capacity-file').write_bytes(b'x')
+    q=d/'.find'/'capacity-*';expected=contents(q);fds=[];bounded=False
+    try:
+        for _ in range(80):
+            try:fds.append(os.open(d/'.find'/f'absent-capacity-{_:03}*',os.O_RDONLY))
+            except OSError as e:
+                assert e.errno==errno.ENOMEM,(len(fds),e)
+                bounded=True;break
+        assert bounded and len(fds)>=20,len(fds)
+        for fd in fds:assert os.read(fd,4096)==b''
+    finally:
+        for fd in fds:os.close(fd)
+    assert contents(q)==expected
+gate('snapshot',snapshot);gate('stats',stats);gate('invalid',invalid);gate('permissions',permissions);gate('fd_capacity',fd_capacity)
 print(json.dumps(dict(root=str(root),results=results)),flush=True)
 raise SystemExit(any(r['status']!='PASS' for r in results))

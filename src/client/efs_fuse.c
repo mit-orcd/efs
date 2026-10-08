@@ -647,6 +647,7 @@ static struct {
     uint32_t nlookup;
     uint32_t nopen;
     size_t open_size;
+    uint64_t version;
     fuse_ino_t nodeid;
     efs_ino_t dir_ino;
     char term[EFS_MAX_NAME];
@@ -654,14 +655,22 @@ static struct {
 static pthread_mutex_t g_vq_mu = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t g_vq_seq = 1;
 
-static fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term)
+static uint64_t virtual_version(const char *text, size_t len)
+{
+    uint64_t hash=1469598103934665603ULL;
+    for (size_t i=0;i<len;i++) { hash^=(unsigned char)text[i];hash*=1099511628211ULL; }
+    return hash;
+}
+static fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term,
+                            uint64_t version, size_t len)
 {
     fuse_ino_t id = 0;
     int slot = -1, empty = -1, stale = -1;
 
     pthread_mutex_lock(&g_vq_mu);
     for (int i = 0; i < EFS_VQ_N; i++) {
-        if (g_vq[i].valid && !g_vq[i].nopen && g_vq[i].dir_ino == dir_ino &&
+        if (g_vq[i].valid && g_vq[i].version == version &&
+            g_vq[i].open_size == len && g_vq[i].dir_ino == dir_ino &&
             strcmp(g_vq[i].term, term) == 0) {
             id = g_vq[i].nodeid;
             pthread_mutex_unlock(&g_vq_mu);
@@ -681,6 +690,8 @@ static fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term)
     g_vq[slot].valid = 1;
     g_vq[slot].nodeid = id;
     g_vq[slot].dir_ino = dir_ino;
+    g_vq[slot].version = version;
+    g_vq[slot].open_size = len;
     strncpy(g_vq[slot].term, term, EFS_MAX_NAME - 1);
     pthread_mutex_unlock(&g_vq_mu);
     return id;
@@ -756,11 +767,23 @@ static int vq_pinned_size(efs_ino_t ino, size_t *len)
     int found=0;
     pthread_mutex_lock(&g_vq_mu);
     for (int i=0; i<EFS_VQ_N; i++) if (g_vq[i].valid &&
-        g_vq[i].nodeid==ino && g_vq[i].nopen) {
+        g_vq[i].nodeid==ino) {
         *len=g_vq[i].open_size; found=1; break;
     }
     pthread_mutex_unlock(&g_vq_mu);
     return found;
+}
+
+static int vq_version_matches(efs_ino_t ino, const char *text, size_t len)
+{
+    uint64_t version=virtual_version(text,len);
+    int match=0;
+    pthread_mutex_lock(&g_vq_mu);
+    for (int i=0;i<EFS_VQ_N;i++) if (g_vq[i].valid && g_vq[i].nodeid==ino) {
+        match=g_vq[i].version==version && g_vq[i].open_size==len; break;
+    }
+    pthread_mutex_unlock(&g_vq_mu);
+    return match;
 }
 
 static const struct fuse_ctx *ll_ctx(void)
@@ -2206,7 +2229,8 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
         for (int i = 0; i < EFS_FIND_RES_N; i++) {
             if (g_find_res[i].valid && find_res_caller(i) && g_find_res[i].dir_ino == dir_ino &&
                 strcmp(g_find_res[i].term, term) == 0) {
-                rc = virtual_file_open(fi, ino, g_find_res[i].text, g_find_res[i].len);
+                rc = vq_version_matches(ino, g_find_res[i].text, g_find_res[i].len) ?
+                    virtual_file_open(fi, ino, g_find_res[i].text, g_find_res[i].len) : -ESTALE;
                 break;
             }
         }
@@ -5001,8 +5025,27 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
             return lookup_fill(parent, e, NULL);
         if (strcmp(name, "..") == 0)
             return lookup_fill((fuse_ino_t)virt_parent(parent), e, NULL);
-        q = vq_intern(virt_parent(parent), name);
-        if (!q) return -ENOMEM;
+        efs_ino_t dir=virt_parent(parent);
+        char path[EFS_MAX_PATH], query[EFS_MAX_PATH];
+        if (ino_to_fuse_path(dir,path,sizeof(path)) != 0) return -ENOENT;
+        int n=snprintf(query,sizeof(query),"%s%s%s/%s",path,
+                       strcmp(path,"/")==0 ? "" : "/",EFS_FIND_NAME,name);
+        if (n<0 || (size_t)n>=sizeof(query)) return -ENAMETOOLONG;
+        int qr=find_query_ensure(dir,query,name);
+        if (qr) return qr;
+        q=0;
+        int present=0;
+        pthread_mutex_lock(&g_find_res_mu);
+        for (int i=0;i<EFS_FIND_RES_N;i++) if (g_find_res[i].valid &&
+            find_res_caller(i) && g_find_res[i].dir_ino==dir &&
+            strcmp(g_find_res[i].term,name)==0) {
+            present=1;
+            q=vq_intern(dir,name,virtual_version(g_find_res[i].text,g_find_res[i].len),
+                        g_find_res[i].len);
+            break;
+        }
+        pthread_mutex_unlock(&g_find_res_mu);
+        if (!q) return present ? -ENOMEM : -EAGAIN;
         return lookup_fill(q, e, NULL);
     }
     if (virt_kind(parent))
