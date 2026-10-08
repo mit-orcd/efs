@@ -2,11 +2,16 @@
 #include "efs/session.h"
 #include "efs/meta_apply.h"
 #include "efs/kv.h"
+#include "efs/kv_lsm.h"
 #include "efs/kv_key.h"
 #include "efs/common.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <stdlib.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 static int failures = 0;
 
@@ -192,8 +197,79 @@ static void test_pending_create_ownership(void)
     efs_kv_mem_free(kv);
 }
 
+
+/* Exit without closing the engine after each acknowledged ownership edge.
+ * Recovery must preserve the token and the independent normal-owner bit. */
+static void test_pending_cold_edges(void)
+{
+    char dir[] = "/tmp/efs-pending-lease-XXXXXX";
+    struct efs_kv_lsm_cfg cfg = {0};
+    uint8_t uuid[EFS_OPID_UUID_LEN], key[EFS_KV_KEY_MAX];
+    uint32_t klen = 0;
+    const efs_ino_t ino = EFS_ROOT_INO;
+    const uint64_t token = UINT64_C(0xfedcba9876543210);
+    uuid_of(uuid, 10);
+    CHECK(mkdtemp(dir) != NULL, "pending cold directory");
+    CHECK(efs_kv_key_lease(efs_kv_inode_shard(ino), ino, 1, uuid, 1,
+                         key, &klen) == EFS_OK, "pending cold key");
+    for (unsigned phase = 0; phase < 4; phase++) {
+        pid_t pid = fork();
+        CHECK(pid >= 0, "pending cold fork");
+        if (pid < 0) break;
+        if (pid == 0) {
+            struct efs_kv *kv = efs_kv_lsm_open(dir, &cfg);
+            uint8_t value[EFS_LEASE_PENDING_VALUE_LEN];
+            int rc = kv ? EFS_OK : EFS_ERR_IO;
+            if (rc == EFS_OK && phase == 0) {
+                rc = efs_meta_apply_init(kv, T0);
+                if (rc == EFS_OK) rc = efs_lease_pending_value(token, value);
+                if (rc == EFS_OK) rc = efs_kv_put(kv, key, klen, value, sizeof(value));
+            } else if (rc == EFS_OK && phase == 1) {
+                rc = efs_lease_open(kv, ino, 1, uuid, 1);
+            } else if (rc == EFS_OK && phase == 2) {
+                rc = efs_lease_close(kv, ino, 1, uuid, 1);
+            } else if (rc == EFS_OK) {
+                rc = efs_lease_pending_close(kv, ino, 1, uuid, 1, token, 1);
+            }
+            _exit(rc == EFS_OK ? 0 : 1);
+        }
+        int status = 0;
+        CHECK(waitpid(pid, &status, 0) == pid && WIFEXITED(status) &&
+              WEXITSTATUS(status) == 0, "acknowledged pending cold edge");
+        struct efs_kv *kv = efs_kv_lsm_open(dir, &cfg);
+        CHECK(kv != NULL, "recover pending cold edge");
+        if (!kv) break;
+        uint8_t value[EFS_LEASE_PENDING_VALUE_LEN], expected[EFS_LEASE_PENDING_VALUE_LEN];
+        uint32_t len = sizeof(value);
+        int rc = efs_kv_get(kv, key, klen, value, &len);
+        if (phase == 3) {
+            CHECK(rc == EFS_ERR_NOT_FOUND, "cold final cleanup remains absent");
+        } else {
+            CHECK(efs_lease_pending_value(token, expected) == EFS_OK, "cold expected token");
+            if (phase == 1) expected[1] |= 1;
+            CHECK(rc == EFS_OK && len == sizeof(expected) &&
+                  memcmp(value, expected, sizeof(expected)) == 0,
+                  "cold pending token and ownership bits exact");
+        }
+        efs_kv_lsm_close(kv);
+    }
+    DIR *d = opendir(dir);
+    if (d) {
+        struct dirent *entry;
+        while ((entry = readdir(d)) != NULL) {
+            if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) continue;
+            char path[1024];
+            snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
+            CHECK(unlink(path) == 0, "remove owned pending fixture file");
+        }
+        closedir(d);
+        CHECK(rmdir(dir) == 0, "remove owned pending fixture directory");
+    }
+}
+
 int main(void)
 {
+    test_pending_cold_edges();
     test_pending_create_ownership();
     test_register_and_fence();
     test_i19_lease();

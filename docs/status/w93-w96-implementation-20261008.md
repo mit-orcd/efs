@@ -253,3 +253,18 @@ one-key accounting, stale cleanup and session removal. This primitive is not
 used by production CREATE or enabled on the wire. Guarded ambiguous HOLD edges,
 atomic token composition/adoption and durable runtime-session recovery remain
 activation requirements.
+
+## Longer W93 gate and W94 cold ownership
+
+Six isolated 4,096-file mixed-load fixtures passed exact cold verification and
+physical deletion/reclamation on AMD direct/TCP. Three balanced pairs compare
+the same current code with receive coalescing enabled versus limited to one.
+Mean close-p99 is 309.124 ms versus 311.454 ms; overlapping samples show no
+consistent tail regression, not a universal speedup. Explicit fixture quotas
+and bounded file counts make the longer test reproducible. The earlier 1 GiB
+quota-pressure failure is retained separately, with healthy eventual GC drain.
+[Measurements](../../results/measure/20261008-w93-w96-implementation/w93-mixed-long/README.md).
+
+W94 now has four real process-exit/cold-reopen ownership-edge tests. A fresh
+AMD Linux build and complete `make test` pass with these tests and the final
+W96 interior-damage guard. Production pending ownership remains inactive.
