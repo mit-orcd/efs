@@ -22,3 +22,13 @@ each measurement. RSS samples are observed peaks, not proof of a global bound.
 
 The follow-up tests ACK-after-log-durability before local state-machine apply;
 these measurements do not describe that new ordering.
+
+Durable-ACK-before-apply (`34fd56fa`) passes all correctness gates, but three
+new isolated mixed-load samples have close p99 269–309 ms. This does not
+resolve W53's end-to-end tail or establish a production performance win.
+A same-current-code one-request control is the next attribution step.
+
+The same-current-code one-request controls also show a large close tail,
+so these short samples do not attribute the difference from the historical
+baseline to batching. The test is being extended to 4096 tiny files with
+alternating serial/batched ordering before any acceptance conclusion.
