@@ -345,7 +345,7 @@ struct efs_raft_host {
     pthread_t tid;
     int running;
     int started;
-    pthread_mutex_t query_mu;
+    pthread_rwlock_t query_lock;
     pthread_t query_tid;
     int query_running,query_started,query_error,query_enabled;
     uint64_t query_deadline_ms;
@@ -7125,11 +7125,11 @@ static void *host_query_thread(void *ctx)
             dirty+=diff;
         }
         /* Only this worker changes the published pointer. Readers hold
-         * query_mu; old remains alive throughout the next candidate build. */
+         * query_lock; old remains alive throughout the next candidate build. */
         int initial=h->query_view.catalog==NULL;
         if (!dirty) first_dirty=0;
         else if (!first_dirty) first_dirty=now;
-        pthread_mutex_lock(&h->query_mu);
+        pthread_rwlock_wrlock(&h->query_lock);
         struct efs_server_query_view *lag=&h->query_view;
         int was_overdue=lag->pending_changes && lag->lag_sample_ms-lag->pending_since_ms>=HOST_QUERY_T_MS;
         int overdue=dirty && now-first_dirty>=HOST_QUERY_T_MS;
@@ -7137,7 +7137,7 @@ static void *host_query_thread(void *ctx)
             lag->pending_changes=dirty;lag->pending_since_ms=first_dirty;
             lag->lag_sample_ms=now;lag->lag_sample_ns=now_ns();
         }
-        pthread_mutex_unlock(&h->query_mu);
+        pthread_rwlock_unlock(&h->query_lock);
         if (!dirty && !initial) continue;
         if (!initial && dirty<HOST_QUERY_N && now-first_dirty<HOST_QUERY_T_MS) continue;
         if (failed && last_attempt && now-last_attempt<HOST_QUERY_T_MS) continue;
@@ -7153,7 +7153,7 @@ static void *host_query_thread(void *ctx)
         else if (!rc) rc=EFS_ERR_BUSY;
         efs_kv_lsm_snapshot_release(source);
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
-        pthread_mutex_lock(&h->query_mu);
+        pthread_rwlock_wrlock(&h->query_lock);
         h->query_error=rc;failed=rc!=EFS_OK;
         if (rc && rc!=EFS_ERR_NOT_PRIMARY && (rc!=last_error || now-last_error_log>=30000)) {
             fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu\n",
@@ -7178,17 +7178,19 @@ static void *host_query_thread(void *ctx)
                 (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
                 (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
             memcpy(published,revisions,sizeof(published));first_dirty=0;
-            /* query_mu drains readers before retirement; one builder bounds
+            /* query_lock drains readers before retirement; one builder bounds
              * simultaneous old/candidate generations to two per host. */
             efs_query_catalog_free(old);
         }
-        pthread_mutex_unlock(&h->query_mu);
+        pthread_rwlock_unlock(&h->query_lock);
     }
     return NULL;
 }
 /* Internal borrowed-view API. The consumer is bounded and may not retain the
  * pointer. It MUST enforce fresh user permissions/ancestry before returning
- * bytes. Source and build times do not advance after a failed refresh. */
+ * bytes. Readers share the immutable view; publication/free takes the exclusive
+ * lock and drains them, retaining the two-generation memory bound. Source and
+ * build times do not advance after a failed refresh. */
 int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
                                  void *ctx,uint16_t *primary_id)
 {
@@ -7213,10 +7215,10 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     capable=host_query_capable(h);
     pthread_mutex_unlock(&h->mu);
     if (!capable) return EFS_ERR_BUSY;
-    pthread_mutex_lock(&h->query_mu);
+    pthread_rwlock_rdlock(&h->query_lock);
     int rc=h->query_view.catalog ? consume(ctx,&h->query_view,h->query_error) :
            h->query_error ? h->query_error : EFS_ERR_BUSY;
-    pthread_mutex_unlock(&h->query_mu);
+    pthread_rwlock_unlock(&h->query_lock);
     return rc;
 }
 
@@ -7558,7 +7560,15 @@ int server_raft_host_start(struct efsd_server *s)
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
     pthread_mutex_init(&h->snap_mu, NULL);
-    pthread_mutex_init(&h->query_mu,NULL);
+    pthread_rwlockattr_t query_attr;
+    pthread_rwlockattr_init(&query_attr);
+#ifdef __linux__
+    /* Query readers never recursively acquire this lock. Pending publication
+     * must stop admitting readers so a busy command stream cannot starve it. */
+    pthread_rwlockattr_setkind_np(&query_attr,PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+#endif
+    pthread_rwlock_init(&h->query_lock,&query_attr);
+    pthread_rwlockattr_destroy(&query_attr);
     pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
@@ -7726,11 +7736,11 @@ void server_raft_host_stop(void)
         return;
     __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
     if (h->query_started) pthread_join(h->query_tid,NULL);
-    pthread_mutex_lock(&h->query_mu);
+    pthread_rwlock_wrlock(&h->query_lock);
     efs_query_catalog_free(h->query_view.catalog);
     h->query_view.catalog=NULL;
-    pthread_mutex_unlock(&h->query_mu);
-    pthread_mutex_destroy(&h->query_mu);
+    pthread_rwlock_unlock(&h->query_lock);
+    pthread_rwlock_destroy(&h->query_lock);
     /* Stop the GC reaper first: an in-flight host_propose_wait needs the
      * pump alive to apply, and its peer RPCs need the conn pool. */
     h->gc_running = 0;

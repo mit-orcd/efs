@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from query_rpc import query, request
 
 mount=Path(sys.argv[1])
 peer=Path(sys.argv[2])
@@ -24,9 +25,29 @@ def writer(worker):
         count+=1
     return count
 
+def reader():
+    # Two independent RPC readers overlap each other and the refresh worker.
+    # Small explicit buffers avoid exhausting the separate reply-memory cap.
+    successes=0
+    generations=set()
+    while time.monotonic()<end:
+        reply,text=query(int(os.environ['EFS_QUERY_TEST_PORT']),request(
+            version=2,operation=1,match=3,term=b'',max_output=4<<20))
+        if reply.status:
+            assert reply.status==-13 and not text,('concurrent query failure',reply.status)
+            continue  # bounded BUSY during mutations; never partial success
+        result=json.loads(text)
+        paths=[bytes.fromhex(entry['path_hex']) for entry in result['entries']]
+        assert result['complete'] and len(paths)==len(set(paths)),result
+        assert result['snapshot']['generation']==reply.generation
+        generations.add(reply.generation)
+        successes+=1
+    return successes,sorted(generations)
+
 generations=[]
-with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+with concurrent.futures.ThreadPoolExecutor(max_workers=10) as pool:
     tasks=[pool.submit(writer,i) for i in range(8)]
+    readers=[pool.submit(reader) for _ in range(2)]
     for _ in range(5):
         time.sleep(2)
         result=subprocess.run([sys.executable,str(peer/'.efs/stats'),'--json'],
@@ -35,6 +56,9 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         generations.append(snap['generation'])
         print('loaded snapshot '+json.dumps(snap,sort_keys=True),flush=True)
     counts=[t.result(timeout=30) for t in tasks]
+    reader_results=[t.result(timeout=30) for t in readers]
+assert all(count>1 and len(gens)>1 for count,gens in reader_results),reader_results
+print('concurrent readers and publication PASS '+str(reader_results),flush=True)
 assert sum(counts)>100,counts
 assert len(set(generations))>1,('publication starved under ordinary writes',generations)
 # After close, wait for the exact independent writer oracle.
