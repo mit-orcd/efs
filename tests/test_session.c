@@ -566,8 +566,51 @@ static void test_guarded_edge_permutations(void)
     CHECK(tested==24,"all four-edge permutations covered");
 }
 
+/* Pending adoption cleanup is independent of the normal-open bit. A stale
+ * cleanup keeps a bounded owner until a fresh, resolved edge can release it. */
+static void test_pending_adoption_permutations(void)
+{
+    unsigned tested=0;
+    for(unsigned a=2;a<=6;a++)for(unsigned b=2;b<=6;b++)
+    for(unsigned c=2;c<=6;c++)for(unsigned d=2;d<=6;d++)for(unsigned e=2;e<=6;e++) {
+        unsigned order[5]={a,b,c,d,e},bits=0;
+        for(unsigned i=0;i<5;i++)bits|=1u<<order[i];
+        if(bits!=124)continue;
+        struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[EFS_OPID_UUID_LEN];efs_ino_t ino=0;
+        CHECK(kv!=NULL,"pending permutation KV");if(!kv)return;
+        guarded_session_init(kv,uuid);
+        struct efs_opid_req create=guarded_request(uuid,1,0);
+        CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"adopt",0,-1,&create,uuid,1,&ino)==EFS_OK,"pending permutation CREATE");
+        uint64_t latest=0;int normal=0,pending=1;
+        for(unsigned i=0;i<5;i++) {
+            unsigned seq=order[i],flags=seq==4?EFS_LEASE_EDGE_CLEAR_PENDING:
+                    ((seq==2 || seq==5)?EFS_LEASE_EDGE_OPEN:EFS_LEASE_EDGE_CLOSE);
+            struct efs_opid_req q=guarded_request(uuid,seq,0);
+            int expect=seq<latest?EFS_ERR_STALE:EFS_OK;
+            CHECK(efs_lease_guarded_edge(kv,ino,1,&q,flags,seq==4?1:0)==expect,"pending/adoption edge ordering verdict");
+            if(expect==EFS_OK) {
+                latest=seq;
+                if(seq==4)pending=0;else normal=flags==EFS_LEASE_EDGE_OPEN;
+            }
+            CHECK(efs_lease_any(kv,ino,1)==(normal || pending),"each adoption ordering preserves precisely owned state");
+            int verdict=EFS_ERR_BUSY;
+            CHECK(efs_lease_guarded_probe(kv,ino,1,&q,flags,seq==4?1:0,&verdict)==1 && verdict==expect,"ambiguous adoption edge resolves exact stored verdict");
+        }
+        CHECK(!normal,"highest final-close always removes normal ownership");
+        struct efs_opid_req cleanup=guarded_request(uuid,7,6);
+        CHECK(efs_lease_guarded_edge(kv,ino,1,&cleanup,pending?EFS_LEASE_EDGE_CLEAR_PENDING:EFS_LEASE_EDGE_CLOSE,pending?1:0)==EFS_OK && !efs_lease_any(kv,ino,1),"fresh cleanup releases stale pending owner after all outcomes known");
+        struct efs_opid_req old=guarded_request(uuid,2,0);
+        CHECK(efs_lease_guarded_edge(kv,ino,1,&old,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,"retired adoption cannot resurrect ownership");
+        CHECK(efs_meta_apply_unlink(kv,1,"adopt",T0+1)==EFS_OK,"reclaim after resolved adoption cleanup");
+        struct efs_meta_row row;CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_ERR_NOT_FOUND,"no orphan after adoption permutations");
+        efs_kv_mem_free(kv);tested++;
+    }
+    CHECK(tested==120,"all five pending/adoption edge permutations covered");
+}
+
 int main(void)
 {
+    test_pending_adoption_permutations();
     test_guarded_edge_permutations();
     test_guarded_malformed_ownership();
     test_guarded_lease_edges();
