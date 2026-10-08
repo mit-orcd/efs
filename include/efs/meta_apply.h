@@ -770,10 +770,13 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p);
 /* NOT_FOUND means unknown, NEVER permission to rebase. Read under lane ReadIndex. */
 /* Retired is a replay barrier, not evidence of commit or rejection. */
 #define EFS_META_PUBLICATION_RETIRED 1
+/* The immutable intent is durable; no mapping verdict exists yet. */
+#define EFS_META_PUBLICATION_PENDING 2
 #define EFS_META_PUBLICATION_MAX_RECEIPTS 64u
 /* Durable publication submit/retire require an established, unfenced session
  * on the lane shard; apply checks admission before receipts or mutation. */
 int efs_meta_apply_publication_retire(struct efs_kv *, const struct efs_meta_pub *);
+int efs_meta_apply_publication_admit(struct efs_kv *, const struct efs_meta_pub *);
 /* Internal durable inspection, NOT session admission. External callers must
  * gate the session under authoritative lane ReadIndex before returning it. */
 int efs_meta_publication_result(struct efs_kv *, const struct efs_meta_pub *, int *verdict);

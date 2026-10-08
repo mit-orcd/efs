@@ -148,6 +148,13 @@ int main(void)
     assert(!efs_publication_digest(&p,before));
     r.rec.publish_flags|=EFS_CHUNK_REC_F_FRESH_OBJECT;p=intent(&r);assert(p.fresh_object);
     assert(!efs_publication_digest(&p,after)&&memcmp(before,after,sizeof(before)));
+    struct efs_publication_ack_queue pending_q={0};
+    assert(efs_publication_ack_admit(&pending_q,&r)==EFS_OK);
+    struct efs_publication_ack_queue saved=pending_q;
+    struct efs_msg_publication_reply pending_reply=reply(&r,EFS_PUBLICATION_PENDING,EFS_META_PUBLICATION_PENDING);
+    assert(efs_publication_ack_consumed(&pending_q,r.id.seq,&pending_reply)==EFS_ERR_BUSY);
+    assert(efs_publication_ack_complete(&pending_q,r.id.seq,&pending_reply)==EFS_ERR_BUSY);
+    assert(!memcmp(&saved,&pending_q,sizeof(saved)));
     ownership();bounded_wrap();durable_order();
     puts("publication ACK: immutable ownership, ordered retirement, bounded wrap and lost replies PASS");
     return 0;

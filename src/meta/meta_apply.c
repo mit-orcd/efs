@@ -3825,7 +3825,7 @@ static int publication_scan_cb(void *ctx,const uint8_t *key,uint32_t klen,
 {
     struct publication_scan *s=ctx;
     if(klen!=51 || !rd64(key+43) || vlen!=8+EFS_HASH_SIZE ||
-       rd32(value)!=1 || rd32(value+4)<1 || rd32(value+4)>3) {
+       rd32(value)!=1 || rd32(value+4)<1 || rd32(value+4)>4) {
         s->rc=EFS_ERR_PROTO; return 1;
     }
     if(!s->count)s->first=rd64(key+43);
@@ -3850,6 +3850,26 @@ static int publication_session_accept(struct efs_kv *kv,
         p->publication_id.client_uuid,p->publication_id.session_epoch);
 }
 
+/* Called only by serialized replicated apply. A durable admission commits the
+ * immutable intent, not the file mapping. The caller must retain the payload
+ * and submit it unchanged until a terminal result exists. */
+int efs_meta_apply_publication_admit(struct efs_kv *kv,const struct efs_meta_pub *p)
+{
+    uint8_t digest[EFS_HASH_SIZE],key[51],value[8+EFS_HASH_SIZE];int verdict;
+    if(!kv || !p || !p->durable_result)return EFS_ERR_INVAL;
+    int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
+    rc=publication_session_accept(kv,p);if(rc!=EFS_OK)return rc;
+    rc=efs_meta_publication_result(kv,p,&verdict);
+    if(rc==EFS_OK)return verdict==EFS_META_PUBLICATION_RETIRED?EFS_ERR_STALE:EFS_OK;
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    struct publication_scan scan;rc=publication_scan(kv,p,&scan);if(rc!=EFS_OK)return rc;
+    if(scan.count>=EFS_META_PUBLICATION_MAX_RECEIPTS)return EFS_ERR_BUSY;
+    publication_key(p,key);be32(value,1);be32(value+4,4);
+    memcpy(value+8,digest,sizeof(digest));
+    struct efs_kv_item item={EFS_KV_PUT,key,sizeof(key),value,sizeof(value)};
+    return meta_write_batch(kv,&item,1);
+}
+
 int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pub *p)
 {
     int verdict; uint64_t floor; uint8_t digest[EFS_HASH_SIZE];
@@ -3859,6 +3879,7 @@ int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pu
     rc=publication_floor(kv,p,&floor);if(rc!=EFS_OK)return rc;
     if(p->publication_id.seq<=floor)return EFS_OK; /* lost ACK reply */
     rc=efs_meta_publication_result(kv,p,&verdict);if(rc!=EFS_OK)return rc;
+    if(verdict==EFS_META_PUBLICATION_PENDING)return EFS_ERR_BUSY;
     struct publication_scan scan;rc=publication_scan(kv,p,&scan);if(rc!=EFS_OK)return rc;
     /* Never discard another unresolved receipt while advancing the floor. */
     if(!scan.count || scan.first!=p->publication_id.seq)return EFS_ERR_BUSY;
@@ -3876,9 +3897,10 @@ int efs_meta_publication_result(struct efs_kv *kv, const struct efs_meta_pub *p,
     uint64_t floor;rc=publication_floor(kv,p,&floor);if(rc!=EFS_OK)return rc;
     if(p->publication_id.seq<=floor) { *verdict=EFS_META_PUBLICATION_RETIRED; return EFS_OK; }
     publication_key(p,key);rc=efs_kv_get(kv,key,sizeof(key),v,&len);if(rc!=EFS_OK)return rc;
-    if(len!=sizeof(v)||rd32(v)!=1||rd32(v+4)<1||rd32(v+4)>3 ||
+    if(len!=sizeof(v)||rd32(v)!=1||rd32(v+4)<1||rd32(v+4)>4 ||
        memcmp(v+8,digest,sizeof(digest)))return EFS_ERR_PROTO;
-    *verdict=rd32(v+4)==1?EFS_OK:rd32(v+4)==2?EFS_ERR_STALE:EFS_ERR_INVAL;
+    *verdict=rd32(v+4)==1?EFS_OK:rd32(v+4)==2?EFS_ERR_STALE:
+        rd32(v+4)==3?EFS_ERR_INVAL:EFS_META_PUBLICATION_PENDING;
     return EFS_OK;
 }
 static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
@@ -4272,10 +4294,11 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
     rc=publication_session_accept(kv,p);if(rc!=EFS_OK)return rc;
     rc=efs_meta_publication_result(kv,p,&verdict);
-    if(rc==EFS_OK)return verdict==EFS_META_PUBLICATION_RETIRED?EFS_ERR_STALE:verdict;
-    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    int pending=rc==EFS_OK && verdict==EFS_META_PUBLICATION_PENDING;
+    if(rc==EFS_OK && !pending)return verdict==EFS_META_PUBLICATION_RETIRED?EFS_ERR_STALE:verdict;
+    if(rc!=EFS_ERR_NOT_FOUND && !pending)return rc;
     struct publication_scan scan;rc=publication_scan(kv,p,&scan);if(rc!=EFS_OK)return rc;
-    if(scan.count>=EFS_META_PUBLICATION_MAX_RECEIPTS)return EFS_ERR_BUSY;
+    if(!pending && scan.count>=EFS_META_PUBLICATION_MAX_RECEIPTS)return EFS_ERR_BUSY;
     publication_key(p,key);
     be32(value,1);be32(value+4,1);memcpy(value+8,digest,sizeof(digest));
     struct efs_kv_item receipt={EFS_KV_PUT,key,sizeof(key),value,sizeof(value)};
@@ -4284,8 +4307,8 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     /* A mutation included the receipt atomically. A replay/no-op or terminal
      * rejection has no mapping mutation; record its verdict before answering. */
     int found=efs_meta_publication_result(kv,p,&verdict);
-    if(found==EFS_OK)return verdict;
-    if(found!=EFS_ERR_NOT_FOUND)return found;
+    if(found==EFS_OK && verdict!=EFS_META_PUBLICATION_PENDING)return verdict;
+    if(found!=EFS_ERR_NOT_FOUND && found!=EFS_OK)return found;
     be32(value+4,rc==EFS_OK?1:rc==EFS_ERR_STALE?2:3);
     struct efs_kv_item completed[2] = {receipt}; unsigned completed_n = 1;
     uint8_t tk[EFS_PUT_TICKET_KEY_LEN], tv[EFS_PUT_TICKET_VAL_LEN];
@@ -8105,7 +8128,7 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
             efs_kv_lane_shard(rd64(key + 3), ci % EFS_META_LANES) !=
                 (((uint32_t)key[0] << 8) | key[1]) ||
             !rd32(key + 39) || !rd64(key + 43) ||
-            vlen != 8 + EFS_HASH_SIZE || rd32(val) != 1 || rd32(val + 4) < 1 || rd32(val + 4) > 3) {
+            vlen != 8 + EFS_HASH_SIZE || rd32(val) != 1 || rd32(val + 4) < 1 || rd32(val + 4) > 4) {
             c->rc = EFS_ERR_PROTO;
             return 1;
         }

@@ -76,6 +76,10 @@ int main(void)
  assert(calls==3 && sleeps==1 && last_target==2 && releases==3 && !drops);
  reset();query=1;replies[0].state=EFS_PUBLICATION_REJECTED;replies[0].verdict=EFS_ERR_STALE;
  assert(efs_client_rpc_publication(&request,1,&out)==EFS_OK && out.state==EFS_PUBLICATION_REJECTED);
+ reset();query=1;replies[0].state=EFS_PUBLICATION_PENDING;replies[0].verdict=EFS_META_PUBLICATION_PENDING;
+ assert(efs_client_rpc_publication(&request,1,&out)==EFS_OK && out.state==EFS_PUBLICATION_PENDING);
+ reset();replies[0].state=EFS_PUBLICATION_PENDING;replies[0].verdict=EFS_OK;
+ assert(efs_client_rpc_publication(&request,0,&out)==EFS_ERR_PROTO);
  reset();query=1;replies[0].rpc.status=EFS_INODE_RPC_NOT_FOUND;
  assert(efs_client_rpc_publication(&request,1,&out)==EFS_ERR_NOT_FOUND && out.state==EFS_PUBLICATION_UNKNOWN);
  for(unsigned i=0;i<5;i++) {

@@ -1973,14 +1973,16 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
     p.mtime_gen = rd64be(q + 8);
     p.lane_local = (q[16] & HOST_PUB_F_LANE_LOCAL) ? 1 : 0;
     p.fresh_object = !!(q[16] & HOST_PUB_F_FRESH_OBJECT);
-    if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE) {
+    if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
         p.durable_result = 1;
         memcpy(p.publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
         p.publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
         p.publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
     }
     rc = cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ?
-        efs_meta_apply_publication_retire(h->kv, &p) : efs_meta_apply_publish(h->kv, &p);
+        efs_meta_apply_publication_retire(h->kv, &p) :
+        cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT ? efs_meta_apply_publication_admit(h->kv, &p) :
+        efs_meta_apply_publish(h->kv, &p);
     /* Deleted inode: P3 no-op. STALE stays on the apply-result ring so
      * host_pub_batch_finish can fail the report (W1 / I12). host_apply
      * must still return OK to the raft core — a losing CAS is a committed
@@ -2203,7 +2205,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
-           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
+           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
            cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
@@ -2544,7 +2546,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
         return apply_unlink_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_RMDIR)
         return apply_rmdir_cmd(h, cmd, clen, index);
-    if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE)
+    if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT)
         return clen == HOST_PUBLICATION_LEN ? apply_one_publish(h,cmd,index) : EFS_ERR_PROTO;
     if (cmd[0] == EFS_MD_CMD_PUBLISH)
         return apply_publish_cmd(h, cmd, clen, index);
@@ -13290,7 +13292,7 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
     int rc=host_read_index(h,group,&hint);
     if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,req->id.client_uuid,req->id.session_epoch);
     if(rc==EFS_OK)rc=efs_meta_publication_result(h->kv,&p,&verdict);
-    if((rc==EFS_ERR_NOT_FOUND && !query_only) ||
+    if(((rc==EFS_ERR_NOT_FOUND || (rc==EFS_OK && verdict==EFS_META_PUBLICATION_PENDING)) && !query_only) ||
        (rc==EFS_OK && query_only==2 && verdict!=EFS_META_PUBLICATION_RETIRED)) {
         /* Apply validates FileID/fences again. No pack-time CAS skip: losers
          * must have a replicated terminal result, and retries use that result. */
@@ -13302,7 +13304,22 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
             cmd[0]=query_only==2?EFS_MD_CMD_PUBLICATION_RETIRE:EFS_MD_CMD_PUBLICATION;
             memcpy(cmd+len,p.publication_id.client_uuid,EFS_OPID_UUID_LEN);
             wr32be(cmd+len+16,p.publication_id.session_epoch);wr64be(cmd+len+20,p.publication_id.seq);
-            len+=28;rc=host_propose_wait(h,group,cmd,len,&hint);
+            len+=28;
+            if(!query_only && rc==EFS_OK) {
+                /* Pending is issued only after replicated admission is visible
+                 * under fresh authority, never from a proposed index/term. */
+                cmd[0]=EFS_MD_CMD_PUBLICATION_ADMIT;
+                rc=host_propose_wait(h,group,cmd,len,&hint);
+                if(rc==EFS_OK || rc==EFS_ERR_STALE || rc==EFS_ERR_BUSY) {
+                    rc=host_read_index(h,group,&hint);
+                    if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,req->id.client_uuid,req->id.session_epoch);
+                    if(rc==EFS_OK)rc=efs_meta_publication_result(h->kv,&p,&verdict);
+                }
+                if(rc==EFS_OK && verdict==EFS_META_PUBLICATION_PENDING) {
+                    cmd[0]=EFS_MD_CMD_PUBLICATION;
+                    rc=host_propose_wait(h,group,cmd,len,&hint);
+                }
+            } else rc=host_propose_wait(h,group,cmd,len,&hint);
         }
         /* Even STALE may describe another entry or a lost apply-ring result.
          * Resolve this intent from durable state after an authoritative read. */
@@ -13316,7 +13333,8 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
     set_inode_rc(&out->rpc,rc,hint);
     if(rc==EFS_OK) {
         out->verdict=verdict;
-        out->state=verdict==EFS_META_PUBLICATION_RETIRED?EFS_PUBLICATION_RETIRED:
+        out->state=verdict==EFS_META_PUBLICATION_PENDING?EFS_PUBLICATION_PENDING:
+            verdict==EFS_META_PUBLICATION_RETIRED?EFS_PUBLICATION_RETIRED:
             verdict==EFS_OK?EFS_PUBLICATION_COMMITTED:EFS_PUBLICATION_REJECTED;
     }
 }

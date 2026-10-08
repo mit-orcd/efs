@@ -150,12 +150,87 @@ static void bounded_receipts(void)
     first.publication_id.seq=5;assert(efs_meta_apply_publish(kv,&first)==EFS_ERR_STALE);
     assert(efs_meta_apply_check(kv)==EFS_OK);efs_kv_mem_free(kv);
 }
+/* W88's exact bounded-trailer eviction sequence, with durable identities.
+ * The receipt/floor, never the trailer, supplies replay authority. */
+static void folded_history_replay(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();assert(kv);
+    struct efs_meta_attrs at={0,0,1};efs_ino_t ino;struct efs_meta_row row;
+    assert(efs_meta_apply_init(kv,1)==EFS_OK);
+    assert(efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"evicted",&ino)==EFS_OK);
+    assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);admit(kv,ino);
+    struct efs_meta_pub first=publication(ino,row.generation,0,100),p=first;
+    first.delta_len=1;
+    for(unsigned i=0;i<EFS_CHUNK_DELTA_MAX;i++) {
+        p=publication(ino,row.generation,0,100+i);p.delta_off=i;p.delta_len=1;
+        assert(efs_meta_apply_publication_admit(kv,&p)==EFS_OK);
+        assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+    }
+    struct efs_meta_delta ds[EFS_CHUNK_DELTA_MAX];uint32_t nd;uint64_t newest;
+    assert(efs_meta_apply_get_chunk_deltas(kv,ino,0,ds,EFS_CHUNK_DELTA_MAX,&nd,&newest)==EFS_OK);
+    p=publication(ino,row.generation,0,200);p.delta_base_n=nd;p.delta_base_seq=newest;
+    assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+    assert(efs_meta_apply_get_chunk_deltas(kv,ino,0,ds,EFS_CHUNK_DELTA_MAX,&nd,&newest)==EFS_OK);
+    p=publication(ino,row.generation,200,201);p.delta_base_n=nd;p.delta_base_seq=newest;
+    assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+    p=publication(ino,row.generation,0,202);p.delta_off=1000;p.delta_len=1;
+    assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+    assert(efs_meta_apply_get_chunk_deltas(kv,ino,0,ds,EFS_CHUNK_DELTA_MAX,&nd,&newest)==EFS_OK);
+    for(unsigned i=0;i<nd;i++)assert(ds[i].generation!=first.candidate_gen);
+    assert(efs_meta_apply_publish(kv,&first)==EFS_OK); /* lost original ACK */
+    assert(efs_meta_apply_publication_retire(kv,&first)==EFS_OK);
+    assert(efs_meta_apply_publish(kv,&first)==EFS_ERR_STALE); /* GC/re-PUT cannot reopen identity */
+    struct efs_meta_chunk got;assert(efs_meta_apply_get_chunk(kv,ino,0,&got)==EFS_OK && got.generation==201);
+    assert(efs_meta_apply_get_chunk_deltas(kv,ino,0,ds,EFS_CHUNK_DELTA_MAX,&nd,&newest)==EFS_OK);
+    for(unsigned i=0;i<nd;i++)assert(!(ds[i].generation==first.candidate_gen && ds[i].len));
+    assert(efs_meta_apply_check(kv)==EFS_OK);efs_kv_mem_free(kv);
+}
+
+static void pending_admission(struct efs_kv *kv,efs_ino_t ino,uint64_t gen)
+{
+    admit(kv,ino);
+    struct efs_meta_pub first=publication(ino,gen,0,1000);int v;
+    assert(efs_kv_mem_fail_next_batch(kv)==EFS_OK);
+    assert(efs_meta_apply_publication_admit(kv,&first)==EFS_ERR_IO);
+    assert(result(kv,&first,&v)==EFS_ERR_NOT_FOUND);
+    for(unsigned i=0;i<EFS_META_PUBLICATION_MAX_RECEIPTS;i++) {
+        struct efs_meta_pub p=publication(ino,gen,0,1000+i);
+        assert(efs_meta_apply_publication_admit(kv,&p)==EFS_OK);
+        assert(result(kv,&p,&v)==EFS_OK && v==EFS_META_PUBLICATION_PENDING);
+        assert(efs_meta_apply_publication_admit(kv,&p)==EFS_OK);
+        assert(efs_meta_apply_publication_retire(kv,&p)==EFS_ERR_BUSY);
+    }
+    struct efs_meta_chunk got;
+    assert(efs_meta_apply_get_chunk(kv,ino,0,&got)==EFS_ERR_NOT_FOUND);
+    struct efs_meta_pub extra=publication(ino,gen,0,2000),changed=first;changed.new_size++;
+    assert(efs_meta_apply_publication_admit(kv,&extra)==EFS_ERR_BUSY);
+    assert(efs_meta_apply_publication_admit(kv,&changed)==EFS_ERR_PROTO);
+    assert(efs_meta_apply_publish(kv,&changed)==EFS_ERR_PROTO);
+    /* Full admission capacity must not deadlock completion of an owned intent. */
+    assert(efs_kv_mem_fail_next_batch(kv)==EFS_OK);
+    assert(efs_meta_apply_publish(kv,&first)==EFS_ERR_IO);
+    assert(result(kv,&first,&v)==EFS_OK && v==EFS_META_PUBLICATION_PENDING);
+    assert(efs_meta_apply_publish(kv,&first)==EFS_OK);
+    assert(efs_meta_apply_publication_retire(kv,&first)==EFS_OK);
+    assert(efs_meta_apply_publication_admit(kv,&first)==EFS_ERR_STALE);
+    assert(efs_meta_apply_publication_admit(kv,&extra)==EFS_OK);
+    /* Pending losers become durable terminal rejections without leaking slots. */
+    assert(efs_meta_apply_publish(kv,&extra)==EFS_ERR_STALE);
+    assert(result(kv,&extra,&v)==EFS_OK && v==EFS_ERR_STALE);
+    assert(efs_meta_apply_check(kv)==EFS_OK);
+}
+
 int main(void)
 {
     struct efs_kv *mem=efs_kv_mem_create();assert(mem);struct efs_meta_attrs ma={0,0,1};efs_ino_t mi;struct efs_meta_row mr;
     assert(efs_meta_apply_init(mem,1)==EFS_OK);assert(efs_meta_apply_create_file(mem,&ma,EFS_ROOT_INO,S_IFREG|0644,"retire",&mi)==EFS_OK);
     assert(efs_meta_apply_get_inode(mem,mi,&mr)==EFS_OK);exercise(mem,mi,mr.generation);retirement(mem,mi,mr.generation);efs_kv_mem_free(mem);
-    failures();bounded_receipts();char dir[]="/tmp/efs-publication-XXXXXX";assert(mkdtemp(dir));
+    mem=efs_kv_mem_create();assert(mem);
+    assert(efs_meta_apply_init(mem,1)==EFS_OK);
+    assert(efs_meta_apply_create_file(mem,&ma,EFS_ROOT_INO,S_IFREG|0644,"pending",&mi)==EFS_OK);
+    assert(efs_meta_apply_get_inode(mem,mi,&mr)==EFS_OK);
+    pending_admission(mem,mi,mr.generation);efs_kv_mem_free(mem);
+    folded_history_replay();failures();bounded_receipts();char dir[]="/tmp/efs-publication-XXXXXX";assert(mkdtemp(dir));
     struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);
     struct efs_meta_attrs at={0,0,1};efs_ino_t ino;struct efs_meta_row row;
     assert(efs_meta_apply_init(kv,1)==EFS_OK);
@@ -177,6 +252,21 @@ int main(void)
     assert(result(kv,&first,&v)==EFS_OK && v==EFS_META_PUBLICATION_RETIRED);
     assert(efs_meta_apply_publish(kv,&first)==EFS_ERR_STALE);
     assert(efs_meta_apply_get_chunk(kv,ino,0,&got)==EFS_OK && got.generation==12);
+    /* Crash immediately after admission, before any mapping publication. */
+    efs_ino_t pi;struct efs_meta_row pr;
+    assert(efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"pending-crash",&pi)==EFS_OK);
+    assert(efs_meta_apply_get_inode(kv,pi,&pr)==EFS_OK);admit(kv,pi);
+    efs_kv_lsm_close(kv);child=fork();assert(child>=0);
+    struct efs_meta_pub pending=publication(pi,pr.generation,0,1000);
+    if(!child) {kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+        assert(efs_meta_apply_publication_admit(kv,&pending)==EFS_OK);_exit(0);}
+    assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
+    kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+    assert(result(kv,&pending,&v)==EFS_OK && v==EFS_META_PUBLICATION_PENDING);
+    assert(efs_meta_apply_get_chunk(kv,pi,0,&got)==EFS_ERR_NOT_FOUND);
+    assert(efs_meta_apply_publication_retire(kv,&pending)==EFS_ERR_BUSY);
+    assert(efs_meta_apply_publish(kv,&pending)==EFS_OK);
+    assert(result(kv,&pending,&v)==EFS_OK && v==EFS_OK);
     assert(efs_meta_apply_check(kv)==EFS_OK);efs_kv_lsm_close(kv);
     DIR *d=opendir(dir);assert(d);struct dirent *e;
     while((e=readdir(d))){if(e->d_name[0]=='.')continue;char p[512];snprintf(p,sizeof(p),"%s/%s",dir,e->d_name);assert(!unlink(p));}

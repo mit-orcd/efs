@@ -865,6 +865,7 @@ struct efs_chunk_rec {
 
 /* Per-publication transport status is separate from its durable verdict.
  * UNKNOWN (including NOT_FOUND) never authorizes dropping/rebasing ownership. */
+#define EFS_PUBLICATION_PENDING 4u /* durable intent only: retain bytes; fsync must wait */
 #define EFS_PUBLICATION_UNKNOWN 0u
 #define EFS_PUBLICATION_COMMITTED 1u
 #define EFS_PUBLICATION_REJECTED 2u

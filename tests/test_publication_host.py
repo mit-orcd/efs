@@ -29,7 +29,8 @@ static uint64_t rd64be(const uint8_t *p){uint64_t n=0;for(unsigned i=0;i<8;i++)n
 struct efs_raft_host {int running,n;struct efs_kv *kv;};
 static struct efs_raft_host host={.running=1,.n=3},*g_host=&host;
 static int owns=1,stored,stored_verdict,wait_rc,read_rc,store_on_propose=1;
-static int session_rc, fence_after_propose;
+static int session_rc, fence_after_propose, admission_only;
+static unsigned admissions;
 static unsigned gates;
 static unsigned proposals,reads,forwards;static uint8_t group;
 int efs_chunk_size_valid(uint32_t s){return s==EFS_MIN_CHUNK_SIZE;}
@@ -61,12 +62,24 @@ int efs_meta_apply_publish(struct efs_kv *kv,const struct efs_meta_pub *p)
 {(void)kv;assert(p->durable_result && p->lane_local && p->candidate_gen==789 &&
  p->inode_gen==456 && p->new_size==100 && p->publication_id.seq==77 &&
  p->publication_id.client_uuid[0]==1 && p->publication_id.session_epoch==1);return EFS_OK;}
+int efs_meta_apply_publication_admit(struct efs_kv *kv,const struct efs_meta_pub *p)
+{(void)kv;(void)p;return EFS_OK;}
 int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pub *p)
 {assert(efs_meta_apply_publish(kv,p)==EFS_OK);stored_verdict=EFS_META_PUBLICATION_RETIRED;return EFS_OK;}
 int efs_meta_apply_publish_stale_why(void){return 0;}
 ''' + pack + '\n' + apply + r'''
 static int host_propose_wait(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uint32_t n,int *hint)
-{(void)h;(void)hint;assert(g==group && (cmd[0]==EFS_MD_CMD_PUBLICATION || cmd[0]==EFS_MD_CMD_PUBLICATION_RETIRE) && n==HOST_PUBLICATION_LEN);proposals++;if(store_on_propose)assert(apply_one_publish(h,cmd,1)==EFS_OK);stored=store_on_propose;if(fence_after_propose)session_rc=EFS_ERR_STALE;return wait_rc;}
+{(void)h;(void)hint;assert(g==group && n==HOST_PUBLICATION_LEN);
+ if(cmd[0]==EFS_MD_CMD_PUBLICATION_ADMIT) {
+  admissions++;assert(apply_one_publish(h,cmd,1)==EFS_OK);
+  if(store_on_propose){stored=1;stored_verdict=EFS_META_PUBLICATION_PENDING;}
+  return wait_rc;
+ }
+ assert(cmd[0]==EFS_MD_CMD_PUBLICATION || cmd[0]==EFS_MD_CMD_PUBLICATION_RETIRE);
+ proposals++;if(store_on_propose && !admission_only)assert(apply_one_publish(h,cmd,1)==EFS_OK);
+ if(!admission_only){stored=store_on_propose;if(cmd[0]==EFS_MD_CMD_PUBLICATION)stored_verdict=wait_rc==EFS_ERR_BUSY?EFS_ERR_STALE:EFS_OK;}
+ if(fence_after_propose)session_rc=EFS_ERR_STALE;
+ return wait_rc;}
 ''' +fn+r'''
 int main(void)
 {
@@ -84,14 +97,14 @@ int main(void)
  stored=0;stored_verdict=EFS_ERR_STALE;wait_rc=EFS_ERR_BUSY;
  server_raft_host_publication(&req,0,&out);assert(proposals==2 && out.state==EFS_PUBLICATION_REJECTED && out.verdict==EFS_ERR_STALE);
  stored=0;store_on_propose=0;server_raft_host_publication(&req,0,&out);
- assert(proposals==3 && out.rpc.status==EFS_INODE_RPC_NOT_FOUND && out.state==EFS_PUBLICATION_UNKNOWN);
+ assert(proposals==2 && out.rpc.status==EFS_INODE_RPC_NOT_FOUND && out.state==EFS_PUBLICATION_UNKNOWN);
  /* The missing outcome later appears: a status query recovers it without I/O. */
  stored=1;stored_verdict=EFS_OK;server_raft_host_publication(&req,1,&out);
- assert(proposals==3 && out.state==EFS_PUBLICATION_COMMITTED);
+ assert(proposals==2 && out.state==EFS_PUBLICATION_COMMITTED);
  read_rc=EFS_ERR_BUSY;server_raft_host_publication(&req,1,&out);
- assert(out.rpc.status==EFS_INODE_RPC_BUSY && out.state==EFS_PUBLICATION_UNKNOWN && proposals==3);
- owns=0;server_raft_host_publication(&req,1,&out);assert(forwards==1 && proposals==3);
- server_raft_host_publication(&req,2,&out);assert(forwards==2 && proposals==3);
+ assert(out.rpc.status==EFS_INODE_RPC_BUSY && out.state==EFS_PUBLICATION_UNKNOWN && proposals==2);
+ owns=0;server_raft_host_publication(&req,1,&out);assert(forwards==1 && proposals==2);
+ server_raft_host_publication(&req,2,&out);assert(forwards==2 && proposals==2);
  owns=1;read_rc=EFS_OK;stored=1;stored_verdict=EFS_OK;store_on_propose=0;
  server_raft_host_publication(&req,2,&out);assert(out.rpc.status==EFS_INODE_RPC_NOT_FOUND && out.state==EFS_PUBLICATION_UNKNOWN);
  stored=1;store_on_propose=1;
@@ -108,6 +121,13 @@ int main(void)
  session_rc=EFS_OK;stored=0;fence_after_propose=1;
  server_raft_host_publication(&req,0,&out);
  assert(out.rpc.status==EFS_INODE_RPC_STALE && out.state==EFS_PUBLICATION_UNKNOWN && proposals==saved+1 && gates);
+ session_rc=EFS_OK;fence_after_propose=0;stored=0;store_on_propose=1;admission_only=1;wait_rc=EFS_ERR_BUSY;
+ server_raft_host_publication(&req,0,&out);
+ assert(out.rpc.status==EFS_INODE_RPC_OK && out.state==EFS_PUBLICATION_PENDING && out.verdict==EFS_META_PUBLICATION_PENDING);
+ saved=proposals;server_raft_host_publication(&req,1,&out);
+ assert(out.state==EFS_PUBLICATION_PENDING && proposals==saved && admissions);
+ admission_only=0;wait_rc=EFS_OK;server_raft_host_publication(&req,0,&out);
+ assert(out.state==EFS_PUBLICATION_COMMITTED && proposals==saved+1);
  puts("publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS");
 }
 '''
