@@ -1,0 +1,168 @@
+static int host_view_covers(const struct host_view *v, uint64_t want,
+                            uint64_t round, uint64_t term)
+{
+    return v->has && v->role == EFS_RAFT_LEADER && v->read_done &&
+           v->read_round >= round && v->term == term &&
+           v->read_index >= want && v->applied >= v->read_index;
+}
+
+/* Sleep until the pump wakes this waiter or `end` passes. cv_mu HELD by
+                rc = host_wait_applied(h, group, ridx, leader_hint);
+            if (prof)
+                read_prof_add(&g_read_prof.ri_remote_wait, now_us_() - p1);
+            if (rc != EFS_OK)
+                return rc;
+            if (leader_hint && rhint >= 0)
+                *leader_hint = rhint;
+            return EFS_OK;
+        }
+        if (!round) {
+            /* Admit this request BEFORE any heartbeat eligible to cover it.
+             * Readers arriving during an existing round queue for the next. */
+            pthread_mutex_lock(&h->mu);
+            struct efs_raft *r = group_raft(h, group);
+            if (!r || efs_raft_role(r) != EFS_RAFT_LEADER) {
+                pthread_mutex_unlock(&h->mu);
+                host_view_get(h, group, &v);
+                continue;
+            }
+            uint64_t previous = efs_raft_read_round(r);
+            if (previous == UINT64_MAX) {
+                pthread_mutex_unlock(&h->mu);
+                return EFS_ERR_BUSY;
+            }
+            round = previous + 1;
+            admitted_term = efs_raft_term(r);
+            pthread_mutex_unlock(&h->mu);
+        }
+        if (v.term != admitted_term)
+            return EFS_ERR_NOT_PRIMARY;
+        if (host_view_covers(&v, want, round, admitted_term)) {
+            if (prof)
+                read_prof_add(first ? &g_read_prof.ri_leader_covered
+                                    : &g_read_prof.ri_leader,
+                              now_us_() - p0);
+            return EFS_OK;
+        }
+        first = 0;
+        if (!v.read_pending) {
+            /* Begin a round — under h->mu, re-validated against the core
+             * (another reader may have begun one since the view). */
+            struct efs_raft *r;
+
+            pthread_mutex_lock(&h->mu);
+            r = group_raft(h, group);
+            rc = EFS_OK;
+            if (r && efs_raft_role(r) == EFS_RAFT_LEADER &&
+                !efs_raft_read_pending(r) &&
+                !(efs_raft_read_round(r) >= round &&
+                  efs_raft_read_covers(r, want)))
+                rc = efs_raft_read_begin(r);
+            host_publish_group(h, group);
+            pthread_mutex_unlock(&h->mu);
+            if (rc != EFS_OK)
+                return rc;
+            host_pump_kick(h);
+            host_view_get(h, group, &v);
+            continue;
+        }
+        if (host_past_deadline(&end))
+            return EFS_ERR_BUSY;
+        /* read_done lands when heartbeat replies arrive — the pump
+         * publishes the view and broadcasts applied_cv each cycle. */
+        pthread_mutex_lock(&h->cv_mu);
+        host_view_get(h, group, &v);
+        if (v.has && v.role == EFS_RAFT_LEADER && v.read_pending &&
+            !host_view_covers(&v, want, round, admitted_term)) {
+            uint64_t s0 = now_us_();
+            host_waiter_sleep(h, group, 1, 0, v.stamp, &end);
+            s0 = now_us_() - s0;
+            if (s0 > 20000)
+                fprintf(stderr, "raft-host: read-sleep us=%llu group=%u "
+                        "want=%llu read_idx=%llu applied=%llu pending=%d\n",
+                        (unsigned long long)s0, group,
+                        (unsigned long long)want,
+                        (unsigned long long)v.read_index,
+                        (unsigned long long)v.applied, v.read_pending);
+        }
+        pthread_mutex_unlock(&h->cv_mu);
+        host_view_get(h, group, &v);
+    }
+         * Order matters — the index must not pass the durable KV. Only
+         * the pump applies, so nothing under h->mu depends on this fsync
+         * having finished; handler-thread KV writes outside the hold
+         * fsync themselves. */
+        if (obs)
+            c0 = now_us_();
+        if (efs_kv_lsm_sync_release(h->kv) != EFS_OK)
+            fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
+        {
+            uint64_t pnow = now_us_();
+
+            for (i = 0; i < HOST_NGROUPS; i++)
+                (void)persist_applied(h, i, applied_now[i], pnow, 0);
+        }
+        if (obs) {
+            t_persist = now_us_() - c0;
+            if (t_persist > h->obs_persist_max_us)
+                h->obs_persist_max_us = t_persist;
+        }
+        /* Sleep until the next raft timer tick OR an event (inbox message,
+         * local propose, shutdown) — whichever comes first. Timer cadence is
+        } else if (r->apply && clen > 0) {
+            rc = r->apply(r->app, idx, term, cmd, clen);
+            if (rc != EFS_OK) {
+                free(cmd);
+                return rc;
+            }
+        }
+        free(cmd);
+        r->last_applied = idx;
+    }
+    if (r->read_in_flight &&
+        (r->read_cfg_old != r->log_old || r->read_cfg_new != r->log_new))
+        r->read_in_flight = 0;
+    if (r->read_in_flight == 1 && r->role == EFS_RAFT_LEADER &&
+        r->last_applied >= r->read_index && quorum_ok(r, r->read_acks)) {
+        uint64_t committed_term = 0;
+        /* A leader must first commit an entry in its own term. */
+        if (log_term(r, r->commit_index, &committed_term) == EFS_OK &&
+            committed_term == r->current_term)
+            r->read_in_flight = 2;
+    }
+    return EFS_OK;
+}
+
+static int append_local(struct efs_raft *r, uint64_t term, const uint8_t *cmd,
+                        uint32_t clen, uint64_t *index_out)
+
+static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
+{
+    maybe_step_down(r, in->term);
+    if (r->role != EFS_RAFT_LEADER || in->term != r->current_term)
+        return EFS_OK;
+    if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
+        return EFS_OK;
+    /* A commit probe echoes vote_granted. Clearing inflight here would
+     * forget an entry batch that is still unanswered. */
+    if (!in->vote_granted)
+        r->ae_inflight[in->from] = 0;
+    if (in->success) {
+        uint64_t prev_commit = r->commit_index;
+        if (in->match_index > r->match_index[in->from])
+            r->match_index[in->from] = in->match_index;
+        r->next_index[in->from] = r->match_index[in->from] + 1;
+        if (r->read_in_flight == 1 && in->last_log_index == r->read_round &&
+            is_voter(r, in->from))
+            r->read_acks |= 1u << in->from;
+        /* Queue the next batch before apply. The sender thread writes
+         * it while apply still holds the lock, so the round trip
+         * overlaps the apply. send_ae will not start a second batch
+         * while this one is in flight. */
+        if (r->next_index[in->from] <= r->match_index[r->id])
+            (void)send_ae(r, in->from, 1);
+        try_commit(r);
+        apply_committed(r);
+        if (r->commit_index != prev_commit) {
+            /* Commit advanced: push the new commit index to every peer NOW.
+             * A follower's local apply (and anyone waiting on it, e.g. a
