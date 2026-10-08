@@ -559,6 +559,7 @@ static int efs_file_open(struct fuse_file_info *fi, efs_ino_t ino)
     return 0;
 }
 static void vq_open_size(efs_ino_t ino, size_t len, int delta);
+static void vq_closed(efs_ino_t ino);
 static void efs_file_close(struct fuse_file_info *fi)
 {
     struct efs_file_handle *h = efs_file_handle(fi);
@@ -566,6 +567,7 @@ static void efs_file_close(struct fuse_file_info *fi)
         if (h->errors) efs_wb_description_close(h->errors);
         if (h->snapshot) {
             vq_open_size(h->ino, h->snapshot_len, -1);
+            vq_closed(h->ino);
             pthread_mutex_lock(&g_virtual_open_mu);
             g_virtual_open_bytes -= h->snapshot_len;
             pthread_mutex_unlock(&g_virtual_open_mu);
@@ -748,7 +750,7 @@ static void vq_nlookup_sub(fuse_ino_t nodeid, uint64_t n)
 
 /* Pin the query inode's advertised size while its immutable fd is open.
  * Linux may issue GETATTR without a file handle even for fstat. A subsequent
- * path lookup receives a distinct inode while this version is pinned. */
+ * path lookup shares an inode only when its result bytes are unchanged. */
 static void vq_open_size(efs_ino_t ino, size_t len, int delta)
 {
     pthread_mutex_lock(&g_vq_mu);
@@ -793,7 +795,9 @@ static const struct fuse_ctx *ll_ctx(void)
 
 static void ll_inval_push(struct ll_inval_item it)
 {
-    if (!g_fuse_se || virt_kind(it.parent) || virt_kind(it.ino))
+    if (!g_fuse_se || (virt_kind(it.parent) &&
+        !(it.kind == LL_INVAL_ENTRY && virt_kind(it.parent) == 2)) ||
+        virt_kind(it.ino))
         return;
     pthread_mutex_lock(&g_inval.mu);
     if (!g_inval.run) {
@@ -817,13 +821,24 @@ static void ll_inval_entry(fuse_ino_t parent, const char *name)
 {
     struct ll_inval_item it;
 
-    if (!name || !name[0] || virt_kind(parent))
+    if (!name || !name[0] || (virt_kind(parent) && virt_kind(parent) != 2))
         return;
     memset(&it, 0, sizeof(it));
     it.kind = LL_INVAL_ENTRY;
     it.parent = parent;
     strncpy(it.name, name, EFS_MAX_NAME - 1);
     ll_inval_push(it);
+}
+
+/* Expired FUSE entries can retain lookup references until memory pressure.
+ * Drop the query dentry on close so FORGET, rather than expiry alone, releases
+ * the bounded identity slot. Open descriptions retain their own bytes. */
+static void vq_closed(efs_ino_t ino)
+{
+    efs_ino_t dir;
+    char term[EFS_MAX_NAME];
+    if (vq_lookup(ino, &dir, term, sizeof(term)) == 0)
+        ll_inval_entry(virt_find_ino(dir), term);
 }
 
 static void ll_inval_inode(fuse_ino_t ino, off_t off, off_t len)
@@ -5180,8 +5195,14 @@ static void ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
-    else
+    else {
         fuse_reply_entry(req, &e);
+        /* Also release lookup-only queries (stat has no RELEASE callback).
+         * Queue after the reply; the notifier must not run inline while the
+         * kernel holds the lookup's directory locks. */
+        if (virt_kind(e.ino) == 3)
+            ll_inval_entry(parent, name);
+    }
 }
 
 static void ll_forget(fuse_req_t req, fuse_ino_t ino, uint64_t nlookup)

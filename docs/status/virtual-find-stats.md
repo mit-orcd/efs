@@ -134,3 +134,29 @@ The first client repair compiles without warnings on NUC. Live fixed gates,
 server architecture, staged 400 GiB population and final acceptance remain
 outstanding at this checkpoint. Feature switches SET_FEATURES are retired in
 current protocol; revisit the older toggle gate wording against current code.
+
+Second checkpoint: `d078711b` passed the full NUC POSIX suite (216 pass,
+0 fail, 1 skip; 75.2 s) and peer suite (64/64; 49.9 s). The subsequent inode
+size fix `4f3aa3b0` repeated these at 68.6 s and 48.1 s. `467244c3` uses
+content-versioned query identities; focused immutable snapshot, invalid query,
+and permission gates pass. Stats still fails (peer-created file reports zero).
+
+Capacity testing subsequently exposed kernel lookup-reference retention:
+expired dentries were not forgotten after query fds closed, eventually filling
+all 64 query identities. The repair explicitly queues dentry invalidation after
+lookup replies and on close, preserving open snapshots until release/FORGET.
+A regression covers 256 distinct stat-only queries, 128 sequential opens,
+two exhaustion/drain cycles, and a fresh query in another directory. With the
+repair, recovery and subsequent snapshot gates pass on the real mount.
+The older phase3 capacity FAIL (80 opens) used the same unchanged query 80
+times: sharing an immutable identity is intentional, so that harness expectation
+was wrong. The revised capacity gate opens distinct queries.
+
+Population is resumable in the dedicated `w90-scale` tree via
+`tests/live/w90_populate.py`: 131,072 16-KiB files plus 64-MiB bulk files,
+staged 16/64/128/256/380 GiB new logical bytes. Existing ~20 GiB is preserved.
+Stop with `/data1/efs/w90-control/PAUSE`. Each underlying store filesystem
+must retain 50 GiB and 100,000 free inodes. Initial overnight pipeline aborted
+before any population when the capacity regression exhausted query identities;
+do not interpret that aborted run as load or final acceptance evidence.
+Server snapshot/index implementation and its acceptance gates remain open.

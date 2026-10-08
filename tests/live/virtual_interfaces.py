@@ -47,7 +47,7 @@ def permissions():
             else:raise AssertionError('protected query succeeded: '+str(q))
     finally:os.chmod(d,0o700)
 def fd_capacity():
-    d=root/'capacity';d.mkdir();(d/'capacity-file').write_bytes(b'x')
+    d=root/'capacity';d.mkdir(exist_ok=True);(d/'capacity-file').write_bytes(b'x')
     q=d/'.find'/'capacity-*';expected=contents(q);fds=[];bounded=False
     try:
         for _ in range(80):
@@ -60,6 +60,16 @@ def fd_capacity():
     finally:
         for fd in fds:os.close(fd)
     assert contents(q)==expected
-gate('snapshot',snapshot);gate('stats',stats);gate('invalid',invalid);gate('permissions',permissions);gate('fd_capacity',fd_capacity)
+def recovery():
+    d=root/'recovery';d.mkdir()
+    for i in range(256):
+        q=d/'.find'/f'absent-stat-{i:03}*'
+        assert os.stat(q).st_size==0
+    for i in range(128):
+        assert contents(d/'.find'/f'absent-open-{i:03}*')==b''
+    # Exhaust and drain twice, then use a different directory/query version.
+    fd_capacity();fd_capacity();fd_capacity_repeat=d/'repeat';fd_capacity_repeat.mkdir()
+    assert contents(fd_capacity_repeat/'.find'/'fresh-*')==b''
+gate('recovery',recovery);gate('snapshot',snapshot);gate('stats',stats);gate('invalid',invalid);gate('permissions',permissions);gate('fd_capacity',fd_capacity)
 print(json.dumps(dict(root=str(root),results=results)),flush=True)
 raise SystemExit(any(r['status']!='PASS' for r in results))
