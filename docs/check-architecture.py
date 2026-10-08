@@ -193,7 +193,7 @@ def check_links():
                             f"{rel(src)}:{lineno}: link escapes the repo: {target}"
                         )
                         continue
-                    if not dest.is_file():
+                    if not (dest.is_file() or (dest.is_dir() and not anchor)):
                         problems.append(
                             f"{rel(src)}:{lineno}: link target does not exist: "
                             f"{target}"
