@@ -1,0 +1,25 @@
+--- /data1/efs/w93-w96-final-20261008/src/meta/meta_apply.c	2026-10-08 16:12:11.052638804 -0400
++++ /data1/efs/w94-create-apply-fault-20261008/src/meta/meta_apply.c	2026-10-08 16:21:40.202330139 -0400
+@@ -11,6 +11,8 @@
+ #include "efs/dir_spread.h"
+ #include "efs/txn.h"
+ #include <pthread.h>
++#include <stdio.h>
++#include <unistd.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/stat.h>
+@@ -1516,6 +1518,13 @@
+                          lease_token ? EFS_LEASE_PENDING_VALUE_LEN : 1};
+     }
+ 
++    /* PRIVATE TEST ONLY: two apply failures before the atomic CREATE batch. */
++    static unsigned create_apply_fault_phase;
++    if (create_apply_fault_phase < 2) {
++        unsigned phase=create_apply_fault_phase++;
++        fprintf(stderr, "PRIVATE CREATE apply failure phase=%u pid=%ld\n",phase,(long)getpid());
++        return phase ? EFS_ERR_NOMEM : EFS_ERR_IO;
++    }
+     rc = meta_write_batch(kv, it, n);
+     if (rc != EFS_OK)
+         return rc;

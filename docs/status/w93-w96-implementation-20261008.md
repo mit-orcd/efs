@@ -11,7 +11,7 @@ between private fixtures. No physical power-loss or distributed-RDMA proof.
 | Item | Completed | Still open |
 |---|---|---|
 | W93 | Bounded batching, durability/fault/cold/full Linux/live gates and balanced long controls | Preserve regression coverage; W53 close tails remain separate |
-| W94 | Atomic server lease, rejected replies, pending ownership/atomic CREATE, bounded sequenced-edge and cold tests | Wire/client ownership/recovery integration, production runtime sessions and activation gates |
+| W94 | Atomic server lease, rejected replies, pending ownership/atomic CREATE, bounded sequenced-edge and cold tests | Client ownership/recovery integration, production runtime sessions and activation gates |
 | W95 | Tiny/durable timing, independent retained/cold/crash tests and production churn | Indexed packing model and any P4.1 production-layout selection |
 | W96 | Tail/interior-damage recovery, reservation/fallback/fault and final full live gates | Quiet NUC two-device performance acceptance; unrelated workload retained |
 
@@ -321,3 +321,77 @@ read-only probe/negative checks are additionally covered by the exact unit suite
 [Evidence and activation limits](../../results/measure/20261008-w93-w96-implementation/w94-guarded-edges/README.md).
 Wire/client handoff, unknown-CREATE recovery and production sessions remain;
 these server primitives do not activate piggyback ownership or D25.
+
+
+## W94 guarded wire and replay cleanup follow-up
+
+`95ac399e` exposes sequenced lease effects and read-only result queries through
+existing session commands. Requests carry the exact FileID, session epoch,
+sequence, contiguous acknowledgement and pending token; outcome queries cross
+ReadIndex and never acquire ownership. Required last-close cleanup errors hold
+apply rather than being converted to a successful verdict. FUSE retains its
+legacy HOLD path: this is server integration, not piggyback activation.
+
+`1cecf502` durably records pending CREATE EEXIST results without namespace or
+lease effects. A delayed retry cannot create abandoned pending ownership after
+the conflicting name is removed. Injected batch failure, replay pressure and
+real process-exit/cold-reopen coverage (`8a919c5a`) pass.
+
+`e28c1244` retires redundant guarded verdict windows after the local rejection
+floor is durable. The rejection floor remains; active ownership waits for the
+completed global barrier and LEASE_DROP. Unit and cold tests prove those distinct
+conditions, including lane-local behavior without consulting a missing owner row.
+
+AMD direct/TCP fixtures `gc-direct-gfy2f_ho` and `gc-direct-mma_iq6m` pass
+lost-reply probing without resubmitting the successful OPEN, reversed OPEN/CLOSE,
+cold replay, final close and physical reclamation. The second adds an unknown
+probe that acquires no ownership and durable fencing of an active unlinked lease.
+Both full runs also pass POSIX 216/217 (0 fail, 1 skip), peer 64/64,
+append/synchronous-write/replay/shutdown/dirty-stop recovery, two cold WAL-repair
+restarts and physical inventory/quota zero. Installed AMD service was restored.
+
+The third repeat (`gc-direct-ejr5ca22`) exposed explicit NOT_PRIMARY without a
+leader hint during cross-group ESTABLISH after cold rejoin. It failed closed and
+restored service. `7a56625d` adds bounded retries only for that explicitly
+non-applied response; ambiguous transport failures still return immediately.
+Deterministic no-hint/exhaustion/transport tests and full Linux regressions pass.
+Further exact-code live and CREATE apply-failure repeats are in progress.
+
+[Wire evidence](../../results/measure/20261008-w93-w96-review/w94-guarded-wire/).
+
+Remaining W94 activation dependencies are real runtime mount sessions, atomic
+pending ownership on every namespace transaction path, bounded retention and
+resolution of ambiguous client outcomes, and safe local descriptor adoption.
+Do not enable the CREATE flag merely because server primitive gates pass.
+W95 indexed packing semantics/experiments and W96 quiet NUC acceptance remain
+open; NUC still runs unrelated tiny-file and storage-engine experiments.
+
+
+The corrected cross-group admission/window-retirement repeat
+`gc-direct-1vk60ch4` passed the complete live gate and restored service.
+`2e890738` fixes two storage-failure behaviors found while strengthening W94:
+CREATE IO/NOMEM now holds the Raft apply position, and a follower retries already
+committed but unapplied entries on unchanged valid heartbeats. A private
+IO-then-NOMEM injection reproduced EBUSY after cold restart in
+`gc-direct-mgwf9eza`; the follower stalled at applied=31/commit=32 because no
+later write advanced commit. The corrected repeat `gc-direct-5dywwrr_` has passed
+POSIX/peer and ownership gates; final physical/WAL checks are still running.
+Both ordinary and batched deterministic retry tests, the full Linux test target,
+Mac Raft ASan/UBSan and metadata/session ASan/UBSan passed. The metadata/session
+sanitizer test links the normal KV library; this is not full-library instrumentation.
+
+Guarded retirement now propagates missing authoritative session evidence instead
+of confusing that with an already-absent replay-window key. Unit/sanitizer tests
+prove active ownership and its recorded verdict survive that failure. The
+production cross-group retirement coordinator remains a separate integration
+requirement; a missing owner row never constitutes revocation proof.
+
+
+The CREATE failure repeat `gc-direct-5dywwrr_` completed successfully: actual
+IO/NOMEM phase markers, POSIX 216/217 (0 fail/1 skip), peer 64/64, cold WAL
+acknowledged-byte recovery, physical inventory/quota zero and installed-service
+restoration. All 120 five-edge pending-adoption/normal OPEN/CLOSE/cleanup arrival
+orders now pass, including exact replay verdicts and safe fresh cleanup of a
+stale pending owner after every earlier outcome is resolved. ASan/UBSan passes.
+This verifies server ownership semantics; production client adoption remains
+inactive pending its session and bounded ambiguous-outcome integration.
