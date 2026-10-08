@@ -7,6 +7,7 @@ runs use direct I/O/TCP, one AMD host/four daemons. No efs-bench changes.
 | --- | --- |
 | `replay/` | Exact durable replay with lost replies, 32 concurrent repeats, explicit group-0 leader death, ACK retirement, payload refusal, POSIX 216 pass / 0 fail / 1 skip, peer 64/64, exact 800-record cold audit and physical GC/restart. |
 | `persistence/` | Same broad gates with production PUT file/pathname persistence, plus active shutdown. Actual store buffered/direct/bounce fault tests also pass. |
+| `append-transaction-tests.json`, `append-transaction-unit-tail.log` | Staged complete-view reservation planner: targeted, ASan/UBSan and full AMD units pass. Production routing remains unchanged until coordinated completion is integrated. |
 | `unit-tail.log` | Combined committed-source `make -j12 test`, exit 0 on AMD; full console at `/tmp/efs-readiness-final-unit.log`. |
 | `w73-candidate-failure.log`, `w73-candidate-fuse.log` | Failed synchronous append integration; short write and subsequent NOT_PRIMARY after publication. |
 | `append-boundary-*` | Repeated 128 KiB append/fsync fails EIO without the W73 candidate; trace confirms NOT_PRIMARY after publishing cross-group lanes. |

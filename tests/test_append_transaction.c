@@ -1,0 +1,172 @@
+/* APPEND chooses one offset, then freezes all EOF inputs and durable output
+ * through exact-image transactions. No hosted-view recomputation at apply. */
+#include "efs/meta_apply.h"
+#include "efs/kv_lsm.h"
+#include <assert.h>
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/wait.h>
+#include <unistd.h>
+static int decision(void *ctx,const struct efs_txid *t,uint32_t sh,int *d)
+{ return efs_txn_decision_get(ctx,sh,t,d); }
+static int prepare(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,
+                   const struct efs_meta_append_image *q)
+{ return efs_txn_prepare_excl_value(ctx,t,p,q->key,q->klen,q->expected,q->expected_len,
+                                    q->op,q->value,q->new_len); }
+static int decide(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
+{ return efs_txn_decide(ctx,efs_txn_coordinator(t,p),t,d); }
+static int resolve(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
+{
+ for(unsigned i=0;i<p->n;++i){int rc=efs_txn_resolve(ctx,t,p->shard[i],d);if(rc)return rc;}
+ return EFS_OK;
+}
+static const struct efs_meta_append_ops ops={prepare,decide,resolve};
+static struct efs_opid_req identity(unsigned seq,unsigned ack)
+{struct efs_opid_req q={0};q.id.client_uuid[0]=42;q.id.session_epoch=1;q.id.seq=seq;q.ack=ack;return q;}
+static struct efs_meta_pub publication(efs_ino_t ino,uint64_t gen,unsigned ci,uint64_t end,unsigned candidate)
+{
+ struct efs_meta_pub p={0};p.ino=ino;p.inode_gen=gen;p.chunk_index=ci;
+ p.new_size=end;p.now=100;p.candidate_gen=candidate;
+ p.coding_profile_id=EFS_META_PROFILE_K2F1;
+ for(unsigned i=0;i<EFS_NUM_FRAGMENTS;++i)p.ch.nodes[i]=i+1;
+ return p;
+}
+static void fixture(struct efs_kv *kv,efs_ino_t *ino,uint64_t *gen)
+{
+ struct efs_meta_attrs a={1,1,1};struct efs_meta_row row;
+ assert(efs_meta_apply_init(kv,1)==EFS_OK);
+ assert(efs_meta_apply_create_file(kv,&a,EFS_ROOT_INO,S_IFREG|0644,"file",ino)==EFS_OK);
+ assert(efs_meta_apply_get_inode(kv,*ino,&row)==EFS_OK);*gen=row.generation;
+ assert(efs_meta_apply_activate_lanes(kv,*ino,3)==EFS_OK);
+ struct efs_meta_pub p=publication(*ino,*gen,0,100,10);
+ assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+ p=publication(*ino,*gen,1,200,20);assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+}
+static int lost_decision(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
+{assert(decide(ctx,t,p,d)==EFS_OK);return EFS_ERR_IO;}
+static void unit(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen,off=999;
+ fixture(kv,&ino,&gen);struct efs_opid_req q=identity(1,0);
+ struct efs_meta_append_plan *a=malloc(sizeof(*a)),*b=malloc(sizeof(*b));assert(a&&b);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK && a->offset==200 && a->count==6);
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_ERR_NOT_FOUND); /* capture never mutates */
+ /* Full-image CAS rejects a non-append extension racing the snapshot. */
+ struct efs_meta_pub p=publication(ino,gen,65,300,30);
+ assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+ struct efs_txid t={{1}};
+ assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_ERR_STALE);
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_ERR_NOT_FOUND);
+ uint64_t wm,frontier;uint32_t open;
+ assert(efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)==EFS_OK && !open);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK && a->offset==300);
+ /* Same operation and competing stream choose the same snapshot. Only one
+  * can own the inode; a loser must recapture, never reserve the same extent. */
+ struct efs_opid_req competing=q;competing.id.client_uuid[0]=43;
+ assert(efs_meta_capture_append(kv,ino,8,&competing,decision,kv,b)==EFS_OK);
+ t.bytes[0]=2;assert(prepare(kv,&t,&a->parts,&a->images[0])==EFS_OK);
+ struct efs_txid other={{3}};
+ assert(efs_meta_execute_append(b,&other,&ops,kv)==EFS_ERR_BUSY);
+ /* Inode freeze blocks new-lane activation and legacy cursor mutation. */
+ assert(efs_meta_apply_activate_lane(kv,ino,2)==EFS_ERR_BUSY);
+ assert(efs_meta_apply_append_reserve_durable(kv,ino,8,&q,decision,kv,&off)==EFS_ERR_BUSY);
+ for(unsigned i=1;i<a->count;++i)assert(prepare(kv,&t,&a->parts,&a->images[i])==EFS_OK);
+ p=publication(ino,gen,129,301,40);assert(efs_meta_apply_publish(kv,&p)==EFS_ERR_BUSY);
+ assert(decide(kv,&t,&a->parts,EFS_TXN_COMMIT)==EFS_OK);
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_ERR_NOT_FOUND);
+ assert(resolve(kv,&t,&a->parts,EFS_TXN_COMMIT)==EFS_OK);
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_OK && off==300);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,b)==EFS_OK && !b->count && b->offset==300);
+ assert(efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)==EFS_OK && wm==308 && open==1);
+ /* A lost COMMIT reply preserves its decision; recovery installs one next
+  * reservation and the same durable result, never an abort/rebase. */
+ q=identity(2,1);assert(efs_meta_capture_append(kv,ino,9,&q,decision,kv,a)==EFS_OK && a->offset==308);
+ struct efs_meta_append_ops lost={prepare,lost_decision,resolve};t.bytes[0]=4;
+ assert(efs_meta_execute_append(a,&t,&lost,kv)==EFS_ERR_IO);
+ int d=0;assert(decision(kv,&t,efs_txn_coordinator(&t,&a->parts),&d)==EFS_OK && d==EFS_TXN_COMMIT);
+ assert(resolve(kv,&t,&a->parts,EFS_TXN_COMMIT)==EFS_OK);
+ assert(efs_meta_capture_append(kv,ino,9,&q,decision,kv,b)==EFS_OK && !b->count && b->offset==308);
+ q=identity(3,2);assert(efs_meta_capture_append(kv,ino,10,&q,decision,kv,a)==EFS_OK);
+ unsigned count=a->count;a->count=4;t.bytes[0]=5;
+ assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_ERR_INVAL);a->count=count;
+ a->parts.n--;assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_ERR_INVAL);a->parts.n++;
+ a->offset++;assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_ERR_INVAL);a->offset--;
+ a->images[4].value[48]^=1;assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_ERR_INVAL);a->images[4].value[48]^=1;
+ assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_OK);
+ q=identity(1,0);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,b)==EFS_ERR_STALE);
+ assert(efs_meta_apply_check(kv)==EFS_OK);
+ free(a);free(b);efs_kv_mem_free(kv);
+}
+static void bounds_and_pending(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen,off=999;
+ fixture(kv,&ino,&gen);
+ struct efs_meta_append_plan *a=malloc(sizeof(*a)),*b=malloc(sizeof(*b));assert(a&&b);
+ struct efs_opid_req q=identity(1,0),foreign=q;foreign.id.client_uuid[0]=43;
+ assert(efs_meta_capture_append(kv,ino,8,&foreign,decision,kv,a)==EFS_OK);
+ struct efs_txid t={{60}};
+ for(unsigned i=0;i<a->count;++i)assert(prepare(kv,&t,&a->parts,&a->images[i])==EFS_OK);
+ assert(decide(kv,&t,&a->parts,EFS_TXN_COMMIT)==EFS_OK);
+ /* A committed overlay cursor must not be combined with an old raw scan
+  * and then accepted after its foreign reservation materializes. */
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,b)==EFS_OK);
+ assert(resolve(kv,&t,&a->parts,EFS_TXN_COMMIT)==EFS_OK);
+ struct efs_txid later={{61}};
+ assert(efs_meta_execute_append(b,&later,&ops,kv)==EFS_ERR_STALE);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,b)==EFS_ERR_BUSY);
+ assert(efs_meta_apply_append_resolve(kv,ino,200,EFS_META_APPEND_COMPLETED)==EFS_OK);
+ /* All 64 active lanes participate, including absent stamps. The inode
+  * guard and absent lane CAS close first-publication races. */
+ assert(efs_meta_apply_activate_lanes(kv,ino,UINT64_MAX)==EFS_OK);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK && a->count==EFS_META_LANES+4);
+ t.bytes[0]=62;assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_apply_append_resolve(kv,ino,a->offset,EFS_META_APPEND_COMPLETED)==EFS_OK);
+ for(unsigned seq=2;seq<=EFS_OPID_REPLY_CACHE;++seq){
+  q=identity(seq,0);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK);
+  t.bytes[0]=62+seq;assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_OK);
+  assert(efs_meta_apply_append_resolve(kv,ino,a->offset,EFS_META_APPEND_COMPLETED)==EFS_OK);
+ }
+ q=identity(17,0);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_ERR_BUSY);
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==EFS_ERR_NOT_FOUND);
+ q=identity(17,16);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK);
+ q=identity(18,18);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,b)==EFS_ERR_INVAL);
+ q=identity(18,17);assert(efs_meta_capture_append(kv,ino,UINT64_MAX,&q,decision,kv,b)==EFS_ERR_INVAL);
+ assert(efs_meta_apply_check(kv)==EFS_OK);free(a);free(b);efs_kv_mem_free(kv);
+}
+static void recovery(int committed)
+{
+ char dir[]="/tmp/efs-append-txn-XXXXXX";assert(mkdtemp(dir));
+ struct efs_kv *kv=efs_kv_lsm_open(dir,NULL);assert(kv);efs_ino_t ino;uint64_t gen,off=999;
+ fixture(kv,&ino,&gen);efs_kv_lsm_close(kv);
+ struct efs_txid t={{90}};struct efs_opid_req q=identity(1,0);
+ pid_t child=fork();assert(child>=0);
+ if(!child){
+  kv=efs_kv_lsm_open(dir,NULL);assert(kv);struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+  assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_OK && plan->offset==200);
+  for(unsigned i=0;i<plan->count;++i)assert(prepare(kv,&t,&plan->parts,&plan->images[i])==EFS_OK);
+  if(committed)assert(decide(kv,&t,&plan->parts,EFS_TXN_COMMIT)==EFS_OK);
+  _exit(0);
+ }
+ int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
+ kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+ struct efs_txn_parts parts={0};parts.shard[parts.n++]=efs_kv_inode_shard(ino);
+ for(unsigned lane=0;lane<2;++lane){unsigned sh=efs_kv_lane_shard(ino,lane);int exists=0;for(unsigned i=0;i<parts.n;++i)exists|=parts.shard[i]==sh;if(!exists)parts.shard[parts.n++]=sh;}
+ if(!committed)assert(decide(kv,&t,&parts,EFS_TXN_ABORT)==EFS_OK);
+ int verdict=committed?EFS_TXN_COMMIT:EFS_TXN_ABORT;
+ /* Resolve the foreign lane, then crash/reopen before the inode participant. */
+ assert(efs_txn_resolve(kv,&t,efs_kv_lane_shard(ino,1),verdict)==EFS_OK);
+ efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+ assert(resolve(kv,&t,&parts,verdict)==EFS_OK);
+ assert(efs_meta_append_result(kv,ino,8,&q,&off)==(committed?EFS_OK:EFS_ERR_NOT_FOUND));
+ if(committed)assert(off==200);
+ uint64_t wm,frontier;uint32_t open;
+ assert(efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)==EFS_OK && open==(unsigned)committed);
+ efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
+ while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+ closedir(d);assert(!rmdir(dir));
+}
+int main(void)
+{unit();bounds_and_pending();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

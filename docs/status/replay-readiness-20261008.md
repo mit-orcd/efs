@@ -71,6 +71,36 @@ then its next reserve returned NOT_PRIMARY (-15). This confirms that the
 routing blocker precedes W73; intermediate publication boundaries need their
 own gate.
 
+## 06:44 UTC continuation — staged append reservation transaction
+
+`efs_meta_capture_append` now captures one complete EOF and exact source/output
+images for the inode guard, cursor, durable receipt, reservation and every active
+lane. `efs_meta_execute_append` validates that complete plan and freezes the
+inode first using the existing exact-image PREPARE/DECIDE/RESOLVE protocol.
+Followers install the chosen offset; they do not recompute it from partial
+hosted views. Capture never mutates state; an exact replay has zero participants.
+The bounded plan has at most 68 images and uses caller-owned heap storage.
+
+AMD targeted tests and ASan/UBSan pass: extension racing capture aborts without
+reserving, competing owners conflict, inode freeze blocks cold activation and
+legacy reservation mutation, all 64 lanes (including missing stamps) participate,
+full receipt windows refuse allocation, and a committed overlay cannot combine
+a new cursor with an old raw foreign-reservation scan. Lost COMMIT and abrupt
+LSM exit, with foreign-lane resolution before inode resolution, recover the same
+offset or the original absent reservation according to the durable decision.
+The full AMD `make -j12 test` passes, console `/tmp/efs-append-txn-unit.log`.
+[Exact source hashes and commands](../../results/measure/20261008-replay-readiness/append-transaction-tests.json)
+record this staged implementation.
+
+**Production APPEND routing is not changed by this prerequisite.** Next:
+coordinate reservation completion and lane-barrier cleanup with the same inode
+and cursor guards. The existing resolution may delete many DONE rows at burst
+completion; preserve those semantics and recovery while keeping individual
+PREPARE/apply operations bounded. Avoid mixing committed overlay cursors with
+raw reservation scans. Then wire ACK-bearing APPEND to dual-host capture/commit,
+retaining legacy decoding, and run `--append-sync-boundary`, lost-reply/leader
+churn, mixed append/non-append extension and broad POSIX/peer gates before W73.
+
 ## Evidence
 
 [Recorded evidence](../../results/measure/20261008-replay-readiness/README.md)

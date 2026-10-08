@@ -118,6 +118,38 @@ int efs_meta_execute_mtime(const struct efs_meta_mtime_plan *plan,
                            const struct efs_txid *t,
                            const struct efs_meta_mtime_ops *ops, void *ctx);
 
+/* Staged cross-authority APPEND planning. Capture requires authoritative
+ * views of the inode and all active lanes. Exact images freeze the inode
+ * first, then the cursor/result/reservation and lanes through the existing
+ * durable transaction protocol. No reservation is computed again at apply.
+ * count==0 is an exact durable replay: no transaction should be started.
+ * This API does not activate the production APPEND endpoint by itself. */
+struct efs_meta_append_image {
+    uint8_t key[EFS_KV_KEY_MAX];
+    uint32_t klen, expected_len, new_len;
+    int op;
+    uint8_t expected[EFS_OPID_VAL_MAX], value[EFS_OPID_VAL_MAX];
+};
+struct efs_meta_append_plan {
+    struct efs_txn_parts parts;
+    uint32_t count;
+    uint64_t offset;
+    struct efs_meta_append_image images[EFS_META_LANES + 4];
+};
+struct efs_meta_append_ops {
+    int (*prepare)(void *, const struct efs_txid *, const struct efs_txn_parts *,
+                   const struct efs_meta_append_image *);
+    int (*decide)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
+    int (*resolve)(void *, const struct efs_txid *, const struct efs_txn_parts *, int);
+};
+int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
+                             const struct efs_opid_req *q,
+                             efs_txn_coord_fn coord, void *ctx,
+                             struct efs_meta_append_plan *out);
+int efs_meta_execute_append(const struct efs_meta_append_plan *plan,
+                             const struct efs_txid *t,
+                             const struct efs_meta_append_ops *ops, void *ctx);
+
 /* Atomic single-authority fence, for the future serialized TRUNCATE path.
  * Caller owns Raft apply serialization and cross-authority coordination.
  * This does not replace the current public truncate command by itself. */

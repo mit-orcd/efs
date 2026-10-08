@@ -7051,6 +7051,239 @@ int efs_meta_apply_append_reserve_durable(struct efs_kv *kv, efs_ino_t ino,
     return append_reserve_inner(kv, ino, len, &q->id, q, coord, ctx, off_out);
 }
 
+/* Select an offset once from complete authoritative views. Prepared exact
+ * images close every extension/resize race before the decision; followers
+ * install these images instead of recomputing EOF from their hosted subset. */
+int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
+                             const struct efs_opid_req *q,
+                             efs_txn_coord_fn coord, void *ctx,
+                             struct efs_meta_append_plan *out)
+{
+    struct efs_meta_row row;
+    struct append_cur cur;
+    struct append_rsv rsv = {0};
+    struct efs_txn_pending pending = {0};
+    struct efs_meta_append_image *image;
+    struct efs_opid_reply reply = {0};
+    uint64_t phys;
+    int rc, moved = 0;
+    if (!kv || !ino || !len || !q || !coord || !out)
+        return EFS_ERR_INVAL;
+    memset(out, 0, sizeof(*out));
+    rc = efs_meta_append_result(kv, ino, len, q, &out->offset);
+    if (rc != EFS_ERR_NOT_FOUND) return rc;
+    rc = inode_read_tx(kv, ino, coord, ctx, &pending, &row);
+    if (rc != EFS_OK) return rc;
+    if (!S_ISREG(row.mode)) return EFS_ERR_INVAL;
+    image = &out->images[out->count++];
+    rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, image->key, &image->klen);
+    if (rc != EFS_OK) return rc;
+    image->op = EFS_TXN_PUT;
+    image->expected_len = image->new_len = INO_VAL;
+    pack_inode(image->expected, &row); pack_inode(image->value, &row);
+    rc = resize_parts_add(&out->parts, efs_kv_inode_shard(ino));
+    if (rc != EFS_OK) return rc;
+    /* Cursor, receipt and reservation have fixed image positions. Lane
+     * capture below establishes EOF before those replacements are built. */
+    out->count = 4;
+    phys = row.base_size;
+    for (uint8_t lane = 0; lane < EFS_META_LANES; ++lane) {
+        struct lane_rec stamp;
+        struct efs_txn_reduce red = {0};
+        uint32_t n;
+        if (!(row.active_lanes & (1ull << lane))) continue;
+        image = &out->images[out->count++];
+        rc = resize_lane_read(kv, ino, row.generation, lane, coord, ctx,
+                              &pending, image->expected, &n, &stamp);
+        if (rc != EFS_OK) return rc;
+        rc = efs_kv_key_lane(efs_kv_lane_shard(ino, lane), ino, row.generation,
+                             lane, image->key, &image->klen);
+        if (rc == EFS_OK)
+            rc = efs_txn_reduce_read_ex(kv, image->key, image->klen, coord, ctx,
+                                        &red, &pending);
+        if (rc != EFS_OK) return rc;
+        image->op = EFS_TXN_PUT;
+        image->expected_len = n ? n : EFS_TXN_ABSENT;
+        image->new_len = LANE_VAL;
+        if (!n) stamp.fenced_epoch = row.content_epoch;
+        /* A legacy incomplete epoch fanout cannot grant append authority. */
+        if (stamp.fenced_epoch != row.content_epoch) return EFS_ERR_BUSY;
+        phys = max_u64(phys, max_u64(stamp.max_end, red.max_end));
+        pack_lane(image->value, &stamp);
+        rc = resize_parts_add(&out->parts, efs_kv_lane_shard(ino, lane));
+        if (rc != EFS_OK) return rc;
+    }
+    image = &out->images[1];
+    rc = efs_kv_key_append_cur(efs_kv_inode_shard(ino), ino, row.generation,
+                               image->key, &image->klen);
+    if (rc != EFS_OK) return rc;
+    uint32_t n = sizeof(image->expected);
+    /* Cursor and reservation scans use materialized state together. Reading
+     * a committed-but-unresolved cursor overlaid on an old reservation scan
+     * could miss its foreign owner. The inode/cursor PREPARE checks reject
+     * outstanding intents or any subsequent resolution/mutation. */
+    rc = efs_kv_get(kv, image->key, image->klen, image->expected, &n);
+    memset(&cur, 0, sizeof(cur));
+    if (rc == EFS_ERR_NOT_FOUND) image->expected_len = EFS_TXN_ABSENT;
+    else if (rc == EFS_OK) {
+        image->expected_len = n;
+        rc = unpack_append_cur(image->expected, n, &cur);
+    }
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
+    if (cur.nopen) {
+        rc = append_foreign_open(kv, ino, row.generation, q->id.client_uuid);
+        if (rc) return rc > 0 ? EFS_ERR_BUSY : rc;
+    }
+    out->offset = max_u64(phys, cur.watermark);
+    if (len > UINT64_MAX - out->offset || cur.nopen == UINT32_MAX)
+        return EFS_ERR_INVAL;
+    if (!cur.nopen) cur.frontier = out->offset;
+    cur.watermark = out->offset + len; ++cur.nopen;
+    image->op = EFS_TXN_PUT; image->new_len = APPEND_CUR_VAL;
+    pack_append_cur(image->value, &cur);
+    image = &out->images[2]; n = sizeof(image->expected);
+    rc = append_receipt_load(kv, ino, q, image->key, &image->klen,
+                             image->expected, &n);
+    if (rc != EFS_OK) return rc;
+    image->expected_len = n ? n : EFS_TXN_ABSENT;
+    reply.rc = EFS_OK; reply.ino = len; reply.extra = out->offset;
+    image->new_len = sizeof(image->value); image->op = EFS_TXN_PUT;
+    rc = efs_opid_fold(image->expected, n, q->id.client_uuid, q->id.session_epoch,
+                       q, &reply, image->value, &image->new_len);
+    if (rc != EFS_OK) return rc == EFS_ERR_NOMEM ? EFS_ERR_BUSY : rc;
+    image = &out->images[3];
+    rc = efs_kv_key_append_rsv(efs_kv_inode_shard(ino), ino, row.generation,
+                               out->offset, image->key, &image->klen);
+    if (rc != EFS_OK) return rc;
+    n = sizeof(image->expected);
+    rc = efs_kv_get(kv, image->key, image->klen, image->expected, &n);
+    if (rc != EFS_ERR_NOT_FOUND) return rc == EFS_OK ? EFS_ERR_BUSY : rc;
+    image->expected_len = EFS_TXN_ABSENT; image->new_len = APPEND_RSV_VAL;
+    image->op = EFS_TXN_PUT;
+    rsv.off = out->offset; rsv.len = len;
+    memcpy(rsv.uuid, q->id.client_uuid, EFS_OPID_UUID_LEN);
+    rsv.epoch = q->id.session_epoch; rsv.seq = q->id.seq; rsv.state = APPEND_OPEN;
+    pack_append_rsv(image->value, &rsv);
+    for (uint32_t i = 4; i < out->count; ++i) {
+        struct lane_rec stamp;
+        image = &out->images[i];
+        rc = unpack_lane(image->value, image->new_len, &stamp);
+        if (rc != EFS_OK) return rc;
+        stamp.append_bar = cur.watermark; pack_lane(image->value, &stamp);
+    }
+    rc = efs_txn_pending_recheck(&pending, coord, ctx, &moved);
+    return rc != EFS_OK ? rc : moved ? EFS_ERR_BUSY : EFS_OK;
+}
+
+int efs_meta_execute_append(const struct efs_meta_append_plan *plan,
+                             const struct efs_txid *t,
+                             const struct efs_meta_append_ops *ops, void *ctx)
+{
+    struct efs_txn_parts expected = {0};
+    if (!plan || !t || !ops || !ops->prepare || !ops->decide || !ops->resolve)
+        return EFS_ERR_INVAL;
+    if (!plan->count) return EFS_OK; /* exact replay: no new reservation */
+    if (plan->count < 4 || plan->count > EFS_META_LANES + 4 ||
+        plan->images[0].klen != 11 || plan->images[0].key[2] != EFS_KV_KIND_INODE ||
+        plan->images[0].expected_len != INO_VAL || plan->images[0].new_len != INO_VAL ||
+        memcmp(plan->images[0].expected, plan->images[0].value, INO_VAL))
+        return EFS_ERR_INVAL;
+    struct efs_meta_row row;
+    struct append_cur cursor, previous = {0};
+    struct append_rsv reservation;
+    uint64_t bits = 0;
+    const struct efs_meta_append_image *c = &plan->images[1], *r = &plan->images[3];
+    if (unpack_inode(plan->images[0].value, INO_VAL, &row) != EFS_OK ||
+        !S_ISREG(row.mode) || c->new_len != APPEND_CUR_VAL ||
+        r->new_len != APPEND_RSV_VAL ||
+        unpack_append_cur(c->value, c->new_len, &cursor) != EFS_OK ||
+        unpack_append_rsv(r->value, r->new_len, &reservation) != EFS_OK ||
+        (c->expected_len != EFS_TXN_ABSENT &&
+         unpack_append_cur(c->expected, c->expected_len, &previous) != EFS_OK) ||
+        r->expected_len != EFS_TXN_ABSENT || reservation.state != APPEND_OPEN ||
+        !reservation.len || reservation.off != plan->offset ||
+        reservation.len > UINT64_MAX - reservation.off || previous.nopen == UINT32_MAX ||
+        cursor.nopen != previous.nopen + 1 ||
+        cursor.watermark != reservation.off + reservation.len ||
+        cursor.frontier != (previous.nopen ? previous.frontier : reservation.off) ||
+        reservation.off < max_u64(row.base_size, previous.watermark))
+        return EFS_ERR_INVAL;
+    for (uint32_t i = 1; i < plan->count; ++i) {
+        const struct efs_meta_append_image *image = &plan->images[i];
+        uint8_t key[EFS_KV_KEY_MAX]; uint32_t kl = 0;
+        int rc;
+        if (i == 1) rc = efs_kv_key_append_cur(efs_kv_inode_shard(row.ino), row.ino,
+                                               row.generation, key, &kl);
+        else if (i == 2) {
+            rc = efs_kv_key_inode(efs_kv_inode_shard(row.ino), row.ino, key, &kl);
+            key[2] = EFS_KV_KIND_APPEND_RECEIPT;
+            memcpy(key + kl, reservation.uuid, EFS_OPID_UUID_LEN); kl += EFS_OPID_UUID_LEN;
+            be32(key + kl, reservation.epoch); kl += 4;
+            struct efs_opid id = {.session_epoch = reservation.epoch, .seq = reservation.seq};
+            struct efs_opid_reply result;
+            memcpy(id.client_uuid, reservation.uuid, EFS_OPID_UUID_LEN);
+            if (image->new_len > EFS_OPID_VAL_MAX ||
+                efs_opid_probe(image->value, image->new_len, &id, &result) != 1 ||
+                result.rc != EFS_OK || result.ino != reservation.len || result.extra != reservation.off)
+                return EFS_ERR_INVAL;
+        } else if (i == 3) rc = efs_kv_key_append_rsv(efs_kv_inode_shard(row.ino), row.ino,
+                                                     row.generation, reservation.off, key, &kl);
+        else {
+            struct lane_rec before = {0}, after;
+            if (image->klen != 20 || image->key[19] >= EFS_META_LANES ||
+                image->new_len != LANE_VAL ||
+                (image->expected_len != EFS_TXN_ABSENT &&
+                 unpack_lane(image->expected, image->expected_len, &before) != EFS_OK) ||
+                unpack_lane(image->value, image->new_len, &after) != EFS_OK)
+                return EFS_ERR_INVAL;
+            uint8_t lane = image->key[19];
+            if (bits & (1ull << lane)) return EFS_ERR_INVAL;
+            bits |= 1ull << lane;
+            if (image->expected_len == EFS_TXN_ABSENT) before.fenced_epoch = row.content_epoch;
+            if (before.fenced_epoch != row.content_epoch || reservation.off < before.max_end)
+                return EFS_ERR_INVAL;
+            before.append_bar = cursor.watermark;
+            uint8_t value[LANE_VAL]; pack_lane(value, &before);
+            if (memcmp(value, image->value, LANE_VAL)) return EFS_ERR_INVAL;
+            rc = efs_kv_key_lane(efs_kv_lane_shard(row.ino, lane), row.ino,
+                                 row.generation, lane, key, &kl);
+        }
+        if (rc != EFS_OK || image->klen != kl || memcmp(image->key, key, kl))
+            return EFS_ERR_INVAL;
+    }
+    if (bits != row.active_lanes) return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < plan->count; ++i) {
+        const struct efs_meta_append_image *image = &plan->images[i];
+        if (image->klen < 11 || image->klen > EFS_KV_KEY_MAX ||
+            memcmp(image->key + 3, plan->images[0].key + 3, 8) ||
+            image->op != EFS_TXN_PUT || !image->new_len ||
+            image->new_len > EFS_OPID_VAL_MAX ||
+            (image->expected_len != EFS_TXN_ABSENT && image->expected_len > EFS_OPID_VAL_MAX))
+            return EFS_ERR_INVAL;
+        for (uint32_t j = 0; j < i; ++j)
+            if (image->klen == plan->images[j].klen &&
+                !memcmp(image->key, plan->images[j].key, image->klen))
+                return EFS_ERR_INVAL;
+        int rc = resize_parts_add(&expected, ((uint32_t)image->key[0] << 8) | image->key[1]);
+        if (rc != EFS_OK) return rc;
+    }
+    if (expected.n != plan->parts.n ||
+        memcmp(expected.shard, plan->parts.shard, expected.n * sizeof(uint32_t)))
+        return EFS_ERR_INVAL;
+    for (uint32_t i = 0; i < plan->count; ++i) {
+        int rc = ops->prepare(ctx, t, &plan->parts, &plan->images[i]);
+        if (rc != EFS_OK) {
+            int aborted = ops->decide(ctx, t, &plan->parts, EFS_TXN_ABORT);
+            if (aborted != EFS_OK) return aborted;
+            (void)ops->resolve(ctx, t, &plan->parts, EFS_TXN_ABORT);
+            return rc;
+        }
+    }
+    int rc = ops->decide(ctx, t, &plan->parts, EFS_TXN_COMMIT);
+    if (rc != EFS_OK) return rc; /* never convert an ambiguous COMMIT to ABORT */
+    return ops->resolve(ctx, t, &plan->parts, EFS_TXN_COMMIT);
+}
+
 int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
                                   int outcome)
 {
