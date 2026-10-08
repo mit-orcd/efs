@@ -8,6 +8,7 @@ import sys
 import tempfile
 import time
 from unittest.mock import patch
+from contextlib import nullcontext
 root=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('clients',root/'scripts/client_processes.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
@@ -48,20 +49,27 @@ if len(sys.argv)>3:
 print("READY",flush=True)
 time.sleep(1 if len(sys.argv)>3 else 30)
 '''
-        for owned in (False,True,'closing'):
+        for owned in (False,True,'closing','closing-denied','owned-denied'):
             bound=endpoint if owned else endpoint+'.other'
-            process=subprocess.Popen([sys.executable,'-c',code,mount,bound,*(['closing'] if owned=='closing' else [])],stdout=subprocess.PIPE,text=True)
+            process=subprocess.Popen([sys.executable,'-c',code,mount,bound,*(['closing'] if str(owned).startswith('closing') else [])],stdout=subprocess.PIPE,text=True)
             try:
                 assert process.stdout.readline().strip()=='READY'
                 assert any(row[0]==process.pid and row[1]==mount for row in m.clients())
-                if not owned:
-                    try: m.retire(mount)
-                    except RuntimeError: pass
-                    else: raise AssertionError('unowned endpoint must not authorize retirement')
-                    assert process.poll() is None
-                else:
-                    m.retire(mount)
-                    assert process.wait(timeout=2)==(0 if owned=='closing' else -15)
+                original_iterdir=Path.iterdir
+                def denied_fd(path):
+                    if path==Path(f'/proc/{process.pid}/fd'):raise PermissionError('simulated exit/access race')
+                    return original_iterdir(path)
+                context=patch.object(Path,'iterdir',denied_fd) if 'denied' in str(owned) else nullcontext()
+                with context:
+                    if not owned or owned=='owned-denied':
+                        try: m.retire(mount)
+                        except RuntimeError: pass
+                        else: raise AssertionError('unproven endpoint ownership must not authorize retirement')
+                        assert process.poll() is None
+                    else:
+                        m.retire(mount)
+                        assert process.wait(timeout=2)==(0 if str(owned).startswith('closing') else -15)
+
             finally:
                 if process.poll() is None: process.terminate();process.wait()
                 try: os.unlink(bound)

@@ -67,8 +67,11 @@ def retire(mount):
             for candidate in Path(f'/proc/{pid}/fd').iterdir():
                 try:links.add(os.readlink(candidate))
                 except FileNotFoundError:pass # descriptor closed during exit
-        except FileNotFoundError:
-            pass # process exited; bounded identity check below confirms it
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            # procfs descriptor access can disappear before the final worker
+            # exits. Unreadable descriptors never establish endpoint ownership;
+            # the bounded identity check below permits only natural departure.
+            pass
         if not any(f'socket:[{inode}]' in links for inode in inodes):
             # A naturally exiting client can close its control socket before
             # its last worker joins. Never signal without endpoint ownership;
