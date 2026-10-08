@@ -327,13 +327,21 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
             g_client.conn_busy[idx][free_slot] = 1;
             pthread_mutex_unlock(&g_client.conn_lock[idx]);
 
+            /* The checkout limit includes DNS, TCP connect and optional
+             * upgrade. Network helpers must not start fresh local budgets. */
+            uint64_t previous = efs_client_rpc_deadline_ms();
+            efs_client_rpc_set_deadline_ms((uint64_t)admission_end);
             int fd = efs_connect_tcp(host, port);
+            int local_failure = fd < 0 &&
+                (errno == ENOMEM || errno == ENOBUFS || errno == EAGAIN ||
+                 errno == EMFILE || errno == ENFILE);
             struct efs_conn *nc = NULL;
             if (fd >= 0) {
                 efs_set_recv_timeout(fd, EFS_IO_TIMEOUT_MS);
                 efs_set_send_timeout(fd, EFS_IO_TIMEOUT_MS);
                 nc = efs_conn_wrap_tcp(fd, 0);
                 if (!nc) {
+                    local_failure = 1; /* wrapper allocation, not peer failure */
                     close(fd);
                 } else if (efs_rdma_available() &&
                            efs_rdma_client_upgrade(nc) != 0 &&
@@ -343,14 +351,14 @@ struct efs_conn *efs_client_conn_get(efs_node_id_t node_id)
                     nc = NULL;
                 }
             }
+            efs_client_rpc_set_deadline_ms(previous);
             if (!nc) {
                 pthread_mutex_lock(&g_client.conn_lock[idx]);
                 g_client.conn_busy[idx][free_slot] = 0;
                 now = monotonic_ms();
-                /* A caller budget can expire during DNS/connect/upgrade.
-                 * That is local cancellation, not evidence the peer is down.
-                 * Still count genuine connect failures inside the budget. */
-                if (!outer || now < (int64_t)outer) {
+                /* Caller or local checkout expiry is cancellation, not a
+                 * peer-health verdict. Count genuine failures within budget. */
+                if (!local_failure && now < admission_end) {
                     if (g_client.node_fail_streak[idx] < 1000)
                         g_client.node_fail_streak[idx]++;
                     if (g_client.node_fail_streak[idx] >= EFS_NODE_DOWN_FAILS &&

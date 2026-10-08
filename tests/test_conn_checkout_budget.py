@@ -15,24 +15,27 @@ code=r'''
 #include <unistd.h>
 #include <errno.h>
 struct efs_client g_client;
-static uint64_t deadline;static int64_t advance;static int late,destroyed;
+static uint64_t deadline;static int64_t advance;static int late,destroyed,wrap_failure,connect_errno,closed;
 static struct efs_conn connection;
 static int64_t real_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (int64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
 static int64_t monotonic_ms(void) {return real_ms()+__atomic_load_n(&advance,__ATOMIC_RELAXED);}
 uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
+void efs_client_rpc_set_deadline_ms(uint64_t d) {deadline=d;}
 static int node_index_for_id(efs_node_id_t id) {assert(id==1);return 0;}
 static int pool_size(void) {return 1;}
 static int conn_fd_is_dead(struct efs_conn *c) {(void)c;return 0;}
-int efs_connect_tcp(const char *h,uint16_t p) {(void)h;(void)p;assert(late);if(late!=3)__atomic_fetch_add(&advance,2000,__ATOMIC_RELAXED);return late==1?42:-1;}
+int efs_connect_tcp(const char *h,uint16_t p) {(void)h;(void)p;assert(late && deadline && deadline<= (uint64_t)monotonic_ms()+5000);if(late!=3 && late!=5)__atomic_fetch_add(&advance,late==4?6000:2000,__ATOMIC_RELAXED);errno=connect_errno;return late==1 || late==5?42:-1;}
 int efs_set_recv_timeout(int fd,int ms) {(void)fd;(void)ms;return 0;}
 int efs_set_send_timeout(int fd,int ms) {(void)fd;(void)ms;return 0;}
-struct efs_conn *efs_conn_wrap_tcp(int fd,int server) {(void)fd;(void)server;return &connection;}
+struct efs_conn *efs_conn_wrap_tcp(int fd,int server) {(void)fd;(void)server;return wrap_failure?NULL:&connection;}
 int efs_rdma_available(void) {return 0;}
 int efs_rdma_client_upgrade(struct efs_conn *c) {(void)c;return 0;}
 int efs_rdma_transport(void) {return EFS_TRANSPORT_TCP;}
 void efs_conn_destroy(struct efs_conn *c) {assert(c==&connection);destroyed++;}
 void efs_conn_bind_gen(struct efs_conn *c,uint64_t *p) {(void)c;(void)p;}
 void efs_conn_note_ok(struct efs_conn *c) {(void)c;}
+static int fake_close(int fd) {assert(fd==42);closed++;return 0;}
+#define close fake_close
 #define EFS_NODE_DOWN_FAILS 4
 #define EFS_NODE_DOWN_MS 30000
 '''+f+note+r'''
@@ -56,6 +59,21 @@ int main(void) {
  assert(!efs_client_conn_get(1)&&!g_client.conn_busy[0][0]);
  assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS&&g_client.node_down_until_ms[0]>monotonic_ms());
  g_client.node_down_until_ms[0]=0;g_client.node_fail_streak[0]=EFS_NODE_DOWN_FAILS-1;
+ advance=0;late=4;deadline=0;
+ assert(!efs_client_conn_get(1)&&!g_client.conn_busy[0][0]&&!deadline);
+ assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS-1&&!g_client.node_down_until_ms[0]);
+ advance=0;late=5;wrap_failure=1;deadline=monotonic_ms()+1000;
+ uint64_t saved=deadline;
+ assert(!efs_client_conn_get(1)&&closed==1&&!g_client.conn_busy[0][0]&&deadline==saved);
+ assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS-1&&!g_client.node_down_until_ms[0]);
+ wrap_failure=0;late=3;
+ const int resources[]={ENOMEM,ENOBUFS,EAGAIN,EMFILE,ENFILE};
+ for(unsigned i=0;i<sizeof(resources)/sizeof(resources[0]);i++){
+  connect_errno=resources[i];deadline=monotonic_ms()+1000;saved=deadline;
+  assert(!efs_client_conn_get(1)&&!g_client.conn_busy[0][0]&&deadline==saved);
+  assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS-1&&!g_client.node_down_until_ms[0]);
+ }
+ connect_errno=0;
  deadline=monotonic_ms();efs_client_node_note_fail(1);
  assert(g_client.node_fail_streak[0]==EFS_NODE_DOWN_FAILS-1&&!g_client.node_down_until_ms[0]);
  deadline=monotonic_ms()+1000;efs_client_node_note_fail(1);
@@ -69,4 +87,4 @@ with tempfile.TemporaryDirectory(prefix='efs-conn-budget-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
-print('connection checkout: inherited budget, spurious wakeups, reuse and late-connect cleanup PASS')
+print('connection checkout: shared DNS/connect budget, TLS restoration, local resource health, spurious wakeups and cleanup PASS')
