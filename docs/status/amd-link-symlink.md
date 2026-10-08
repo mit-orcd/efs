@@ -1,7 +1,6 @@
 # AMD POSIX link of symlink failure
 
-Status: root cause established; test correction and full-suite rerun remain
-open. Documentation only; no test or filesystem implementation changed.
+Status: corrected no-follow test merged from devel-roce-rdma; all four AMD I/O/transport full POSIX and peer reruns pass. Production hard-link behavior was not changed. Additional follow/dangling cases and comparable NUC Python/syscall evidence below remain useful test follow-ups. See [release acceptance](v020-amd-release.md).
 
 ## Finding
 

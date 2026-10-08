@@ -1,0 +1,54 @@
+[
+  {
+    "mode": "direct",
+    "transport": "rdma",
+    "exitcode": 0,
+    "seconds": 42.58495125,
+    "six_processes_verified": true,
+    "suites": {
+      "posix": "# summary pass=216 fail=0 skip=1 notrun=0 total=217 dur=17.4",
+      "posix2": "# summary pass=64 fail=0 skip=0 total=64 dur=8.2",
+      "persist-prepare": "# summary pass=26 fail=0 skip=0 total=26 dur=4.6",
+      "persist-verify": "# summary pass=26 fail=0 skip=0 total=26 dur=4.1"
+    }
+  },
+  {
+    "mode": "direct",
+    "transport": "tcp",
+    "exitcode": 0,
+    "seconds": 40.1219725,
+    "six_processes_verified": true,
+    "suites": {
+      "posix": "# summary pass=216 fail=0 skip=1 notrun=0 total=217 dur=16.0",
+      "posix2": "# summary pass=64 fail=0 skip=0 total=64 dur=7.4",
+      "persist-prepare": "# summary pass=26 fail=0 skip=0 total=26 dur=4.6",
+      "persist-verify": "# summary pass=26 fail=0 skip=0 total=26 dur=3.9"
+    }
+  },
+  {
+    "mode": "buffered",
+    "transport": "rdma",
+    "exitcode": 0,
+    "seconds": 42.078757667000005,
+    "six_processes_verified": true,
+    "suites": {
+      "posix": "# summary pass=216 fail=0 skip=1 notrun=0 total=217 dur=17.1",
+      "posix2": "# summary pass=64 fail=0 skip=0 total=64 dur=7.9",
+      "persist-prepare": "# summary pass=26 fail=0 skip=0 total=26 dur=4.6",
+      "persist-verify": "# summary pass=26 fail=0 skip=0 total=26 dur=4.1"
+    }
+  },
+  {
+    "mode": "buffered",
+    "transport": "tcp",
+    "exitcode": 0,
+    "seconds": 39.403467375000005,
+    "six_processes_verified": true,
+    "suites": {
+      "posix": "# summary pass=216 fail=0 skip=1 notrun=0 total=217 dur=16.1",
+      "posix2": "# summary pass=64 fail=0 skip=0 total=64 dur=6.9",
+      "persist-prepare": "# summary pass=26 fail=0 skip=0 total=26 dur=4.4",
+      "persist-verify": "# summary pass=26 fail=0 skip=0 total=26 dur=3.7"
+    }
+  }
+]

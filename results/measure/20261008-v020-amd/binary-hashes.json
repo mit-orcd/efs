@@ -1,0 +1,5 @@
+{
+  "/data1/efs/src/efsd": "08c2c9612d577c67a7ec97eab37261f3294d5bb4babe584baa41fbb608467b93",
+  "/data1/efs/src/efs-fuse": "d90a79ae5a7e0f9d2a0b196412c5bed0fabb6ebb6646017bc09dc982dfb9259a",
+  "/data1/efs/src/efs-mgmt": "b629e414111de6243064ad9da77711df194e65d46ad16a412ea3bfce880bfa8f"
+}

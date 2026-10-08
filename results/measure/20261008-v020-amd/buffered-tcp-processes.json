@@ -1,0 +1,38 @@
+[
+  {
+    "pid": 492923,
+    "args": "/data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 37.5G --no-direct-io ",
+    "transport": "tcp",
+    "verbs": []
+  },
+  {
+    "pid": 492977,
+    "args": "/data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 37.5G --no-direct-io --join 127.0.0.1:17432 ",
+    "transport": "tcp",
+    "verbs": []
+  },
+  {
+    "pid": 493030,
+    "args": "/data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data1/efs/n3 --quota 37.5G --no-direct-io --join 127.0.0.1:17432 ",
+    "transport": "tcp",
+    "verbs": []
+  },
+  {
+    "pid": 493213,
+    "args": "/data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data1/efs/n4 --quota 37.5G --no-direct-io --join 127.0.0.1:17432 ",
+    "transport": "tcp",
+    "verbs": []
+  },
+  {
+    "pid": 493349,
+    "args": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt2 ",
+    "transport": "tcp",
+    "verbs": []
+  },
+  {
+    "pid": 496661,
+    "args": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt ",
+    "transport": "tcp",
+    "verbs": []
+  }
+]

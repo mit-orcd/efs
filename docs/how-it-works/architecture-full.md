@@ -1459,6 +1459,8 @@ this document is the invariant they are measured against.
 
 ### 1. The task right now
 
+[Version0.2.0 AMD release acceptance](../status/v020-amd-release.md): devel-roce-rdma merged into devel; full POSIX, peer and cold durability suites pass for direct/buffered × TCP/RXE RDMA. Hardware RoCE/native-IB and broader roadmap obligations are not closed by this release.
+
 The [memory acceptance follow-up](../status/memory-closure-20261007.md) closes W59/W67.
 The [three-package closure follow-up](../status/allocation-gc-fold-gates-20261007.md) closes D17.
 Current grouped open count: **44**, including **8** implemented/partial

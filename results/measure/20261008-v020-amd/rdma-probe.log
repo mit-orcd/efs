@@ -1,0 +1,4 @@
+efs: CQ moderation off failed errno=0
+efsd: RDMA transport up on rxe0 port 1 (lid 0)
+efs: RDMA transport up on rxe0 port 1 (lid 0, 36 x 84 KiB bufs/conn)
+PASS: rdma xprt (rdma=67 tcp_big=1 frames=68)
