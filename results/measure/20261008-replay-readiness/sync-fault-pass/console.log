@@ -1,9 +1,9 @@
-Evidence directory: /data1/efs/gc-direct-crua5qeb
+Evidence directory: /data1/efs/gc-direct-rd5k0ll3
 node 1 listening PASS
 node 2 listening PASS
 node 3 listening PASS
 node 4 listening PASS
-raft-mkfs rc=0 leader_hint=1 index=2 salt=12539698579120844232
+raft-mkfs rc=0 leader_hint=1 index=2 salt=2335468551962878638
 client serving PASS
 node 1 listening PASS
 node 2 listening PASS
@@ -14,7 +14,7 @@ node 2 listening PASS
 node 3 listening PASS
 node 4 listening PASS
 Unmounting /data1/efs/mnt
-Retiring drained efs-fuse PID 2008061 for /data1/efs/mnt
+Retiring drained efs-fuse PID 2024190 for /data1/efs/mnt
 Unmounted /data1/efs/mnt
 node 1 listening PASS
 node 2 listening PASS
@@ -25,7 +25,7 @@ synchronous failed-write recovery physically reclaimed PASS
 O_SYNC/O_DSYNC offline callback failure retains exact bytes for fsync and cold recovery PASS
 peer mounted PASS
 Unmounting /data1/efs/mnt2
-Retiring drained efs-fuse PID 2010981 for /data1/efs/mnt2
+Retiring drained efs-fuse PID 2027025 for /data1/efs/mnt2
 Unmounted /data1/efs/mnt2
 two-peer adjacent writes and repeated folds complete
 fragment files present PASS
@@ -54,7 +54,7 @@ valid late-PUT control accepted on live inode by every member PASS
 disk failure visible PASS
 failed fragment remains on disk pending retry PASS
 Unmounting /data1/efs/mnt
-Retiring drained efs-fuse PID 2010950 for /data1/efs/mnt
+Retiring drained efs-fuse PID 2026995 for /data1/efs/mnt
 Unmounted /data1/efs/mnt
 node 1 listening PASS
 node 2 listening PASS
@@ -68,7 +68,7 @@ fold fragments physically reclaimed PASS
 fragment files present PASS
 offline fourth member retains reap ledger PASS
 Unmounting /data1/efs/mnt
-Retiring drained efs-fuse PID 2012827 for /data1/efs/mnt
+Retiring drained efs-fuse PID 2029324 for /data1/efs/mnt
 Unmounted /data1/efs/mnt
 node 1 listening PASS
 node 2 listening PASS
@@ -80,7 +80,7 @@ client serving PASS
 sentinel physically reclaimed PASS
 all fixture GC records retired PASS
 Unmounting /data1/efs/mnt
-Retiring drained efs-fuse PID 2013960 for /data1/efs/mnt
+Retiring drained efs-fuse PID 2030562 for /data1/efs/mnt
 Unmounted /data1/efs/mnt
 node 1 listening PASS
 node 2 listening PASS

@@ -15,7 +15,7 @@ benchmark harness changes belong to this package.
 | W23/W89 | Corrected follower pressure measurement and D30 remedy remain pending; no pressure closure from these runs. |
 | Queue | Dated evidence reconciled below without removing hardware/multi-host obligations. |
 | W71 | `e77e1f13`: production fragment contents, checksum/length and ancestor directory entries are fenced before PUT succeeds. Actual buffered/direct/bounce fault tests and direct/TCP live POSIX/replay/append/GC/restart gates pass. Physical power-loss acceptance remains owed. |
-| W73 | Explicit O_SYNC/O_DSYNC callback publication is implemented and accepted in AMD direct/TCP gates after the W64 fix: small/queued, append/non-append, peer-before-close and cold crash bytes pass. Historical rejected candidate evidence remains preserved; hardware power-loss acceptance is W71. |
+| W73 | Explicit O_SYNC/O_DSYNC callback publication is implemented and accepted in AMD direct/TCP gates after the W64 fix: small/queued, append/non-append, peer-before-close, offline publication failure/fsync recovery and cold crash bytes pass. Historical rejected candidate evidence remains preserved; hardware power-loss acceptance is W71. |
 | W72/W86 | Real production sessions, touched-authority registration, durable revocation and ticket/storage fences remain pending. |
 | D25 | Remains staged: write-path integration and bounded history/materialization are still required before logical resize activation. |
 
@@ -287,3 +287,43 @@ gate. Installed binaries were not upgraded by this package. AMD is one host;
 process crashes and software RXE do not establish hardware power-loss or
 physical multi-host RDMA acceptance. The final four-mode release matrix is
 still owed, and these partial packages do not authorize activation.
+
+## One-hour work batch checkpoint — Oct 8, started 06:52 UTC
+
+Six focused production changes were committed on devel:
+
+| Commit | Change |
+| --- | --- |
+| `593becf3` | Bounded coordinated append completion and DONE receipt cleanup. |
+| `3a2033d8` | Cross-group authoritative EOF/reservation/completion routing. |
+| `a6ff3d4c` | Explicit stop flushes retained partial bodies and waits for REPORT ownership. |
+| `8bf38bfa` | Both FUSE write callbacks publish O_SYNC/O_DSYNC before replying. |
+| `dc9fded0` | Stream append completion and bound OPEN capture memory. |
+| `141cd73c` | Append backoff/stripe reacquisition obey inherited deadlines and lock ownership. |
+
+`e2fd20da` adds the live synchronous publication-failure/recovery gate;
+`120d8292` reconciles current W64/W73 documentation without including the other
+chat's staged design proposal or W90/W91/W92 edits.
+
+The final production-source AMD direct/TCP broad run passes 216 POSIX tests
+(0 fail, 1 skip), all 64 peer cases, durable replay/leader death, append/fsync
+and peer EOF extension, sync writes before close, exact 800-record cold append
+integrity during GC, graceful shutdown and dirty-stop recovery. Full AMD units
+and the actual metadata/transaction ASan+UBSan tests pass. The failed
+partial-body drain run is retained in `shutdown-before-fix`; subsequent
+recovery gates pass. Both the exact committed documentation tree and the
+shared working documentation pass all five architecture checks.
+
+No benchmark code, installed AMD binaries/stores, release refs or D25 activation
+were changed. Remaining blockers are production publication replay identity,
+real session/PUT-ticket fencing and recovery, bounded transaction history,
+D27 whole-write fault/RSS acceptance, W23/W89 pressure remedies, mount-sync and
+the final mode matrix, plus W71 hardware power-loss evidence. D28/D29/D30 policy
+decisions remain unresolved. Installed AMD service is restored after each gate;
+the six-hour heartbeat remains authorized until its existing deadline.
+
+Final evidence review tightened the live failure gate to match only trace bytes
+emitted by the current write, preventing O_DSYNC from matching the prior O_SYNC
+trace. The stricter rerun passes with both flags and full GC/restart cleanup
+(`/data1/efs/gc-direct-rd5k0ll3`); `sync-fault-pass` now contains that rerun.
+Installed four-daemon/two-mount direct/TCP service was restored at 07:46 UTC.

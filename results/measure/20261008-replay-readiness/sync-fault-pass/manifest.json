@@ -1,16 +1,16 @@
 {
   "mode": "direct",
   "roots": [
-    "/data1/efs/gc-direct-crua5qeb/n1",
-    "/data1/efs/gc-direct-crua5qeb/n2",
-    "/data1/efs/gc-direct-jjhyemo7/n3",
-    "/data1/efs/gc-direct-jjhyemo7/n4"
+    "/data1/efs/gc-direct-rd5k0ll3/n1",
+    "/data1/efs/gc-direct-rd5k0ll3/n2",
+    "/data1/efs/gc-direct-sd5xcw9j/n3",
+    "/data1/efs/gc-direct-sd5xcw9j/n4"
   ],
   "real_roots": [
-    "/data1/efs/gc-direct-crua5qeb/n1",
-    "/data1/efs/gc-direct-crua5qeb/n2",
-    "/data1/efs/gc-direct-jjhyemo7/n3",
-    "/data1/efs/gc-direct-jjhyemo7/n4"
+    "/data1/efs/gc-direct-rd5k0ll3/n1",
+    "/data1/efs/gc-direct-rd5k0ll3/n2",
+    "/data1/efs/gc-direct-sd5xcw9j/n3",
+    "/data1/efs/gc-direct-sd5xcw9j/n4"
   ],
   "port": 20190,
   "gates": {
@@ -75,7 +75,7 @@
     "port": 20190
   },
   "source_tree_sha256": "5964d42b8a8ab27ea9e3c5941f774cb774318ed2e7b9655e5fb340c1f2eda69b",
-  "test_script_sha256": "0e734dd92dfbda6002dba29f85090a36908994c2c2ce39f16c729a0a8ebdbe71",
+  "test_script_sha256": "ba6ba4764da5f71bfe3a6f7d6e0a28888cc6629a76b78b2bfbc261073d32d9ef",
   "binary_sha256": {
     "efsd": "16e8fda33d4aee3cc0e035e01f6bc0638deae145e09b13d075364a2d410fee0d",
     "efs-fuse": "bb38f0b6e5f5381830f24f457074d1b86b359bc1da237d705caf0dfa0506dfa0",

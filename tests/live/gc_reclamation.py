@@ -669,12 +669,14 @@ os.close(fd)
             body=b'synchronous callback retains this partial body'
             fd=os.open(target,os.O_CREAT|os.O_EXCL|os.O_WRONLY|flag,0o600)
             stop();errors=[]
+            trace_start=(work/'fuse.log').stat().st_size
             try:
                 try:os.write(fd,body)
                 except OSError as error:
                     assert error.errno==5,error;errors.append({'call':'write','errno':error.errno})
                 else:raise AssertionError('offline synchronous write falsely succeeded')
-                trace=(work/'fuse.log').read_text(errors='replace')
+                with (work/'fuse.log').open('rb') as trace_file:
+                    trace_file.seek(trace_start);trace=trace_file.read().decode(errors='replace')
                 assert re.search(r'sync-write ino=.* bytes='+str(len(body))+r' .* rc=-5',trace),'write did not reach the synchronous publication failure boundary'
                 start()
                 for attempt in range(3):
