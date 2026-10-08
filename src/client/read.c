@@ -142,7 +142,7 @@ static int get_one_reply(struct efs_conn *conn, struct frag_get_job *j)
     return 0;
 }
 
-static void get_two_parallel(struct frag_get_job *jobs)
+static void get_two_parallel_run(struct frag_get_job *jobs)
 {
     struct efs_conn *conns[2] = {NULL, NULL};
     int pending[2] = {0, 0};
@@ -152,6 +152,10 @@ static void get_two_parallel(struct frag_get_job *jobs)
         struct efs_msg_get_chunk req;
         jobs[i].rc = EFS_ERR_NET;
         jobs[i].len = 0;
+        if (efs_client_rpc_past_deadline()) {
+            jobs[i].rc = EFS_ERR_BUSY;
+            continue;
+        }
         if (jobs[i].node == 0 || efs_client_node_is_down(jobs[i].node))
             continue;
         conns[i] = efs_client_conn_get(jobs[i].node);
@@ -263,6 +267,27 @@ static void get_two_parallel(struct frag_get_job *jobs)
             }
         }
     }
+}
+
+/* A partial TCP frame can turn readiness into a blocking receive. Keep the
+ * pair's existing five-second bound active during checkout, sends and receive,
+ * not only the poll after sends. Restore the enclosing merge/read budget. */
+static void get_two_parallel(struct frag_get_job *jobs)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    uint64_t previous = efs_client_rpc_deadline_ms();
+    uint64_t deadline = (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000 + 5000;
+    if (previous && previous < deadline)
+        deadline = previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    get_two_parallel_run(jobs);
+    if (efs_client_rpc_past_deadline()) {
+        for (int i = 0; i < 2; i++)
+            if (jobs[i].rc == EFS_ERR_NET)
+                jobs[i].rc = EFS_ERR_BUSY;
+    }
+    efs_client_rpc_set_deadline_ms(previous);
 }
 
 /* Reconstruct one logical chunk from any 2 of 3 fragments. The three GETs run
