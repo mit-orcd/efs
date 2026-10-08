@@ -628,6 +628,9 @@ try:
         if a.ecrawl_binary:
             crawls=[]
             for folder,expected_sparse in ((dense,0),(sparse,2)):
+                # ecrawl must receive server allocation on a cold client,
+                # without help from the earlier byte-verification reads.
+                unmount();mount_client()
                 capture=work/('ecrawl-'+folder.name)
                 result=run([a.ecrawl_binary,folder,capture],capture_output=True,text=True,timeout=120)
                 (work/(capture.name+'.log')).write_text(result.stdout+result.stderr)
