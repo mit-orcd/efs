@@ -71,12 +71,59 @@ int main(void)
  end=resolver_now_ms()+2000;
  while(__atomic_load_n(&resolver_jobs,__ATOMIC_ACQUIRE) && resolver_now_ms()<end)usleep(1000);
  assert(!resolver_jobs && descriptors()==baseline);
- puts("resolver: hung NSS deadlines, eight-job cap, late completion ownership, thread failure and hostname connect PASS");
+ puts("resolver: hung NSS deadlines, eight-job cap, late completion ownership, thread failure and hostname connect and checkout-local DNS budget PASS");
  return 0;
 }
 '''
+
+# Include the actual pool checkout against the actual resolver/connection code:
+# a hung NSS call must inherit checkout's local limit even without a parent RPC.
+node=(root/'src/client/node_cache.c').read_text();a=node.index('struct efs_conn *efs_client_conn_get(')
+checkout=node[a:node.index('\n}',a)+2].replace('+ 5000','+ 50')
+stubs=r'''
+struct efs_client g_client;
+static int64_t monotonic_ms(void) {return (int64_t)resolver_now_ms();}
+static int node_index_for_id(efs_node_id_t id) {assert(id==1);return 0;}
+static int pool_size(void) {return 1;}
+static int conn_fd_is_dead(struct efs_conn *c) {(void)c;assert(0);return 0;}
+uint64_t efs_client_rpc_deadline_ms(void) {return efs_net_deadline_ms();}
+void efs_client_rpc_set_deadline_ms(uint64_t d) {efs_net_set_deadline_ms(d);}
+int efs_set_recv_timeout(int fd,int ms) {(void)fd;(void)ms;assert(0);return -1;}
+int efs_set_send_timeout(int fd,int ms) {(void)fd;(void)ms;assert(0);return -1;}
+struct efs_conn *efs_conn_wrap_tcp(int fd,int server) {(void)fd;(void)server;assert(0);return NULL;}
+int efs_rdma_available(void) {assert(0);return 0;}
+int efs_rdma_client_upgrade(struct efs_conn *c) {(void)c;assert(0);return -1;}
+int efs_rdma_transport(void) {assert(0);return EFS_TRANSPORT_TCP;}
+void efs_conn_destroy(struct efs_conn *c) {(void)c;assert(0);}
+void efs_conn_bind_gen(struct efs_conn *c,uint64_t *g) {(void)c;(void)g;assert(0);}
+void efs_conn_note_ok(struct efs_conn *c) {(void)c;assert(0);}
+#define EFS_NODE_DOWN_FAILS 4
+#define EFS_NODE_DOWN_MS 30000
+'''
+code=code.replace('#include <assert.h>','#include "client_internal.h"\n#include "efs/rdma.h"\n#include <assert.h>',1)
+code=code.replace('int main(void)',stubs+checkout+'\nint main(void)',1)
+needle_test=''' assert(!__atomic_load_n(&resolver_jobs,__ATOMIC_ACQUIRE) && descriptors()==baseline);
+ efs_net_set_deadline_ms(resolver_now_ms());'''
+replacement=''' assert(!__atomic_load_n(&resolver_jobs,__ATOMIC_ACQUIRE) && descriptors()==baseline);
+ pthread_mutex_init(&g_client.conn_lock[0],NULL);pthread_cond_init(&g_client.conn_cv[0],NULL);
+ strcpy(g_client.nodes[0].addr,"hung.test");g_client.nodes[0].port=1234;
+ pthread_mutex_lock(&fake_mu);frozen=1;pthread_mutex_unlock(&fake_mu);
+ efs_net_set_deadline_ms(0);uint64_t checkout_start=resolver_now_ms();
+ assert(!efs_client_conn_get(1));uint64_t checkout_elapsed=resolver_now_ms()-checkout_start;
+ assert(checkout_elapsed>=40 && checkout_elapsed<500);
+ printf("checkout-local hung DNS elapsed_ms=%llu restored_deadline=0 busy=0 peer_failures=0\\n",(unsigned long long)checkout_elapsed);
+ assert(!efs_net_deadline_ms() && !g_client.conn_busy[0][0] && !g_client.node_fail_streak[0] && !g_client.node_down_until_ms[0]);
+ pthread_mutex_lock(&fake_mu);frozen=0;pthread_cond_broadcast(&fake_cv);pthread_mutex_unlock(&fake_mu);
+ end=resolver_now_ms()+2000;
+ while(__atomic_load_n(&resolver_jobs,__ATOMIC_ACQUIRE) && resolver_now_ms()<end)usleep(1000);
+ assert(!__atomic_load_n(&resolver_jobs,__ATOMIC_ACQUIRE) && descriptors()==baseline);
+ pthread_cond_destroy(&g_client.conn_cv[0]);pthread_mutex_destroy(&g_client.conn_lock[0]);
+ efs_net_set_deadline_ms(resolver_now_ms());'''
+assert needle_test in code
+code=code.replace(needle_test,replacement,1)
+
 with tempfile.TemporaryDirectory(prefix='efs-resolver-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  flags=['-fsanitize=address,undefined','-fno-omit-frame-pointer'] if os.environ.get('EFS_TEST_SANITIZE') else []
- subprocess.run(['cc','-D_GNU_SOURCE','-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),*flags,str(p),'-o',str(p.with_suffix(''))],check=True)
+ subprocess.run(['cc','-D_GNU_SOURCE','-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),*flags,str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=10)
