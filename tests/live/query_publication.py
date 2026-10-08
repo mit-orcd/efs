@@ -309,7 +309,10 @@ try:
         import json
         for node in (2,3):
             assert features(base+node-1)==3,('reenabled feature mask',node)
-            reply,text=query(base+node-1,request(version=2,max_output=65536,operation=1,
+            # LOAD/POSIX gates may leave thousands of paths. Use the normal
+            # bounded command output cap for this namespace-wide oracle;
+            # 64 KiB deliberately remains in the small explicit-limit gates.
+            reply,text=query(base+node-1,request(version=2,max_output=16<<20,operation=1,
                                               match=1,term=b''))
             assert reply.status==0,(reply.status,text)
             paths={bytes.fromhex(e['path_hex']) for e in json.loads(text)['entries']}

@@ -209,6 +209,21 @@ int main(void)
     CHECK(!capture(kv,NULL,&newer),"reenable builds authoritative image without dirty history");
     CHECK(newer && efs_query_catalog_rebuilt(newer)==4096,"reenable requires full initial build");
     efs_query_catalog_free(newer);newer=NULL;
+    /* Many matching names in one outside directory must not leak into a
+     * scoped search; scope decisions must not survive into another query. */
+    for (unsigned i=0;i<6;i++) {
+        char name[32];efs_ino_t created;
+        snprintf(name,sizeof(name),"scope-cache-%u",i);
+        CHECK(!efs_meta_apply_create_file(kv,&attrs,EFS_ROOT_INO,S_IFREG|0644,name,&created),"outside scope file");
+    }
+    CHECK(!capture(kv,NULL,&newer),"scope cache image");
+    f=(struct found){0};
+    CHECK(newer && !efs_query_catalog_find(newer,a,EFS_NAME_PREFIX,"scope-cache-",100,collect,&f) && !f.n,
+          "repeated outside parent excluded");
+    f=(struct found){0};
+    CHECK(newer && !efs_query_catalog_find(newer,EFS_ROOT_INO,EFS_NAME_PREFIX,"scope-cache-",100,collect,&f) && f.n==6,
+          "scope cache belongs to one query root");
+    efs_query_catalog_free(newer);newer=NULL;
     CHECK(!efs_meta_apply_get_inode(kv,b,&r),"dir for corruption");
     r.parent=a;row_put(kv,&r);
     CHECK(capture(kv,c,&newer)==EFS_ERR_PROTO && !newer,"mismatched parent fails closed");

@@ -387,17 +387,24 @@ struct find_context {
     uint32_t shard;
     int (*emit)(void *,const struct efs_name_entry *,const char *);
     void *user;
+    /* Direct-mapped, query-local negative scope memo (16 KiB). Collisions
+     * only cause recomputation; no permissions or successful paths are cached. */
+    efs_ino_t outside[2048];
 };
 static int find_candidate(void *ctx, const struct efs_name_entry *entry)
 {
     struct find_context *f=ctx;
+    uint32_t scope_slot=(uint32_t)((entry->parent^(entry->parent>>32))*2654435761U)&2047U;
+    if (entry->parent && f->outside[scope_slot]==entry->parent) return EFS_OK;
     struct node *parent=find_node(f->c,entry->parent);
     if (!parent) return EFS_ERR_IO;
     /* Membership is immutable and independent of a candidate binding. Avoid
      * KV/directory-layout lookups for names outside the requested subtree. */
     char path[EFS_MAX_PATH];
     int rc=efs_query_catalog_path(f->c,entry->parent,f->root,path,sizeof(path));
-    if (rc==EFS_ERR_NOT_FOUND) return EFS_OK;
+    if (rc==EFS_ERR_NOT_FOUND) {
+        f->outside[scope_slot]=entry->parent;return EFS_OK;
+    }
     if (rc) return rc;
     struct efs_meta_dentry authoritative;
     rc=efs_meta_apply_lookup((struct efs_kv *)&f->c->kv,entry->parent,entry->name,&authoritative);
@@ -430,8 +437,9 @@ int efs_query_catalog_find(const struct efs_query_catalog *c, efs_ino_t root, en
     struct node *n=find_node(c,root);
     if (!n) return EFS_ERR_NOT_FOUND;
     if (!S_ISDIR(n->row.mode)) return EFS_ERR_INVAL;
+    struct find_context f={.c=c,.root=root,.emit=emit,.user=user};
     for (uint32_t shard=0;shard<4096;shard++) {
-        struct find_context f={c,root,shard,emit,user};uint32_t cursor=0;
+        f.shard=shard;uint32_t cursor=0;
         uint32_t visits=0;
         uint32_t budget=visit_budget>UINT32_MAX ? UINT32_MAX : (uint32_t)visit_budget;
         int rc=efs_name_index_query_visits(c->part[shard]->names,match,term,&cursor,budget,find_candidate,&f,&visits);
