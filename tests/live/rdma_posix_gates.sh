@@ -17,7 +17,9 @@ mkdir -p "$run/mnt" "$run/mnt2"; pids=()
 cleanup() {
     for m in "$run/mnt" "$run/mnt2"; do
         if mountpoint -q "$m"; then
-            "$src/scripts/client.sh" stop "$m" || { echo "Retained cluster: clean stop failed at $m" >&2; return; }
+            "$src/scripts/client.sh" stop "$m" || {
+                if mountpoint -q "$m"; then echo "Retained cluster: clean stop failed at $m" >&2; return 1; fi
+            }
         fi
     done
     for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done

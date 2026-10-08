@@ -1,0 +1,132 @@
+# posix-2client host_a=local-a host_b=local-b mnt=/home/efs/efs-rdma/gate-rdma-5jt0h6/mnt 2026-10-08T02:52:57Z
+# select	peer_mkdir_visible
+# select	peer_create_visible
+# select	peer_write_read
+# select	peer_listdir_siblings
+# select	peer_shared_creat
+# select	peer_open_existing
+# select	peer_creat_excl_eexist
+# select	peer_stat_size
+# select	peer_rename_visible
+# select	peer_mkdir_then_create
+# select	peer_shared_pwrite
+# select	peer_unlink_gone
+# select	peer_chmod_visible
+# select	peer_utimens_visible
+# select	peer_dir_mtime_bump_visible
+# select	peer_truncate_visible
+# select	peer_hardlink_visible
+# select	peer_symlink_visible
+# select	peer_negative_dentry
+# select	peer_fsync_then_read
+# select	peer_mkdir_rmdir_recreate
+# select	peer_oappend
+# select	peer_rename_over
+# select	peer_flock_exclusive
+# select	peer_unlink_while_b_has_fd
+# select	peer_rmdir_gone
+# select	peer_nlink_after_link
+# select	peer_hardlink_write
+# select	peer_rename_dir
+# select	peer_o_trunc_visible
+# select	peer_unlink_recreate
+# select	peer_lstat_symlink_size
+# select	peer_listdir_after_unlink
+# select	peer_chmod_via_hardlink
+# select	peer_sparse_size
+# select	peer_overlap_pwrite_same_range
+# select	peer_overlap_pwrite_partial
+# select	peer_overlap_pwrite_chunk_straddle
+# select	peer_concurrent_append
+# select	peer_append_while_truncate
+# select	peer_disjoint_extend
+# select	peer_disjoint_extend_reverse_completion
+# select	peer_extend_and_truncate
+# select	peer_stat_during_extend
+# select	peer_trunc_then_pwrite_old_fd
+# select	peer_trunc_zero_then_high_pwrite
+# select	peer_pwrite_then_peer_truncate
+# select	peer_rename_same_src_two_dst
+# select	peer_rename_vs_unlink_src
+# select	peer_rename_vs_unlink_dst
+# select	peer_rename_across_dirs_chase
+# select	peer_creat_excl_race
+# select	peer_create_unlink_stat_churn
+# select	peer_negative_after_unlink
+# select	peer_rename_negative
+# select	peer_unlink_recreate_stale_ino
+# select	peer_open_unlink_nlink
+# select	peer_open_rename_fd
+# select	peer_unlink_recreate_old_fd
+# select	peer_concurrent_hardlink
+# select	peer_concurrent_unlink_hardlinks
+# select	peer_fcntl_range_conflict
+# select	peer_fcntl_range_adjacent
+# select	peer_mtime_no_regress
+test	result	detail
+peer_mkdir_visible	PASS	
+peer_create_visible	PASS	
+peer_write_read	PASS	
+peer_listdir_siblings	PASS	
+peer_shared_creat	PASS	
+peer_open_existing	PASS	
+peer_creat_excl_eexist	PASS	
+peer_stat_size	PASS	
+peer_rename_visible	PASS	
+peer_mkdir_then_create	PASS	
+peer_shared_pwrite	PASS	
+peer_unlink_gone	PASS	
+peer_chmod_visible	PASS	
+peer_utimens_visible	PASS	
+peer_dir_mtime_bump_visible	PASS	
+peer_truncate_visible	PASS	
+peer_hardlink_visible	PASS	
+peer_symlink_visible	PASS	
+peer_negative_dentry	PASS	
+peer_fsync_then_read	PASS	
+peer_mkdir_rmdir_recreate	PASS	
+peer_oappend	PASS	
+peer_rename_over	PASS	
+peer_flock_exclusive	PASS	
+peer_unlink_while_b_has_fd	PASS	
+peer_rmdir_gone	PASS	
+peer_nlink_after_link	PASS	
+peer_hardlink_write	PASS	
+peer_rename_dir	PASS	
+peer_o_trunc_visible	PASS	
+peer_unlink_recreate	PASS	
+peer_lstat_symlink_size	PASS	
+peer_listdir_after_unlink	PASS	
+peer_chmod_via_hardlink	PASS	
+peer_sparse_size	PASS	
+peer_overlap_pwrite_same_range	PASS	
+peer_overlap_pwrite_partial	PASS	
+peer_overlap_pwrite_chunk_straddle	PASS	
+peer_concurrent_append	PASS	
+peer_append_while_truncate	PASS	
+peer_disjoint_extend	PASS	
+peer_disjoint_extend_reverse_completion	PASS	
+peer_extend_and_truncate	PASS	
+peer_stat_during_extend	PASS	
+peer_trunc_then_pwrite_old_fd	PASS	
+peer_trunc_zero_then_high_pwrite	PASS	
+peer_pwrite_then_peer_truncate	PASS	
+peer_rename_same_src_two_dst	PASS	
+peer_rename_vs_unlink_src	PASS	
+peer_rename_vs_unlink_dst	PASS	
+peer_rename_across_dirs_chase	PASS	
+peer_creat_excl_race	PASS	
+peer_create_unlink_stat_churn	PASS	
+peer_negative_after_unlink	PASS	
+peer_rename_negative	PASS	
+peer_unlink_recreate_stale_ino	PASS	
+peer_open_unlink_nlink	PASS	
+peer_open_rename_fd	PASS	
+peer_unlink_recreate_old_fd	PASS	
+peer_concurrent_hardlink	PASS	
+peer_concurrent_unlink_hardlinks	PASS	
+peer_fcntl_range_conflict	PASS	
+peer_fcntl_range_adjacent	PASS	
+peer_mtime_no_regress	PASS	
+# summary pass=64 fail=0 skip=0 total=64 dur=8.0
+# complete

@@ -208,6 +208,7 @@ struct efs_rdma_dev {
      * per-conn SPSC rings. Replaces per-conn CQs, whose spin-polling by
      * every conn thread was the top CPU consumer on client AND server. */
     struct ibv_cq *recv_cq;
+    int recv_capacity, recv_reserved;
     struct ibv_comp_channel *recv_chan;
     pthread_t poller;
     int poller_started;
@@ -662,6 +663,7 @@ int efs_rdma_available(void)
 /* ---------------- connection ---------------- */
 
 struct efs_rdma_conn {
+    int cq_reserved;
     struct efs_rdma_dev *dev;
     struct ibv_qp *qp;
     struct ibv_cq *send_cq;
@@ -920,15 +922,22 @@ static int dev_shared_cq_start(struct efs_rdma_dev *dev)
     }
     /* Sized for every conn's posted recvs with headroom; CQ entries are
      * cheap driver-side. */
-    dev->recv_cq = ibv_create_cq(dev->ctx, 1 << 16, NULL, dev->recv_chan, 0);
-    if (!dev->recv_cq)
-        return -1;
+    struct ibv_device_attr caps;
+    if (ibv_query_device(dev->ctx, &caps) || caps.max_cqe < 2) goto cq_fail;
+    int capacity = caps.max_cqe < (1 << 16) ? caps.max_cqe : (1 << 16);
+    dev->recv_cq = ibv_create_cq(dev->ctx, capacity, NULL, dev->recv_chan, 0);
+    if (!dev->recv_cq) goto cq_fail;
+    dev->recv_capacity = dev->recv_cq->cqe / 2; /* reserve teardown headroom */
     cq_unmoderate(dev->recv_cq);
-    if (pthread_create(&dev->poller, NULL, recv_poller, dev) != 0)
-        return -1;
+    if (pthread_create(&dev->poller, NULL, recv_poller, dev) != 0) {
+        ibv_destroy_cq(dev->recv_cq); dev->recv_cq = NULL; goto cq_fail;
+    }
     pthread_detach(dev->poller);
     dev->poller_started = 1;
     return 0;
+cq_fail:
+    ibv_destroy_comp_channel(dev->recv_chan); dev->recv_chan = NULL;
+    return -1;
 }
 
 static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
@@ -948,6 +957,9 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
 
     pthread_mutex_lock(&g_dev_lock);
     int cq_rc = dev_shared_cq_start(dev);
+    if (!cq_rc && dev->recv_reserved + rc->nrecv <= dev->recv_capacity) {
+        dev->recv_reserved += rc->nrecv; rc->cq_reserved = rc->nrecv;
+    } else cq_rc = -1;
     pthread_mutex_unlock(&g_dev_lock);
     if (cq_rc != 0)
         goto fail;
@@ -1248,6 +1260,11 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
         close(rc->efd);
     if (rc->mr)
         ibv_dereg_mr(rc->mr);
+    if (rc->cq_reserved) {
+        pthread_mutex_lock(&g_dev_lock);
+        rc->dev->recv_reserved -= rc->cq_reserved;
+        pthread_mutex_unlock(&g_dev_lock);
+    }
     int counted = rc->counted;
     free(rc->arena);
     free(rc->recv_bufs);
