@@ -230,6 +230,9 @@ struct kv_lsm {
     uint64_t apply_next; /* WAL seq whose turn it is to hit the memtable */
     int io_failed;
     int fail_next_batch;
+    /* Process-local dirty hints, not Raft watermarks. Incremented under mu
+     * by applied metadata-key writes, including transaction resolve/import. */
+    uint64_t metadata_revision[4096];
     struct kv_buf scratch;
 };
 
@@ -327,6 +330,9 @@ int kv_seg_iter_open(struct kv_seg *s, struct kv_seg_iter **out);
 /* 1 MiB readahead for a reader that walks the whole segment (compaction,
  * snapshot export). Off by default: a prefix scan reads one block. */
 void kv_seg_iter_set_seq(struct kv_seg_iter *it, int seq);
+/* Immutable snapshot scans run without the live LSM lock. Skip mutable point
+ * cache slots while retaining shared immutable indexes and pinned fds. */
+void kv_seg_iter_set_private(struct kv_seg_iter *it, int private_read);
 void kv_seg_iter_close(struct kv_seg_iter *it);
 /* Positions at the first key >= seek (whole segment when plen is 0). */
 int kv_seg_iter_seek(struct kv_seg_iter *it, const uint8_t *seek, uint32_t plen);
