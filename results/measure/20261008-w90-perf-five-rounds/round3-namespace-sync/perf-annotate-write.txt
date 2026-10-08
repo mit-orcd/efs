@@ -1,0 +1,888 @@
+ Percent |	Source code & Disassembly of efs-bench for cpu-clock (195 samples, percent: local period)
+---------------------------------------------------------------------------------------------------------
+         : 0      0x414910 <write_object>:
+    0.00 :   414910:        pushq   %rbp
+    0.00 :   414911:        movq    %rsp, %rbp
+    0.00 :   414914:        pushq   %r15
+    0.00 :   414916:        pushq   %r14
+    0.00 :   414918:        pushq   %r13
+    0.00 :   41491a:        pushq   %r12
+    0.00 :   41491c:        movl    %esi, %r12d
+    0.00 :   41491f:        pushq   %rbx
+    0.00 :   414920:        movq    %rdi, %r14
+    0.00 :   414923:        andq    $-0x20, %rsp
+    0.00 :   414927:        leaq    (%r12,%r12,2), %rax
+    0.00 :   41492b:        subq    $0x120, %rsp
+    0.00 :   414932:        shlq    $0x4, %rax
+    0.00 :   414936:        movl    %edx, 0x5c(%rsp)
+    0.00 :   41493a:        movq    %rcx, 0x70(%rsp)
+    0.00 :   41493f:        movl    $0x2, 0x58(%rsp)
+    0.00 :   414947:        movq    %r12, 0x38(%rsp)
+    0.00 :   41494c:        addq    0x28(%rdi), %rax
+    0.00 :   414950:        movq    %rax, 0x60(%rsp)
+    0.00 :   414955:        movq    (%r14), %r12
+    0.00 :   414958:        movl    0xc(%r14), %r13d
+    0.00 :   41495c:        movq    0x8(%r12), %rax
+    0.00 :   414961:        movq    %rax, 0x78(%rsp)
+    0.00 :   414966:        testl   %r13d, %r13d
+    0.00 :   414969:        je      0x4149bc <write_object+0xac>
+    0.00 :   41496b:        movq    %rax, %rdi
+    0.00 :   41496e:        movl    $0x4c4789, %esi
+    0.00 :   414973:        movl    0x20(%r14), %ebx
+    0.00 :   414977:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   41497c:        testl   %eax, %eax
+    0.00 :   41497e:        je      0x414ea0 <write_object+0x590>
+    0.00 :   414984:        movl    0x18(%r14), %r9d
+    0.00 :   414988:        movl    0x10(%r14), %esi
+    0.00 :   41498c:        leal    (%rbx,%r13), %edi
+    0.00 :   414990:        movl    %ebx, %eax
+    0.00 :   414992:        xorl    %edx, %edx
+    0.00 :   414994:        divl    %r13d
+    0.00 :   414997:        movl    %edx, %eax
+    0.00 :   414999:        movl    %edx, %ecx
+    0.00 :   41499b:        xorl    %edx, %edx
+    0.51 :   41499d:        divl    %esi
+    0.00 :   41499f:        cmpl    %r9d, %eax
+    0.00 :   4149a2:        je      0x4149b6 <write_object+0xa6>
+    0.00 :   4149a4:        movq    0x30(%r14), %rax
+    0.00 :   4149a8:        movl    %ecx, %r15d
+    0.00 :   4149ab:        cmpb    $0x0, (%rax,%r15)
+    0.00 :   4149b0:        je      0x415350 <write_object+0xa40>
+    0.00 :   4149b6:        incl    %ebx
+    0.00 :   4149b8:        cmpl    %ebx, %edi
+    0.00 :   4149ba:        jne     0x414990 <write_object+0x80>
+    0.00 :   4149bc:        movq    0x78(%rsp), %rdi
+    0.00 :   4149c1:        movl    $0x4c4d9c, %esi
+    0.00 :   4149c6:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   4149cb:        testl   %eax, %eax
+    0.00 :   4149cd:        je      0x4150a0 <write_object+0x790>
+    0.00 :   4149d3:        movq    0x78(%rsp), %rdi
+    0.00 :   4149d8:        movl    $0x4c4e64, %esi
+    0.00 :   4149dd:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   4149e2:        testl   %eax, %eax
+    0.00 :   4149e4:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   4149ea:        movl    $0x1, %edi
+    0.00 :   4149ef:        leaq    0x90(%rsp), %rsi
+    0.00 :   4149f7:        callq   0x4041b0 <_init+0x1b0>
+    0.00 :   4149fc:        movq    0x90(%rsp), %rax
+    0.00 :   414a04:        movl    0x14(%r14), %edi
+    0.00 :   414a08:        movq    0x98(%rsp), %r13
+    0.00 :   414a10:        movq    %rax, 0x30(%rsp)
+    0.00 :   414a15:        testl   %edi, %edi
+    0.00 :   414a17:        je      0x4150c4 <write_object+0x7b4>
+    0.00 :   414a1d:        movl    0x18(%r14), %ecx
+    0.00 :   414a21:        xorl    %edx, %edx
+    0.00 :   414a23:        movl    $0xffffffff, %r9d
+    0.00 :   414a29:        xorl    %eax, %eax
+    0.00 :   414a2b:        nopl    (%rax,%rax)
+    0.00 :   414a30:        cmpl    %ecx, %eax
+    0.00 :   414a32:        je      0x414a85 <write_object+0x175>
+    0.00 :   414a34:        cmpl    $-0x1, %r9d
+    0.00 :   414a38:        jne     0x414a59 <write_object+0x149>
+    0.00 :   414a3a:        leal    0x1(%rax), %esi
+    0.00 :   414a3d:        addq    $0x100c, %rdx
+    0.00 :   414a44:        cmpl    %esi, %edi
+    0.00 :   414a46:        je      0x415541 <write_object+0xc31>
+    0.00 :   414a4c:        movl    %eax, %r9d
+    0.00 :   414a4f:        movl    %esi, %eax
+    0.00 :   414a51:        cmpl    %esi, %ecx
+    0.00 :   414a53:        je      0x415450 <write_object+0xb40>
+    0.00 :   414a59:        movq    0x48(%r14), %r8
+    0.00 :   414a5d:        movl    %r9d, %esi
+    0.00 :   414a60:        imulq   $0x100c, %rsi, %rsi
+    0.00 :   414a67:        addq    %r8, %rsi
+    0.00 :   414a6a:        movl    0x8(%rsi), %ebx
+    0.00 :   414a6d:        cmpl    %ebx, 0x8(%r8,%rdx)
+    0.00 :   414a72:        jb      0x414a3a <write_object+0x12a>
+    0.00 :   414a74:        incl    %eax
+    0.00 :   414a76:        addq    $0x100c, %rdx
+    0.00 :   414a7d:        cmpl    %edi, %eax
+    0.00 :   414a7f:        je      0x414a92 <write_object+0x182>
+    0.00 :   414a81:        cmpl    %eax, %ecx
+    0.00 :   414a83:        jne     0x414a6a <write_object+0x15a>
+    0.00 :   414a85:        incl    %eax
+    0.00 :   414a87:        addq    $0x100c, %rdx
+    0.00 :   414a8e:        cmpl    %eax, %edi
+    0.00 :   414a90:        jne     0x414a30 <write_object+0x120>
+    0.00 :   414a92:        movl    %r9d, %eax
+    0.00 :   414a95:        movl    %r9d, 0x78(%rsp)
+    0.00 :   414a9a:        cmpl    $-0x1, %eax
+    0.00 :   414a9d:        je      0x4150c4 <write_object+0x7b4>
+    0.00 :   414aa3:        movq    0x48(%r14), %rbx
+    0.00 :   414aa7:        movl    %eax, %r15d
+    0.00 :   414aaa:        movl    0x10(%r14), %esi
+    0.00 :   414aae:        imulq   $0x100c, %r15, %r15
+    0.00 :   414ab5:        leaq    (%rbx,%r15), %r12
+    0.00 :   414ab9:        cmpl    %esi, 0x8(%rbx,%r15)
+    0.00 :   414abe:        jae     0x4150c4 <write_object+0x7b4>
+    0.00 :   414ac4:        movl    0x1c(%r14), %r8d
+    0.00 :   414ac8:        movl    %ecx, %eax
+    0.00 :   414aca:        imulq   $0x100c, %rax, %rax
+    0.00 :   414ad1:        movq    %rax, 0x40(%rsp)
+    0.00 :   414ad6:        testl   %r8d, %r8d
+    0.00 :   414ad9:        je      0x415690 <write_object+0xd80>
+    0.00 :   414adf:        xorl    %ebx, %ebx
+    0.00 :   414ae1:        movq    %r15, 0x18(%rsp)
+    0.00 :   414ae6:        movl    $0x0, 0x68(%rsp)
+    0.00 :   414aee:        movq    %r14, %r15
+    0.00 :   414af1:        movq    %r13, 0x28(%rsp)
+    0.00 :   414af6:        movq    %rbx, %r14
+    0.00 :   414af9:        movl    %ecx, 0x24(%rsp)
+    0.00 :   414afd:        jmp     0x414b10 <write_object+0x200>
+    0.00 :   414aff:        nop
+    0.00 :   414b00:        incq    %r14
+    0.00 :   414b03:        cmpl    %r8d, %r14d
+    0.00 :   414b06:        jae     0x414c27 <write_object+0x317>
+    0.00 :   414b0c:        movl    0x10(%r15), %esi
+    0.00 :   414b10:        leaq    (%r14,%r14,2), %rcx
+    0.00 :   414b14:        xorl    %edx, %edx
+    0.00 :   414b16:        movl    0x78(%rsp), %edi
+    0.00 :   414b1a:        shlq    $0x4, %rcx
+    0.00 :   414b1e:        addq    0x28(%r15), %rcx
+    0.00 :   414b22:        movl    0x8(%rcx), %r10d
+    0.00 :   414b26:        movl    %r10d, %eax
+    0.00 :   414b29:        divl    %esi
+    0.00 :   414b2b:        cmpl    %edi, %eax
+    0.00 :   414b2d:        jne     0x414b00 <write_object+0x1f0>
+    0.00 :   414b2f:        movq    (%rcx), %rax
+    0.00 :   414b32:        leaq    0xc(%rcx), %r8
+    0.00 :   414b36:        movl    %r10d, %edx
+    0.00 :   414b39:        movl    %r14d, %esi
+    0.00 :   414b3c:        movq    %r15, %rdi
+    0.00 :   414b3f:        movq    %rax, %rcx
+    0.00 :   414b42:        callq   0x414600 <verify_location>
+    0.00 :   414b47:        testl   %eax, %eax
+    0.00 :   414b49:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   414b4f:        movq    (%r15), %rax
+    0.00 :   414b52:        movl    0x68(%rsp), %ecx
+    0.00 :   414b56:        movq    0x40(%rsp), %rdi
+    0.00 :   414b5b:        movq    0x40(%r15), %r10
+    0.00 :   414b5f:        movl    0x34(%rax), %r12d
+    0.00 :   414b63:        movq    0x48(%r15), %rax
+    0.00 :   414b67:        movq    %r12, %r13
+    0.00 :   414b6a:        movl    (%rax,%rdi), %r11d
+    0.00 :   414b6e:        imulq   %rcx, %r12
+    0.00 :   414b72:        testl   %r13d, %r13d
+    0.00 :   414b75:        je      0x4154f1 <write_object+0xbe1>
+    0.00 :   414b7b:        xorl    %ebx, %ebx
+    0.00 :   414b7d:        movq    %r14, 0x50(%rsp)
+    0.00 :   414b82:        movq    %r15, 0x48(%rsp)
+    0.00 :   414b87:        movq    %r10, %r14
+    0.00 :   414b8a:        movl    %ebx, %r15d
+    0.00 :   414b8d:        movl    %r11d, %ebx
+    0.00 :   414b90:        jmp     0x414bae <write_object+0x29e>
+    0.00 :   414b92:        nopw    %cs:(%rax,%rax)
+    0.00 :   414b9d:        nopl    (%rax)
+    0.00 :   414ba0:        je      0x415406 <write_object+0xaf6>
+    0.00 :   414ba6:        addl    %eax, %r15d
+    0.00 :   414ba9:        cmpl    %r13d, %r15d
+    0.00 :   414bac:        jae     0x414be0 <write_object+0x2d0>
+    0.00 :   414bae:        movl    %r15d, %esi
+    0.00 :   414bb1:        movl    %r13d, %edx
+    0.00 :   414bb4:        movl    %ebx, %edi
+    0.00 :   414bb6:        leaq    (%rsi,%r12), %rcx
+    0.00 :   414bba:        subl    %r15d, %edx
+    0.00 :   414bbd:        addq    %r14, %rsi
+    0.00 :   414bc0:        callq   0x4040b0 <_init+0xb0>
+    0.00 :   414bc5:        testq   %rax, %rax
+    0.00 :   414bc8:        jns     0x414ba0 <write_object+0x290>
+    0.00 :   414bca:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   414bcf:        cmpl    $0x4, (%rax)
+    0.00 :   414bd2:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   414bd8:        cmpl    %r13d, %r15d
+    0.00 :   414bdb:        jb      0x414bae <write_object+0x29e>
+    0.00 :   414bdd:        nopl    (%rax)
+    0.00 :   414be0:        movq    0x48(%rsp), %r15
+    0.00 :   414be5:        movq    0x50(%rsp), %r14
+    0.00 :   414bea:        movq    (%r15), %rax
+    0.00 :   414bed:        movl    0x34(%rax), %eax
+    0.00 :   414bf0:        vmovq   0xb1278(%rip), %xmm1  # 0x4c5e70
+    0.00 :   414bf8:        movl    0x1c(%r15), %r8d
+    0.00 :   414bfc:        incq    %r14
+    0.00 :   414bff:        incl    0x68(%rsp)
+    0.00 :   414c03:        vpinsrq $0x1, %rax, %xmm1, %xmm0
+    0.00 :   414c09:        movq    0x70(%rsp), %rax
+    0.00 :   414c0e:        vpaddq  0x2b848(%rax), %xmm0, %xmm0
+    0.00 :   414c16:        vmovdqu %xmm0, 0x2b848(%rax)
+    0.00 :   414c1e:        cmpl    %r8d, %r14d
+    0.00 :   414c21:        jb      0x414b0c <write_object+0x1fc>
+    0.00 :   414c27:        movq    %r15, %r14
+    0.00 :   414c2a:        movl    0x24(%rsp), %ecx
+    0.00 :   414c2e:        movl    $0x4c4cc8, %esi
+    0.00 :   414c33:        movl    %r8d, 0x68(%rsp)
+    0.00 :   414c38:        movq    (%r14), %rax
+    0.00 :   414c3b:        movq    0x28(%rsp), %r13
+    0.00 :   414c40:        movq    0x18(%rsp), %r15
+    0.00 :   414c45:        movl    %ecx, 0x50(%rsp)
+    0.00 :   414c49:        movq    0x10(%rax), %rdi
+    0.00 :   414c4d:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   414c52:        movl    0x68(%rsp), %r8d
+    0.00 :   414c57:        movl    0x50(%rsp), %ecx
+    0.00 :   414c5b:        testl   %eax, %eax
+    0.00 :   414c5d:        jne     0x41554a <write_object+0xc3a>
+    0.00 :   414c63:        testl   %r8d, %r8d
+    0.00 :   414c66:        je      0x415681 <write_object+0xd71>
+    0.00 :   414c6c:        xorl    %r11d, %r11d
+    0.00 :   414c6f:        xorl    %edi, %edi
+    0.00 :   414c71:        cmpl    $0x1, %ecx
+    0.00 :   414c74:        jne     0x415620 <write_object+0xd10>
+    0.00 :   414c7a:        xorl    %ecx, %ecx
+    0.00 :   414c7c:        movq    0x28(%r14), %r9
+    0.00 :   414c80:        movl    0x10(%r14), %esi
+    0.00 :   414c84:        leaq    (%r9,%r11), %r10
+    0.00 :   414c88:        xorl    %edx, %edx
+    0.00 :   414c8a:        movl    0x8(%r10), %eax
+    0.00 :   414c8e:        divl    %esi
+    0.00 :   414c90:        cmpl    %eax, 0x78(%rsp)
+    0.00 :   414c94:        je      0x415420 <write_object+0xb10>
+    0.00 :   414c9a:        incl    %ecx
+    0.00 :   414c9c:        addq    $0x30, %r11
+    0.00 :   414ca0:        cmpl    %r8d, %ecx
+    0.00 :   414ca3:        jb      0x414c84 <write_object+0x374>
+    0.00 :   414ca5:        movq    0x48(%r14), %rbx
+    0.00 :   414ca9:        leaq    (%rbx,%r15), %r12
+    0.00 :   414cad:        movq    0x40(%rsp), %rax
+    0.00 :   414cb2:        leaq    0x90(%rsp), %rsi
+    0.00 :   414cba:        addq    %rax, %rbx
+    0.00 :   414cbd:        movl    %edi, 0x8(%rbx)
+    0.00 :   414cc0:        movl    $0x1, 0x4(%rbx)
+    0.00 :   414cc7:        movl    (%r12), %edi
+    0.00 :   414ccb:        callq   0x404220 <_init+0x220>
+    0.00 :   414cd0:        testl   %eax, %eax
+    0.00 :   414cd2:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   414cd8:        movq    0x48(%r14), %rdi
+    0.00 :   414cdc:        movq    0x70(%rsp), %rbx
+    0.00 :   414ce1:        movl    $0x9, %eax
+    0.00 :   414ce6:        shlxq   %rax, 0xd0(%rsp), %rax
+    0.00 :   414cf0:        addq    %r15, %rdi
+    0.00 :   414cf3:        addq    %rax, 0x2b858(%rbx)
+    0.00 :   414cfa:        addq    $0xc, %rdi
+    0.00 :   414cfe:        callq   0x4042f0 <_init+0x2f0>
+    0.00 :   414d03:        testl   %eax, %eax
+    0.00 :   414d05:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   414d0b:        movq    0x48(%r14), %rax
+    0.00 :   414d0f:        movl    (%rax,%r15), %edi
+    0.00 :   414d13:        callq   0x404150 <_init+0x150>
+    0.00 :   414d18:        testl   %eax, %eax
+    0.00 :   414d1a:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   414d20:        movq    0x48(%r14), %rax
+    0.00 :   414d24:        movl    0x78(%rsp), %ebx
+    0.00 :   414d28:        movl    $0xffffffff, (%rax,%r15)
+    0.00 :   414d30:        movl    0x10(%r14), %eax
+    0.00 :   414d34:        movl    %ebx, %esi
+    0.00 :   414d36:        leal    0x1(%rbx), %ecx
+    0.00 :   414d39:        imull   %eax, %esi
+    0.00 :   414d3c:        leal    (%rax,%rsi), %edx
+    0.00 :   414d3f:        movl    %esi, %eax
+    0.00 :   414d41:        cmpl    %edx, %esi
+    0.00 :   414d43:        jae     0x414da4 <write_object+0x494>
+    0.00 :   414d45:        nopw    %cs:(%rax,%rax)
+    0.00 :   414d50:        nopw    %cs:(%rax,%rax)
+    0.00 :   414d5b:        nopw    %cs:(%rax,%rax)
+    0.00 :   414d66:        nopw    %cs:(%rax,%rax)
+    0.00 :   414d71:        nopw    %cs:(%rax,%rax)
+    0.00 :   414d7c:        nopl    (%rax)
+    0.00 :   414d80:        movq    0x30(%r14), %rdx
+    0.00 :   414d84:        addq    %rax, %rdx
+    0.00 :   414d87:        cmpb    $0x2, (%rdx)
+    0.00 :   414d8a:        jne     0x414d93 <write_object+0x483>
+    0.00 :   414d8c:        decq    0x1078(%r14)
+    0.00 :   414d93:        movb    $0x0, (%rdx)
+    0.00 :   414d96:        movl    0x10(%r14), %edx
+    0.00 :   414d9a:        incq    %rax
+    0.00 :   414d9d:        imull   %ecx, %edx
+    0.00 :   414da0:        cmpl    %edx, %eax
+    0.00 :   414da2:        jb      0x414d80 <write_object+0x470>
+    0.00 :   414da4:        movl    0x78(%rsp), %esi
+    0.00 :   414da8:        movq    %r14, %rdi
+    0.00 :   414dab:        callq   0x413900 <create_segment>
+    0.00 :   414db0:        testl   %eax, %eax
+    0.00 :   414db2:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   414db8:        movl    0x78(%rsp), %eax
+    0.00 :   414dbc:        movl    $0x4c4cc8, %esi
+    0.00 :   414dc1:        movl    %eax, 0x18(%r14)
+    0.00 :   414dc5:        movq    (%r14), %rax
+    0.00 :   414dc8:        movq    0x10(%rax), %rdi
+    0.00 :   414dcc:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   414dd1:        testl   %eax, %eax
+    0.00 :   414dd3:        je      0x414dea <write_object+0x4da>
+    0.00 :   414dd5:        movq    0x70(%rsp), %rsi
+    0.00 :   414dda:        movq    %r14, %rdi
+    0.00 :   414ddd:        callq   0x414330 <flush_worker>
+    0.00 :   414de2:        testl   %eax, %eax
+    0.00 :   414de4:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   414dea:        movq    0x70(%rsp), %rax
+    0.00 :   414def:        leaq    0x80(%rsp), %rsi
+    0.00 :   414df7:        movl    $0x1, %edi
+    0.00 :   414dfc:        incq    0x2b868(%rax)
+    0.00 :   414e03:        callq   0x4041b0 <_init+0x1b0>
+    0.00 :   414e08:        imulq   $0x3b9aca00, 0x80(%rsp), %rax
+    0.00 :   414e14:        imulq   $-0x3b9aca00, 0x30(%rsp), %rcx
+    0.00 :   414e1d:        addq    0x88(%rsp), %rcx
+    0.00 :   414e25:        subq    %r13, %rax
+    0.00 :   414e28:        addq    %rax, %rcx
+    0.00 :   414e2b:        movabsq $0x20c49ba5e353f7cf, %rax
+    0.00 :   414e35:        movq    %rcx, %rdx
+    0.00 :   414e38:        shrq    $0x3, %rdx
+    0.00 :   414e3c:        mulq    %rdx
+    0.00 :   414e3f:        shrq    $0x4, %rdx
+    0.00 :   414e43:        movl    %edx, %eax
+    0.00 :   414e45:        cmpq    $0x3e7ff, %rcx
+    0.00 :   414e4c:        jbe     0x414e66 <write_object+0x556>
+    0.00 :   414e4e:        movl    $0x38, %ecx
+    0.00 :   414e53:        lzcntq  %rdx, %rax
+    0.00 :   414e58:        subl    %eax, %ecx
+    0.00 :   414e5a:        movl    %ecx, %eax
+    0.00 :   414e5c:        shrxq   %rcx, %rdx, %rcx
+    0.00 :   414e61:        shll    $0x7, %eax
+    0.00 :   414e64:        addl    %ecx, %eax
+    0.00 :   414e66:        movq    0x70(%rsp), %rbx
+    0.00 :   414e6b:        incq    0x1d030(%rbx,%rax,8)
+    0.00 :   414e73:        incq    0x1d020(%rbx)
+    0.00 :   414e7a:        cmpq    %rdx, 0x1d028(%rbx)
+    0.00 :   414e81:        jae     0x4150b9 <write_object+0x7a9>
+    0.00 :   414e87:        movq    %rdx, 0x1d028(%rbx)
+    0.00 :   414e8e:        jmp     0x4150b9 <write_object+0x7a9>
+    0.00 :   414e93:        nopw    %cs:(%rax,%rax)
+    0.00 :   414e9e:        nop
+    0.00 :   414ea0:        movq    0x30(%r14), %rsi
+    0.00 :   414ea4:        leal    (%rbx,%r13), %edi
+    0.00 :   414ea8:        jmp     0x414eca <write_object+0x5ba>
+    0.00 :   414eaa:        nopw    %cs:(%rax,%rax)
+    0.00 :   414eb5:        nopw    %cs:(%rax,%rax)
+    0.00 :   414ec0:        incl    %ebx
+    0.00 :   414ec2:        cmpl    %edi, %ebx
+    0.00 :   414ec4:        je      0x4149bc <write_object+0xac>
+    0.00 :   414eca:        xorl    %edx, %edx
+    0.00 :   414ecc:        movl    %ebx, %eax
+    0.00 :   414ece:        divl    %r13d
+    0.00 :   414ed1:        movl    %edx, %r15d
+    0.00 :   414ed4:        cmpb    $0x0, (%rsi,%r15)
+    0.00 :   414ed9:        jne     0x414ec0 <write_object+0x5b0>
+    0.00 :   414edb:        movl    %r13d, %r9d
+    0.00 :   414ede:        movq    %r12, %r13
+    0.00 :   414ee1:        movq    0x38(%rsp), %r12
+    0.00 :   414ee6:        movl    %edx, %ecx
+    0.00 :   414ee8:        movq    %r14, %rbx
+    0.00 :   414eeb:        leal    0x1(%rcx), %eax
+    0.00 :   414eee:        xorl    %edx, %edx
+    0.00 :   414ef0:        movl    0x8(%rbx), %edi
+    0.00 :   414ef3:        xorl    %esi, %esi
+    0.00 :   414ef5:        divl    %r9d
+    0.00 :   414ef8:        movq    0x60(%rsp), %rax
+    0.00 :   414efd:        shlq    $0x20, %rdi
+    0.00 :   414f01:        movq    (%rax), %rax
+    2.56 :   414f04:        orq     %r12, %rdi
+    0.00 :   414f07:        movq    %rax, 0x78(%rsp)
+    0.00 :   414f0c:        incq    %rax
+    0.00 :   414f0f:        movl    %edx, 0x20(%rbx)
+    0.00 :   414f12:        movl    0x30(%r13), %r8d
+    0.00 :   414f16:        movabsq $-0x61c8864680b583eb, %rdx
+    0.00 :   414f20:        movq    %rax, 0x68(%rsp)
+    0.00 :   414f25:        xorq    %rdi, %rax
+    0.00 :   414f28:        xorq    %rdx, %rax
+    0.00 :   414f2b:        testl   %r8d, %r8d
+    0.00 :   414f2e:        je      0x414f73 <write_object+0x663>
+    0.00 :   414f30:        nopw    %cs:(%rax,%rax)
+    0.00 :   414f3b:        nopl    (%rax,%rax)
+    0.00 :   414f40:        movq    %rax, %rdx
+    0.00 :   414f43:        movq    0x38(%rbx), %r8
+   20.51 :   414f47:        shlq    $0xd, %rdx
+   14.87 :   414f4b:        xorq    %rdx, %rax
+    0.00 :   414f4e:        movq    %rax, %rdx
+   26.15 :   414f51:        shrq    $0x7, %rdx
+    0.00 :   414f55:        xorq    %rax, %rdx
+    2.05 :   414f58:        movq    %rdx, %rax
+   32.82 :   414f5b:        shlq    $0x11, %rax
+    0.00 :   414f5f:        xorq    %rdx, %rax
+    0.00 :   414f62:        movl    %esi, %edx
+    0.00 :   414f64:        addl    $0x8, %esi
+    0.00 :   414f67:        movq    %rax, (%r8,%rdx)
+    0.00 :   414f6b:        movq    (%rbx), %rdx
+    0.00 :   414f6e:        cmpl    0x30(%rdx), %esi
+    0.00 :   414f71:        jb      0x414f40 <write_object+0x630>
+    0.00 :   414f73:        movq    0x38(%rbx), %rax
+    0.00 :   414f77:        xorl    %esi, %esi
+    0.00 :   414f79:        movl    %ecx, 0x78(%rsp)
+    0.00 :   414f7d:        movq    %rdi, (%rax)
+    0.00 :   414f80:        movq    0x68(%rsp), %rdi
+    0.00 :   414f85:        movq    0x38(%rbx), %rax
+    0.00 :   414f89:        movq    %rdi, 0x8(%rax)
+    0.00 :   414f8d:        movq    (%rbx), %rax
+    0.00 :   414f90:        movl    0x30(%rax), %edi
+    0.00 :   414f93:        movl    0x34(%rax), %edx
+    0.00 :   414f96:        subl    %edi, %edx
+    0.00 :   414f98:        addq    0x38(%rbx), %rdi
+    0.00 :   414f9c:        callq   0x4040d0 <_init+0xd0>
+    0.00 :   414fa1:        movq    (%rbx), %rax
+    0.00 :   414fa4:        movq    0x38(%rbx), %rdi
+    0.00 :   414fa8:        movl    0x30(%rax), %esi
+    0.00 :   414fab:        leaq    (%rdi,%rsi), %rdx
+    0.00 :   414faf:        callq   0x441aa0 <efs_hash>
+    0.00 :   414fb4:        movq    (%rbx), %r12
+    0.00 :   414fb7:        movl    $0x4c4789, %esi
+    0.00 :   414fbc:        movq    0x8(%r12), %rdi
+    0.00 :   414fc1:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   414fc6:        movl    0x78(%rsp), %ecx
+    0.00 :   414fca:        testl   %eax, %eax
+    0.00 :   414fcc:        je      0x415300 <write_object+0x9f0>
+    0.00 :   414fd2:        movl    0x10(%rbx), %edi
+    0.00 :   414fd5:        movl    %ecx, %eax
+    0.00 :   414fd7:        xorl    %edx, %edx
+    0.00 :   414fd9:        divl    %edi
+    0.00 :   414fdb:        imulq   $0x100c, %rax, %rax
+    0.00 :   414fe2:        addq    0x48(%rbx), %rax
+    0.00 :   414fe6:        movl    (%rax), %eax
+    0.00 :   414fe8:        movl    %eax, 0x78(%rsp)
+    0.00 :   414fec:        testl   %eax, %eax
+    0.00 :   414fee:        js      0x4150cf <write_object+0x7bf>
+    0.00 :   414ff4:        movl    %ecx, %eax
+    0.00 :   414ff6:        xorl    %edx, %edx
+    0.00 :   414ff8:        movl    0x34(%r12), %r13d
+    0.00 :   414ffd:        divl    %edi
+    0.00 :   414fff:        movl    %r13d, %eax
+    0.00 :   415002:        imulq   %rax, %rdx
+    0.00 :   415006:        movq    %rdx, %rax
+    0.00 :   415009:        movq    0x38(%rbx), %rdi
+    0.00 :   41500d:        xorl    %r14d, %r14d
+    0.00 :   415010:        testl   %r13d, %r13d
+    0.00 :   415013:        je      0x4150fc <write_object+0x7ec>
+    0.00 :   415019:        movl    %r14d, %r12d
+    0.00 :   41501c:        movq    %r15, 0x50(%rsp)
+    0.00 :   415021:        movq    %rax, %r14
+    0.00 :   415024:        movq    %rdi, %r15
+    0.00 :   415027:        movl    %ecx, 0x48(%rsp)
+    0.00 :   41502b:        jmp     0x415042 <write_object+0x732>
+    0.00 :   41502d:        nopl    (%rax)
+    0.00 :   415030:        je      0x415363 <write_object+0xa53>
+    0.00 :   415036:        addl    %eax, %r12d
+    0.00 :   415039:        cmpl    %r13d, %r12d
+    0.00 :   41503c:        jae     0x4150f0 <write_object+0x7e0>
+    0.00 :   415042:        movl    0x78(%rsp), %edi
+    0.00 :   415046:        movl    %r12d, %esi
+    0.00 :   415049:        movl    %r13d, %edx
+    0.00 :   41504c:        leaq    (%rsi,%r14), %rcx
+    0.00 :   415050:        subl    %r12d, %edx
+    0.00 :   415053:        addq    %r15, %rsi
+    0.00 :   415056:        callq   0x4040b0 <_init+0xb0>
+    0.00 :   41505b:        testq   %rax, %rax
+    0.00 :   41505e:        jns     0x415030 <write_object+0x720>
+    0.00 :   415060:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   415065:        movl    (%rax), %edx
+    0.00 :   415067:        cmpl    $0x4, %edx
+    0.00 :   41506a:        je      0x415039 <write_object+0x729>
+    0.00 :   41506c:        movq    %rax, %r12
+    0.00 :   41506f:        movq    (%rbx), %rax
+    0.00 :   415072:        movl    $0x4c4789, %esi
+    0.00 :   415077:        movl    %edx, 0x70(%rsp)
+    0.00 :   41507b:        movq    0x8(%rax), %rdi
+    0.00 :   41507f:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   415084:        movl    0x70(%rsp), %edx
+    0.00 :   415088:        testl   %eax, %eax
+    0.00 :   41508a:        je      0x41552f <write_object+0xc1f>
+    0.00 :   415090:        movl    %edx, (%r12)
+    0.00 :   415094:        jmp     0x4150cf <write_object+0x7bf>
+    0.00 :   415096:        nopw    %cs:(%rax,%rax)
+    0.00 :   4150a0:        movl    0x58(%r14), %edi
+    0.00 :   4150a4:        testl   %edi, %edi
+    0.00 :   4150a6:        je      0x4150cf <write_object+0x7bf>
+    0.00 :   4150a8:        movq    0x70(%rsp), %rsi
+    0.00 :   4150ad:        movq    %r14, %rdi
+    0.00 :   4150b0:        callq   0x413a80 <drain_punches>
+    0.00 :   4150b5:        testl   %eax, %eax
+    0.00 :   4150b7:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   4150b9:        cmpl    $0x1, 0x58(%rsp)
+    0.00 :   4150be:        jne     0x415674 <write_object+0xd64>
+    0.00 :   4150c4:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   4150c9:        movl    $0x1c, (%rax)
+    0.00 :   4150cf:        leaq    -0x28(%rbp), %rsp
+    0.00 :   4150d3:        movl    $0xffffffff, %eax
+    0.00 :   4150d8:        popq    %rbx
+    0.00 :   4150d9:        popq    %r12
+    0.00 :   4150db:        popq    %r13
+    0.00 :   4150dd:        popq    %r14
+    0.00 :   4150df:        popq    %r15
+    0.00 :   4150e1:        popq    %rbp
+    0.00 :   4150e2:        retq
+    0.00 :   4150e3:        nopw    %cs:(%rax,%rax)
+    0.00 :   4150ee:        nop
+    0.00 :   4150f0:        movq    0x50(%rsp), %r15
+    0.00 :   4150f5:        movl    0x48(%rsp), %ecx
+    0.00 :   4150f9:        movq    (%rbx), %r12
+    0.00 :   4150fc:        movq    0x8(%r12), %r13
+    0.00 :   415101:        movl    $0x4c4789, %esi
+    0.00 :   415106:        movl    %ecx, 0x50(%rsp)
+    0.00 :   41510a:        movq    %r12, %r14
+    0.00 :   41510d:        movq    %r13, %rdi
+    0.00 :   415110:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   415115:        movl    0x50(%rsp), %ecx
+    0.00 :   415119:        movl    %eax, %edx
+    0.00 :   41511b:        movl    0x5c(%rsp), %eax
+    0.00 :   41511f:        orl     %edx, %eax
+    0.00 :   415121:        je      0x415468 <write_object+0xb58>
+    0.00 :   415127:        movl    %ecx, 0x48(%rsp)
+    0.00 :   41512b:        movl    %edx, 0x50(%rsp)
+    0.00 :   41512f:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   415134:        movl    0x50(%rsp), %edx
+    0.00 :   415138:        movl    0x48(%rsp), %ecx
+    0.00 :   41513c:        movq    %rax, %r12
+    0.00 :   41513f:        testl   %edx, %edx
+    0.00 :   415141:        je      0x4154da <write_object+0xbca>
+    0.00 :   415147:        movl    %ecx, %eax
+    0.00 :   415149:        xorl    %edx, %edx
+    0.00 :   41514b:        movq    0x48(%rbx), %rsi
+    0.00 :   41514f:        divl    0x10(%rbx)
+    0.00 :   415152:        xorl    %edx, %edx
+    0.00 :   415154:        imulq   $0x100c, %rax, %rax
+    0.00 :   41515b:        movl    $0x1, 0x4(%rsi,%rax)
+    0.00 :   415163:        movl    %ecx, %eax
+    0.00 :   415165:        divl    0x10(%rbx)
+    0.00 :   415168:        imulq   $0x100c, %rax, %rax
+    0.00 :   41516f:        incl    0x8(%rsi,%rax)
+    0.00 :   415173:        movl    0x5c(%rsp), %edx
+    0.00 :   415177:        testl   %edx, %edx
+    0.00 :   415179:        jne     0x4152a0 <write_object+0x990>
+    0.00 :   41517f:        movq    0x10(%r14), %r14
+    0.00 :   415183:        movl    $0x4c4cc8, %esi
+    0.00 :   415188:        movl    %ecx, 0x78(%rsp)
+    0.00 :   41518c:        movq    %r14, %rdi
+    0.00 :   41518f:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   415194:        movl    0x78(%rsp), %ecx
+    0.00 :   415198:        testl   %eax, %eax
+    0.00 :   41519a:        je      0x4151b5 <write_object+0x8a5>
+    0.00 :   41519c:        movl    $0x4c4789, %esi
+    0.00 :   4151a1:        movq    %r13, %rdi
+    0.00 :   4151a4:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   4151a9:        movl    0x78(%rsp), %ecx
+    0.00 :   4151ad:        testl   %eax, %eax
+    0.00 :   4151af:        jne     0x415392 <write_object+0xa82>
+    0.00 :   4151b5:        movq    0x30(%rbx), %rax
+    0.00 :   4151b9:        movq    0x60(%rsp), %rdi
+    0.00 :   4151be:        movl    0x8(%rdi), %esi
+    0.51 :   4151c1:        movb    $0x1, (%rax,%r15)
+    0.00 :   4151c6:        movq    0x68(%rsp), %rax
+    0.00 :   4151cb:        movq    0x38(%rbx), %rdx
+    0.00 :   4151cf:        movl    %ecx, 0x8(%rdi)
+    0.00 :   4151d2:        movq    %rax, (%rdi)
+    0.00 :   4151d5:        movq    (%rbx), %rax
+    0.00 :   4151d8:        movl    0x30(%rax), %eax
+    0.00 :   4151db:        vmovdqu8        (%rdx,%rax), %ymm0
+    0.00 :   4151e2:        vmovdqu8        %ymm0, 0xc(%rdi)
+    0.00 :   4151ec:        movq    (%rbx), %rdx
+    0.00 :   4151ef:        movl    0x60(%rdx), %eax
+    0.00 :   4151f2:        testl   %eax, %eax
+    0.00 :   4151f4:        je      0x41520f <write_object+0x8ff>
+    0.00 :   4151f6:        movl    0x58(%rbx), %eax
+    0.00 :   4151f9:        cmpl    0x48(%rdx), %eax
+    0.00 :   4151fc:        jae     0x4156b8 <write_object+0xda8>
+    0.00 :   415202:        movq    0x50(%rbx), %rdx
+    0.00 :   415206:        leal    0x1(%rax), %edi
+    0.00 :   415209:        movl    %edi, 0x58(%rbx)
+    0.00 :   41520c:        movl    %ecx, (%rdx,%rax,4)
+    0.00 :   41520f:        movq    0x70(%rsp), %r14
+    0.00 :   415214:        movq    %rbx, %rdi
+    0.00 :   415217:        movq    %r14, %rdx
+    0.00 :   41521a:        vzeroupper
+    0.00 :   41521d:        callq   0x414130 <retire_location>
+    0.00 :   415222:        testl   %eax, %eax
+    0.00 :   415224:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   41522a:        movq    (%rbx), %r13
+    0.00 :   41522d:        movq    0x2b838(%r14), %rdi
+    0.00 :   415234:        movq    %r14, %rax
+    0.00 :   415237:        movl    $0x4c4cc8, %esi
+    0.00 :   41523c:        movq    0x10(%r13), %r12
+    0.00 :   415240:        leaq    0x1(%rdi), %r14
+    0.00 :   415244:        movq    %rdi, 0x78(%rsp)
+    0.00 :   415249:        movq    %r14, 0x2b838(%rax)
+    0.00 :   415250:        movq    %r12, %rdi
+    0.00 :   415253:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   415258:        testl   %eax, %eax
+    0.00 :   41525a:        je      0x4152e3 <write_object+0x9d3>
+    0.00 :   415260:        movl    $0x4c4da2, %esi
+    0.00 :   415265:        movq    %r12, %rdi
+    0.00 :   415268:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   41526d:        testl   %eax, %eax
+    0.00 :   41526f:        je      0x415282 <write_object+0x972>
+    0.00 :   415271:        movl    0x48(%r13), %ecx
+    0.00 :   415275:        movq    %r14, %rax
+    0.00 :   415278:        xorl    %edx, %edx
+    0.00 :   41527a:        divq    %rcx
+    0.00 :   41527d:        testq   %rdx, %rdx
+    0.00 :   415280:        jne     0x4152e3 <write_object+0x9d3>
+    0.00 :   415282:        movq    0x70(%rsp), %rsi
+    0.00 :   415287:        leaq    -0x28(%rbp), %rsp
+    0.00 :   41528b:        movq    %rbx, %rdi
+    0.00 :   41528e:        popq    %rbx
+    0.00 :   41528f:        popq    %r12
+    0.00 :   415291:        popq    %r13
+    0.00 :   415293:        popq    %r14
+    0.00 :   415295:        popq    %r15
+    0.00 :   415297:        popq    %rbp
+    0.00 :   415298:        jmp     0x414330 <flush_worker>
+    0.00 :   41529d:        nopl    (%rax)
+    0.00 :   4152a0:        movq    0x30(%rbx), %rax
+    0.00 :   4152a4:        movq    0x60(%rsp), %rdi
+    0.00 :   4152a9:        movb    $0x1, (%rax,%r15)
+    0.00 :   4152ae:        movq    0x68(%rsp), %rax
+    0.00 :   4152b3:        movq    0x38(%rbx), %rdx
+    0.00 :   4152b7:        movl    %ecx, 0x8(%rdi)
+    0.00 :   4152ba:        movq    %rax, (%rdi)
+    0.00 :   4152bd:        movq    (%rbx), %rax
+    0.00 :   4152c0:        movl    0x30(%rax), %eax
+    0.00 :   4152c3:        vmovdqu8        (%rdx,%rax), %ymm0
+    0.00 :   4152ca:        movq    0x70(%rsp), %rax
+    0.00 :   4152cf:        vmovdqu8        %ymm0, 0xc(%rdi)
+    0.00 :   4152d9:        incq    0x2b838(%rax)
+    0.00 :   4152e0:        vzeroupper
+    0.00 :   4152e3:        leaq    -0x28(%rbp), %rsp
+    0.00 :   4152e7:        xorl    %eax, %eax
+    0.00 :   4152e9:        popq    %rbx
+    0.00 :   4152ea:        popq    %r12
+    0.00 :   4152ec:        popq    %r13
+    0.00 :   4152ee:        popq    %r14
+    0.00 :   4152f0:        popq    %r15
+    0.00 :   4152f2:        popq    %rbp
+    0.00 :   4152f3:        retq
+    0.00 :   4152f4:        nopw    %cs:(%rax,%rax)
+    0.00 :   4152ff:        nop
+    0.00 :   415300:        movl    $0x1, %edx
+    0.00 :   415305:        movl    %ecx, %esi
+    0.00 :   415307:        movq    %rbx, %rdi
+    0.00 :   41530a:        movl    %ecx, 0x50(%rsp)
+    0.00 :   41530e:        callq   0x414090 <open_location.part.0>
+    0.00 :   415313:        movl    %eax, 0x78(%rsp)
+    0.00 :   415317:        testl   %eax, %eax
+    0.00 :   415319:        js      0x4150cf <write_object+0x7bf>
+    0.00 :   41531f:        movq    (%rbx), %r12
+    0.00 :   415322:        movl    $0x4c4789, %esi
+    0.00 :   415327:        movq    0x8(%r12), %rdi
+    0.00 :   41532c:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   415331:        movl    0x34(%r12), %r13d
+    0.00 :   415336:        movl    0x50(%rsp), %ecx
+    0.00 :   41533a:        testl   %eax, %eax
+    0.00 :   41533c:        jne     0x4156c8 <write_object+0xdb8>
+    0.00 :   415342:        xorl    %eax, %eax
+    0.00 :   415344:        jmp     0x415009 <write_object+0x6f9>
+    0.00 :   415349:        nopl    (%rax)
+    0.00 :   415350:        movl    %r13d, %r9d
+    0.00 :   415353:        movq    %r14, %rbx
+    0.00 :   415356:        movq    %r12, %r13
+    0.00 :   415359:        movq    0x38(%rsp), %r12
+    0.00 :   41535e:        jmp     0x414eeb <write_object+0x5db>
+    0.00 :   415363:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   415368:        movl    $0x4c4789, %esi
+    0.00 :   41536d:        movq    %rax, %r12
+    0.00 :   415370:        movq    (%rbx), %rax
+    0.00 :   415373:        movq    0x8(%rax), %rdi
+    0.00 :   415377:        movl    $0x5, (%r12)
+    0.00 :   41537f:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   415384:        testl   %eax, %eax
+    0.00 :   415386:        je      0x4153fb <write_object+0xaeb>
+    0.00 :   415388:        movl    $0x5, %edx
+    0.00 :   41538d:        jmp     0x415090 <write_object+0x780>
+    0.00 :   415392:        movl    $0x4c4da2, %esi
+    0.00 :   415397:        movq    %r14, %rdi
+    0.00 :   41539a:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   41539f:        movl    0x78(%rsp), %ecx
+    0.00 :   4153a3:        testl   %eax, %eax
+    0.00 :   4153a5:        jne     0x4151b5 <write_object+0x8a5>
+    0.00 :   4153ab:        movl    %ecx, %eax
+    0.00 :   4153ad:        xorl    %edx, %edx
+    0.00 :   4153af:        movl    %ecx, %r14d
+    0.00 :   4153b2:        divl    0x10(%rbx)
+    0.00 :   4153b5:        imulq   $0x100c, %rax, %rax
+    0.00 :   4153bc:        addq    0x48(%rbx), %rax
+    0.00 :   4153c0:        movl    (%rax), %r13d
+    0.00 :   4153c3:        jmp     0x4153db <write_object+0xacb>
+    0.00 :   4153c5:        nopw    %cs:(%rax,%rax)
+    0.00 :   4153d0:        cmpl    $0x4, (%r12)
+    0.00 :   4153d5:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   4153db:        movl    %r13d, %edi
+    0.00 :   4153de:        callq   0x404530 <_init+0x530>
+    0.00 :   4153e3:        testl   %eax, %eax
+    0.00 :   4153e5:        jne     0x4153d0 <write_object+0xac0>
+    0.00 :   4153e7:        movq    0x70(%rsp), %rax
+    0.00 :   4153ec:        movl    %r14d, %ecx
+    0.00 :   4153ef:        incq    0x2b860(%rax)
+    0.00 :   4153f6:        jmp     0x4151b5 <write_object+0x8a5>
+    0.00 :   4153fb:        movl    0x78(%rsp), %edi
+    0.00 :   4153ff:        callq   0x404150 <_init+0x150>
+    0.00 :   415404:        jmp     0x415388 <write_object+0xa78>
+    0.00 :   415406:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   41540b:        movl    $0x5, (%rax)
+    0.00 :   415411:        jmp     0x4150cf <write_object+0x7bf>
+    0.00 :   415416:        nopw    %cs:(%rax,%rax)
+    0.00 :   415420:        movq    0x30(%r14), %rax
+    0.00 :   415424:        addl    %edi, %esi
+    0.00 :   415426:        incl    %ecx
+    0.00 :   415428:        incl    %edi
+    0.00 :   41542a:        movl    %esi, 0x8(%r10)
+    0.00 :   41542e:        addq    $0x30, %r11
+    0.00 :   415432:        movb    $0x1, (%rax,%rsi)
+    0.00 :   415436:        movl    0x1c(%r14), %r8d
+    0.00 :   41543a:        cmpl    %r8d, %ecx
+    0.00 :   41543d:        jb      0x414c7c <write_object+0x36c>
+    0.00 :   415443:        jmp     0x414ca5 <write_object+0x395>
+    0.00 :   415448:        nopl    (%rax,%rax)
+    0.00 :   415450:        movl    %ecx, %eax
+    0.00 :   415452:        addq    $0x100c, %rdx
+    0.00 :   415459:        incl    %eax
+    0.00 :   41545b:        cmpl    %eax, %edi
+    0.00 :   41545d:        jne     0x414a30 <write_object+0x120>
+    0.00 :   415463:        jmp     0x414a92 <write_object+0x182>
+    0.00 :   415468:        movq    0x10(%r12), %rdi
+    0.00 :   41546d:        movl    $0x4c4cc8, %esi
+    0.00 :   415472:        movl    %ecx, 0x50(%rsp)
+    0.00 :   415476:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   41547b:        movl    0x50(%rsp), %ecx
+    0.00 :   41547f:        testl   %eax, %eax
+    0.00 :   415481:        je      0x415490 <write_object+0xb80>
+    0.00 :   415483:        movl    0x60(%r12), %esi
+    0.00 :   415488:        testl   %esi, %esi
+    0.00 :   41548a:        je      0x415591 <write_object+0xc81>
+    0.00 :   415490:        movl    0x78(%rsp), %edi
+    0.00 :   415494:        movl    %ecx, 0x50(%rsp)
+    0.00 :   415498:        callq   0x404150 <_init+0x150>
+    0.00 :   41549d:        testl   %eax, %eax
+    0.00 :   41549f:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   4154a5:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   4154aa:        movq    %rax, %r12
+    0.00 :   4154ad:        movl    0x50(%rsp), %ecx
+    0.00 :   4154b1:        movq    (%rbx), %r14
+    0.00 :   4154b4:        movl    $0x4c4789, %esi
+    0.00 :   4154b9:        movl    %ecx, 0x78(%rsp)
+    0.00 :   4154bd:        movq    0x8(%r14), %r13
+    0.00 :   4154c1:        movq    %r13, %rdi
+    0.00 :   4154c4:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   4154c9:        movl    0x78(%rsp), %ecx
+    0.00 :   4154cd:        testl   %eax, %eax
+    0.00 :   4154cf:        je      0x415173 <write_object+0x863>
+    0.00 :   4154d5:        jmp     0x415147 <write_object+0x837>
+    0.00 :   4154da:        movl    0x78(%rsp), %edi
+    0.00 :   4154de:        movl    %ecx, 0x50(%rsp)
+    0.00 :   4154e2:        callq   0x404150 <_init+0x150>
+    0.00 :   4154e7:        testl   %eax, %eax
+    0.00 :   4154e9:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   4154ef:        jmp     0x4154ad <write_object+0xb9d>
+    0.00 :   4154f1:        xorl    %eax, %eax
+    0.00 :   4154f3:        jmp     0x414bf0 <write_object+0x2e0>
+    0.00 :   4154f8:        movq    %r12, %rbx
+    0.00 :   4154fb:        movq    %rax, %r12
+    0.00 :   4154fe:        movq    0x70(%rsp), %rax
+    0.00 :   415503:        movl    $0x4c4789, %esi
+    0.00 :   415508:        movl    %edx, 0x68(%rsp)
+    0.00 :   41550c:        incq    0x2b860(%rax)
+    0.00 :   415513:        movq    (%rbx), %rax
+    0.00 :   415516:        movq    0x8(%rax), %rdi
+    0.00 :   41551a:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   41551f:        movl    0x68(%rsp), %edx
+    0.00 :   415523:        testl   %eax, %eax
+    0.00 :   415525:        jne     0x415090 <write_object+0x780>
+    0.00 :   41552b:        movl    %edx, 0x70(%rsp)
+    0.00 :   41552f:        movl    0x78(%rsp), %edi
+    0.00 :   415533:        callq   0x404150 <_init+0x150>
+    0.00 :   415538:        movl    0x70(%rsp), %edx
+    0.00 :   41553c:        jmp     0x415090 <write_object+0x780>
+    0.00 :   415541:        movl    %eax, 0x78(%rsp)
+    0.00 :   415545:        jmp     0x414a9a <write_object+0x18a>
+    0.00 :   41554a:        movq    0x48(%r14), %rbx
+    0.00 :   41554e:        movq    0x40(%rsp), %rax
+    0.00 :   415553:        movl    %ecx, %r12d
+    0.00 :   415556:        movl    (%rbx,%rax), %ebx
+    0.00 :   415559:        jmp     0x41556e <write_object+0xc5e>
+    0.00 :   41555b:        nopl    (%rax,%rax)
+    0.00 :   415560:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   415565:        cmpl    $0x4, (%rax)
+    0.00 :   415568:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   41556e:        movl    %ebx, %edi
+    0.00 :   415570:        callq   0x404530 <_init+0x530>
+    0.00 :   415575:        testl   %eax, %eax
+    0.00 :   415577:        jne     0x415560 <write_object+0xc50>
+    0.00 :   415579:        movq    0x70(%rsp), %rax
+    0.00 :   41557e:        movl    0x1c(%r14), %r8d
+    0.00 :   415582:        movl    %r12d, %ecx
+    0.00 :   415585:        incq    0x2b860(%rax)
+    0.00 :   41558c:        jmp     0x414c63 <write_object+0x353>
+    0.00 :   415591:        movq    %rbx, %r12
+    0.00 :   415594:        movl    0x78(%rsp), %r14d
+    0.00 :   415599:        movl    %ecx, %ebx
+    0.00 :   41559b:        jmp     0x4155a9 <write_object+0xc99>
+    0.00 :   41559d:        nopl    (%rax)
+    0.00 :   4155a0:        cmpl    $0x4, %edx
+    0.00 :   4155a3:        jne     0x4154f8 <write_object+0xbe8>
+    0.00 :   4155a9:        movl    %r14d, %edi
+    0.00 :   4155ac:        callq   0x404530 <_init+0x530>
+    0.00 :   4155b1:        movl    %eax, %r13d
+    0.00 :   4155b4:        callq   0x4047b0 <_init+0x7b0>
+    0.00 :   4155b9:        movl    (%rax), %edx
+    0.00 :   4155bb:        testl   %r13d, %r13d
+    0.00 :   4155be:        jne     0x4155a0 <write_object+0xc90>
+    0.00 :   4155c0:        movl    %ebx, 0x50(%rsp)
+    0.00 :   4155c4:        movq    %r12, %rbx
+    0.00 :   4155c7:        movq    %rax, %r12
+    0.00 :   4155ca:        movq    0x70(%rsp), %rax
+    0.00 :   4155cf:        movq    (%rbx), %r14
+    0.00 :   4155d2:        movl    $0x4c4789, %esi
+    0.00 :   4155d7:        incq    0x2b860(%rax)
+    0.00 :   4155de:        movq    0x8(%r14), %r13
+    0.00 :   4155e2:        movq    %r13, %rdi
+    0.00 :   4155e5:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   4155ea:        movl    0x50(%rsp), %ecx
+    0.00 :   4155ee:        testl   %eax, %eax
+    0.00 :   4155f0:        jne     0x415147 <write_object+0x837>
+    0.00 :   4155f6:        movl    0x78(%rsp), %edi
+    0.00 :   4155fa:        movl    %ecx, 0x50(%rsp)
+    0.00 :   4155fe:        callq   0x404150 <_init+0x150>
+    0.00 :   415603:        movl    0x50(%rsp), %ecx
+    0.00 :   415607:        testl   %eax, %eax
+    0.00 :   415609:        jne     0x4150cf <write_object+0x7bf>
+    0.00 :   41560f:        jmp     0x4154b1 <write_object+0xba1>
+    0.00 :   415614:        nopw    %cs:(%rax,%rax)
+    0.00 :   41561f:        nop
+    0.00 :   415620:        xorl    %ebx, %ebx
+    0.00 :   415622:        movq    0x28(%r14), %r9
+    0.00 :   415626:        movl    0x10(%r14), %esi
+    0.00 :   41562a:        leaq    (%r9,%r11), %r10
+    0.00 :   41562e:        xorl    %edx, %edx
+    0.00 :   415630:        movl    0x8(%r10), %eax
+    0.00 :   415634:        divl    %esi
+    0.00 :   415636:        cmpl    %eax, 0x78(%rsp)
+    0.00 :   41563a:        je      0x41564c <write_object+0xd3c>
+    0.00 :   41563c:        incl    %ebx
+    0.00 :   41563e:        addq    $0x30, %r11
+    0.00 :   415642:        cmpl    %r8d, %ebx
+    0.00 :   415645:        jb      0x41562a <write_object+0xd1a>
+    0.00 :   415647:        jmp     0x414ca5 <write_object+0x395>
+    0.00 :   41564c:        movq    0x30(%r14), %rdx
+    0.00 :   415650:        imull   %ecx, %esi
+    0.00 :   415653:        incl    %ebx
+    0.00 :   415655:        addq    $0x30, %r11
+    0.00 :   415659:        leal    (%rsi,%rdi), %eax
+    0.00 :   41565c:        incl    %edi
+    0.00 :   41565e:        movl    %eax, 0x8(%r10)
+    0.00 :   415662:        movb    $0x1, (%rdx,%rax)
+    0.00 :   415666:        movl    0x1c(%r14), %r8d
+    0.00 :   41566a:        cmpl    %r8d, %ebx
+    0.00 :   41566d:        jb      0x415622 <write_object+0xd12>
+    0.00 :   41566f:        jmp     0x414ca5 <write_object+0x395>
+    0.00 :   415674:        movl    $0x1, 0x58(%rsp)
+    0.00 :   41567c:        jmp     0x414955 <write_object+0x45>
+    0.00 :   415681:        movq    0x48(%r14), %rbx
+    0.00 :   415685:        xorl    %edi, %edi
+    0.00 :   415687:        leaq    (%rbx,%r15), %r12
+    0.00 :   41568b:        jmp     0x414cad <write_object+0x39d>
+    0.00 :   415690:        movq    (%r14), %rax
+    0.00 :   415693:        movl    $0x4c4cc8, %esi
+    0.00 :   415698:        movl    %ecx, 0x68(%rsp)
+    0.00 :   41569c:        movq    0x10(%rax), %rdi
+    0.00 :   4156a0:        callq   0x4047f0 <_init+0x7f0>
+    0.00 :   4156a5:        movl    0x68(%rsp), %ecx
+    0.00 :   4156a9:        testl   %eax, %eax
+    0.00 :   4156ab:        jne     0x41554e <write_object+0xc3e>
+    0.00 :   4156b1:        xorl    %edi, %edi
+    0.00 :   4156b3:        jmp     0x414cad <write_object+0x39d>
+    0.00 :   4156b8:        movl    $0x4b, (%r12)
+    0.00 :   4156c0:        vzeroupper
+    0.00 :   4156c3:        jmp     0x4150cf <write_object+0x7bf>
+    0.00 :   4156c8:        movl    0x10(%rbx), %edi
+    0.00 :   4156cb:        jmp     0x414ff4 <write_object+0x6e4>

@@ -92,6 +92,8 @@ struct efsd_server {
     uint64_t gc_missing_exports;
     struct efs_gc_io_stats gc_io[EFS_GC_IO_CLASSES];
     uint32_t gc_stage, gc_group, gc_sampled_mask, gc_reap_capped[2];
+    int storage_engine; /* 0 files (default), 1 experimental containers */
+    void *container_targets[EFS_MAX_STORAGE_PATHS]; /* engine identity/locks */
     int direct_io; /* use O_DIRECT for fragment reads/writes */
     int bench_sync; /* benchmark-only O_SYNC; daemon store builds ignore it */
     /* Shared writer-pool size (0 = inline, <0 = auto from nproc at start). */
@@ -152,7 +154,7 @@ int server_fragment_path(struct efsd_server *s, struct efs_export *ex,
                          char *path, size_t path_len);
 
 /* Unlink a fragment's data + .sum sidecar from every storage root. */
-void server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
+int server_unlink_fragment_files(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index);
 
@@ -173,8 +175,10 @@ struct efs_store;
 void efs_store_nvme_bind(struct efs_store *st, struct efs_nvme_store *ctx,
                          struct efsd_server *s, struct efs_export *ex);
 
-/* Combined fragment+checksum read (single-root fast path). *sum_ok set when
- * the sidecar supplied the checksum; caller hashes the data otherwise. */
+/* Combined fragment+checksum read (single-root fast path). *sum_ok uses
+ * efs_store_sum_state: container full reads return VERIFIED. Nonzero when
+ * a stored checksum exists. PRESENT requires verification; NONE is untrusted
+ * for data fragments. */
 int server_read_fragment_with_sum(struct efsd_server *s, struct efs_export *ex,
                                   efs_ino_t ino, uint32_t chunk_index,
                                   uint32_t fragment_index, uint8_t *data,

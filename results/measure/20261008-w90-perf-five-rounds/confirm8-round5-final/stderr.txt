@@ -1,0 +1,5 @@
+Events disabled
+Events enabled
+BENCH_PHASE begin
+BENCH_PHASE end
+Events disabled

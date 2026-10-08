@@ -1,0 +1,14 @@
+{
+  "round": 8,
+  "daemon_sha256": "f556c1d47a0213da87a81c6cd01d21961a3d9e58107011eb072d69e412ff4b5d",
+  "source_sha256": {
+    "src/server/store_containers.c": "7bed8cbb670b48fe9c55e0f42285a7efc1272a55b9fb72bb9fedc5b07a114af5",
+    "src/server/store_containers.h": "20e62536b085c4b4a346afdbc896c432ad2295acdc00c3a31b99652c53c8f110",
+    "src/server/store.c": "afe9937017d98a2adbf856569b87cbc952f60a61e0dfc6401e526621a27a8b3a",
+    "src/server/server_internal.h": "9e60909217d2fb579e6765b47f896a258c31ec4682ad2c8b18929681b49fa0e1",
+    "src/server/handler.c": "4611d3ea243935581fb61b05bac1f28f14fbb0c940e24c6a3c4e5f7d47913059",
+    "include/efs/store.h": "45a6ff54c6ad39d81d1c099e3fd960f6f84e066775b3d082b5ee47ae1f54eb5e",
+    "tests/test_store_containers.c": "7c36fe82dd670f358d709b6fd9df8e0710afd4aa12391a2a6e61df05610b9eb0",
+    "Makefile": "d2d4601fdfc9f22cc3f8cf119e68b557a262eb0437f078b5a4ed6d32acb6389e"
+  }
+}

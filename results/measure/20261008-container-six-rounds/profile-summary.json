@@ -1,0 +1,254 @@
+[
+  {
+    "round": 1,
+    "io": "direct",
+    "phase": "read",
+    "instrumentation": "strace",
+    "MiB_s": 47.76055602680697,
+    "p99_ms": 56.860046010115184
+  },
+  {
+    "round": 1,
+    "io": "direct",
+    "phase": "churn",
+    "instrumentation": "strace",
+    "MiB_s": 10.144033402559005,
+    "p99_ms": 97.96963899862021
+  },
+  {
+    "round": 1,
+    "io": "buffered",
+    "phase": "read",
+    "instrumentation": "strace",
+    "MiB_s": 47.39551639136683,
+    "p99_ms": 57.96250299317762
+  },
+  {
+    "round": 1,
+    "io": "buffered",
+    "phase": "churn",
+    "instrumentation": "strace",
+    "MiB_s": 9.98957900681758,
+    "p99_ms": 107.49353599385358
+  },
+  {
+    "round": 2,
+    "io": "direct",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 87.92567940681397,
+    "p99_ms": 32.814313992275856,
+    "cycles_per_MiB": 38755605.6,
+    "daemon_cpu_ms_per_MiB": 22.088689393939394,
+    "context_switches_per_MiB": 551.6689393939394
+  },
+  {
+    "round": 2,
+    "io": "direct",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.6579983125226,
+    "p99_ms": 69.54701599897817,
+    "cycles_per_MiB": 187710721.81418583,
+    "daemon_cpu_ms_per_MiB": 101.4099100899101,
+    "context_switches_per_MiB": 2493.4145854145854
+  },
+  {
+    "round": 2,
+    "io": "buffered",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 88.01222810844646,
+    "p99_ms": 32.737759000156075,
+    "cycles_per_MiB": 36462953.10741301,
+    "daemon_cpu_ms_per_MiB": 20.833683812405447,
+    "context_switches_per_MiB": 521.6588502269288
+  },
+  {
+    "round": 2,
+    "io": "buffered",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.280551931691434,
+    "p99_ms": 75.2941049868241,
+    "cycles_per_MiB": 191837123.20818415,
+    "daemon_cpu_ms_per_MiB": 103.1431611253197,
+    "context_switches_per_MiB": 2518.8132992327364
+  },
+  {
+    "round": 3,
+    "io": "direct",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 87.87443483166464,
+    "p99_ms": 32.71218000736553,
+    "cycles_per_MiB": 36878939.714393936,
+    "daemon_cpu_ms_per_MiB": 21.35951515151515,
+    "context_switches_per_MiB": 534.844696969697
+  },
+  {
+    "round": 3,
+    "io": "direct",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.67946764760615,
+    "p99_ms": 65.1391639985377,
+    "cycles_per_MiB": 187509200.8223553,
+    "daemon_cpu_ms_per_MiB": 101.45768463073851,
+    "context_switches_per_MiB": 2499.1377245508984
+  },
+  {
+    "round": 3,
+    "io": "buffered",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 89.73528268886315,
+    "p99_ms": 33.38759900361765,
+    "cycles_per_MiB": 35716969.702411875,
+    "daemon_cpu_ms_per_MiB": 20.65516141001855,
+    "context_switches_per_MiB": 516.774025974026
+  },
+  {
+    "round": 3,
+    "io": "buffered",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.6375125615149,
+    "p99_ms": 72.62930400611367,
+    "cycles_per_MiB": 187168286.356,
+    "daemon_cpu_ms_per_MiB": 102.22139999999999,
+    "context_switches_per_MiB": 2509.548
+  },
+  {
+    "round": 4,
+    "io": "direct",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 86.43131323071867,
+    "p99_ms": 34.290857991436496,
+    "cycles_per_MiB": 36151171.82672314,
+    "daemon_cpu_ms_per_MiB": 21.17633423180593,
+    "context_switches_per_MiB": 536.0515979976897
+  },
+  {
+    "round": 4,
+    "io": "direct",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.907993312485978,
+    "p99_ms": 65.85427199024707,
+    "cycles_per_MiB": 187602738.92769307,
+    "daemon_cpu_ms_per_MiB": 102.24373831775702,
+    "context_switches_per_MiB": 2530.467289719626
+  },
+  {
+    "round": 4,
+    "io": "buffered",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 87.57751753559099,
+    "p99_ms": 34.277851998922415,
+    "cycles_per_MiB": 35502107.074524716,
+    "daemon_cpu_ms_per_MiB": 20.528813688212928,
+    "context_switches_per_MiB": 517.590114068441
+  },
+  {
+    "round": 4,
+    "io": "buffered",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.61356145682976,
+    "p99_ms": 82.74885998980608,
+    "cycles_per_MiB": 184069665.26126125,
+    "daemon_cpu_ms_per_MiB": 101.09913913913914,
+    "context_switches_per_MiB": 2490.6386386386384
+  },
+  {
+    "round": 5,
+    "io": "direct",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 87.52878240265825,
+    "p99_ms": 32.746595999924466,
+    "cycles_per_MiB": 36995797.10384177,
+    "daemon_cpu_ms_per_MiB": 21.432628375808292,
+    "context_switches_per_MiB": 536.1338912133891
+  },
+  {
+    "round": 5,
+    "io": "direct",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 17.156067555468177,
+    "p99_ms": 67.83156900200993,
+    "cycles_per_MiB": 186384387.50897622,
+    "daemon_cpu_ms_per_MiB": 100.82922852983988,
+    "context_switches_per_MiB": 2473.0325084910237
+  },
+  {
+    "round": 5,
+    "io": "buffered",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 89.67035144931153,
+    "p99_ms": 32.12912500021048,
+    "cycles_per_MiB": 37126880.63275158,
+    "daemon_cpu_ms_per_MiB": 20.92614927590048,
+    "context_switches_per_MiB": 519.6234682510212
+  },
+  {
+    "round": 5,
+    "io": "buffered",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.92931595533459,
+    "p99_ms": 59.44524500227999,
+    "cycles_per_MiB": 187003441.60393122,
+    "daemon_cpu_ms_per_MiB": 101.44857002457002,
+    "context_switches_per_MiB": 2486.030466830467
+  },
+  {
+    "round": 6,
+    "io": "direct",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 83.76462101931565,
+    "p99_ms": 54.00574400846381,
+    "cycles_per_MiB": 36434678.827833004,
+    "daemon_cpu_ms_per_MiB": 21.244827037773362,
+    "context_switches_per_MiB": 533.2994035785289
+  },
+  {
+    "round": 6,
+    "io": "direct",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.829793517584523,
+    "p99_ms": 74.75108100334182,
+    "cycles_per_MiB": 183027818.00494316,
+    "daemon_cpu_ms_per_MiB": 100.1609095402867,
+    "context_switches_per_MiB": 2481.48690064261
+  },
+  {
+    "round": 6,
+    "io": "buffered",
+    "phase": "read",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 89.0946236604656,
+    "p99_ms": 32.10687299724668,
+    "cycles_per_MiB": 35705508.92675635,
+    "daemon_cpu_ms_per_MiB": 20.66681614349776,
+    "context_switches_per_MiB": 519.0455904334829
+  },
+  {
+    "round": 6,
+    "io": "buffered",
+    "phase": "churn",
+    "instrumentation": "cycles-perf",
+    "MiB_s": 16.798754531747704,
+    "p99_ms": 70.96383400494233,
+    "cycles_per_MiB": 186391663.67128712,
+    "daemon_cpu_ms_per_MiB": 101.43441584158415,
+    "context_switches_per_MiB": 2497.7663366336633
+  }
+]

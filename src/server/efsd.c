@@ -3,6 +3,7 @@
 #include "efs/network.h"
 #include "efs/version.h"
 #include "server_internal.h"
+#include "store_containers.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -94,12 +95,13 @@ static void usage(const char *prog)
     fprintf(stderr,
             "Usage: %s --node-id <id> --addr <addr> --port <port> "
             "--storage <path>[,path...] [--storage <path> ...] "
-            "[--quota <bytes>[T|G|M|K]] [--direct-io|--no-direct-io] "
+            "[--quota <bytes>[T|G|M|K]] [--storage-engine files|containers] [--direct-io|--no-direct-io] "
             "[--writers <n>] [--join <host:port>] [--no-persist] [--perf] [--strace] "
             "[--meta-storage <root>]\n"
             "  --storage        1..%d paths (comma and/or repeated).\n"
             "                   Multiple paths: least-queue write placement\n"
             "                   (chunk_index %% N) across disks for parallelism.\n"
+            "  --storage-engine files (default) or experimental containers; fresh roots required\n"
             "  --direct-io      O_DIRECT for fragment I/O\n"
             "  --no-direct-io   use the page cache for fragment I/O (default)\n"
             "  --writers <n>    shared writer threads across all storage paths "
@@ -404,6 +406,11 @@ int main(int argc, char **argv)
                 usage(argv[0]);
                 return 1;
             }
+        } else if (strcmp(argv[i], "--storage-engine") == 0 && i + 1 < argc) {
+            const char *engine = argv[++i];
+            if (!strcmp(engine, "files")) server.storage_engine = 0;
+            else if (!strcmp(engine, "containers")) server.storage_engine = 1;
+            else { fprintf(stderr, "unknown storage engine: %s\n", engine); return 2; }
         } else if (strcmp(argv[i], "--direct-io") == 0) {
             server.direct_io = 1;
         } else if (strcmp(argv[i], "--no-direct-io") == 0) {
@@ -480,6 +487,9 @@ int main(int argc, char **argv)
         snprintf(subdir, sizeof(subdir), "%s/log", server.storage_paths[pi]);
         mkdir_p(subdir);
     }
+    if (server_storage_engine_init(&server) != EFS_OK) return 1;
+    fprintf(stderr, "storage-engine=%s direct_io=%s\n",
+            server.storage_engine ? "containers" : "files", server.direct_io ? "on" : "off");
     if (server.meta_storage[0] &&
         mkdir_p(server.meta_storage) != 0 && errno != EEXIST) {
         fprintf(stderr, "mkdir meta-storage %s: %s\n", server.meta_storage,
@@ -715,6 +725,7 @@ int main(int argc, char **argv)
      * boundary and recovery is WAL replay at next start. */
     server_raft_host_stop();
     server_peer_pool_shutdown();
+    server_storage_engine_close(&server);
     pthread_mutex_destroy(&server.lock);
     for (uint32_t i = 0; i < server.export_count; i++)
         efs_export_free(&server.exports[i]);

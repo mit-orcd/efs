@@ -61,3 +61,5 @@ __pycache__/
 /tests/test_store_overwrite
 
 /tests/test_bench_latency
+
+/tests/test_store_containers

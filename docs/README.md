@@ -42,6 +42,7 @@ in this repository. Pick the guide below for your task.
 
 ## Operations
 
+- [operations/storage-engines.md](operations/storage-engines.md) — experimental daemon files/containers selection and isolated VM A/B.
 - [operations/operations.md](operations/operations.md) — start/stop, storage layout, quotas, `efs-mgmt`, rejoin, profiling; [operations/runbooks.md](operations/runbooks.md) — current measurement entry points and archived investigation records.
 
 ## History / archive

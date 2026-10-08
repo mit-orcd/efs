@@ -1,0 +1,2 @@
+strace-baseline aligned I/O and punch bounds PASS; 89545 calls; 937 directory fsyncs
+strace-round5-final aligned I/O and punch bounds PASS; 131872 calls; 0 directory fsyncs

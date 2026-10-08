@@ -1,0 +1,26 @@
+[
+  {
+    "data_records": 843,
+    "logical_bytes": 55246848,
+    "record_allocated": 58699776,
+    "container_allocated": 0
+  },
+  {
+    "data_records": 822,
+    "logical_bytes": 53870592,
+    "record_allocated": 57237504,
+    "container_allocated": 0
+  },
+  {
+    "data_records": 817,
+    "logical_bytes": 53542912,
+    "record_allocated": 56889344,
+    "container_allocated": 0
+  },
+  {
+    "data_records": 807,
+    "logical_bytes": 52887552,
+    "record_allocated": 56193024,
+    "container_allocated": 0
+  }
+]

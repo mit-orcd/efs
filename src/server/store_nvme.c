@@ -64,10 +64,10 @@ static int nvme_del(void *ctx, const struct efs_frag_id *id)
     if (id->export_id != n->ex->id)
         return EFS_ERR_INVAL;
     efs_tls_chunk_gen = id->chunk_generation;
-    server_unlink_fragment_files(n->s, n->ex, id->ino, id->chunk_index,
+    int rc = server_unlink_fragment_files(n->s, n->ex, id->ino, id->chunk_index,
                                  id->fragment_index);
     efs_tls_chunk_gen = 0;
-    return EFS_OK;
+    return rc;
 }
 
 static int nvme_del_if_sum(void *ctx, const struct efs_frag_id *id,

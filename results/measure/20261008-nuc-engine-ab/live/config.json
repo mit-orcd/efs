@@ -1,0 +1,18 @@
+{
+  "seconds": 30,
+  "repeat": 2,
+  "ports": [
+    27432,
+    27433,
+    27434,
+    27435
+  ],
+  "env": {
+    "EFS_MD_RAFT_N": "4",
+    "EFS_TRANSPORT": "tcp"
+  },
+  "source": "/data1/efs/bench/nuc-engine-ab-20261008/src",
+  "nvme_base": "/home/efs/additional-work-dir/bench/nuc-engine-ab-20261008",
+  "writers": 2,
+  "quota": "2G"
+}

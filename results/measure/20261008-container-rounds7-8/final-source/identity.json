@@ -1,0 +1,13 @@
+{
+  "source_sha256": {
+    "src/server/store_containers.c": "7bed8cbb670b48fe9c55e0f42285a7efc1272a55b9fb72bb9fedc5b07a114af5",
+    "src/server/store_containers.h": "20e62536b085c4b4a346afdbc896c432ad2295acdc00c3a31b99652c53c8f110",
+    "src/server/store.c": "95cc853307245b740759941e04202c8de07ca61a66f216adc14c6be6b909bbdd",
+    "src/server/server_internal.h": "05cf8c228366a4db2488b589168899b0af6f174d4d2a4b7207740871fe685023",
+    "src/server/handler.c": "4611d3ea243935581fb61b05bac1f28f14fbb0c940e24c6a3c4e5f7d47913059",
+    "include/efs/store.h": "0e97d9937d58761ed80d4122df6d82ffca77bbf50891aaa1555833ec5a65e582",
+    "tests/test_store_containers.c": "65bfef167f2ac295a3babc30b9df5fa0747969d84d7a40a5e1c6a0401bc63dfc",
+    "Makefile": "1236f8b2e25d3d7c15f1c87d034a2b512563b3018bd722d037e93829c68eb260"
+  },
+  "note": "Runtime matches round 8 except comments; final harness uses an atomic diagnostic counter during concurrent tests. Final Makefile rebuilds both checksum-state consumers when the header changes."
+}

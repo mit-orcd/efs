@@ -1,0 +1,14 @@
+[
+  {
+    "pid": 3487093,
+    "path": "/home/efs/additional-work-dir/bench/nuc-engine-ab-20261008/files-direct-r1/n3/data/exports/1/0000/0000/0000/0042/5006/0/0.1.88723949115727853",
+    "flags": "0o140001",
+    "O_DIRECT": true
+  },
+  {
+    "pid": 3487105,
+    "path": "/home/efs/additional-work-dir/bench/nuc-engine-ab-20261008/files-direct-r1/n4/data/exports/1/0000/0000/0000/0042/5006/0/0.2.88723949115727853",
+    "flags": "0o140001",
+    "O_DIRECT": true
+  }
+]

@@ -102,3 +102,20 @@ This is a separate scalability phase, not a change to the current truncate
 checkpoint. The exact group-count ramp, placement policy and migration protocol
 remain to be designed and reviewed; this entry records the required enhancement
 and proposed implementation approach, not an assertion that it is implemented.
+
+## Oct 8 measurement follow-up
+
+The [NUC metadata-group performance follow-up](metadata-group-perf-followup-20261008.md)
+records eight passing functional cases whose rates correlate with file-inode
+group placement. It supplies a bounded measurement/routing investigation for
+W66 phase 1 and P4.1 engine comparisons. It does not establish the cause, implement
+generalized multi-Raft routing, or close W66.
+
+
+The Oct 8 live tiny-file follow-up now includes 48 successful read-only probes:
+group-2 median attribute latency is 16.5–18.7 ms versus 1.4–1.6 ms for group 0,
+including direct leader contact. Slow replica durability and shared pump service
+are candidates; unequal group write load and absent per-round ack timelines
+prevent causal isolation. See the same follow-up for read-round freshness,
+pre-sleep log semantics, evidence and the next measurement gate. No runtime
+change was made and W66 remains open.
