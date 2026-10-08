@@ -3510,14 +3510,12 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 <a id="w93"></a>
 
+## W93 · Broader durable Raft group commit for tiny-file metadata
+
 **Implementation update (Oct 8):** Implemented bounded follower-request durability batching, deferred ACK/apply, storage-failure fencing and committed-prefix protection (`534341af`, `54e800cd`). Focused fault tests, full AMD direct/TCP POSIX/peer/replay/cold/GC and mixed-group measurements pass. Sustained mixed large-writer/tiny-close timing acceptance remains open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-## W93 · Broader durable Raft group commit for tiny-file metadata
-
-**Class/status:** performance investigation; registered Oct 8, 2026. Open;
-broader batching is not implemented or accepted. First priority within the
-four [tiny-file follow-ups](../status/tiny-file-performance-plan-20261008.md).
+**Class/status:** Performance; partial implementation with acceptance pending. Bounded follower batching, durable ACK ordering, persistence fencing and committed-prefix protection are implemented. Fault/cold/POSIX/peer gates pass; long same-code mixed-load performance acceptance remains open.
 
 **Evidence:** NUC round 7, `c22754236b38-tiny-r7`, buffered/TCP. In an eight-second
 instrumented window, n3 pump thread 1746498 completed 1,024 Raft `fdatasync`
@@ -3527,15 +3525,7 @@ The trace includes replication/catch-up/background work. See the
 [raw trace](../../results/measure/20261008-nuc-tiny-create/round-7/after/follower-sync.txt)
 and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after/).
 
-**Remaining action:** attribute entries, bytes, queue delay and barrier count
-by group and operation. `drain_inbox` drives received messages serially;
-`raft.c:on_ae_req` and the disk batch callbacks already batch within an
-AppendEntries request. Evaluate a bounded durability batch across eligible
-queued requests, with acknowledgements held until the required records and
-hard state are durable. Account for both parity groups sharing one log, term
-changes, conflicting tails, elections, read authority and shutdown. Size/time
-bounds must prevent starvation and growing follower lag. Do not assume that
-removing a sync call leaves a safe acknowledgement path.
+**Remaining action:** Complete the balanced long serial/batched mixed-load comparison and attribute remaining tails with queue/barrier/lag evidence as needed. Short historical-baseline samples do not establish a causal batching regression: same-current-code serial controls also show the tail. Preserve the fault, durability and cold-read gates already recorded in the checkpoint.
 
 **Governing contracts/related work:** preserve Raft durability, W82 read
 authority, W23/W89 and D30 pressure bounds. W19's older CPU-copy measurement
@@ -3556,13 +3546,12 @@ existing preallocation experiment closes this item.
 
 <a id="w94"></a>
 
+## W94 · Atomic CREATE and open-lease acquisition
+
 **Implementation update (Oct 8):** Server-side atomic CREATE/lease persistence and cross-group transaction integration are implemented (`ec192d17`); cold lost-reply replay and open-unlinked lifetime gates pass. Client adoption ownership and ambiguous-result cleanup remain open. FUSE deliberately retains separate HOLD until those races are proved safe.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-## W94 · Atomic CREATE and open-lease acquisition
-
-**Class/status:** client/server metadata performance; registered Oct 8, 2026.
-Open; second priority within the tiny-file follow-ups.
+**Class/status:** Client/server metadata performance; partial implementation. Atomic server CREATE/lease persistence and rejected-descriptor cleanup are tested. Client piggyback adoption remains disabled until guarded ownership, ambiguous lease edges and runtime-session fencing are proved safe.
 
 **Evidence:** `efs_fuse_create_at` passes flags 0 to CREATE, then
 `efs_open_acquire` sends a separate HOLD for the first local open. The protocol
@@ -3572,19 +3561,9 @@ attribute all latency to HOLD. The client profile contains
 `efs_client_rpc_hold`. Historical Aug 24 piggybacking is not evidence that the
 current open-description lifecycle safely supports it.
 
-**Remaining action:** measure CREATE/HOLD RPC and consensus counts per file;
-combine creation and lease acquisition in the same durable operation and
-adopt the returned lease in the local open-reference table. Resolve the race
-where another local open/last-close can release the same session/inode lease
-before CREATE adopts it. Cover lost replies/retry identity, allocation failure,
-failed FUSE replies, existing-file O_CREAT, O_EXCL and O_TRUNC. Preserve the
-current first-open/last-close semantics, open-unlinked lifetime and lock cleanup.
-This requires an ownership protocol, not just setting the existing flag.
+**Remaining action:** Implement guarded pending-CREATE adoption and sequenced HOLD/CLOSE identity with bounded retirement through W72 runtime session fencing. Then measure the eliminated HOLD round and deterministically gate lost replies, late OPEN/CLOSE, adoption/last-close/unlink interleavings and local failures. Server atomicity, CREATE reply reuse and rejected-reply cleanup are prerequisites already implemented; merely enabling the flag is unsafe.
 
-**Governing contracts/related work:** W72 session/fencing integration, W58 and
-W76 namespace retry identity, W69 attribute coherence. The round-6 reuse of the
-CREATE reply inode removes a GETATTR; it does not implement this item. Do not
-restore historical asynchronous-close behavior while reusing historical ideas.
+**Governing contracts/related work:** W72 session/fencing, W58/W76 namespace retry identity and W69 coherence. CREATE reply reuse is merged (`e6926d85`); it removes a redundant read but does not implement safe lease adoption. Preserve synchronous close semantics.
 
 **Gate:** demonstrate one fewer independent HOLD consensus round on successful
 new-file CREATE, with measured open latency and sustained creation throughput.
@@ -3600,15 +3579,12 @@ open latency as a measured saving.
 
 <a id="w95"></a>
 
+## W95 · Tiny-file data persistence and packing principles
+
 **Implementation update (Oct 8):** Independent tiny logical/physical geometry, packed-container experiments, ancestor barriers and per-record durable cohort latency are implemented (`12993678`), with contract tests, sanitizers and separate perf/strace evidence. Sustained churn, index/body/ACK/GC crash phases and any production-format decision remain open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-## W95 · Tiny-file data persistence and packing principles
-
-**Class/status:** storage performance experiment; registered Oct 8, 2026.
-Open; a concrete tiny-file investigation under the existing P3/P4.1 and
-[storage engine v2 proposal](storage-engine-v2.md), not a second competing
-storage-layout project or an approved production format change.
+**Class/status:** Storage performance experiment; partial implementation. Tiny logical/physical geometry, durable cohort timing, retained/cold/crash principles and production churn are tested. Independent indexed packing and any production layout selection remain P4.1 work; no migration is activated.
 
 **Evidence:** round-7 generator close averaged 77.8 ms; n3 fragment syncs
 averaged 22.4 ms (356 calls in its separate trace). The default chunk is
@@ -3617,15 +3593,7 @@ The client profile concentrates sampled CPU in flush/report and fragment
 transfer. Separate traces cannot be divided to infer an exact fragment count
 or write-amplification ratio per file. Measure that explicitly.
 
-**Remaining action:** use independent `efs-bench` principle drivers to compare
-the relevant file-per-fragment workload with bounded shared durable writes,
-packed records/containers, and appropriate small-payload encodings. Keep the
-benchmark independent of the production engine, as requested. Compare equal
-durability and protection semantics, including checksums, pathname/index
-persistence, fsync/close and recovery; include read and conditional delete/GC
-workloads. Measure syscalls, flushes, bytes, physical allocation, space recovery
-and write amplification through create/overwrite/delete churn. A packing
-experiment is not automatic selection of a backend.
+**Remaining action:** Extend the independent model with an indexed packing candidate only when its publication/recovery semantics are specified, and compare sustained churn at equal durability. Current fixed-geometry seal crash tests are not a production packed index. Port only a demonstrated principle; retain existing stores and require explicit P4.1 compatibility/migration decisions before a layout change.
 
 **Governing contracts/related work:** W71 durable PUT, W73 synchronous writes,
 W75 integrity, W86 ownership/GC fencing and W77 publication. P4.1 owns the
@@ -3650,13 +3618,12 @@ equivalent protocol, or deploy a layout by wiping the preserved test stores.
 
 <a id="w96"></a>
 
+## W96 · Bounded preallocation for the KV write-ahead log
+
 **Implementation update (Oct 8):** Invalid-tail repair, sticky write-failure handling and bounded logical-EOF reservation are implemented (`f35a67c0`, `0ed74ef8`). Fault/reset/replay and AMD cold/POSIX/peer/GC gates pass. Two-device NUC QD8 performance acceptance remains open: measurements under unrelated load are mixed, not an unconditional win.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-## W96 · Bounded preallocation for the KV write-ahead log
-
-**Class/status:** metadata storage performance experiment; registered Oct 8,
-2026. Open; round 7 preallocates only the Raft log, not the KV WAL.
+**Class/status:** Metadata storage performance; implemented with final gates pending. EOF-tail repair, detectable interior-damage refusal, sticky failures and bounded logical-EOF reservation are tested. Final guard live cold rerun and isolated NUC two-device performance acceptance remain open.
 
 **Evidence:** the loaded n3 KV WAL sync mean was 12.1 ms before round 7 and
 14.6 ms afterward; the latter contains only 13 calls and different queue
@@ -3666,15 +3633,7 @@ versus 3.9 ms with preallocation. That motivates a KV-specific experiment,
 not a KV throughput claim. See the
 [probe](../../results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json).
 
-**Remaining action:** inspect `kv_wal.c` append/replay/reset/rotation and
-compaction ownership before porting the principle. Its current O_APPEND path
-would append behind a physically extended zero tail, so it cannot simply reuse
-the Raft allocation call. Keep valid logical end, reserved capacity and the
-durable watermark distinct; use correct offsets and preserve concurrent group
-commit and hold semantics. Bound reservation and unused space, retain checksum
-and torn-tail recovery, and handle allocation failure or unsupported filesystems
-without claiming unwritten bytes durable. Preserve KV durability before the
-saved applied index advances.
+**Remaining action:** Run the final recovery guard through full live cold/POSIX/peer gates. Repeat the NUC two-device A/B performance gate when unrelated workload is absent; current QD8 samples are mixed. Preserve bounded reservations, fallback, logical EOF, covered durability and compaction/reset correctness rather than asserting an unconditional allocation win.
 
 **Governing contracts/related work:** W23/W89 compaction/pressure and D30
 resource bounds; the round-7 Raft candidate is supporting evidence only. This
