@@ -1,0 +1,121 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 4K of event 'cycles:P'
+# Event count (approx.): 81736816605
+#
+# Overhead  Command   Shared Object           Symbol                                       
+# ........  ........  ......................  .............................................
+#
+    16.61%  efsd      libc.so.6               [.] __memcmp_evex_movbe
+            |          
+             --16.01%--__memcmp_evex_movbe
+                       |          
+                        --14.24%--efs_txn_read_ex
+                                  |          
+                                  |--7.93%--efs_meta_apply_getattr
+                                  |          efs_query_catalog_build
+                                  |          host_query_thread
+                                  |          start_thread
+                                  |          
+                                   --6.31%--efs_txn_reduce_read_ex
+                                             efs_meta_apply_getattr
+                                             efs_query_catalog_build
+                                             host_query_thread
+                                             start_thread
+
+    15.68%  efsd      efsd                    [.] cache_get
+            |          
+             --15.23%--cache_get
+                       |          
+                        --13.49%--efs_txn_read_ex
+                                  |          
+                                  |--9.33%--efs_meta_apply_getattr
+                                  |          efs_query_catalog_build
+                                  |          host_query_thread
+                                  |          start_thread
+                                  |          
+                                   --4.16%--efs_txn_reduce_read_ex
+                                             efs_meta_apply_getattr
+                                             efs_query_catalog_build
+                                             host_query_thread
+                                             start_thread
+
+     6.56%  efsd      efsd                    [.] add_edge
+            |          
+             --6.54%--add_edge
+                       efs_name_index_query_visits
+                       efs_name_index_query
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     3.57%  efsd      libc.so.6               [.] __memmove_evex_unaligned_erms
+            |          
+             --3.39%--__memmove_evex_unaligned_erms
+                       |          
+                        --1.77%--0x1
+
+     3.08%  efsd      efsd                    [.] efs_query_catalog_path.part.0.constprop.0
+            |          
+             --2.98%--efs_query_catalog_path.part.0.constprop.0
+                       find_candidate
+                       efs_name_index_query_visits
+                       efs_query_catalog_find
+                       query_consume.part.0
+                       server_raft_host_query_snapshot
+                       server_handle_conn
+                       conn_thread
+                       start_thread
+
+     1.93%  efsd      efsd                    [.] lookup
+            |
+            ---lookup
+               lsm_get
+               |          
+                --1.16%--efs_txn_read_ex
+                          |          
+                           --1.13%--lookup_at
+                                     |          
+                                      --1.09%--query_emit.part.0
+                                                find_candidate
+                                                efs_name_index_query_visits
+                                                efs_query_catalog_find
+                                                query_consume.part.0
+                                                server_raft_host_query_snapshot
+                                                server_handle_conn
+                                                conn_thread
+                                                start_thread
+
+     1.32%  efsd      efsd                    [.] node_cmp
+            |          
+             --1.24%--node_cmp
+
+     1.15%  efsd      efsd                    [.] efs_meta_apply_getattr
+            |          
+             --1.05%--efs_meta_apply_getattr
+                       |          
+                        --1.01%--efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     1.10%  efsd      efsd                    [.] find_candidate
+            |          
+             --1.07%--find_candidate
+                       |          
+                        --1.05%--efs_name_index_query_visits
+                                  efs_query_catalog_find
+                                  query_consume.part.0
+                                  server_raft_host_query_snapshot
+                                  server_handle_conn
+                                  conn_thread
+                                  start_thread
+
+     1.04%  efsd      libc.so.6               [.] __memset_evex_unaligned_erms
+
+
+#
+# (Tip: To add Node.js USDT(User-Level Statically Defined Tracing): perf buildid-cache --add `which node`)
+#
