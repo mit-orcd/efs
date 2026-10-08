@@ -12,8 +12,8 @@ between private fixtures. No physical power-loss or distributed-RDMA proof.
 |---|---|---|
 | W93 | Bounded batching, durability/fault/cold/full Linux/live gates and balanced long controls | Preserve regression coverage; W53 close tails remain separate |
 | W94 | Atomic server lease, rejected replies, pending ownership/atomic CREATE, bounded sequenced-edge and cold tests | Client ownership/recovery integration, production runtime sessions and activation gates |
-| W95 | Tiny/durable timing, independent retained/cold/crash tests and production churn | Indexed packing model and any P4.1 production-layout selection |
-| W96 | Tail/interior-damage recovery, reservation/fallback/fault and final full live gates | Quiet NUC two-device performance acceptance; unrelated workload retained |
+| W95 | Tiny/durable timing, independent indexed recovery/GC model, finite-create comparisons and production churn | P4.1 production-layout selection/migration; no format activation |
+| W96 | Tail/interior-damage recovery, reservation/fallback/fault and final full live gates | AMD covered acceptance passed; historical two-device comparison deferred |
 
 ## W96 recovery prerequisite
 
@@ -406,3 +406,13 @@ production EFS storage. The 36 balanced AMD buffered measurements show slower
 individual publications and faster cohorts of 32; sustained comparative churn
 and production format selection remain open. Details and raw measurements:
 [w95-indexed-model-20261008.md](w95-indexed-model-20261008.md).
+
+
+AMD-only follow-up: sustained W95 tiny/mixed conditional churn passed all 24
+samples (184,320 operations), with GC costs, allocation and read-only reopened
+bytes/generations checked. Four publication barrier failures, ten short-write/
+ENOSPC cuts, GC sync failure and directory inventory errors pass focused AMD
+normal and ASan/UBSan gates. The full regression suite is repeated after adding
+these gates. W95 still selects no production layout; that migration remains P4.1.
+Current implementation/testing uses AMD as requested. The earlier NUC comparison
+is historical evidence and does not change the current test target.

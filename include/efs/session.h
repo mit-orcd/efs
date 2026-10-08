@@ -81,8 +81,9 @@ int efs_lease_pending_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
  * unknown CREATE outcomes before abandoning a known pending token. There are
  * at most 16 unacknowledged edge verdicts/closed records per session/shard.
  * Every effect, replay verdict and acknowledged tombstone retirement shares
- * one KV batch. No production wire path uses this API yet. Legacy edge APIs
- * reject its versioned records; do not mix protocols for one lease session. */
+ * one KV batch. Server wire commands expose effects and authoritative probes;
+ * production FUSE ownership remains staged pending runtime session integration.
+ * Legacy edge APIs reject versioned records; never mix protocols per session. */
 #define EFS_LEASE_EDGE_OPEN 1u
 #define EFS_LEASE_EDGE_CLOSE 2u
 #define EFS_LEASE_EDGE_CLEAR_PENDING 4u

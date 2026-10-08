@@ -1,0 +1,1 @@
+CHURN_OK model=files rounds=60 cohort=32 mixed=1 ops=7680 ops_s=4296.759 p50_us=7183.202 p95_us=8054.385 p99_us=10424.727 allocated=917504 peak_allocated=1048576 live_bytes=544792 live_objects=96 body_written=25365616 index_written=0 reclaimed=0 verified=128

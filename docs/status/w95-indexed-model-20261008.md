@@ -54,7 +54,7 @@ worker barrier, latency and retained/cold harness. Initial timed support is
 buffered packed allocation and read-only cold verification; unsupported direct,
 unflushed, overwrite/delete harness modes are refused explicitly. Conditional
 versioned overwrite/delete/recreate and GC are exercised by the independent
-protocol gate, not yet the comparative timed churn harness.
+protocol gate and a separate comparative timed churn harness.
 
 Admission budgets include both manifest copies and new body allocation, rounded
 using the filesystem allocation unit (at least 4 KiB). Actual allocated blocks
@@ -78,3 +78,20 @@ The [36-sample comparison](../../results/measure/20261008-w93-w96-review/w95-ind
 shows that individual indexed publications are slower, whereas cohorts of 32
 are substantially faster for finite creation. This supports further experiments;
 it does not establish sustained churn performance or choose a production format.
+
+
+The [sustained churn gate](../../results/measure/20261008-w93-w96-review/w95-churn/README.md)
+passed 24 AMD samples and 184,320 operations with read-only reopen generation
+and byte verification. Mixed cases include 64-KiB objects among tiny objects.
+GC and inventory cost belong to sustained throughput; publication latency ends
+at its durability boundary. Individual indexed publications remain slower;
+cohorts of 32 improve both tiny and mixed cases. This is a serial independent
+model, not a multiclient EFS result. Peak allocation samples exclude transient
+manifest replacement; pre-publication admission checks cover that separately.
+
+Actual fault gates inject four publication fsync failures, ten partial-write/
+ENOSPC boundaries, GC directory-sync failure and incomplete directory inventories.
+A publication failure fences the writer until reopen; valid prior authority is
+preserved. A scratch file lacking sufficient root identity is retained rather
+than guessed safe to delete. Test syscall indirection exists only in a separate
+test object; production and benchmark objects have no fault injection.
