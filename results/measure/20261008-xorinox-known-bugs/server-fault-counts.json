@@ -1,0 +1,29 @@
+{
+  "combined": {
+    "root": "/data1/efs-known-bugs/root1/gc-direct-620822ox",
+    "fragment_barrier_refusals": {
+      "n1.log": 0,
+      "n2.log": 0,
+      "n3.log": 0,
+      "n4.log": 0
+    }
+  },
+  "unique": {
+    "root": "/data1/efs-known-bugs/root1/gc-direct-wklynk4o",
+    "fragment_barrier_refusals": {
+      "n1.log": 0,
+      "n2.log": 0,
+      "n3.log": 0,
+      "n4.log": 0
+    }
+  },
+  "barrier": {
+    "root": "/data1/efs-known-bugs/root1/gc-direct-9q8j1i3s",
+    "fragment_barrier_refusals": {
+      "n1.log": 8,
+      "n2.log": 8,
+      "n3.log": 8,
+      "n4.log": 0
+    }
+  }
+}
