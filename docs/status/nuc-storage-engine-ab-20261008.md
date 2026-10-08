@@ -158,6 +158,10 @@ Build/test and daemon logs are compressed; binaries and storage contents are
 excluded. Initial startup failures are retained, rather than counted as passing
 workload cases. P4.1 remains open.
 
+The [metadata-group follow-up](metadata-group-perf-followup-20261008.md) records
+the group definitions, Xorinox comparison and next balanced investigation under
+P4.1 / W66. It remains open; this checkpoint does not establish its root cause.
+
 ## Reproduction
 
 Deploy this branch into a **fresh** private base, build natively, run the test suite,

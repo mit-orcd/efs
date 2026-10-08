@@ -102,3 +102,11 @@ This is a separate scalability phase, not a change to the current truncate
 checkpoint. The exact group-count ramp, placement policy and migration protocol
 remain to be designed and reviewed; this entry records the required enhancement
 and proposed implementation approach, not an assertion that it is implemented.
+
+## Oct 8 measurement follow-up
+
+The [NUC metadata-group performance follow-up](metadata-group-perf-followup-20261008.md)
+records eight passing functional cases whose rates correlate with file-inode
+group placement. It supplies a bounded measurement/routing investigation for
+W66 phase 1 and P4.1 engine comparisons. It does not establish the cause, implement
+generalized multi-Raft routing, or close W66.
