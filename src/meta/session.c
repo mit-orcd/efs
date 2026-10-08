@@ -784,10 +784,13 @@ int efs_lease_guarded_retire(struct efs_kv *kv,uint32_t shard,
                             const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch)
 {
     int rc=efs_session_reclaimable(kv,shard,uuid,epoch);
-    if(rc==EFS_OK)rc=efs_lease_drop_session(kv,shard,uuid,epoch);
+    if(rc!=EFS_OK)return rc; /* missing authority is not successful retirement */
+    rc=efs_lease_drop_session(kv,shard,uuid,epoch);
+    if(rc!=EFS_OK)return rc;
     uint8_t key[EFS_KV_KEY_MAX];uint32_t len=0;
-    if(rc==EFS_OK)rc=edge_window_key(shard,uuid,epoch,key,&len);
-    if(rc==EFS_OK)rc=efs_kv_del(kv,key,len);
+    rc=edge_window_key(shard,uuid,epoch,key,&len);
+    if(rc!=EFS_OK)return rc;
+    rc=efs_kv_del(kv,key,len);
     return rc==EFS_ERR_NOT_FOUND?EFS_OK:rc;
 }
 

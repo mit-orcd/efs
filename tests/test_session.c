@@ -472,6 +472,21 @@ static void test_guarded_pending_and_fence(void)
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"new epoch has independent sequence identity");
     efs_kv_mem_free(kv);
 }
+static void test_guarded_retire_missing_authority(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[EFS_OPID_UUID_LEN];efs_ino_t ino=0;
+    CHECK(kv!=NULL,"missing authority KV");if(!kv)return;
+    guarded_session_init(kv,uuid);
+    CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"authority",&ino)==EFS_OK,"authority file");
+    struct efs_opid_req q=guarded_request(uuid,1,0);
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"authority active owner");
+    uint8_t key[EFS_KV_KEY_MAX];uint32_t kl=0;
+    CHECK(efs_kv_key_session(efs_kv_session_shard(uuid),uuid,key,&kl)==EFS_OK && efs_kv_del(kv,key,kl)==EFS_OK,"simulate unhosted session owner");
+    CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_NOT_FOUND,"missing global authority cannot claim successful retirement");
+    int verdict=EFS_ERR_BUSY;
+    CHECK(efs_lease_any(kv,ino,1)==1 && efs_lease_guarded_probe(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0,&verdict)==1 && verdict==EFS_OK,"missing authority preserves ownership and replay evidence");
+    efs_kv_mem_free(kv);
+}
 static void test_guarded_window_bound(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[EFS_OPID_UUID_LEN];
@@ -557,6 +572,7 @@ int main(void)
     test_guarded_malformed_ownership();
     test_guarded_lease_edges();
     test_guarded_pending_and_fence();
+    test_guarded_retire_missing_authority();
     test_guarded_window_bound();
     test_negative_create_cold();
     test_pending_cold_edges();
