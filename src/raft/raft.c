@@ -795,7 +795,14 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
          * after the batch was built is pushed as an empty probe so the
          * follower can apply without waiting out the heartbeat. */
         if (ae_inflight_fresh(r, to, ni)) {
-            if (!data_only && r->commit_index > r->ae_inflight_commit[to])
+            /* A batch sent before read_begin carries an older (or zero)
+             * context. Waiting for its reply cannot establish this round's
+             * quorum, even when commit has not moved. Send a bounded empty
+             * probe without clearing/resending the outstanding data window.
+             * The follower must validate prev_index/term before echoing the
+             * fresh context; old replies still cannot authorize this read. */
+            if (!data_only && (r->commit_index > r->ae_inflight_commit[to] ||
+                               r->read_in_flight == 1))
                 return send_commit_probe(r, to);
             return EFS_OK;
         }

@@ -31,6 +31,7 @@ struct net {
     int snap_restart_watch;
     uint64_t snap_restart_off;
     int snap_restart_seen;
+    int hold_ae_replies; /* deliver append bytes but delay their acknowledgements */
     int cap_rep;          /* record AE_REP match_index */
     int cap_n;
     int cap_ok;
@@ -223,6 +224,8 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
             }
         }
     }
+    if (n->hold_ae_replies && msg->type == EFS_RAFT_MSG_AE_REP)
+        return EFS_OK;
     if (n->drop[msg->to])
         return EFS_OK;
     if (msg->to < 0 || msg->to >= n->n || !n->r[msg->to])
@@ -424,6 +427,42 @@ static void test_replicate_and_readindex(void)
     for (i = 0; i < 3; i++) {
         efs_raft_free(n.r[i]);
         efs_raft_mem_free(st[i]);
+    }
+}
+
+/* A fresh read must send its own context even when an older data batch
+ * remains outstanding. No timer tick or extra entry batch may be required. */
+static void test_readindex_outstanding_batch(void)
+{
+    struct net n = { .n = 3 };
+    struct efs_raft_store *st[3];
+    struct app app[3] = {{0}};
+    struct efs_raft_cfg cfg = {0};
+    uint8_t cmd = 'R';
+    uint64_t idx = 0;
+    int i, lid, batches[3];
+    cfg.n=3;cfg.send=send_now;cfg.net=&n;cfg.apply=apply_cmd;
+    cfg.heartbeat_ticks=1;
+    for (i=0;i<3;i++) {
+        st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];
+        cfg.store_ctx=st[i];cfg.app=&app[i];cfg.election_ticks=4+i*4;
+        n.r[i]=efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n,20)==1,"elect outstanding read fixture");
+    lid=leader_id(&n);
+    efs_raft_arm_durable(n.r[lid]);
+    CHECK(efs_raft_propose_local(n.r[lid],&cmd,1,&idx)==EFS_OK,"append local");
+    CHECK(efs_raft_submit(n.r[lid],idx)==EFS_OK,"submit local");
+    CHECK(efs_raft_durable(n.r[lid],idx)==EFS_OK,"local durable");
+    n.hold_ae_replies=1;
+    CHECK(efs_raft_flush(n.r[lid])==EFS_OK,"send outstanding batch");
+    for (i=0;i<3;i++) batches[i]=n.batches[i];
+    n.hold_ae_replies=0;
+    CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK,"begin fresh round behind batch");
+    CHECK(efs_raft_read_ready(n.r[lid]),"fresh quorum completes without heartbeat tick");
+    for (i=0;i<3;i++) {
+        CHECK(n.batches[i]==batches[i],"fresh read does not resend outstanding entries");
+        efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);
     }
 }
 
@@ -1582,6 +1621,7 @@ int main(void)
     test_ae_full_window_not_resent_per_propose();
     test_step_down_no_campaign();
     test_replicate_and_readindex();
+    test_readindex_outstanding_batch();
     test_i3_i4_and_restart();
     test_snapshot();
     test_grow_3_to_5();

@@ -1,0 +1,2 @@
+test_raft: OK
+exit_status=0
