@@ -1,7 +1,8 @@
 # W92 find/stats continuation checkpoint — Oct 8, 01:53 EDT
 
 This work is **in progress, not accepted**. `.stats` still reports zero for
-peer-created files. Server-owned rollups/name indexes have not been implemented.
+peer-created files. Server-owned rollups and query serving have not been integrated. Offline snapshot
+and name-index components are implemented below.
 Legacy `.find` still walks on query misses and errors at its explicit limits.
 Do not close the task on the strength of ordinary POSIX smoke passes.
 
@@ -90,3 +91,56 @@ large-tree targeted searches with measured node/RPC work, repeated cat/stat
 without rebuilds, permissions/chmod, simultaneous opens, output limits,
 transport/leader/restart faults, data validation, full POSIX/peer. Update the
 status entry and retain exact source/build/evidence before declaring success.
+
+
+## Oct 8, 02:12 EDT — query foundations implemented offline
+
+Two focused commits extend this branch; neither is deployed to running NUC:
+
+- `3ecfec32`: full applied KV snapshots, including copied live memtable updates
+  and tombstones, pinned atomically with the segment set. Snapshot scans/gets
+  bypass the live mutable point cache while sharing immutable sparse indexes;
+  they take no live KV lock after pin and support concurrent readers and
+  callback re-entry. A caller-supplied memtable budget refuses excess work with
+  BUSY; poisoned/half-applied engines refuse snapshots with IO. Pin still copies
+  the bounded memtable under the KV mutex; its tail latency must be measured.
+- Process-local per-shard metadata dirty hints increment in the LSM batch apply
+  path, covering ordinary mutations, transaction resolve and snapshot import.
+  Payload chunk keys are excluded. Snapshot hints are captured with its data.
+  They count relevant applied key writes, not user operations or Raft commits,
+  and reset on engine open. Rebuild once per server boot; never expose these
+  hints as authoritative cross-group watermarks or proof of an empty shard.
+- `5d7e1175`: immutable shard-local name candidate indexes (`name_index.h/c`).
+  Exact/prefix queries seek a sorted name range; suffix/contains scans have
+  explicit visit budgets and resumable cursors. Candidate callbacks can fail
+  explicitly and retry the same entry. Memory limits fail explicitly; a partial
+  build is freed. Hard-link names and raw UTF8/newline names are retained.
+  Dentry tombstones remain candidates so directory layout precedence can be
+  resolved correctly. A pending intent/guard/reduction refuses the new shard
+  build with BUSY. That local check alone does NOT prove cross-group assembly.
+
+NUC full KV suite and new name-index unit suite pass in isolated
+`/data1/efs/w92-build`; no cluster files, stores or deployed binaries were
+replaced. Focused new snapshot and name-index tests also pass Clang AddressSanitizer
+and UndefinedBehaviorSanitizer on the Mac (leak checking unavailable there).
+NUC lacks the ASan runtime. An attempted unfiltered Mac KV sanitizer run hit the
+pre-existing Linux-vs-BSD qsort_r call ABI in kv_snap.c/group import; retain that
+failure rather than claiming the entire KV suite passed sanitizers. The new
+focused env selector EFS_TEST_KV_SNAPSHOT_ONLY runs the relevant tests on Mac.
+Raw build/test logs are in results/measure/20261008-w92-query-foundation.
+
+Next: integrate bounded server refresh and publication. Capture group-applied
+vectors with the KV cut under the host apply lock (pin only, no scans). Refuse
+snapshot-import/partial Raft-entry states, retain the previous published version
+on resource failure, rebuild initially and refresh dirty partitions on N/T.
+Index candidates still require authoritative layout/generation, directory scope
+and permission validation. Cross-group transactions, rename-only convergence,
+server-owned rollups with folded publication lanes, versioned bounded RPCs,
+freshness reporting and legacy virtual interface consumers remain required.
+The running loader and historical w90 control paths continue unchanged.
+
+W91 expiry tests remain required, but this branch has no expiry mutation/deadline
+worker or settled command transport yet. Main W90/W91 are independently recorded
+as design-open; preserve their documentation and add real expiry lifecycle gates
+when the implemented interface can be exercised. Do not simulate expiration by
+having the test unlink files itself or report unsupported cases as passing.

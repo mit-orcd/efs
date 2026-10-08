@@ -169,3 +169,10 @@ labels; they refer to this repair, not scratch expiry. Do not overwrite or
 import concurrent main-checkout edits while reconciling documentation.
 
 Latest executable continuation state: [Oct 8 checkpoint](find-stats-checkpoint-20261008.md).
+
+
+Offline query foundations now exist on this branch: full local KV snapshots
+(including unflushed state), per-shard metadata dirty hints and bounded immutable
+name-candidate indexes. See the latest checkpoint for commits and retained unit/
+sanitizer evidence. They are not connected to live server refresh/RPCs yet;
+.stats remains incorrect and W92 remains open.
