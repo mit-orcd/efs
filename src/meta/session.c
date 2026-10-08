@@ -335,7 +335,7 @@ int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,
     struct efs_sess_local loc;
     int rc;
 
-    if (!kv || !uuid || shard >= EFS_SESSION_BITS)
+    if (!kv || !uuid || !fence_epoch || shard >= EFS_SESSION_BITS)
         return EFS_ERR_INVAL;
     memset(&loc, 0, sizeof(loc));
     rc = load_local(kv, shard, uuid, &loc);

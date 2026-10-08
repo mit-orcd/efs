@@ -34,3 +34,12 @@ The live wire gate prepares a private session-row intent, requires FENCE_LOC
 BUSY, resolves ABORT, and then requires FENCE_LOC success. It exercises the
 server reply and log-progress boundary; it is not a production pending-CREATE
 namespace transaction or a complete runtime-session coordinator.
+
+
+The second AMD repeat `gc-direct-t3xivx_5` additionally rejects truncated,
+oversized, zero-epoch, out-of-range-shard and wrong-group fences before proposing
+any mutation. All five wire probes return INVAL, the guarded valid request
+returns BUSY, and resolution permits the successful retry. Full direct-I/O/TCP
+POSIX/peer, ownership, GC and two-crash WAL gates pass; installed service restored.
+Session normal/sanitizer checks and the full Linux target pass. No NUC test ran.
+[Wire evidence](../../results/measure/20261008-w93-w96-review/w94-fence-validation/prepared-owner-wire.txt).

@@ -78,6 +78,21 @@ static void owner_fence(unsigned port, const char *hex, unsigned shard)
     memcpy(fence + 3, uuid, 16);
     be(fence + 19, 2, 4);
     be(fence + 23, shard, 4);
+    /* No malformed/routed fence may look like an acknowledged barrier. */
+    owner_rpc(port, fence, sizeof(fence) - 1, EFS_ERR_INVAL);
+    fence[0] = efs_raft_shard_group(shard ^ 1u);
+    owner_rpc(port, fence, sizeof(fence), EFS_ERR_INVAL);
+    fence[0] = p[0];
+    be(fence + 19, 0, 4);
+    owner_rpc(port, fence, sizeof(fence), EFS_ERR_INVAL);
+    be(fence + 19, 2, 4);
+    be(fence + 23, EFS_SESSION_BITS, 4);
+    owner_rpc(port, fence, sizeof(fence), EFS_ERR_INVAL);
+    be(fence + 23, shard, 4);
+    uint8_t extra[sizeof(fence) + 1];
+    memcpy(extra, fence, sizeof(fence));
+    extra[sizeof(fence)] = 0;
+    owner_rpc(port, extra, sizeof(extra), EFS_ERR_INVAL);
     owner_rpc(port, fence, sizeof(fence), EFS_ERR_BUSY);
     uint8_t resolve[23] = {0};
     resolve[0] = p[0];

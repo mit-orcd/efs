@@ -1809,10 +1809,12 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_session_begin_fence(h->kv, uuid);
         break;
     case EFS_MD_SESS_FENCE_LOC:
-        if (clen < HOST_SESS_REG_LEN)
-            return EFS_OK;
+        if (clen != HOST_SESS_REG_LEN)
+            return EFS_ERR_INVAL;
         epoch = rd32be(cmd + 18);
         shard = rd32be(cmd + 22);
+        if (!epoch || shard >= EFS_SESSION_BITS)
+            return EFS_ERR_INVAL;
         rc = efs_session_fence_local(h->kv, shard, uuid, epoch);
         /* Abort in-memory waiters of the fenced epoch now (not only at
          * LEASE_DROP): a queued waiter must not GRANT after FENCE_LOC. */
@@ -7946,6 +7948,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         rc=host_unpack_lease_edge(cmd,clen,&q,&ino,&gen,&flags,&token);
         if(rc!=EFS_OK || group!=efs_raft_shard_group(efs_kv_inode_shard(ino))) {
             out->rc=EFS_ERR_INVAL;return;
+        }
+    }
+    if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION && cmd[1] == EFS_MD_SESS_FENCE_LOC) {
+        if (clen != HOST_SESS_REG_LEN || !rd32be(cmd + 18) ||
+            rd32be(cmd + 22) >= EFS_SESSION_BITS ||
+            group != efs_raft_shard_group(rd32be(cmd + 22))) {
+            out->rc = EFS_ERR_INVAL;
+            return;
         }
     }
     if (clen >= HOST_CFG_LEN && cmd[0] == EFS_MD_CMD_CFG) {
