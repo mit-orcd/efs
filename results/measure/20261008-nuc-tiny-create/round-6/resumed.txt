@@ -1,0 +1,2 @@
+    PID STAT COMMAND
+1623836 Sl   python3 ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 1000000 --workers 8 /data1/efs/mnt/tiny-profile-r6

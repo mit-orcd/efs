@@ -1,0 +1,119 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'context-switches'
+# Event count (approx.): 36053
+#
+# Children      Self  Command   Shared Object       Symbol                                  
+# ........  ........  ........  ..................  ........................................
+#
+    86.76%    86.76%  efsd      [kernel.kallsyms]   [k] __schedule
+    86.67%     0.00%  efsd      [kernel.kallsyms]   [k] schedule
+    86.33%     0.00%  efsd      [kernel.kallsyms]   [k] do_syscall_64
+    86.33%     0.00%  efsd      [kernel.kallsyms]   [k] entry_SYSCALL_64_after_hwframe
+    37.92%     0.00%  efsd      libc.so.6           [.] start_thread
+    37.15%     0.00%  efsd      [kernel.kallsyms]   [k] __futex_wait
+    37.15%     0.00%  efsd      [kernel.kallsyms]   [k] __x64_sys_futex
+    37.15%     0.00%  efsd      [kernel.kallsyms]   [k] do_futex
+    37.15%     0.00%  efsd      [kernel.kallsyms]   [k] futex_do_wait
+    37.15%     0.00%  efsd      [kernel.kallsyms]   [k] futex_wait
+    22.10%     0.00%  efsd      [kernel.kallsyms]   [k] schedule_timeout
+    21.07%     0.00%  efsd      libc.so.6           [.] __futex_abstimed_wait_common
+    19.00%     0.00%  efsd      [kernel.kallsyms]   [k] __sys_recvfrom
+    19.00%     0.00%  efsd      [kernel.kallsyms]   [k] __x64_sys_recvfrom
+    19.00%     0.00%  efsd      [kernel.kallsyms]   [k] inet_recvmsg
+    19.00%     0.00%  efsd      [kernel.kallsyms]   [k] sock_recvmsg
+    19.00%     0.00%  efsd      [kernel.kallsyms]   [k] tcp_recvmsg
+    19.00%     0.00%  efsd      libc.so.6           [.] __libc_recv
+    18.92%     0.00%  efsd      [kernel.kallsyms]   [k] sk_wait_data
+    18.92%     0.00%  efsd      [kernel.kallsyms]   [k] tcp_recvmsg_locked
+    18.92%     0.00%  efsd      [kernel.kallsyms]   [k] wait_woken
+    16.17%     0.00%  efsd      libc.so.6           [.] __GI___lll_lock_wait
+    15.65%     0.00%  efsd      [kernel.kallsyms]   [k] __x64_sys_poll
+    15.65%     0.00%  efsd      [kernel.kallsyms]   [k] do_poll.constprop.0
+    15.65%     0.00%  efsd      [kernel.kallsyms]   [k] do_sys_poll
+    15.65%     0.00%  efsd      [kernel.kallsyms]   [k] poll_schedule_timeout.constprop.0
+    15.65%     0.00%  efsd      [kernel.kallsyms]   [k] schedule_hrtimeout_range_clock
+    15.65%     0.00%  efsd      libc.so.6           [.] __poll
+    13.24%    13.24%  efs-fuse  [kernel.kallsyms]   [k] __schedule
+    13.16%     0.00%  efs-fuse  [kernel.kallsyms]   [k] schedule
+    13.07%     0.00%  efs-fuse  [kernel.kallsyms]   [k] do_syscall_64
+    13.07%     0.00%  efs-fuse  [kernel.kallsyms]   [k] entry_SYSCALL_64_after_hwframe
+    11.61%     0.00%  efsd      efsd                [.] conn_thread
+    11.61%     0.00%  efsd      efsd                [.] server_handle_conn
+    11.44%     0.00%  efsd      [kernel.kallsyms]   [k] do_fsync
+    11.26%     0.00%  efsd      [xfs]               [k] xfs_file_fsync
+     9.46%     0.00%  efsd      [kernel.kallsyms]   [k] __x64_sys_fdatasync
+     9.46%     0.00%  efsd      libc.so.6           [.] fdatasync
+     9.11%     0.00%  efs-fuse  libfuse3.so.3.16.2  [.] fuse_do_work
+     9.03%     0.00%  efs-fuse  efs-fuse            [.] ll_flush
+     9.03%     0.00%  efs-fuse  libfuse3.so.3.16.2  [.] do_flush.lto_priv.0
+     6.79%     0.00%  efs-fuse  [kernel.kallsyms]   [k] __x64_sys_clock_nanosleep
+     6.79%     0.00%  efs-fuse  [kernel.kallsyms]   [k] common_nsleep
+     6.79%     0.00%  efs-fuse  [kernel.kallsyms]   [k] do_nanosleep
+     6.79%     0.00%  efs-fuse  [kernel.kallsyms]   [k] hrtimer_nanosleep
+     6.79%     0.00%  efs-fuse  libc.so.6           [.] clock_nanosleep@GLIBC_2.2.5
+     6.53%     0.00%  efsd      [xfs]               [k] xfs_log_force_seq
+     5.93%     0.00%  efsd      efsd                [.] host_pump
+     4.82%     0.00%  efsd      [kernel.kallsyms]   [k] __filemap_fdatawait_range
+     4.82%     0.00%  efsd      [kernel.kallsyms]   [k] file_write_and_wait_range
+     4.82%     0.00%  efsd      [kernel.kallsyms]   [k] folio_wait_bit_common
+     4.82%     0.00%  efsd      [kernel.kallsyms]   [k] folio_wait_writeback
+     4.82%     0.00%  efsd      [kernel.kallsyms]   [k] io_schedule
+     4.30%     0.00%  efsd      efsd                [.] server_raft_host_hold
+     3.35%     0.00%  efsd      [xfs]               [k] xlog_wait_on_iclog
+     3.18%     0.00%  efsd      [kernel.kallsyms]   [k] __flush_workqueue
+     3.18%     0.00%  efsd      [kernel.kallsyms]   [k] __wait_for_common
+     3.18%     0.00%  efsd      [xfs]               [k] xlog_cil_force_seq
+     3.18%     0.00%  efsd      [xfs]               [k] xlog_cil_push_now.isra.0
+     3.01%     0.00%  efsd      efsd                [.] host_propose
+     2.49%     0.00%  efs-fuse  [fuse]              [k] fuse_dev_do_read
+     2.49%     0.00%  efs-fuse  [fuse]              [k] fuse_dev_read
+     2.49%     0.00%  efs-fuse  [kernel.kallsyms]   [k] ksys_read
+     2.49%     0.00%  efs-fuse  [kernel.kallsyms]   [k] vfs_read
+     2.49%     0.00%  efs-fuse  libc.so.6           [.] read
+     2.41%     0.00%  efsd      efsd                [.] efs_raft_disk_sync_release_wait
+     2.41%     0.00%  efsd      efsd                [.] host_propose_wait_idx.constprop.0
+     2.32%     0.00%  efsd      efsd                [.] server_raft_host_create
+     2.32%     0.00%  efsd      efsd                [.] server_raft_host_report
+     2.24%     0.00%  efs-fuse  efs-fuse            [.] efs_append_flush_report.isra.0
+     2.24%     0.00%  efsd      [kernel.kallsyms]   [k] __x64_sys_clock_nanosleep
+     2.24%     0.00%  efsd      [kernel.kallsyms]   [k] common_nsleep
+     2.24%     0.00%  efsd      [kernel.kallsyms]   [k] do_nanosleep
+     2.24%     0.00%  efsd      [kernel.kallsyms]   [k] hrtimer_nanosleep
+     2.24%     0.00%  efsd      libc.so.6           [.] clock_nanosleep@GLIBC_2.2.5
+     2.15%     0.00%  efs-fuse  [kernel.kallsyms]   [k] __x64_sys_poll
+     2.15%     0.00%  efs-fuse  [kernel.kallsyms]   [k] do_poll.constprop.0
+     2.15%     0.00%  efs-fuse  [kernel.kallsyms]   [k] do_sys_poll
+     2.15%     0.00%  efs-fuse  [kernel.kallsyms]   [k] poll_schedule_timeout.constprop.0
+     2.15%     0.00%  efs-fuse  [kernel.kallsyms]   [k] schedule_hrtimeout_range_clock
+     2.15%     0.00%  efs-fuse  libc.so.6           [.] __poll
+     2.06%     0.00%  efsd      efsd                [.] efs_txn_read_ex
+     1.98%     0.00%  efsd      [kernel.kallsyms]   [k] __x64_sys_fsync
+     1.98%     0.00%  efsd      libc.so.6           [.] fsync
+     1.81%     0.00%  efs-fuse  efs-fuse            [.] dcache_flush_ino_pass
+     1.81%     0.00%  efs-fuse  efs-fuse            [.] efs_dcache_flush_ino
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] __sys_recvfrom
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] __x64_sys_recvfrom
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] inet_recvmsg
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] schedule_timeout
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] sk_wait_data
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] sock_recvmsg
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] tcp_recvmsg
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] tcp_recvmsg_locked
+     1.46%     0.00%  efs-fuse  [kernel.kallsyms]   [k] wait_woken
+     1.46%     0.00%  efs-fuse  libc.so.6           [.] __libc_recv
+     1.29%     0.00%  efs-fuse  efs-fuse            [.] dcache_put_now_budgeted
+     1.29%     0.00%  efs-fuse  efs-fuse            [.] put_pool_run.isra.0
+     1.20%     0.00%  efs-fuse  efs-fuse            [.] efs_client_put_fragments_parallel
+     1.20%     0.00%  efsd      efsd                [.] efs_raft_disk_sync_release
+     1.12%     0.00%  efsd      efsd                [.] inode_read_tx
+     1.12%     0.00%  efsd      efsd                [.] server_raft_host_lookup
+     1.03%     0.00%  efsd      efsd                [.] efs_meta_apply_get_inode
+
+
+#
+# (Tip: To show assembler sample context control flow use perf record -b / perf report --samples 10 and then browse context)
+#

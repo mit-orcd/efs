@@ -509,6 +509,11 @@ efs_ino_t efs_client_create_ex(efs_ino_t parent, const char *name, uint32_t mode
  * Concurrent mutations cannot overwrite the caller's error. */
 int efs_client_create_result(efs_ino_t parent, const char *name, uint32_t mode,
                               uid_t uid, gid_t gid, uint32_t flags, efs_ino_t *ino);
+/* Optional request-local committed CREATE reply, cleared on failure.
+ * It is valid for this mutation's reply, never a cache for subsequent stat. */
+int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t mode,
+                                   uid_t uid, gid_t gid, uint32_t flags,
+                                   efs_ino_t *ino, struct efs_inode *created);
 
 /* Remove a file or directory. */
 int efs_client_unlink(efs_ino_t parent, const char *name, bool is_dir);

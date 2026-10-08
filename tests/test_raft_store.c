@@ -355,7 +355,7 @@ static void test_torn_tail(void)
     struct efs_raft_disk *d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
     struct efs_raft_store *s;
     char path[600];
-    uint64_t idx = 0, term = 0;
+    uint64_t idx = 0, term = 0, end;
     int fd;
 
     if (!d)
@@ -363,15 +363,17 @@ static void test_torn_tail(void)
     s = efs_raft_disk_group(d, EFS_RAFT_GROUP_SHARD);
     st_append(s, 1, 1, "one");
     st_append(s, 2, 1, "two");
+    end = efs_raft_disk_bytes(d);
     efs_raft_disk_close(d);
 
     /* Append a half-written record, the way a crash mid-write leaves one. */
     snprintf(path, sizeof(path), "%s/raft.log", g_dir);
-    fd = open(path, O_WRONLY | O_APPEND);
+    fd = open(path, O_WRONLY);
     CHECK(fd >= 0, "open log");
     if (fd >= 0) {
         const char junk[] = "\x00\x00\x01\x00\x00\x00\x00\x40partial";
-        CHECK(write(fd, junk, sizeof(junk) - 1) > 0, "write partial");
+        CHECK(pwrite(fd, junk, sizeof(junk) - 1, (off_t)end) > 0,
+              "write partial at valid tail, before reserved zeros");
         close(fd);
     }
     d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
@@ -428,6 +430,64 @@ static void test_crash_durability(void)
     CHECK(s->last(s, &idx, &term) == EFS_OK && idx == 1 && term == 3,
           "fsynced entry did not survive a crash");
     CHECK(st_check(s, 1, 3, "survives"), "fsynced payload lost");
+    efs_raft_disk_close(d);
+    rmtree(g_dir);
+}
+
+/* Cross multiple allocation chunks, rotate, then crash with a zero-filled
+ * reserved tail. The durable watermark must count only actual records and
+ * recovery must append at that boundary, not behind the reserved zeros. */
+static void test_reserved_tail(void)
+{
+    struct efs_raft_disk *d;
+    struct efs_raft_store *s;
+    char cmd[401], path[600];
+    uint64_t idx = 0, term = 0;
+    int status = 0;
+    pid_t pid;
+
+    memset(cmd, 'p', sizeof(cmd) - 1);
+    cmd[sizeof(cmd) - 1] = 0;
+    snprintf(path, sizeof(path), "%s/raft.log", g_dir);
+    pid = fork();
+    CHECK(pid >= 0, "reserved tail fork");
+    if (pid < 0) return;
+    if (pid == 0) {
+        struct stat st;
+        d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+        if (!d) _exit(2);
+        s = efs_raft_disk_group(d, EFS_RAFT_GROUP_SHARD);
+        if (efs_raft_disk_sync_hold(d) != EFS_OK) _exit(3);
+        for (uint64_t i = 1; i <= 5000; i++)
+            if (st_append(s, i, 3, cmd) != EFS_OK) _exit(4);
+        if (efs_raft_disk_sync_release_wait(d) != EFS_OK) _exit(5);
+        if (efs_raft_disk_synced_bytes(d) != efs_raft_disk_bytes(d)) _exit(6);
+        if (stat(path, &st) || (uint64_t)st.st_size < efs_raft_disk_bytes(d))
+            _exit(7);
+        if (efs_raft_disk_rotate(d) != EFS_OK) _exit(8);
+        if (st_append(s, 5001, 3, "after rotation") != EFS_OK) _exit(9);
+        if (efs_raft_disk_synced_bytes(d) != efs_raft_disk_bytes(d)) _exit(10);
+        _exit(0);
+    }
+    waitpid(pid, &status, 0);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == 0,
+          "reserved tail child failed");
+    d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+    CHECK(d != NULL, "reserved tail reopen");
+    if (!d) return;
+    s = efs_raft_disk_group(d, EFS_RAFT_GROUP_SHARD);
+    CHECK(s->last(s, &idx, &term) == EFS_OK && idx == 5001,
+          "reserved tail must not hide records across allocation boundaries");
+    CHECK(st_check(s, 1, 3, cmd) && st_check(s, 5000, 3, cmd) &&
+          st_check(s, 5001, 3, "after rotation"), "reserved payloads survive");
+    CHECK(st_append(s, 5002, 3, "after recovery") == EFS_OK,
+          "append after reserved tail recovery");
+    efs_raft_disk_close(d);
+    d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+    CHECK(d != NULL, "reserved tail second reopen");
+    if (!d) return;
+    s = efs_raft_disk_group(d, EFS_RAFT_GROUP_SHARD);
+    CHECK(st_check(s, 5002, 3, "after recovery"), "post-recovery append survives");
     efs_raft_disk_close(d);
     rmtree(g_dir);
 }
@@ -603,6 +663,7 @@ int main(void)
     test_truncate_persists();
     test_torn_tail();
     test_crash_durability();
+    test_reserved_tail();
     test_rotation();
     test_raft_on_disk_store();
 

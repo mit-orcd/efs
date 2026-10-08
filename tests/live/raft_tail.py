@@ -14,6 +14,7 @@ def commands(path, commits):
     off=8;entries={}
     while off+8<=len(data):
         crc,length=struct.unpack_from('>II',data,off)
+        if crc==0 and length==0 and not any(data[off:]):break  # preallocated tail
         if not 0<length<=16*1024*1024:raise ValueError('invalid record length')
         if off+8+length>len(data):break
         payload=data[off+8:off+8+length]

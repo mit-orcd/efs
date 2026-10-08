@@ -3521,8 +3521,8 @@ instrumented window, n3 pump thread 1746498 completed 1,024 Raft `fdatasync`
 calls totaling 7.394 s (mean 7.22 ms). This is one thread's measured syscall
 elapsed time, not a cluster-wide CPU percentage or a per-created-file ratio.
 The trace includes replication/catch-up/background work. See the
-raw trace `round-7/after/follower-sync.txt` and separate profiles retained
-in the isolated worktree; [evidence location](../status/tiny-file-performance-plan-20261008.md#evidence-location).
+[raw trace](../../results/measure/20261008-nuc-tiny-create/round-7/after/follower-sync.txt)
+and [separate profiles](../../results/measure/20261008-nuc-tiny-create/round-7/after/).
 
 **Remaining action:** attribute entries, bytes, queue delay and barrier count
 by group and operation. `drain_inbox` drives received messages serially;
@@ -3652,7 +3652,7 @@ conditions, so it proves neither a regression nor an expected saving. A
 separate NVMe microbenchmark measured durable 1 KiB appends at 7.1–7.8 ms
 versus 3.9 ms with preallocation. That motivates a KV-specific experiment,
 not a KV throughput claim. See the
-[probe location](../status/tiny-file-performance-plan-20261008.md#evidence-location).
+[probe](../../results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json).
 
 **Remaining action:** inspect `kv_wal.c` append/replay/reset/rotation and
 compaction ownership before porting the principle. Its current O_APPEND path

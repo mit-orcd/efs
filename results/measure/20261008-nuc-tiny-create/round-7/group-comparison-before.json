@@ -1,0 +1,55 @@
+{
+  "root": "/data1/efs/mnt/tiny-r7-groups-1692975",
+  "groups": {
+    "0": [
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d001",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d003",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d005",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d007",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d009",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d010",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d012",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d014"
+    ],
+    "2": [
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d000",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d002",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d004",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d006",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d008",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d011",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d013",
+      "/data1/efs/mnt/tiny-r7-groups-1692975/d015"
+    ]
+  },
+  "results": [
+    {
+      "group": 0,
+      "files": 256,
+      "seconds": 1.6013348209962714,
+      "files_per_sec": 159.8666291667407,
+      "mean_file_ms": 47.84325661034927
+    },
+    {
+      "group": 2,
+      "files": 256,
+      "seconds": 13.698868480016245,
+      "files_per_sec": 18.687674852375576,
+      "mean_file_ms": 423.8624258200616
+    },
+    {
+      "group": 0,
+      "files": 256,
+      "seconds": 1.4611861059966031,
+      "files_per_sec": 175.20013292584315,
+      "mean_file_ms": 42.89934267728768
+    },
+    {
+      "group": 2,
+      "files": 256,
+      "seconds": 13.517349786008708,
+      "files_per_sec": 18.938623624652802,
+      "mean_file_ms": 414.063785648068
+    }
+  ]
+}

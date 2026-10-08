@@ -84,15 +84,15 @@ Baseline round-7 private gates passed POSIX 216/0/1 (16.0 s), peer 64/64
 (10.4 s), nine virtual-interface gates and persisted restart. They are
 regression evidence for the prior candidate, not acceptance of W93–W96.
 
-## Evidence location
+## Evidence
 
-The measurements above are recorded in the isolated `devel-find-stats`
-worktree under `results/measure/20261008-nuc-tiny-create/round-7/`:
-`group-comparison-before.json`, `group-comparison-after.json`, `sync-summary.json`,
-`log-space-probe-r7.json`, `identity.txt`, `source.patch`, `full-validation.log`,
-and the separate profiles/traces in `after/`. That evidence and experimental
-source are not included in this documentation-only commit. Preserve and review
-those artifacts before implementation or acceptance; the summaries here do
-not establish production acceptance.
+- [Before group comparison](../../results/measure/20261008-nuc-tiny-create/round-7/group-comparison-before.json)
+  and [after](../../results/measure/20261008-nuc-tiny-create/round-7/group-comparison-after.json).
+- [Separate perf/strace files](../../results/measure/20261008-nuc-tiny-create/round-7/after/)
+  and [sync summary](../../results/measure/20261008-nuc-tiny-create/round-7/sync-summary.json).
+- [Storage principle probe](../../results/measure/20261008-nuc-tiny-create/round-7/log-space-probe-r7.json).
+- [Build identities](../../results/measure/20261008-nuc-tiny-create/round-7/identity.txt),
+  [source patch](../../results/measure/20261008-nuc-tiny-create/round-7/source.patch),
+  and [validation](../../results/measure/20261008-nuc-tiny-create/round-7/full-validation.log).
 
 The full text and binding limits for each item are in the work-item register.

@@ -1,0 +1,31 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 619  of event 'cycles:P'
+# Event count (approx.): 4760894985
+#
+# Overhead  Command  Shared Object      Symbol                                     
+# ........  .......  .................  ...........................................
+#
+     3.52%  efsd     efsd               [.] cache_get
+            |
+            ---cache_get
+               efs_txn_read_ex
+               |          
+                --2.86%--efs_meta_apply_getattr
+                          efs_query_catalog_build
+                          host_query_thread
+                          start_thread
+
+     2.76%  efsd     libc.so.6          [.] __memcmp_evex_movbe
+     2.75%  efsd     libc.so.6          [.] __memmove_evex_unaligned_erms
+            |          
+             --2.14%--__memmove_evex_unaligned_erms
+
+
+
+#
+# (Tip: For memory address profiling, try: perf mem record / perf mem report)
+#

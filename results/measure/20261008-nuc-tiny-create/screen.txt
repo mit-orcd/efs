@@ -1,0 +1,46 @@
+    waiter.event.wait(timeout)
+  File "/usr/lib64/python3.12/threading.py", line 655, in wait
+    signaled = self._cond.wait(timeout)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/threading.py", line 355, in wait
+    waiter.acquire()
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/efs/./tiny_files.py", line 136, in <module>
+    main()
+  File "/home/efs/./tiny_files.py", line 118, in main
+    with Progress(target) as progress, ThreadPoolExecutor(max_workers=args.workers) as executor:
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/concurrent/futures/_base.py", line 647, in __exit__
+    self.shutdown(wait=True)
+  File "/usr/lib64/python3.12/concurrent/futures/thread.py", line 239, in shutdown
+    t.join()
+  File "/usr/lib64/python3.12/threading.py", line 1149, in join
+    self._wait_for_tstate_lock()
+  File "/usr/lib64/python3.12/threading.py", line 1169, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+^CException ignored in: <module 'threading' from '/usr/lib64/python3.12/threading.py'>
+Traceback (most recent call last):
+  File "/usr/lib64/python3.12/threading.py", line 1602, in _shutdown
+    atexit_call()
+  File "/usr/lib64/python3.12/concurrent/futures/thread.py", line 31, in _python_exit
+    t.join()
+  File "/usr/lib64/python3.12/threading.py", line 1149, in join
+    self._wait_for_tstate_lock()
+  File "/usr/lib64/python3.12/threading.py", line 1169, in _wait_for_tstate_lock
+    if lock.acquire(block, timeout):
+       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt:
+
+efs@nuc:~$ ^C
+efs@nuc:~$ ^C
+efs@nuc:~$
+efs@nuc:~$
+efs@nuc:~$
+efs@nuc:~$ ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 1000000 --workers 8 /data1/efs/mnt/tiny-files4
+17,860/1,000,000 files (1.8%), 414.1 s, 43 files/s

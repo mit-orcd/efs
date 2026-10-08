@@ -209,7 +209,9 @@ static int kv_wal_fsync_to_locked(struct kv_wal *w, uint64_t mine)
         w->syncing = 1;
         target = w->appended;
         pthread_mutex_unlock(&w->mu);
-        rc = fsync(w->fd) == 0 ? EFS_OK : EFS_ERR_IO;
+        /* WAL recovery needs bytes and file length, not timestamp metadata.
+         * fdatasync retains both durability requirements. */
+        rc = fdatasync(w->fd) == 0 ? EFS_OK : EFS_ERR_IO;
         pthread_mutex_lock(&w->mu);
         w->syncing = 0;
         if (rc == EFS_OK && w->synced < target)

@@ -136,6 +136,12 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
         return EFS_OK;
     if (honor_hold && d->sync_hold > 0)
         return EFS_OK;
+    if (d->io_failed)
+        return EFS_ERR_IO;
+    /* A concurrent batch may already have persisted this tail. Creating
+     * a fresh round here would issue a barrier with no new log bytes. */
+    if (d->synced_bytes >= d->bytes)
+        return EFS_OK;
     want = ++d->sync_want;
     for (;;) {
         if (d->io_failed)
@@ -155,7 +161,9 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
             uint64_t cover = d->bytes;
 
             pthread_mutex_unlock(&d->mu);
-            if (fsync(d->fd) != 0) {
+            /* Recovery requires the log bytes and length; fdatasync
+             * persists both without unrelated timestamp metadata. */
+            if (fdatasync(d->fd) != 0) {
                 pthread_mutex_lock(&d->mu);
                 d->io_failed = 1;
             } else {
@@ -174,6 +182,37 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
     }
 }
 
+/* Reserve the EOF ahead of small appends. On XFS, growing EOF on every
+ * durable record also forces inode/log work. Unwritten extents read as zero,
+ * which replay already treats as the end of records. The valid/durable byte
+ * watermarks must never include this padding. Allocation is an optimization:
+ * if the filesystem cannot reserve a whole chunk, try the exact record write
+ * normally (it may still fit). Its normal sync remains the ACK boundary. */
+static void log_reserve_locked(struct efs_raft_disk *d, uint64_t end)
+{
+#ifdef __linux__
+    const uint64_t chunk = 1024ull * 1024ull;
+    uint64_t reserve;
+    int rc;
+
+    if (d->sync_mode != EFS_RAFT_DISK_SYNC || d->prealloc_off ||
+        end <= d->allocated_bytes || end > INT64_MAX - chunk)
+        return;
+    reserve = (end + chunk - 1) & ~(chunk - 1);
+    do {
+        rc = fallocate(d->fd, 0, (off_t)d->allocated_bytes,
+                       (off_t)(reserve - d->allocated_bytes));
+    } while (rc < 0 && errno == EINTR);
+    if (rc == 0)
+        d->allocated_bytes = reserve;
+    else
+        d->prealloc_off = 1;
+#else
+    (void)d;
+    (void)end;
+#endif
+}
+
 /* Write without making it durable. Only rotation may use this directly: it
  * writes many records and pays one fsync at the end. */
 static int log_write_locked(struct efs_raft_disk *d, uint8_t type,
@@ -188,12 +227,15 @@ static int log_write_locked(struct efs_raft_disk *d, uint8_t type,
     len = rec_encode(d, type, group, a, b, cmd, clen);
     if (len == 0)
         return EFS_ERR_INVAL;
+    log_reserve_locked(d, d->bytes + len);
     rc = write_all(d->fd, d->rec, len, d->bytes);
     if (rc != EFS_OK) {
         d->io_failed = 1;
         return rc;
     }
     d->bytes += len;
+    if (d->allocated_bytes < d->bytes)
+        d->allocated_bytes = d->bytes;
     return EFS_OK;
 }
 
@@ -336,6 +378,7 @@ static int finish_replay(struct efs_raft_disk *d, uint64_t good)
             return EFS_ERR_IO;
         d->bytes = good;
     }
+    d->allocated_bytes = good;
     d->live_bytes = 0;
     for (i = 0; i < RAFT_DISK_MAX_GROUPS; i++)
         if (d->g[i])
@@ -358,6 +401,7 @@ int raft_log_replay(struct efs_raft_disk *d)
         if (rc != EFS_OK)
             return rc;
         d->bytes = RAFT_DISK_HDR_LEN;
+        d->allocated_bytes = d->bytes;
         return fsync(d->fd) == 0 ? EFS_OK : EFS_ERR_IO;
     }
     if (d->bytes < RAFT_DISK_HDR_LEN)
@@ -415,7 +459,7 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     char final[RAFT_DISK_PATH_MAX + 32];
     uint8_t hdr[RAFT_DISK_HDR_LEN];
     int fd, dfd, old_fd;
-    uint64_t old_bytes;
+    uint64_t old_bytes, old_allocated;
     uint32_t i;
     int rc = EFS_OK;
 
@@ -432,8 +476,10 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     /* Swap the fd so raft_log_append writes into the new file. */
     old_fd = d->fd;
     old_bytes = d->bytes;
+    old_allocated = d->allocated_bytes;
     d->fd = fd;
     d->bytes = RAFT_DISK_HDR_LEN;
+    d->allocated_bytes = RAFT_DISK_HDR_LEN;
     for (i = 0; rc == EFS_OK && i < RAFT_DISK_MAX_GROUPS; i++) {
         struct raft_disk_group *g = d->g[i];
         uint32_t k;
@@ -462,6 +508,7 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     if (rc != EFS_OK) {
         d->fd = old_fd;
         d->bytes = old_bytes;
+        d->allocated_bytes = old_allocated;
         close(fd);
         unlink(tmp);
         d->io_failed = 1;

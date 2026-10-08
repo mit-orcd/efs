@@ -1,0 +1,16 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 628  of event 'cycles:P'
+# Event count (approx.): 4517547816
+#
+# Overhead  Command  Shared Object      Symbol                                     
+# ........  .......  .................  ...........................................
+#
+
+
+#
+# (Tip: For latency profiling, try: perf record/report --latency)
+#

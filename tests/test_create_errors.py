@@ -32,7 +32,11 @@ int efs_client_rpc_create(efs_export_id_t ex, efs_ino_t parent, const char *name
     uint32_t mode, uid_t uid, gid_t gid, uint32_t flags,
     efs_ino_t *ino, struct efs_inode *out) {
     (void)ex; (void)parent; (void)mode; (void)uid; (void)gid; (void)flags; (void)ino;
+    memset(out, 0, sizeof(*out));
     out->ino = 42;
+    out->mode = mode;
+    out->uid = uid;
+    out->size = 123;
     return !strcmp(name,"busy") ? EFS_ERR_BUSY :
            !strcmp(name,"quota") ? EFS_ERR_QUOTA : EFS_OK;
 }
@@ -48,22 +52,26 @@ static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode
     (void)parent; (void)name; (void)mode; (void)uid; (void)gid;
     assert(out->ino == 42);
 }
-''' + '\n'.join([function(ops, 'efs_client_create_result'),
+''' + '\n'.join([function(ops, 'efs_client_create_result_inode'),
+                   function(ops, 'efs_client_create_result'),
                    function(ops, 'efs_client_create_ex'),
                    function(fuse, 'fuse_stat_errno'),
                    function(fuse, 'fuse_create_errno')]) + r'''
 static void *worker(void *arg) {
     const char *name = arg;
     efs_ino_t ino = 999;
-    int rc = efs_client_create_result(1,name,0,0,0,0,&ino);
+    struct efs_inode created;
+    memset(&created, 0xff, sizeof(created));
+    int rc = efs_client_create_result_inode(1,name,0640,123,0,0,&ino,&created);
     rendezvous(); /* All results exist before any error is consumed. */
     if (!strcmp(name,"busy")) {
-        assert(rc == EFS_ERR_BUSY && ino == 0);
+        assert(rc == EFS_ERR_BUSY && ino == 0 && created.ino == 0);
         assert(fuse_create_errno(rc,1,name) == -EBUSY);
     } else if (!strcmp(name,"quota")) {
-        assert(rc == EFS_ERR_QUOTA && ino == 0);
+        assert(rc == EFS_ERR_QUOTA && ino == 0 && created.ino == 0);
         assert(fuse_create_errno(rc,1,name) == -ENOSPC);
-    } else assert(rc == EFS_OK && ino == 42);
+    } else assert(rc == EFS_OK && ino == 42 && created.ino == 42 &&
+                created.mode == 0640 && created.uid == 123 && created.size == 123);
     return NULL;
 }
 int main(void) {

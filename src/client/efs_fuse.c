@@ -3483,10 +3483,12 @@ static int fuse_create_errno(int create_rc, efs_ino_t parent, const char *name)
 
 static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
                               mode_t mode, struct fuse_file_info *fi,
-                              efs_ino_t *out_ino)
+                              efs_ino_t *out_ino, struct efs_inode *created)
 {
     struct efs_inode parent;
     int rc;
+    if (created)
+        memset(created, 0, sizeof(*created));
     if (strlen(name) > 255)
         return -ENAMETOOLONG;
     if (name_is_reserved(name))
@@ -3504,8 +3506,8 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     uid_t uid = ctx ? ctx->uid : 0;
     gid_t gid = ctx ? ctx->gid : 0;
     efs_ino_t ino = 0;
-    int create_rc = efs_client_create_result(parent.ino, name, S_IFREG | mode,
-                                              uid, gid, 0, &ino);
+    int create_rc = efs_client_create_result_inode(parent.ino, name, S_IFREG | mode,
+                                                    uid, gid, 0, &ino, created);
     if (create_rc != EFS_OK) {
         int e = fuse_create_errno(create_rc, parent.ino, name);
         if (e == -EEXIST && fi && !(fi->flags & O_EXCL)) {
@@ -5572,7 +5574,7 @@ static void ll_mknod_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     if (!S_ISREG(mode))
         rc = -EPERM;
     else {
-        rc = efs_fuse_create_at(parent, name, mode, NULL, &new_ino);
+        rc = efs_fuse_create_at(parent, name, mode, NULL, &new_ino, NULL);
         if (rc == 0)
             rc = lookup_fill_committed((fuse_ino_t)new_ino, &e, "mknod",
                                        parent, name);
@@ -5592,9 +5594,20 @@ static void ll_create_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     int rc;
     lookup_memo_mutation_begin();
     t_req = req;
-    rc = efs_fuse_create_at(parent, name, mode, fi, NULL);
-    if (rc == 0)
+    struct efs_inode created;
+    rc = efs_fuse_create_at(parent, name, mode, fi, NULL, &created);
+    if (rc == 0 && created.ino) {
+        /* CREATE already returned this committed row. A fresh GETATTR here
+         * adds a quorum read solely to construct the same syscall's reply.
+         * Keep zero attribute/entry TTLs and do not populate the lookup memo:
+         * subsequent fstat and peer mutations still use their normal path. */
+        struct stat st;
+        fill_stat_from_inode(&st, &created);
+        fill_entry((fuse_ino_t)created.ino, &e, &st);
+    } else if (rc == 0) {
+        /* O_CREAT without O_EXCL may have opened an existing file. */
         rc = lookup_fill((fuse_ino_t)efs_file_ino(fi, 0), &e, fi);
+    }
     lookup_memo_mutation_end();
     t_req = NULL;
     if (rc)
@@ -6599,7 +6612,7 @@ static void *bench_wr_worker(void *arg)
     fi.flags = O_WRONLY | O_CREAT | O_TRUNC;
     efs_ino_t ino = 0;
     double t0 = bench_now_sec();
-    int rc = efs_fuse_create_at(EFS_ROOT_INO, name, 0644, &fi, &ino);
+    int rc = efs_fuse_create_at(EFS_ROOT_INO, name, 0644, &fi, &ino, NULL);
     if (rc != 0) {
         a->errors++;
         a->wall_s = bench_now_sec() - t_start;

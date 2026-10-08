@@ -1137,9 +1137,12 @@ static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode
     efs_client_stage_unpin(out->ino);
 }
 
-int efs_client_create_result(efs_ino_t parent, const char *name, uint32_t mode,
-                               uid_t uid, gid_t gid, uint32_t flags, efs_ino_t *ino)
+int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t mode,
+                                   uid_t uid, gid_t gid, uint32_t flags,
+                                   efs_ino_t *ino, struct efs_inode *created)
 {
+    if (created)
+        memset(created, 0, sizeof(*created));
     if (!ino)
         return EFS_ERR_INVAL;
     *ino = 0;
@@ -1155,9 +1158,18 @@ int efs_client_create_result(efs_ino_t parent, const char *name, uint32_t mode,
     if (rc == EFS_OK) {
         create_stage_inode(parent, name, mode, uid, gid, &out);
         *ino = out.ino;
+        if (created)
+            *created = out;
     }
     efs_client_report_unreserve();
     return rc;
+}
+
+int efs_client_create_result(efs_ino_t parent, const char *name, uint32_t mode,
+                               uid_t uid, gid_t gid, uint32_t flags, efs_ino_t *ino)
+{
+    return efs_client_create_result_inode(parent, name, mode, uid, gid, flags,
+                                           ino, NULL);
 }
 
 /* Phase 2b: setattr via the primary; dual-apply the returned inode. */

@@ -1,0 +1,43 @@
+diff --git a/src/kv/kv_wal.c b/src/kv/kv_wal.c
+index c00090e2..6b69add6 100644
+--- a/src/kv/kv_wal.c
++++ b/src/kv/kv_wal.c
+@@ -209,7 +209,9 @@ static int kv_wal_fsync_to_locked(struct kv_wal *w, uint64_t mine)
+         w->syncing = 1;
+         target = w->appended;
+         pthread_mutex_unlock(&w->mu);
+-        rc = fsync(w->fd) == 0 ? EFS_OK : EFS_ERR_IO;
++        /* WAL recovery needs bytes and file length, not timestamp metadata.
++         * fdatasync retains both durability requirements. */
++        rc = fdatasync(w->fd) == 0 ? EFS_OK : EFS_ERR_IO;
+         pthread_mutex_lock(&w->mu);
+         w->syncing = 0;
+         if (rc == EFS_OK && w->synced < target)
+diff --git a/src/raft/raft_log.c b/src/raft/raft_log.c
+index dd821d4f..a50d8ede 100644
+--- a/src/raft/raft_log.c
++++ b/src/raft/raft_log.c
+@@ -136,6 +136,12 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
+         return EFS_OK;
+     if (honor_hold && d->sync_hold > 0)
+         return EFS_OK;
++    if (d->io_failed)
++        return EFS_ERR_IO;
++    /* A concurrent batch may already have persisted this tail. Creating
++     * a fresh round here would issue a barrier with no new log bytes. */
++    if (d->synced_bytes >= d->bytes)
++        return EFS_OK;
+     want = ++d->sync_want;
+     for (;;) {
+         if (d->io_failed)
+@@ -155,7 +161,9 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
+             uint64_t cover = d->bytes;
+ 
+             pthread_mutex_unlock(&d->mu);
+-            if (fsync(d->fd) != 0) {
++            /* Recovery requires the log bytes and length; fdatasync
++             * persists both without unrelated timestamp metadata. */
++            if (fdatasync(d->fd) != 0) {
+                 pthread_mutex_lock(&d->mu);
+                 d->io_failed = 1;
+             } else {

@@ -50,6 +50,8 @@ def main():
     n = 0
     while off + 8 <= len(buf):
         crc, ln = struct.unpack(">II", buf[off:off + 8])
+        if ln < 5:  # Includes a preallocated zero tail.
+            break
         body = buf[off + 8:off + 8 + ln]
         if len(body) < ln or zlib.crc32(body) & 0xFFFFFFFF != crc:
             break
