@@ -8154,7 +8154,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
     uint32_t psh;
     uint8_t pg;
     int hint = -1;
-    int rc;
+    int rc, found_dentry = 0;
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
@@ -8203,6 +8203,7 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
     if (prof)
         p2 = now_us_();
     if (rc == EFS_OK) {
+        found_dentry = 1;
         uint8_t cg = efs_raft_shard_group(efs_kv_inode_shard(dent.ino));
         if (!host_hosts(h, cg)) {
             /* The dentry was read here under pg's ReadIndex; only the
@@ -8216,6 +8217,11 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
             if (prof)
                 __atomic_fetch_add(&g_read_prof.lk_fwd, 1, __ATOMIC_RELAXED);
             host_fwd_getattr(h, dent.ino, out, &cg, 1);
+            /* A rename can commit between the dentry and inode reads.
+             * Missing the captured inode is not proof that this name is
+             * absent: its replacement may already be visible. */
+            if (out->status == EFS_INODE_RPC_NOT_FOUND)
+                out->status = EFS_INODE_RPC_BUSY;
             if (out->status == EFS_INODE_RPC_OK) {
                 out->inode.parent = parent;
                 strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
@@ -8237,6 +8243,8 @@ void server_raft_host_lookup(efs_ino_t parent, const char *name,
         p3 = now_us_();
     if (rc == EFS_OK)
         rc = efs_meta_apply_getattr(h->kv, dent.ino, host_txn_coord, h, &st);
+    if (found_dentry && rc == EFS_ERR_NOT_FOUND)
+        rc = EFS_ERR_BUSY; /* retry the complete name lookup across replacement */
     set_inode_rc(out, rc, hint);
     if (rc == EFS_OK) {
         stat_to_inode(&st, &out->inode);
