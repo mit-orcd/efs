@@ -1,0 +1,12 @@
+2026-10-08T02:43:28.784Z Loaded 4 persisted cluster node(s) from /data2/efs/namespace-replay-u8s7jnoe/n4/meta/cluster_nodes.bin
+2026-10-08T02:43:28.784Z   persisted node 1: 127.0.0.1:26790
+2026-10-08T02:43:28.784Z   persisted node 2: 127.0.0.1:26791
+2026-10-08T02:43:28.784Z   persisted node 3: 127.0.0.1:26792
+2026-10-08T02:43:28.784Z   persisted node 4: 127.0.0.1:26793
+2026-10-08T02:43:28.805Z Joined cluster with 4 nodes
+2026-10-08T02:43:28.809Z heartbeat: enabled (2000 ms interval)
+2026-10-08T02:43:28.822Z kv-obs: mt_bytes=177192 l0_bytes=0 l0=0 l1=0
+2026-10-08T02:43:28.822Z raft-host: up raft_id=3 n=4 boot=5886777521875276 salt=8971267883546875517 g0=off g2=hosted
+2026-10-08T02:43:28.822Z efsd (no git metadata, branch unknown, built 2026-10-08T02:21:25Z on nuc), build=unknown: node 4 listening on 127.0.0.1:26793, storage=/data2/efs/namespace-replay-u8s7jnoe/n4 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-08T02:43:30.809Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=982 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-08T02:43:33.825Z kv-obs: mt_bytes=167024 l0_bytes=0 l0=0 l1=0

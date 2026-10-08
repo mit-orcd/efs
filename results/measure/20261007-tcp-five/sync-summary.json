@@ -1,0 +1,8 @@
+{
+  "successful_sync_calls": 28393,
+  "sum_seconds": 66.08526299999724,
+  "median_seconds": 0.000188,
+  "maximum_seconds": 0.01946,
+  "calls_over_10ms": 147,
+  "scope": "all four private daemons; separate from perf; successful completed and resumed fsync/fdatasync calls; traced timing includes strace overhead"
+}

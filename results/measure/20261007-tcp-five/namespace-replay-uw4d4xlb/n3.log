@@ -1,0 +1,50 @@
+2026-10-08T02:43:28.533Z Loaded 4 persisted cluster node(s) from /data2/efs/namespace-replay-u8s7jnoe/n3/meta/cluster_nodes.bin
+2026-10-08T02:43:28.533Z   persisted node 1: 127.0.0.1:26790
+2026-10-08T02:43:28.533Z   persisted node 2: 127.0.0.1:26791
+2026-10-08T02:43:28.533Z   persisted node 3: 127.0.0.1:26792
+2026-10-08T02:43:28.533Z   persisted node 4: 127.0.0.1:26793
+2026-10-08T02:43:28.539Z Joined cluster with 4 nodes
+2026-10-08T02:43:28.543Z heartbeat: enabled (2000 ms interval)
+2026-10-08T02:43:28.556Z kv-obs: mt_bytes=492040 l0_bytes=0 l0=0 l1=0
+2026-10-08T02:43:28.557Z raft-host: up raft_id=2 n=4 boot=5884672721666398 salt=5398762720025778130 g0=hosted g2=hosted
+2026-10-08T02:43:28.557Z efsd (no git metadata, branch unknown, built 2026-10-08T02:21:25Z on nuc), build=unknown: node 3 listening on 127.0.0.1:26792, storage=/data2/efs/namespace-replay-u8s7jnoe/n3 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-08T02:43:30.543Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=981 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-08T02:43:32.106Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=0 ino=36
+2026-10-08T02:43:32.106Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=0
+2026-10-08T02:43:32.106Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=0
+2026-10-08T02:43:32.110Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=2074
+2026-10-08T02:43:32.111Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=-3
+2026-10-08T02:43:32.111Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=-3
+2026-10-08T02:43:32.119Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=2074
+2026-10-08T02:43:32.119Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=-3
+2026-10-08T02:43:32.119Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=-3
+2026-10-08T02:43:33.124Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:33.124Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:33.124Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:33.124Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:33.124Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:33.124Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:33.127Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:33.127Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:33.127Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:33.128Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:33.142Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=0
+2026-10-08T02:43:33.143Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=0
+2026-10-08T02:43:33.174Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:33.192Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=0
+2026-10-08T02:43:33.192Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=0
+2026-10-08T02:43:33.556Z kv-obs: mt_bytes=472793 l0_bytes=0 l0=0 l1=0
+2026-10-08T02:43:33.653Z raft-host: gc-pass ms=71 orphan=0 reap=0 frag=0 spread=0 recover=68 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=184 emit=0 tomb=184 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-08T02:43:34.207Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:34.207Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:34.207Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:34.216Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:34.216Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:34.216Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:34.220Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:34.220Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=0
+2026-10-08T02:43:34.220Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=0
+2026-10-08T02:43:34.228Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:34.229Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=0
+2026-10-08T02:43:34.229Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=0
+2026-10-08T02:43:34.727Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=148 emit=0 tomb=148 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0

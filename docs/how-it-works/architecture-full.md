@@ -1461,8 +1461,9 @@ this document is the invariant they are measured against.
 
 The [memory acceptance follow-up](../status/memory-closure-20261007.md) closes W59/W67.
 The [three-package closure follow-up](../status/allocation-gc-fold-gates-20261007.md) closes D17.
-Current grouped open count: **45**, including **9** implemented/partial
+Current grouped open count: **44**, including **8** implemented/partial
 packages awaiting gates. W84 and W23 still have implementation/design gaps.
+The [five TCP package round](../status/tcp-five-gates-20261007.md) closes W65 for supported TCP and W56 inside W56/W60. RDMA is deferred; nine physical hosts, W60 historical scale and W84 full-ancestry acceptance remain.
 
 The [three-package acceptance round](../status/three-package-gates-20261007.md) advances
 W59/W67, W84 and W23/W89 with pressure, boundary and recovery fixes. That earlier pass left
@@ -1530,10 +1531,10 @@ separate states. Close only when the item's named acceptance gates are recorded.
 
 | # | item | class | status | home |
 | --- | --- | --- | --- | --- |
-| 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts/RDMA remain | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
+| 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; RDMA deferred | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
 | 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — found Oct 5 on the xorinox test cluster (write via the nfsd re-export from a macOS client); trigger not isolated | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
-| 0l | **W56** · root-level rename leaves a ghost name in the renaming client's local lookup | correctness | fixed in `f8fef814` — exact old directory-name cache eviction across parent/hash tabs; NUC full POSIX jobs=4/jobs=1 and two-client suites PASS Oct 6; xorinox roll still owed | [full text](#w56--root-level-rename-leaves-a-ghost-name-in-the-renaming-clients-local-lookup-queue-row-0l) |
+| 0l | **W56** · root-level rename leaves a ghost name in the renaming client's local lookup | correctness | fixed in `f8fef814` — exact old directory-name cache eviction across parent/hash tabs; closed: NUC full POSIX/two-client and 64 root-rename reuse repeats pass; xorinox running binary matches cb5e86de containing the fix (Oct 7) | [full text](#w56--root-level-rename-leaves-a-ghost-name-in-the-renaming-clients-local-lookup-queue-row-0l) |
 | mem1 | **W67** · sparse dirty writes and bounded body admission | correctness / resource exhaustion | Closed: NUC live publication failure plus real recovery scratch exhaustion passes at 32+32 and default 256+64 MiB budgets under a 1 GiB/no-swap ceiling; same-mount/cold recovery and physical GC/restart pass | [evidence, fix shape and gates](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound) |
 | mem2 | **W68** · reply-buffer worker lifetime | resource lifetime | Closed: NUC direct/buffered real worker retirement, allocation/TLS/growth fault RSS and key-failure gates pass | [evidence, fix shape and gates](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit) |
 | 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | analyzed Oct 6 (xorinox, build `3d3f17c2-dirty`): the file exists (created 05:17:31.319Z, size 0), the retry was answered BUSY (rc=-13, 05:17:31.733Z), no server logged EEXIST; suspect the retry path — an opid replay must return the recorded verdict (I16), not EEXIST; BUSY on unique-name creates is new with the dirty D25 intent probes | [full text](#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
@@ -1542,9 +1543,9 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w61) |
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w62) |
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | open — host-local replay race fixed in `ec1500ec`; durable failover replay remains unresolved | [work item](#w64) |
-| 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | idle-reader/accept blockers repaired; NUC TCP shutdown and service persistence gates pass; RDMA/fault-time mutation gates remain | [work item](#w65) |
+| 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](#w65) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
-| 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts/RDMA remain | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
+| 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; RDMA deferred | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
 | 0b | **W27** · REPORT identity from the staging table | correctness | closed: owned-PUT predicate shared by both builders; nonzero unowned observations rejected; 2048-file cold copy/trace and GC/restart pass | [full text](#w27--report-identity-from-the-staging-table-queue-row-0b) |
 | 0g | **W43** · large truncate is refused; logical truncate = **D25** (decided) | correctness | explicit failure is implemented; `3a1b4a52` makes oversized legacy truncate fail atomically; D25 metadata/read/resize foundations exist, but FUSE publication, live-file sweep and public activation remain open | [full text](#w43--truncateo_trunc-of-a-file-with--32-chunks-in-a-lane-is-a-silent-no-op-queue-row-0g) · [D25](#appendix-3--decisions--taken-and-pending-register-d1d31) |
@@ -1582,7 +1583,7 @@ positions do not assign an execution order or override the active handoff.
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
-| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | 64-participant envelope and cross-group HASHED unlink repair; NUC boundary/refusal/restart gates and exact helper limits pass; shared 8-second rename budget; 144-participant envelope and full 64-lane removal/replacement implemented; 64-hop ancestry limit and boundary leader-failure acceptance remain open | [evidence and gate](#w84) |
+| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | 64-participant envelope and cross-group HASHED unlink repair; NUC boundary/refusal/restart gates and exact helper limits pass; shared 8-second rename budget; 144-participant envelope and full 64-lane removal/replacement implemented; ancestry now uses the 144-record envelope; depth143/refusal144 and 66-participant prepared/committed crash gates pass; full-ancestry product limit remains open | [evidence and gate](#w84) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine committed `b3a11877`, staged for integration; production admission, sessions and all-member collection not active | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
@@ -1608,8 +1609,7 @@ most implementation is done. Preserve historical evidence without letting its
 old "next" instructions or cluster claims govern current work.
 
 W57's NUC implementation/gates are complete; its detail remains in the work-item
-ledger, and the previous status row is retained in the archive. W56 and W60
-remain here only for their named xorinox verification obligations.
+ledger, and the previous status row is retained in the archive. W56 is closed; W60 retains its original large-tree verification obligation.
 
 ### Latest queue reconciliation
 
@@ -3854,6 +3854,8 @@ project-history.md "START-HERE closed items".**
 
 ### W54 · a fold's GC deletes the live base (queue row 0i)
 
+**TCP scope follow-up (Oct 7):** supported NUC fold/GC/cold-read gates pass. RDMA is deferred at the user’s request; nine physical hosts remain owed, so W54/W38 is not closed. See [five-package ledger](../status/tcp-five-gates-20261007.md).
+
 **Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/allocation-gc-fold-gates-20261007.md).
 
 **Gate follow-up (Oct 7):** NUC direct/buffered authoritative chunk views
@@ -3890,6 +3892,8 @@ cold IOR-hard verification and hardscan. No cluster rollout performed here.
 
 
 ### W56 · root-level rename leaves a ghost name in the renaming client's local lookup (queue row 0l)
+
+**Closed (Oct 7):** root rename/reuse passes64 NUC repeats. Xorinox’s running FUSE binary and installed binary have identical SHA256 and version cb5e86de, containing f8fef814. W60’s missing historical tree does not reopen W56. See [ledger](../status/tcp-five-gates-20261007.md).
 
 **Oct 6 fix:** `f8fef814` drops matching old-directory-name cache rows from both lookup tabs after authoritative rename. It preserves other names/chunks and ignores a replacement inode. NUC full POSIX jobs=4/jobs=1 and full posix2 PASS; the root directory regression now passes. Xorinox roll remains owed.
 
@@ -3931,6 +3935,8 @@ performed. Next code item in the agreed sequence is W38.
 
 
 ### W38 · ior-hard fold tombstone without the span's bytes (queue row 0e)
+
+**TCP scope follow-up (Oct 7):** RDMA deferred; nine physical hosts remain owed. Actual nine-process IOR cold verification and physical GC/restart pass on NUC. See [ledger](../status/tcp-five-gates-20261007.md).
 
 **Oct 7 acceptance:** real traced IOR cold verification and separate-remount hardscan pass on NUC direct at 4/36 ranks and buffered at 4 ranks. Nine independent FUSE clients on one physical host verify 108000 records with zero bad/short reads; the complete nine-client GC/restart fixture passes. Nine physical hosts/RDMA remain open. [Evidence and limitations](../status/allocation-gc-fold-gates-20261007.md).
 
@@ -4500,6 +4506,8 @@ results dirs; move this plan's finished rows to project-history.
 <a id="w65"></a>
 
 ### W65 · Daemon exceeds graceful shutdown wait (queue row 0u)
+
+**Closed for supported TCP (Oct 7):** six writer-active-at-signal leader SIGTERM fixtures pass, three direct and three buffered. All acknowledged fsynced bytes verify after full restart/cold remount; physical GC and quota drain also pass. RDMA is deferred, not tested. This supersedes earlier open TCP mutation gates below. See [ledger](../status/tcp-five-gates-20261007.md).
 
 **Class:** liveness investigation. **Status:** open; indexed Oct 7, 2026.
 
@@ -5146,6 +5154,8 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 <a id="w84"></a>
 
 ### W84 · Namespace guard bounds reject supported deep/spread-directory work
+
+**TCP recovery follow-up (Oct 7):** ancestry guards now use the144-record envelope; depth143 succeeds and depth144 refuses safely within the8-second budget. Full64-lane removal/replacement and prepared/committed coordinator death (66 participants) pass cold. The fault gate found and repaired FUSE error-to-ENOENT mapping and split dentry/inode LOOKUP absence. Exact144-participant crash acceptance and an approved finite full-ancestry limit remain open. See [ledger](../status/tcp-five-gates-20261007.md).
 
 **Envelope follow-up (Oct 7):** the shared transaction capacity is now 144:
 64 used-directory lanes plus 64 ancestry shards and fixed namespace participants.

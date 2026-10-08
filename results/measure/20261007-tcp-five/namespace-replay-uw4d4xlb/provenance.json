@@ -1,0 +1,13 @@
+{
+  "original": "/data1/efs/gc-direct-di2g8953",
+  "roots": [
+    "/data1/efs/namespace-replay-uw4d4xlb/n1",
+    "/data1/efs/namespace-replay-uw4d4xlb/n2",
+    "/data2/efs/namespace-replay-u8s7jnoe/n3",
+    "/data2/efs/namespace-replay-u8s7jnoe/n4"
+  ],
+  "port": 26790,
+  "server_sha256": "23d8339efaaf5d2a86409f54697bbb6c8449111e9b9f80aabeaa8bca15081b26",
+  "original_server_sha256": "4b19739e89d446989a5a3a04ab70f6815f45db8e8cb9379fe03b3817a53f5bc7",
+  "overlay": "lookup trace only; original stores preserved"
+}

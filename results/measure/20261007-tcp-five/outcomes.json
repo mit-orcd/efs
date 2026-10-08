@@ -1,0 +1,23 @@
+{
+  "combined_direct": 0,
+  "depth_direct": 0,
+  "initial_full_units": 0,
+  "shutdown_direct": [
+    0,
+    0,
+    0
+  ],
+  "shutdown_buffered": [
+    0,
+    0,
+    0
+  ],
+  "gc_reap_initial": 0,
+  "candidate_units": 0,
+  "serial_reap_settled": 0,
+  "candidate_reap_settled": 0,
+  "namespace_coordinator_fault": 0,
+  "namespace_coordinator_fault_original": 1,
+  "namespace_coordinator_fault_mapper_only": 1,
+  "retained_final_units": 0
+}

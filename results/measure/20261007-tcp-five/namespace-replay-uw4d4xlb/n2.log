@@ -1,0 +1,51 @@
+2026-10-08T02:43:28.284Z Loaded 4 persisted cluster node(s) from /data1/efs/namespace-replay-uw4d4xlb/n2/meta/cluster_nodes.bin
+2026-10-08T02:43:28.284Z   persisted node 1: 127.0.0.1:26790
+2026-10-08T02:43:28.284Z   persisted node 2: 127.0.0.1:26791
+2026-10-08T02:43:28.284Z   persisted node 3: 127.0.0.1:26792
+2026-10-08T02:43:28.284Z   persisted node 4: 127.0.0.1:26793
+2026-10-08T02:43:28.286Z Joined cluster with 4 nodes
+2026-10-08T02:43:28.287Z heartbeat: enabled (2000 ms interval)
+2026-10-08T02:43:28.308Z raft-host: up raft_id=1 n=4 boot=5884951613678091 salt=3439887288323398220 g0=hosted g2=hosted
+2026-10-08T02:43:28.308Z efsd (no git metadata, branch unknown, built 2026-10-08T02:21:25Z on nuc), build=unknown: node 2 listening on 127.0.0.1:26791, storage=/data1/efs/namespace-replay-uw4d4xlb/n2 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-08T02:43:28.308Z kv-obs: mt_bytes=492040 l0_bytes=0 l0=0 l1=0
+2026-10-08T02:43:30.287Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=974 passes=2 sampled=0 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-08T02:43:32.097Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=0 ino=36
+2026-10-08T02:43:32.097Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=0
+2026-10-08T02:43:32.097Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=0
+2026-10-08T02:43:32.103Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=0 ino=36
+2026-10-08T02:43:32.103Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=0
+2026-10-08T02:43:32.103Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=0
+2026-10-08T02:43:32.109Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=0 ino=36
+2026-10-08T02:43:32.109Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=0
+2026-10-08T02:43:32.109Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=0
+2026-10-08T02:43:32.116Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=2074
+2026-10-08T02:43:32.116Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=-3
+2026-10-08T02:43:32.116Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=-3
+2026-10-08T02:43:32.121Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=2074
+2026-10-08T02:43:32.122Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=-3
+2026-10-08T02:43:32.122Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=-3
+2026-10-08T02:43:33.126Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:33.126Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:33.126Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:33.128Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:33.128Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:33.128Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:33.161Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:33.173Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=0
+2026-10-08T02:43:33.173Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=0
+2026-10-08T02:43:33.193Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:33.206Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=0
+2026-10-08T02:43:33.206Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=0
+2026-10-08T02:43:33.309Z kv-obs: mt_bytes=481463 l0_bytes=0 l0=0 l1=0
+2026-10-08T02:43:34.213Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:34.213Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:34.213Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:34.219Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:34.219Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:34.219Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:34.225Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:34.226Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=0
+2026-10-08T02:43:34.226Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=0
+2026-10-08T02:43:34.231Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:34.231Z namespace lookup parent=1 name=fault-replace-commit lanes_rc=0
+2026-10-08T02:43:34.231Z namespace lookup parent=1 name=fault-replace-commit getattr_rc=0

@@ -1,0 +1,13 @@
+[
+  {
+    "stage": "prepare",
+    "barrier": "pid=1318398 parts=66 stage=prepare\n",
+    "coordinator_node": 2,
+    "errors": [],
+    "replacement_inode": 1930,
+    "incoming_inode": 1930,
+    "old_inode": 2540,
+    "transient_read_errno": [],
+    "cold_atomic_namespace": true
+  }
+]

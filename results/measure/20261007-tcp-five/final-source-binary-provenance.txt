@@ -1,0 +1,10 @@
+FUSE LOOKUP: IO/network/quorum errors stay IO, BUSY/memory/access preserved, only actual absence ENOENT PASS
+LOOKUP replacement: missing captured inode retryable locally and forwarded; true absence and IO preserved PASS
+architecture doc gate: all 5 checks passed
+55f37bd0eef104a3a4f29468b415b910d1b5efa157525421889bb47e859b7bd9  /data1/efs/tcp-five-kept-20261007/src/server/raft_host.c
+b64029d51642878af2db63ec165a084cb666a5b263c863a06de3a2357f2b0356  /data1/efs/tcp-five-kept-20261007/src/client/efs_fuse.c
+5076dca07d8f506c55f23c9754ae1ede9802fbeb6121d2a562c67c8adc692601  /data1/efs/tcp-five-kept-20261007/tests/live/gc_reclamation.py
+bd6c1f6c65960a8cf9257ebac28a95c82ec617cb1b223fb303414dcf2a9205fc  /data1/efs/tcp-five-kept-20261007/efsd
+7bd330e2aca2b9b909d5edca97f3a5a8e2da1123d33a29b29d79d281725888b0  /data1/efs/tcp-five-kept-20261007/efs-fuse
+28edee70ff9739ef2693ba47b9ebfd11f40a1a7980d5516aa0987111e4aa8a84  /data1/efs/tcp-five-fault-final-20261007/efsd
+f63bc4f4e084a109923f0d2c3184bb83cbb0528dedb264eb0ec5e98c9ac45809  /data1/efs/tcp-five-gc.data

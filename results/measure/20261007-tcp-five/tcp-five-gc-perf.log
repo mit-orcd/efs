@@ -1,0 +1,2 @@
+[ perf record: Woken up 38 times to write data ]
+[ perf record: Captured and wrote 10.415 MB /data1/efs/tcp-five-gc.data (59344 samples) ]

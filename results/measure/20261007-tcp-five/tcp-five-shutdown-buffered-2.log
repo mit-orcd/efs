@@ -1,0 +1,87 @@
+Evidence directory: /data1/efs/gc-buffered-1np0dcp1
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=15619721006142306627
+client serving PASS
+fsynced mutations before leader stop PASS
+leader restart responds PASS
+Unmounting /data1/efs/gc-buffered-1np0dcp1/mnt
+Retiring drained efs-fuse PID 1191645 for /data1/efs/gc-buffered-1np0dcp1/mnt
+Unmounted /data1/efs/gc-buffered-1np0dcp1/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+shutdown mutation deletion drains PASS
+active mutation graceful leader stop and cold acknowledged-byte recovery PASS
+peer mounted PASS
+Unmounting /data1/efs/gc-buffered-1np0dcp1/peer
+Retiring drained efs-fuse PID 1192324 for /data1/efs/gc-buffered-1np0dcp1/peer
+Unmounted /data1/efs/gc-buffered-1np0dcp1/peer
+two-peer adjacent writes and repeated folds complete
+fragment files present PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+fragment files present PASS
+GC runs while hardlink remains PASS
+hardlink protects stored fragments PASS
+GC runs while unlinked inode is open PASS
+open unlinked inode retains readable/writable fragments PASS
+last close physically reclaims fragments PASS
+GC passes, removal bytes and quota reflect last-close deletion PASS
+closed-unlinked inode allocated bytes: 15249408 -> 0 PASS
+fragment files present PASS
+valid late-PUT control accepted on live inode by every member PASS
+disk failure visible PASS
+failed fragment remains on disk pending retry PASS
+Unmounting /data1/efs/gc-buffered-1np0dcp1/mnt
+Retiring drained efs-fuse PID 1192293 for /data1/efs/gc-buffered-1np0dcp1/mnt
+Unmounted /data1/efs/gc-buffered-1np0dcp1/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+restart without client reclaims pending fragments PASS
+leader reap and fragment queues drain PASS
+client serving PASS
+cold two-peer fold and live-base reads after GC PASS
+fold fragments physically reclaimed PASS
+fragment files present PASS
+offline fourth member retains reap ledger PASS
+Unmounting /data1/efs/gc-buffered-1np0dcp1/mnt
+Retiring drained efs-fuse PID 1195891 for /data1/efs/gc-buffered-1np0dcp1/mnt
+Unmounted /data1/efs/gc-buffered-1np0dcp1/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+rejoined member completes reclamation PASS
+queues drain after member rejoins PASS
+client serving PASS
+sentinel physically reclaimed PASS
+all fixture GC records retired PASS
+Unmounting /data1/efs/gc-buffered-1np0dcp1/mnt
+Retiring drained efs-fuse PID 1197811 for /data1/efs/gc-buffered-1np0dcp1/mnt
+Unmounted /data1/efs/gc-buffered-1np0dcp1/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+physical inventory empty after restart PASS
+restart orphan and GC queues drained PASS
+restart quota zero and late PUT fenced on every member PASS
+physical fragment inventory empty after restart PASS
+GC reclamation buffered PASS

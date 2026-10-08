@@ -1,0 +1,12 @@
+{
+  "leader_node": 1,
+  "shutdown_seconds": 0.06344617399736308,
+  "acknowledged_before_stop": 216,
+  "acknowledged_files": 216,
+  "writer_active_at_signal": true,
+  "errors": [
+    "[Errno 5] Input/output error: '/data1/efs/gc-buffered-jrsk2jyi/mnt/shutdown-writes/216'"
+  ],
+  "cold_bytes_verified": true,
+  "returncode": 0
+}

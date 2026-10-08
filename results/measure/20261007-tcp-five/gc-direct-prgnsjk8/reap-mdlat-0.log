@@ -1,0 +1,6 @@
+mkdir              min     0.597 med    11.525 max    53.970 ms
+create+1B+close    min     2.549 med     3.023 max     3.493 ms
+append+close       min     5.966 med     6.674 max    14.878 ms
+stat               min     0.091 med     0.093 max     0.608 ms
+unlink             min     0.422 med     0.586 max     0.857 ms
+rmdir              min     0.415 med    10.593 max    42.557 ms

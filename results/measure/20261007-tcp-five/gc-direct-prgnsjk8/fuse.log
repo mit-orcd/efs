@@ -1,0 +1,46 @@
+2026-10-08T02:21:46.030Z efs-fuse (no git metadata, branch unknown, built 2026-10-08T02:14:05Z on nuc), build=unknown: starting export=default mount=/data1/efs/gc-direct-prgnsjk8/mnt
+2026-10-08T02:21:46.030Z Discovered 4 cluster nodes from 127.0.0.1:26590
+2026-10-08T02:21:46.030Z   node id=1 127.0.0.1:26590
+2026-10-08T02:21:46.030Z   node id=2 127.0.0.1:26591
+2026-10-08T02:21:46.030Z   node id=3 127.0.0.1:26592
+2026-10-08T02:21:46.030Z   node id=4 127.0.0.1:26593
+2026-10-08T02:21:46.030Z fetching metadata...
+2026-10-08T02:21:46.030Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T02:21:46.030Z export id=1 name=default
+2026-10-08T02:21:46.030Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T02:21:46.032Z efs-fuse: workers max=10 idle=10
+2026-10-08T02:21:46.033Z fuse serving
+2026-10-08T02:24:26.013Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-08T02:24:26.033Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=5
+2026-10-08T02:24:26.057Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=8
+2026-10-08T02:24:26.078Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=5
+2026-10-08T02:24:26.096Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=6
+2026-10-08T02:24:26.121Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=7
+2026-10-08T02:24:26.138Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-08T02:24:26.155Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-08T02:24:26.167Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T02:24:26.175Z efs: report rec ino=4097 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-08T02:24:47.409Z efs-fuse (no git metadata, branch unknown, built 2026-10-08T02:14:05Z on nuc), build=unknown: starting export=default mount=/data1/efs/gc-direct-prgnsjk8/mnt
+2026-10-08T02:24:47.410Z Discovered 4 cluster nodes from 127.0.0.1:26590
+2026-10-08T02:24:47.410Z   node id=1 127.0.0.1:26590
+2026-10-08T02:24:47.410Z   node id=2 127.0.0.1:26591
+2026-10-08T02:24:47.410Z   node id=3 127.0.0.1:26592
+2026-10-08T02:24:47.410Z   node id=4 127.0.0.1:26593
+2026-10-08T02:24:47.410Z fetching metadata...
+2026-10-08T02:24:47.410Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T02:24:47.410Z export id=1 name=default
+2026-10-08T02:24:47.410Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T02:24:47.412Z efs-fuse: workers max=10 idle=10
+2026-10-08T02:24:47.416Z fuse serving
+2026-10-08T02:25:03.952Z efs-fuse (no git metadata, branch unknown, built 2026-10-08T02:14:05Z on nuc), build=unknown: starting export=default mount=/data1/efs/gc-direct-prgnsjk8/mnt
+2026-10-08T02:25:03.952Z Discovered 4 cluster nodes from 127.0.0.1:26590
+2026-10-08T02:25:03.952Z   node id=1 127.0.0.1:26590
+2026-10-08T02:25:03.952Z   node id=2 127.0.0.1:26591
+2026-10-08T02:25:03.952Z   node id=3 127.0.0.1:26592
+2026-10-08T02:25:03.952Z   node id=4 127.0.0.1:26593
+2026-10-08T02:25:03.952Z fetching metadata...
+2026-10-08T02:25:03.952Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T02:25:03.952Z export id=1 name=default
+2026-10-08T02:25:03.952Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T02:25:03.955Z efs-fuse: workers max=10 idle=10
+2026-10-08T02:25:03.960Z fuse serving

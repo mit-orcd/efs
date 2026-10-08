@@ -1,0 +1,74 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 59K of event 'cycles:P'
+# Event count (approx.): 24490002900
+#
+# Overhead  Shared Object           Symbol                                              
+# ........  ......................  ....................................................
+#
+     3.17%  [kernel.kallsyms]       [k] crc32_body
+     2.66%  libc.so.6               [.] __memmove_evex_unaligned_erms
+     1.84%  efsd                    [.] host_pump
+     1.76%  [nf_tables]             [k] nft_do_chain
+     1.33%  efsd                    [.] kv_mtab_pos
+     1.29%  libc.so.6               [.] pthread_mutex_lock@@GLIBC_2.2.5
+     1.25%  [kernel.kallsyms]       [k] its_return_thunk
+     1.07%  [kernel.kallsyms]       [k] _raw_spin_lock
+     1.04%  efsd                    [.] blake3_hash_many_avx512
+     1.00%  [kernel.kallsyms]       [k] _raw_spin_lock_irqsave
+     0.89%  [kernel.kallsyms]       [k] clear_bhb_loop
+     0.79%  [kernel.kallsyms]       [k] update_load_avg
+     0.76%  [kernel.kallsyms]       [k] sched_balance_update_blocked_averages
+     0.68%  [kernel.kallsyms]       [k] fdget
+     0.64%  [kernel.kallsyms]       [k] __update_load_avg_cfs_rq
+     0.63%  [kernel.kallsyms]       [k] __intel_pmu_enable_all.isra.0
+     0.60%  [kernel.kallsyms]       [k] restore_fpregs_from_fpstate
+     0.59%  [kernel.kallsyms]       [k] _copy_from_iter
+     0.59%  [kernel.kallsyms]       [k] update_curr
+     0.58%  libc.so.6               [.] __GI___pthread_mutex_unlock_usercnt
+     0.56%  [kernel.kallsyms]       [k] _raw_spin_lock_bh
+     0.55%  [kernel.kallsyms]       [k] dequeue_entity
+     0.52%  [kernel.kallsyms]       [k] tcp_recvmsg_locked
+     0.52%  [kernel.kallsyms]       [k] __update_load_avg_se
+     0.52%  libc.so.6               [.] __memset_evex_unaligned_erms
+     0.51%  libc.so.6               [.] __GI___pthread_disable_asynccancel
+     0.50%  [kernel.kallsyms]       [k] __rcu_read_unlock
+     0.48%  [kernel.kallsyms]       [k] kmem_cache_alloc_noprof
+     0.48%  [kernel.kallsyms]       [k] _copy_to_iter
+     0.45%  [kernel.kallsyms]       [k] dequeue_entities
+     0.44%  [kernel.kallsyms]       [k] __rcu_read_lock
+     0.44%  [kernel.kallsyms]       [k] __tcp_transmit_skb
+     0.43%  [kernel.kallsyms]       [k] __memcpy
+     0.43%  [kernel.kallsyms]       [k] x64_sys_call
+     0.43%  [kernel.kallsyms]       [k] kmem_cache_free
+     0.43%  libc.so.6               [.] malloc
+     0.42%  libc.so.6               [.] __libc_recv
+     0.40%  [kernel.kallsyms]       [k] available_idle_cpu
+     0.38%  [kernel.kallsyms]       [k] fput
+     0.38%  [kernel.kallsyms]       [k] do_syscall_64
+     0.38%  [kernel.kallsyms]       [k] native_sched_clock
+     0.37%  [kernel.kallsyms]       [k] tcp_sendmsg_locked
+     0.37%  [kernel.kallsyms]       [k] entry_SYSCALL_64_after_hwframe
+     0.37%  libc.so.6               [.] clock_gettime@@GLIBC_2.17
+     0.35%  [kernel.kallsyms]       [k] entry_SYSRETQ_unsafe_stack
+     0.34%  [kernel.kallsyms]       [k] __audit_syscall_entry
+     0.34%  [kernel.kallsyms]       [k] __get_user_8
+     0.34%  [kernel.kallsyms]       [k] avc_lookup
+     0.33%  [nf_conntrack]          [k] __nf_conntrack_find_get
+     0.33%  [kernel.kallsyms]       [k] tcp_clean_rtx_queue.constprop.0
+     0.33%  [kernel.kallsyms]       [k] __d_lookup_rcu
+     0.32%  efsd                    [.] host_sender
+     0.32%  [kernel.kallsyms]       [k] vfs_writev
+     0.32%  efsd                    [.] efs_crc32
+     0.31%  [kernel.kallsyms]       [k] __sys_recvfrom
+     0.31%  [kernel.kallsyms]       [k] __inet_lookup_established
+     0.30%  libc.so.6               [.] cfree@GLIBC_2.2.5
+     0.30%  [kernel.kallsyms]       [k] _raw_spin_lock_irq
+
+
+#
+# (Tip: To show IPC for sampling periods use perf record -e '{cycles,instructions}:S' and then browse context)
+#

@@ -1,0 +1,34 @@
+2026-10-08T02:43:28.031Z Loaded 4 persisted cluster node(s) from /data1/efs/namespace-replay-uw4d4xlb/n1/meta/cluster_nodes.bin
+2026-10-08T02:43:28.031Z   persisted node 1: 127.0.0.1:26790
+2026-10-08T02:43:28.031Z   persisted node 2: 127.0.0.1:26791
+2026-10-08T02:43:28.031Z   persisted node 3: 127.0.0.1:26792
+2026-10-08T02:43:28.031Z   persisted node 4: 127.0.0.1:26793
+2026-10-08T02:43:28.031Z Trying to rejoin via persisted peer 127.0.0.1:26791 (node 2)...
+2026-10-08T02:43:28.031Z Cannot connect to peer 127.0.0.1:26791
+2026-10-08T02:43:28.031Z Failed to rejoin via 127.0.0.1:26791
+2026-10-08T02:43:28.031Z Trying to rejoin via persisted peer 127.0.0.1:26792 (node 3)...
+2026-10-08T02:43:28.031Z Cannot connect to peer 127.0.0.1:26792
+2026-10-08T02:43:28.031Z Failed to rejoin via 127.0.0.1:26792
+2026-10-08T02:43:28.031Z Trying to rejoin via persisted peer 127.0.0.1:26793 (node 4)...
+2026-10-08T02:43:28.031Z Cannot connect to peer 127.0.0.1:26793
+2026-10-08T02:43:28.031Z Failed to rejoin via 127.0.0.1:26793
+2026-10-08T02:43:28.031Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-08T02:43:28.031Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-08T02:43:28.032Z heartbeat: enabled (2000 ms interval)
+2026-10-08T02:43:28.039Z raft-host: up raft_id=0 n=4 boot=5884861155560495 salt=4615377258906842474 g0=hosted g2=off
+2026-10-08T02:43:28.039Z efsd (no git metadata, branch unknown, built 2026-10-08T02:21:25Z on nuc), build=unknown: node 1 listening on 127.0.0.1:26790, storage=/data1/efs/namespace-replay-uw4d4xlb/n1 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=on, writers=4 shared
+2026-10-08T02:43:28.039Z kv-obs: mt_bytes=314848 l0_bytes=0 l0=0 l1=0
+2026-10-08T02:43:30.032Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=987 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-08T02:43:32.100Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=0 ino=36
+2026-10-08T02:43:32.113Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=2074
+2026-10-08T02:43:33.125Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:33.125Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:33.125Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:33.143Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:33.607Z raft-host: txn-recover shard=1 coord=3627 parts=66 age=316.9s -> COMMIT (resolved)
+2026-10-08T02:43:33.675Z raft-host: gc-pass ms=613 orphan=0 reap=0 frag=0 spread=0 recover=613 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=380 emit=6 tomb=374 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-08T02:43:34.210Z namespace lookup parent=1 name=fault-incoming-commit dentry_rc=-3 ino=0
+2026-10-08T02:43:34.210Z namespace lookup parent=1 name=fault-incoming-commit lanes_rc=-3
+2026-10-08T02:43:34.210Z namespace lookup parent=1 name=fault-incoming-commit getattr_rc=-3
+2026-10-08T02:43:34.222Z namespace lookup parent=1 name=fault-replace-commit dentry_rc=0 ino=36
+2026-10-08T02:43:34.750Z raft-host: gc-pass ms=69 orphan=0 reap=0 frag=0 spread=0 recover=69 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=194 segs=0 keys=173 emit=0 tomb=173 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0

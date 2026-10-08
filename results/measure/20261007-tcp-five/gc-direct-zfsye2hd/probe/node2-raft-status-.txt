@@ -1,0 +1,3 @@
+node 2 root=1 salt=9968036965477119820 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=2 term=5 commit=1870 applied=1870 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=1 term=6 commit=3309 applied=3309 voters=0xe joint=0

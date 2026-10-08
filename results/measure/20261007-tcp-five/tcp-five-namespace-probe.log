@@ -1,0 +1,31 @@
+/data1/efs/namespace-replay-uw4d4xlb
+{'name': 'fault-incoming-commit', 'ino': 36}
+1 raft-lookup status=0 primary=3 parent=1 name=fault-incoming-commit ino=36 mode=040755 nlink=2
+2 raft-lookup status=0 primary=3 parent=1 name=fault-incoming-commit ino=36 mode=040755 nlink=2
+3 raft-lookup status=0 primary=3 parent=1 name=fault-incoming-commit ino=36 mode=040755 nlink=2
+4 raft-lookup status=0 primary=3 parent=1 name=fault-incoming-commit ino=36 mode=040755 nlink=2
+{'name': 'fault-replace-commit', 'errno': 2}
+1 raft-lookup status=1 primary=3 parent=1 name=fault-replace-commit ino=0 mode=00 nlink=0
+2 raft-lookup status=1 primary=3 parent=1 name=fault-replace-commit ino=0 mode=00 nlink=0
+3 raft-lookup status=1 primary=3 parent=1 name=fault-replace-commit ino=0 mode=00 nlink=0
+4 raft-lookup status=1 primary=3 parent=1 name=fault-replace-commit ino=0 mode=00 nlink=0
+{'name': 'fault-incoming-commit', 'errno': 2}
+1 raft-lookup status=1 primary=1 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0
+2 raft-lookup status=1 primary=1 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0
+3 raft-lookup status=1 primary=1 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0
+4 raft-lookup status=1 primary=1 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0
+{'name': 'fault-replace-commit', 'ino': 36}
+1 raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=36 mode=040755 nlink=2
+2 raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=36 mode=040755 nlink=2
+3 raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=36 mode=040755 nlink=2
+4 raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=36 mode=040755 nlink=2
+{'name': 'fault-incoming-commit', 'errno': 2}
+1 raft-lookup status=1 primary=1 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0
+2 raft-lookup status=1 primary=1 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0
+3 raft-lookup status=1 primary=1 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0
+4 raft-lookup status=1 primary=1 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0
+{'name': 'fault-replace-commit', 'ino': 36}
+1 raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=36 mode=040755 nlink=2
+2 raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=36 mode=040755 nlink=2
+3 raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=36 mode=040755 nlink=2
+4 raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=36 mode=040755 nlink=2

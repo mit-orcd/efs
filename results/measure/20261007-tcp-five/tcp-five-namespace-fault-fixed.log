@@ -1,0 +1,83 @@
+Evidence directory: /data1/efs/gc-direct-di2g8953
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=13780157790203909084
+client serving PASS
+twenty-ancestor rename preserves all guards and rejects cycle PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1316437 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1316664 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+client serving PASS
+replacement inode: source=3069 old=1549 observed=3069
+node 1 authoritative replacement inode PASS
+node 2 authoritative replacement inode PASS
+node 3 authoritative replacement inode PASS
+node 4 authoritative replacement inode PASS
+sixteen used-lane empty HASHED rmdir and replacement PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1316891 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+client serving PASS
+namespace boundary prior GC drained PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1317123 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1317790 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+64-lane empty directory removal/replacement and restart PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1318822 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+client serving PASS
+64-lane prepare barrier reached PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1318864 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+fault replacement cleanup drained PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1320121 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+client serving PASS
+64-lane commit barrier reached PASS
+Unmounting /data1/efs/gc-direct-di2g8953/mnt
+Retiring drained efs-fuse PID 1320171 for /data1/efs/gc-direct-di2g8953/mnt
+Unmounted /data1/efs/gc-direct-di2g8953/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+Traceback (most recent call last):
+  File "/data1/efs/tcp-five-kept-20261007/tests/live/gc_reclamation.py", line 851, in <module>
+    try:observed=replacement.stat().st_ino;break
+                 ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/pathlib.py", line 840, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/data1/efs/gc-direct-di2g8953/mnt/fault-replace-commit'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/data1/efs/tcp-five-kept-20261007/tests/live/gc_reclamation.py", line 855, in <module>
+    assert error.errno in (5,16),error
+           ^^^^^^^^^^^^^^^^^^^^^
+AssertionError: [Errno 2] No such file or directory: '/data1/efs/gc-direct-di2g8953/mnt/fault-replace-commit'

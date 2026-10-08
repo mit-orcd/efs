@@ -1,0 +1,28 @@
+[
+  {
+    "stage": "prepare",
+    "barrier": "pid=1368280 parts=66 stage=prepare\n",
+    "coordinator_node": 2,
+    "errors": [
+      "[Errno 16] Device or resource busy: '/data1/efs/gc-direct-_fmf42xf/mnt/fault-incoming-prepare' -> '/data1/efs/gc-direct-_fmf42xf/mnt/fault-replace-prepare'"
+    ],
+    "replacement_inode": 3263,
+    "incoming_inode": 3263,
+    "old_inode": 865,
+    "transient_read_errno": [],
+    "cold_atomic_namespace": true
+  },
+  {
+    "stage": "commit",
+    "barrier": "pid=1371008 parts=66 stage=commit\n",
+    "coordinator_node": 2,
+    "errors": [
+      "[Errno 5] Input/output error: '/data1/efs/gc-direct-_fmf42xf/mnt/fault-incoming-commit' -> '/data1/efs/gc-direct-_fmf42xf/mnt/fault-replace-commit'"
+    ],
+    "replacement_inode": 3209,
+    "incoming_inode": 3209,
+    "old_inode": 1839,
+    "transient_read_errno": [],
+    "cold_atomic_namespace": true
+  }
+]
