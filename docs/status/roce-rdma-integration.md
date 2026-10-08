@@ -67,3 +67,25 @@ must not be represented as an exact clean committed-binary acceptance.
 Still open: native-IB/mixed-version gates, fault/retirement stress, sustained
 CQ capacity and RSS bounds, reboot verification and cross-host hardware RoCE.
 GPU-direct DMA remains unsupported/unvalidated.
+
+## Oct 7 installed AMD cluster switched to RDMA
+
+Reused the existing four nodes and both mounts under /home/efs/efs, deployed
+the devel-roce-rdma source, and restarted with EFS_TRANSPORT=rdma,
+EFS_RDMA_DEV=rxe0, EFS_RDMA_GID_INDEX=1 and direct I/O. All four daemons and
+both FUSE processes hold uverbs0 open; the live portal reports RoCE / RDMA
+and direct I/O. Native Ethernet/InfiniBand link-layer discovery distinguishes
+RoCE / RDMA from IB / RDMA. The installed cluster is left running.
+
+Full POSIX: 216 pass, 0 fail, 1 skip, 19.5 seconds.
+Two-mount POSIX2: 64 pass, 0 fail, 7.9 seconds. No new failures.
+Remote results: /home/efs/efs/logs/posix-20261007-230909.tsv and
+/home/efs/efs/logs/posix2c-20261007-230929.tsv.
+Cluster status after testing: all four active, cluster OK, both mounts live.
+The installed build reports unknown Git metadata because deployment uses
+a source copy; the deployed source is from this RDMA worktree.
+
+Devops now propagates configurable transport/device/GID settings across SSH
+and to both daemons and mounts; AMD defaults to RDMA/direct, NUC to TCP.
+The portal was restarted on its existing AMD port 6060 and live API verified
+all six process badges. RXE remains software RoCE, not hardware offload.
