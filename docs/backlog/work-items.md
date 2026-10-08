@@ -3510,6 +3510,9 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 <a id="w93"></a>
 
+**Implementation update (Oct 8):** Implemented bounded follower-request durability batching, deferred ACK/apply, storage-failure fencing and committed-prefix protection (`534341af`, `54e800cd`). Focused fault tests, full AMD direct/TCP POSIX/peer/replay/cold/GC and mixed-group measurements pass. Sustained mixed large-writer/tiny-close timing acceptance remains open.
+[Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
+
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
 **Class/status:** performance investigation; registered Oct 8, 2026. Open;
@@ -3553,6 +3556,9 @@ existing preallocation experiment closes this item.
 
 <a id="w94"></a>
 
+**Implementation update (Oct 8):** Server-side atomic CREATE/lease persistence and cross-group transaction integration are implemented (`ec192d17`); cold lost-reply replay and open-unlinked lifetime gates pass. Client adoption ownership and ambiguous-result cleanup remain open. FUSE deliberately retains separate HOLD until those races are proved safe.
+[Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
+
 ## W94 · Atomic CREATE and open-lease acquisition
 
 **Class/status:** client/server metadata performance; registered Oct 8, 2026.
@@ -3593,6 +3599,9 @@ weaken close durability or permission/coherence checks, or report the entire
 open latency as a measured saving.
 
 <a id="w95"></a>
+
+**Implementation update (Oct 8):** Independent tiny logical/physical geometry, packed-container experiments, ancestor barriers and per-record durable cohort latency are implemented (`12993678`), with contract tests, sanitizers and separate perf/strace evidence. Sustained churn, index/body/ACK/GC crash phases and any production-format decision remain open.
+[Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 ## W95 · Tiny-file data persistence and packing principles
 
@@ -3640,6 +3649,9 @@ acknowledge before required persistence, remove pathname barriers without an
 equivalent protocol, or deploy a layout by wiping the preserved test stores.
 
 <a id="w96"></a>
+
+**Implementation update (Oct 8):** Invalid-tail repair, sticky write-failure handling and bounded logical-EOF reservation are implemented (`f35a67c0`, `0ed74ef8`). Fault/reset/replay and AMD cold/POSIX/peer/GC gates pass. Two-device NUC QD8 performance acceptance remains open: measurements under unrelated load are mixed, not an unconditional win.
+[Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
 ## W96 · Bounded preallocation for the KV write-ahead log
 

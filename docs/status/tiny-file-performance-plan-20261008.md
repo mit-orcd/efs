@@ -1,5 +1,8 @@
 # Tiny-file performance follow-up — W93–W96
 
+**Current implementation (Oct 8):** The review below describes the pre-merge baseline. W93 batching/fault fixes, W94 atomic server leases, W95 tiny principles/durable timing, and W96 tail repair/reservation are now implemented and tested in focused portions. Client adoption, churn/recovery experiments and remaining performance acceptance are still open. [Current checkpoint](w93-w96-implementation-20261008.md).
+
+
 Registered Oct 8, 2026 after seven NUC profiling/implementation rounds.
 All four items are **open investigations/experiments**, not completed fixes.
 The current experimental deployment is `c22754236b38-tiny-r7` on
