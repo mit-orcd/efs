@@ -5170,8 +5170,8 @@ static void ll_open_run(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *f
     t_req = NULL;
     if (rc)
         fuse_reply_err(req, -rc);
-    else
-        fuse_reply_open(req, fi);
+    else if (fuse_reply_open(req, fi) != 0)
+        (void)efs_fuse_release_ino(ino, fi);
 }
 
 /* Per-worker reply buffer. A malloc(1 MiB)/free per READ request sat
@@ -5596,6 +5596,7 @@ static void ll_create_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     t_req = req;
     struct efs_inode created;
     rc = efs_fuse_create_at(parent, name, mode, fi, NULL, &created);
+    int opened = (rc == 0);
     if (rc == 0 && created.ino) {
         /* CREATE already returned this committed row. A fresh GETATTR here
          * adds a quorum read solely to construct the same syscall's reply.
@@ -5610,10 +5611,17 @@ static void ll_create_run(fuse_req_t req, fuse_ino_t parent, const char *name,
     }
     lookup_memo_mutation_end();
     t_req = NULL;
-    if (rc)
+    if (rc) {
+        /* A successful open followed by failed reply construction has no
+         * kernel descriptor and therefore will never receive RELEASE. */
+        if (opened)
+            (void)efs_fuse_release_ino(0, fi);
         fuse_reply_err(req, -rc);
-    else
-        fuse_reply_create(req, &e, fi);
+    } else if (fuse_reply_create(req, &e, fi) != 0) {
+        /* Interrupted requests may reject the reply after CREATE/HOLD has
+         * committed. Keep the namespace effect, release only our open ref. */
+        (void)efs_fuse_release_ino(e.ino, fi);
+    }
 }
 
 static void ll_getlk(fuse_req_t req, fuse_ino_t ino, struct fuse_file_info *fi,

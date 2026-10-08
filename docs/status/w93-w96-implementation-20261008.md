@@ -149,3 +149,19 @@ pass. Full private AMD direct/TCP fixture `gc-direct-aw0f7val` passes POSIX
 216/0/1, peer 64/64, append/replay/fsync, held CREATE, shutdown, two cold WAL
 recovery cycles and empty final physical GC inventory. Installed service restored.
 [Evidence](../../results/measure/20261008-w93-w96-implementation/w93-fault-recovery/live.log).
+
+## W94 rejected descriptor replies
+
+CREATE reply-construction failure and rejected CREATE/OPEN descriptor replies
+now release the acquired local handle/open reference. The namespace effect is
+retained. Kernel rejection cannot be followed by RELEASE, so leaving those
+references behind leaked their server leases. Production callback fault tests
+pass on Mac and AMD. A live LD_PRELOAD shim completes each request without a
+descriptor, returns the rejected-reply status, then verifies unlink reclaims
+the server inode. Full private AMD `gc-direct-czn4utnr` passes POSIX 216/0/1,
+peer 64/64, replay/fsync/shutdown and repeated cold WAL/GC gates. Service restored.
+The full Linux regression suite also passes in an isolated generated-doc tree.
+[Evidence](../../results/measure/20261008-w93-w96-implementation/w94-rejected-replies/live.log).
+
+This fixes a lifecycle leak; it does not enable CREATE lease piggybacking.
+Client adoption and ambiguous CREATE/lease-close recovery remain open.

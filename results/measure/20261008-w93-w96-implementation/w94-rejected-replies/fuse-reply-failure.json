@@ -1,0 +1,14 @@
+[
+  {
+    "operation": "create",
+    "ino": 4097,
+    "rejected_errno": 5,
+    "inode_reclaimed": true
+  },
+  {
+    "operation": "open",
+    "ino": 8193,
+    "rejected_errno": 5,
+    "inode_reclaimed": true
+  }
+]
