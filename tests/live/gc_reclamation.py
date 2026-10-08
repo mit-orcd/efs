@@ -19,6 +19,7 @@ import threading
 import socket
 import subprocess
 import tempfile
+from raft_tail import commands as raft_commands
 import time
 
 p = argparse.ArgumentParser(description=__doc__)
@@ -39,11 +40,17 @@ p.add_argument('--publication-pressure',action='store_true',help='retain failed 
 p.add_argument('--namespace-max',action='store_true',help='exact ancestry limit, over-limit refusal and restart recovery')
 p.add_argument('--opid', action='store_true')
 p.add_argument('--opid-restart',action='store_true',help='restart all owned servers between lost commit reply and replay')
+p.add_argument('--ior-binary',type=Path,help='actual IOR executable for traced hard-mode cold verification')
+p.add_argument('--mpi-run',type=Path,help='MPI launcher paired with --ior-binary')
+p.add_argument('--ior-clients',type=int,choices=(1,9),default=1,help='one or nine independent FUSE clients on this host')
+p.add_argument('--ior-ranks',type=int,action='append',default=[])
+p.add_argument('--ior-segments',type=int,default=3000)
 p.add_argument('--fold-audit', action='store_true', help='require authoritative fold transitions and cold bytes after GC')
 p.add_argument('--sequential', action='store_true', help='sustained same-mount writes beyond metadata-cache capacity')
 p.add_argument('--memo', action='store_true', help='immediate lookup/stat following local mutations')
 p.add_argument('--rename-cache', action='store_true', help='root rename evicts the exact old name')
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
+p.add_argument('--ecrawl-binary',type=Path,help='run the actual ecrawl dense/sparse classification gate; requires --allocation')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
 p.add_argument('--compactor-pressure', action='store_true', help='fault-build follower pressure with finite stop and recovery')
 p.add_argument('--du-audit',action='store_true',help='measure repeated GNU du on a cold never-writing client')
@@ -55,10 +62,18 @@ p.add_argument('--report-audit', action='store_true', help='small-file publicati
 p.add_argument('--server-binary', type=Path, help='owned experimental/fault daemon; normal client/mgmt remain unchanged')
 p.add_argument('--client-binary', type=Path, help='owned test-only FUSE binary')
 p.add_argument('--worker-fault',choices=('allocation','tls','growth'))
+p.add_argument('--gc-bulk-gib',type=int,choices=range(1,11),help='large live deletion with physical and pass accounting')
 p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle GC, process CPU and Raft commits')
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+assert bool(a.ior_binary)==bool(a.mpi_run),'IOR and MPI launcher must be supplied together'
+if a.ior_clients==9:assert a.ior_binary,'nine-client gate requires IOR'
+if a.ior_binary:
+    a.ior_binary=a.ior_binary.resolve();assert a.mpi_run and a.ior_segments>0
+    a.mpi_run=a.mpi_run.resolve();assert a.ior_ranks and all(0<n<=36 for n in a.ior_ranks)
+if a.ecrawl_binary:
+    a.ecrawl_binary=a.ecrawl_binary.resolve();assert a.allocation
 if a.server_binary:a.server_binary=a.server_binary.resolve()
 if a.client_binary:a.client_binary=a.client_binary.resolve()
 source = Path(__file__).resolve().parents[2]
@@ -96,6 +111,9 @@ for path in sorted(inputs):
                       for name in ('efsd','efs-fuse','efs-mgmt')},
 },indent=2))
 env = dict(os.environ, EFS_MD_RAFT_N='4', EFS_TRANSPORT='tcp')
+if a.gc_bulk_gib:
+    assert not a.idle_seconds;env['EFS_GC_DBG']='1'
+if a.ior_binary:env.update(EFS_DCACHE_TRACE='1',EFS_REPORT_DBG='1')
 if a.workers:env['EFS_REPLY_BUFFER_TRACE']='1'
 if a.worker_fault:
     assert a.workers and a.client_binary,'worker faults require explicit fault client and --workers'
@@ -119,6 +137,7 @@ peer=None
 peer_mount=work/"peer"
 peer_mount.mkdir()
 handles=[]
+extra_clients=[]
 blocked=None
 
 def run(args, **kwargs):
@@ -146,7 +165,7 @@ def start():
     for i,root in enumerate(roots):
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
-        cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota','4G' if a.compactor_pressure else '1G','--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota','16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G'),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
         if a.storage_roots==2:
             first=root/'storage0';second=root/'storage1'
             first.mkdir(exist_ok=True);second.mkdir(exist_ok=True)
@@ -345,7 +364,15 @@ try:
             return int(fields[11])+int(fields[12])
         def commits():
             return [run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+i}'],capture_output=True,text=True).stdout for i in range(4)]
-        before_commits=commits();before_ticks=[process_ticks(proc) for proc in servers]
+        def committed_tail(replies):
+            result={}
+            for node,(root,reply) in enumerate(zip(roots,replies)):
+                bounds={int(g):int(i) for g,i in re.findall(r'group (\d+) hosted=1 .*?commit=(\d+)',reply)}
+                for key,value in raft_commands(root/'mdraft/log/raft.log',bounds).items():
+                    if key in result:assert result[key]==value,('replica disagreement',key)
+                    result[key]=value
+            return result
+        before_commits=commits();before_tail=committed_tail(before_commits);before_ticks=[process_ticks(proc) for proc in servers]
         before_logs=[(work/f'n{i+1}.log').stat().st_size for i in range(4)]
         started=time.monotonic();next_notice=started
         while time.monotonic()-started<a.idle_seconds:
@@ -358,7 +385,14 @@ try:
         for index,offset in enumerate(before_logs):
             with (work/f'n{index+1}.log').open('rb') as log:log.seek(offset);text=log.read().decode(errors='replace')
             slow.extend({'node':index+1,'line':line} for line in text.splitlines() if 'gc-pass ' in line)
-        record={'live_files':4096,'elapsed_seconds':elapsed,'cpu_percent':cpu,'slow_gc_passes':slow,'before_raft':before_commits,'after_raft':commits()}
+        after_commits=commits();after_tail=committed_tail(after_commits)
+        new_entries={key:value for key,value in after_tail.items() if key not in before_tail}
+        command_counts={}
+        for _,command in new_entries.values():
+            if command:command_counts[str(command[0])]=command_counts.get(str(command[0]),0)+1
+        gc_ack_cmd=int(re.search(r'#define EFS_MD_CMD_GC_ACK\s+(\d+)',(source/'include/efs/meta_cmd.h').read_text()).group(1))
+        assert command_counts.get(str(gc_ack_cmd),0)==0,command_counts
+        record={'idle_committed_commands':command_counts,'idle_gc_ack_entries':command_counts.get(str(gc_ack_cmd),0),'idle_new_entries':len(new_entries),'live_files':4096,'elapsed_seconds':elapsed,'cpu_percent':cpu,'slow_gc_passes':slow,'before_raft':before_commits,'after_raft':after_commits}
         (work/'idle-live-table.json').write_text(json.dumps(record,indent=2))
         assert not slow and max(cpu)<5,record
         print('live-table idle: no slow GC passes; each daemon CPU below 5 percent PASS',flush=True)
@@ -485,27 +519,131 @@ try:
         wait(drained,'bulk mixed-read deletions drained before fault fixture',600)
         budgets=re.findall(r'buf-budget hard=(\d+) drain=(\d+) slab=(\d+)',(work/'fuse.log').read_text())
         assert budgets and all(tuple(map(int,b))==(hard_budget,drain_budget,32<<20) for b in budgets),budgets
+    if a.gc_bulk_gib:
+        def metadata_latency(label):
+            result=run(['python3',source/'tests/measure/md_latency.py',mount],capture_output=True,text=True,timeout=120)
+            (work/('gc-bulk-mdlat-'+label+'.log')).write_text(result.stdout+result.stderr)
+            return {name:float(median) for name,median in re.findall(r'^(\S+)\s+min\s+\S+\s+med\s+(\S+)',result.stdout,re.M)}
+        before_latency=metadata_latency('before')
+        path=mount/'gc-bulk';body=bytes(range(256))*4096
+        started=time.monotonic()
+        with path.open('xb',buffering=0) as out:
+            for _ in range(a.gc_bulk_gib*1024):assert out.write(body)==len(body)
+            os.fsync(out.fileno());ino=os.fstat(out.fileno()).st_ino
+        write_seconds=time.monotonic()-started
+        assert path.stat().st_size==a.gc_bulk_gib*(1<<30)
+        before_stats=status();before_totals=totals(before_stats)
+        offsets=[(work/f'n{i+1}.log').stat().st_size for i in range(4)]
+        started=time.monotonic();path.unlink()
+        wait(drained,'bulk GC records drained',1800)
+        assert not files(ino),'GC queues drained but physical bulk fragments remain'
+        elapsed=time.monotonic()-started;after_stats=status();after_totals=totals(after_stats)
+        scan_passes=[]
+        for node,offset in enumerate(offsets):
+            with (work/f'n{node+1}.log').open('rb') as log:log.seek(offset);text=log.read().decode(errors='replace')
+            scan_passes.extend({'node':node+1,**{k:int(v) for k,v in re.findall(r'(\w+)=(\d+)',line)}} for line in text.splitlines() if 'gc-pass ' in line)
+        expected_fragments=a.gc_bulk_gib*(1<<30)//131072*3
+        assert after_totals['removed_fragments']-before_totals['removed_fragments']>=expected_fragments
+        assert after_totals['reclaimed_payload_bytes']-before_totals['reclaimed_payload_bytes']>=a.gc_bulk_gib*(1<<30)*3//2
+        after_latency=metadata_latency('after')
+        (work/'gc-bulk.json').write_text(json.dumps({'logical_bytes':a.gc_bulk_gib*(1<<30),'write_seconds':write_seconds,'deletion_seconds':elapsed,'before_stats':before_stats,'after_stats':after_stats,'before_totals':before_totals,'after_totals':after_totals,'scan_passes':scan_passes,'before_metadata_median_ms':before_latency,'after_metadata_median_ms':after_latency},indent=2))
+        print(f'{a.gc_bulk_gib} GiB deletion physical inventory/queues and pass accounting PASS',flush=True)
+    if a.ior_binary:
+        run(['cc','-O2','-pthread',source/'tests/tools/hardscan.c','-o',work/'hardscan'])
+        def start_ior_peers():
+            for index in range(1,a.ior_clients):
+                target=work/f'ior-client-{index}';target.mkdir(exist_ok=True)
+                log=open(work/f'ior-client-{index}.log','ab');handles.append(log)
+                proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(target),'-f'],env=env,stdout=log,stderr=log)
+                extra_clients.append((proc,target))
+                def ready():
+                    assert proc.poll() is None,'IOR peer exited'
+                    return subprocess.run(['mountpoint','-q',str(target)]).returncode==0 and subprocess.run(['timeout','2','stat',str(target)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
+                wait(ready,f'IOR independent client {index+1} mounted',40)
+        def stop_ior_peers():
+            for proc,target in extra_clients:
+                run([source/'scripts/client.sh','stop',target]);proc.wait(timeout=15)
+            extra_clients.clear()
+        wrapper=work/'ior-client-wrapper'
+        wrapper.write_text('#!/usr/bin/env python3\nimport os,sys\nfrom pathlib import Path\nroots='+repr([str(mount)]+[str(work/f'ior-client-{i}') for i in range(1,a.ior_clients)])+'\nargs=sys.argv[1:]\ni=args.index("-o")+1\nrelative=Path(args[i]).relative_to(roots[0])\nargs[i]=str(Path(roots[int(os.environ["PMI_RANK"])//4])/relative)\nos.execv('+repr(str(a.ior_binary))+',['+repr(str(a.ior_binary))+',*args])\n')
+        wrapper.chmod(0o700)
+        records=[]
+        for ranks in a.ior_ranks:
+            if a.ior_clients==9:assert ranks==36
+            start_ior_peers()
+            path=mount/f'ior-hard-{ranks}';signature=271828
+            base=[a.mpi_run,'-n',ranks,wrapper if a.ior_clients==9 else a.ior_binary,'-a','POSIX','--dataPacketType=timestamp','-C','-Q','1','-g',f'-G={signature}','-k','-e','-t','47008','-b','47008','-s',a.ior_segments,'-o',path]
+            def ior_phase(phase,flags):
+                started=time.monotonic()
+                result=run([*base,*flags],capture_output=True,text=True,timeout=1800)
+                (work/f'ior-{ranks}-{phase}.log').write_text(result.stdout+result.stderr)
+                return time.monotonic()-started
+            write_seconds=ior_phase('write',['-w'])
+            assert path.stat().st_size==47008*ranks*a.ior_segments
+            observe_pass('GC after IOR hard writes')
+            # Purge all client caches, then independently check each packet.
+            stop_ior_peers();unmount();mount_client();start_ior_peers()
+            verify_seconds=ior_phase('cold-verify',['-r','-R'])
+            stop_ior_peers();unmount();mount_client()
+            result=run([work/'hardscan',path,ranks,a.ior_segments,signature,'8'],capture_output=True,text=True,timeout=1800)
+            (work/f'ior-{ranks}-hardscan.log').write_text(result.stdout+result.stderr)
+            assert f'DONE records={ranks*a.ior_segments} bad=0 short=0' in result.stdout,result.stdout
+            ino=path.stat().st_ino;path.unlink()
+            # Large scattered writes retain more immutable generations than
+            # their logical size. Observe bounded queue drain, then inspect
+            # the physical inventory once instead of repeatedly scanning it.
+            wait(drained,'IOR GC records drained',1800)
+            assert not files(ino),'IOR GC drained but physical fragments remain'
+            records.append({'ranks':ranks,'segments':a.ior_segments,'records':ranks*a.ior_segments,'bytes':47008*ranks*a.ior_segments,'write_seconds':write_seconds,'verify_seconds':verify_seconds,'cold_hardscan_bad':0,'cold_hardscan_short':0})
+            print(f'actual IOR hard ranks={ranks} cold verify/hardscan and deletion PASS',flush=True)
+        records_meta={'independent_fuse_clients':a.ior_clients,'physical_client_hosts':1,'ior_binary':str(a.ior_binary),'ior_sha256':hashlib.sha256(a.ior_binary.read_bytes()).hexdigest(),'mpi_run_sha256':hashlib.sha256(a.mpi_run.read_bytes()).hexdigest(),'cases':records}
+        (work/'ior-hard-acceptance.json').write_text(json.dumps(records_meta,indent=2))
     if a.allocation:
+        dense=mount/'allocation-dense';dense.mkdir()
+        sparse=mount/'allocation-sparse';sparse.mkdir()
         models=[]
-        for name,offset,size in (('dense',0,1<<20),('sparse',1<<30,4096),('empty',0,0)):
-            path=mount/f'allocated-{name}'
+        for name,offset,size in (('dense',0,1<<20),('dense-tail',0,131073),('dense-small',0,4096),('sparse',1<<30,4096),('sparse-16g',16<<30,4096),('empty',0,0)):
+            path=(sparse if offset else dense)/name
             with path.open('xb',buffering=0) as out:
                 if size:out.seek(offset);assert out.write(b'A'*size)==size
                 os.fsync(out.fileno())
             models.append((path,offset,size))
+        shrunk=dense/'dense-shrunk'
+        with shrunk.open('xb',buffering=0) as out:
+            assert out.write(b'A'*131072)==131072
+            os.fsync(out.fileno());os.ftruncate(out.fileno(),1000);os.fsync(out.fileno())
+        models.append((shrunk,0,1000))
         unmount();mount_client()  # new process has never written these inodes
         records=[]
         for path,offset,size in models:
-            st=path.stat();assert st.st_size==offset+size
+            started=time.perf_counter_ns();st=path.stat();latency=(time.perf_counter_ns()-started)/1e6
+            assert st.st_size==offset+size
             if size:
                 assert st.st_blocks>0 and st.st_blocks*512<=((size+131071)//131072)*131072
+                if not offset:assert st.st_blocks*512>=size,(path,st.st_size,st.st_blocks)
                 with path.open('rb',buffering=0) as inp:
                     inp.seek(offset);assert inp.read(size)==b'A'*size
             else:assert st.st_blocks==0
-            records.append({'name':path.name,'size':st.st_size,'blocks':st.st_blocks})
-            path.unlink()
+            records.append({'name':path.name,'size':st.st_size,'blocks':st.st_blocks,'cold_stat_ms':latency})
+        if a.ecrawl_binary:
+            crawls=[]
+            for folder,expected_sparse in ((dense,0),(sparse,2)):
+                capture=work/('ecrawl-'+folder.name)
+                result=run([a.ecrawl_binary,folder,capture],capture_output=True,text=True,timeout=120)
+                (work/(capture.name+'.log')).write_text(result.stdout+result.stderr)
+                summaries=[capture/'crawl_manifest.txt']
+                fields=dict(re.findall(r'^(\w+)=(.*)$',result.stdout+'\n'+result.stderr,re.M))
+                for summary in summaries:
+                    if summary.is_file():fields.update(re.findall(r'^(\w+)=(.*)$',summary.read_text(),re.M))
+                assert int(fields['files_sparse_heuristic'])==expected_sparse,(capture,fields)
+                assert int(fields.get('total_errors',fields.get('errors','-1')))==0,(capture,fields)
+                crawls.append({'tree':folder.name,'expected_sparse':expected_sparse,'fields':fields})
+            (work/'ecrawl-allocation.json').write_text(json.dumps({'binary':str(a.ecrawl_binary),'sha256':hashlib.sha256(a.ecrawl_binary.read_bytes()).hexdigest(),'crawls':crawls},indent=2))
+            print('actual ecrawl: dense zero false sparse, true sparse counted, no errors PASS',flush=True)
+        for path,offset,size in models:path.unlink()
+        dense.rmdir();sparse.rmdir()
         (work/'cold-allocation.json').write_text(json.dumps(records,indent=2))
-        print('cold non-writing client dense/sparse/empty allocation PASS',flush=True)
+        print('cold non-writing client dense/sparse/empty/truncated allocation PASS',flush=True)
     if a.sequential:
         # 16,384 chunk entries exceed the original 8 MiB metadata failure
         # threshold. A second file on the same mount tests continued admission.
@@ -1162,6 +1300,11 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         print('small-memory whole-fixture envelope '+json.dumps(record)+' PASS',flush=True)
     print('GC reclamation '+a.mode+' PASS',flush=True)
 finally:
+    for proc,target in extra_clients:
+        subprocess.run(['fusermount3','-uz',str(target)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        proc.terminate()
+        try:proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:proc.kill();proc.wait()
     if blocked and blocked.exists():
         blocked.parent.chmod(0o700);blocked.chmod(0o600)
     if client:

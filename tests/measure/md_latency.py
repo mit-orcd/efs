@@ -12,8 +12,8 @@ os.mkdir(base)
 def run(name, fn, n=20):
     ts = []
     for i in range(n):
-        t = time.time(); fn(i); ts.append((time.time() - t) * 1000)
-    print("%-18s min %6.1f med %6.1f max %6.1f ms" % (name, min(ts), st.median(ts), max(ts)))
+        t = time.perf_counter(); fn(i); ts.append((time.perf_counter() - t) * 1000)
+    print("%-18s min %9.3f med %9.3f max %9.3f ms" % (name, min(ts), st.median(ts), max(ts)))
 run("mkdir", lambda i: os.mkdir("%s/d%d" % (base, i)))
 def cr(i):
     fd = os.open("%s/f%d" % (base, i), os.O_CREAT | os.O_WRONLY, 0o644); os.write(fd, b"x"); os.close(fd)
