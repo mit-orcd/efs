@@ -572,8 +572,27 @@ int efs_conn_recv_put_reply(struct efs_conn *c, uint8_t *type, uint8_t *status,
 {
     if (path)
         *path = 0xff;
-    if (!c->rc || c->recv_chan == EFS_CONN_TCP)
+    if (!c->rc || c->recv_chan == EFS_CONN_TCP) {
+        if (c->put_reply_used) {
+            if (c->put_reply_used < 4)
+                return EFS_ERR_PROTO;
+            uint32_t be;
+            memcpy(&be, c->put_reply, sizeof(be));
+            uint32_t nlen = ntohl(be);
+            if (nlen < 2 || nlen > 4 || c->put_reply_used != 4 + nlen)
+                return EFS_ERR_PROTO;
+            if (type)
+                *type = c->put_reply[4];
+            if (status)
+                *status = c->put_reply[5];
+            if (path && nlen >= 3)
+                *path = c->put_reply[6];
+            c->put_reply_used = 0;
+            efs_conn_note_ok(c);
+            return EFS_OK;
+        }
         return efs_recv_put_reply(c->fd, type, status, path);
+    }
 
     const uint8_t *pl = NULL;
     uint32_t plen = 0;
@@ -632,4 +651,42 @@ int efs_conn_reply_watch_us(struct efs_conn *c, int budget_us)
     if (r < 0)
         return -1;
     return efs_rdma_reply_fd(c->rc);
+}
+
+/* Only the checked-out PUT owns this buffer. Consume exactly one small frame,
+ * leaving any subsequent frame in the socket. Partial TCP delivery must not
+ * turn a readiness notification into a blocking recv across the whole quorum. */
+int efs_conn_put_reply_watch(struct efs_conn *c, int budget_us)
+{
+    if (c->rc && c->recv_chan != EFS_CONN_TCP)
+        return budget_us > 0 ? efs_conn_reply_watch_us(c, budget_us) :
+                               efs_conn_reply_watch_quick(c);
+    for (;;) {
+        uint32_t target = 4;
+        if (c->put_reply_used >= 4) {
+            uint32_t be;
+            memcpy(&be, c->put_reply, sizeof(be));
+            uint32_t nlen = ntohl(be);
+            if (nlen < 2 || nlen > 4)
+                return -1;
+            target += nlen;
+        }
+        if (c->put_reply_used == target && target > 4)
+            return EFS_CONN_REPLY_READY;
+        if (c->put_reply_used > target)
+            return -1;
+        ssize_t got = recv(c->fd, c->put_reply + c->put_reply_used,
+                            target - c->put_reply_used, MSG_DONTWAIT);
+        if (got > 0) {
+            c->put_reply_used += (uint8_t)got;
+            continue;
+        }
+        if (!got)
+            return -1;
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return c->fd;
+        return -1;
+    }
 }

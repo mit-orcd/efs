@@ -166,6 +166,7 @@ test-report-pressure:
 	python3 tests/test_get_pool_budget.py
 	python3 tests/test_put_retry_budget.py
 	python3 tests/test_put_reply_deadline.py
+	python3 tests/test_put_tcp_frame.py
 	python3 tests/test_put_window_deadline.py
 	python3 tests/test_write_budget.py
 	python3 tests/test_append_sequence.py

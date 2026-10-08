@@ -1193,5 +1193,9 @@ int efs_conn_reply_watch(struct efs_conn *c);
 int efs_conn_reply_watch_quick(struct efs_conn *c);
 /* Fixed-budget spin variant for the PUT reply wait. */
 int efs_conn_reply_watch_us(struct efs_conn *c, int budget_us);
+/* PUT-only watch consumes an incomplete TCP frame into bounded conn storage.
+ * A READY result guarantees recv_put_reply cannot block on missing bytes.
+ * RDMA preserves the existing CQ watch behavior (budget_us=0 is quick). */
+int efs_conn_put_reply_watch(struct efs_conn *c, int budget_us);
 
 #endif

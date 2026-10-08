@@ -72,6 +72,10 @@ struct efs_conn {
      * read TCP only after a big AppendEntries, left the RDMA reply in the
      * ring, and timed out every batch). */
     int last_recv_chan;
+    /* Exclusive PUT checkout: incremental TCP reply, never wait on a partial
+     * frame while other fragment ACKs may already form a quorum. */
+    uint8_t put_reply[8];
+    uint8_t put_reply_used;
 };
 
 /* Take ownership of fd. */

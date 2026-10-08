@@ -2493,7 +2493,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         for (int i = 0; i < EFS_NUM_FRAGMENTS && acks < 2; i++) {
             if (!pending[i] || !conns[i])
                 continue;
-            int w = efs_conn_reply_watch_quick(conns[i]);
+            int w = efs_conn_put_reply_watch(conns[i], 0);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                 if (r > 0)
@@ -2522,7 +2522,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         for (int i = 0; i < EFS_NUM_FRAGMENTS && acks < 2; i++) {
             if (!pending[i] || !conns[i])
                 continue;
-            int w = efs_conn_reply_watch_us(conns[i], 24);
+            int w = efs_conn_put_reply_watch(conns[i], 24);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                 if (r > 0)
@@ -2552,7 +2552,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
             if (!pending[i] || !conns[i])
                 continue;
-            int w = efs_conn_reply_watch_quick(conns[i]);
+            int w = efs_conn_put_reply_watch(conns[i], 0);
             if (w == EFS_CONN_REPLY_READY) {
                 int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                 if (r > 0)
@@ -2616,7 +2616,16 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             int i = map[p];
             if (!pending[i] || !conns[i])
                 continue;
-            int r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+            int watch = efs_conn_put_reply_watch(conns[i], 0);
+            if (watch >= 0) continue;
+            int r;
+            if (watch == EFS_CONN_REPLY_READY)
+                r = put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+            else {
+                efs_client_conn_drop(nodes[i], conns[i]);
+                efs_client_node_note_fail(nodes[i]);
+                r = -1;
+            }
             if (r > 0)
                 acks++;
             else if (r == 0)
@@ -2648,7 +2657,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
             for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
                 if (!conns[i])
                     continue;
-                int w = efs_conn_reply_watch_quick(conns[i]);
+                int w = efs_conn_put_reply_watch(conns[i], 0);
                 if (w == EFS_CONN_REPLY_READY) {
                     put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
                     conns[i] = NULL;
@@ -2680,7 +2689,11 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 int i = map[p];
                 if (!conns[i])
                     continue;
-                put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+                int watch = efs_conn_put_reply_watch(conns[i], 0);
+                if (watch >= 0) continue;
+                if (watch == EFS_CONN_REPLY_READY)
+                    put_recv_reply(nodes[i], conns[i], ino, chunk_index, (uint8_t)i);
+                else efs_client_conn_drop(nodes[i], conns[i]);
                 conns[i] = NULL;
                 pending[i] = 0;
             }

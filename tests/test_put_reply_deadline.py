@@ -34,6 +34,7 @@ static uint32_t path_hint_get(efs_node_id_t n,efs_ino_t ino,uint32_t ci,uint8_t 
 int efs_conn_send_msg_parts(struct efs_conn *c,uint8_t t,const void *a,uint32_t an,const void *b,uint32_t bn){(void)c;(void)t;(void)a;(void)an;(void)b;(void)bn;sends++;return 0;}
 int efs_conn_reply_watch_quick(struct efs_conn *c){return mode==1 && c!=&conns[2]?EFS_CONN_REPLY_READY:c->fd;}
 int efs_conn_reply_watch_us(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
+int efs_conn_put_reply_watch(struct efs_conn *c,int budget){(void)budget;return efs_conn_reply_watch_quick(c);}
 static int put_recv_reply(efs_node_id_t n,struct efs_conn *c,efs_ino_t ino,uint32_t ci,uint8_t fi){(void)n;(void)c;(void)ino;(void)ci;(void)fi;releases++;return 1;}
 '''+f+r'''
 int main(void){
