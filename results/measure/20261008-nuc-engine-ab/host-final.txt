@@ -1,0 +1,10 @@
+cc (GCC) 14.3.1 20251022 (Red Hat 14.3.1-4)
+NAME      SIZE MODEL                   ROTA TRAN
+sda     745.2G MK0800GEYKE                0 sata
+nvme0n1 931.5G Samsung SSD 970 EVO 1TB    0 nvme
+3176126 /data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --no-direct-io
+3177121 /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --no-direct-io --join 127.0.0.1:17432
+3178042 /data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --no-direct-io --join 127.0.0.1:17432
+3179403 /data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --no-direct-io --join 127.0.0.1:17432
+3180627 ./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt
+3180674 ./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt2

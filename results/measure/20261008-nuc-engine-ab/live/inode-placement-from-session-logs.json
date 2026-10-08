@@ -1,0 +1,146 @@
+[
+  {
+    "case": "containers-buffered-r1",
+    "read_MiB_s": 6.2106913811018085,
+    "observed_session_inodes": 256,
+    "parity_histogram": {
+      "0": 256
+    },
+    "inode_samples": [
+      6886,
+      10982,
+      15078,
+      19174,
+      23270,
+      27366,
+      31462,
+      35558
+    ]
+  },
+  {
+    "case": "containers-buffered-r2",
+    "read_MiB_s": 5.678097887467368,
+    "observed_session_inodes": 256,
+    "parity_histogram": {
+      "0": 256
+    },
+    "inode_samples": [
+      7540,
+      11636,
+      15732,
+      19828,
+      23924,
+      28020,
+      32116,
+      36212
+    ]
+  },
+  {
+    "case": "containers-direct-r1",
+    "read_MiB_s": 6.054625474242238,
+    "observed_session_inodes": 256,
+    "parity_histogram": {
+      "0": 256
+    },
+    "inode_samples": [
+      7030,
+      11126,
+      15222,
+      19318,
+      23414,
+      27510,
+      31606,
+      35702
+    ]
+  },
+  {
+    "case": "containers-direct-r2",
+    "read_MiB_s": 142.28458587243074,
+    "observed_session_inodes": 256,
+    "parity_histogram": {
+      "1": 256
+    },
+    "inode_samples": [
+      4739,
+      8835,
+      12931,
+      17027,
+      21123,
+      25219,
+      29315,
+      33411
+    ]
+  },
+  {
+    "case": "files-buffered-r1",
+    "read_MiB_s": 6.173339456806153,
+    "observed_session_inodes": 256,
+    "parity_histogram": {
+      "0": 256
+    },
+    "inode_samples": [
+      7210,
+      11306,
+      15402,
+      19498,
+      23594,
+      27690,
+      31786,
+      35882
+    ]
+  },
+  {
+    "case": "files-buffered-r2",
+    "read_MiB_s": 216.23199057321622,
+    "observed_session_inodes": 256,
+    "parity_histogram": {
+      "1": 256
+    },
+    "inode_samples": [
+      5173,
+      9269,
+      13365,
+      17461,
+      21557,
+      25653,
+      29749,
+      33845
+    ]
+  },
+  {
+    "case": "files-direct-r1",
+    "read_MiB_s": 6.254798655124652,
+    "observed_session_inodes": 256,
+    "parity_histogram": {
+      "0": 256
+    },
+    "inode_samples": [
+      7214,
+      11310,
+      15406,
+      19502,
+      23598,
+      27694,
+      31790,
+      35886
+    ]
+  },
+  {
+    "case": "files-direct-r2",
+    "read_MiB_s": 120.33979903437961,
+    "observed_session_inodes": 256,
+    "parity_histogram": {
+      "1": 256
+    },
+    "inode_samples": [
+      7645,
+      11741,
+      15837,
+      19933,
+      24029,
+      28125,
+      32221,
+      36317
+    ]
+  }
+]

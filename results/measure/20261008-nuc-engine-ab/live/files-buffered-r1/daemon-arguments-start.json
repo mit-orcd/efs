@@ -1,0 +1,112 @@
+[
+  {
+    "pid": 3402600,
+    "argv": [
+      "/data1/efs/bench/nuc-engine-ab-20261008/src/efsd",
+      "--node-id",
+      "1",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "27432",
+      "--storage",
+      "/data1/efs/bench/nuc-engine-ab-20261008/files-buffered-r1/n1",
+      "--quota",
+      "2G",
+      "--writers",
+      "2",
+      "--storage-engine",
+      "files",
+      "--no-direct-io"
+    ],
+    "storage_canonical": "/data1/efs/bench/nuc-engine-ab-20261008/files-buffered-r1/n1",
+    "environment": [
+      "EFS_MD_RAFT_N=4",
+      "EFS_TRANSPORT=tcp"
+    ]
+  },
+  {
+    "pid": 3402609,
+    "argv": [
+      "/data1/efs/bench/nuc-engine-ab-20261008/src/efsd",
+      "--node-id",
+      "2",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "27433",
+      "--storage",
+      "/data1/efs/bench/nuc-engine-ab-20261008/files-buffered-r1/n2",
+      "--quota",
+      "2G",
+      "--writers",
+      "2",
+      "--storage-engine",
+      "files",
+      "--no-direct-io",
+      "--join",
+      "127.0.0.1:27432"
+    ],
+    "storage_canonical": "/data1/efs/bench/nuc-engine-ab-20261008/files-buffered-r1/n2",
+    "environment": [
+      "EFS_MD_RAFT_N=4",
+      "EFS_TRANSPORT=tcp"
+    ]
+  },
+  {
+    "pid": 3402630,
+    "argv": [
+      "/data1/efs/bench/nuc-engine-ab-20261008/src/efsd",
+      "--node-id",
+      "3",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "27434",
+      "--storage",
+      "/data2/efs/bench/nuc-engine-ab-20261008/files-buffered-r1/n3",
+      "--quota",
+      "2G",
+      "--writers",
+      "2",
+      "--storage-engine",
+      "files",
+      "--no-direct-io",
+      "--join",
+      "127.0.0.1:27432"
+    ],
+    "storage_canonical": "/home/efs/additional-work-dir/bench/nuc-engine-ab-20261008/files-buffered-r1/n3",
+    "environment": [
+      "EFS_MD_RAFT_N=4",
+      "EFS_TRANSPORT=tcp"
+    ]
+  },
+  {
+    "pid": 3402727,
+    "argv": [
+      "/data1/efs/bench/nuc-engine-ab-20261008/src/efsd",
+      "--node-id",
+      "4",
+      "--addr",
+      "127.0.0.1",
+      "--port",
+      "27435",
+      "--storage",
+      "/data2/efs/bench/nuc-engine-ab-20261008/files-buffered-r1/n4",
+      "--quota",
+      "2G",
+      "--writers",
+      "2",
+      "--storage-engine",
+      "files",
+      "--no-direct-io",
+      "--join",
+      "127.0.0.1:27432"
+    ],
+    "storage_canonical": "/home/efs/additional-work-dir/bench/nuc-engine-ab-20261008/files-buffered-r1/n4",
+    "environment": [
+      "EFS_MD_RAFT_N=4",
+      "EFS_TRANSPORT=tcp"
+    ]
+  }
+]

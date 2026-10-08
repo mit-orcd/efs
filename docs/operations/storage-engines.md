@@ -128,3 +128,23 @@ The follow-up [rounds 7–8](../status/container-profiling-rounds7-8-20261008.md
 remove duplicate mapping reads during quota admission and duplicate RPC hashing
 of container payloads already fully verified by the backend. Partial reads and
 missing stored checksums retain their previous verification requirements.
+
+## Repeat on the bare-metal NUC
+
+Use `scripts/ab_storage_engines_nuc.py` as the unprivileged `efs` user on
+`nuc_efs`, after deploying and building this branch in a fresh directory below
+`/data1/efs/bench`. This runner starts a separate four-daemon group on loopback
+ports 27432–27435, with two SATA roots and two NVMe roots, and explicitly verifies
+engine/I/O arguments and `EFS_MD_RAFT_N=4` at each start and restart. It leaves the
+installed services running. Source and binaries belong in `BASE/src`; run:
+
+```sh
+python3 BASE/src/scripts/ab_storage_engines_nuc.py \
+  --base /data1/efs/bench/NEW_BASE --seconds 30 --repeat 2
+```
+
+Replace `BASE` with that same absolute base. The corresponding NVMe directory is
+created below `/data2/efs/bench`; check its resolved filesystem before deployment.
+Run the native test suite before the live matrix. Keep results and logs with source
+and binary hashes. See the [NUC checkpoint](../status/nuc-storage-engine-ab-20261008.md)
+for the tested topology, workload, verified arguments and results.

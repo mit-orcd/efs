@@ -1,0 +1,2 @@
+raft-mkfs rc=0 leader_hint=1 index=2 salt=17162974633286591857
+Note: legacy label 'fs' is ignored; initializes the single cluster export.
