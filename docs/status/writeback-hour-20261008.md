@@ -136,3 +136,25 @@ change has separate unit and functional acceptance.
 
 Address/undefined-behavior sanitizer runs pass for bounded TCP PUT frame parsing
 and the GET pair budget wrapper. Benchmark sources/harnesses are untouched.
+
+
+## Final hour checkpoint
+
+Final production fix is `b1a19421`; integrated checkout/hung-DNS regression is
+`dd568867` (normal and ASan/UBSan pass, shortened local budget returns at 50 ms,
+restores deadline zero and leaves no pool or resolver ownership leak).
+The final latest-source AMD direct/TCP broad cycle passes POSIX 216/0/1 skip,
+all 64 peer cases, append reservation replay and fsync boundary, O_SYNC/O_DSYNC,
+retained partial-body stop recovery, graceful leader recovery, exact 800 cold
+append records under GC, and zero fragment/quota inventory after restart.
+[Final evidence](../../results/measure/20261008-writeback-hour/final/live.log)
+includes the source/binary manifest and service restoration check. No private
+fixture daemons/clients remain; four installed daemons and both mounts are up.
+Installed stores/binaries were preserved. No push, merge, tag or D25 activation.
+
+The exact committed documentation tree passes all five architecture checks.
+Concurrent shared documentation edits and their seven staged README lines were
+preserved and excluded from this package; their generated-document reconciliation
+is separate. All implementation/test/evidence changes for this hour are committed.
+The package advances specific D27 timing/health gaps and W88 staged acceptance;
+it does not close production receipt/session/ticket integration or activation.

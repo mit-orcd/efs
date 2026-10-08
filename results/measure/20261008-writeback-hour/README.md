@@ -27,3 +27,5 @@ python3 tests/live/get_pair_deadline.py
 - `memory/`: default-budget publication/drain and concurrent sparse pressure under 1 GiB/no-swap, manifests, exact cold recovery and zero OOM-event snapshots.
 - `failed-cross/`: retained failed driver logs; private fixture stores/logs remain on AMD.
 - `sanitizer-frame.log`, `sanitizer-get.log`: address/undefined-behavior sanitizer acceptance on the Mac.
+
+- `final/`: latest-source full unit and AMD direct/TCP broad acceptance, exact manifest, integrated hung-DNS normal/sanitized gate, committed-document check and restored-service process inventory.
