@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """W90 real-mount regression gates; nonzero exit for any required failure."""
-import argparse,errno,json,os,time
+import argparse,errno,json,os,time,traceback
 from pathlib import Path
 p=argparse.ArgumentParser();p.add_argument('mount');p.add_argument('peer');p.add_argument('--case',default='all');a=p.parse_args()
 name='w90-gates-'+str(os.getpid());root=Path(a.mount)/name;peer=Path(a.peer)/name;root.mkdir();results=[]
@@ -8,7 +8,7 @@ def gate(name,fn):
     if a.case not in ('all',name):return
     t=time.monotonic()
     try:fn();results.append(dict(case=name,status='PASS',seconds=round(time.monotonic()-t,3)))
-    except Exception as e:results.append(dict(case=name,status='FAIL',error=repr(e)))
+    except Exception as e:results.append(dict(case=name,status='FAIL',error=repr(e),traceback=traceback.format_exc()))
     print(json.dumps(results[-1]),flush=True)
 def contents(path):
     with open(path,'rb',buffering=0) as f:return f.read()

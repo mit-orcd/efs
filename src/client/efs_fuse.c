@@ -558,12 +558,14 @@ static int efs_file_open(struct fuse_file_info *fi, efs_ino_t ino)
     fi->fh = EFS_FILE_FH_TAG | (uint64_t)(uintptr_t)h;
     return 0;
 }
+static void vq_open_size(efs_ino_t ino, size_t len, int delta);
 static void efs_file_close(struct fuse_file_info *fi)
 {
     struct efs_file_handle *h = efs_file_handle(fi);
     if (h) {
         if (h->errors) efs_wb_description_close(h->errors);
         if (h->snapshot) {
+            vq_open_size(h->ino, h->snapshot_len, -1);
             pthread_mutex_lock(&g_virtual_open_mu);
             g_virtual_open_bytes -= h->snapshot_len;
             pthread_mutex_unlock(&g_virtual_open_mu);
@@ -599,6 +601,7 @@ static int virtual_file_open(struct fuse_file_info *fi, efs_ino_t ino,
     if (len) memcpy(h->snapshot, text, len);
     h->snapshot_len = len;
     h->ino = ino;
+    vq_open_size(ino, len, 1);
     fi->fh = EFS_FILE_FH_TAG | (uint64_t)(uintptr_t)h;
     return 0;
 }
@@ -642,6 +645,8 @@ static fuse_ino_t virt_find_ino(efs_ino_t parent)
 static struct {
     int valid;
     uint32_t nlookup;
+    uint32_t nopen;
+    size_t open_size;
     fuse_ino_t nodeid;
     efs_ino_t dir_ino;
     char term[EFS_MAX_NAME];
@@ -656,7 +661,7 @@ static fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term)
 
     pthread_mutex_lock(&g_vq_mu);
     for (int i = 0; i < EFS_VQ_N; i++) {
-        if (g_vq[i].valid && g_vq[i].dir_ino == dir_ino &&
+        if (g_vq[i].valid && !g_vq[i].nopen && g_vq[i].dir_ino == dir_ino &&
             strcmp(g_vq[i].term, term) == 0) {
             id = g_vq[i].nodeid;
             pthread_mutex_unlock(&g_vq_mu);
@@ -664,10 +669,11 @@ static fuse_ino_t vq_intern(efs_ino_t dir_ino, const char *term)
         }
         if (!g_vq[i].valid && empty < 0)
             empty = i;
-        else if (g_vq[i].valid && g_vq[i].nlookup == 0)
+        else if (g_vq[i].valid && g_vq[i].nlookup == 0 && !g_vq[i].nopen)
             stale = i;
     }
-    slot = empty >= 0 ? empty : (stale >= 0 ? stale : 0);
+    slot = empty >= 0 ? empty : stale;
+    if (slot < 0) { pthread_mutex_unlock(&g_vq_mu); return 0; }
     id = (fuse_ino_t)(EFS_VIRT_QUERY | (g_vq_seq++ & EFS_VIRT_PARENT_MASK));
     if (!(id & EFS_VIRT_QUERY))
         id = EFS_VIRT_QUERY | 1;
@@ -719,7 +725,7 @@ static void vq_nlookup_sub(fuse_ino_t nodeid, uint64_t n)
         if (!g_vq[i].valid || g_vq[i].nodeid != nodeid)
             continue;
         if (n >= g_vq[i].nlookup) {
-            g_vq[i].valid = 0;
+            g_vq[i].valid = g_vq[i].nopen != 0;
             g_vq[i].nlookup = 0;
         } else {
             g_vq[i].nlookup -= (uint32_t)n;
@@ -727,6 +733,34 @@ static void vq_nlookup_sub(fuse_ino_t nodeid, uint64_t n)
         break;
     }
     pthread_mutex_unlock(&g_vq_mu);
+}
+
+/* Pin the query inode's advertised size while its immutable fd is open.
+ * Linux may issue GETATTR without a file handle even for fstat. A subsequent
+ * path lookup receives a distinct inode while this version is pinned. */
+static void vq_open_size(efs_ino_t ino, size_t len, int delta)
+{
+    pthread_mutex_lock(&g_vq_mu);
+    for (int i=0; i<EFS_VQ_N; i++) if (g_vq[i].valid && g_vq[i].nodeid == ino) {
+        if (delta > 0) { g_vq[i].nopen++; g_vq[i].open_size=len; }
+        else if (g_vq[i].nopen) {
+            g_vq[i].nopen--;
+            if (!g_vq[i].nopen && !g_vq[i].nlookup) g_vq[i].valid=0;
+        }
+        break;
+    }
+    pthread_mutex_unlock(&g_vq_mu);
+}
+static int vq_pinned_size(efs_ino_t ino, size_t *len)
+{
+    int found=0;
+    pthread_mutex_lock(&g_vq_mu);
+    for (int i=0; i<EFS_VQ_N; i++) if (g_vq[i].valid &&
+        g_vq[i].nodeid==ino && g_vq[i].nopen) {
+        *len=g_vq[i].open_size; found=1; break;
+    }
+    pthread_mutex_unlock(&g_vq_mu);
+    return found;
 }
 
 static const struct fuse_ctx *ll_ctx(void)
@@ -1667,6 +1701,14 @@ static int efs_fuse_getattr_ino(fuse_ino_t ino, struct stat *stbuf,
             return -ENOENT;
         if (efs_client_stat_ino(dir_ino, &parent) != EFS_OK)
             return -ENOENT;
+        size_t pinned_len;
+        if (vq_pinned_size(ino, &pinned_len)) {
+            memset(stbuf, 0, sizeof(*stbuf));
+            stbuf->st_ino=ino; stbuf->st_mode=S_IFREG | 0444; stbuf->st_nlink=1;
+            stbuf->st_uid=parent.uid; stbuf->st_gid=parent.gid;
+            stat_set_size_blocks(stbuf,pinned_len,pinned_len);
+            return 0;
+        }
         if (ino_to_fuse_path(dir_ino, dir_fuse, sizeof(dir_fuse)) != 0)
             return -ENOENT;
         if (strcmp(dir_fuse, "/") == 0)
@@ -4960,6 +5002,7 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
         if (strcmp(name, "..") == 0)
             return lookup_fill((fuse_ino_t)virt_parent(parent), e, NULL);
         q = vq_intern(virt_parent(parent), name);
+        if (!q) return -ENOMEM;
         return lookup_fill(q, e, NULL);
     }
     if (virt_kind(parent))
