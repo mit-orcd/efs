@@ -98,3 +98,10 @@ fragments and format mismatch. Linux `make -j4 all` and full `make test` passed 
 
 See [operator usage and reproduction](../operations/storage-engines.md).
 No production acceptance claimed; files remains the recommended default.
+
+## Follow-up · six container profiling rounds
+
+See [P4.1 profiling checkpoint](container-profiling-20261008.md) for syscall
+reductions, five CPU profiling rounds and repeated original/optimized measurements.
+Direct durable overwrite remains about 22.5 MiB/s. Buffered read/delete metadata
+stalls persist; historical A/B numbers above do not establish a storage speedup.

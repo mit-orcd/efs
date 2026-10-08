@@ -1,0 +1,13 @@
+{
+  "phase": "restart-verify",
+  "workers": 4,
+  "operations": 256,
+  "bytes": 134217728,
+  "wall_s": 17.94661653599178,
+  "MiB_s": 7.132263607644212,
+  "ops_s": 14.264527215288425,
+  "p99_ms": 1072.3706030112226,
+  "max_ms": 1133.4421179926721,
+  "errors": 0,
+  "integrity": true
+}

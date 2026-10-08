@@ -13,7 +13,8 @@ On `devel-storage-engine`, `efsd` accepts `--storage-engine files|containers`.
 Follow the ordinary cluster initialization/join/mount steps with matching private
 ports and roots. Engine selection is per daemon; use the same selection on all
 nodes for a controlled comparison. Multiple comma-separated startup storage
-paths work with either engine. Container targets cannot be added at runtime yet.
+paths work with either engine. Container roots must be distinct, non-overlapping directories;
+the complete canonical target set is checked before recovery can touch any root. Container targets cannot be added at runtime yet.
 
 Use a fresh empty root for containers. Each target receives a checksummed engine
 marker and UUID, and the daemon holds an exclusive root lock. Switching an
@@ -88,3 +89,37 @@ I/O bypasses guest data caching, but qcow2, VM scheduling and shared host storag
 still affect results. It does not isolate a physical drive's limits.
 
 See the [implementation and evidence checkpoint](../status/container-engine-20261008.md).
+
+## Profile the experimental backend
+
+Stage `scripts/storage_engine_profile.py` as
+`/tmp/efs-engine-ab-bin/profile.py` on each storage VM. It uses passwordless
+`sudo` to attach only to the recorded private daemon PID after verifying its
+exact storage root. `perf` and `strace` must be installed in the guests.
+
+```sh
+python3 scripts/ab_storage_engines.py \
+  --ssh-key /path/to/cluster_key \
+  --base /data1/efs/bench/container-profile-unique-run \
+  --output /path/to/new-local-results \
+  --engines containers --profile perf --seconds 15 --repeat 1
+```
+
+Use `--profile strace` for syscall traces/summaries; `none` is the default.
+Profiling covers create/read/overwrite/delete on all three private daemons.
+Perf records cycles at 199 Hz with frame-pointer call stacks and separately
+counts cycles/instructions/task-clock/context-switches/page-faults. Textual
+reports are retrieved; raw perf data remains under each VM's private case root.
+Profilers receive SIGINT and finalize before shutdown. Tracing and virtual PMU
+sampling affect timing; use an unprofiled repeated comparison for throughput.
+`--reverse` reverses the first-pass case order for matched comparisons.
+
+The optimized v1 implementation holds a root directory descriptor and up to
+8 container descriptors per target, with per-operation descriptors for later
+segments. Runtime mapping operations use root-relative paths. Startup persists
+root ancestry; runtime publication/deletion still sync every required directory
+through the root. Mapping temporaries use the record nonce plus O_EXCL; collisions
+fail without modifying an existing temporary or current map. Physical format and
+checksum/durability/lifetime-lock requirements are unchanged.
+
+See the [six-round profiling checkpoint](../status/container-profiling-20261008.md).

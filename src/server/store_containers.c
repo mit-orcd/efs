@@ -17,10 +17,12 @@
 #define SEG_BYTES (UINT64_C(1)<<30)
 #define BLOCKS (SEG_BYTES/PAGE)
 #define MAX_SEGS 1024u
+#define CACHED_SEGS 8u
 struct target {
     pthread_mutex_t mu;
     char root[4096], dir[8192];
-    int lockfd, failed;
+    int lockfd, rootfd, failed;
+    int direct_io, data_fds[CACHED_SEGS];
     unsigned cursor_seg, cursor_block;
     uint8_t uuid[16];
     uint8_t *bits[MAX_SEGS];
@@ -59,8 +61,14 @@ static int barrier(int fd){
     while(r&&errno==EINTR);
     return r?EFS_ERR_IO:EFS_OK;
 }
-static int parents(const char *path)
+/* Startup makes the root path durable. Runtime publication must sync every
+ * directory below it and the root itself, but never unrelated ancestors. */
+static int parents_at(const char *path, struct target *t)
 {
+    const char *root=t?t->root:NULL;
+    if (root && strcmp(root, "/") &&
+        (strncmp(path, root, strlen(root)) || path[strlen(root)] != '/'))
+        return EFS_ERR_IO;
     char p[8192];
     if(strlen(path)>=sizeof(p))return EFS_ERR_IO;
     strcpy(p,path);
@@ -69,16 +77,18 @@ static int parents(const char *path)
     if(slash==p)slash[1]=0;
     else *slash=0;
     for(;;){
-        int fd=open(p,O_RDONLY|O_DIRECTORY|O_CLOEXEC),rc=EFS_OK;
+        int is_root=t && !strcmp(p,t->root);
+        int fd=is_root?t->rootfd:t?openat(t->rootfd,p+strlen(t->root)+1,O_RDONLY|O_DIRECTORY|O_CLOEXEC):open(p,O_RDONLY|O_DIRECTORY|O_CLOEXEC);
+        int rc=EFS_OK;
         if(fd<0){
             if(errno!=ENOENT)return EFS_ERR_IO;
         }
         else{
             rc=barrier(fd);
-            if(close(fd))rc=EFS_ERR_IO;
+            if(!is_root && close(fd))rc=EFS_ERR_IO;
             if(rc)return rc;
         }
-        if(!strcmp(p,"/"))break;
+        if(!strcmp(p,"/") || (root && !strcmp(p,root)))break;
         slash=strrchr(p,'/');
         if(!slash)return EFS_ERR_IO;
         if(slash==p)slash[1]=0;
@@ -86,6 +96,7 @@ static int parents(const char *path)
     }
     return EFS_OK;
 }
+static int parents(const char *path) { return parents_at(path, NULL); }
 static int mkdirs(const char *path)
 {
     char p[8192];
@@ -98,25 +109,41 @@ static int mkdirs(const char *path)
     }
     return EFS_OK;
 }
-static int atomic_page(const char *path,const uint8_t *page,size_t n,int *published)
+/* Runtime mappings already carry a random record nonce. O_EXCL prevents a
+ * collision from touching any existing temporary, and avoids a second random
+ * temp-name generator plus repeated absolute path walks. Markers use mkstemp. */
+static int temp_open(struct target *t,const char *path,const uint8_t *page,char tmp[8192])
+{
+    int n=t?snprintf(tmp,8192,"%s.tmp.%08x%08x",path,get32(page+24),get32(page+28)):
+            snprintf(tmp,8192,"%s.tmp.XXXXXX",path);
+    if(n>=8192){errno=ENAMETOOLONG;return -1;}
+    return t?openat(t->rootfd,tmp+strlen(t->root)+1,O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC,0600):mkstemp(tmp);
+}
+static int atomic_page(const char *path,const uint8_t *page,size_t n,int *published,struct target *t)
 {
     char tmp[8192];
     *published=0;
-    if(mkdirs(path))return EFS_ERR_IO;
-    if(snprintf(tmp,sizeof(tmp),"%s.tmp.XXXXXX",path)>=(int)sizeof(tmp))return EFS_ERR_IO;
-    int fd=mkstemp(tmp);
+    int fd=temp_open(t,path,page,tmp);
+    if(fd<0 && errno==ENOENT) {
+        if(mkdirs(path))return EFS_ERR_IO;
+        fd=temp_open(t,path,page,tmp);
+    }
     if(fd<0)return EFS_ERR_IO;
     int rc=full_io(fd,(void*)page,n,0,1);
     if(!rc)rc=barrier(fd);
     if(close(fd))rc=EFS_ERR_IO;
     if(!rc){
-        if(rename(tmp,path))rc=EFS_ERR_IO;
+        int rr=t?renameat(t->rootfd,tmp+strlen(t->root)+1,t->rootfd,path+strlen(t->root)+1):rename(tmp,path);
+        if(rr)rc=EFS_ERR_IO;
         else{
             *published=1;
-            rc=parents(path);
+            rc=parents_at(path,t);
         }
     }
-    if(!*published)unlink(tmp);
+    if(!*published){
+        if(t)unlinkat(t->rootfd,tmp+strlen(t->root)+1,0);
+        else unlink(tmp);
+    }
     return rc;
 }
 static int marker_read(const char *root,uint8_t page[128])
@@ -169,6 +196,24 @@ static struct target *target_at(struct efsd_server *s,const char *path)
 static void segpath(struct target *t,unsigned seg,char path[8192]){
     snprintf(path,8192,"%s/%016x.dat",t->dir,seg);
 }
+/* Segments are immutable names for the lifetime of a target. Share bounded
+ * positional-I/O descriptors; mapping and directory descriptors stay per-op. */
+static int body_open(struct target *t, unsigned seg, int *owned)
+{
+    char path[8192];segpath(t,seg,path);
+    int flags=O_RDWR|O_CLOEXEC|O_NOFOLLOW|(t->direct_io?O_DIRECT:0);
+    *owned=seg>=CACHED_SEGS;
+    if(*owned)return open(path,flags);
+    pthread_mutex_lock(&t->mu);
+    int fd=t->data_fds[seg];
+    if(fd<0) {
+        fd=open(path,flags);
+        if(fd>=0)t->data_fds[seg]=fd;
+    }
+    pthread_mutex_unlock(&t->mu);
+    return fd;
+}
+static int body_close(int fd,int owned) { return owned?close(fd):0; }
 static int marked(struct target *t,unsigned seg,unsigned block){
     return (t->bits[seg][block/8]>>(block%8))&1;
 }
@@ -199,7 +244,8 @@ static int decode(const char *path,struct target *t,struct mapping *m)
 }
 static int mapping_read(const char *path,struct target *t,struct mapping *m)
 {
-    int fd=open(path,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
+    if(t && (strncmp(path,t->root,strlen(t->root)) || path[strlen(t->root)]!='/'))return EFS_ERR_IO;
+    int fd=t?openat(t->rootfd,path+strlen(t->root)+1,O_RDONLY|O_NOFOLLOW|O_CLOEXEC):open(path,O_RDONLY|O_NOFOLLOW|O_CLOEXEC);
     if(fd<0)return errno==ENOENT?EFS_ERR_NOT_FOUND:EFS_ERR_IO;
     struct stat st;
     int rc=fstat(fd,&st)||!S_ISREG(st.st_mode)||st.st_size!=PAGE?EFS_ERR_IO:full_io(fd,m->page,PAGE,0,0);
@@ -273,12 +319,10 @@ static int reserve(struct target *t,struct mapping *m)
 }
 static int release_extent(struct target *t,struct mapping *m)
 {
-    char path[8192];
-    segpath(t,m->seg,path);
-    int fd=open(path,O_RDWR|O_CLOEXEC|O_NOFOLLOW);
+    int owned;int fd=body_open(t,m->seg,&owned);
     if(fd<0)return EFS_ERR_IO;
     int rc=fallocate(fd,FALLOC_FL_PUNCH_HOLE|FALLOC_FL_KEEP_SIZE,(off_t)m->off*PAGE,(off_t)m->span*PAGE)?EFS_ERR_IO:barrier(fd);
-    if(close(fd))rc=EFS_ERR_IO;
+    if(body_close(fd,owned))rc=EFS_ERR_IO;
     if(!rc){
         pthread_mutex_lock(&t->mu);
         mark(t,m->seg,m->off,m->span,0);
@@ -315,21 +359,22 @@ int server_container_put(struct efsd_server *s,const char *path,const uint8_t *d
     uint8_t *buf=NULL;
     size_t bytes=(size_t)m.span*PAGE;
     if(posix_memalign((void**)&buf,PAGE,bytes))return EFS_ERR_NOMEM;
-    memset(buf,0,bytes);
     memcpy(buf,m.page,PAGE);
     if(len)memcpy(buf+PAGE,data,len);
-    char body[8192];
-    segpath(t,m.seg,body);
-    int fd=open(body,O_RDWR|O_CLOEXEC|O_NOFOLLOW|(s->direct_io?O_DIRECT:0));
+    /* Header and payload are fully overwritten; only alignment padding needs
+     * clearing. Do not stream over the payload twice before the write. */
+    size_t used=PAGE+(size_t)len;
+    if(bytes>used)memset(buf+used,0,bytes-used);
+    int owned;int fd=body_open(t,m.seg,&owned);
     rc=fd<0?EFS_ERR_IO:full_io(fd,buf,bytes,(off_t)m.off*PAGE,1);
     if(fd>=0){
         if(!rc)rc=barrier(fd);
-        if(close(fd))rc=EFS_ERR_IO;
+        if(body_close(fd,owned))rc=EFS_ERR_IO;
     }
     free(buf);
     if(rc)return rc;
     /* incomplete/uncertain I/O: quarantine until restart */
-    rc=atomic_page(path,m.page,PAGE,published);
+    rc=atomic_page(path,m.page,PAGE,published,t);
     if(rc)return rc;
     /* even a failed directory barrier can expose the new map */
     if(found==EFS_OK){
@@ -349,11 +394,9 @@ int server_container_get(struct efsd_server *s,const char *path,uint8_t *data,ui
     uint8_t *buf=NULL;
     size_t bytes=(size_t)m.span*PAGE;
     if(posix_memalign((void**)&buf,PAGE,bytes))return EFS_ERR_NOMEM;
-    char body[8192];
-    segpath(t,m.seg,body);
-    int fd=open(body,O_RDONLY|O_CLOEXEC|O_NOFOLLOW|(s->direct_io?O_DIRECT:0));
+    int owned;int fd=body_open(t,m.seg,&owned);
     rc=fd<0?EFS_ERR_IO:full_io(fd,buf,bytes,(off_t)m.off*PAGE,0);
-    if(fd>=0&&close(fd))rc=EFS_ERR_IO;
+    if(fd>=0&&body_close(fd,owned))rc=EFS_ERR_IO;
     uint8_t hash[32];
     if(!rc){
         efs_hash(buf+PAGE,m.len,hash);
@@ -376,11 +419,11 @@ int server_container_delete(struct efsd_server *s,const char *path,const uint8_t
     if(!t)return EFS_ERR_IO;
     struct mapping m;
     int rc=mapping_read(path,t,&m);
-    if(rc==EFS_ERR_NOT_FOUND)return parents(path);
+    if(rc==EFS_ERR_NOT_FOUND)return parents_at(path,t);
     if(rc)return rc;
     if(expect&&memcmp(expect,m.page+64,32))return EFS_ERR_EXIST;
-    if(unlink(path))return EFS_ERR_IO;
-    rc=parents(path);
+    if(unlinkat(t->rootfd,path+strlen(t->root)+1,0))return EFS_ERR_IO;
+    rc=parents_at(path,t);
     if(rc)return rc;
     *payload=m.len;
     *bytes=(uint64_t)m.span*PAGE+PAGE;
@@ -543,11 +586,26 @@ static int recover_free(struct target *t)
 }
 int server_storage_engine_init(struct efsd_server *s)
 {
+    /* Validate the complete target set before recovery can reclaim anything.
+     * Nested roots make prefix routing ambiguous and must never be admitted. */
+    for(unsigned i=0;i<s->storage_path_count;i++) {
+        char canonical[4096];
+        if(!realpath(s->storage_paths[i],canonical) || strlen(canonical)>=sizeof(s->storage_paths[i]))goto fail;
+        strcpy(s->storage_paths[i],canonical);
+    }
+    if(s->storage_engine)for(unsigned i=0;i<s->storage_path_count;i++)for(unsigned j=0;j<i;j++) {
+        const char *a=s->storage_paths[i],*b=s->storage_paths[j];
+        size_t na=strlen(a),nb=strlen(b);
+        if((na<=nb&&!strncmp(a,b,na)&&(na==nb||na==1||b[na]=='/')) ||
+           (nb<na&&!strncmp(a,b,nb)&&(nb==1||a[nb]=='/')))goto fail;
+    }
     for(unsigned i=0;i<s->storage_path_count;i++){
         struct target *t=calloc(1,sizeof(*t));
         if(!t)goto fail;
         s->container_targets[i]=t;
-        t->lockfd=-1;
+        t->lockfd=t->rootfd=-1;
+        t->direct_io=s->direct_io;
+        for(unsigned j=0;j<CACHED_SEGS;j++)t->data_fds[j]=-1;
         pthread_mutex_init(&t->mu,NULL);
         if (!realpath(s->storage_paths[i], t->root)) goto fail;
         if (strlen(t->root) >= sizeof(s->storage_paths[i])) goto fail;
@@ -559,6 +617,8 @@ int server_storage_engine_init(struct efsd_server *s)
         snprintf(p,sizeof(p),"%s/.efs-engine-lock",t->root);
         t->lockfd=open(p,O_RDWR|O_CREAT|O_NOFOLLOW|O_CLOEXEC,0600);
         if(t->lockfd<0||flock(t->lockfd,LOCK_EX|LOCK_NB))goto fail;
+        t->rootfd=open(t->root,O_RDONLY|O_DIRECTORY|O_NOFOLLOW|O_CLOEXEC);
+        if(t->rootfd<0)goto fail;
         uint8_t marker[128]={0};
         int rc=marker_read(t->root,marker);
         if(rc==EFS_ERR_NOT_FOUND){
@@ -572,9 +632,13 @@ int server_storage_engine_init(struct efsd_server *s)
             efs_hash(marker,96,marker+96);
             snprintf(p,sizeof(p),"%s/.efs-engine",t->root);
             int published;
-            if(atomic_page(p,marker,128,&published))goto fail;
+            if(atomic_page(p,marker,128,&published,NULL))goto fail;
         }
         else if(rc||marker[8]!=s->storage_engine)goto fail;
+        /* Existing roots may have been configured at a new pathname; persist
+         * that ancestry once before bounded runtime namespace barriers. */
+        snprintf(p,sizeof(p),"%s/.efs-engine",t->root);
+        if(parents(p))goto fail;
         memcpy(t->uuid,marker+16,16);
         for(unsigned j=0;j<i;j++)if(!memcmp(((struct target*)s->container_targets[j])->uuid,t->uuid,16))goto fail;
         if(s->storage_engine){
@@ -596,6 +660,8 @@ void server_storage_engine_close(struct efsd_server *s)
     for(unsigned i=0;i<EFS_MAX_STORAGE_PATHS;i++){
         struct target *t=s->container_targets[i];
         if(!t)continue;
+        for(unsigned j=0;j<CACHED_SEGS;j++)if(t->data_fds[j]>=0)close(t->data_fds[j]);
+        if(t->rootfd>=0)close(t->rootfd);
         if(t->lockfd>=0)close(t->lockfd);
         for(unsigned j=0;j<MAX_SEGS;j++)free(t->bits[j]);
         pthread_mutex_destroy(&t->mu);

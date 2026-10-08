@@ -1,0 +1,13 @@
+# started on Thu Oct  8 13:20:24 2026
+
+
+ Performance counter stats for process id '3191087':
+
+     4,123,669,138      cycles                           #    1.911 GHz                       
+     1,777,014,957      instructions                     #    0.43  insn per cycle            
+          2,158.30 msec task-clock                       #    0.249 CPUs utilized             
+            49,107      context-switches                 #   22.753 K/sec                     
+             1,326      page-faults                      #  614.372 /sec                      
+
+       8.670664324 seconds time elapsed
+

@@ -12,11 +12,21 @@
 #include <sys/wait.h>
 #include <unistd.h>
 static int fault;
+static const char *watched_root;
+static unsigned outside_syncs, root_syncs, mkdir_calls;
+static int container_mkdir(const char *path, mode_t mode) {
+    mkdir_calls++;
+    return mkdir(path,mode);
+}
 static int container_sync(int fd)
 {
     struct stat st; assert(!fstat(fd,&st));
     char p[64],name[8192];snprintf(p,sizeof(p),"/proc/self/fd/%d",fd);
     ssize_t n=readlink(p,name,sizeof(name)-1);assert(n>=0);name[n]=0;
+    if(watched_root && S_ISDIR(st.st_mode)) {
+        if(!strcmp(name,watched_root))root_syncs++;
+        else if(strncmp(name,watched_root,strlen(watched_root)))outside_syncs++;
+    }
     int body=strstr(name,".efs-containers/")&&strstr(name,".dat");
     if(fault==1&&body){errno=EIO;return -1;}
     if(fault==2&&S_ISDIR(st.st_mode)){errno=EIO;return -1;}
@@ -33,10 +43,18 @@ static int container_rename(const char *a,const char *b)
 {
     int rc=rename(a,b);if(!rc&&fault==5)_exit(45);return rc;
 }
+static int container_renameat(int ad,const char *a,int bd,const char *b)
+{
+    int rc=renameat(ad,a,bd,b);if(!rc&&fault==5)_exit(45);return rc;
+}
+#define renameat container_renameat
+#define mkdir container_mkdir
 #define fsync container_sync
 #define fallocate container_punch
 #define rename container_rename
 #include "../src/server/store_containers.c"
+#undef renameat
+#undef mkdir
 #undef fsync
 #undef fallocate
 #undef rename
@@ -78,7 +96,22 @@ int main(void)
         efs_tls_write_root=0;efs_tls_chunk_gen=100;
         write_value(42,0,17,EFS_OK);read_value(42,0,EFS_OK,17);assert(server.nodes[0].used==EFS_FRAGMENT_SIZE);
         /* Idempotent same identity is charged once; replacement uses a fresh extent. */
+        int cached_fd=((struct target*)server.container_targets[0])->data_fds[0];assert(cached_fd>=0);
+        assert(!!(fcntl(cached_fd,F_GETFL)&O_DIRECT)==direct);
+        watched_root=server.storage_paths[0];outside_syncs=root_syncs=mkdir_calls=0;
         write_value(42,0,18,EFS_OK);assert(server.nodes[0].used==EFS_FRAGMENT_SIZE);
+        assert(!outside_syncs && root_syncs && !mkdir_calls);watched_root=NULL;
+        assert(((struct target*)server.container_targets[0])->data_fds[0]==cached_fd);
+        /* A nonce collision must fail without altering the existing temp/map. */
+        char collision_path[8192],collision_tmp[8192];
+        server_fragment_path(&server,&ex,42,0,0,collision_path,sizeof(collision_path));
+        struct target *ct=target_at(&server,collision_path);struct mapping cm;assert(!mapping_read(collision_path,ct,&cm));
+        snprintf(collision_tmp,sizeof(collision_tmp),"%s.tmp.%08x%08x",collision_path,get32(cm.page+24),get32(cm.page+28));
+        int collision_fd=open(collision_tmp,O_WRONLY|O_CREAT|O_EXCL,0600);assert(collision_fd>=0);
+        assert(write(collision_fd,"keep",4)==4);close(collision_fd);
+        int collision_published=0;assert(atomic_page(collision_path,cm.page,PAGE,&collision_published,ct)==EFS_ERR_IO);
+        assert(!collision_published);collision_fd=open(collision_tmp,O_RDONLY);char keep[4];assert(collision_fd>=0);
+        assert(read(collision_fd,keep,4)==4&&!memcmp(keep,"keep",4));close(collision_fd);assert(!unlink(collision_tmp));read_value(42,0,EFS_OK,18);
         efs_tls_chunk_gen=101;write_value(42,0,19,EFS_OK);
         efs_tls_chunk_gen=100;read_value(42,0,EFS_OK,18);
         efs_tls_write_root=1;write_value(84,0,20,EFS_OK);
@@ -129,6 +162,23 @@ int main(void)
         assert(cap==large_len&&sum_ok&&!memcmp(large,large_read,cap));restart();
         cap=large_len;assert(!server_read_fragment_with_sum(&server,&ex,900,0,0,large_read,&cap,sum,&sum_ok));assert(!memcmp(large,large_read,cap));
         assert(!server_delete_fragment_if_sum(&server,&ex,900,0,0,large_sum));free(large);free(large_read);
+        /* A segment outside the descriptor cache retains per-operation I/O. */
+        full=server.container_targets[0];full->cursor_seg=CACHED_SEGS;full->cursor_block=0;
+        efs_tls_chunk_gen=889;write_value(901,0,78,EFS_OK);read_value(901,0,EFS_OK,78);
+        restart();read_value(901,0,EFS_OK,78);memset(data,78,sizeof(data));efs_hash(data,sizeof(data),sum);
+        assert(!server_delete_fragment_if_sum(&server,&ex,901,0,0,sum));
+        /* Short payloads preserve zeroed alignment padding after copy changes. */
+        uint8_t small[17];memset(small,79,sizeof(small));efs_hash(small,sizeof(small),sum);efs_tls_chunk_gen=890;
+        assert(!server_write_fragment_with_sum_sync(&server,&ex,902,0,0,small,sizeof(small),sum));
+        char small_path[8192],small_body[8192];server_fragment_path(&server,&ex,902,0,0,small_path,sizeof(small_path));
+        struct target *small_t=target_at(&server,small_path);struct mapping small_map;assert(!mapping_read(small_path,small_t,&small_map));
+        segpath(small_t,small_map.seg,small_body);int small_fd=open(small_body,O_RDONLY);assert(small_fd>=0);
+        uint8_t padded[PAGE];assert(pread(small_fd,padded,PAGE,(off_t)small_map.off*PAGE+PAGE)==PAGE);close(small_fd);
+        assert(!memcmp(padded,small,sizeof(small)));for(unsigned i=sizeof(small);i<PAGE;i++)assert(!padded[i]);
+        restart();uint32_t small_len=sizeof(data);int small_ok=0;
+        assert(!server_read_fragment_with_sum(&server,&ex,902,0,0,data,&small_len,wrong,&small_ok));
+        assert(small_len==sizeof(small)&&small_ok&&!memcmp(data,small,sizeof(small)));
+        assert(!server_delete_fragment_if_sum(&server,&ex,902,0,0,sum));
         /* Both map and referenced extent headers fail startup closed when damaged. */
         efs_tls_chunk_gen=101;efs_tls_write_root=0;char path[8192];server_fragment_path(&server,&ex,42,0,0,path,sizeof(path));
         struct mapping m;struct target *t=target_at(&server,path);assert(!mapping_read(path,t,&m));
@@ -143,6 +193,21 @@ int main(void)
         char body[8192];segpath(t,m.seg,body);int fd=open(body,O_RDWR);assert(fd>=0);off_t off=(off_t)m.off*PAGE+PAGE;
         uint8_t v;assert(pread(fd,&v,1,off)==1);uint8_t bad=v^1;assert(pwrite(fd,&bad,1,off)==1);close(fd);read_value(42,0,EFS_ERR_IO,0);
         fd=open(body,O_RDWR);assert(fd>=0&&pwrite(fd,&v,1,off)==1);close(fd);read_value(42,0,EFS_OK,19);
+        server_storage_engine_close(&server);
+        /* Reject nested roots in either order before ANY recovery/punching.
+         * An unreferenced sentinel extent proves the first root was untouched. */
+        char nested[8192],sentinel[8192];snprintf(nested,sizeof(nested),"%s/nested",server.storage_paths[0]);assert(!mkdir(nested,0755));
+        snprintf(sentinel,sizeof(sentinel),"%s/.efs-containers/%016x.dat",server.storage_paths[0],63);
+        int sentinel_fd=open(sentinel,O_RDWR|O_CREAT|O_EXCL,0600);assert(sentinel_fd>=0);
+        assert(!ftruncate(sentinel_fd,SEG_BYTES));assert(pwrite(sentinel_fd,"untouched",9,0)==9);assert(!fsync(sentinel_fd));close(sentinel_fd);
+        for(unsigned order=0;order<2;order++) {
+            struct efsd_server *bad=calloc(1,sizeof(*bad));assert(bad);bad->storage_engine=1;bad->storage_path_count=2;
+            strcpy(bad->storage_paths[order],server.storage_paths[0]);strcpy(bad->storage_paths[1-order],nested);
+            assert(server_storage_engine_init(bad)==EFS_ERR_IO);free(bad);
+            sentinel_fd=open(sentinel,O_RDONLY);char saved[9];assert(sentinel_fd>=0);
+            assert(pread(sentinel_fd,saved,9,0)==9&&!memcmp(saved,"untouched",9));close(sentinel_fd);
+        }
+        assert(!unlink(sentinel)&&!rmdir(nested));assert(!server_storage_engine_init(&server));read_value(42,0,EFS_OK,19);
         server_storage_engine_close(&server);server.storage_engine=0;assert(server_storage_engine_init(&server)==EFS_ERR_IO);
         pthread_mutex_destroy(&server.lock);assert(!nftw(base,remove_owned,32,FTW_DEPTH|FTW_PHYS));
     }

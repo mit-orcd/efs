@@ -21,6 +21,9 @@ def main():
     p.add_argument('--ssh-key',type=Path,required=True)
     p.add_argument('--output',type=Path,required=True)
     p.add_argument('--base',default=BASE)
+    p.add_argument('--engines',nargs='+',choices=['files','containers'],default=['files','containers'])
+    p.add_argument('--reverse',action='store_true',help='reverse first-pass case order')
+    p.add_argument('--profile',choices=['none','strace','perf'],default='none')
     p.add_argument('--resume',action='store_true',help='skip completed cases; requires cleanly stopped private group')
     p.add_argument('--seconds',type=int,default=0,choices=range(0,121))
     p.add_argument('--repeat',type=int,default=2,choices=range(1,5))
@@ -28,6 +31,7 @@ def main():
     if not a.base.startswith('/data1/efs/bench/') or '..' in Path(a.base).parts:raise ValueError('private benchmark root required')
     BASE=a.base;MOUNT=BASE+'/mnt'
     a.output.mkdir(parents=True,exist_ok=a.resume)
+    (a.output/'run-config.json').write_text(json.dumps({'base':BASE,'seconds':a.seconds,'repeat':a.repeat,'engines':a.engines,'profile':a.profile,'reverse':a.reverse},indent=2)+'\n')
     def remote(ip,cmd,timeout=120):
         argv=['ssh','-J','xorinox_efs','-i',str(a.ssh_key),'-o','BatchMode=yes',f'admin@{ip}',cmd]
         with (a.output/'commands.jsonl').open('a') as f:f.write(json.dumps({'ip':ip,'command':cmd})+'\n')
@@ -35,6 +39,15 @@ def main():
         if r.returncode:raise RuntimeError(f'{ip}: {cmd}\n{r.stdout}\n{r.stderr}')
         return r.stdout+r.stderr
     def as_efs(ip,argv,timeout=120):return remote(ip,shlex.join(['sudo','-n','-H','-u','efs',*argv]),timeout)
+    def profile(name,phase,action):
+        if a.profile=='none' or phase=='verify':return
+        for i,ip in enumerate(NODES,1):
+            remote(ip,shlex.join(['sudo','-n','python3',BIN+'/profile.py',action,'--case',BASE+'/'+name,'--phase',phase,'--kind',a.profile]),60)
+            if action=='stop':
+                extensions=['stderr','strace'] if a.profile=='strace' else ['stderr','stat','report','calls']
+                for ext in extensions:
+                    path=f'{BASE}/{name}/profile-{phase}.{ext}'
+                    (a.output/name/f'node{i}-{phase}.{ext}').write_text(remote(ip,shlex.join(['sudo','-n','cat',path]),60))
     def start(name,engine,mode,restart=False):
         for i,ip in enumerate(NODES,1):
             root=f'{BASE}/{name}'
@@ -79,7 +92,7 @@ def main():
     assert all(row['status']=='PASS' for row in previous)
     completed={row['name'] for row in previous}
     names=[f'{engine}-{mode}-r{r}' for r in range(1,a.repeat+1)
-           for engine in ('files','containers') for mode in ('buffered','direct')
+           for engine in a.engines for mode in ('buffered','direct')
            if f'{engine}-{mode}-r{r}' not in completed]
     for ip in NODES:
         if remote(ip,shlex.join(['ss','-H','-ltn',f'sport = :{PORT}'])).strip():
@@ -97,6 +110,8 @@ def main():
         assert baseline==json.loads((a.output/'installed-before.json').read_text()),'installed processes changed before resume'
     else:(a.output/'installed-before.json').write_text(json.dumps(baseline,indent=2)+'\n')
     order=[('files','buffered'),('containers','direct'),('containers','buffered'),('files','direct')]
+    order=[pair for pair in order if pair[0] in a.engines]
+    if a.reverse:order.reverse()
     for repeat in range(1,a.repeat+1):
         for engine,mode in (order if repeat%2 else order[::-1]):
             name=f'{engine}-{mode}-r{repeat}'
@@ -107,17 +122,23 @@ def main():
             phases=[]
             for phase in ('create','read','churn','verify'):
                 path=f'{BASE}/{name}/{phase}.json'
-                result=as_efs(GW,['python3',BIN+'/storage_engine_ab.py',phase,'--mount',MOUNT,
-                    '--state',f'{BASE}/{name}/expected.json','--output',path,
-                    '--seconds',str(a.seconds if phase in ('read','churn') else 0)],600)
+                profile(name,phase,'start')
+                try:
+                    result=as_efs(GW,['python3',BIN+'/storage_engine_ab.py',phase,'--mount',MOUNT,
+                        '--state',f'{BASE}/{name}/expected.json','--output',path,
+                        '--seconds',str(a.seconds if phase in ('read','churn') else 0)],600)
+                finally:profile(name,phase,'stop')
                 row=json.loads(result.strip().splitlines()[-1]);phases.append(row);(out/(phase+'.json')).write_text(json.dumps(row,indent=2)+'\n')
             inventory=[json.loads(as_efs(ip,['python3',BIN+'/inventory.py',f'{BASE}/{name}/store']).strip()) for ip in NODES]
             (out/'inventory-live.json').write_text(json.dumps(inventory,indent=2)+'\n')
             stop(name)
             (out/'status-restart.txt').write_text(start(name,engine,mode,restart=True))
             for phase in ('verify','delete'):
-                result=as_efs(GW,['python3',BIN+'/storage_engine_ab.py',phase,'--mount',MOUNT,
-                    '--state',f'{BASE}/{name}/expected.json','--output',f'{BASE}/{name}/restart-{phase}.json'],600)
+                profile(name,phase,'start')
+                try:
+                    result=as_efs(GW,['python3',BIN+'/storage_engine_ab.py',phase,'--mount',MOUNT,
+                        '--state',f'{BASE}/{name}/expected.json','--output',f'{BASE}/{name}/restart-{phase}.json'],600)
+                finally:profile(name,phase,'stop')
                 row=json.loads(result.strip().splitlines()[-1]);row['phase']='restart-'+phase;phases.append(row)
                 (out/('restart-'+phase+'.json')).write_text(json.dumps(row,indent=2)+'\n')
             # GC is asynchronous. Preserve its progress and require converged zero usage.
