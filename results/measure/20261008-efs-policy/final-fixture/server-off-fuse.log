@@ -1,0 +1,17 @@
+2026-10-08T17:20:14.225Z efs-fuse: legacy export label 'w92-private' is ignored; mounting the single export 'default' (id=1)
+2026-10-08T17:20:14.225Z efs-fuse 1509e6e1-policy-a9f0a842 (branch devel-find-stats, built 2026-10-08T17:18:45Z on nuc), build=1509e6e1-policy-a9f0a842: starting export=default mount=/data1/efs/commands-policy-final2-20261008/server-off
+2026-10-08T17:20:14.226Z Discovered 4 cluster nodes from 127.0.0.1:24800
+2026-10-08T17:20:14.226Z   node id=1 127.0.0.1:24800
+2026-10-08T17:20:14.226Z   node id=2 127.0.0.1:24801
+2026-10-08T17:20:14.226Z   node id=3 127.0.0.1:24802
+2026-10-08T17:20:14.226Z   node id=4 127.0.0.1:24803
+2026-10-08T17:20:14.226Z fetching metadata...
+2026-10-08T17:20:14.226Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T17:20:14.226Z export id=1 name=default
+2026-10-08T17:20:14.226Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T17:20:14.226Z efs-fuse daemon pid=2460377
+2026-10-08T17:20:14.232Z efs-fuse: workers max=10 idle=10
+2026-10-08T17:20:14.238Z fuse serving
+2026-10-08T17:20:14.640Z inode-rpc: retry type=67 attempt=0 why=recv rc=-6 req_len=240 recv_ms=30000
+2026-10-08T17:20:14.690Z inode-rpc: retry type=67 attempt=1 why=recv rc=-6 req_len=240 recv_ms=30000
+2026-10-08T17:20:14.791Z inode-rpc: retry type=67 attempt=2 why=recv rc=-6 req_len=240 recv_ms=30000

@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 #include "efs/common.h"
 #include "efs/log_ts.h"
 #include "efs/network.h"
@@ -92,24 +93,7 @@ static void efsd_install_crash_handlers(void)
 
 static void usage(const char *prog)
 {
-    fprintf(stderr,
-            "Usage: %s --node-id <id> --addr <addr> --port <port> "
-            "--storage <path>[,path...] [--storage <path> ...] "
-            "[--quota <bytes>[T|G|M|K]] [--storage-engine files|containers] [--direct-io|--no-direct-io] "
-            "[--writers <n>] [--join <host:port>] [--no-persist] [--perf] [--strace] "
-            "[--meta-storage <root>]\n"
-            "  --storage        1..%d paths (comma and/or repeated).\n"
-            "                   Multiple paths: least-queue write placement\n"
-            "                   (chunk_index %% N) across disks for parallelism.\n"
-            "  --storage-engine files (default) or experimental containers; fresh roots required\n"
-            "  --direct-io      O_DIRECT for fragment I/O\n"
-            "  --no-direct-io   use the page cache for fragment I/O (default)\n"
-            "  --writers <n>    shared writer threads across all storage paths "
-            "(default: nproc-%d, 0 = inline)\n"
-            "  --meta-storage   directory whose mdraft/ holds the Raft log and KV.\n"
-            "                   Default: the first --storage root. Does not move\n"
-            "                   an existing mdraft.\n",
-            prog, EFS_MAX_STORAGE_PATHS, EFS_WRITERS_RESERVED);
+    efs_cli_help(stderr,prog,NULL);
 }
 
 static int add_storage_path(struct efsd_server *s, const char *path)
@@ -352,6 +336,7 @@ static void sigint_handler(int sig)
 int main(int argc, char **argv)
 {
     efs_version_check_argv("efsd", argc, argv);
+    if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],NULL);return 0; }
 
     /* Install before any work — imagenet load has produced silent SIGSEGVs. */
     efsd_install_crash_handlers();

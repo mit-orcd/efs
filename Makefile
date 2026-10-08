@@ -344,6 +344,7 @@ test: all
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
 	python3 tests/test_raft_tail.py
+	python3 tests/test_efs_commands.py
 	python3 tests/test_namespace_bounds.py
 	python3 tests/test_rename_budget.py
 	./tests/test_session
@@ -519,3 +520,10 @@ src/server/handler.o src/server/store_containers.o src/bench/store_containers.o 
 
 tests/test_store_containers: tests/test_store_containers.c src/server/store.c src/server/store_containers.c src/server/server_internal.h src/bench/writer.o $(LIB)
 	$(CC) $(CFLAGS) $(INCLUDES) -ffunction-sections -fdata-sections -Wl,--gc-sections -o $@ $< src/bench/writer.o $(LIB) $(LDFLAGS)
+# The synthetic scripts are file bytes, embedded without running queries.
+src/client/commands/source.h: src/client/commands/command.py src/client/commands/embed.py
+	python3 src/client/commands/embed.py
+src/client/efs_fuse.o: src/client/commands/source.h include/efs/command_path.h
+
+# Native programs share one help renderer and option reference.
+$(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ): include/efs/cli_help.h

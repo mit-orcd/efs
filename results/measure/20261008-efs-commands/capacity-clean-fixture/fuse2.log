@@ -1,0 +1,40 @@
+2026-10-08T16:09:23.611Z efs-fuse: legacy export label 'w92-private' is ignored; mounting the single export 'default' (id=1)
+2026-10-08T16:09:23.611Z efs-fuse c22754236b38-cmd-58997ac5 (branch devel-find-stats, built 2026-10-08T16:09:04Z on nuc), build=c22754236b38-cmd-58997ac5: starting export=default mount=/data1/efs/commands-58997ac5-clean-20261008/mnt2
+2026-10-08T16:09:23.612Z Discovered 4 cluster nodes from 127.0.0.1:24800
+2026-10-08T16:09:23.612Z   node id=1 127.0.0.1:24800
+2026-10-08T16:09:23.612Z   node id=2 127.0.0.1:24801
+2026-10-08T16:09:23.612Z   node id=3 127.0.0.1:24802
+2026-10-08T16:09:23.612Z   node id=4 127.0.0.1:24803
+2026-10-08T16:09:23.612Z fetching metadata...
+2026-10-08T16:09:23.612Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T16:09:23.612Z export id=1 name=default
+2026-10-08T16:09:23.612Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T16:09:23.612Z efs-fuse daemon pid=2042297
+2026-10-08T16:09:23.613Z efs-fuse: workers max=10 idle=10
+2026-10-08T16:09:23.615Z fuse serving
+2026-10-08T16:09:29.029Z efs commands: real .efs takes precedence in directory 2006
+2026-10-08T16:09:47.728Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-08T16:09:47.732Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:09:47.739Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:47.748Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:47.758Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:09:47.771Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:09:48.792Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:48.796Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:09:48.803Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:48.812Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:09:48.822Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:48.834Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:48.853Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-08T16:09:48.858Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:48.864Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:49.007Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:50.265Z efs: read hole ino=4984 ci=0 holes=1
+2026-10-08T16:09:50.276Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:09:50.278Z efs: report rec ino=5048 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-08T16:09:50.291Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-08T16:09:50.309Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-08T16:09:56.251Z efs: read hole ino=5419 ci=0 holes=2
+2026-10-08T16:09:57.691Z inode-rpc: retry type=67 attempt=0 why=recv rc=-6 req_len=744 recv_ms=30000
+2026-10-08T16:09:57.741Z inode-rpc: retry type=67 attempt=1 why=recv rc=-6 req_len=744 recv_ms=30000
+2026-10-08T16:09:57.841Z inode-rpc: retry type=67 attempt=2 why=recv rc=-6 req_len=744 recv_ms=30000

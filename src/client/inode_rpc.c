@@ -1790,8 +1790,8 @@ int efs_client_rpc_xattr(efs_export_id_t export_id, efs_ino_t ino, uint8_t op,
     return EFS_OK;
 }
 
-int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
-                                    struct efs_msg_query_snapshot_reply *reply,char **text)
+static int query_snapshot_rpc(const struct efs_msg_query_snapshot *req,uint32_t req_len,
+                                struct efs_msg_query_snapshot_reply *reply,char **text)
 {
     if (!req || !reply || !text) return EFS_ERR_INVAL;
     *text=NULL;memset(reply,0,sizeof(*reply));
@@ -1804,14 +1804,14 @@ int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
         if (!conn) last=EFS_ERR_NET;
         else {
             uint8_t type=0;void *payload=NULL;uint32_t len=0;
-            if (efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT,req,sizeof(*req)) ||
+            if (efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT,req,req_len) ||
                 efs_conn_recv_msg(conn,&type,&payload,&len)) {
                 efs_client_conn_drop(nid,conn);free(payload);last=EFS_ERR_NET;
             } else {
                 efs_client_conn_release(nid,conn);
                 if (type!=EFS_MSG_QUERY_SNAPSHOT_REPLY || len<sizeof(*reply)) { free(payload);return EFS_ERR_PROTO; }
                 memcpy(reply,payload,sizeof(*reply));
-                if (reply->version!=EFS_QUERY_VERSION || reply->text_len>req->max_output ||
+                if (reply->version!=req->version || reply->text_len>req->max_output ||
                     len!=sizeof(*reply)+reply->text_len || (reply->status && reply->text_len)) {
                     free(payload);return EFS_ERR_PROTO;
                 }
@@ -1834,4 +1834,18 @@ int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
         if (attempt+1<16 && rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
     }
     return last;
+}
+
+int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
+                                    struct efs_msg_query_snapshot_reply *reply,char **text)
+{
+    if (req && req->version==EFS_QUERY_FILTER_VERSION) return EFS_ERR_INVAL;
+    return query_snapshot_rpc(req,sizeof(*req),reply,text);
+}
+int efs_client_rpc_query_snapshot_v3(const struct efs_msg_query_snapshot_v3 *req,
+                                    struct efs_msg_query_snapshot_reply *reply,char **text)
+{
+    if (!req) return EFS_ERR_INVAL;
+    return query_snapshot_rpc(&req->base,req->base.version==EFS_QUERY_FILTER_VERSION ?
+                              sizeof(*req) : sizeof(req->base),reply,text);
 }

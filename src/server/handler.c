@@ -1061,10 +1061,10 @@ send_reply:
          * recv timeout (the client GET_FEATURES poll is 2 s x node_count,
          * which wedged every .stats/.find stat for ~16 s). */
         case EFS_MSG_GET_FEATURES: {
-            /* No per-export feature state in the KV yet; defaults apply. */
+            /* Server startup policy applies to this metadata namespace. */
             struct efs_msg_features_reply r;
             memset(&r, 0, sizeof(r));
-            r.features = EFS_FEATURES_DEFAULT;
+            r.features = server_raft_host_query_features();
             r.status = EFS_FEATURES_OK;
             efs_conn_send_msg(conn, EFS_MSG_GET_FEATURES_REPLY, &r,
                               sizeof(r));
@@ -1072,11 +1072,19 @@ send_reply:
         }
         case EFS_MSG_QUERY_SNAPSHOT: {
             void *reply=NULL;uint32_t reply_len=0;
-            int rc=payload_len==sizeof(struct efs_msg_query_snapshot) ?
-                server_raft_host_query_snapshot(payload,&reply,&reply_len) : EFS_ERR_INVAL;
+            uint32_t version=0;
+            if (payload_len>=sizeof(version)) memcpy(&version,payload,sizeof(version));
+            int extended=version==EFS_QUERY_FILTER_VERSION && payload_len==sizeof(struct efs_msg_query_snapshot_v3);
+            int legacy=(version==EFS_QUERY_VERSION || version==EFS_QUERY_COMMAND_VERSION) &&
+                       payload_len==sizeof(struct efs_msg_query_snapshot);
+            const struct efs_query_filters *filters=extended ? &((const struct efs_msg_query_snapshot_v3 *)payload)->filters : NULL;
+            int rc=extended || legacy ?
+                server_raft_host_query_snapshot(payload,filters,&reply,&reply_len) : EFS_ERR_INVAL;
             if (rc) {
                 struct efs_msg_query_snapshot_reply failure;
                 memset(&failure,0,sizeof(failure));failure.version=EFS_QUERY_VERSION;failure.status=rc;
+                if (version==EFS_QUERY_COMMAND_VERSION || version==EFS_QUERY_FILTER_VERSION)
+                    failure.version=version;
                 efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,&failure,sizeof(failure));
             } else efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,reply,reply_len);
             server_raft_host_query_reply_free(reply);

@@ -42,4 +42,13 @@ int efs_query_catalog_find(const struct efs_query_catalog *catalog,
                             const char *term, uint64_t visit_budget,
                             int (*emit)(void *, const struct efs_name_entry *,
                                         const char *relative), void *user);
+/* Immediate entries from the immutable catalog's directory lanes, not a full
+ * name-index scan or any live tree walk. Budget limits scanned records, including tombstones. */
+int efs_query_catalog_ls(const struct efs_query_catalog *catalog, efs_ino_t root,
+                          uint64_t visit_budget,
+                          int (*emit)(void *, const struct efs_name_entry *, const char *), void *user);
+/* Cancellation is checked for scanned records even when no name is emitted. */
+int efs_query_catalog_ls_bounded(const struct efs_query_catalog *catalog,efs_ino_t root,
+                          uint64_t visit_budget,int (*stop)(void *),void *stop_ctx,
+                          int (*emit)(void *,const struct efs_name_entry *,const char *),void *user);
 #endif

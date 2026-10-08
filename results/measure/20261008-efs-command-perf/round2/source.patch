@@ -1,0 +1,69 @@
+diff --git a/src/client/commands/command.py b/src/client/commands/command.py
+index 9a9e9dd3..e66f8249 100644
+--- a/src/client/commands/command.py
++++ b/src/client/commands/command.py
+@@ -6,11 +6,19 @@ query result. The command is scoped to the directory containing .efs, even
+ when invoked through a symlink or from another working directory. Expiry is
+ unavailable until the server implements and enables the expiry policy.
+ """
++import sys
++
++# The synthetic command directory contains no Python dependencies. Removing
++# its automatic import-search entry avoids a remote negative lookup for every
++# standard-library import (and prevents user files from shadowing dependencies).
++# Leave embedding/importing applications' search paths unchanged.
++if __name__ == "__main__" and sys.path:
++    del sys.path[0]
++
+ import argparse
+ import errno
+ import json
+ import os
+-import sys
+ import time
+ 
+ MAX_OUTPUT = 16 << 20
+diff --git a/src/client/commands/source.h b/src/client/commands/source.h
+index b8a90b4d..d892398a 100644
+--- a/src/client/commands/source.h
++++ b/src/client/commands/source.h
+@@ -8,11 +8,19 @@ static const char efs_command_source[] =
+ "when invoked through a symlink or from another working directory. Expiry is\n"
+ "unavailable until the server implements and enables the expiry policy.\n"
+ "\"\"\"\n"
++"import sys\n"
++"\n"
++"# The synthetic command directory contains no Python dependencies. Removing\n"
++"# its automatic import-search entry avoids a remote negative lookup for every\n"
++"# standard-library import (and prevents user files from shadowing dependencies).\n"
++"# Leave embedding/importing applications' search paths unchanged.\n"
++"if __name__ == \"__main__\" and sys.path:\n"
++"    del sys.path[0]\n"
++"\n"
+ "import argparse\n"
+ "import errno\n"
+ "import json\n"
+ "import os\n"
+-"import sys\n"
+ "import time\n"
+ "\n"
+ "MAX_OUTPUT = 16 << 20\n"
+diff --git a/tests/test_efs_commands.py b/tests/test_efs_commands.py
+index f45adedd..c4e8cc3c 100644
+--- a/tests/test_efs_commands.py
++++ b/tests/test_efs_commands.py
+@@ -61,6 +61,14 @@ class Commands(unittest.TestCase):
+         literal = ''.join(json.loads(line.rstrip(';')) for line in lines)
+         self.assertEqual(literal, SOURCE.read_text())
+ 
++    def test_command_directory_cannot_shadow_standard_library(self):
++        self.result("stats")
++        (self.directory / "json.py").write_text("raise RuntimeError('shadowed json')\n")
++        (self.directory / "argparse.py").write_text("raise RuntimeError('shadowed argparse')\n")
++        p = self.run_command("stats", "--json")
++        self.assertEqual(p.returncode, 0, p.stderr)
++        self.assertEqual(json.loads(p.stdout)["stats"]["tree_bytes"], 7)
++
+     def test_source_read_never_queries(self):
+         # No query files exist; simply reading source succeeds and has no side effects.
+         self.assertEqual((self.directory / "find").read_bytes(), SOURCE.read_bytes())

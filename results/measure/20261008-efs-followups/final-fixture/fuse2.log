@@ -1,0 +1,68 @@
+2026-10-08T16:57:45.551Z efs-fuse: legacy export label 'w92-private' is ignored; mounting the single export 'default' (id=1)
+2026-10-08T16:57:45.551Z efs-fuse ecabac6ff587-commands-d2573704 (branch devel-find-stats, built 2026-10-08T16:57:18Z on nuc), build=ecabac6ff587-commands-d2573704: starting export=default mount=/data1/efs/commands-followups-final-20261008/mnt2
+2026-10-08T16:57:45.552Z Discovered 4 cluster nodes from 127.0.0.1:24804
+2026-10-08T16:57:45.552Z   node id=1 127.0.0.1:24804
+2026-10-08T16:57:45.552Z   node id=2 127.0.0.1:24805
+2026-10-08T16:57:45.552Z   node id=3 127.0.0.1:24806
+2026-10-08T16:57:45.552Z   node id=4 127.0.0.1:24807
+2026-10-08T16:57:45.552Z fetching metadata...
+2026-10-08T16:57:45.552Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T16:57:45.552Z export id=1 name=default
+2026-10-08T16:57:45.552Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T16:57:45.552Z efs-fuse daemon pid=2337146
+2026-10-08T16:57:45.553Z efs-fuse: workers max=10 idle=10
+2026-10-08T16:57:45.555Z fuse serving
+2026-10-08T16:57:51.057Z efs commands: real .efs takes precedence in directory 856
+2026-10-08T16:58:14.351Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-08T16:58:14.357Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.364Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:14.375Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-08T16:58:14.386Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:14.400Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.416Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-08T16:58:14.444Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-08T16:58:14.449Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.455Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-08T16:58:14.464Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.530Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-08T16:58:14.535Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.543Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:14.677Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.780Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:14.785Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:14.893Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.898Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.015Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.128Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:15.132Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.358Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.363Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.370Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.476Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.576Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.581Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:15.751Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.755Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.762Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.770Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.783Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-08T16:58:15.796Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.810Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:17.745Z efs: read hole ino=7793 ci=0 holes=1
+2026-10-08T16:58:17.760Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:17.762Z efs: report rec ino=4529 ci=0 rejected unowned staging observation nodes=4,1,2 (putid miss, n=1)
+2026-10-08T16:58:17.779Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-08T16:58:17.800Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:23.381Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1289296
+2026-10-08T16:58:24.580Z efs: read hole ino=4218 ci=0 holes=2
+2026-10-08T16:58:24.596Z efs: rename_at 2352/x -> 2352/z rc=-3 after 1 tries
+2026-10-08T16:58:53.749Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13
+2026-10-08T16:59:01.949Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13
+2026-10-08T16:59:10.150Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13
+2026-10-08T16:59:18.350Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13
+2026-10-08T16:59:26.550Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13
+2026-10-08T16:59:34.750Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13
+2026-10-08T16:59:42.950Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13
+2026-10-08T16:59:51.150Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13
+2026-10-08T16:59:51.150Z efs-fuse: UNMOUNT DATA LOSS: metadata flush still failing (rc=-13) after 60s; writes that were never reported are gone
+2026-10-08T16:59:59.153Z report-loop ino=0 rounds=1 stale=0 busy=1 ms=8000 rpc_ms=8000 replay_ms=0 sleep_ms=0 recs=0 rc=-13

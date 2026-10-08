@@ -1,0 +1,21 @@
+snapshot 12134278373997136:34, source age 0.037s, complete; refresh_error=0; expiry unavailable
+loaded snapshot {"applied_g0": 22546, "applied_g2": 16292, "boot_id": 12134278373997136, "built_ns": 1791484223851002624, "generation": 34, "lag_sample_ns": 1791484223851002868, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 0, "refresh_error": 0, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791484223835220675, "term_g0": 2, "term_g2": 2}
+snapshot 12134278373997136:43, source age 0.163s, complete; refresh_error=0; expiry unavailable
+loaded snapshot {"applied_g0": 24445, "applied_g2": 18149, "boot_id": 12134278373997136, "built_ns": 1791484225878137597, "generation": 43, "lag_sample_ns": 1791484225878137781, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 0, "refresh_error": 0, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791484225820249192, "term_g0": 2, "term_g2": 2}
+snapshot 12134278373997136:53, source age 0.093s, complete; refresh_error=0; expiry unavailable
+loaded snapshot {"applied_g0": 26668, "applied_g2": 20185, "boot_id": 12134278373997136, "built_ns": 1791484228015514007, "generation": 53, "lag_sample_ns": 1791484228015514216, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 0, "refresh_error": 0, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791484228000173371, "term_g0": 2, "term_g2": 2}
+snapshot 12134278373997136:62, source age 0.091s, complete; refresh_error=0; expiry unavailable
+loaded snapshot {"applied_g0": 28514, "applied_g2": 21871, "boot_id": 12134278373997136, "built_ns": 1791484230077192351, "generation": 62, "lag_sample_ns": 1791484230077192449, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 0, "refresh_error": 0, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791484230062153527, "term_g0": 2, "term_g2": 2}
+snapshot 12134278373997136:71, source age 0.143s, complete; refresh_error=0; expiry unavailable
+loaded snapshot {"applied_g0": 30096, "applied_g2": 23581, "boot_id": 12134278373997136, "built_ns": 1791484232119014410, "generation": 71, "lag_sample_ns": 1791484232119014621, "pending_age_ms_at_sample": 0, "pending_changes_at_least": 0, "refresh_error": 0, "refresh_ms": 2000, "refresh_n": 256, "refresh_overdue": false, "source_ns": 1791484232099637971, "term_g0": 2, "term_g2": 2}
+concurrent readers and publication PASS [(726, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62]), (729, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62])]
+snapshot 12134278373997136:87, source age 0.116s, complete; refresh_error=0; expiry unavailable
+snapshot 12134278373997136:87, source age 0.407s, complete; refresh_error=0; expiry unavailable
+snapshot 12134278373997136:87, source age 0.710s, complete; refresh_error=0; expiry unavailable
+snapshot 12134278373997136:87, source age 1.002s, complete; refresh_error=0; expiry unavailable
+snapshot 12134278373997136:87, source age 1.284s, complete; refresh_error=0; expiry unavailable
+snapshot 12134278373997136:87, source age 1.567s, complete; refresh_error=0; expiry unavailable
+snapshot 12134278373997136:87, source age 1.852s, complete; refresh_error=0; expiry unavailable
+snapshot 12134278373997136:87, source age 2.144s, complete; refresh_error=0; expiry unavailable
+snapshot 12134278373997136:88, source age 0.209s, complete; refresh_error=0; expiry unavailable
+loaded publication PASS files=5891 logical_bytes=1508096

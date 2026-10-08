@@ -104,7 +104,13 @@ void efs_kv_lsm_snapshot_release(struct efs_kv_lsm_snapshot *s);
  * empty/rebuilt shard. The index must rebuild once per server boot. Snapshot
  * hints belong to the same local KV cut as its data. Failed/poisoned state is
  * never presented as a fresh snapshot or an advanced index watermark. */
+/* Startup-only host policy; enabling requires a fresh full catalog build. */
+void efs_kv_lsm_query_tracking(struct efs_kv *kv,int enabled);
 int efs_kv_lsm_metadata_revisions(struct efs_kv *kv, uint64_t *out, uint32_t n);
+/* Process-local transaction activity fence. Snapshot value is captured under
+ * the same KV lock as the metadata image. Saturation refuses comparisons. */
+int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out);
+int efs_kv_lsm_snapshot_transaction_revision(struct efs_kv_lsm_snapshot *s,uint64_t *out);
 int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
                                   uint64_t *out, uint32_t n);
 

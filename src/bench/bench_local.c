@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 #include "bench_local.h"
 #include "perf_control.h"
 #include "latency.h"
@@ -1098,20 +1099,7 @@ static int run_local_bench(struct efsd_server *s, const char *kind,
 
 static void local_usage(const char *prog)
 {
-    fprintf(stderr,
-        "Usage: %s --bench data --storage <path>[,path...] [--time seconds]\n"
-        "       [--writers N] [--qd N] [--window fragments-per-slot] [--direct-io|--no-direct-io] [--perf]\n"
-        "   or: %s --bench meta --meta-storage <path> [--time seconds] [--perf]\n"
-        "Local engine benchmarks; no cluster or sockets. Scratch roots must be\n"
-        "empty. Data sweeps paths x QD 1/16/64/256; meta measures KV and Raft log.\n"
-        "--rw read|write|both isolates phases; read requires --window.\n"
-        "--write-mode overwrite requires --window; create requires no window.\n"
-        "Bounded windows are populated before timing. Percentiles have <0.782%% bucket width; max is exact.\n"
-        "--sync enables O_SYNC for engine writes (benchmark only).\n"
-        "--full-paths skips the path-prefix ladder; --writer-stats enables wait timing.\n"
-        "--skip-ceiling omits the separate fio/raw ceiling probe.\n"
-        "--storage may repeat; meta also accepts its first root. Default time: 10s.\n",
-        prog, prog);
+    efs_cli_help(stderr,prog,"data");
 }
 
 static int local_storage_arg(struct efsd_server *s, const char *arg)
@@ -1133,6 +1121,7 @@ static int local_storage_arg(struct efsd_server *s, const char *arg)
 
 int efs_bench_local_main(int argc, char **argv)
 {
+    if (efs_help_requested(argc,argv)) { efs_cli_help(stdout,argv[0],"data");return 0; }
     struct efsd_server s = {0};
     s.nwriters = -1;
     s.listen_fd = -1;

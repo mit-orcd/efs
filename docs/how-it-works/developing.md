@@ -253,3 +253,35 @@ implemented code or accepted behavior. Keep implementation, local checks,
 cluster gates and closure separate. Archive superseded checkpoint narratives
 intact, repair links, and retain every unresolved gate in the active queue.
 Regenerate architecture artifacts and run the documentation gate after edits.
+
+## Command-line help style
+
+All EFS executable help uses the same layout: one-line program description,
+then `Usage`, optional `Commands`/`Arguments`, `Options`, `Examples`, and `Notes`.
+Leave a blank line between sections; indent rows by two spaces and align option
+explanations in column 25 (a 22-character label field). Keep the default overview
+short. Put operation-specific syntax in subcommand/mode `--help`, and detailed
+limits/requirements in extended help or notes. Preserve important semantics,
+such as the ignored legacy mkfs label, when reorganizing wording.
+
+Native programs use `include/efs/cli_help.h`; add new program/mode content there
+rather than creating another layout. Directory-local commands use the matching
+Python formatter in `src/client/commands/command.py`; regenerate `source.h` with
+`python3 src/client/commands/embed.py` (also a Make dependency). Their source is
+self-contained because clients do not install a separate EFS command package.
+
+`-h` and `--help` print to stdout, exit zero, and perform no network, mount,
+formatting or benchmark work. Invalid invocation diagnostics go to stderr and
+exit nonzero. FUSE's upstream option reference is separate: `efs-fuse
+--help-fuse`. Administrative subcommands support `efs-mgmt COMMAND --help`;
+local benchmarks support `efs-bench --bench MODE --help`.
+
+`.efs/help` is the short directory-command overview; `.efs/help --extended`
+explains limits and prerequisites. Python is an implementation dependency of
+these scripts, not of EFS storage, the native binaries or the query protocol.
+FUSE supplies executable bytes and has no execute-with-arguments callback. The
+client OS runs a script interpreter (or could run a platform-specific native
+wrapper); that wrapper encodes arguments in a query path and formats the
+server result. Python 3 provides the selected portable argument/JSON/raw-filename
+handling implementation. The existing shebang locates it automatically for
+direct invocation.

@@ -1,3 +1,4 @@
+#include "efs/cli_help.h"
 #include "efs/common.h"
 #include "efs/lock.h"
 #include "efs/protocol.h"
@@ -81,7 +82,7 @@ static int probe_node_up(const char *nhost, uint16_t nport, struct efs_msg_statu
 static int cmd_status(int argc, char **argv)
 {
     if (argc < 1) {
-        fprintf(stderr, "usage: status <node:port>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt status <node:port>\n");
         return 1;
     }
     char host[64];
@@ -403,7 +404,7 @@ static int cmd_status(int argc, char **argv)
 static int cmd_add_node(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: add-node <new-node:port> <existing-node:port>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt add-node <new-node:port> <existing-node:port>\n");
         return 1;
     }
     char new_host[64], existing_host[64];
@@ -451,7 +452,7 @@ static int cmd_add_node(int argc, char **argv)
 static int cmd_shrink_quota(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: shrink-quota <node:port> <amount>[T|G|M|K]\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt shrink-quota <node:port> <amount>[T|G|M|K]\n");
         return 1;
     }
     char host[64];
@@ -504,7 +505,7 @@ static int cmd_shrink_quota(int argc, char **argv)
 static int cmd_add_storage(int argc, char **argv)
 {
     if (argc < 2) {
-        fprintf(stderr, "usage: add-storage <node:port> <path>[,path...]\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt add-storage <node:port> <path>[,path...]\n");
         return 1;
     }
     char host[64];
@@ -606,7 +607,7 @@ static int cmd_io_stats(int argc, char **argv)
     uint32_t i;
 
     if (argc < 1) {
-        fprintf(stderr, "usage: io-stats <node:port>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt io-stats <node:port>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -663,7 +664,7 @@ static int cmd_version(int argc, char **argv)
     struct efs_msg_version_reply *r;
 
     if (argc < 1) {
-        fprintf(stderr, "usage: version <node:port>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt version <node:port>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -702,7 +703,7 @@ static int cmd_gc_status(int argc, char **argv)
     void *payload = NULL;
     uint32_t len = 0;
     if (argc != 1 || parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
-        fprintf(stderr, "usage: gc-status <node:port>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt gc-status <node:port>\n");
         return 1;
     }
     int fd = efs_connect_tcp(host, port);
@@ -775,7 +776,7 @@ static int cmd_raft_status(int argc, char **argv)
     uint32_t i;
 
     if (argc < 1) {
-        fprintf(stderr, "usage: raft-status <node:port>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-status <node:port>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -909,7 +910,7 @@ static int cmd_raft_change(int argc, char **argv)
     int i, rc = EFS_ERR_BUSY;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-change <node:port> <group> <voters>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-change <node:port> <group> <voters>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -981,7 +982,7 @@ static int cmd_raft_mkfs(int argc, char **argv)
     struct efs_msg_raft_mkfs_reply *r;
 
     if (argc < 1 || argc > 2) {
-        fprintf(stderr, "usage: mkfs|raft-mkfs <node:port> [legacy-label]\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt mkfs|raft-mkfs <node:port> [legacy-label]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1054,7 +1055,7 @@ static int cmd_raft_dir(int argc, char **argv)
     uint32_t st;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-dir <node:port> <ino> <begin|migrate|finish>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-dir <node:port> <ino> <begin|migrate|finish>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1333,7 +1334,7 @@ static int cmd_raft_session(int argc, char **argv)
 
     if (argc < 3) {
         fprintf(stderr,
-                "usage: raft-session <node:port> <create|register|establish|get|fence> "
+                "Usage:\n  efs-mgmt raft-session <node:port> <create|register|establish|get|fence> "
                 "<uuid-hex> [epoch|shard] [shard]\n");
         return 1;
     }
@@ -1442,7 +1443,7 @@ static int cmd_raft_getattr(int argc, char **argv)
     efs_ino_t ino = EFS_ROOT_INO;
 
     if (argc < 1) {
-        fprintf(stderr, "usage: raft-getattr <node:port> [ino]\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-getattr <node:port> [ino]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1493,7 +1494,7 @@ static int cmd_raft_lookup(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-lookup <node:port> <parent> <name>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-lookup <node:port> <parent> <name>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1543,7 +1544,7 @@ static int cmd_raft_create(int argc, char **argv)
     uint32_t mode = S_IFREG | 0644;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-create <node:port> <parent> <name> "
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-create <node:port> <parent> <name> "
                 "[mode]\n");
         return 1;
     }
@@ -1600,7 +1601,7 @@ static int cmd_raft_append(int argc, char **argv)
 
     if (argc < 3 || (argc != 3 && argc != 5)) {
         fprintf(stderr,
-                "usage: raft-append <node:port> <ino> <len> [uuid-hex epoch]\n");
+                "Usage:\n  efs-mgmt raft-append <node:port> <ino> <len> [uuid-hex epoch]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1664,7 +1665,7 @@ static int cmd_raft_hold(int argc, char **argv)
     struct efs_msg_inode_reply *r;
     const char *op;
     const char *usage =
-        "usage: raft-hold <node:port> <ino> <open|close> [owner] [uuid-hex epoch]\n";
+        "Usage:\n  efs-mgmt raft-hold <node:port> <ino> <open|close> [owner] [uuid-hex epoch]\n";
 
     if (argc < 3 || argc == 5 || argc > 6) {
         fprintf(stderr, "%s", usage);
@@ -1735,7 +1736,7 @@ static int cmd_raft_lock_op(int argc, char **argv, uint32_t extra, const char *n
     struct efs_msg_inode_reply *r;
     const char *op;
     const char *usage =
-        "usage: raft-%s <node:port> <ino> <ex|sh|un|gex|gsh|wex|wsh> [owner] [start end] [uuid-hex epoch]\n";
+        "Usage:\n  efs-mgmt raft-%s <node:port> <ino> <ex|sh|un|gex|gsh|wex|wsh> [owner] [start end] [uuid-hex epoch]\n";
     int is_getlk = 0, n, sess = 0;
 
     if (argc < 3) {
@@ -1855,7 +1856,7 @@ static int cmd_raft_unlink(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-unlink <node:port> <parent> <name>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-unlink <node:port> <parent> <name>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1904,7 +1905,7 @@ static int cmd_raft_rmdir(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-rmdir <node:port> <parent> <name>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-rmdir <node:port> <parent> <name>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -1954,7 +1955,7 @@ static int cmd_raft_link(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 4) {
-        fprintf(stderr, "usage: raft-link <node:port> <src_ino> <parent> <name>\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-link <node:port> <src_ino> <parent> <name>\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -2004,7 +2005,7 @@ static int cmd_raft_setattr(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 3) {
-        fprintf(stderr, "usage: raft-setattr <node:port> <ino> <mask> "
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-setattr <node:port> <ino> <mask> "
                 "[mode|mtime|size] [uid|atime] [gid]\n");
         return 1;
     }
@@ -2071,7 +2072,7 @@ static int cmd_raft_rename(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 5) {
-        fprintf(stderr, "usage: raft-rename <node:port> <old_parent> <old_name> "
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-rename <node:port> <old_parent> <old_name> "
                 "<new_parent> <new_name>\n");
         return 1;
     }
@@ -2125,7 +2126,7 @@ static int cmd_raft_readdir(int argc, char **argv)
     uint32_t i;
 
     if (argc < 2) {
-        fprintf(stderr, "usage: raft-readdir <node:port> <parent> [after_ino]\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-readdir <node:port> <parent> [after_ino]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -2178,7 +2179,7 @@ static int cmd_raft_lookup_path(int argc, char **argv)
     struct efs_msg_inode_lookup_path_reply *r;
 
     if (argc < 2) {
-        fprintf(stderr, "usage: raft-lookup-path <node:port> <path> [start]\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-lookup-path <node:port> <path> [start]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -2236,7 +2237,7 @@ static int cmd_raft_publish(int argc, char **argv)
     struct efs_msg_inode_reply *r;
 
     if (argc < 2) {
-        fprintf(stderr, "usage: raft-publish <node:port> <ino> [chunk] [size]\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-publish <node:port> <ino> [chunk] [size]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -2306,7 +2307,7 @@ static int cmd_raft_getchunks(int argc, char **argv)
     struct efs_msg_inode_getchunks_reply *r;
 
     if (argc < 2) {
-        fprintf(stderr, "usage: raft-getchunks <node:port> <ino> [start]\n");
+        fprintf(stderr, "Usage:\n  efs-mgmt raft-getchunks <node:port> <ino> [start]\n");
         return 1;
     }
     if (parse_host_port(argv[0], host, sizeof(host), &port) != 0) {
@@ -2380,41 +2381,10 @@ int main(int argc, char **argv)
 {
     efs_version_check_argv("efs-mgmt", argc, argv);
 
-    if (argc < 2) {
-    fprintf(stderr, "Usage: %s <command> [args]\n"
-                    "Commands:\n"
-                    "  status <node:port>\n"
-                    "  mkfs <node:port> [legacy-label] (single export; label ignored)\n"
-                    "  add-node <new-node:port> <existing-node:port>\n"
-                    "  shrink-quota <node:port> <amount>[T|G|M|K]\n"
-                    "  add-storage <node:port> <path>[,path...]\n"
-                    "  io-stats <node:port>\n"
-                    "  version <node:port>\n"
-                    "  raft-status <node:port>\n"
-                    "  gc-status <node:port>\n"
-                    "  raft-mkfs <node:port> [legacy-label] (single export; label ignored)\n"
-                    "  raft-change <node:port> <group> <voters>\n"
-                    "  raft-dir <node:port> <ino> <begin|migrate|finish>\n"
-                    "  raft-session <node:port> <create|register|establish|get|fence> <uuid-hex> [epoch|shard] [shard]\n"
-                    "  raft-getattr <node:port> [ino]\n"
-                    "  raft-lookup <node:port> <parent> <name>\n"
-                    "  raft-create <node:port> <parent> <name> [mode]\n"
-                    "  raft-unlink <node:port> <parent> <name>\n"
-                    "  raft-rmdir <node:port> <parent> <name>\n"
-                    "  raft-link <node:port> <src_ino> <parent> <name>\n"
-                    "  raft-setattr <node:port> <ino> <mask> [mode|mtime|size] [uid|atime] [gid]\n"
-                    "  raft-rename <node:port> <old_parent> <old_name> <new_parent> <new_name>\n"
-                    "  raft-readdir <node:port> <parent> [after_ino]\n"
-                    "  raft-lookup-path <node:port> <path> [start]\n"
-                    "  raft-publish <node:port> <ino> [chunk] [size]\n"
-                    "  raft-getchunks <node:port> <ino> [start]\n"
-                    "  raft-append <node:port> <ino> <len> [uuid-hex epoch]\n"
-                    "  raft-hold <node:port> <ino> <open|close> [owner] [uuid-hex epoch]\n"
-                    "  raft-flock <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [uuid-hex epoch]\n"
-                    "  raft-fcntl <node:port> <ino> <ex|sh|un|gex|gsh> [owner] [start end] [uuid-hex epoch]\n",
-            argv[0]);
-    return 1;
-}
+    if (efs_help_requested(argc,argv)) {
+        return efs_mgmt_help(stdout,argc>2 ? argv[1] : NULL);
+    }
+    if (argc < 2) { efs_cli_help(stderr,argv[0],NULL);return 1; }
 
     const char *cmd = argv[1];
     if (strcmp(cmd, "status") == 0)

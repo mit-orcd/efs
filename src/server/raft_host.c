@@ -6,6 +6,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/kv_snap.h"
 #include "efs/meta_apply.h"
+#include "efs/query_filters.h"
 #include "efs/publication.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
@@ -345,9 +346,9 @@ struct efs_raft_host {
     pthread_t tid;
     int running;
     int started;
-    pthread_mutex_t query_mu;
+    pthread_rwlock_t query_lock;
     pthread_t query_tid;
-    int query_running,query_started,query_error;
+    int query_running,query_started,query_error,query_enabled;
     uint64_t query_deadline_ms;
     struct efs_server_query_view query_view;
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
@@ -7106,9 +7107,13 @@ static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot 
                               struct efs_server_query_view *view,uint64_t *revisions)
 {
     *source=NULL;memset(view,0,sizeof(*view));
+    uint64_t import_generation[HOST_NGROUPS];
     pthread_mutex_lock(&h->mu);
     int rc=host_query_capable(h) ? EFS_OK : EFS_ERR_NOT_PRIMARY;
     if (!rc) {
+        pthread_mutex_lock(&h->snap_mu);
+        for (int i=0;i<HOST_NGROUPS;i++) import_generation[i]=h->g[i].import_gen;
+        pthread_mutex_unlock(&h->snap_mu);
         view->boot_id=h->boot_id;view->source_ns=now_ns();
         for (int i=0;i<HOST_NGROUPS;i++) {
             view->applied[i]=efs_raft_applied(h->g[i].r);
@@ -7121,19 +7126,26 @@ static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot 
     pthread_mutex_unlock(&h->mu);
     if (rc) return rc;
     rc=efs_kv_lsm_snapshot_revisions(*source,revisions,4096);
-    /* Barriers AFTER capture expose an asynchronously missing participant
-     * prepare/resolve. A changed metadata image refuses this cut; pending
-     * records additionally refuse catalog construction. This deliberately
-     * favors BUSY over publishing a half cross-group transaction. */
+    uint64_t transaction_before=0,transaction_after=0;
+    if (!rc) rc=efs_kv_lsm_snapshot_transaction_revision(*source,&transaction_before);
+    /* Post-capture barriers expose missing asynchronous participants. Only
+     * transaction activity invalidates the cut: ordinary single-entry updates
+     * are atomic in the pinned KV image and need not starve publication.
+     * A prepare/resolve/decision after capture changes this fence; pending
+     * records already in the image independently refuse catalog construction.
+     * Import transitions remain excluded by host_query_capable. */
     for (int i=0;i<HOST_NGROUPS && !rc;i++) {
         int hint=-1;
         rc=host_read_index(h,h->g[i].group,&hint);
     }
-    uint64_t after[4096];
     pthread_mutex_lock(&h->mu);
     if (!rc && !host_query_capable(h)) rc=EFS_ERR_NOT_PRIMARY;
-    if (!rc) rc=efs_kv_lsm_metadata_revisions(h->kv,after,4096);
-    if (!rc && memcmp(revisions,after,sizeof(after))) rc=EFS_ERR_BUSY;
+    pthread_mutex_lock(&h->snap_mu);
+    for (int i=0;i<HOST_NGROUPS && !rc;i++)
+        if (import_generation[i]!=h->g[i].import_gen) rc=EFS_ERR_BUSY;
+    pthread_mutex_unlock(&h->snap_mu);
+    if (!rc) rc=efs_kv_lsm_transaction_revision(h->kv,&transaction_after);
+    if (!rc && transaction_before!=transaction_after) rc=EFS_ERR_BUSY;
     pthread_mutex_unlock(&h->mu);
     if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
     return rc;
@@ -7142,7 +7154,16 @@ static void *host_query_thread(void *ctx)
 {
     struct efs_raft_host *h=ctx;
     uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
-    int failed=0;
+    int failed=0,last_error=0;uint64_t last_error_log=0;
+    uint64_t catalog_bytes=HOST_QUERY_BYTES;
+    const char *budget=getenv("EFS_QUERY_CATALOG_MIB");
+    if (budget && *budget) {
+        char *end=NULL;errno=0;
+        unsigned long long mib=strtoull(budget,&end,10);
+        if (!errno && end && !*end && mib>=64 && mib<=1024)
+            catalog_bytes=(uint64_t)mib<<20;
+        else fprintf(stderr,"query-config: invalid EFS_QUERY_CATALOG_MIB; using 256 (allowed 64..1024)\n");
+    }
     while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
         usleep(100000);
         uint64_t now=query_mono_ms(),dirty=0;
@@ -7155,10 +7176,20 @@ static void *host_query_thread(void *ctx)
             dirty+=diff;
         }
         /* Only this worker changes the published pointer. Readers hold
-         * query_mu; old remains alive throughout the next candidate build. */
+         * query_lock; old remains alive throughout the next candidate build. */
         int initial=h->query_view.catalog==NULL;
-        if (!dirty && !initial) { first_dirty=0;continue; }
-        if (!first_dirty) first_dirty=now;
+        if (!dirty) first_dirty=0;
+        else if (!first_dirty) first_dirty=now;
+        pthread_rwlock_wrlock(&h->query_lock);
+        struct efs_server_query_view *lag=&h->query_view;
+        int was_overdue=lag->pending_changes && lag->lag_sample_ms-lag->pending_since_ms>=HOST_QUERY_T_MS;
+        int overdue=dirty && now-first_dirty>=HOST_QUERY_T_MS;
+        if (lag->pending_changes!=dirty || was_overdue!=overdue) {
+            lag->pending_changes=dirty;lag->pending_since_ms=first_dirty;
+            lag->lag_sample_ms=now;lag->lag_sample_ns=now_ns();
+        }
+        pthread_rwlock_unlock(&h->query_lock);
+        if (!dirty && !initial) continue;
         if (!initial && dirty<HOST_QUERY_N && now-first_dirty<HOST_QUERY_T_MS) continue;
         if (failed && last_attempt && now-last_attempt<HOST_QUERY_T_MS) continue;
         last_attempt=now;
@@ -7169,17 +7200,25 @@ static void *host_query_thread(void *ctx)
         rc=host_query_source(h,&source,&view,revisions);
         struct efs_query_catalog *candidate=NULL;
         if (!rc && !host_query_cancel(h))
-            rc=efs_query_catalog_build(source,h->query_view.catalog,HOST_QUERY_BYTES,host_query_cancel,h,&candidate);
+            rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
         else if (!rc) rc=EFS_ERR_BUSY;
         efs_kv_lsm_snapshot_release(source);
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
-        pthread_mutex_lock(&h->query_mu);
+        pthread_rwlock_wrlock(&h->query_lock);
         h->query_error=rc;failed=rc!=EFS_OK;
+        if (rc && rc!=EFS_ERR_NOT_PRIMARY && (rc!=last_error || now-last_error_log>=30000)) {
+            fprintf(stderr,"query-refresh: rc=%d cap_mib=%llu initial=%d elapsed_ms=%llu\n",
+                    rc,(unsigned long long)(catalog_bytes>>20),initial,
+                    (unsigned long long)(query_mono_ms()-now));
+            last_error_log=now;
+        }
+        last_error=rc;
         if (!rc) {
             struct efs_query_catalog *old=h->query_view.catalog;
             view.catalog=candidate;view.built_ns=now_ns();
             view.build_ms=query_mono_ms()-now;
             view.generation=h->query_view.generation+1;
+            view.lag_sample_ms=query_mono_ms();view.lag_sample_ns=now_ns();
             h->query_view=view;
             struct efs_query_rollup root={0};
             int root_rc=efs_query_catalog_stats(candidate,EFS_ROOT_INO,&root);
@@ -7190,23 +7229,26 @@ static void *host_query_thread(void *ctx)
                 (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
                 (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
             memcpy(published,revisions,sizeof(published));first_dirty=0;
-            /* query_mu drains readers before retirement; one builder bounds
+            /* query_lock drains readers before retirement; one builder bounds
              * simultaneous old/candidate generations to two per host. */
             efs_query_catalog_free(old);
         }
-        pthread_mutex_unlock(&h->query_mu);
+        pthread_rwlock_unlock(&h->query_lock);
     }
     return NULL;
 }
 /* Internal borrowed-view API. The consumer is bounded and may not retain the
  * pointer. It MUST enforce fresh user permissions/ancestry before returning
- * bytes. Source and build times do not advance after a failed refresh. */
+ * bytes. Readers share the immutable view; publication/free takes the exclusive
+ * lock and drains them, retaining the two-generation memory bound. Source and
+ * build times do not advance after a failed refresh. */
 int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
                                  void *ctx,uint16_t *primary_id)
 {
     struct efs_raft_host *h=g_host;
     if (primary_id) *primary_id=0;
     if (!h || !consume) return EFS_ERR_INVAL;
+    if (!h->query_enabled) return EFS_ERR_NOT_FOUND;
     uint8_t both[2];host_need_both(both);
     pthread_mutex_lock(&h->mu);
     int capable=host_query_capable(h);
@@ -7224,9 +7266,10 @@ int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_qu
     capable=host_query_capable(h);
     pthread_mutex_unlock(&h->mu);
     if (!capable) return EFS_ERR_BUSY;
-    pthread_mutex_lock(&h->query_mu);
-    int rc=h->query_view.catalog ? consume(ctx,&h->query_view,h->query_error) : EFS_ERR_BUSY;
-    pthread_mutex_unlock(&h->query_mu);
+    pthread_rwlock_rdlock(&h->query_lock);
+    int rc=h->query_view.catalog ? consume(ctx,&h->query_view,h->query_error) :
+           h->query_error ? h->query_error : EFS_ERR_BUSY;
+    pthread_rwlock_unlock(&h->query_lock);
     return rc;
 }
 
@@ -7249,6 +7292,7 @@ struct query_auth {
 struct query_request {
     struct efs_raft_host *h;
     const struct efs_msg_query_snapshot *req;
+    const struct efs_query_filters *filters;
     struct efs_msg_query_snapshot_reply *reply;
     const struct efs_server_query_view *view;
     struct query_auth *auth;
@@ -7319,24 +7363,99 @@ static int query_ancestry(struct query_request *q,efs_ino_t dir,efs_ino_t root,i
     }
     return EFS_ERR_OVERFLOW;
 }
+/* ASCII JSON: hex encodes raw POSIX filename bytes, including invalid UTF-8
+ * and terminal controls. No NUL wire payload or JSON string escaping ambiguity. */
+static int query_append(struct query_request *q,const char *text,size_t n)
+{
+    if (n>q->req->max_output-q->len) return EFS_ERR_OVERFLOW;
+    memcpy(q->text+q->len,text,n);q->len+=(uint32_t)n;return EFS_OK;
+}
+static int query_command_begin(struct query_request *q)
+{
+    const struct efs_server_query_view *v=q->view;
+    const char *op=q->req->operation==EFS_QUERY_STATS ? "stats" : q->req->operation==EFS_QUERY_LS ? "ls" : "find";
+    char header[1024];
+    uint64_t pending_age=v->pending_since_ms && v->lag_sample_ms>=v->pending_since_ms ? v->lag_sample_ms-v->pending_since_ms : 0;
+    int n=snprintf(header,sizeof(header),
+        "{\"version\":1,\"operation\":\"%s\",\"complete\":true,\"expiry\":\"unavailable\","
+        "\"snapshot\":{\"boot_id\":%llu,\"generation\":%llu,\"source_ns\":%llu,\"built_ns\":%llu,"
+        "\"applied_g0\":%llu,\"applied_g2\":%llu,\"term_g0\":%llu,\"term_g2\":%llu,"
+        "\"refresh_error\":%d,\"refresh_n\":%d,\"refresh_ms\":%d,\"pending_changes_at_least\":%llu,\"pending_age_ms_at_sample\":%llu,\"lag_sample_ns\":%llu,\"refresh_overdue\":%s},",
+        op,(unsigned long long)v->boot_id,(unsigned long long)v->generation,
+        (unsigned long long)v->source_ns,(unsigned long long)v->built_ns,
+        (unsigned long long)v->applied[0],(unsigned long long)v->applied[1],
+        (unsigned long long)v->terms[0],(unsigned long long)v->terms[1],q->reply->refresh_error,
+        HOST_QUERY_N,HOST_QUERY_T_MS,(unsigned long long)v->pending_changes,
+        (unsigned long long)pending_age,(unsigned long long)v->lag_sample_ns,
+        v->pending_changes && pending_age>=HOST_QUERY_T_MS ? "true" : "false");
+    if (n<0 || (size_t)n>=sizeof(header)) return EFS_ERR_OVERFLOW;
+    int rc=query_append(q,header,(size_t)n);
+    if (!rc && q->filters) {
+        const struct efs_query_filters *f=q->filters;
+        char values[4][32];uint64_t raw[4]={f->min_size,f->max_size,f->after_ns,f->before_ns};
+        for (unsigned i=0;i<4;i++) {
+            if (f->flags&(1u<<i)) snprintf(values[i],sizeof(values[i]),"%llu",(unsigned long long)raw[i]);
+            else strcpy(values[i],"null");
+        }
+        const char *kind=f->kind==1 ? "\"file\"" : f->kind==2 ? "\"dir\"" : f->kind==3 ? "\"symlink\"" : "null";
+        n=snprintf(header,sizeof(header),
+            "\"filters\":{\"type\":%s,\"min_size\":%s,\"max_size\":%s,\"modified_after_ns\":%s,\"modified_before_ns\":%s},",
+            kind,values[0],values[1],values[2],values[3]);
+        rc=n<0 || (size_t)n>=sizeof(header) ? EFS_ERR_OVERFLOW : query_append(q,header,(size_t)n);
+    }
+    return rc;
+}
 static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *relative)
 {
     struct query_request *q=ctx;
-    int rc=query_ancestry(q,entry->parent,q->req->root,5);
+    struct efs_meta_stat stat;
+    int rc=EFS_OK;
+    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
+        rc=efs_query_catalog_inode(q->view->catalog,entry->dentry.ino,NULL,&stat);
+        if (rc) return rc;
+    }
+    rc=query_ancestry(q,entry->parent,q->req->root,5);
     if (rc) return rc;
+    /* Authorize/check deadline even for excluded entries: metadata predicates
+     * must not become a probe of inaccessible descendants. The index still
+     * charges every candidate; filters need no extra GETATTRs. */
+    if (q->filters && !efs_query_filters_match(q->filters,stat.mode,stat.size,stat.mtime)) return EFS_OK;
     /* A moved/deleted entry must not be rendered with stale ancestry while
      * using fresh permissions. A concurrent mutation refuses the whole result. */
     struct efs_meta_dentry fresh;
-    rc=efs_meta_apply_lookup_tx(q->h->kv,entry->parent,entry->name,host_txn_coord,q->h,&fresh);
+    struct efs_meta_row *parent=NULL;
+    rc=query_auth_dir(q,entry->parent,5,&parent);
+    if (!rc) rc=efs_meta_apply_lookup_row_tx(q->h->kv,parent,entry->name,host_txn_coord,q->h,&fresh);
     if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
     if (rc) return rc;
     if (fresh.ino!=entry->dentry.ino || fresh.generation!=entry->dentry.generation) return EFS_ERR_BUSY;
+    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
+        if (q->len && q->text[q->len-1]!= '[') {
+            rc=query_append(q,",",1);if (rc) return rc;
+        }
+        rc=query_append(q,"{\"path_hex\":\"",13);if (rc) return rc;
+        static const char hex[]="0123456789abcdef";
+        for (const unsigned char *p=(const unsigned char *)relative;*p;p++) {
+            char pair[2]={hex[*p>>4],hex[*p&15]};
+            rc=query_append(q,pair,2);if (rc) return rc;
+        }
+        char tail[256];
+        int n=snprintf(tail,sizeof(tail),"\",\"mode\":%u,\"uid\":%u,\"gid\":%u,\"size\":%llu,\"mtime_ns\":%llu,\"expiry\":null}",
+                       stat.mode,stat.uid,stat.gid,(unsigned long long)stat.size,(unsigned long long)stat.mtime);
+        if (n<0 || (size_t)n>=sizeof(tail)) return EFS_ERR_OVERFLOW;
+        return query_append(q,tail,(size_t)n);
+    }
     if (strchr(relative,'\n') || strchr(q->root_path,'\n')) return EFS_ERR_ILSEQ;
     size_t prefix=strlen(q->root_path),n=strlen(relative),sep=prefix ? 1 : 0;
     if (prefix+sep+n+1>q->req->max_output-q->len) return EFS_ERR_OVERFLOW;
     if (prefix) { memcpy(q->text+q->len,q->root_path,prefix);q->len+=(uint32_t)prefix;q->text[q->len++]='/'; }
     memcpy(q->text+q->len,relative,n);q->len+=(uint32_t)n;q->text[q->len++]='\n';
     return EFS_OK;
+}
+static int query_expired(void *ctx)
+{
+    struct query_request *q=ctx;
+    return query_mono_ms()>q->deadline;
 }
 static int query_consume(void *ctx,const struct efs_server_query_view *view,int refresh_error)
 {
@@ -7354,7 +7473,31 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
     memcpy(r->applied,view->applied,sizeof(r->applied));memcpy(r->terms,view->terms,sizeof(r->terms));
     r->refresh_error=refresh_error;r->uid=root->uid;r->gid=root->gid;
     r->mtime=root->base_mtime;r->atime=root->base_atime;r->ctime=root->base_ctime;
-    if (q->req->operation==EFS_QUERY_STATS) {
+    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
+        rc=query_command_begin(q);
+        if (!rc && q->req->operation==EFS_QUERY_STATS) {
+            struct efs_query_rollup stats;
+            rc=efs_query_catalog_stats(view->catalog,q->req->root,&stats);
+            if (!rc) {
+                char text[1024];
+                int n=snprintf(text,sizeof(text),
+                    "\"stats\":{\"imm_files\":%llu,\"imm_dirs\":%llu,\"imm_bytes\":%llu,\"imm_tmin\":%llu,\"imm_tmax\":%llu,"
+                    "\"tree_files\":%llu,\"tree_dirs\":%llu,\"tree_bytes\":%llu,\"tree_tmin\":%llu,\"tree_tmax\":%llu}}",
+                    (unsigned long long)stats.imm_files,(unsigned long long)stats.imm_dirs,
+                    (unsigned long long)stats.imm_bytes,(unsigned long long)stats.imm_tmin,(unsigned long long)stats.imm_tmax,
+                    (unsigned long long)stats.tree_files,(unsigned long long)stats.tree_dirs,
+                    (unsigned long long)stats.tree_bytes,(unsigned long long)stats.tree_tmin,(unsigned long long)stats.tree_tmax);
+                rc=n<0 || (size_t)n>=sizeof(text) ? EFS_ERR_OVERFLOW : query_append(q,text,(size_t)n);
+            }
+        } else if (!rc) {
+            rc=query_append(q,"\"entries\":[",11);
+            if (!rc) rc=q->req->operation==EFS_QUERY_LS ?
+                efs_query_catalog_ls_bounded(view->catalog,q->req->root,q->req->visit_budget,query_expired,q,query_emit,q) :
+                efs_query_catalog_find(view->catalog,q->req->root,q->req->match,q->req->term,
+                                       q->req->visit_budget,query_emit,q);
+            if (!rc) rc=query_append(q,"]}",2);
+        }
+    } else if (q->req->operation==EFS_QUERY_STATS) {
         struct efs_query_rollup s;
         rc=efs_query_catalog_stats(view->catalog,q->req->root,&s);
         if (!rc) {
@@ -7382,14 +7525,17 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
         if (!rc) rc=efs_query_catalog_find(view->catalog,q->req->root,q->req->match,q->req->term,
                                            q->req->visit_budget,query_emit,q);
     }
-    /* Recheck authorization/ancestry just before delivery. Open result bytes
+    /* Recheck authorization/ancestry and the layouts used by batched dentry
+     * reads just before delivery. A split invalidates the whole result.
+     * Open result bytes
      * then remain immutable; later chmod does not rewrite an already-open FD. */
     for (uint32_t i=0;i<HOST_QUERY_AUTH_N && !rc;i++) if (q->auth[i].valid) {
         if (query_mono_ms()>q->deadline) { rc=EFS_ERR_BUSY;break; }
         struct efs_meta_row now;
         rc=efs_meta_apply_get_inode_tx(q->h->kv,q->auth[i].row.ino,host_txn_coord,q->h,&now);
         if (!rc && (now.generation!=q->auth[i].row.generation || now.parent!=q->auth[i].row.parent ||
-            now.mode!=q->auth[i].row.mode || now.uid!=q->auth[i].row.uid || now.gid!=q->auth[i].row.gid || !now.nlink))
+            now.mode!=q->auth[i].row.mode || now.uid!=q->auth[i].row.uid || now.gid!=q->auth[i].row.gid || !now.nlink ||
+            now.layout!=q->auth[i].row.layout || now.layout_epoch!=q->auth[i].row.layout_epoch))
             rc=EFS_ERR_BUSY;
         if (!rc) rc=query_directory_binding(q,now.ino);
     }
@@ -7397,15 +7543,27 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
     if (!rc) r->text_len=q->len;
     return rc;
 }
-int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,void **out,uint32_t *len)
+/* Startup policy is immutable for a process; change it on every node and
+ * restart gracefully. It gates both wire versions, not only synthetic paths. */
+uint32_t server_raft_host_query_features(void)
+{
+    return g_host && g_host->query_enabled && g_host->query_started ? EFS_FEATURES_DEFAULT : 0;
+}
+int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,const struct efs_query_filters *filters,void **out,uint32_t *len)
 {
     if (out) *out=NULL;
-    if (!req || !out || !len || req->version!=EFS_QUERY_VERSION || !req->root ||
-        req->operation>EFS_QUERY_FIND || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
+    if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
+    if (!req || !out || !len || (req->version!=EFS_QUERY_VERSION && req->version!=EFS_QUERY_COMMAND_VERSION && req->version!=EFS_QUERY_FILTER_VERSION) || !req->root ||
+        req->operation>(req->version==EFS_QUERY_VERSION ? EFS_QUERY_FIND : EFS_QUERY_LS) || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
         !req->max_output || req->max_output>EFS_QUERY_MAX_OUTPUT ||
         !req->visit_budget || req->visit_budget>EFS_QUERY_MAX_VISITS ||
         !memchr(req->term,0,sizeof(req->term))) return EFS_ERR_INVAL;
-    if (req->operation==EFS_QUERY_FIND && (strlen(req->term)<EFS_FIND_MIN_TERM || strchr(req->term,'/') || strchr(req->term,'*')))
+    if ((req->version==EFS_QUERY_FILTER_VERSION) != (filters!=NULL) ||
+        (filters && (req->operation!=EFS_QUERY_FIND || !efs_query_filters_valid(filters)))) return EFS_ERR_INVAL;
+    if (req->operation==EFS_QUERY_FIND && (strchr(req->term,'/') ||
+        (req->version==EFS_QUERY_VERSION && (strlen(req->term)<EFS_FIND_MIN_TERM || strchr(req->term,'*'))) ||
+        (req->version>=EFS_QUERY_COMMAND_VERSION && (strlen(req->term)>120 ||
+        (!req->term[0] && req->match!=EFS_NAME_PREFIX && req->match!=EFS_NAME_CONTAINS)))))
         return EFS_ERR_INVAL;
     if (__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)>8) {
         __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);return EFS_ERR_BUSY;
@@ -7423,9 +7581,9 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,voi
     a->bytes=bytes;
     struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
     struct query_request q={0};
-    q.h=g_host;q.req=req;q.reply=reply;q.text=(char *)(reply+1);q.deadline=query_mono_ms()+5000;
+    q.h=g_host;q.req=req;q.filters=filters;q.reply=reply;q.text=(char *)(reply+1);q.deadline=query_mono_ms()+5000;
     q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
-    reply->version=EFS_QUERY_VERSION;
+    reply->version=req->version;
     int rc=q.auth ? server_raft_host_query_read(query_consume,&q,&reply->primary_id) : EFS_ERR_NOMEM;
     free(q.auth);
     reply->status=rc;
@@ -7446,6 +7604,12 @@ int server_raft_host_start(struct efsd_server *s)
      * starts — there is no env gate. */
     if (!s || g_host)
         return EFS_ERR_INVAL;
+    const char *commands=getenv("EFS_COMMANDS_SERVER");
+    if (commands && strcmp(commands,"0") && strcmp(commands,"1")) {
+        fprintf(stderr,"raft-host: EFS_COMMANDS_SERVER must be 0 or 1\n");
+        return EFS_ERR_INVAL;
+    }
+    int query_enabled=!commands || !strcmp(commands,"1");
     ns = getenv("EFS_MD_RAFT_N");
     if (ns && ns[0]) {
         n = atoi(ns);
@@ -7464,13 +7628,22 @@ int server_raft_host_start(struct efsd_server *s)
     if (!h)
         return EFS_ERR_NOMEM;
     h->s = s;
+    h->query_enabled=query_enabled;
     h->raft_id = (int)s->id - 1;
     h->n = n;
     h->boot_id = make_boot_id();
     h->salt = make_salt(h->boot_id);
     pthread_mutex_init(&h->mu, NULL);
     pthread_mutex_init(&h->snap_mu, NULL);
-    pthread_mutex_init(&h->query_mu,NULL);
+    pthread_rwlockattr_t query_attr;
+    pthread_rwlockattr_init(&query_attr);
+#ifdef __linux__
+    /* Query readers never recursively acquire this lock. Pending publication
+     * must stop admitting readers so a busy command stream cannot starve it. */
+    pthread_rwlockattr_setkind_np(&query_attr,PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+#endif
+    pthread_rwlock_init(&h->query_lock,&query_attr);
+    pthread_rwlockattr_destroy(&query_attr);
     pthread_mutex_init(&h->wait_mu, NULL);
     pthread_mutex_init(&h->inbox_mu, NULL);
     pthread_mutex_init(&h->outbox_mu, NULL);
@@ -7548,6 +7721,7 @@ int server_raft_host_start(struct efsd_server *s)
     }
     h->tx_running = 1;
     h->running = 1;
+    efs_kv_lsm_query_tracking(h->kv,h->query_enabled);
     g_host = h;
     if (efsd_pthread_create(&h->tid, host_pump, h) != 0) {
         fprintf(stderr, "raft-host: pump thread failed\n");
@@ -7562,11 +7736,13 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_IO;
     }
     h->started = 1;
-    __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
-    if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
-        __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
-        fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
-    } else h->query_started=1;
+    if (h->query_enabled) {
+        __atomic_store_n(&h->query_running,1,__ATOMIC_RELEASE);
+        if (efsd_pthread_create(&h->query_tid,host_query_thread,h)!=0) {
+            __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
+            fprintf(stderr,"raft-host: query refresh thread failed; virtual queries unavailable\n");
+        } else h->query_started=1;
+    } else fprintf(stderr,"raft-host: .efs server queries disabled; no catalog worker or query tracking\n");
     /* GC reaper after the pump: its proposals need the pump to apply. A
      * spawn failure only leaks fragments (logged), never corrupts.
      * EFS_GC_DISABLE is an operational escape hatch (A/B, emergencies):
@@ -7635,11 +7811,11 @@ void server_raft_host_stop(void)
         return;
     __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
     if (h->query_started) pthread_join(h->query_tid,NULL);
-    pthread_mutex_lock(&h->query_mu);
+    pthread_rwlock_wrlock(&h->query_lock);
     efs_query_catalog_free(h->query_view.catalog);
     h->query_view.catalog=NULL;
-    pthread_mutex_unlock(&h->query_mu);
-    pthread_mutex_destroy(&h->query_mu);
+    pthread_rwlock_unlock(&h->query_lock);
+    pthread_rwlock_destroy(&h->query_lock);
     /* Stop the GC reaper first: an in-flight host_propose_wait needs the
      * pump alive to apply, and its peer RPCs need the conn pool. */
     h->gc_running = 0;

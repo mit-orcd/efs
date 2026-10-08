@@ -12,6 +12,12 @@ Implementation and gates remain open; no fixed directory depth or universal
 scratch TTL is selected. D28–D30 are also accepted. The zero decision count
 refers to settled registered asks, not to every remaining implementation detail.
 
+## Command options and expiry coverage
+
+[W91/W92 options and W90 test status](efs-command-options-20261008.md) records
+long listings, dates, sorting and server-side predicates. Expiry remains
+unimplemented; unavailable/refusal tests are not lifecycle acceptance.
+
 ## Tiny-file performance follow-up
 
 [W93–W96: NUC profiling evidence and next experiments](tiny-file-performance-plan-20261008.md)
@@ -128,7 +134,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](replay-readiness-20261008.md)) | [work item](../backlog/work-items.md#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](../backlog/work-items.md#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | root cause proven on native and EFS storage: default os.link requests follow; explicit no-follow works; test correction and full reruns owed | [evidence and fix](amd-link-symlink.md) |
-| virtual-io | **W92 · `.find` / `.stats` — server snapshots and safe reads** | correctness / performance / access control | in progress — immutable reads, permission/error handling and query-slot recovery repaired; server stats/index and large-tree acceptance remain open | [fix scope and acceptance](virtual-find-stats.md) |
+| virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — opt-in command scripts, versioned JSON queries, server snapshots/index and private gates implemented; loaded publication, publisher fault, noexec and opt-out gates pass; server startup disablement/catch-up gates pass; nine profiling rounds include CPU/storage/scaling evidence, with software limits remaining; full scale/remote per-export policy/platform acceptance remains open | [latest profiling](efs-command-performance-20261008.md) · [policy](efs-command-policy-20261008.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](../backlog/work-items.md#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](../backlog/work-items.md#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](../backlog/work-items.md#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |

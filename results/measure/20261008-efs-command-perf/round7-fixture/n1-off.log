@@ -1,0 +1,26 @@
+2026-10-08T18:14:56.997Z Loaded 4 persisted cluster node(s) from /data1/efs/command-perf-fixture-r7-20261008/n1/meta/cluster_nodes.bin
+2026-10-08T18:14:56.997Z   persisted node 1: 127.0.0.1:24800
+2026-10-08T18:14:56.997Z   persisted node 2: 127.0.0.1:24801
+2026-10-08T18:14:56.997Z   persisted node 3: 127.0.0.1:24802
+2026-10-08T18:14:56.997Z   persisted node 4: 127.0.0.1:24803
+2026-10-08T18:14:57.111Z Trying to rejoin via persisted peer 127.0.0.1:24801 (node 2)...
+2026-10-08T18:14:57.111Z Cannot connect to peer 127.0.0.1:24801
+2026-10-08T18:14:57.111Z Failed to rejoin via 127.0.0.1:24801
+2026-10-08T18:14:57.111Z Trying to rejoin via persisted peer 127.0.0.1:24802 (node 3)...
+2026-10-08T18:14:57.111Z Cannot connect to peer 127.0.0.1:24802
+2026-10-08T18:14:57.111Z Failed to rejoin via 127.0.0.1:24802
+2026-10-08T18:14:57.111Z Trying to rejoin via persisted peer 127.0.0.1:24803 (node 4)...
+2026-10-08T18:14:57.111Z Cannot connect to peer 127.0.0.1:24803
+2026-10-08T18:14:57.111Z Failed to rejoin via 127.0.0.1:24803
+2026-10-08T18:14:57.111Z Could not rejoin any of the 3 persisted peer(s)
+2026-10-08T18:14:57.111Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-08T18:14:57.111Z heartbeat: enabled (2000 ms interval)
+2026-10-08T18:14:57.154Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-08T18:14:57.154Z raft-host: up raft_id=0 n=4 boot=11932358860993700 salt=4681746886183255406 g0=hosted g2=off
+2026-10-08T18:14:57.154Z efsd fcdda898-perf-r7 (branch devel-find-stats, built 2026-10-08T18:13:44Z on nuc), build=fcdda898-perf-r7: node 1 listening on 127.0.0.1:24800, storage=/data1/efs/command-perf-fixture-r7-20261008/n1 (1 paths, stripe=none), used=496566272, quota=1073741824, direct_io=off, writers=0 shared
+2026-10-08T18:14:57.154Z kv-obs: mt_bytes=274325 l0_bytes=802 l0=3 l1=37
+2026-10-08T18:14:58.166Z raft-host: gc-pass ms=7 orphan=7 reap=0 frag=0 spread=0 recover=0 fscans=1 fsegs=1 fkeys=37 femit=0 ftomb=37 scans=4 segs=42 keys=4340 emit=4097 tomb=243 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-08T18:14:58.938Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=1950 p50_us=1950 max_us=1950 wdisk ops=1 bytes=65536 errors=0 avg_us=1696 p50_us=1696 max_us=1696
+2026-10-08T18:14:59.111Z gc-health: stage=0 group=0 elapsed_ms=0 last_pass_age_ms=945 passes=2 sampled=1 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-08T18:15:02.154Z kv-obs: mt_bytes=275346 l0_bytes=802 l0=3 l1=37
+2026-10-08T18:15:02.251Z raft-host: gc-pass ms=68 orphan=0 reap=0 frag=0 spread=0 recover=67 fscans=0 fsegs=0 fkeys=0 femit=0 ftomb=0 scans=195 segs=57 keys=2392 emit=2272 tomb=120 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0

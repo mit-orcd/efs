@@ -1,0 +1,122 @@
+[
+  {
+    "command": "stats",
+    "seconds": 0.4899858389981091,
+    "rc": 0,
+    "bytes": 675,
+    "entries": 0,
+    "stderr": "snapshot 17444155377256341:28, source age 1.494s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "stats",
+    "seconds": 0.5215202030085493,
+    "rc": 0,
+    "bytes": 675,
+    "entries": 0,
+    "stderr": "snapshot 17444155377256341:28, source age 2.016s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "stats",
+    "seconds": 0.5118657120037824,
+    "rc": 0,
+    "bytes": 675,
+    "entries": 0,
+    "stderr": "snapshot 17444155377256341:29, source age 1.498s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "ls",
+    "seconds": 0.5468203669879586,
+    "rc": 0,
+    "bytes": 55921,
+    "entries": 666,
+    "stderr": "snapshot 17444155377256341:30, source age 0.925s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "ls",
+    "seconds": 0.5659177280031145,
+    "rc": 0,
+    "bytes": 55923,
+    "entries": 666,
+    "stderr": "snapshot 17444155377256341:30, source age 1.490s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "ls",
+    "seconds": 0.6660677960026078,
+    "rc": 0,
+    "bytes": 55923,
+    "entries": 666,
+    "stderr": "snapshot 17444155377256341:31, source age 1.181s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "exact",
+    "seconds": 0.5245100159954745,
+    "rc": 0,
+    "bytes": 7477,
+    "entries": 57,
+    "stderr": "snapshot 17444155377256341:31, source age 1.706s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "exact",
+    "seconds": 0.5475644159887452,
+    "rc": 0,
+    "bytes": 7475,
+    "entries": 57,
+    "stderr": "snapshot 17444155377256341:32, source age 1.119s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "exact",
+    "seconds": 0.5627857419895008,
+    "rc": 0,
+    "bytes": 7477,
+    "entries": 57,
+    "stderr": "snapshot 17444155377256341:32, source age 1.683s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "prefix",
+    "seconds": 0.952680997987045,
+    "rc": 0,
+    "bytes": 3188262,
+    "entries": 25725,
+    "stderr": "snapshot 17444155377256341:33, source age 1.508s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "prefix",
+    "seconds": 1.1295688079844695,
+    "rc": 0,
+    "bytes": 3188262,
+    "entries": 25725,
+    "stderr": "snapshot 17444155377256341:34, source age 1.635s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "prefix",
+    "seconds": 0.9981829450116493,
+    "rc": 0,
+    "bytes": 3188262,
+    "entries": 25725,
+    "stderr": "snapshot 17444155377256341:35, source age 1.429s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "contains",
+    "seconds": 1.1586528809857555,
+    "rc": 0,
+    "bytes": 3188262,
+    "entries": 25725,
+    "stderr": "snapshot 17444155377256341:36, source age 1.577s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "contains",
+    "seconds": 1.0841028380091302,
+    "rc": 0,
+    "bytes": 3188262,
+    "entries": 25725,
+    "stderr": "snapshot 17444155377256341:37, source age 1.701s, complete; refresh_error=0; expiry unavailable\n"
+  },
+  {
+    "command": "contains",
+    "seconds": 1.0038921329833101,
+    "rc": 0,
+    "bytes": 3188262,
+    "entries": 25725,
+    "stderr": "snapshot 17444155377256341:38, source age 1.526s, complete; refresh_error=0; expiry unavailable\n"
+  }
+]

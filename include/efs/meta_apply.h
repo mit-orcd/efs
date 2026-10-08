@@ -467,6 +467,14 @@ int efs_meta_apply_lookup(struct efs_kv *kv, efs_ino_t parent, const char *name,
 int efs_meta_apply_lookup_tx(struct efs_kv *kv, efs_ino_t parent,
                              const char *name, efs_txn_coord_fn coord,
                              void *ctx, struct efs_meta_dentry *out);
+/* Batched handler lookup with an already transaction-aware parent row. The
+ * caller MUST recheck generation, layout and layout_epoch before delivering
+ * the batch, refusing it if any changed. Dentry reads still resolve committed
+ * intents and respect split tombstones. Not a cross-request row cache. */
+int efs_meta_apply_lookup_row_tx(struct efs_kv *kv,
+                                 const struct efs_meta_row *parent_row,
+                                 const char *name, efs_txn_coord_fn coord,
+                                 void *ctx, struct efs_meta_dentry *out);
 /* LOOKUP + inode fetch. Dentry miss = NOT_FOUND; inode miss = I9 (IO). */
 int efs_meta_apply_resolve(struct efs_kv *kv, efs_ino_t parent, const char *name,
                            struct efs_meta_dentry *dent, struct efs_meta_row *row);

@@ -91,6 +91,12 @@ int efs_name_index_build(struct efs_kv_lsm_snapshot *source, uint32_t shard,
         rc=efs_kv_lsm_snapshot_scan(source,prefix,3,NULL,0,append_entry,index);
     }
     if (rc!=EFS_OK) { efs_name_index_free(index);return rc; }
+    /* Published indexes are immutable: release geometric growth slack before
+     * retention. On shrink failure retain the original, honestly accounted cap. */
+    if (index->count && index->count<index->capacity) {
+        struct efs_name_entry *tight=realloc(index->entries,(size_t)index->count*sizeof(*tight));
+        if (tight) { index->entries=tight;index->capacity=index->count; }
+    }
     if (index->count>1)
         qsort(index->entries,index->count,sizeof(*index->entries),entry_compare);
     *out=index;

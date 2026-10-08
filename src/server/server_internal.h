@@ -344,14 +344,16 @@ int server_raft_host_active(void);
 struct efs_server_query_view {
     struct efs_query_catalog *catalog;
     uint64_t boot_id,source_ns,built_ns,generation,applied[2],terms[2],pin_ms,build_ms;
+    uint64_t pending_changes,pending_since_ms,lag_sample_ms,lag_sample_ns;
 };
+uint32_t server_raft_host_query_features(void);
 int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
                                  void *ctx,uint16_t *primary_id);
 
 /* Leader + ReadIndex + applied KV. No s->lock. Inactive before mkfs
  * and these are never called. NOT_PRIMARY fills primary_id = raft leader
  * node id. */
-int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req, void **reply, uint32_t *len);
+int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req, const struct efs_query_filters *filters, void **reply, uint32_t *len);
 void server_raft_host_query_reply_free(void *reply);
 void server_raft_host_getattr(efs_ino_t ino, struct efs_msg_inode_reply *out);
 void server_raft_host_hold(efs_ino_t ino, uint32_t flags, uint64_t owner,

@@ -538,11 +538,16 @@ struct efs_user_stat {
  * Credentials use the same trusted mount boundary as inode RPCs; this does
  * not introduce an authentication protocol. Unknown versions fail explicitly. */
 #define EFS_QUERY_VERSION 1
+/* W91 commands use ASCII JSON envelopes and hex-encoded relative path bytes.
+ * The native request/reply layout is unchanged; legacy v1 is internal only. */
+#define EFS_QUERY_COMMAND_VERSION 2
+#define EFS_QUERY_FILTER_VERSION 3
 #define EFS_QUERY_GROUPS 128
 #define EFS_QUERY_MAX_OUTPUT (16u << 20)
 #define EFS_QUERY_MAX_VISITS 1000000u
 #define EFS_QUERY_STATS 0
 #define EFS_QUERY_FIND 1
+#define EFS_QUERY_LS 2
 struct efs_msg_query_snapshot {
     uint32_t version,operation;
     efs_ino_t root;
@@ -550,6 +555,21 @@ struct efs_msg_query_snapshot {
     uint32_t max_output,visit_budget;
     uint32_t groups[EFS_QUERY_GROUPS];
     char term[EFS_MAX_NAME];
+};
+/* v3 extends the native v1/v2 request without changing their 808-byte ABI.
+ * Size bounds are inclusive; modification timestamps are strict ns bounds.
+ * Unset fields MUST be zero; kind: 0 any, 1 regular, 2 directory, 3 symlink. */
+#define EFS_QUERY_MIN_SIZE 1u
+#define EFS_QUERY_MAX_SIZE 2u
+#define EFS_QUERY_AFTER 4u
+#define EFS_QUERY_BEFORE 8u
+struct efs_query_filters {
+    uint32_t flags,kind;
+    uint64_t min_size,max_size,after_ns,before_ns;
+};
+struct efs_msg_query_snapshot_v3 {
+    struct efs_msg_query_snapshot base;
+    struct efs_query_filters filters;
 };
 struct efs_msg_query_snapshot_reply {
     uint32_t version;

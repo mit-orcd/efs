@@ -3496,9 +3496,45 @@ the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
-## W92 · Server-owned .find/.stats snapshots and large namespace acceptance
+## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
 Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
+Current user scope replaces synthetic `.find`/`.stats` with `.efs/find` and
+`.efs/stats`; W91 supplies Python commands and versioned query paths. Real
+legacy-named user entries are preserved. The [command implementation checkpoint](../status/efs-commands-20261008.md)
+records opt-in FUSE integration, wire v2 JSON, immediate ls, permissions, immutable
+results and private POSIX/peer/restart/resource gates. W91/W92 remain open for
+loaded/scale/fault/export-policy/NFS acceptance; W90 expiry is separate.
+
+Oct 8 follow-up: transaction-specific refresh fence, tombstone scan/deadline bounds,
+retained allocation compaction and sampled lag diagnostics implemented. Clean
+`ecabac6ff587-commands-d2573704` passes POSIX 216/0/1, peer 64/64, sustained-write
+publication/payload oracle, publisher loss/rejoin, noexec, cold opt-out and restart
+oracle. [Evidence and remaining acceptance](../status/efs-command-followups-20261008.md).
+This does not close 400 GiB, persistent remote export-policy or NFS/macOS gates.
+
+Server startup disablement now uses `EFS_COMMANDS_SERVER=0` on every daemon:
+no query worker/catalog, no dirty tracking, zero advertised query features and
+both query versions refused. Re-enable rebuilds all partitions from current
+persisted metadata, without an accumulated query-index queue. See
+[policy and catch-up gates](../status/efs-command-policy-20261008.md).
+This is distinct from future live replicated per-export policy transitions.
+
+Nine successive NUC command profiling rounds target immutable KV searches, Python
+import lookups, redundant root reads, scoped-search ancestry, compact inode lookup,
+native path validation, repeated parent reads and serialized query consumption.
+Rounds 8–9 add CPU/storage/concurrency measurements: the hardware-ceiling claim
+is not supported; bounded mount admission and repeated lookup/open snapshots
+remain software costs. Raw perf
+callgraphs, strace, timing samples and correctness evidence are retained in the
+[command performance report](../status/efs-command-performance-20261008.md).
+The measurements do not close the separate scale/platform acceptance.
+
+Oct 8 command options add long metadata display, date/size/name ordering and
+server-side type, size and modification-time predicates. [Usage and acceptance](../status/efs-command-options-20261008.md).
+Expiry coverage is explicitly limited to unavailable/refusal behavior; W90
+lifecycle implementation and gates remain open.
+
 Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
 NUC target: staged population toward 400 GiB real logical payload, with a large
 small-file namespace, two cold mounts, shard-distributed queries and measured

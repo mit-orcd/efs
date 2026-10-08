@@ -1,0 +1,1510 @@
+$ efsd --help
+efsd - Run an EFS storage node
+
+Usage:
+  efsd --node-id ID --addr ADDRESS --port PORT --storage PATH [options]
+
+Options:
+  --node-id ID          Node identifier
+  --addr ADDRESS        Listen address
+  --port PORT           Listen port
+  --storage PATH        Storage roots; repeat or separate with commas
+  --quota SIZE          Storage quota; accepts K, M, G and T suffixes
+  --direct-io           Use O_DIRECT for fragment I/O
+  --no-direct-io        Use buffered fragment I/O (default)
+  --writers N           Shared writer threads; 0 runs writes inline
+  --join HOST:PORT      Join an existing cluster
+  --meta-storage PATH   Raft/KV root (default: first storage root)
+  --no-persist          Disable cluster configuration persistence
+  --perf                Record a CPU profile
+  --strace              Record system calls
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1
+
+Notes:
+  Metadata root changes do not move existing mdraft data.
+  Storage roots use least-queue write placement across paths.
+
+$ efsd -h
+efsd - Run an EFS storage node
+
+Usage:
+  efsd --node-id ID --addr ADDRESS --port PORT --storage PATH [options]
+
+Options:
+  --node-id ID          Node identifier
+  --addr ADDRESS        Listen address
+  --port PORT           Listen port
+  --storage PATH        Storage roots; repeat or separate with commas
+  --quota SIZE          Storage quota; accepts K, M, G and T suffixes
+  --direct-io           Use O_DIRECT for fragment I/O
+  --no-direct-io        Use buffered fragment I/O (default)
+  --writers N           Shared writer threads; 0 runs writes inline
+  --join HOST:PORT      Join an existing cluster
+  --meta-storage PATH   Raft/KV root (default: first storage root)
+  --no-persist          Disable cluster configuration persistence
+  --perf                Record a CPU profile
+  --strace              Record system calls
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1
+
+Notes:
+  Metadata root changes do not move existing mdraft data.
+  Storage roots use least-queue write placement across paths.
+
+$ efs-fuse --help
+efs-fuse - Mount an EFS export
+
+Usage:
+  efs-fuse NODE:PORT [NODE:PORT ...] EXPORT MOUNTPOINT [options]
+
+Options:
+  -o OPTIONS            FUSE mount options
+  --perf                Record a CPU profile
+  --strace              Record system calls
+  --stop MOUNTPOINT     Drain and stop a mounted client
+  --resume MOUNTPOINT   Resume a drained client
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt
+  EFS_COMMANDS=1 efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt
+
+Notes:
+  One node address is enough; the client discovers the other nodes.
+  EFS_COMMANDS=1 enables directory-local .efs commands on this mount.
+  Those commands require Python 3 on the machine executing them.
+  Use --stop MOUNTPOINT --force-discard only to discard pending writes.
+  Use --help-fuse for the underlying FUSE option reference.
+
+$ efs-fuse -h
+efs-fuse - Mount an EFS export
+
+Usage:
+  efs-fuse NODE:PORT [NODE:PORT ...] EXPORT MOUNTPOINT [options]
+
+Options:
+  -o OPTIONS            FUSE mount options
+  --perf                Record a CPU profile
+  --strace              Record system calls
+  --stop MOUNTPOINT     Drain and stop a mounted client
+  --resume MOUNTPOINT   Resume a drained client
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt
+  EFS_COMMANDS=1 efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt
+
+Notes:
+  One node address is enough; the client discovers the other nodes.
+  EFS_COMMANDS=1 enables directory-local .efs commands on this mount.
+  Those commands require Python 3 on the machine executing them.
+  Use --stop MOUNTPOINT --force-discard only to discard pending writes.
+  Use --help-fuse for the underlying FUSE option reference.
+
+$ efs-bench --help
+efs-bench - Measure EFS network, storage and metadata performance
+
+Usage:
+  efs-bench [NODE:PORT] MODE [options]
+
+Commands:
+  --time SEC            Network ceiling; servers ACK and discard data
+  --size SIZE           Write real protected data (K/M/G/T suffixes)
+  --store --time SEC    Timed disk writes
+  --read --time SEC     Timed disk reads
+  --meta                Metadata RPC workload
+  --bench io            Raw storage I/O (no cluster)
+  --bench io-blake3     Raw I/O with timed hashing
+  --bench blake3        CPU hashing (no storage or cluster)
+  --bench data          Local data engine (no cluster)
+  --bench meta          Local metadata engine (no cluster)
+  --bench principles    Independent EFS-shaped storage experiments
+
+Options:
+  --window N            Read window in chunks
+  --export NAME         Metadata export
+  --files N             Metadata file count
+  --dirs N              Metadata directory count
+  --workers N           Metadata workers
+  --phases CSV          Metadata phases
+  --keep                Keep metadata fixture
+  --id N                Chunk-index base for parallel writers
+  --perf                Record a CPU profile
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench 127.0.0.1:17432 --store --time 10
+  efs-bench --bench data --help
+  efs-bench --bench principles --help
+
+Notes:
+  Run efs-bench --bench MODE --help for local mode options.
+  Cluster modes discover all servers from one node address.
+
+$ efs-bench -h
+efs-bench - Measure EFS network, storage and metadata performance
+
+Usage:
+  efs-bench [NODE:PORT] MODE [options]
+
+Commands:
+  --time SEC            Network ceiling; servers ACK and discard data
+  --size SIZE           Write real protected data (K/M/G/T suffixes)
+  --store --time SEC    Timed disk writes
+  --read --time SEC     Timed disk reads
+  --meta                Metadata RPC workload
+  --bench io            Raw storage I/O (no cluster)
+  --bench io-blake3     Raw I/O with timed hashing
+  --bench blake3        CPU hashing (no storage or cluster)
+  --bench data          Local data engine (no cluster)
+  --bench meta          Local metadata engine (no cluster)
+  --bench principles    Independent EFS-shaped storage experiments
+
+Options:
+  --window N            Read window in chunks
+  --export NAME         Metadata export
+  --files N             Metadata file count
+  --dirs N              Metadata directory count
+  --workers N           Metadata workers
+  --phases CSV          Metadata phases
+  --keep                Keep metadata fixture
+  --id N                Chunk-index base for parallel writers
+  --perf                Record a CPU profile
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench 127.0.0.1:17432 --store --time 10
+  efs-bench --bench data --help
+  efs-bench --bench principles --help
+
+Notes:
+  Run efs-bench --bench MODE --help for local mode options.
+  Cluster modes discover all servers from one node address.
+
+$ efs-mgmt --help
+efs-mgmt - Inspect and manage an EFS cluster
+
+Usage:
+  efs-mgmt COMMAND [arguments]
+
+Commands:
+  status                Cluster status
+  io-stats              I/O counters
+  gc-status             Garbage-collection status
+  version               Node version
+  add-node              Add a node
+  add-storage           Add storage roots
+  shrink-quota          Reduce a node quota
+  mkfs, raft-mkfs       Format metadata
+  raft-status           Raft group status
+  raft-change           Change group voters
+  raft-dir              Directory layout migration
+  raft-session          Session lifecycle
+  raft-getattr          Read inode attributes
+  raft-lookup           Look up a name
+  raft-lookup-path      Resolve a path
+  raft-create           Create a file
+  raft-unlink           Remove a file name
+  raft-rmdir            Remove an empty directory
+  raft-link             Create a hard link
+  raft-setattr          Change attributes
+  raft-rename           Rename a name
+  raft-readdir          List directory entries
+  raft-publish          Publish a chunk
+  raft-getchunks        Read chunk mappings
+  raft-append           Allocate an append range
+  raft-hold             Open/close a lease
+  raft-flock            Whole-file locking
+  raft-fcntl            Byte-range locking
+
+Options:
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-mgmt status 127.0.0.1:17432
+  efs-mgmt gc-status 127.0.0.1:17432
+
+Notes:
+  Run efs-mgmt COMMAND --help for its argument syntax.
+
+$ efs-mgmt -h
+efs-mgmt - Inspect and manage an EFS cluster
+
+Usage:
+  efs-mgmt COMMAND [arguments]
+
+Commands:
+  status                Cluster status
+  io-stats              I/O counters
+  gc-status             Garbage-collection status
+  version               Node version
+  add-node              Add a node
+  add-storage           Add storage roots
+  shrink-quota          Reduce a node quota
+  mkfs, raft-mkfs       Format metadata
+  raft-status           Raft group status
+  raft-change           Change group voters
+  raft-dir              Directory layout migration
+  raft-session          Session lifecycle
+  raft-getattr          Read inode attributes
+  raft-lookup           Look up a name
+  raft-lookup-path      Resolve a path
+  raft-create           Create a file
+  raft-unlink           Remove a file name
+  raft-rmdir            Remove an empty directory
+  raft-link             Create a hard link
+  raft-setattr          Change attributes
+  raft-rename           Rename a name
+  raft-readdir          List directory entries
+  raft-publish          Publish a chunk
+  raft-getchunks        Read chunk mappings
+  raft-append           Allocate an append range
+  raft-hold             Open/close a lease
+  raft-flock            Whole-file locking
+  raft-fcntl            Byte-range locking
+
+Options:
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-mgmt status 127.0.0.1:17432
+  efs-mgmt gc-status 127.0.0.1:17432
+
+Notes:
+  Run efs-mgmt COMMAND --help for its argument syntax.
+
+$ efs-query --help
+efs-query - Query the legacy server statistics endpoint
+
+Usage:
+  efs-query [--raw] NODE:PORT
+
+Options:
+  --raw                 Legacy compatibility flag
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-query 127.0.0.1:17432
+
+Notes:
+  The legacy QUERY_STATS endpoint is retired on current servers.
+  Use a mounted directory's .efs/stats command for server-owned snapshots.
+
+$ efs-query -h
+efs-query - Query the legacy server statistics endpoint
+
+Usage:
+  efs-query [--raw] NODE:PORT
+
+Options:
+  --raw                 Legacy compatibility flag
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-query 127.0.0.1:17432
+
+Notes:
+  The legacy QUERY_STATS endpoint is retired on current servers.
+  Use a mounted directory's .efs/stats command for server-owned snapshots.
+
+$ blake3-bench --help
+blake3-bench - Measure BLAKE3 hashing throughput
+
+Usage:
+  blake3-bench [options]
+
+Options:
+  --time SEC            Sample duration (default: 3)
+  --threads N           Workers (default: CPUs in affinity mask)
+  --size BYTES          Bytes per update (default: 65536)
+  --stream              Repeated updates to one hasher (default)
+  --oneshot             Initialize/finalize for each buffer
+  -h, --help            Show this help
+
+Examples:
+  efs-bench --bench blake3 --size 64K --threads 4 --time 3
+
+Notes:
+  No storage or cluster is used. Match workers to the CPU allocation.
+
+$ blake3-bench -h
+blake3-bench - Measure BLAKE3 hashing throughput
+
+Usage:
+  blake3-bench [options]
+
+Options:
+  --time SEC            Sample duration (default: 3)
+  --threads N           Workers (default: CPUs in affinity mask)
+  --size BYTES          Bytes per update (default: 65536)
+  --stream              Repeated updates to one hasher (default)
+  --oneshot             Initialize/finalize for each buffer
+  -h, --help            Show this help
+
+Examples:
+  efs-bench --bench blake3 --size 64K --threads 4 --time 3
+
+Notes:
+  No storage or cluster is used. Match workers to the CPU allocation.
+
+$ efs-bench --bench data --help
+efs-bench - Measure local EFS storage engines
+
+Usage:
+  efs-bench --bench data|meta --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Data scratch roots; repeat or comma-separate
+  --meta-storage PATH   Metadata scratch root
+  --time SEC            Duration (default: 10)
+  --writers N           Writer threads
+  --qd N                Queue depth
+  --window N            Bounded fragments per slot
+  --rw TYPE             read, write or both
+  --write-mode TYPE     create or overwrite
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  --sync                Use O_SYNC for engine writes
+  --full-paths          Skip the path-prefix ladder
+  --writer-stats        Measure writer waits
+  --skip-ceiling        Skip the separate raw/fio ceiling probe
+  --perf                Record a CPU profile
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench data --storage /data1/bench --time 10
+  efs-bench --bench meta --meta-storage /data1/meta-bench --time 10
+
+Notes:
+  Local engines: no cluster or sockets. Scratch roots must be empty.
+  Read/overwrite requires --window; create requires no window.
+  Bounded windows are populated before timing.
+  Percentile buckets have less than 0.782% width; maximum is exact.
+
+$ efs-bench --bench data -h
+efs-bench - Measure local EFS storage engines
+
+Usage:
+  efs-bench --bench data|meta --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Data scratch roots; repeat or comma-separate
+  --meta-storage PATH   Metadata scratch root
+  --time SEC            Duration (default: 10)
+  --writers N           Writer threads
+  --qd N                Queue depth
+  --window N            Bounded fragments per slot
+  --rw TYPE             read, write or both
+  --write-mode TYPE     create or overwrite
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  --sync                Use O_SYNC for engine writes
+  --full-paths          Skip the path-prefix ladder
+  --writer-stats        Measure writer waits
+  --skip-ceiling        Skip the separate raw/fio ceiling probe
+  --perf                Record a CPU profile
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench data --storage /data1/bench --time 10
+  efs-bench --bench meta --meta-storage /data1/meta-bench --time 10
+
+Notes:
+  Local engines: no cluster or sockets. Scratch roots must be empty.
+  Read/overwrite requires --window; create requires no window.
+  Bounded windows are populated before timing.
+  Percentile buckets have less than 0.782% width; maximum is exact.
+
+$ efs-bench --bench meta --help
+efs-bench - Measure local EFS storage engines
+
+Usage:
+  efs-bench --bench data|meta --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Data scratch roots; repeat or comma-separate
+  --meta-storage PATH   Metadata scratch root
+  --time SEC            Duration (default: 10)
+  --writers N           Writer threads
+  --qd N                Queue depth
+  --window N            Bounded fragments per slot
+  --rw TYPE             read, write or both
+  --write-mode TYPE     create or overwrite
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  --sync                Use O_SYNC for engine writes
+  --full-paths          Skip the path-prefix ladder
+  --writer-stats        Measure writer waits
+  --skip-ceiling        Skip the separate raw/fio ceiling probe
+  --perf                Record a CPU profile
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench data --storage /data1/bench --time 10
+  efs-bench --bench meta --meta-storage /data1/meta-bench --time 10
+
+Notes:
+  Local engines: no cluster or sockets. Scratch roots must be empty.
+  Read/overwrite requires --window; create requires no window.
+  Bounded windows are populated before timing.
+  Percentile buckets have less than 0.782% width; maximum is exact.
+
+$ efs-bench --bench meta -h
+efs-bench - Measure local EFS storage engines
+
+Usage:
+  efs-bench --bench data|meta --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Data scratch roots; repeat or comma-separate
+  --meta-storage PATH   Metadata scratch root
+  --time SEC            Duration (default: 10)
+  --writers N           Writer threads
+  --qd N                Queue depth
+  --window N            Bounded fragments per slot
+  --rw TYPE             read, write or both
+  --write-mode TYPE     create or overwrite
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  --sync                Use O_SYNC for engine writes
+  --full-paths          Skip the path-prefix ladder
+  --writer-stats        Measure writer waits
+  --skip-ceiling        Skip the separate raw/fio ceiling probe
+  --perf                Record a CPU profile
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench data --storage /data1/bench --time 10
+  efs-bench --bench meta --meta-storage /data1/meta-bench --time 10
+
+Notes:
+  Local engines: no cluster or sockets. Scratch roots must be empty.
+  Read/overwrite requires --window; create requires no window.
+  Bounded windows are populated before timing.
+  Percentile buckets have less than 0.782% width; maximum is exact.
+
+$ efs-bench --bench io --help
+efs-bench - Measure raw storage I/O
+
+Usage:
+  efs-bench --bench io|io-blake3 --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Scratch root; may repeat
+  --rw read|write       I/O direction
+  --io-size SIZE        I/O size (default: 64K)
+  --qd N                Parallel workers (default: 16)
+  --window N            Blocks per worker (default: 64)
+  --time SEC            Duration (default: 3)
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  --sync                Include fdatasync after each write
+  --preallocate         Allocate and populate the window before timing
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench io --storage /data1/bench --rw write --direct-io
+
+Notes:
+  No EFS store or network is used. Scratch roots must be empty.
+  io-blake3 hashes writes and verifies reads inside the timed loop.
+  Read files are populated first; written blocks are checked afterward.
+  Buffered writes without --sync measure page-cache acceptance.
+  Direct I/O sizes must be aligned to 4 KiB.
+
+$ efs-bench --bench io -h
+efs-bench - Measure raw storage I/O
+
+Usage:
+  efs-bench --bench io|io-blake3 --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Scratch root; may repeat
+  --rw read|write       I/O direction
+  --io-size SIZE        I/O size (default: 64K)
+  --qd N                Parallel workers (default: 16)
+  --window N            Blocks per worker (default: 64)
+  --time SEC            Duration (default: 3)
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  --sync                Include fdatasync after each write
+  --preallocate         Allocate and populate the window before timing
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench io --storage /data1/bench --rw write --direct-io
+
+Notes:
+  No EFS store or network is used. Scratch roots must be empty.
+  io-blake3 hashes writes and verifies reads inside the timed loop.
+  Read files are populated first; written blocks are checked afterward.
+  Buffered writes without --sync measure page-cache acceptance.
+  Direct I/O sizes must be aligned to 4 KiB.
+
+$ efs-bench --bench io-blake3 --help
+efs-bench - Measure raw storage I/O
+
+Usage:
+  efs-bench --bench io|io-blake3 --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Scratch root; may repeat
+  --rw read|write       I/O direction
+  --io-size SIZE        I/O size (default: 64K)
+  --qd N                Parallel workers (default: 16)
+  --window N            Blocks per worker (default: 64)
+  --time SEC            Duration (default: 3)
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  --sync                Include fdatasync after each write
+  --preallocate         Allocate and populate the window before timing
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench io --storage /data1/bench --rw write --direct-io
+
+Notes:
+  No EFS store or network is used. Scratch roots must be empty.
+  io-blake3 hashes writes and verifies reads inside the timed loop.
+  Read files are populated first; written blocks are checked afterward.
+  Buffered writes without --sync measure page-cache acceptance.
+  Direct I/O sizes must be aligned to 4 KiB.
+
+$ efs-bench --bench io-blake3 -h
+efs-bench - Measure raw storage I/O
+
+Usage:
+  efs-bench --bench io|io-blake3 --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Scratch root; may repeat
+  --rw read|write       I/O direction
+  --io-size SIZE        I/O size (default: 64K)
+  --qd N                Parallel workers (default: 16)
+  --window N            Blocks per worker (default: 64)
+  --time SEC            Duration (default: 3)
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  --sync                Include fdatasync after each write
+  --preallocate         Allocate and populate the window before timing
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench io --storage /data1/bench --rw write --direct-io
+
+Notes:
+  No EFS store or network is used. Scratch roots must be empty.
+  io-blake3 hashes writes and verifies reads inside the timed loop.
+  Read files are populated first; written blocks are checked afterward.
+  Buffered writes without --sync measure page-cache acceptance.
+  Direct I/O sizes must be aligned to 4 KiB.
+
+$ efs-bench --bench blake3 --help
+efs-bench - Measure BLAKE3 hashing throughput
+
+Usage:
+  efs-bench --bench blake3 [options]
+
+Options:
+  --time SEC            Sample duration (default: 3)
+  --threads N           Workers (default: CPUs in affinity mask)
+  --size BYTES          Bytes per update (default: 65536)
+  --stream              Repeated updates to one hasher (default)
+  --oneshot             Initialize/finalize for each buffer
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench blake3 --size 64K --threads 4 --time 3
+
+Notes:
+  No storage or cluster is used. Match workers to the CPU allocation.
+
+$ efs-bench --bench blake3 -h
+efs-bench - Measure BLAKE3 hashing throughput
+
+Usage:
+  efs-bench --bench blake3 [options]
+
+Options:
+  --time SEC            Sample duration (default: 3)
+  --threads N           Workers (default: CPUs in affinity mask)
+  --size BYTES          Bytes per update (default: 65536)
+  --stream              Repeated updates to one hasher (default)
+  --oneshot             Initialize/finalize for each buffer
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench blake3 --size 64K --threads 4 --time 3
+
+Notes:
+  No storage or cluster is used. Match workers to the CPU allocation.
+
+$ efs-bench --bench principles --help
+efs-bench - Test EFS-shaped storage principles
+
+Usage:
+  efs-bench --bench principles --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Empty scratch root; may repeat
+  --layout TYPE         files or container
+  --rw TYPE             read, write or delete
+  --policy TYPE         populated, allocating, overwrite, unlink, punch or release
+  --persist TYPE        none, each or batch
+  --objects N           Object count
+  --payload-size SIZE   Payload bytes
+  --qd N                Parallel workers
+  --batch-size N        Objects per durability batch
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench principles --storage /data1/bench --layout files
+
+Notes:
+  Independent principle driver; no production engine or cluster.
+  Fixtures make one finite pass, rather than --time loops.
+  Payloads have a 32-byte checksum tail; direct records use a 4 KiB tail.
+  each/batch includes required file and directory fsync in wall time.
+
+$ efs-bench --bench principles -h
+efs-bench - Test EFS-shaped storage principles
+
+Usage:
+  efs-bench --bench principles --storage EMPTY_ROOT [options]
+
+Options:
+  --storage PATH        Empty scratch root; may repeat
+  --layout TYPE         files or container
+  --rw TYPE             read, write or delete
+  --policy TYPE         populated, allocating, overwrite, unlink, punch or release
+  --persist TYPE        none, each or batch
+  --objects N           Object count
+  --payload-size SIZE   Payload bytes
+  --qd N                Parallel workers
+  --batch-size N        Objects per durability batch
+  --direct-io           Use O_DIRECT
+  --no-direct-io        Use buffered I/O
+  -h, --help            Show this help
+  --version             Show the program version
+
+Examples:
+  efs-bench --bench principles --storage /data1/bench --layout files
+
+Notes:
+  Independent principle driver; no production engine or cluster.
+  Fixtures make one finite pass, rather than --time loops.
+  Payloads have a 32-byte checksum tail; direct records use a 4 KiB tail.
+  each/batch includes required file and directory fsync in wall time.
+
+$ efs-mgmt status --help
+efs-mgmt status - Administrative command
+
+Usage:
+  efs-mgmt status NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt status -h
+efs-mgmt status - Administrative command
+
+Usage:
+  efs-mgmt status NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt io-stats --help
+efs-mgmt io-stats - Administrative command
+
+Usage:
+  efs-mgmt io-stats NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt io-stats -h
+efs-mgmt io-stats - Administrative command
+
+Usage:
+  efs-mgmt io-stats NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt gc-status --help
+efs-mgmt gc-status - Administrative command
+
+Usage:
+  efs-mgmt gc-status NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt gc-status -h
+efs-mgmt gc-status - Administrative command
+
+Usage:
+  efs-mgmt gc-status NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt version --help
+efs-mgmt version - Administrative command
+
+Usage:
+  efs-mgmt version NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt version -h
+efs-mgmt version - Administrative command
+
+Usage:
+  efs-mgmt version NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt add-node --help
+efs-mgmt add-node - Administrative command
+
+Usage:
+  efs-mgmt add-node NEW_NODE:PORT EXISTING_NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt add-node -h
+efs-mgmt add-node - Administrative command
+
+Usage:
+  efs-mgmt add-node NEW_NODE:PORT EXISTING_NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt shrink-quota --help
+efs-mgmt shrink-quota - Administrative command
+
+Usage:
+  efs-mgmt shrink-quota NODE:PORT AMOUNT[K|M|G|T]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt shrink-quota -h
+efs-mgmt shrink-quota - Administrative command
+
+Usage:
+  efs-mgmt shrink-quota NODE:PORT AMOUNT[K|M|G|T]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt add-storage --help
+efs-mgmt add-storage - Administrative command
+
+Usage:
+  efs-mgmt add-storage NODE:PORT PATH[,PATH...]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt add-storage -h
+efs-mgmt add-storage - Administrative command
+
+Usage:
+  efs-mgmt add-storage NODE:PORT PATH[,PATH...]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt mkfs --help
+efs-mgmt mkfs - Administrative command
+
+Usage:
+  efs-mgmt mkfs NODE:PORT [legacy-label]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Single export; the legacy label is accepted and ignored.
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt mkfs -h
+efs-mgmt mkfs - Administrative command
+
+Usage:
+  efs-mgmt mkfs NODE:PORT [legacy-label]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Single export; the legacy label is accepted and ignored.
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-mkfs --help
+efs-mgmt raft-mkfs - Administrative command
+
+Usage:
+  efs-mgmt raft-mkfs NODE:PORT [legacy-label]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Single export; the legacy label is accepted and ignored.
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-mkfs -h
+efs-mgmt raft-mkfs - Administrative command
+
+Usage:
+  efs-mgmt raft-mkfs NODE:PORT [legacy-label]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Single export; the legacy label is accepted and ignored.
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-status --help
+efs-mgmt raft-status - Administrative command
+
+Usage:
+  efs-mgmt raft-status NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-status -h
+efs-mgmt raft-status - Administrative command
+
+Usage:
+  efs-mgmt raft-status NODE:PORT
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-change --help
+efs-mgmt raft-change - Administrative command
+
+Usage:
+  efs-mgmt raft-change NODE:PORT GROUP VOTERS
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-change -h
+efs-mgmt raft-change - Administrative command
+
+Usage:
+  efs-mgmt raft-change NODE:PORT GROUP VOTERS
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-dir --help
+efs-mgmt raft-dir - Administrative command
+
+Usage:
+  efs-mgmt raft-dir NODE:PORT INO begin|migrate|finish
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-dir -h
+efs-mgmt raft-dir - Administrative command
+
+Usage:
+  efs-mgmt raft-dir NODE:PORT INO begin|migrate|finish
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-session --help
+efs-mgmt raft-session - Administrative command
+
+Usage:
+  efs-mgmt raft-session NODE:PORT create|register|establish|get|fence UUID_HEX [epoch|shard] [shard]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-session -h
+efs-mgmt raft-session - Administrative command
+
+Usage:
+  efs-mgmt raft-session NODE:PORT create|register|establish|get|fence UUID_HEX [epoch|shard] [shard]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-getattr --help
+efs-mgmt raft-getattr - Administrative command
+
+Usage:
+  efs-mgmt raft-getattr NODE:PORT [ino]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-getattr -h
+efs-mgmt raft-getattr - Administrative command
+
+Usage:
+  efs-mgmt raft-getattr NODE:PORT [ino]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-lookup --help
+efs-mgmt raft-lookup - Administrative command
+
+Usage:
+  efs-mgmt raft-lookup NODE:PORT PARENT NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-lookup -h
+efs-mgmt raft-lookup - Administrative command
+
+Usage:
+  efs-mgmt raft-lookup NODE:PORT PARENT NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-create --help
+efs-mgmt raft-create - Administrative command
+
+Usage:
+  efs-mgmt raft-create NODE:PORT PARENT NAME [mode]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-create -h
+efs-mgmt raft-create - Administrative command
+
+Usage:
+  efs-mgmt raft-create NODE:PORT PARENT NAME [mode]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-unlink --help
+efs-mgmt raft-unlink - Administrative command
+
+Usage:
+  efs-mgmt raft-unlink NODE:PORT PARENT NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-unlink -h
+efs-mgmt raft-unlink - Administrative command
+
+Usage:
+  efs-mgmt raft-unlink NODE:PORT PARENT NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-rmdir --help
+efs-mgmt raft-rmdir - Administrative command
+
+Usage:
+  efs-mgmt raft-rmdir NODE:PORT PARENT NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-rmdir -h
+efs-mgmt raft-rmdir - Administrative command
+
+Usage:
+  efs-mgmt raft-rmdir NODE:PORT PARENT NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-link --help
+efs-mgmt raft-link - Administrative command
+
+Usage:
+  efs-mgmt raft-link NODE:PORT SRC_INO PARENT NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-link -h
+efs-mgmt raft-link - Administrative command
+
+Usage:
+  efs-mgmt raft-link NODE:PORT SRC_INO PARENT NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-setattr --help
+efs-mgmt raft-setattr - Administrative command
+
+Usage:
+  efs-mgmt raft-setattr NODE:PORT INO MASK [mode|mtime|size] [uid|atime] [gid]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-setattr -h
+efs-mgmt raft-setattr - Administrative command
+
+Usage:
+  efs-mgmt raft-setattr NODE:PORT INO MASK [mode|mtime|size] [uid|atime] [gid]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-rename --help
+efs-mgmt raft-rename - Administrative command
+
+Usage:
+  efs-mgmt raft-rename NODE:PORT OLD_PARENT OLD_NAME NEW_PARENT NEW_NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-rename -h
+efs-mgmt raft-rename - Administrative command
+
+Usage:
+  efs-mgmt raft-rename NODE:PORT OLD_PARENT OLD_NAME NEW_PARENT NEW_NAME
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-readdir --help
+efs-mgmt raft-readdir - Administrative command
+
+Usage:
+  efs-mgmt raft-readdir NODE:PORT PARENT [after_ino]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-readdir -h
+efs-mgmt raft-readdir - Administrative command
+
+Usage:
+  efs-mgmt raft-readdir NODE:PORT PARENT [after_ino]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-lookup-path --help
+efs-mgmt raft-lookup-path - Administrative command
+
+Usage:
+  efs-mgmt raft-lookup-path NODE:PORT PATH [start]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-lookup-path -h
+efs-mgmt raft-lookup-path - Administrative command
+
+Usage:
+  efs-mgmt raft-lookup-path NODE:PORT PATH [start]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-publish --help
+efs-mgmt raft-publish - Administrative command
+
+Usage:
+  efs-mgmt raft-publish NODE:PORT INO [chunk] [size]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-publish -h
+efs-mgmt raft-publish - Administrative command
+
+Usage:
+  efs-mgmt raft-publish NODE:PORT INO [chunk] [size]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-getchunks --help
+efs-mgmt raft-getchunks - Administrative command
+
+Usage:
+  efs-mgmt raft-getchunks NODE:PORT INO [start]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-getchunks -h
+efs-mgmt raft-getchunks - Administrative command
+
+Usage:
+  efs-mgmt raft-getchunks NODE:PORT INO [start]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-append --help
+efs-mgmt raft-append - Administrative command
+
+Usage:
+  efs-mgmt raft-append NODE:PORT INO LENGTH [uuid-hex epoch]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-append -h
+efs-mgmt raft-append - Administrative command
+
+Usage:
+  efs-mgmt raft-append NODE:PORT INO LENGTH [uuid-hex epoch]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-hold --help
+efs-mgmt raft-hold - Administrative command
+
+Usage:
+  efs-mgmt raft-hold NODE:PORT INO open|close [owner] [uuid-hex epoch]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-hold -h
+efs-mgmt raft-hold - Administrative command
+
+Usage:
+  efs-mgmt raft-hold NODE:PORT INO open|close [owner] [uuid-hex epoch]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-flock --help
+efs-mgmt raft-flock - Administrative command
+
+Usage:
+  efs-mgmt raft-flock NODE:PORT INO ex|sh|un|gex|gsh|wex|wsh [owner] [uuid-hex epoch]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-flock -h
+efs-mgmt raft-flock - Administrative command
+
+Usage:
+  efs-mgmt raft-flock NODE:PORT INO ex|sh|un|gex|gsh|wex|wsh [owner] [uuid-hex epoch]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-fcntl --help
+efs-mgmt raft-fcntl - Administrative command
+
+Usage:
+  efs-mgmt raft-fcntl NODE:PORT INO ex|sh|un|gex|gsh|wex|wsh [owner] [start end] [uuid-hex epoch]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ efs-mgmt raft-fcntl -h
+efs-mgmt raft-fcntl - Administrative command
+
+Usage:
+  efs-mgmt raft-fcntl NODE:PORT INO ex|sh|un|gex|gsh|wex|wsh [owner] [start end] [uuid-hex epoch]
+
+Options:
+  -h, --help            Show this help
+
+Notes:
+  Node addresses use HOST:PORT.
+
+$ .efs/help 
+EFS commands for this directory
+
+Usage:
+  .efs/COMMAND [options]
+
+Commands:
+  ls                    List immediate children
+  find PATTERN          Search names recursively
+  stats                 Show directory and subtree totals
+  help                  Show this help
+
+Options:
+  --json                Structured results and snapshot details
+  -0                    NUL-separated paths (ls and find)
+  --extended            Show limits and requirements (help)
+  -h, --help            Show command-specific help
+
+Examples:
+  .efs/find report
+  .efs/find .txt --match suffix
+  .efs/stats --json
+
+Notes:
+  Run any command with --help for its options.
+  Use .efs/help --extended for limits and requirements.
+
+$ .efs/ls --help
+.efs/ls - List immediate children
+
+Usage:
+  .efs/ls [-h] [--json] [-0]
+
+Options:
+  -h, --help            Show this help
+  --json                Structured results and snapshot details
+  -0, --print0          NUL-separated paths
+
+Examples:
+  .efs/ls --json
+  .efs/ls -0
+
+Notes:
+  Use .efs/help --extended for limits and requirements.
+
+$ .efs/find --help
+.efs/find - Search names recursively
+
+Usage:
+  .efs/find [-h] [--json] [-0] [--match {exact,prefix,suffix,contains}] pattern
+
+Arguments:
+  pattern               Name pattern; matched literally
+
+Options:
+  -h, --help            Show this help
+  --json                Structured results and snapshot details
+  -0, --print0          NUL-separated paths
+  --match {exact,prefix,suffix,contains}
+                        Match type (default: contains)
+
+Examples:
+  .efs/find report
+  .efs/find .txt --match suffix -0
+
+Notes:
+  Use .efs/help --extended for limits and requirements.
+
+$ .efs/stats --help
+.efs/stats - Show directory and subtree totals
+
+Usage:
+  .efs/stats [-h] [--json]
+
+Options:
+  -h, --help            Show this help
+  --json                Structured results and snapshot details
+
+Examples:
+  .efs/stats --json
+
+Notes:
+  Use .efs/help --extended for limits and requirements.
+

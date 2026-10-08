@@ -79,8 +79,10 @@ escape terminal control characters and preserve accurate errors. No full-tree
 atomic snapshot promise is introduced by per-open immutable result ownership.
 
 Real existing `.efs` entries take precedence and collisions are reported;
-feature enablement cannot overwrite or hide user data. Preserve `.find` and
-`.stats` compatibility initially. Exclude synthetic entries from user traversal,
+feature enablement cannot overwrite or hide user data. The Oct 8 user revision
+replaces synthetic `.find` and `.stats` with `.efs/find` and `.efs/stats`; legacy
+compatibility is not required and real legacy-named user entries remain valid.
+Exclude synthetic entries from user traversal,
 counts and expiry. Enforce caller permissions, current authorization and safe
 cache isolation throughout. Executable mode grants no additional visibility.
 `noexec` prevents direct invocation; document explicit interpreter invocation

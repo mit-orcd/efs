@@ -1467,6 +1467,12 @@ Implementation and gates remain open; no fixed directory depth or universal
 scratch TTL is selected. D28–D30 are also accepted. The zero decision count
 refers to settled registered asks, not to every remaining implementation detail.
 
+### Command options and expiry coverage
+
+[W91/W92 options and W90 test status](../status/efs-command-options-20261008.md) records
+long listings, dates, sorting and server-side predicates. Expiry remains
+unimplemented; unavailable/refusal tests are not lifecycle acceptance.
+
 ### Tiny-file performance follow-up
 
 [W93–W96: NUC profiling evidence and next experiments](../status/tiny-file-performance-plan-20261008.md)
@@ -1583,7 +1589,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | partial — durable replay, coordinated cross-group EOF/completion and bounded cleanup pass AMD direct/TCP replay, POSIX/peer, sync-write and cold-byte gates; production sessions and broader failover acceptance remain open ([ledger](../status/replay-readiness-20261008.md)) | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | closed for supported TCP: six active-fsynced-write leader stops (three direct/three buffered) recover every acknowledged file cold; RDMA deferred | [work item](#w65) |
 | posix-link | **AMD `link_of_symlink` — Python request/test mismatch** | test correctness | root cause proven on native and EFS storage: default os.link requests follow; explicit no-follow works; test correction and full reruns owed | [evidence and fix](../status/amd-link-symlink.md) |
-| virtual-io | **W92 · `.find` / `.stats` — server snapshots and safe reads** | correctness / performance / access control | in progress — immutable reads, permission/error handling and query-slot recovery repaired; server stats/index and large-tree acceptance remain open | [fix scope and acceptance](../status/virtual-find-stats.md) |
+| virtual-io | **W91/W92 · `.efs/` commands — server snapshots and safe reads** | correctness / performance / access control | in progress — opt-in command scripts, versioned JSON queries, server snapshots/index and private gates implemented; loaded publication, publisher fault, noexec and opt-out gates pass; server startup disablement/catch-up gates pass; nine profiling rounds include CPU/storage/scaling evidence, with software limits remaining; full scale/remote per-export policy/platform acceptance remains open | [latest profiling](../status/efs-command-performance-20261008.md) · [policy](../status/efs-command-policy-20261008.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
@@ -5538,9 +5544,45 @@ the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
-### W92 · Server-owned .find/.stats snapshots and large namespace acceptance
+### W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
 Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
+Current user scope replaces synthetic `.find`/`.stats` with `.efs/find` and
+`.efs/stats`; W91 supplies Python commands and versioned query paths. Real
+legacy-named user entries are preserved. The [command implementation checkpoint](../status/efs-commands-20261008.md)
+records opt-in FUSE integration, wire v2 JSON, immediate ls, permissions, immutable
+results and private POSIX/peer/restart/resource gates. W91/W92 remain open for
+loaded/scale/fault/export-policy/NFS acceptance; W90 expiry is separate.
+
+Oct 8 follow-up: transaction-specific refresh fence, tombstone scan/deadline bounds,
+retained allocation compaction and sampled lag diagnostics implemented. Clean
+`ecabac6ff587-commands-d2573704` passes POSIX 216/0/1, peer 64/64, sustained-write
+publication/payload oracle, publisher loss/rejoin, noexec, cold opt-out and restart
+oracle. [Evidence and remaining acceptance](../status/efs-command-followups-20261008.md).
+This does not close 400 GiB, persistent remote export-policy or NFS/macOS gates.
+
+Server startup disablement now uses `EFS_COMMANDS_SERVER=0` on every daemon:
+no query worker/catalog, no dirty tracking, zero advertised query features and
+both query versions refused. Re-enable rebuilds all partitions from current
+persisted metadata, without an accumulated query-index queue. See
+[policy and catch-up gates](../status/efs-command-policy-20261008.md).
+This is distinct from future live replicated per-export policy transitions.
+
+Nine successive NUC command profiling rounds target immutable KV searches, Python
+import lookups, redundant root reads, scoped-search ancestry, compact inode lookup,
+native path validation, repeated parent reads and serialized query consumption.
+Rounds 8–9 add CPU/storage/concurrency measurements: the hardware-ceiling claim
+is not supported; bounded mount admission and repeated lookup/open snapshots
+remain software costs. Raw perf
+callgraphs, strace, timing samples and correctness evidence are retained in the
+[command performance report](../status/efs-command-performance-20261008.md).
+The measurements do not close the separate scale/platform acceptance.
+
+Oct 8 command options add long metadata display, date/size/name ordering and
+server-side type, size and modification-time predicates. [Usage and acceptance](../status/efs-command-options-20261008.md).
+Expiry coverage is explicitly limited to unavailable/refusal behavior; W90
+lifecycle implementation and gates remain open.
+
 Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
 NUC target: staged population toward 400 GiB real logical payload, with a large
 small-file namespace, two cold mounts, shard-distributed queries and measured
@@ -8878,6 +8920,38 @@ implemented code or accepted behavior. Keep implementation, local checks,
 cluster gates and closure separate. Archive superseded checkpoint narratives
 intact, repair links, and retain every unresolved gate in the active queue.
 Regenerate architecture artifacts and run the documentation gate after edits.
+
+### Command-line help style
+
+All EFS executable help uses the same layout: one-line program description,
+then `Usage`, optional `Commands`/`Arguments`, `Options`, `Examples`, and `Notes`.
+Leave a blank line between sections; indent rows by two spaces and align option
+explanations in column 25 (a 22-character label field). Keep the default overview
+short. Put operation-specific syntax in subcommand/mode `--help`, and detailed
+limits/requirements in extended help or notes. Preserve important semantics,
+such as the ignored legacy mkfs label, when reorganizing wording.
+
+Native programs use `include/efs/cli_help.h`; add new program/mode content there
+rather than creating another layout. Directory-local commands use the matching
+Python formatter in `src/client/commands/command.py`; regenerate `source.h` with
+`python3 src/client/commands/embed.py` (also a Make dependency). Their source is
+self-contained because clients do not install a separate EFS command package.
+
+`-h` and `--help` print to stdout, exit zero, and perform no network, mount,
+formatting or benchmark work. Invalid invocation diagnostics go to stderr and
+exit nonzero. FUSE's upstream option reference is separate: `efs-fuse
+--help-fuse`. Administrative subcommands support `efs-mgmt COMMAND --help`;
+local benchmarks support `efs-bench --bench MODE --help`.
+
+`.efs/help` is the short directory-command overview; `.efs/help --extended`
+explains limits and prerequisites. Python is an implementation dependency of
+these scripts, not of EFS storage, the native binaries or the query protocol.
+FUSE supplies executable bytes and has no execute-with-arguments callback. The
+client OS runs a script interpreter (or could run a platform-specific native
+wrapper); that wrapper encodes arguments in a query path and formats the
+server result. Python 3 provides the selected portable argument/JSON/raw-filename
+handling implementation. The existing shebang locates it automatically for
+direct invocation.
 
 
 ## Appendix 14 — Verification — simulator & code→signal cycle

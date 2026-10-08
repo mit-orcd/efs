@@ -1,0 +1,39 @@
+diff --git a/src/client/efs_fuse.c b/src/client/efs_fuse.c
+index aff52084..0e04a48e 100644
+--- a/src/client/efs_fuse.c
++++ b/src/client/efs_fuse.c
+@@ -1019,8 +1019,8 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
+     command.root=dir_ino;
+     (void)query_path; /* Server supplies authoritative export-relative paths. */
+ 
+-    int access = virtual_access(dir_ino);
+-    if (access) return access;
++    /* The snapshot RPC checks fresh root/ancestor permissions and rechecks
++     * them before delivery; a separate root GETATTR adds no authority. */
+     const struct fuse_ctx *ctx = ll_ctx();
+     uint64_t now = stats_now_ms();
+     /* Query the published server index outside the local byte-cache lock. */
+@@ -2050,8 +2050,8 @@ static int efs_fuse_open_ino(fuse_ino_t ino, struct fuse_file_info *fi)
+         if (vq_lookup(ino, &dir_ino, term, sizeof(term)) != 0)
+             return -ENOENT;
+         if (!commands_enabled()) return -ENOENT;
+-        int access=virtual_access(dir_ino);if (access) return access;
+         if (command_script(term)) {
++            int access=virtual_access(dir_ino);if (access) return access;
+             int rc=virtual_file_open(fi,ino,efs_command_source,sizeof(efs_command_source)-1);
+             if (!rc) fuse_fi_direct_io(fi);
+             return rc;
+@@ -4881,8 +4881,11 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
+         return id ? lookup_fill(id,e,NULL) : -ENOMEM;
+     }
+     if (virt_kind(parent) == 2) {
+-        int access = virtual_access(virt_parent(parent));
+-        if (access) return access;
++        /* Query children authorize through the server snapshot RPC below.
++         * Dot-directory traversal still needs its independent access check. */
++        if (!strcmp(name,".") || !strcmp(name,"..")) {
++            int access=virtual_access(virt_parent(parent));if (access) return access;
++        }
+         fuse_ino_t q;
+         if (!feature_enabled(EFS_FEATURE_FIND))
+             return -ENOENT;
