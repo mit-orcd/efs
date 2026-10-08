@@ -1,0 +1,10 @@
+{
+  "leader_node": 1,
+  "shutdown_seconds": 0.06352068501291797,
+  "acknowledged_before_stop": 12,
+  "acknowledged_files": 13,
+  "writer_active_at_signal": true,
+  "errors": [],
+  "cold_bytes_verified": true,
+  "returncode": 0
+}

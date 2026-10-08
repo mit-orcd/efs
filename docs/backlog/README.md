@@ -15,3 +15,6 @@ active queue item; it has no priority beyond what the status index/handoff says.
   filesystem you could run (audited capability inventory).
 - [ideas.md](ideas.md) — parked ideas and landed scaling history; never
   instructions.
+- [storage-engine-v2.md](storage-engine-v2.md) — proposed independent
+  EFS-relevant I/O principle experiments, XFS optimizations, and an experimental container
+  backend; includes the Oct 7 AMD baseline and recovery/acceptance gates.

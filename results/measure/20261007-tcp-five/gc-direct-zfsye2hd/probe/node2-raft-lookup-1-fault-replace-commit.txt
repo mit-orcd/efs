@@ -1,0 +1,1 @@
+raft-lookup status=0 primary=3 parent=1 name=fault-replace-commit ino=1793 mode=040755 nlink=2

@@ -29,6 +29,7 @@ p.add_argument('--posix', action='store_true')
 p.add_argument('--integrity', action='store_true')
 p.add_argument('--namespace', action='store_true')
 p.add_argument('--namespace-boundary', action='store_true')
+p.add_argument('--namespace-boundary-fault',action='store_true',help='kill the 64-lane replacement coordinator at prepared and committed barriers')
 p.add_argument('--namespace-cycles',action='store_true',help='race opposite directory moves using captured inode parents')
 p.add_argument('--mount-label', default='default')
 p.add_argument('--workers', action='store_true')
@@ -38,6 +39,7 @@ p.add_argument('--drain-pressure',action='store_true',help='physically exhaust r
 p.add_argument('--memory-limit-bytes',type=int,help='require an inherited cgroup memory ceiling and verify no OOM events')
 p.add_argument('--publication-pressure',action='store_true',help='retain failed REPORT bodies until bounded admission refuses, then recover')
 p.add_argument('--namespace-max',action='store_true',help='exact ancestry limit, over-limit refusal and restart recovery')
+p.add_argument('--shutdown-mutations',action='store_true',help='gracefully stop a metadata leader during fsynced file creation; verify acknowledged bytes after restart')
 p.add_argument('--opid', action='store_true')
 p.add_argument('--opid-restart',action='store_true',help='restart all owned servers between lost commit reply and replay')
 p.add_argument('--ior-binary',type=Path,help='actual IOR executable for traced hard-mode cold verification')
@@ -63,6 +65,7 @@ p.add_argument('--server-binary', type=Path, help='owned experimental/fault daem
 p.add_argument('--client-binary', type=Path, help='owned test-only FUSE binary')
 p.add_argument('--worker-fault',choices=('allocation','tls','growth'))
 p.add_argument('--gc-bulk-gib',type=int,choices=range(1,11),help='large live deletion with physical and pass accounting')
+p.add_argument('--gc-reap-files',type=int,choices=(256,1024),help='measure small-file reaping and settled metadata latency')
 p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle GC, process CPU and Raft commits')
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
@@ -131,6 +134,9 @@ if a.lookup_barrier:
 if a.put_reply_fault:
     assert a.client_binary,'PUT reply fault requires explicit fault client'
 if a.opid_failover:assert a.opid and not a.opid_restart
+if a.namespace_boundary_fault:
+    assert a.namespace_boundary and a.namespace and a.server_binary
+    env['EFS_FAULT_TXN_BARRIER']=str(work/'txn-barrier')
 servers=[]
 client=None
 peer=None
@@ -494,6 +500,50 @@ try:
             path.unlink()
         (work/'memo-mutations.json').write_text(json.dumps({'files':32,'immediate_stat_checks':mutations},indent=2))
         print('immediate post-mutation lookup/stat gate PASS',flush=True)
+    if a.shutdown_mutations:
+        directory=mount/'shutdown-writes';directory.mkdir()
+        acknowledged=[];errors=[];active=threading.Event();finish=threading.Event()
+        def writer():
+            try:
+                for index in range(4096):
+                    if finish.is_set():break
+                    body=index.to_bytes(8,'little')+bytes(range(256))*128
+                    active.set()
+                    with (directory/str(index)).open('xb',buffering=0) as out:
+                        assert out.write(body)==len(body);os.fsync(out.fileno())
+                    acknowledged.append((index,hashlib.sha256(body).hexdigest()))
+            except OSError as error:errors.append(str(error))
+        thread=threading.Thread(target=writer,daemon=True);thread.start()
+        wait(lambda:len(acknowledged)>=8,'fsynced mutations before leader stop',30)
+        assert active.wait(1) and thread.is_alive()
+        leaders=[]
+        for node in range(4):
+            text=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+node}'],capture_output=True,text=True).stdout
+            if re.search(r'group 0 .*role=LEADER',text):leaders.append(node)
+        assert len(leaders)==1,leaders
+        node=leaders[0];proc=servers[node]
+        command=Path(f'/proc/{proc.pid}/cmdline').read_bytes().split(b'\0')[:-1]
+        assert thread.is_alive(),'writer finished before the shutdown signal'
+        before_stop=len(acknowledged)
+        started=time.monotonic();proc.terminate();proc.wait(timeout=10)
+        elapsed=time.monotonic()-started;assert proc.returncode==0,proc.returncode
+        finish.set();thread.join(60);assert not thread.is_alive(),'mutation worker did not finish'
+        log=open(work/f'n{node+1}.log','ab');handles.append(log)
+        servers[node]=subprocess.Popen(command,env=env,stdout=log,stderr=log)
+        def restarted():
+            if servers[node].poll() is not None:raise AssertionError('restarted leader exited')
+            try:
+                with socket.create_connection(('127.0.0.1',a.port+node),timeout=.2):return True
+            except OSError:return False
+        wait(restarted,'leader restart responds',30)
+        unmount();stop();start();mount_client()
+        for index,digest in acknowledged:
+            assert hashlib.sha256((directory/str(index)).read_bytes()).hexdigest()==digest,(node,index)
+        record={'leader_node':node+1,'shutdown_seconds':elapsed,'acknowledged_before_stop':before_stop,'acknowledged_files':len(acknowledged),'writer_active_at_signal':True,'errors':errors,'cold_bytes_verified':True,'returncode':proc.returncode}
+        (work/'shutdown-mutations.json').write_text(json.dumps(record,indent=2))
+        for path in directory.iterdir():path.unlink()
+        directory.rmdir();wait(drained,'shutdown mutation deletion drains',180)
+        print('active mutation graceful leader stop and cold acknowledged-byte recovery PASS',flush=True)
     if a.rename_cache:
         for index in range(64):
             old=mount/f'root-old-{index}';new=mount/f'root-new-{index}'
@@ -519,6 +569,32 @@ try:
         wait(drained,'bulk mixed-read deletions drained before fault fixture',600)
         budgets=re.findall(r'buf-budget hard=(\d+) drain=(\d+) slab=(\d+)',(work/'fuse.log').read_text())
         assert budgets and all(tuple(map(int,b))==(hard_budget,drain_budget,32<<20) for b in budgets),budgets
+    if a.gc_reap_files:
+        # Startup recovery marks all shards; exclude that one-time sweep
+        # from the steady-state reaping comparison on these four-node fixtures.
+        print('waiting 120 seconds before steady-state reaping capture',flush=True)
+        time.sleep(120)
+        folder=mount/'reap-latency';folder.mkdir()
+        for index in range(a.gc_reap_files):
+            with (folder/str(index)).open('xb',buffering=0) as out:
+                assert out.write(b'gc-reap-witness')==15;os.fsync(out.fileno())
+        wait(drained,'pre-reap queues drained')
+        offsets=[(work/f'n{i+1}.log').stat().st_size for i in range(4)]
+        before=totals(status());started=time.monotonic()
+        for path in folder.iterdir():path.unlink()
+        folder.rmdir();wait(drained,'small-file reap queues drained',600)
+        elapsed=time.monotonic()-started;after=totals(status());samples=[]
+        for repeat in range(3):
+            result=run(['python3',source/'tests/measure/md_latency.py',mount],capture_output=True,text=True,timeout=180)
+            (work/f'reap-mdlat-{repeat}.log').write_text(result.stdout+result.stderr);samples.append(result.stdout)
+        passes=[]
+        for node,offset in enumerate(offsets):
+            with (work/f'n{node+1}.log').open('rb') as log:log.seek(offset);text=log.read().decode(errors='replace')
+            passes.extend({'node':node+1,**{k:int(v) for k,v in re.findall(r'(\w+)=(\d+)',line)}} for line in text.splitlines() if 'gc-pass ' in line)
+        assert after['removed_fragments']>before['removed_fragments'] and after['reclaimed_payload_bytes']>before['reclaimed_payload_bytes']
+        (work/'reap-latency.json').write_text(json.dumps({'files':a.gc_reap_files,'deletion_seconds':elapsed,'before':before,'after':after,'metadata_samples':samples,'passes':passes},indent=2))
+        wait(drained,'metadata probe cleanup drained',180)
+        print('small-file physical reaping and metadata latency capture PASS',flush=True)
     if a.gc_bulk_gib:
         def metadata_latency(label):
             result=run(['python3',source/'tests/measure/md_latency.py',mount],capture_output=True,text=True,timeout=120)
@@ -749,12 +825,52 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
             os.rmdir(replacement)
             (work/'namespace-full-lanes.json').write_text(json.dumps({'lanes':64,'rmdir':True,'replacement':True,'restart_verified':True},indent=2))
             print('64-lane empty directory removal/replacement and restart PASS',flush=True)
+            if a.namespace_boundary_fault:
+                outcomes=[]
+                for stage in ('prepare','commit'):
+                    replacement=mount/f'fault-replace-{stage}';oldino=spread(replacement)
+                    incoming=mount/f'fault-incoming-{stage}';incoming.mkdir();saved=incoming.stat().st_ino
+                    barrier=work/'txn-barrier';ready=work/'txn-barrier.ready';barrier.write_text(stage)
+                    errors=[]
+                    def replace():
+                        try:os.rename(incoming,replacement)
+                        except OSError as error:errors.append(str(error))
+                    thread=threading.Thread(target=replace,daemon=True);thread.start()
+                    wait(ready.exists,'64-lane '+stage+' barrier reached',30)
+                    proof=ready.read_text();pid=int(re.search(r'pid=(\d+)',proof).group(1))
+                    (work/f'namespace-{stage}-barrier.json').write_text(json.dumps({'proof':proof,'incoming_inode':saved,'replacement_inode':oldino},indent=2))
+                    node=next(i for i,proc in enumerate(servers) if proc.pid==pid)
+                    proc=servers[node];command=Path(f'/proc/{pid}/cmdline').read_bytes().split(b'\0')[:-1]
+                    proc.kill();proc.wait();barrier.unlink();ready.unlink()
+                    log=open(work/f'n{node+1}.log','ab');handles.append(log)
+                    servers[node]=subprocess.Popen(command,env=env,stdout=log,stderr=log)
+                    thread.join(60);assert not thread.is_alive(),'replacement retry did not finish'
+                    unmount();stop();start();mount_client()
+                    transient=[];deadline=time.monotonic()+30
+                    while True:
+                        try:observed=replacement.stat().st_ino;break
+                        except OSError as error:
+                            # Recovery may temporarily lack authoritative
+                            # reads; it must never disguise that as absence.
+                            assert error.errno in (5,16),error
+                            transient.append(error.errno)
+                            assert time.monotonic()<deadline,'replacement authority did not recover'
+                            time.sleep(.1)
+                    if observed==saved:assert not incoming.exists()
+                    else:assert observed==oldino and incoming.stat().st_ino==saved
+                    if stage=='commit':assert observed==saved,'durable replacement COMMIT was lost'
+                    outcomes.append({'stage':stage,'barrier':proof,'coordinator_node':node+1,'errors':errors,'replacement_inode':observed,'incoming_inode':saved,'old_inode':oldino,'transient_read_errno':transient,'cold_atomic_namespace':True})
+                    (work/'namespace-boundary-fault.json').write_text(json.dumps(outcomes,indent=2))
+                    if incoming.exists():incoming.rmdir()
+                    replacement.rmdir();wait(drained,'fault replacement cleanup drained',180)
+                (work/'namespace-boundary-fault.json').write_text(json.dumps(outcomes,indent=2))
+                print('64-lane prepared/committed coordinator death and cold atomic recovery PASS',flush=True)
 
     if a.namespace_max:
-        # Find the actual participant envelope before the separate 64-hop cap.
+        # Exercise the actual guarded transaction envelope, including >64 hops.
         folder=mount;chain=[];moving=mount/'max-moving';moving.mkdir()
         last=moving;elapsed=None
-        for index in range(64):
+        for index in range(144):
             folder=folder/f'max-{index}';folder.mkdir();chain.append(folder)
             started=time.monotonic()
             try:os.rename(last,folder/'moved')
@@ -762,7 +878,7 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
                 assert error.errno in (11,16),error
                 elapsed=time.monotonic()-started;break
             last=folder/'moved'
-        assert elapsed is not None and len(chain)>20
+        assert elapsed is not None and len(chain)>64
         saved=last.stat().st_ino
         assert elapsed<30 and not (folder/'moved').exists()
         unmount();stop();start();mount_client()

@@ -1,0 +1,12 @@
+2026-10-08T02:24:25.730Z efs-fuse (no git metadata, branch unknown, built 2026-10-08T02:14:05Z on nuc), build=unknown: starting export=default mount=/data1/efs/gc-direct-prgnsjk8/peer
+2026-10-08T02:24:25.730Z Discovered 4 cluster nodes from 127.0.0.1:26590
+2026-10-08T02:24:25.730Z   node id=1 127.0.0.1:26590
+2026-10-08T02:24:25.730Z   node id=2 127.0.0.1:26591
+2026-10-08T02:24:25.730Z   node id=3 127.0.0.1:26592
+2026-10-08T02:24:25.730Z   node id=4 127.0.0.1:26593
+2026-10-08T02:24:25.730Z fetching metadata...
+2026-10-08T02:24:25.730Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T02:24:25.730Z export id=1 name=default
+2026-10-08T02:24:25.730Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T02:24:25.733Z efs-fuse: workers max=10 idle=10
+2026-10-08T02:24:25.735Z fuse serving

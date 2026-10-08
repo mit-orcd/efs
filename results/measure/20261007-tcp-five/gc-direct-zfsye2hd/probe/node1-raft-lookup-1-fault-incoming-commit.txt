@@ -1,0 +1,1 @@
+raft-lookup status=1 primary=3 parent=1 name=fault-incoming-commit ino=0 mode=00 nlink=0

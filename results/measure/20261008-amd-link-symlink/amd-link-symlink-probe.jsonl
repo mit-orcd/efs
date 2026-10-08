@@ -1,0 +1,8 @@
+{"root": "/tmp", "case": "default", "is_symlink": false, "ino": 2231, "source_ino": 2232, "target_ino": 2231}
+{"root": "/tmp", "case": "nofollow", "is_symlink": true, "ino": 2232, "source_ino": 2232, "target_ino": 2231}
+{"root": "/tmp", "case": "follow", "is_symlink": false, "ino": 2231, "source_ino": 2232, "target_ino": 2231}
+{"root": "/tmp", "case": "libc_link", "rc": 0, "errno": 0, "is_symlink": true}
+{"root": "/home/efs/efs/mnt", "case": "default", "is_symlink": false, "ino": 6702, "source_ino": 10798, "target_ino": 6702}
+{"root": "/home/efs/efs/mnt", "case": "nofollow", "is_symlink": true, "ino": 10798, "source_ino": 10798, "target_ino": 6702}
+{"root": "/home/efs/efs/mnt", "case": "follow", "is_symlink": false, "ino": 6702, "source_ino": 10798, "target_ino": 6702}
+{"root": "/home/efs/efs/mnt", "case": "libc_link", "rc": 0, "errno": 0, "is_symlink": true}

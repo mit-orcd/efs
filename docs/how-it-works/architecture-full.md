@@ -1543,6 +1543,7 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | 0s | **W62** · sweep/truncate batch boundaries lose delta GC records | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w62) |
 | 0t | **W64** · durable append reservation replay across leader changes | correctness / recovery | open — host-local replay race fixed in `ec1500ec`; durable failover replay remains unresolved | [work item](#w64) |
 | 0u | **W65** · daemon exceeds graceful shutdown wait | liveness investigation | idle-reader/accept blockers repaired; NUC TCP shutdown and service persistence gates pass; RDMA/fault-time mutation gates remain | [work item](#w65) |
+| virtual-io | **`.find` / `.stats` — server snapshots and safe reads** | correctness / performance / access control | open — client-local stats, read-triggered walks, per-open consistency, permissions and explicit limits need fixes; N/T server refresh design retained | [fix scope and acceptance](../status/virtual-find-stats.md) |
 | gc-obs | **W63** · GC backlog, reclaimed bytes and retry progress are missing | observability enhancement | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w63) |
 | 0e | **W38** · ior-hard fold tombstone without the span's bytes | correctness | code present; dated Oct 5 checkpoint — replay preserves live spans; folds require byte observations; deterministic regression + ASan/UBSan pass; traced real IOR-hard + independent cold hardscan pass (108000 records, bad=0, short=0); nine physical hosts/RDMA remain | [full text](#w38--ior-hard-fold-tombstone-without-the-spans-bytes-queue-row-0e) |
 | 2a | **W42** · `df` / `efs-mgmt status` report the 3-node capacity model on any node count | correctness | capacity helper is used by both clients; NUC four-node status/df record 500 GiB for 4 × 187.5 GiB quotas; NUC limited-member write/cold-read/reclaim gate passes; protection debt/repair and named 19810 capacity acceptance remain open | [full text](#w42--df--efs-mgmt-status-report-the-3-node-capacity-model-on-any-node-count-queue-row-2a) |
@@ -1634,6 +1635,19 @@ The [GC checkpoint](../status/gc-implementation-20261007.md) records production 
 NUC physical deletion/restart gates, and the approved discard-after-durable-
 revocation policy. PUT ticket metadata is committed in `b3a11877` and staged for integration; production session, wire and
 storage-fence integration remains open. Xorinox rollout and substantial reclamation are confirmed in the checkpoint; complete backlog drainage and historical lost-ledger reconciliation are not.
+
+
+#### Xorinox's two GC errors — investigation comment (Oct 7)
+
+[Read-only investigation](../status/gc-errors-20261007.md): both are cumulative xefs3
+`reap_errors` from metadata/Raft proposals, first observed at 16:35 and 16:39
+UTC; physical-delete errors are zero. GC continued and both sampled leader
+queues are now empty. The deployed code omits the command/return code, so the
+exact causes are not recoverable. W63 follow-up: separate expected orphan BUSY
+deferrals from retry/hard failures, retain operation/inode/return-code diagnostics,
+and label portal errors as cumulative with node/class and recent activity.
+Preserve all lease/transaction checks and retry records. The known age-clock
+fix is implemented locally but still needs xorinox rollout; see the checkpoint.
 
 #### Implemented-fix gate rounds (Oct 7)
 

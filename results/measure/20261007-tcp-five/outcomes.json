@@ -1,0 +1,20 @@
+{
+  "combined_direct": 0,
+  "depth_direct": 0,
+  "initial_full_units": 0,
+  "shutdown_direct": [
+    0,
+    0,
+    0
+  ],
+  "shutdown_buffered": [
+    0,
+    0,
+    0
+  ],
+  "gc_reap_initial": 0,
+  "candidate_units": "pending",
+  "serial_reap_settled": "pending",
+  "candidate_reap_settled": "pending",
+  "namespace_coordinator_fault": "pending"
+}

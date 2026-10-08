@@ -8,6 +8,16 @@
 > ideas that are deliberately parked live — never instructions. The landed
 > history is in [../archive/project-history.md](../archive/project-history.md).
 
+## Proposed storage engine v2 and XFS experiments
+
+The [storage engine v2 proposal](storage-engine-v2.md) preserves the Oct 7
+discussion and clarification: use independent EFS-relevant read/write/delete
+workloads to test principles such as preallocation, extent hints, batching and
+container reclamation, then apply measured improvements separately to `efsd`. It records the AMD baseline, SSD/USB/TRIM limitations,
+durability and recovery requirements, and later raw-device/FDP/ZNS options.
+This is a proposed direction; the status queue and existing correctness gates
+continue to govern implementation.
+
 ## Where the scaling plan ended up
 
 The original plan raised the inode ceiling from ~14M toward ≥ 2³² in numbered
@@ -34,6 +44,8 @@ are design approvals, with implementation and acceptance recorded separately;
 the pending ones remain asks.
 
 ## Parked: server-side `.stats` / `.find` refresh
+
+**Oct 7 follow-up:** tracked in the [current status repair plan](../status/virtual-find-stats.md). The architecture below remains the design direction; wire/default decisions and implementation/acceptance are still open. Use that plan for current gaps and gates rather than treating this parked note as implemented.
 
 Both virtual files are **user-triggered** today: `cat dir/.stats` computes
 rollups on the client (TTL ~1 s), and `cat dir/.find/<term>` walks the query

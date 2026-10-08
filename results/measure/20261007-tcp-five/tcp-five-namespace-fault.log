@@ -1,0 +1,75 @@
+Evidence directory: /data1/efs/gc-direct-zfsye2hd
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=2 index=2 salt=9968036965477119820
+client serving PASS
+twenty-ancestor rename preserves all guards and rejects cycle PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1276241 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1276395 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+client serving PASS
+replacement inode: source=84 old=68 observed=84
+node 1 authoritative replacement inode PASS
+node 2 authoritative replacement inode PASS
+node 3 authoritative replacement inode PASS
+node 4 authoritative replacement inode PASS
+sixteen used-lane empty HASHED rmdir and replacement PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1276706 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+client serving PASS
+namespace boundary prior GC drained PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1276926 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+client serving PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1277728 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+64-lane empty directory removal/replacement and restart PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1278970 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+client serving PASS
+64-lane prepare barrier reached PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1279044 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+fault replacement cleanup drained PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1280524 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+client serving PASS
+64-lane commit barrier reached PASS
+Unmounting /data1/efs/gc-direct-zfsye2hd/mnt
+Retiring drained efs-fuse PID 1280574 for /data1/efs/gc-direct-zfsye2hd/mnt
+Unmounted /data1/efs/gc-direct-zfsye2hd/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+Traceback (most recent call last):
+  File "/data1/efs/tcp-five-candidate-20261007/tests/live/gc_reclamation.py", line 848, in <module>
+    observed=replacement.stat().st_ino
+             ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/pathlib.py", line 840, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/data1/efs/gc-direct-zfsye2hd/mnt/fault-replace-commit'

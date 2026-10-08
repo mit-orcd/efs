@@ -4890,7 +4890,7 @@ static int efs_fuse_lookup_at(fuse_ino_t parent, const char *name,
     }
     rc = efs_client_rpc_lookup(g_client.export_id, (efs_ino_t)parent, name, &row);
     if (rc != EFS_OK)
-        return (rc == EFS_ERR_ACCES) ? -EACCES : -ENOENT;
+        return fuse_stat_errno(rc);
     /* Adopt the LOOKUP row (full resolved inode) instead of throwing it
      * away and re-statting locally — that hid peer size/nlink growth. */
     efs_client_adopt_lookup(&row, &row);

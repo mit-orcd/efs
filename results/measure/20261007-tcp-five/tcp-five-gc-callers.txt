@@ -1,0 +1,3359 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 59K of event 'cycles:P'
+# Event count (approx.): 24490002900
+#
+# Children      Self  Symbol                                              
+# ........  ........  ....................................................
+#
+    77.04%     0.00%  [.] start_thread
+    76.22%     0.37%  [k] entry_SYSCALL_64_after_hwframe
+            |          
+             --75.96%--entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--23.02%--__GI___writev
+                       |          |          
+                       |           --22.94%--efs_conn_send_msg
+                       |                     |          
+                       |                     |--12.00%--server_handle_conn
+                       |                     |          conn_thread
+                       |                     |          start_thread
+                       |                     |          
+                       |                     |--9.26%--host_sender
+                       |                     |          start_thread
+                       |                     |          
+                       |                      --1.05%--host_gc_thread
+                       |                                start_thread
+                       |          
+                       |--12.87%--fsync
+                       |          |          
+                       |          |--3.62%--host_pump
+                       |          |          start_thread
+                       |          |          
+                       |          |--3.15%--fragment_parent_sync
+                       |          |          |          
+                       |          |          |--2.06%--server_delete_fragment_if_sum
+                       |          |          |          nvme_del_if_sum
+                       |          |          |          |          
+                       |          |          |           --1.68%--server_handle_conn
+                       |          |          |                     conn_thread
+                       |          |          |                     start_thread
+                       |          |          |          
+                       |          |           --0.77%--server_gc_inode
+                       |          |                     |          
+                       |          |                      --0.64%--server_handle_conn
+                       |          |                                conn_thread
+                       |          |                                start_thread
+                       |          |          
+                       |          |--2.52%--disk_append
+                       |          |          |          
+                       |          |          |--2.01%--on_ae_req
+                       |          |          |          drain_inbox
+                       |          |          |          host_pump
+                       |          |          |          start_thread
+                       |          |          |          
+                       |          |           --0.51%--efs_raft_propose
+                       |          |                     host_bg_propose.constprop.0
+                       |          |          
+                       |          |--1.17%--server_handle_conn
+                       |          |          conn_thread
+                       |          |          start_thread
+                       |          |          
+                       |           --1.07%--efs_raft_disk_sync_release_wait
+                       |                     host_propose
+                       |                     |          
+                       |                      --0.76%--server_raft_host_unlink
+                       |                                server_handle_conn
+                       |                                conn_thread
+                       |                                start_thread
+                       |          
+                       |--11.60%--__libc_recv
+                       |          
+                       |--3.93%--__poll
+                       |          |          
+                       |           --3.83%--start_thread
+                       |          
+                       |--3.84%--__GI___libc_open
+                       |          0x69642d63672f7366
+                       |          
+                       |--3.13%--__futex_abstimed_wait_common
+                       |          
+                       |--2.60%--__unlink
+                       |          |          
+                       |          |--2.09%--server_delete_fragment_if_sum
+                       |          |          nvme_del_if_sum
+                       |          |          |          
+                       |          |           --1.73%--server_handle_conn
+                       |          |                     conn_thread
+                       |          |                     start_thread
+                       |          |          
+                       |           --0.51%--gc_dead_directory
+                       |                     |          
+                       |                      --0.50%--gc_dead_directory
+                       |                                server_gc_inode
+                       |          
+                       |--2.26%--__GI___libc_write
+                       |          |          
+                       |          |--0.99%--server_handle_conn
+                       |          |          conn_thread
+                       |          |          start_thread
+                       |          |          
+                       |           --0.95%--lsm_batch
+                       |          
+                       |--1.72%--__libc_pwrite
+                       |          |          
+                       |          |--0.90%--disk_append
+                       |          |          |          
+                       |          |           --0.58%--on_ae_req
+                       |          |                     drain_inbox
+                       |          |                     host_pump
+                       |          |                     start_thread
+                       |          |          
+                       |           --0.82%--host_pump
+                       |                     start_thread
+                       |          
+                       |--1.64%--fdatasync
+                       |          host_pump
+                       |          start_thread
+                       |          
+                       |--1.57%--__GI___setsockopt
+                       |          |          
+                       |           --1.22%--host_sender
+                       |                     start_thread
+                       |          
+                       |--1.42%--__libc_pread
+                       |          |          
+                       |           --1.15%--nvme_del_if_sum
+                       |                     |          
+                       |                      --0.93%--server_handle_conn
+                       |                                conn_thread
+                       |                                start_thread
+                       |          
+                       |--1.40%--pthread_cond_signal@@GLIBC_2.3.2
+                       |          |          
+                       |           --0.57%--on_ae_req
+                       |                     drain_inbox
+                       |                     host_pump
+                       |                     start_thread
+                       |          
+                       |--0.89%--__rmdir
+                       |          
+                       |--0.81%--read
+                       |          
+                       |--0.73%--rename
+                       |          |          
+                       |           --0.58%--server_handle_conn
+                       |                     conn_thread
+                       |                     start_thread
+                       |          
+                        --0.61%--__close
+
+    75.84%     0.38%  [k] do_syscall_64
+            |          
+             --75.80%--do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--23.01%--__GI___writev
+                       |          |          
+                       |           --22.93%--efs_conn_send_msg
+                       |                     |          
+                       |                     |--11.99%--server_handle_conn
+                       |                     |          conn_thread
+                       |                     |          start_thread
+                       |                     |          
+                       |                     |--9.26%--host_sender
+                       |                     |          start_thread
+                       |                     |          
+                       |                      --1.05%--host_gc_thread
+                       |                                start_thread
+                       |          
+                       |--12.87%--fsync
+                       |          |          
+                       |          |--3.62%--host_pump
+                       |          |          start_thread
+                       |          |          
+                       |          |--3.15%--fragment_parent_sync
+                       |          |          |          
+                       |          |          |--2.06%--server_delete_fragment_if_sum
+                       |          |          |          nvme_del_if_sum
+                       |          |          |          |          
+                       |          |          |           --1.68%--server_handle_conn
+                       |          |          |                     conn_thread
+                       |          |          |                     start_thread
+                       |          |          |          
+                       |          |           --0.77%--server_gc_inode
+                       |          |                     |          
+                       |          |                      --0.64%--server_handle_conn
+                       |          |                                conn_thread
+                       |          |                                start_thread
+                       |          |          
+                       |          |--2.52%--disk_append
+                       |          |          |          
+                       |          |          |--2.01%--on_ae_req
+                       |          |          |          drain_inbox
+                       |          |          |          host_pump
+                       |          |          |          start_thread
+                       |          |          |          
+                       |          |           --0.51%--efs_raft_propose
+                       |          |                     host_bg_propose.constprop.0
+                       |          |          
+                       |          |--1.17%--server_handle_conn
+                       |          |          conn_thread
+                       |          |          start_thread
+                       |          |          
+                       |           --1.07%--efs_raft_disk_sync_release_wait
+                       |                     host_propose
+                       |                     |          
+                       |                      --0.76%--server_raft_host_unlink
+                       |                                server_handle_conn
+                       |                                conn_thread
+                       |                                start_thread
+                       |          
+                       |--11.55%--__libc_recv
+                       |          
+                       |--3.92%--__poll
+                       |          |          
+                       |           --3.82%--start_thread
+                       |          
+                       |--3.84%--__GI___libc_open
+                       |          0x69642d63672f7366
+                       |          
+                       |--3.12%--__futex_abstimed_wait_common
+                       |          
+                       |--2.60%--__unlink
+                       |          |          
+                       |          |--2.09%--server_delete_fragment_if_sum
+                       |          |          nvme_del_if_sum
+                       |          |          |          
+                       |          |           --1.73%--server_handle_conn
+                       |          |                     conn_thread
+                       |          |                     start_thread
+                       |          |          
+                       |           --0.50%--gc_dead_directory
+                       |                     gc_dead_directory
+                       |                     server_gc_inode
+                       |          
+                       |--2.26%--__GI___libc_write
+                       |          |          
+                       |          |--0.99%--server_handle_conn
+                       |          |          conn_thread
+                       |          |          start_thread
+                       |          |          
+                       |           --0.95%--lsm_batch
+                       |          
+                       |--1.71%--__libc_pwrite
+                       |          |          
+                       |          |--0.90%--disk_append
+                       |          |          |          
+                       |          |           --0.58%--on_ae_req
+                       |          |                     drain_inbox
+                       |          |                     host_pump
+                       |          |                     start_thread
+                       |          |          
+                       |           --0.82%--host_pump
+                       |                     start_thread
+                       |          
+                       |--1.64%--fdatasync
+                       |          host_pump
+                       |          start_thread
+                       |          
+                       |--1.54%--__GI___setsockopt
+                       |          |          
+                       |           --1.20%--host_sender
+                       |                     start_thread
+                       |          
+                       |--1.42%--__libc_pread
+                       |          |          
+                       |           --1.15%--nvme_del_if_sum
+                       |                     |          
+                       |                      --0.93%--server_handle_conn
+                       |                                conn_thread
+                       |                                start_thread
+                       |          
+                       |--1.39%--pthread_cond_signal@@GLIBC_2.3.2
+                       |          |          
+                       |           --0.57%--on_ae_req
+                       |                     drain_inbox
+                       |                     host_pump
+                       |                     start_thread
+                       |          
+                       |--0.89%--__rmdir
+                       |          
+                       |--0.80%--read
+                       |          
+                       |--0.73%--rename
+                       |          |          
+                       |           --0.58%--server_handle_conn
+                       |                     conn_thread
+                       |                     start_thread
+                       |          
+                        --0.61%--__close
+
+    31.21%     0.00%  [.] conn_thread
+            |
+            ---start_thread
+
+    30.87%     0.27%  [.] server_handle_conn
+            |          
+             --30.86%--server_handle_conn
+                       conn_thread
+                       start_thread
+
+    24.26%     0.17%  [.] efs_conn_send_msg
+            |          
+             --24.24%--efs_conn_send_msg
+                       |          
+                       |--12.63%--server_handle_conn
+                       |          conn_thread
+                       |          start_thread
+                       |          
+                       |--9.75%--host_sender
+                       |          start_thread
+                       |          
+                        --1.10%--host_gc_thread
+                                  start_thread
+
+    23.64%     0.20%  [.] __GI___writev
+            |          
+             --23.53%--__GI___writev
+                       |          
+                        --23.40%--efs_conn_send_msg
+                                  |          
+                                  |--12.21%--server_handle_conn
+                                  |          conn_thread
+                                  |          start_thread
+                                  |          
+                                  |--9.41%--host_sender
+                                  |          start_thread
+                                  |          
+                                   --1.08%--host_gc_thread
+                                             start_thread
+
+    22.63%     0.08%  [k] do_writev
+            |          
+             --22.62%--do_writev
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___writev
+                       |          
+                        --22.55%--efs_conn_send_msg
+                                  |          
+                                  |--11.78%--server_handle_conn
+                                  |          conn_thread
+                                  |          start_thread
+                                  |          
+                                  |--9.11%--host_sender
+                                  |          start_thread
+                                  |          
+                                   --1.04%--host_gc_thread
+                                             start_thread
+
+    22.41%     0.32%  [k] vfs_writev
+            |          
+             --22.38%--vfs_writev
+                       do_writev
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___writev
+                       |          
+                        --22.31%--efs_conn_send_msg
+                                  |          
+                                  |--11.66%--server_handle_conn
+                                  |          conn_thread
+                                  |          start_thread
+                                  |          
+                                  |--9.00%--host_sender
+                                  |          start_thread
+                                  |          
+                                   --1.03%--host_gc_thread
+                                             start_thread
+
+    21.59%     0.13%  [k] do_iter_readv_writev
+            |          
+             --21.58%--do_iter_readv_writev
+                       vfs_writev
+                       do_writev
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___writev
+                       |          
+                        --21.52%--efs_conn_send_msg
+                                  |          
+                                  |--11.29%--server_handle_conn
+                                  |          conn_thread
+                                  |          start_thread
+                                  |          
+                                  |--8.64%--host_sender
+                                  |          start_thread
+                                  |          
+                                   --0.99%--host_gc_thread
+                                             start_thread
+
+    21.40%     0.12%  [k] sock_write_iter
+            |          
+             --21.39%--sock_write_iter
+                       do_iter_readv_writev
+                       vfs_writev
+                       do_writev
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___writev
+                       efs_conn_send_msg
+                       |          
+                       |--11.24%--server_handle_conn
+                       |          conn_thread
+                       |          start_thread
+                       |          
+                       |--8.58%--host_sender
+                       |          start_thread
+                       |          
+                        --0.99%--host_gc_thread
+                                  start_thread
+
+    21.01%     0.07%  [k] tcp_sendmsg
+            |          
+             --21.00%--tcp_sendmsg
+                       sock_write_iter
+                       do_iter_readv_writev
+                       vfs_writev
+                       do_writev
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___writev
+                       efs_conn_send_msg
+                       |          
+                       |--11.02%--server_handle_conn
+                       |          conn_thread
+                       |          start_thread
+                       |          
+                       |--8.43%--host_sender
+                       |          start_thread
+                       |          
+                        --0.97%--host_gc_thread
+                                  start_thread
+
+    20.82%     1.84%  [.] host_pump
+            |          
+             --20.80%--host_pump
+                       start_thread
+
+    20.74%     0.37%  [k] tcp_sendmsg_locked
+            |          
+             --20.72%--tcp_sendmsg_locked
+                       tcp_sendmsg
+                       sock_write_iter
+                       do_iter_readv_writev
+                       vfs_writev
+                       do_writev
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___writev
+                       efs_conn_send_msg
+                       |          
+                       |--10.87%--server_handle_conn
+                       |          conn_thread
+                       |          start_thread
+                       |          
+                       |--8.32%--host_sender
+                       |          start_thread
+                       |          
+                        --0.97%--host_gc_thread
+                                  start_thread
+
+    17.90%     0.19%  [k] tcp_write_xmit
+            |          
+             --17.89%--tcp_write_xmit
+                       |          
+                        --17.45%--__tcp_push_pending_frames
+                                  |          
+                                   --17.40%--tcp_sendmsg_locked
+                                             tcp_sendmsg
+                                             sock_write_iter
+                                             do_iter_readv_writev
+                                             vfs_writev
+                                             do_writev
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             __GI___writev
+                                             efs_conn_send_msg
+                                             |          
+                                             |--8.86%--server_handle_conn
+                                             |          conn_thread
+                                             |          start_thread
+                                             |          
+                                             |--7.19%--host_sender
+                                             |          start_thread
+                                             |          
+                                              --0.85%--host_gc_thread
+                                                        start_thread
+
+    17.54%     0.08%  [k] __tcp_push_pending_frames
+            |          
+             --17.49%--tcp_sendmsg_locked
+                       tcp_sendmsg
+                       sock_write_iter
+                       do_iter_readv_writev
+                       vfs_writev
+                       do_writev
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___writev
+                       efs_conn_send_msg
+                       |          
+                       |--8.91%--server_handle_conn
+                       |          conn_thread
+                       |          start_thread
+                       |          
+                       |--7.23%--host_sender
+                       |          start_thread
+                       |          
+                        --0.85%--host_gc_thread
+                                  start_thread
+
+    17.17%     0.44%  [k] __tcp_transmit_skb
+            |          
+             --17.15%--__tcp_transmit_skb
+                       |          
+                        --16.92%--tcp_write_xmit
+                                  |          
+                                   --16.51%--__tcp_push_pending_frames
+                                             |          
+                                              --16.46%--tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+                                                        |          
+                                                        |--8.34%--server_handle_conn
+                                                        |          conn_thread
+                                                        |          start_thread
+                                                        |          
+                                                        |--6.82%--host_sender
+                                                        |          start_thread
+                                                        |          
+                                                         --0.82%--host_gc_thread
+                                                                   start_thread
+
+    16.17%     0.20%  [k] __ip_queue_xmit
+            |          
+             --16.16%--__ip_queue_xmit
+                       __tcp_transmit_skb
+                       |          
+                        --15.94%--tcp_write_xmit
+                                  |          
+                                   --15.55%--__tcp_push_pending_frames
+                                             |          
+                                              --15.50%--tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+                                                        |          
+                                                        |--7.78%--server_handle_conn
+                                                        |          conn_thread
+                                                        |          start_thread
+                                                        |          
+                                                        |--6.48%--host_sender
+                                                        |          start_thread
+                                                        |          
+                                                         --0.79%--host_gc_thread
+                                                                   start_thread
+
+    14.17%     0.04%  [k] do_fsync
+            |          
+             --14.17%--do_fsync
+                       |          
+                       |--12.58%--__x64_sys_fsync
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          fsync
+                       |          |          
+                       |          |--3.55%--host_pump
+                       |          |          start_thread
+                       |          |          
+                       |          |--3.03%--fragment_parent_sync
+                       |          |          |          
+                       |          |          |--2.00%--server_delete_fragment_if_sum
+                       |          |          |          nvme_del_if_sum
+                       |          |          |          |          
+                       |          |          |           --1.62%--server_handle_conn
+                       |          |          |                     conn_thread
+                       |          |          |                     start_thread
+                       |          |          |          
+                       |          |           --0.72%--server_gc_inode
+                       |          |                     |          
+                       |          |                      --0.59%--server_handle_conn
+                       |          |                                conn_thread
+                       |          |                                start_thread
+                       |          |          
+                       |          |--2.49%--disk_append
+                       |          |          |          
+                       |          |          |--1.98%--on_ae_req
+                       |          |          |          drain_inbox
+                       |          |          |          host_pump
+                       |          |          |          start_thread
+                       |          |          |          
+                       |          |           --0.51%--efs_raft_propose
+                       |          |                     host_bg_propose.constprop.0
+                       |          |          
+                       |          |--1.16%--server_handle_conn
+                       |          |          conn_thread
+                       |          |          start_thread
+                       |          |          
+                       |           --1.06%--efs_raft_disk_sync_release_wait
+                       |                     host_propose
+                       |                     |          
+                       |                      --0.75%--server_raft_host_unlink
+                       |                                server_handle_conn
+                       |                                conn_thread
+                       |                                start_thread
+                       |          
+                        --1.59%--__x64_sys_fdatasync
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  fdatasync
+                                  host_pump
+                                  start_thread
+
+    13.10%     0.12%  [k] ip_output
+            |          
+             --13.06%--ip_output
+                       __ip_queue_xmit
+                       __tcp_transmit_skb
+                       |          
+                        --12.90%--tcp_write_xmit
+                                  |          
+                                   --12.57%--__tcp_push_pending_frames
+                                             |          
+                                              --12.52%--tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+                                                        |          
+                                                        |--6.29%--server_handle_conn
+                                                        |          conn_thread
+                                                        |          start_thread
+                                                        |          
+                                                        |--5.23%--host_sender
+                                                        |          start_thread
+                                                        |          
+                                                         --0.64%--host_gc_thread
+                                                                   start_thread
+
+    13.04%     0.08%  [.] fsync
+            |          
+             --13.01%--fsync
+                       |          
+                       |--3.64%--host_pump
+                       |          start_thread
+                       |          
+                       |--3.19%--fragment_parent_sync
+                       |          |          
+                       |          |--2.09%--server_delete_fragment_if_sum
+                       |          |          nvme_del_if_sum
+                       |          |          |          
+                       |          |           --1.70%--server_handle_conn
+                       |          |                     conn_thread
+                       |          |                     start_thread
+                       |          |          
+                       |           --0.78%--server_gc_inode
+                       |                     |          
+                       |                      --0.65%--server_handle_conn
+                       |                                conn_thread
+                       |                                start_thread
+                       |          
+                       |--2.56%--disk_append
+                       |          |          
+                       |          |--2.05%--on_ae_req
+                       |          |          drain_inbox
+                       |          |          host_pump
+                       |          |          start_thread
+                       |          |          
+                       |           --0.51%--efs_raft_propose
+                       |                     host_bg_propose.constprop.0
+                       |          
+                       |--1.18%--server_handle_conn
+                       |          conn_thread
+                       |          start_thread
+                       |          
+                        --1.08%--efs_raft_disk_sync_release_wait
+                                  host_propose
+                                  |          
+                                   --0.77%--server_raft_host_unlink
+                                             server_handle_conn
+                                             conn_thread
+                                             start_thread
+
+    12.79%     0.42%  [.] __libc_recv
+            |          
+             --12.54%--__libc_recv
+
+    12.60%     0.01%  [k] __x64_sys_fsync
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               fsync
+               |          
+               |--3.56%--host_pump
+               |          start_thread
+               |          
+               |--3.03%--fragment_parent_sync
+               |          |          
+               |          |--2.00%--server_delete_fragment_if_sum
+               |          |          nvme_del_if_sum
+               |          |          |          
+               |          |           --1.63%--server_handle_conn
+               |          |                     conn_thread
+               |          |                     start_thread
+               |          |          
+               |           --0.72%--server_gc_inode
+               |                     |          
+               |                      --0.59%--server_handle_conn
+               |                                conn_thread
+               |                                start_thread
+               |          
+               |--2.49%--disk_append
+               |          |          
+               |          |--1.98%--on_ae_req
+               |          |          drain_inbox
+               |          |          host_pump
+               |          |          start_thread
+               |          |          
+               |           --0.51%--efs_raft_propose
+               |                     host_bg_propose.constprop.0
+               |          
+               |--1.16%--server_handle_conn
+               |          conn_thread
+               |          start_thread
+               |          
+                --1.06%--efs_raft_disk_sync_release_wait
+                          host_propose
+                          |          
+                           --0.75%--server_raft_host_unlink
+                                     server_handle_conn
+                                     conn_thread
+                                     start_thread
+
+    12.42%     0.26%  [k] ip_finish_output2
+            |          
+             --12.40%--ip_finish_output2
+                       ip_output
+                       __ip_queue_xmit
+                       __tcp_transmit_skb
+                       |          
+                        --12.23%--tcp_write_xmit
+                                  |          
+                                   --11.92%--__tcp_push_pending_frames
+                                             |          
+                                              --11.88%--tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+                                                        |          
+                                                        |--5.92%--server_handle_conn
+                                                        |          conn_thread
+                                                        |          start_thread
+                                                        |          
+                                                        |--4.99%--host_sender
+                                                        |          start_thread
+                                                        |          
+                                                         --0.61%--host_gc_thread
+                                                                   start_thread
+
+    12.13%     0.25%  [k] __dev_queue_xmit
+            |          
+             --12.12%--__dev_queue_xmit
+                       ip_finish_output2
+                       ip_output
+                       __ip_queue_xmit
+                       __tcp_transmit_skb
+                       |          
+                        --11.96%--tcp_write_xmit
+                                  |          
+                                   --11.65%--__tcp_push_pending_frames
+                                             |          
+                                              --11.60%--tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+                                                        |          
+                                                        |--5.80%--server_handle_conn
+                                                        |          conn_thread
+                                                        |          start_thread
+                                                        |          
+                                                        |--4.87%--host_sender
+                                                        |          start_thread
+                                                        |          
+                                                         --0.59%--host_gc_thread
+                                                                   start_thread
+
+    11.96%     0.32%  [.] host_sender
+            |          
+             --11.96%--host_sender
+                       start_thread
+
+    11.36%     0.24%  [k] __local_bh_enable_ip
+            |          
+             --11.34%--__local_bh_enable_ip
+                       |          
+                        --11.18%--__dev_queue_xmit
+                                  ip_finish_output2
+                                  ip_output
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --11.02%--tcp_write_xmit
+                                             |          
+                                              --10.73%--__tcp_push_pending_frames
+                                                        |          
+                                                         --10.69%--tcp_sendmsg_locked
+                                                                   tcp_sendmsg
+                                                                   sock_write_iter
+                                                                   do_iter_readv_writev
+                                                                   vfs_writev
+                                                                   do_writev
+                                                                   do_syscall_64
+                                                                   entry_SYSCALL_64_after_hwframe
+                                                                   __GI___writev
+                                                                   efs_conn_send_msg
+                                                                   |          
+                                                                   |--5.34%--server_handle_conn
+                                                                   |          conn_thread
+                                                                   |          start_thread
+                                                                   |          
+                                                                   |--4.48%--host_sender
+                                                                   |          start_thread
+                                                                   |          
+                                                                    --0.55%--host_gc_thread
+                                                                              start_thread
+
+    11.18%     0.14%  [k] handle_softirqs
+            |          
+             --11.18%--handle_softirqs
+                       |          
+                        --11.02%--do_softirq
+                                  __local_bh_enable_ip
+                                  |          
+                                   --11.01%--__dev_queue_xmit
+                                             ip_finish_output2
+                                             ip_output
+                                             __ip_queue_xmit
+                                             __tcp_transmit_skb
+                                             |          
+                                              --10.85%--tcp_write_xmit
+                                                        |          
+                                                         --10.57%--__tcp_push_pending_frames
+                                                                   |          
+                                                                    --10.53%--tcp_sendmsg_locked
+                                                                              tcp_sendmsg
+                                                                              sock_write_iter
+                                                                              do_iter_readv_writev
+                                                                              vfs_writev
+                                                                              do_writev
+                                                                              do_syscall_64
+                                                                              entry_SYSCALL_64_after_hwframe
+                                                                              __GI___writev
+                                                                              efs_conn_send_msg
+                                                                              |          
+                                                                              |--5.24%--server_handle_conn
+                                                                              |          conn_thread
+                                                                              |          start_thread
+                                                                              |          
+                                                                              |--4.42%--host_sender
+                                                                              |          start_thread
+                                                                              |          
+                                                                               --0.54%--host_gc_thread
+                                                                                         start_thread
+
+    11.11%     0.08%  [k] do_softirq
+            |          
+             --11.11%--do_softirq
+                       __local_bh_enable_ip
+                       |          
+                        --11.11%--__dev_queue_xmit
+                                  ip_finish_output2
+                                  ip_output
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --10.95%--tcp_write_xmit
+                                             |          
+                                              --10.67%--__tcp_push_pending_frames
+                                                        |          
+                                                         --10.63%--tcp_sendmsg_locked
+                                                                   tcp_sendmsg
+                                                                   sock_write_iter
+                                                                   do_iter_readv_writev
+                                                                   vfs_writev
+                                                                   do_writev
+                                                                   do_syscall_64
+                                                                   entry_SYSCALL_64_after_hwframe
+                                                                   __GI___writev
+                                                                   efs_conn_send_msg
+                                                                   |          
+                                                                   |--5.30%--server_handle_conn
+                                                                   |          conn_thread
+                                                                   |          start_thread
+                                                                   |          
+                                                                   |--4.45%--host_sender
+                                                                   |          start_thread
+                                                                   |          
+                                                                    --0.55%--host_gc_thread
+                                                                              start_thread
+
+    11.08%     0.15%  [k] schedule
+            |          
+             --11.07%--schedule
+                       |          
+                       |--5.34%--schedule_timeout
+                       |          |          
+                       |          |--4.28%--wait_woken
+                       |          |          sk_wait_data
+                       |          |          tcp_recvmsg_locked
+                       |          |          tcp_recvmsg
+                       |          |          inet_recvmsg
+                       |          |          sock_recvmsg
+                       |          |          __sys_recvfrom
+                       |          |          __x64_sys_recvfrom
+                       |          |          do_syscall_64
+                       |          |          entry_SYSCALL_64_after_hwframe
+                       |          |          __libc_recv
+                       |          |          
+                       |           --0.78%--__wait_for_common
+                       |                     __flush_workqueue
+                       |                     xlog_cil_push_now.isra.0
+                       |                     xlog_cil_force_seq
+                       |                     xfs_log_force_seq
+                       |          
+                       |--1.80%--futex_do_wait
+                       |          __futex_wait
+                       |          futex_wait
+                       |          do_futex
+                       |          __x64_sys_futex
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          |          
+                       |           --1.75%--__futex_abstimed_wait_common
+                       |          
+                       |--1.76%--schedule_hrtimeout_range_clock
+                       |          poll_schedule_timeout.constprop.0
+                       |          do_poll.constprop.0
+                       |          do_sys_poll
+                       |          __x64_sys_poll
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          __poll
+                       |          |          
+                       |           --1.73%--start_thread
+                       |          
+                       |--0.98%--io_schedule
+                       |          folio_wait_bit_common
+                       |          |          
+                       |           --0.80%--folio_wait_writeback
+                       |                     __filemap_fdatawait_range
+                       |                     file_write_and_wait_range
+                       |                     xfs_file_fsync
+                       |                     do_fsync
+                       |                     |          
+                       |                      --0.57%--__x64_sys_fsync
+                       |                                do_syscall_64
+                       |                                entry_SYSCALL_64_after_hwframe
+                       |                                fsync
+                       |          
+                        --0.65%--xlog_wait_on_iclog
+
+    10.98%     0.29%  [k] __schedule
+            |          
+             --10.96%--__schedule
+                       |          
+                        --10.89%--schedule
+                                  |          
+                                  |--5.27%--schedule_timeout
+                                  |          |          
+                                  |          |--4.23%--wait_woken
+                                  |          |          sk_wait_data
+                                  |          |          tcp_recvmsg_locked
+                                  |          |          tcp_recvmsg
+                                  |          |          inet_recvmsg
+                                  |          |          sock_recvmsg
+                                  |          |          __sys_recvfrom
+                                  |          |          __x64_sys_recvfrom
+                                  |          |          do_syscall_64
+                                  |          |          entry_SYSCALL_64_after_hwframe
+                                  |          |          __libc_recv
+                                  |          |          
+                                  |           --0.76%--__wait_for_common
+                                  |                     __flush_workqueue
+                                  |                     xlog_cil_push_now.isra.0
+                                  |                     xlog_cil_force_seq
+                                  |                     xfs_log_force_seq
+                                  |          
+                                  |--1.75%--futex_do_wait
+                                  |          __futex_wait
+                                  |          futex_wait
+                                  |          do_futex
+                                  |          __x64_sys_futex
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          |          
+                                  |           --1.70%--__futex_abstimed_wait_common
+                                  |          
+                                  |--1.73%--schedule_hrtimeout_range_clock
+                                  |          poll_schedule_timeout.constprop.0
+                                  |          do_poll.constprop.0
+                                  |          do_sys_poll
+                                  |          __x64_sys_poll
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          __poll
+                                  |          |          
+                                  |           --1.70%--start_thread
+                                  |          
+                                  |--0.97%--io_schedule
+                                  |          folio_wait_bit_common
+                                  |          |          
+                                  |           --0.79%--folio_wait_writeback
+                                  |                     __filemap_fdatawait_range
+                                  |                     file_write_and_wait_range
+                                  |                     xfs_file_fsync
+                                  |                     do_fsync
+                                  |                     |          
+                                  |                      --0.56%--__x64_sys_fsync
+                                  |                                do_syscall_64
+                                  |                                entry_SYSCALL_64_after_hwframe
+                                  |                                fsync
+                                  |          
+                                   --0.64%--xlog_wait_on_iclog
+
+    10.90%     0.09%  [.] drain_inbox
+            |          
+             --10.88%--drain_inbox
+                       |          
+                        --10.85%--host_pump
+                                  start_thread
+
+    10.72%     0.27%  [k] net_rx_action
+            |          
+             --10.72%--net_rx_action
+                       handle_softirqs
+                       |          
+                        --10.69%--do_softirq
+                                  __local_bh_enable_ip
+                                  |          
+                                   --10.69%--__dev_queue_xmit
+                                             ip_finish_output2
+                                             ip_output
+                                             __ip_queue_xmit
+                                             __tcp_transmit_skb
+                                             |          
+                                              --10.54%--tcp_write_xmit
+                                                        |          
+                                                         --10.27%--__tcp_push_pending_frames
+                                                                   |          
+                                                                    --10.23%--tcp_sendmsg_locked
+                                                                              tcp_sendmsg
+                                                                              sock_write_iter
+                                                                              do_iter_readv_writev
+                                                                              vfs_writev
+                                                                              do_writev
+                                                                              do_syscall_64
+                                                                              entry_SYSCALL_64_after_hwframe
+                                                                              __GI___writev
+                                                                              efs_conn_send_msg
+                                                                              |          
+                                                                              |--5.08%--server_handle_conn
+                                                                              |          conn_thread
+                                                                              |          start_thread
+                                                                              |          
+                                                                              |--4.31%--host_sender
+                                                                              |          start_thread
+                                                                              |          
+                                                                               --0.52%--host_gc_thread
+                                                                                         start_thread
+
+    10.66%     0.06%  [k] xfs_file_fsync
+            |          
+             --10.65%--xfs_file_fsync
+                       do_fsync
+                       |          
+                       |--9.09%--__x64_sys_fsync
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          fsync
+                       |          |          
+                       |          |--3.53%--host_pump
+                       |          |          start_thread
+                       |          |          
+                       |          |--2.47%--disk_append
+                       |          |          |          
+                       |          |          |--1.96%--on_ae_req
+                       |          |          |          drain_inbox
+                       |          |          |          host_pump
+                       |          |          |          start_thread
+                       |          |          |          
+                       |          |           --0.51%--efs_raft_propose
+                       |          |                     host_bg_propose.constprop.0
+                       |          |          
+                       |          |--1.16%--server_handle_conn
+                       |          |          conn_thread
+                       |          |          start_thread
+                       |          |          
+                       |           --1.06%--efs_raft_disk_sync_release_wait
+                       |                     host_propose
+                       |                     |          
+                       |                      --0.75%--server_raft_host_unlink
+                       |                                server_handle_conn
+                       |                                conn_thread
+                       |                                start_thread
+                       |          
+                        --1.57%--__x64_sys_fdatasync
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  fdatasync
+                                  host_pump
+                                  start_thread
+
+    10.22%     0.03%  [k] __x64_sys_recvfrom
+            |          
+             --10.21%--__x64_sys_recvfrom
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_recv
+
+    10.17%     0.31%  [k] __sys_recvfrom
+            |          
+             --10.14%--__sys_recvfrom
+                       __x64_sys_recvfrom
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_recv
+
+     9.85%     0.02%  [k] __napi_poll
+            |          
+             --9.85%--__napi_poll
+                       net_rx_action
+                       handle_softirqs
+                       |          
+                        --9.82%--do_softirq
+                                  __local_bh_enable_ip
+                                  |          
+                                   --9.82%--__dev_queue_xmit
+                                             ip_finish_output2
+                                             ip_output
+                                             __ip_queue_xmit
+                                             __tcp_transmit_skb
+                                             |          
+                                              --9.69%--tcp_write_xmit
+                                                        |          
+                                                         --9.45%--__tcp_push_pending_frames
+                                                                   |          
+                                                                    --9.41%--tcp_sendmsg_locked
+                                                                              tcp_sendmsg
+                                                                              sock_write_iter
+                                                                              do_iter_readv_writev
+                                                                              vfs_writev
+                                                                              do_writev
+                                                                              do_syscall_64
+                                                                              entry_SYSCALL_64_after_hwframe
+                                                                              __GI___writev
+                                                                              efs_conn_send_msg
+                                                                              |          
+                                                                              |--4.68%--server_handle_conn
+                                                                              |          conn_thread
+                                                                              |          start_thread
+                                                                              |          
+                                                                               --3.98%--host_sender
+                                                                                         start_thread
+
+     9.80%     0.09%  [k] process_backlog
+            |          
+             --9.78%--process_backlog
+                       __napi_poll
+                       net_rx_action
+                       handle_softirqs
+                       do_softirq
+                       __local_bh_enable_ip
+                       |          
+                        --9.78%--__dev_queue_xmit
+                                  ip_finish_output2
+                                  ip_output
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --9.65%--tcp_write_xmit
+                                             |          
+                                              --9.41%--__tcp_push_pending_frames
+                                                        |          
+                                                         --9.37%--tcp_sendmsg_locked
+                                                                   tcp_sendmsg
+                                                                   sock_write_iter
+                                                                   do_iter_readv_writev
+                                                                   vfs_writev
+                                                                   do_writev
+                                                                   do_syscall_64
+                                                                   entry_SYSCALL_64_after_hwframe
+                                                                   __GI___writev
+                                                                   efs_conn_send_msg
+                                                                   |          
+                                                                   |--4.66%--server_handle_conn
+                                                                   |          conn_thread
+                                                                   |          start_thread
+                                                                   |          
+                                                                    --3.97%--host_sender
+                                                                              start_thread
+
+     9.58%     0.04%  [k] __netif_receive_skb_one_core
+            |          
+             --9.57%--__netif_receive_skb_one_core
+                       process_backlog
+                       __napi_poll
+                       net_rx_action
+                       handle_softirqs
+                       do_softirq
+                       __local_bh_enable_ip
+                       |          
+                        --9.57%--__dev_queue_xmit
+                                  ip_finish_output2
+                                  ip_output
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --9.44%--tcp_write_xmit
+                                             |          
+                                              --9.21%--__tcp_push_pending_frames
+                                                        |          
+                                                         --9.17%--tcp_sendmsg_locked
+                                                                   tcp_sendmsg
+                                                                   sock_write_iter
+                                                                   do_iter_readv_writev
+                                                                   vfs_writev
+                                                                   do_writev
+                                                                   do_syscall_64
+                                                                   entry_SYSCALL_64_after_hwframe
+                                                                   __GI___writev
+                                                                   efs_conn_send_msg
+                                                                   |          
+                                                                   |--4.56%--server_handle_conn
+                                                                   |          conn_thread
+                                                                   |          start_thread
+                                                                   |          
+                                                                    --3.88%--host_sender
+                                                                              start_thread
+
+     9.38%     0.07%  [k] sock_recvmsg
+            |          
+             --9.37%--sock_recvmsg
+                       __sys_recvfrom
+                       __x64_sys_recvfrom
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_recv
+
+     8.87%     0.11%  [k] inet_recvmsg
+            |          
+             --8.86%--inet_recvmsg
+                       sock_recvmsg
+                       __sys_recvfrom
+                       __x64_sys_recvfrom
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_recv
+
+     8.75%     0.13%  [k] tcp_recvmsg
+            |          
+             --8.74%--tcp_recvmsg
+                       inet_recvmsg
+                       sock_recvmsg
+                       __sys_recvfrom
+                       __x64_sys_recvfrom
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_recv
+
+     8.32%     0.52%  [k] tcp_recvmsg_locked
+            |          
+             --8.29%--tcp_recvmsg_locked
+                       tcp_recvmsg
+                       inet_recvmsg
+                       sock_recvmsg
+                       __sys_recvfrom
+                       __x64_sys_recvfrom
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_recv
+
+     8.22%     0.09%  [.] on_ae_req
+            |          
+             --8.21%--on_ae_req
+                       |          
+                        --8.20%--drain_inbox
+                                  host_pump
+                                  start_thread
+
+     6.41%     0.08%  [k] ip_local_deliver
+            |          
+             --6.41%--ip_local_deliver
+                       |          
+                        --6.40%--__netif_receive_skb_one_core
+                                  process_backlog
+                                  __napi_poll
+                                  net_rx_action
+                                  handle_softirqs
+                                  do_softirq
+                                  __local_bh_enable_ip
+                                  |          
+                                   --6.39%--__dev_queue_xmit
+                                             ip_finish_output2
+                                             ip_output
+                                             __ip_queue_xmit
+                                             __tcp_transmit_skb
+                                             |          
+                                              --6.31%--tcp_write_xmit
+                                                        |          
+                                                         --6.14%--__tcp_push_pending_frames
+                                                                   |          
+                                                                    --6.11%--tcp_sendmsg_locked
+                                                                              tcp_sendmsg
+                                                                              sock_write_iter
+                                                                              do_iter_readv_writev
+                                                                              vfs_writev
+                                                                              do_writev
+                                                                              do_syscall_64
+                                                                              entry_SYSCALL_64_after_hwframe
+                                                                              __GI___writev
+                                                                              efs_conn_send_msg
+                                                                              |          
+                                                                              |--2.97%--server_handle_conn
+                                                                              |          conn_thread
+                                                                              |          start_thread
+                                                                              |          
+                                                                               --2.63%--host_sender
+                                                                                         start_thread
+
+     6.11%     0.01%  [.] nvme_del_if_sum
+            |          
+            |--5.03%--server_handle_conn
+            |          conn_thread
+            |          start_thread
+            |          
+             --1.08%--host_gc_thread
+                       start_thread
+
+     5.96%     0.21%  [k] nf_hook_slow
+            |          
+             --5.93%--nf_hook_slow
+                       |          
+                       |--2.56%--ip_rcv
+                       |          __netif_receive_skb_one_core
+                       |          process_backlog
+                       |          __napi_poll
+                       |          net_rx_action
+                       |          handle_softirqs
+                       |          do_softirq
+                       |          __local_bh_enable_ip
+                       |          __dev_queue_xmit
+                       |          ip_finish_output2
+                       |          ip_output
+                       |          __ip_queue_xmit
+                       |          __tcp_transmit_skb
+                       |          |          
+                       |           --2.52%--tcp_write_xmit
+                       |                     |          
+                       |                      --2.47%--__tcp_push_pending_frames
+                       |                                |          
+                       |                                 --2.46%--tcp_sendmsg_locked
+                       |                                           tcp_sendmsg
+                       |                                           sock_write_iter
+                       |                                           do_iter_readv_writev
+                       |                                           vfs_writev
+                       |                                           do_writev
+                       |                                           do_syscall_64
+                       |                                           entry_SYSCALL_64_after_hwframe
+                       |                                           __GI___writev
+                       |                                           efs_conn_send_msg
+                       |                                           |          
+                       |                                           |--1.32%--server_handle_conn
+                       |                                           |          conn_thread
+                       |                                           |          start_thread
+                       |                                           |          
+                       |                                            --0.97%--host_sender
+                       |                                                      start_thread
+                       |          
+                       |--2.54%--__ip_local_out
+                       |          ip_local_out
+                       |          __ip_queue_xmit
+                       |          __tcp_transmit_skb
+                       |          |          
+                       |           --2.50%--tcp_write_xmit
+                       |                     |          
+                       |                      --2.44%--__tcp_push_pending_frames
+                       |                                |          
+                       |                                 --2.44%--tcp_sendmsg_locked
+                       |                                           tcp_sendmsg
+                       |                                           sock_write_iter
+                       |                                           do_iter_readv_writev
+                       |                                           vfs_writev
+                       |                                           do_writev
+                       |                                           do_syscall_64
+                       |                                           entry_SYSCALL_64_after_hwframe
+                       |                                           __GI___writev
+                       |                                           efs_conn_send_msg
+                       |                                           |          
+                       |                                           |--1.22%--server_handle_conn
+                       |                                           |          conn_thread
+                       |                                           |          start_thread
+                       |                                           |          
+                       |                                            --1.04%--host_sender
+                       |                                                      start_thread
+                       |          
+                        --0.50%--ip_local_deliver
+
+     5.89%     0.04%  [k] xfs_log_force_seq
+            |          
+            |--3.29%--xfs_file_fsync
+            |          do_fsync
+            |          __x64_sys_fsync
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          fsync
+            |          |          
+            |          |--1.36%--host_pump
+            |          |          start_thread
+            |          |          
+            |          |--0.89%--disk_append
+            |          |          |          
+            |          |           --0.63%--on_ae_req
+            |          |                     drain_inbox
+            |          |                     host_pump
+            |          |                     start_thread
+            |          |          
+            |           --0.59%--efs_raft_disk_sync_release_wait
+            |                     host_propose
+            |          
+             --2.60%--do_fsync
+                       __x64_sys_fsync
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       fsync
+                       |          
+                        --2.25%--fragment_parent_sync
+                                  |          
+                                  |--1.40%--server_delete_fragment_if_sum
+                                  |          nvme_del_if_sum
+                                  |          |          
+                                  |           --1.05%--server_handle_conn
+                                  |                     conn_thread
+                                  |                     start_thread
+                                  |          
+                                   --0.59%--server_gc_inode
+
+     5.81%     0.02%  [k] ip_local_deliver_finish
+            |          
+             --5.80%--ip_local_deliver_finish
+                       ip_local_deliver
+                       |          
+                        --5.79%--__netif_receive_skb_one_core
+                                  process_backlog
+                                  __napi_poll
+                                  net_rx_action
+                                  handle_softirqs
+                                  do_softirq
+                                  __local_bh_enable_ip
+                                  |          
+                                   --5.79%--__dev_queue_xmit
+                                             ip_finish_output2
+                                             ip_output
+                                             __ip_queue_xmit
+                                             __tcp_transmit_skb
+                                             |          
+                                              --5.72%--tcp_write_xmit
+                                                        |          
+                                                         --5.57%--__tcp_push_pending_frames
+                                                                   |          
+                                                                    --5.54%--tcp_sendmsg_locked
+                                                                              tcp_sendmsg
+                                                                              sock_write_iter
+                                                                              do_iter_readv_writev
+                                                                              vfs_writev
+                                                                              do_writev
+                                                                              do_syscall_64
+                                                                              entry_SYSCALL_64_after_hwframe
+                                                                              __GI___writev
+                                                                              efs_conn_send_msg
+                                                                              |          
+                                                                              |--2.67%--server_handle_conn
+                                                                              |          conn_thread
+                                                                              |          start_thread
+                                                                              |          
+                                                                               --2.41%--host_sender
+                                                                                         start_thread
+
+     5.77%     0.07%  [.] apply_committed
+            |          
+             --5.77%--apply_committed
+                       |          
+                       |--3.85%--on_ae_req
+                       |          drain_inbox
+                       |          host_pump
+                       |          start_thread
+                       |          
+                        --1.89%--try_commit
+                                  |          
+                                   --1.87%--efs_raft_recv
+                                             drain_inbox
+                                             host_pump
+                                             start_thread
+
+     5.76%     0.07%  [k] ip_protocol_deliver_rcu
+            |          
+             --5.75%--ip_protocol_deliver_rcu
+                       ip_local_deliver_finish
+                       ip_local_deliver
+                       |          
+                        --5.74%--__netif_receive_skb_one_core
+                                  process_backlog
+                                  __napi_poll
+                                  net_rx_action
+                                  handle_softirqs
+                                  do_softirq
+                                  __local_bh_enable_ip
+                                  |          
+                                   --5.74%--__dev_queue_xmit
+                                             ip_finish_output2
+                                             ip_output
+                                             __ip_queue_xmit
+                                             __tcp_transmit_skb
+                                             |          
+                                              --5.68%--tcp_write_xmit
+                                                        |          
+                                                         --5.52%--__tcp_push_pending_frames
+                                                                   |          
+                                                                    --5.49%--tcp_sendmsg_locked
+                                                                              tcp_sendmsg
+                                                                              sock_write_iter
+                                                                              do_iter_readv_writev
+                                                                              vfs_writev
+                                                                              do_writev
+                                                                              do_syscall_64
+                                                                              entry_SYSCALL_64_after_hwframe
+                                                                              __GI___writev
+                                                                              efs_conn_send_msg
+                                                                              |          
+                                                                              |--2.64%--server_handle_conn
+                                                                              |          conn_thread
+                                                                              |          start_thread
+                                                                              |          
+                                                                               --2.39%--host_sender
+                                                                                         start_thread
+
+     5.69%     0.12%  [k] schedule_timeout
+            |          
+             --5.67%--schedule_timeout
+                       |          
+                       |--4.55%--wait_woken
+                       |          sk_wait_data
+                       |          tcp_recvmsg_locked
+                       |          tcp_recvmsg
+                       |          inet_recvmsg
+                       |          sock_recvmsg
+                       |          __sys_recvfrom
+                       |          __x64_sys_recvfrom
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          __libc_recv
+                       |          
+                        --0.79%--__wait_for_common
+                                  __flush_workqueue
+                                  xlog_cil_push_now.isra.0
+                                  xlog_cil_force_seq
+                                  xfs_log_force_seq
+
+     5.67%     0.07%  [.] host_apply
+            |          
+             --5.67%--host_apply
+                       |          
+                        --5.66%--apply_committed
+                                  |          
+                                  |--3.82%--on_ae_req
+                                  |          drain_inbox
+                                  |          host_pump
+                                  |          start_thread
+                                  |          
+                                   --1.84%--try_commit
+                                             efs_raft_recv
+                                             drain_inbox
+                                             host_pump
+                                             start_thread
+
+     5.58%     0.15%  [k] tcp_v4_rcv
+            |          
+             --5.58%--tcp_v4_rcv
+                       ip_protocol_deliver_rcu
+                       ip_local_deliver_finish
+                       ip_local_deliver
+                       |          
+                        --5.57%--__netif_receive_skb_one_core
+                                  process_backlog
+                                  __napi_poll
+                                  net_rx_action
+                                  handle_softirqs
+                                  do_softirq
+                                  __local_bh_enable_ip
+                                  __dev_queue_xmit
+                                  ip_finish_output2
+                                  ip_output
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --5.51%--tcp_write_xmit
+                                             |          
+                                              --5.35%--__tcp_push_pending_frames
+                                                        |          
+                                                         --5.32%--tcp_sendmsg_locked
+                                                                   tcp_sendmsg
+                                                                   sock_write_iter
+                                                                   do_iter_readv_writev
+                                                                   vfs_writev
+                                                                   do_writev
+                                                                   do_syscall_64
+                                                                   entry_SYSCALL_64_after_hwframe
+                                                                   __GI___writev
+                                                                   efs_conn_send_msg
+                                                                   |          
+                                                                   |--2.55%--server_handle_conn
+                                                                   |          conn_thread
+                                                                   |          start_thread
+                                                                   |          
+                                                                    --2.32%--host_sender
+                                                                              start_thread
+
+     5.50%     0.11%  [k] xlog_force_lsn
+            |          
+             --5.50%--xlog_force_lsn
+                       |          
+                       |--3.60%--xfs_log_force_seq
+                       |          |          
+                       |          |--1.98%--xfs_file_fsync
+                       |          |          do_fsync
+                       |          |          __x64_sys_fsync
+                       |          |          do_syscall_64
+                       |          |          entry_SYSCALL_64_after_hwframe
+                       |          |          fsync
+                       |          |          |          
+                       |          |           --0.78%--host_pump
+                       |          |                     start_thread
+                       |          |          
+                       |           --1.62%--do_fsync
+                       |                     __x64_sys_fsync
+                       |                     do_syscall_64
+                       |                     entry_SYSCALL_64_after_hwframe
+                       |                     fsync
+                       |                     |          
+                       |                      --1.40%--fragment_parent_sync
+                       |                                |          
+                       |                                 --0.92%--server_delete_fragment_if_sum
+                       |                                           nvme_del_if_sum
+                       |                                           |          
+                       |                                            --0.66%--server_handle_conn
+                       |                                                      conn_thread
+                       |                                                      start_thread
+                       |          
+                       |--1.26%--xfs_file_fsync
+                       |          do_fsync
+                       |          __x64_sys_fsync
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          fsync
+                       |          |          
+                       |           --0.53%--host_pump
+                       |                     start_thread
+                       |          
+                        --0.64%--do_fsync
+                                  __x64_sys_fsync
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  fsync
+                                  |          
+                                   --0.59%--fragment_parent_sync
+
+     5.42%     0.06%  [.] host_gc_thread
+            |          
+             --5.42%--host_gc_thread
+                       start_thread
+
+     5.35%     0.15%  [k] sk_wait_data
+            |          
+             --5.32%--sk_wait_data
+                       tcp_recvmsg_locked
+                       tcp_recvmsg
+                       inet_recvmsg
+                       sock_recvmsg
+                       __sys_recvfrom
+                       __x64_sys_recvfrom
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_recv
+
+     5.06%     0.01%  [k] file_write_and_wait_range
+            |
+            ---xfs_file_fsync
+               do_fsync
+               |          
+               |--3.88%--__x64_sys_fsync
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          fsync
+               |          |          
+               |          |--1.35%--host_pump
+               |          |          start_thread
+               |          |          
+               |          |--0.86%--disk_append
+               |          |          |          
+               |          |           --0.65%--on_ae_req
+               |          |                     drain_inbox
+               |          |                     host_pump
+               |          |                     start_thread
+               |          |          
+               |           --0.82%--server_handle_conn
+               |                     conn_thread
+               |                     start_thread
+               |          
+                --1.18%--__x64_sys_fdatasync
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          fdatasync
+                          host_pump
+                          start_thread
+
+     5.05%     0.03%  [k] xlog_state_release_iclog
+            |          
+             --5.05%--xlog_state_release_iclog
+                       xlog_force_lsn
+                       |          
+                       |--3.22%--xfs_log_force_seq
+                       |          |          
+                       |          |--1.72%--xfs_file_fsync
+                       |          |          do_fsync
+                       |          |          __x64_sys_fsync
+                       |          |          do_syscall_64
+                       |          |          entry_SYSCALL_64_after_hwframe
+                       |          |          fsync
+                       |          |          |          
+                       |          |           --0.69%--host_pump
+                       |          |                     start_thread
+                       |          |          
+                       |           --1.50%--do_fsync
+                       |                     __x64_sys_fsync
+                       |                     do_syscall_64
+                       |                     entry_SYSCALL_64_after_hwframe
+                       |                     fsync
+                       |                     |          
+                       |                      --1.30%--fragment_parent_sync
+                       |                                |          
+                       |                                 --0.84%--server_delete_fragment_if_sum
+                       |                                           nvme_del_if_sum
+                       |                                           |          
+                       |                                            --0.59%--server_handle_conn
+                       |                                                      conn_thread
+                       |                                                      start_thread
+                       |          
+                       |--1.20%--xfs_file_fsync
+                       |          do_fsync
+                       |          __x64_sys_fsync
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          fsync
+                       |          
+                        --0.63%--do_fsync
+                                  __x64_sys_fsync
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  fsync
+                                  |          
+                                   --0.57%--fragment_parent_sync
+
+     4.81%     0.19%  [k] wait_woken
+            |          
+             --4.80%--wait_woken
+                       sk_wait_data
+                       tcp_recvmsg_locked
+                       tcp_recvmsg
+                       inet_recvmsg
+                       sock_recvmsg
+                       __sys_recvfrom
+                       __x64_sys_recvfrom
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_recv
+
+     4.64%     0.02%  [k] tcp_v4_do_rcv
+            |          
+             --4.62%--tcp_v4_rcv
+                       ip_protocol_deliver_rcu
+                       ip_local_deliver_finish
+                       ip_local_deliver
+                       |          
+                        --4.61%--__netif_receive_skb_one_core
+                                  process_backlog
+                                  __napi_poll
+                                  net_rx_action
+                                  handle_softirqs
+                                  do_softirq
+                                  __local_bh_enable_ip
+                                  __dev_queue_xmit
+                                  ip_finish_output2
+                                  ip_output
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --4.56%--tcp_write_xmit
+                                             |          
+                                              --4.43%--__tcp_push_pending_frames
+                                                        |          
+                                                         --4.40%--tcp_sendmsg_locked
+                                                                   tcp_sendmsg
+                                                                   sock_write_iter
+                                                                   do_iter_readv_writev
+                                                                   vfs_writev
+                                                                   do_writev
+                                                                   do_syscall_64
+                                                                   entry_SYSCALL_64_after_hwframe
+                                                                   __GI___writev
+                                                                   efs_conn_send_msg
+                                                                   |          
+                                                                   |--2.15%--server_handle_conn
+                                                                   |          conn_thread
+                                                                   |          start_thread
+                                                                   |          
+                                                                    --1.87%--host_sender
+                                                                              start_thread
+
+     4.59%     0.07%  [.] server_delete_fragment_if_sum
+            |          
+             --4.59%--server_delete_fragment_if_sum
+                       |          
+                        --4.57%--nvme_del_if_sum
+                                  |          
+                                  |--3.76%--server_handle_conn
+                                  |          conn_thread
+                                  |          start_thread
+                                  |          
+                                   --0.81%--host_gc_thread
+                                             start_thread
+
+     4.52%     0.24%  [k] tcp_rcv_established
+            |          
+             --4.51%--tcp_rcv_established
+                       tcp_v4_do_rcv
+                       |          
+                        --4.49%--tcp_v4_rcv
+                                  ip_protocol_deliver_rcu
+                                  ip_local_deliver_finish
+                                  ip_local_deliver
+                                  |          
+                                   --4.49%--__netif_receive_skb_one_core
+                                             process_backlog
+                                             __napi_poll
+                                             net_rx_action
+                                             handle_softirqs
+                                             do_softirq
+                                             __local_bh_enable_ip
+                                             __dev_queue_xmit
+                                             ip_finish_output2
+                                             ip_output
+                                             __ip_queue_xmit
+                                             __tcp_transmit_skb
+                                             |          
+                                              --4.44%--tcp_write_xmit
+                                                        |          
+                                                         --4.31%--__tcp_push_pending_frames
+                                                                   tcp_sendmsg_locked
+                                                                   tcp_sendmsg
+                                                                   sock_write_iter
+                                                                   do_iter_readv_writev
+                                                                   vfs_writev
+                                                                   do_writev
+                                                                   do_syscall_64
+                                                                   entry_SYSCALL_64_after_hwframe
+                                                                   __GI___writev
+                                                                   efs_conn_send_msg
+                                                                   |          
+                                                                   |--2.11%--server_handle_conn
+                                                                   |          conn_thread
+                                                                   |          start_thread
+                                                                   |          
+                                                                    --1.84%--host_sender
+                                                                              start_thread
+
+     4.41%     0.14%  [k] try_to_block_task.constprop.0.isra.0
+            |          
+             --4.40%--try_to_block_task.constprop.0.isra.0
+                       __schedule
+                       schedule
+                       |          
+                       |--2.12%--schedule_timeout
+                       |          |          
+                       |           --1.70%--wait_woken
+                       |                     sk_wait_data
+                       |                     tcp_recvmsg_locked
+                       |                     tcp_recvmsg
+                       |                     inet_recvmsg
+                       |                     sock_recvmsg
+                       |                     __sys_recvfrom
+                       |                     __x64_sys_recvfrom
+                       |                     do_syscall_64
+                       |                     entry_SYSCALL_64_after_hwframe
+                       |                     __libc_recv
+                       |          
+                       |--0.78%--schedule_hrtimeout_range_clock
+                       |          poll_schedule_timeout.constprop.0
+                       |          do_poll.constprop.0
+                       |          do_sys_poll
+                       |          __x64_sys_poll
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          __poll
+                       |          |          
+                       |           --0.77%--start_thread
+                       |          
+                        --0.74%--futex_do_wait
+                                  __futex_wait
+                                  futex_wait
+                                  do_futex
+                                  __x64_sys_futex
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  |          
+                                   --0.72%--__futex_abstimed_wait_common
+
+     4.29%     0.45%  [k] dequeue_entities
+            |          
+             --4.28%--dequeue_entities
+                       |          
+                        --4.09%--dequeue_task_fair
+                                  |          
+                                   --4.09%--try_to_block_task.constprop.0.isra.0
+                                             __schedule
+                                             schedule
+                                             |          
+                                             |--1.98%--schedule_timeout
+                                             |          |          
+                                             |           --1.58%--wait_woken
+                                             |                     sk_wait_data
+                                             |                     tcp_recvmsg_locked
+                                             |                     tcp_recvmsg
+                                             |                     inet_recvmsg
+                                             |                     sock_recvmsg
+                                             |                     __sys_recvfrom
+                                             |                     __x64_sys_recvfrom
+                                             |                     do_syscall_64
+                                             |                     entry_SYSCALL_64_after_hwframe
+                                             |                     __libc_recv
+                                             |          
+                                             |--0.71%--schedule_hrtimeout_range_clock
+                                             |          poll_schedule_timeout.constprop.0
+                                             |          do_poll.constprop.0
+                                             |          do_sys_poll
+                                             |          __x64_sys_poll
+                                             |          do_syscall_64
+                                             |          entry_SYSCALL_64_after_hwframe
+                                             |          __poll
+                                             |          |          
+                                             |           --0.70%--start_thread
+                                             |          
+                                              --0.70%--futex_do_wait
+                                                        __futex_wait
+                                                        futex_wait
+                                                        do_futex
+                                                        __x64_sys_futex
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        |          
+                                                         --0.68%--__futex_abstimed_wait_common
+
+     4.25%     0.11%  [.] __poll
+            |          
+             --4.22%--__poll
+                       |          
+                        --4.11%--start_thread
+
+     4.20%     0.09%  [k] dequeue_task_fair
+            |          
+             --4.19%--dequeue_task_fair
+                       |          
+                        --4.19%--try_to_block_task.constprop.0.isra.0
+                                  __schedule
+                                  schedule
+                                  |          
+                                  |--2.04%--schedule_timeout
+                                  |          |          
+                                  |           --1.62%--wait_woken
+                                  |                     sk_wait_data
+                                  |                     tcp_recvmsg_locked
+                                  |                     tcp_recvmsg
+                                  |                     inet_recvmsg
+                                  |                     sock_recvmsg
+                                  |                     __sys_recvfrom
+                                  |                     __x64_sys_recvfrom
+                                  |                     do_syscall_64
+                                  |                     entry_SYSCALL_64_after_hwframe
+                                  |                     __libc_recv
+                                  |          
+                                  |--0.74%--schedule_hrtimeout_range_clock
+                                  |          poll_schedule_timeout.constprop.0
+                                  |          do_poll.constprop.0
+                                  |          do_sys_poll
+                                  |          __x64_sys_poll
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          __poll
+                                  |          |          
+                                  |           --0.73%--start_thread
+                                  |          
+                                   --0.71%--futex_do_wait
+                                             __futex_wait
+                                             futex_wait
+                                             do_futex
+                                             __x64_sys_futex
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             |          
+                                              --0.69%--__futex_abstimed_wait_common
+
+     4.19%     0.09%  [k] __x64_sys_futex
+            |          
+             --4.19%--__x64_sys_futex
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--2.50%--__futex_abstimed_wait_common
+                       |          
+                        --1.29%--pthread_cond_signal@@GLIBC_2.3.2
+                                  |          
+                                   --0.53%--on_ae_req
+                                             drain_inbox
+                                             host_pump
+                                             start_thread
+
+     4.07%     0.08%  [k] do_futex
+            |          
+             --4.06%--do_futex
+                       __x64_sys_futex
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--2.42%--__futex_abstimed_wait_common
+                       |          
+                        --1.26%--pthread_cond_signal@@GLIBC_2.3.2
+                                  |          
+                                   --0.51%--on_ae_req
+                                             drain_inbox
+                                             host_pump
+                                             start_thread
+
+     3.98%     0.00%  [.] 0x69642d63672f7366
+     3.98%     0.05%  [.] __GI___libc_open
+            |          
+             --3.94%--__GI___libc_open
+                       |          
+                        --3.93%--0x69642d63672f7366
+
+     3.97%     0.02%  [.] lsm_batch
+            |          
+             --3.97%--lsm_batch
+                       |          
+                       |--1.92%--efs_meta_apply_unlink_op
+                       |          host_apply
+                       |          apply_committed
+                       |          |          
+                       |          |--1.28%--on_ae_req
+                       |          |          drain_inbox
+                       |          |          host_pump
+                       |          |          start_thread
+                       |          |          
+                       |           --0.64%--try_commit
+                       |                     efs_raft_recv
+                       |                     drain_inbox
+                       |                     host_pump
+                       |                     start_thread
+                       |          
+                        --1.42%--efs_meta_apply_lane_sweep
+                                  host_apply
+                                  apply_committed
+                                  |          
+                                   --1.01%--on_ae_req
+                                             drain_inbox
+                                             host_pump
+                                             start_thread
+
+     3.95%     0.02%  [k] __filemap_fdatawrite_range
+            |
+            ---file_write_and_wait_range
+               xfs_file_fsync
+               do_fsync
+               |          
+               |--3.07%--__x64_sys_fsync
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          fsync
+               |          |          
+               |          |--0.99%--host_pump
+               |          |          start_thread
+               |          |          
+               |          |--0.75%--server_handle_conn
+               |          |          conn_thread
+               |          |          start_thread
+               |          |          
+               |           --0.66%--disk_append
+               |          
+                --0.89%--__x64_sys_fdatasync
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          fdatasync
+                          host_pump
+                          start_thread
+
+     3.93%     0.13%  [k] __pick_next_task
+            |          
+             --3.90%--__pick_next_task
+                       __schedule
+                       |          
+                        --3.85%--schedule
+                                  |          
+                                  |--1.94%--schedule_timeout
+                                  |          |          
+                                  |           --1.51%--wait_woken
+                                  |                     sk_wait_data
+                                  |                     tcp_recvmsg_locked
+                                  |                     tcp_recvmsg
+                                  |                     inet_recvmsg
+                                  |                     sock_recvmsg
+                                  |                     __sys_recvfrom
+                                  |                     __x64_sys_recvfrom
+                                  |                     do_syscall_64
+                                  |                     entry_SYSCALL_64_after_hwframe
+                                  |                     __libc_recv
+                                  |          
+                                  |--0.56%--futex_do_wait
+                                  |          __futex_wait
+                                  |          futex_wait
+                                  |          do_futex
+                                  |          __x64_sys_futex
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          |          
+                                  |           --0.53%--__futex_abstimed_wait_common
+                                  |          
+                                   --0.54%--schedule_hrtimeout_range_clock
+                                             poll_schedule_timeout.constprop.0
+                                             do_poll.constprop.0
+                                             do_sys_poll
+                                             __x64_sys_poll
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             __poll
+                                             |          
+                                              --0.53%--start_thread
+
+     3.93%     0.00%  [k] filemap_fdatawrite_wbc
+            |          
+             --3.93%--filemap_fdatawrite_wbc
+                       __filemap_fdatawrite_range
+                       file_write_and_wait_range
+                       xfs_file_fsync
+                       do_fsync
+                       |          
+                       |--3.05%--__x64_sys_fsync
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          fsync
+                       |          |          
+                       |          |--0.98%--host_pump
+                       |          |          start_thread
+                       |          |          
+                       |          |--0.75%--server_handle_conn
+                       |          |          conn_thread
+                       |          |          start_thread
+                       |          |          
+                       |           --0.65%--disk_append
+                       |          
+                        --0.88%--__x64_sys_fdatasync
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  fdatasync
+                                  host_pump
+                                  start_thread
+
+     3.88%     0.04%  [k] do_writepages
+            |
+            ---filemap_fdatawrite_wbc
+               __filemap_fdatawrite_range
+               file_write_and_wait_range
+               xfs_file_fsync
+               do_fsync
+               |          
+               |--3.02%--__x64_sys_fsync
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          fsync
+               |          |          
+               |          |--0.96%--host_pump
+               |          |          start_thread
+               |          |          
+               |          |--0.75%--server_handle_conn
+               |          |          conn_thread
+               |          |          start_thread
+               |          |          
+               |           --0.65%--disk_append
+               |          
+                --0.86%--__x64_sys_fdatasync
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          fdatasync
+                          host_pump
+                          start_thread
+
+     3.84%     0.03%  [k] xfs_vm_writepages
+            |          
+             --3.84%--xfs_vm_writepages
+                       do_writepages
+                       filemap_fdatawrite_wbc
+                       __filemap_fdatawrite_range
+                       file_write_and_wait_range
+                       xfs_file_fsync
+                       do_fsync
+                       |          
+                       |--2.98%--__x64_sys_fsync
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          fsync
+                       |          |          
+                       |          |--0.94%--host_pump
+                       |          |          start_thread
+                       |          |          
+                       |          |--0.75%--server_handle_conn
+                       |          |          conn_thread
+                       |          |          start_thread
+                       |          |          
+                       |           --0.64%--disk_append
+                       |          
+                        --0.86%--__x64_sys_fdatasync
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  fdatasync
+                                  host_pump
+                                  start_thread
+
+     3.80%     0.02%  [k] iomap_writepages
+            |
+            ---xfs_vm_writepages
+               do_writepages
+               filemap_fdatawrite_wbc
+               __filemap_fdatawrite_range
+               file_write_and_wait_range
+               xfs_file_fsync
+               do_fsync
+               |          
+               |--2.96%--__x64_sys_fsync
+               |          do_syscall_64
+               |          entry_SYSCALL_64_after_hwframe
+               |          fsync
+               |          |          
+               |          |--0.93%--host_pump
+               |          |          start_thread
+               |          |          
+               |          |--0.75%--server_handle_conn
+               |          |          conn_thread
+               |          |          start_thread
+               |          |          
+               |           --0.63%--disk_append
+               |          
+                --0.85%--__x64_sys_fdatasync
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          fdatasync
+                          host_pump
+                          start_thread
+
+     3.75%     0.02%  [k] __x64_sys_openat
+            |          
+             --3.75%--__x64_sys_openat
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___libc_open
+                       0x69642d63672f7366
+
+     3.73%     0.02%  [k] do_sys_openat2
+            |          
+             --3.72%--do_sys_openat2
+                       __x64_sys_openat
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___libc_open
+                       0x69642d63672f7366
+
+     3.68%     0.02%  [.] server_gc_inode
+            |          
+             --3.68%--server_gc_inode
+                       |          
+                       |--3.04%--server_handle_conn
+                       |          conn_thread
+                       |          start_thread
+                       |          
+                        --0.64%--host_gc_inode_nodes
+                                  host_gc_thread
+                                  start_thread
+
+     3.68%     0.55%  [k] dequeue_entity
+            |          
+             --3.57%--dequeue_entity
+                       dequeue_entities
+                       |          
+                        --3.47%--dequeue_task_fair
+                                  try_to_block_task.constprop.0.isra.0
+                                  __schedule
+                                  schedule
+                                  |          
+                                  |--1.69%--schedule_timeout
+                                  |          |          
+                                  |           --1.35%--wait_woken
+                                  |                     sk_wait_data
+                                  |                     tcp_recvmsg_locked
+                                  |                     tcp_recvmsg
+                                  |                     inet_recvmsg
+                                  |                     sock_recvmsg
+                                  |                     __sys_recvfrom
+                                  |                     __x64_sys_recvfrom
+                                  |                     do_syscall_64
+                                  |                     entry_SYSCALL_64_after_hwframe
+                                  |                     __libc_recv
+                                  |          
+                                  |--0.60%--schedule_hrtimeout_range_clock
+                                  |          poll_schedule_timeout.constprop.0
+                                  |          do_poll.constprop.0
+                                  |          do_sys_poll
+                                  |          __x64_sys_poll
+                                  |          do_syscall_64
+                                  |          entry_SYSCALL_64_after_hwframe
+                                  |          __poll
+                                  |          |          
+                                  |           --0.59%--start_thread
+                                  |          
+                                   --0.60%--futex_do_wait
+                                             __futex_wait
+                                             futex_wait
+                                             do_futex
+                                             __x64_sys_futex
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             |          
+                                              --0.59%--__futex_abstimed_wait_common
+
+     3.67%     0.02%  [.] disk_append
+            |          
+            |--2.78%--on_ae_req
+            |          drain_inbox
+            |          host_pump
+            |          start_thread
+            |          
+             --0.66%--efs_raft_propose
+                       host_bg_propose.constprop.0
+                       |          
+                        --0.60%--host_gc_thread
+                                  start_thread
+
+     3.58%     0.10%  [k] vfs_write
+            |          
+            |--1.95%--ksys_write
+            |          do_syscall_64
+            |          entry_SYSCALL_64_after_hwframe
+            |          __GI___libc_write
+            |          |          
+            |          |--0.89%--lsm_batch
+            |          |          
+            |           --0.78%--server_handle_conn
+            |                     conn_thread
+            |                     start_thread
+            |          
+             --1.63%--__x64_sys_pwrite64
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __libc_pwrite
+                       |          
+                       |--0.85%--disk_append
+                       |          |          
+                       |           --0.55%--on_ae_req
+                       |                     drain_inbox
+                       |                     host_pump
+                       |                     start_thread
+                       |          
+                        --0.77%--host_pump
+                                  start_thread
+
+     3.52%     0.09%  [k] __submit_bio
+            |          
+             --3.51%--__submit_bio
+                       |          
+                       |--1.96%--__submit_bio_noacct
+                       |          |          
+                       |          |--0.74%--xlog_state_release_iclog
+                       |          |          xlog_force_lsn
+                       |          |          
+                       |           --0.72%--iomap_ioend_writeback_submit
+                       |                     |          
+                       |                      --0.70%--iomap_writepages
+                       |                                xfs_vm_writepages
+                       |                                do_writepages
+                       |                                filemap_fdatawrite_wbc
+                       |                                __filemap_fdatawrite_range
+                       |                                file_write_and_wait_range
+                       |                                xfs_file_fsync
+                       |                                do_fsync
+                       |                                |          
+                       |                                 --0.51%--__x64_sys_fsync
+                       |                                           do_syscall_64
+                       |                                           entry_SYSCALL_64_after_hwframe
+                       |                                           fsync
+                       |          
+                        --1.55%--submit_bio_noacct_nocheck
+                                  |          
+                                  |--0.90%--iomap_ioend_writeback_submit
+                                  |          |          
+                                  |           --0.86%--iomap_writepages
+                                  |                     xfs_vm_writepages
+                                  |                     do_writepages
+                                  |                     filemap_fdatawrite_wbc
+                                  |                     __filemap_fdatawrite_range
+                                  |                     file_write_and_wait_range
+                                  |                     xfs_file_fsync
+                                  |                     do_fsync
+                                  |                     |          
+                                  |                      --0.64%--__x64_sys_fsync
+                                  |                                do_syscall_64
+                                  |                                entry_SYSCALL_64_after_hwframe
+                                  |                                fsync
+                                  |          
+                                   --0.55%--xlog_state_release_iclog
+                                             xlog_force_lsn
+                                             |          
+                                              --0.51%--xfs_log_force_seq
+
+     3.47%     0.03%  [k] do_filp_open
+            |          
+             --3.47%--do_filp_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___libc_open
+                       0x69642d63672f7366
+
+     3.46%     0.14%  [.] __futex_abstimed_wait_common
+            |          
+             --3.40%--__futex_abstimed_wait_common
+
+     3.44%     0.02%  [k] path_openat
+            |          
+             --3.44%--path_openat
+                       do_filp_open
+                       do_sys_openat2
+                       __x64_sys_openat
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___libc_open
+                       0x69642d63672f7366
+
+     3.43%     0.11%  [k] nft_do_chain_inet
+            |          
+             --3.42%--nft_do_chain_inet
+                       nf_hook_slow
+                       |          
+                       |--2.39%--ip_rcv
+                       |          __netif_receive_skb_one_core
+                       |          process_backlog
+                       |          __napi_poll
+                       |          net_rx_action
+                       |          handle_softirqs
+                       |          do_softirq
+                       |          __local_bh_enable_ip
+                       |          __dev_queue_xmit
+                       |          ip_finish_output2
+                       |          ip_output
+                       |          __ip_queue_xmit
+                       |          __tcp_transmit_skb
+                       |          |          
+                       |           --2.36%--tcp_write_xmit
+                       |                     |          
+                       |                      --2.30%--__tcp_push_pending_frames
+                       |                                |          
+                       |                                 --2.30%--tcp_sendmsg_locked
+                       |                                           tcp_sendmsg
+                       |                                           sock_write_iter
+                       |                                           do_iter_readv_writev
+                       |                                           vfs_writev
+                       |                                           do_writev
+                       |                                           do_syscall_64
+                       |                                           entry_SYSCALL_64_after_hwframe
+                       |                                           __GI___writev
+                       |                                           efs_conn_send_msg
+                       |                                           |          
+                       |                                           |--1.23%--server_handle_conn
+                       |                                           |          conn_thread
+                       |                                           |          start_thread
+                       |                                           |          
+                       |                                            --0.91%--host_sender
+                       |                                                      start_thread
+                       |          
+                        --0.64%--__ip_local_out
+                                  ip_local_out
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --0.63%--tcp_write_xmit
+                                             |          
+                                              --0.62%--__tcp_push_pending_frames
+                                                        tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+
+     3.41%     0.03%  [k] xlog_sync
+            |
+            ---xlog_state_release_iclog
+               xlog_force_lsn
+               |          
+               |--2.23%--xfs_log_force_seq
+               |          |          
+               |          |--1.27%--xfs_file_fsync
+               |          |          do_fsync
+               |          |          __x64_sys_fsync
+               |          |          do_syscall_64
+               |          |          entry_SYSCALL_64_after_hwframe
+               |          |          fsync
+               |          |          
+               |           --0.97%--do_fsync
+               |                     __x64_sys_fsync
+               |                     do_syscall_64
+               |                     entry_SYSCALL_64_after_hwframe
+               |                     fsync
+               |                     |          
+               |                      --0.86%--fragment_parent_sync
+               |                                |          
+               |                                 --0.64%--server_delete_fragment_if_sum
+               |                                           nvme_del_if_sum
+               |          
+                --0.74%--xfs_file_fsync
+                          do_fsync
+                          __x64_sys_fsync
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          fsync
+
+     3.41%     0.08%  [k] __x64_sys_poll
+            |          
+             --3.40%--__x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __poll
+                       |          
+                        --3.32%--start_thread
+
+     3.35%     0.11%  [k] pick_next_task_fair
+            |          
+             --3.32%--pick_next_task_fair
+                       __pick_next_task
+                       __schedule
+                       |          
+                        --3.28%--schedule
+                                  |          
+                                   --1.67%--schedule_timeout
+                                             |          
+                                              --1.27%--wait_woken
+                                                        sk_wait_data
+                                                        tcp_recvmsg_locked
+                                                        tcp_recvmsg
+                                                        inet_recvmsg
+                                                        sock_recvmsg
+                                                        __sys_recvfrom
+                                                        __x64_sys_recvfrom
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __libc_recv
+
+     3.32%     1.76%  [k] nft_do_chain
+            |          
+             --3.28%--nft_do_chain
+                       nft_do_chain_inet
+                       nf_hook_slow
+                       |          
+                       |--2.30%--ip_rcv
+                       |          __netif_receive_skb_one_core
+                       |          process_backlog
+                       |          __napi_poll
+                       |          net_rx_action
+                       |          handle_softirqs
+                       |          do_softirq
+                       |          __local_bh_enable_ip
+                       |          __dev_queue_xmit
+                       |          ip_finish_output2
+                       |          ip_output
+                       |          __ip_queue_xmit
+                       |          __tcp_transmit_skb
+                       |          |          
+                       |           --2.27%--tcp_write_xmit
+                       |                     |          
+                       |                      --2.22%--__tcp_push_pending_frames
+                       |                                |          
+                       |                                 --2.21%--tcp_sendmsg_locked
+                       |                                           tcp_sendmsg
+                       |                                           sock_write_iter
+                       |                                           do_iter_readv_writev
+                       |                                           vfs_writev
+                       |                                           do_writev
+                       |                                           do_syscall_64
+                       |                                           entry_SYSCALL_64_after_hwframe
+                       |                                           __GI___writev
+                       |                                           efs_conn_send_msg
+                       |                                           |          
+                       |                                           |--1.18%--server_handle_conn
+                       |                                           |          conn_thread
+                       |                                           |          start_thread
+                       |                                           |          
+                       |                                            --0.88%--host_sender
+                       |                                                      start_thread
+                       |          
+                        --0.62%--__ip_local_out
+                                  ip_local_out
+                                  __ip_queue_xmit
+                                  __tcp_transmit_skb
+                                  |          
+                                   --0.61%--tcp_write_xmit
+                                             |          
+                                              --0.60%--__tcp_push_pending_frames
+                                                        tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+
+     3.31%     0.02%  [.] fragment_parent_sync
+            |          
+             --3.31%--fragment_parent_sync
+                       |          
+                       |--2.16%--server_delete_fragment_if_sum
+                       |          nvme_del_if_sum
+                       |          |          
+                       |           --1.76%--server_handle_conn
+                       |                     conn_thread
+                       |                     start_thread
+                       |          
+                        --0.81%--server_gc_inode
+                                  |          
+                                   --0.68%--server_handle_conn
+                                             conn_thread
+                                             start_thread
+
+     3.27%     0.05%  [k] crc32c
+            |          
+             --3.26%--xlog_cksum
+                       xlog_sync
+                       xlog_state_release_iclog
+                       xlog_force_lsn
+                       |          
+                       |--2.15%--xfs_log_force_seq
+                       |          |          
+                       |          |--1.23%--xfs_file_fsync
+                       |          |          do_fsync
+                       |          |          __x64_sys_fsync
+                       |          |          do_syscall_64
+                       |          |          entry_SYSCALL_64_after_hwframe
+                       |          |          fsync
+                       |          |          
+                       |           --0.92%--do_fsync
+                       |                     __x64_sys_fsync
+                       |                     do_syscall_64
+                       |                     entry_SYSCALL_64_after_hwframe
+                       |                     fsync
+                       |                     |          
+                       |                      --0.82%--fragment_parent_sync
+                       |                                |          
+                       |                                 --0.60%--server_delete_fragment_if_sum
+                       |                                           nvme_del_if_sum
+                       |          
+                        --0.69%--xfs_file_fsync
+                                  do_fsync
+                                  __x64_sys_fsync
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  fsync
+
+     3.27%     0.00%  [k] xlog_cksum
+            |
+            ---xlog_sync
+               xlog_state_release_iclog
+               xlog_force_lsn
+               |          
+               |--2.15%--xfs_log_force_seq
+               |          |          
+               |          |--1.23%--xfs_file_fsync
+               |          |          do_fsync
+               |          |          __x64_sys_fsync
+               |          |          do_syscall_64
+               |          |          entry_SYSCALL_64_after_hwframe
+               |          |          fsync
+               |          |          
+               |           --0.92%--do_fsync
+               |                     __x64_sys_fsync
+               |                     do_syscall_64
+               |                     entry_SYSCALL_64_after_hwframe
+               |                     fsync
+               |                     |          
+               |                      --0.82%--fragment_parent_sync
+               |                                |          
+               |                                 --0.60%--server_delete_fragment_if_sum
+               |                                           nvme_del_if_sum
+               |          
+                --0.69%--xfs_file_fsync
+                          do_fsync
+                          __x64_sys_fsync
+                          do_syscall_64
+                          entry_SYSCALL_64_after_hwframe
+                          fsync
+
+     3.25%     0.20%  [k] do_sys_poll
+            |
+            ---__x64_sys_poll
+               do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __poll
+               |          
+                --3.17%--start_thread
+
+     3.21%     0.01%  [k] chksum_update
+            |
+            ---crc32c
+               |          
+                --3.20%--xlog_cksum
+                          xlog_sync
+                          xlog_state_release_iclog
+                          xlog_force_lsn
+                          |          
+                          |--2.11%--xfs_log_force_seq
+                          |          |          
+                          |          |--1.22%--xfs_file_fsync
+                          |          |          do_fsync
+                          |          |          __x64_sys_fsync
+                          |          |          do_syscall_64
+                          |          |          entry_SYSCALL_64_after_hwframe
+                          |          |          fsync
+                          |          |          
+                          |           --0.90%--do_fsync
+                          |                     __x64_sys_fsync
+                          |                     do_syscall_64
+                          |                     entry_SYSCALL_64_after_hwframe
+                          |                     fsync
+                          |                     |          
+                          |                      --0.79%--fragment_parent_sync
+                          |                                |          
+                          |                                 --0.59%--server_delete_fragment_if_sum
+                          |                                           nvme_del_if_sum
+                          |          
+                           --0.67%--xfs_file_fsync
+                                     do_fsync
+                                     __x64_sys_fsync
+                                     do_syscall_64
+                                     entry_SYSCALL_64_after_hwframe
+                                     fsync
+
+     3.19%     3.17%  [k] crc32_body
+            |
+            ---chksum_update
+               crc32c
+               |          
+                --3.18%--xlog_cksum
+                          xlog_sync
+                          xlog_state_release_iclog
+                          xlog_force_lsn
+                          |          
+                          |--2.09%--xfs_log_force_seq
+                          |          |          
+                          |          |--1.21%--xfs_file_fsync
+                          |          |          do_fsync
+                          |          |          __x64_sys_fsync
+                          |          |          do_syscall_64
+                          |          |          entry_SYSCALL_64_after_hwframe
+                          |          |          fsync
+                          |          |          
+                          |           --0.88%--do_fsync
+                          |                     __x64_sys_fsync
+                          |                     do_syscall_64
+                          |                     entry_SYSCALL_64_after_hwframe
+                          |                     fsync
+                          |                     |          
+                          |                      --0.79%--fragment_parent_sync
+                          |                                |          
+                          |                                 --0.59%--server_delete_fragment_if_sum
+                          |                                           nvme_del_if_sum
+                          |          
+                           --0.67%--xfs_file_fsync
+                                     do_fsync
+                                     __x64_sys_fsync
+                                     do_syscall_64
+                                     entry_SYSCALL_64_after_hwframe
+                                     fsync
+
+     3.15%     0.22%  [k] try_to_wake_up
+            |          
+             --3.12%--try_to_wake_up
+                       |          
+                       |--1.29%--__wake_up_common
+                       |          __wake_up_sync_key
+                       |          sock_def_readable
+                       |          |          
+                       |           --1.15%--tcp_rcv_established
+                       |                     tcp_v4_do_rcv
+                       |                     tcp_v4_rcv
+                       |                     ip_protocol_deliver_rcu
+                       |                     ip_local_deliver_finish
+                       |                     ip_local_deliver
+                       |                     __netif_receive_skb_one_core
+                       |                     process_backlog
+                       |                     __napi_poll
+                       |                     net_rx_action
+                       |                     handle_softirqs
+                       |                     do_softirq
+                       |                     __local_bh_enable_ip
+                       |                     __dev_queue_xmit
+                       |                     ip_finish_output2
+                       |                     ip_output
+                       |                     __ip_queue_xmit
+                       |                     __tcp_transmit_skb
+                       |                     tcp_write_xmit
+                       |                     __tcp_push_pending_frames
+                       |                     tcp_sendmsg_locked
+                       |                     tcp_sendmsg
+                       |                     sock_write_iter
+                       |                     do_iter_readv_writev
+                       |                     vfs_writev
+                       |                     do_writev
+                       |                     do_syscall_64
+                       |                     entry_SYSCALL_64_after_hwframe
+                       |                     __GI___writev
+                       |                     efs_conn_send_msg
+                       |                     |          
+                       |                     |--0.56%--server_handle_conn
+                       |                     |          conn_thread
+                       |                     |          start_thread
+                       |                     |          
+                       |                      --0.53%--host_sender
+                       |                                start_thread
+                       |          
+                       |--0.79%--wake_up_q
+                       |          futex_wake
+                       |          do_futex
+                       |          __x64_sys_futex
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          |          
+                       |           --0.76%--pthread_cond_signal@@GLIBC_2.3.2
+                       |          
+                        --0.52%--pollwake
+                                  __wake_up_common
+                                  |          
+                                   --0.50%--eventfd_write
+                                             vfs_write
+                                             ksys_write
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             __GI___libc_write
+
+     2.94%     0.23%  [k] syscall_exit_to_user_mode
+            |          
+             --2.89%--syscall_exit_to_user_mode
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                       |--0.95%--__libc_recv
+                       |          
+                        --0.53%--__futex_abstimed_wait_common
+
+     2.92%     0.10%  [k] ip_rcv
+            |          
+             --2.90%--ip_rcv
+                       __netif_receive_skb_one_core
+                       process_backlog
+                       __napi_poll
+                       net_rx_action
+                       handle_softirqs
+                       do_softirq
+                       __local_bh_enable_ip
+                       __dev_queue_xmit
+                       ip_finish_output2
+                       ip_output
+                       __ip_queue_xmit
+                       __tcp_transmit_skb
+                       |          
+                        --2.86%--tcp_write_xmit
+                                  |          
+                                   --2.80%--__tcp_push_pending_frames
+                                             |          
+                                              --2.79%--tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+                                                        |          
+                                                        |--1.46%--server_handle_conn
+                                                        |          conn_thread
+                                                        |          start_thread
+                                                        |          
+                                                         --1.12%--host_sender
+                                                                   start_thread
+
+     2.89%     0.08%  [k] do_poll.constprop.0
+            |          
+             --2.88%--do_poll.constprop.0
+                       do_sys_poll
+                       __x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __poll
+                       |          
+                        --2.82%--start_thread
+
+     2.87%     0.02%  [.] efs_meta_apply_unlink_op
+            |          
+             --2.87%--host_apply
+                       apply_committed
+                       |          
+                       |--1.94%--on_ae_req
+                       |          drain_inbox
+                       |          host_pump
+                       |          start_thread
+                       |          
+                        --0.93%--try_commit
+                                  efs_raft_recv
+                                  drain_inbox
+                                  host_pump
+                                  start_thread
+
+     2.74%     0.03%  [k] ip_local_out
+            |
+            ---__ip_queue_xmit
+               __tcp_transmit_skb
+               |          
+                --2.69%--tcp_write_xmit
+                          |          
+                           --2.63%--__tcp_push_pending_frames
+                                     |          
+                                      --2.63%--tcp_sendmsg_locked
+                                                tcp_sendmsg
+                                                sock_write_iter
+                                                do_iter_readv_writev
+                                                vfs_writev
+                                                do_writev
+                                                do_syscall_64
+                                                entry_SYSCALL_64_after_hwframe
+                                                __GI___writev
+                                                efs_conn_send_msg
+                                                |          
+                                                |--1.33%--server_handle_conn
+                                                |          conn_thread
+                                                |          start_thread
+                                                |          
+                                                 --1.10%--host_sender
+                                                           start_thread
+
+     2.73%     2.66%  [.] __memmove_evex_unaligned_erms
+            |          
+             --2.72%--__memmove_evex_unaligned_erms
+                       |          
+                        --2.26%--lsm_batch
+                                  |          
+                                  |--1.16%--efs_meta_apply_unlink_op
+                                  |          host_apply
+                                  |          apply_committed
+                                  |          |          
+                                  |           --0.74%--on_ae_req
+                                  |                     drain_inbox
+                                  |                     host_pump
+                                  |                     start_thread
+                                  |          
+                                   --0.99%--efs_meta_apply_lane_sweep
+                                             host_apply
+                                             apply_committed
+                                             |          
+                                              --0.72%--on_ae_req
+                                                        drain_inbox
+                                                        host_pump
+                                                        start_thread
+
+     2.71%     0.08%  [k] __ip_local_out
+            |          
+             --2.70%--__ip_local_out
+                       ip_local_out
+                       __ip_queue_xmit
+                       __tcp_transmit_skb
+                       |          
+                        --2.65%--tcp_write_xmit
+                                  |          
+                                   --2.59%--__tcp_push_pending_frames
+                                             |          
+                                              --2.59%--tcp_sendmsg_locked
+                                                        tcp_sendmsg
+                                                        sock_write_iter
+                                                        do_iter_readv_writev
+                                                        vfs_writev
+                                                        do_writev
+                                                        do_syscall_64
+                                                        entry_SYSCALL_64_after_hwframe
+                                                        __GI___writev
+                                                        efs_conn_send_msg
+                                                        |          
+                                                        |--1.32%--server_handle_conn
+                                                        |          conn_thread
+                                                        |          start_thread
+                                                        |          
+                                                         --1.08%--host_sender
+                                                                   start_thread
+
+     2.65%     0.28%  [k] sched_balance_newidle
+            |          
+             --2.61%--sched_balance_newidle
+                       pick_next_task_fair
+                       __pick_next_task
+                       __schedule
+                       schedule
+                       |          
+                        --1.37%--schedule_timeout
+                                  |          
+                                   --1.11%--wait_woken
+                                             sk_wait_data
+                                             tcp_recvmsg_locked
+                                             tcp_recvmsg
+                                             inet_recvmsg
+                                             sock_recvmsg
+                                             __sys_recvfrom
+                                             __x64_sys_recvfrom
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             __libc_recv
+
+     2.63%     0.01%  [.] __unlink
+            |          
+             --2.62%--__unlink
+                       |          
+                       |--2.11%--server_delete_fragment_if_sum
+                       |          nvme_del_if_sum
+                       |          |          
+                       |           --1.74%--server_handle_conn
+                       |                     conn_thread
+                       |                     start_thread
+                       |          
+                        --0.51%--gc_dead_directory
+                                  |          
+                                   --0.51%--gc_dead_directory
+                                             server_gc_inode
+
+     2.57%     0.00%  [k] __x64_sys_unlink
+            |
+            ---do_syscall_64
+               entry_SYSCALL_64_after_hwframe
+               __unlink
+               |          
+               |--2.07%--server_delete_fragment_if_sum
+               |          nvme_del_if_sum
+               |          |          
+               |           --1.71%--server_handle_conn
+               |                     conn_thread
+               |                     start_thread
+               |          
+                --0.50%--gc_dead_directory
+                          gc_dead_directory
+                          server_gc_inode
+
+     2.55%     0.10%  [.] __GI___libc_write
+            |          
+             --2.49%--__GI___libc_write
+                       |          
+                       |--1.14%--server_handle_conn
+                       |          conn_thread
+                       |          start_thread
+                       |          
+                        --0.96%--lsm_batch
+
+     2.53%     0.06%  [k] xfs_file_buffered_write
+            |          
+             --2.46%--vfs_write
+                       |          
+                       |--1.47%--__x64_sys_pwrite64
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          __libc_pwrite
+                       |          |          
+                       |          |--0.76%--disk_append
+                       |          |          
+                       |           --0.71%--host_pump
+                       |                     start_thread
+                       |          
+                        --0.99%--ksys_write
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  __GI___libc_write
+                                  |          
+                                   --0.81%--lsm_batch
+
+     2.52%     0.01%  [k] do_unlinkat
+            |          
+             --2.52%--do_unlinkat
+                       __x64_sys_unlink
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __unlink
+                       |          
+                        --2.03%--server_delete_fragment_if_sum
+                                  nvme_del_if_sum
+                                  |          
+                                   --1.68%--server_handle_conn
+                                             conn_thread
+                                             start_thread
+
+     2.46%     0.07%  [k] futex_wait
+            |          
+             --2.46%--futex_wait
+                       do_futex
+                       __x64_sys_futex
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --2.38%--__futex_abstimed_wait_common
+
+     2.35%     0.12%  [k] poll_schedule_timeout.constprop.0
+            |          
+             --2.35%--poll_schedule_timeout.constprop.0
+                       do_poll.constprop.0
+                       do_sys_poll
+                       __x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __poll
+                       |          
+                        --2.31%--start_thread
+
+     2.35%     0.05%  [.] efs_raft_recv
+            |          
+             --2.35%--efs_raft_recv
+                       |          
+                        --2.34%--drain_inbox
+                                  host_pump
+                                  start_thread
+
+     2.32%     0.15%  [k] link_path_walk.part.0.constprop.0
+            |          
+             --2.32%--link_path_walk.part.0.constprop.0
+                       |          
+                       |--1.52%--path_openat
+                       |          do_filp_open
+                       |          do_sys_openat2
+                       |          __x64_sys_openat
+                       |          do_syscall_64
+                       |          entry_SYSCALL_64_after_hwframe
+                       |          __GI___libc_open
+                       |          0x69642d63672f7366
+                       |          
+                        --0.70%--path_parentat
+                                  __filename_parentat
+
+     2.30%     0.08%  [k] __futex_wait
+            |          
+             --2.29%--__futex_wait
+                       futex_wait
+                       do_futex
+                       __x64_sys_futex
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       |          
+                        --2.22%--__futex_abstimed_wait_common
+
+     2.22%     0.07%  [k] schedule_hrtimeout_range_clock
+            |          
+             --2.22%--schedule_hrtimeout_range_clock
+                       poll_schedule_timeout.constprop.0
+                       do_poll.constprop.0
+                       do_sys_poll
+                       __x64_sys_poll
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __poll
+                       |          
+                        --2.18%--start_thread
+
+     2.14%     0.01%  [k] xfs_trans_commit
+            |          
+             --2.13%--xfs_trans_commit
+                       |          
+                       |--0.81%--xfs_remove
+                       |          xfs_vn_unlink
+                       |          |          
+                       |           --0.68%--vfs_unlink
+                       |                     do_unlinkat
+                       |                     __x64_sys_unlink
+                       |                     do_syscall_64
+                       |                     entry_SYSCALL_64_after_hwframe
+                       |                     __unlink
+                       |          
+                        --0.79%--xfs_vn_update_time
+                                  |          
+                                   --0.69%--kiocb_modified
+                                             xfs_file_write_checks.constprop.0
+                                             xfs_file_buffered_write
+                                             |          
+                                              --0.66%--vfs_write
+
+     2.13%     0.03%  [k] ksys_write
+            |          
+             --2.12%--ksys_write
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __GI___libc_write
+                       |          
+                       |--0.92%--lsm_batch
+                       |          
+                        --0.90%--server_handle_conn
+                                  conn_thread
+                                  start_thread
+
+     2.12%     0.14%  [.] try_commit
+            |          
+             --2.10%--try_commit
+                       |          
+                        --1.97%--efs_raft_recv
+                                  drain_inbox
+                                  host_pump
+                                  start_thread
+
+     2.05%     0.15%  [k] __wake_up_common
+            |          
+             --2.04%--__wake_up_common
+                       |          
+                       |--1.47%--__wake_up_sync_key
+                       |          sock_def_readable
+                       |          |          
+                       |           --1.29%--tcp_rcv_established
+                       |                     tcp_v4_do_rcv
+                       |                     tcp_v4_rcv
+                       |                     ip_protocol_deliver_rcu
+                       |                     ip_local_deliver_finish
+                       |                     ip_local_deliver
+                       |                     __netif_receive_skb_one_core
+                       |                     process_backlog
+                       |                     __napi_poll
+                       |                     net_rx_action
+                       |                     handle_softirqs
+                       |                     do_softirq
+                       |                     __local_bh_enable_ip
+                       |                     __dev_queue_xmit
+                       |                     ip_finish_output2
+                       |                     ip_output
+                       |                     __ip_queue_xmit
+                       |                     __tcp_transmit_skb
+                       |                     tcp_write_xmit
+                       |                     __tcp_push_pending_frames
+                       |                     tcp_sendmsg_locked
+                       |                     tcp_sendmsg
+                       |                     sock_write_iter
+                       |                     do_iter_readv_writev
+                       |                     vfs_writev
+                       |                     do_writev
+                       |                     do_syscall_64
+                       |                     entry_SYSCALL_64_after_hwframe
+                       |                     __GI___writev
+                       |                     efs_conn_send_msg
+                       |                     |          
+                       |                     |--0.64%--server_handle_conn
+                       |                     |          conn_thread
+                       |                     |          start_thread
+                       |                     |          
+                       |                      --0.58%--host_sender
+                       |                                start_thread
+                       |          
+                        --0.57%--eventfd_write
+                                  vfs_write
+                                  ksys_write
+                                  do_syscall_64
+                                  entry_SYSCALL_64_after_hwframe
+                                  __GI___libc_write
+
+     2.03%     0.06%  [k] __submit_bio_noacct
+            |          
+            |--0.77%--xlog_state_release_iclog
+            |          xlog_force_lsn
+            |          
+             --0.74%--iomap_ioend_writeback_submit
+                       |          
+                        --0.72%--iomap_writepages
+                                  xfs_vm_writepages
+                                  do_writepages
+                                  filemap_fdatawrite_wbc
+                                  __filemap_fdatawrite_range
+                                  file_write_and_wait_range
+                                  xfs_file_fsync
+                                  do_fsync
+                                  |          
+                                   --0.52%--__x64_sys_fsync
+                                             do_syscall_64
+                                             entry_SYSCALL_64_after_hwframe
+                                             fsync
+
+
+
+#
+# (Tip: For parallelism histogram, try: perf report --hierarchy --sort latency,parallelism,comm,symbol)
+#

@@ -1,0 +1,9 @@
+171036 linkat(AT_FDCWD, "/tmp/efs-link-probe-9zu88db9/l", AT_FDCWD, "/tmp/efs-link-probe-9zu88db9/default", AT_SYMLINK_FOLLOW) = 0
+171036 linkat(AT_FDCWD, "/tmp/efs-link-probe-9zu88db9/l", AT_FDCWD, "/tmp/efs-link-probe-9zu88db9/nofollow", 0) = 0
+171036 linkat(AT_FDCWD, "/tmp/efs-link-probe-9zu88db9/l", AT_FDCWD, "/tmp/efs-link-probe-9zu88db9/follow", AT_SYMLINK_FOLLOW) = 0
+171036 link("/tmp/efs-link-probe-9zu88db9/l", "/tmp/efs-link-probe-9zu88db9/raw-link") = 0
+171036 linkat(AT_FDCWD, "/home/efs/efs/mnt/efs-link-probe-x6wzfaxs/l", AT_FDCWD, "/home/efs/efs/mnt/efs-link-probe-x6wzfaxs/default", AT_SYMLINK_FOLLOW) = 0
+171036 linkat(AT_FDCWD, "/home/efs/efs/mnt/efs-link-probe-x6wzfaxs/l", AT_FDCWD, "/home/efs/efs/mnt/efs-link-probe-x6wzfaxs/nofollow", 0) = 0
+171036 linkat(AT_FDCWD, "/home/efs/efs/mnt/efs-link-probe-x6wzfaxs/l", AT_FDCWD, "/home/efs/efs/mnt/efs-link-probe-x6wzfaxs/follow", AT_SYMLINK_FOLLOW) = 0
+171036 link("/home/efs/efs/mnt/efs-link-probe-x6wzfaxs/l", "/home/efs/efs/mnt/efs-link-probe-x6wzfaxs/raw-link") = 0
+171036 +++ exited with 0 +++

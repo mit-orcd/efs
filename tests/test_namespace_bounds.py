@@ -32,8 +32,14 @@ int main(void) {
  int n,hint=0;out.canary=0xabcddcba;
  assert(host_pver_guard_chain(&h,63*4096+1,999,&p,out.g,&n,&hint)==EFS_OK);
  assert(n==64&&p.n==1&&out.canary==0xabcddcba);
- p.n=0;assert(host_pver_guard_chain(&h,64*4096+1,999,&p,out.g,&n,&hint)==EFS_ERR_BUSY);
- assert(n==64&&out.canary==0xabcddcba);
+ p.n=0;assert(host_pver_guard_chain(&h,64*4096+1,999,&p,out.g,&n,&hint)==EFS_OK);
+ assert(n==65&&out.canary==0xabcddcba);
+ p.n=0;assert(host_pver_guard_chain(&h,(EFS_TXN_NAMESPACE_MAX_PART-1)*4096+1,999,&p,out.g,&n,&hint)==EFS_OK);
+ assert(n==EFS_TXN_NAMESPACE_MAX_PART&&p.n==1&&out.canary==0xabcddcba);
+ p.n=0;assert(host_pver_guard_chain(&h,EFS_TXN_NAMESPACE_MAX_PART*4096+1,999,&p,out.g,&n,&hint)==EFS_ERR_BUSY);
+ assert(n==EFS_TXN_NAMESPACE_MAX_PART&&out.canary==0xabcddcba);
+ p.n=0;assert(host_pver_guard_chain(&h,100*4096+1,30*4096+1,&p,out.g,&n,&hint)==EFS_ERR_INVAL);
+ assert(n==70&&out.canary==0xabcddcba);
  p.n=0;assert(host_pver_guard_chain(&h,4097,4097,&p,out.g,&n,&hint)==EFS_ERR_INVAL&&n==0);
  self_parent=1;p.n=0;
  assert(host_pver_guard_chain(&h,4097,999,&p,out.g,&n,&hint)==EFS_ERR_INVAL);
@@ -49,4 +55,4 @@ with tempfile.TemporaryDirectory(prefix='efs-namespace-bound-') as d:
  p=Path(d)/'t.c';p.write_text(code)
  subprocess.run(['cc','-O2','-Wall','-Wextra','-Werror','-D_GNU_SOURCE','-I'+str(root/'include'),str(p),str(root/'libefs.a'),'-pthread','-lm','-ldl','-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=10)
-print('namespace: exact 64 same-shard guards, 65 BUSY, observed cycles INVAL, ReadIndex IO, participant boundary PASS')
+print('namespace: 65/144 same-shard guards, 145 BUSY, deep observed cycle INVAL, ReadIndex IO, participant boundary PASS')

@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 59K of event 'cycles:P'
+# Event count (approx.): 24490002900
+#
+# Overhead  Command  Symbol                                              
+# ........  .......  ....................................................
+#
+     3.17%  efsd     [k] crc32_body
+     2.66%  efsd     [.] __memmove_evex_unaligned_erms
+     1.84%  efsd     [.] host_pump
+     1.76%  efsd     [k] nft_do_chain
+     1.33%  efsd     [.] kv_mtab_pos
+     1.29%  efsd     [.] pthread_mutex_lock@@GLIBC_2.2.5
+     1.25%  efsd     [k] its_return_thunk
+     1.07%  efsd     [k] _raw_spin_lock
+     1.04%  efsd     [.] blake3_hash_many_avx512
+     1.00%  efsd     [k] _raw_spin_lock_irqsave
+     0.89%  efsd     [k] clear_bhb_loop
+     0.79%  efsd     [k] update_load_avg
+     0.76%  efsd     [k] sched_balance_update_blocked_averages
+     0.68%  efsd     [k] fdget
+     0.64%  efsd     [k] __update_load_avg_cfs_rq
+     0.63%  efsd     [k] __intel_pmu_enable_all.isra.0
+     0.60%  efsd     [k] restore_fpregs_from_fpstate
+     0.59%  efsd     [k] _copy_from_iter
+     0.59%  efsd     [k] update_curr
+     0.58%  efsd     [.] __GI___pthread_mutex_unlock_usercnt
+     0.56%  efsd     [k] _raw_spin_lock_bh
+     0.55%  efsd     [k] dequeue_entity
+     0.52%  efsd     [k] tcp_recvmsg_locked
+     0.52%  efsd     [k] __update_load_avg_se
+     0.52%  efsd     [.] __memset_evex_unaligned_erms
+     0.51%  efsd     [.] __GI___pthread_disable_asynccancel
+     0.50%  efsd     [k] __rcu_read_unlock
+
+
+#
+# (Tip: For parallelism histogram, try: perf report --hierarchy --sort latency,parallelism,comm,symbol)
+#

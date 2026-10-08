@@ -19,6 +19,26 @@ spec.loader.exec_module(bench)
 
 
 class ProfileTests(unittest.TestCase):
+    def test_principles_matrix_is_independent_and_finite(self):
+        a = bench.parser().parse_args(['--storage-principles', '--qds', '1,2',
+                                      '--principles-objects', '8', '--storage-root', '/a', '--storage-root', '/b'])
+        cases = bench.cases_for(a, 4)
+        self.assertTrue(cases)
+        self.assertEqual({c['mode'] for c in cases}, {'principles'})
+        self.assertEqual(len({c['name'] for c in cases}), len(cases))
+        for c in cases:
+            self.assertNotIn('--time', c['args'])
+            self.assertNotIn('--writers', c['args'])
+            self.assertEqual(c['args'][c['args'].index('--payload-size') + 1], '65536')
+            self.assertLessEqual(len(c['root_indices']), int(c['args'][c['args'].index('--qd') + 1]))
+        deletes = [c for c in cases if '--rw' in c['args'] and c['args'][c['args'].index('--rw') + 1] == 'delete']
+        self.assertEqual({c['args'][c['args'].index('--policy') + 1] for c in deletes}, {'unlink', 'punch', 'release'})
+        self.assertEqual({c['args'][c['args'].index('--persist') + 1] for c in deletes}, {'none', 'each', 'batch'})
+        for args in [['--principles-objects', '1'], ['--principles-batch', '0'],
+                     ['--principles-sizes', '1K'], ['--seed', 'host:1'], ['--modes', 'data']]:
+            with self.assertRaises(ValueError):
+                bench.cases_for(bench.parser().parse_args(['--storage-principles', '--qds', '2'] + args), 4)
+
     def test_data_sync_is_opt_in(self):
         for enabled in [False, True]:
             args = ['--modes', 'data', '--writers', 'auto', '--qds', '16']
