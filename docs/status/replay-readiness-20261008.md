@@ -232,6 +232,25 @@ Foreign-owner admission remains linear in the outstanding reservation rows;
 this change bounds memory and removes completion's full-burst copies, not a
 claim of thousand-client metadata scalability.
 
+## D27 append retry budget — 07:40 UTC
+
+The FUSE reservation loop previously kept sleeping after an expired RPC budget
+and reacquired the append stripe with an unbounded mutex lock. It now refuses
+new RPCs after expiry, clamps the backoff to remaining time and uses the
+existing budgeted stripe acquisition. Reservation identity remains unchanged
+through all retries. Success retains the caller's stripe; failure releases
+only a stripe the caller still owns, including failed admission and extent
+validation. A timed-out caller cannot unlock a competing writer's stripe.
+
+Actual production-function tests cover expiry before/after RPC, a one-millisecond
+remaining budget, contended reacquisition, identity across three attempts and
+all failure ownership paths. AMD targeted and full units pass. The complete
+AMD direct/TCP sync/append/replay/POSIX/peer/GC/shutdown/cold recovery run also
+passes on this final code. [Unit evidence](../../results/measure/20261008-replay-readiness/append-budget-pass/unit-evidence.json),
+[live console](../../results/measure/20261008-replay-readiness/append-budget-pass/console.log).
+This closes this retry-loop timing gap; durable unknown-outcome ownership and
+whole-write fault/RSS acceptance remain D27/W72/W88 work.
+
 ## Evidence
 
 [Recorded evidence](../../results/measure/20261008-replay-readiness/README.md)

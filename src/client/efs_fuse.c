@@ -2869,21 +2869,38 @@ static off_t append_end_offset(efs_ino_t ino)
     return (off_t)size;
 }
 
+/* Drop the stripe while backing off and reacquire it within the same
+ * inherited call budget. On timeout it stays unowned by this caller. */
+static int append_retry_wait(efs_ino_t ino,unsigned delay_us,int *held)
+{
+    pthread_mutex_unlock(append_mu(ino));*held=0;
+    uint64_t deadline=efs_client_rpc_deadline_ms(),now=stats_now_ms();
+    if(deadline && now>=deadline)return EFS_ERR_BUSY;
+    if(deadline && deadline-now<(delay_us+999u)/1000u)
+        delay_us=(unsigned)(deadline-now)*1000u;
+    usleep(delay_us);
+    int rc=wb_lock_budget(append_mu(ino));
+    if(rc==EFS_OK)*held=1;
+    return rc;
+}
+
 /* Cross-client append: reserve the region at the metadata owner so two
  * clients never write at the same end offset. A second client's uuid is
  * BUSY while the first still has OPEN reservations (in-place fragments
  * cannot merge two GET+PUTs). Their close REPORT resolves nopen. On
  * success, drop cached copies of the tail so a later flush merges the
  * published peer. Does not fall back to an unreserved local end. */
+/* Caller holds the append stripe. Success retains it; every failure
+ * releases it, including expiry while another writer owns the stripe. */
 static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
 {
     uint64_t ns = 0, start = 0, seq;
     struct efs_opid_req q;
     int slot;
-    int rc = EFS_ERR_BUSY;
+    int rc = EFS_ERR_BUSY, held = 1;
 
     slot = efs_client_append_begin(&q);
-    if (slot < 0) return -EAGAIN;
+    if (slot < 0) {pthread_mutex_unlock(append_mu(ino));return -EAGAIN;}
     seq = q.id.seq;
     /* Foreign uuid is BUSY until their close REPORT. 2 ms × 15000 was
      * 500 reserve RPCs/s that stalled the live appender (B's 45 s SSH
@@ -2891,6 +2908,7 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
     {
         int delay_us = 2000;
         for (int attempt = 0; attempt < 400; attempt++) {
+            if(efs_client_rpc_past_deadline()){rc=EFS_ERR_BUSY;break;}
             rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, &q,
                                                &ns, &start);
             if (rc == EFS_OK && ns >= len)
@@ -2903,11 +2921,10 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
                 fflush(stderr);
                 break;
             }
-            pthread_mutex_unlock(append_mu(ino));
-            usleep(delay_us);
+            int wait_rc=append_retry_wait(ino,(unsigned)delay_us,&held);
+            if(wait_rc!=EFS_OK){rc=wait_rc;break;}
             if (delay_us < 50000)
                 delay_us *= 2;
-            pthread_mutex_lock(append_mu(ino));
         }
     }
     efs_client_append_end(slot);
@@ -2915,8 +2932,10 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
      * overlapped another process's reservation and dropped ~40 lines.
      * Do not clamp to local_end either — that overwrites a peer's
      * reserved range with this client's bytes. */
-    if (rc != EFS_OK || ns < len)
+    if (rc != EFS_OK || ns < len) {
+        if(held)pthread_mutex_unlock(append_mu(ino));
         return -EIO;
+    }
     /* The size below is ahead of the PUT. Pin until the caller has the
      * bytes in dcache or the ino is marked dirty. An early dirty mark
      * would release the server's append barrier before the PUT. */
@@ -2927,8 +2946,9 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
                 (unsigned long long)start, (unsigned long long)ns,
                 (unsigned long long)len);
     uint32_t reserve_cs = g_client.export.chunk_size ? g_client.export.chunk_size : EFS_CHUNK_SIZE;
-    if (efs_write_extent_valid(off, len, reserve_cs) != EFS_OK)
-        return -EFBIG;
+    if (efs_write_extent_valid(off, len, reserve_cs) != EFS_OK) {
+        pthread_mutex_unlock(append_mu(ino));return -EFBIG;
+    }
     efs_client_stage_pin(ino);
     if (len > 0) {
         uint32_t cs = g_client.export.chunk_size ? g_client.export.chunk_size
@@ -3085,10 +3105,7 @@ static int efs_fuse_write_admitted(const char *path, const char *buf, size_t siz
         if (lock_rc != EFS_OK)
             return fuse_stat_errno(lock_rc);
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
-        if (rc != 0) {
-            pthread_mutex_unlock(append_mu(ino));
-            return rc;
-        }
+        if (rc != 0)return rc; /* reserve failure already released stripe */
     }
     if ((append ? efs_dcache_try_patch_sparse
                 : efs_dcache_try_patch)(ino, (uint64_t)offset, (uint32_t)size,
@@ -3220,10 +3237,7 @@ static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf
         if (lock_rc != EFS_OK)
             return fuse_stat_errno(lock_rc);
         rc = append_reserve_offset(ino, (uint64_t)size, &offset);
-        if (rc != 0) {
-            pthread_mutex_unlock(append_mu(ino));
-            return rc;
-        }
+        if (rc != 0)return rc; /* reserve failure already released stripe */
     }
 
     /* W15.3: walk the write in chunk-sized pieces. Each whole chunk is
