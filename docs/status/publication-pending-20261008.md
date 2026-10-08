@@ -25,7 +25,7 @@ into every production flush/REPORT path.
 
 ## AMD direct-I/O/TCP validation
 
-[Raw evidence](../../results/measure/20261008-publication-pending/):
+[Raw evidence](../../results/measure/20261008-publication-pending/README.md):
 
 - Full unit suite passes with `EXTRA_DEFS=-Werror`; no compiler warnings.
 - Additional targeted tests pass after adding the exact W88 eight-span/fold,

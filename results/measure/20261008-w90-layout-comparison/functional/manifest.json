@@ -1,0 +1,74 @@
+{
+  "binary": "/data1/efs/bench/w90-comparison-20261008/src/efs-bench",
+  "binary_sha256": "36b1a1c885b9138365b560c8d1f9eb0a0ab3b11155528d58b6b12f748a708f75",
+  "sources": {
+    "src/bench/storage_churn.c": "27594751b3e5c0127346d0996b0f3a79614a201f3e467b0de3d11cb72fc0800c",
+    "src/bench/storage_churn.h": "7e711b02a412d7729ef9bf8832dc95ea713ab53e38c621179b2966c83eb688b3",
+    "src/bench/latency.h": "cf78d75c9a57500b6c5b73f3241558f0b7a44c93e15d79fb5938f77c867d4970",
+    "scripts/bench_churn.py": "e55cc3eb3429241a7822c7aef0c9f5af72ae50f4bcbf3f9fb9ba20cd73b642f9",
+    "src/bench/perf_control.h": "1065b26c7718d721ae3ae05af1dae6149b51a0f60e9f5b3f9f47f0331903a820",
+    "src/client/efs_bench.c": "c586d68787bc15fb5330fd145ca0422c52a92c58f7fdc9fc00e7dee47e3fcd37",
+    "Makefile": "704d6a32f0523233dc53a4d6fef0d422445081deee57cb5c9f997211e519be23",
+    "src/bench/storage_ranges.c": "ef404f8c8c44559453a755d2281be2373ebe41eb373ae01675c1b8a416826f9e",
+    "src/bench/storage_ranges.h": "e063b9989d9268e82451a576b113848279e1b116f3a9355eef8cc7e046c3b03b"
+  },
+  "arguments": {
+    "binary": "/data1/efs/bench/w90-comparison-20261008/src/efs-bench",
+    "storage_root": [
+      "/data1/efs/bench/w90-comparison-20261008/target-a",
+      "/data1/efs/bench/w90-comparison-20261008/target-b"
+    ],
+    "output": "/data1/efs/bench/w90-comparison-20261008/functional",
+    "layouts": "files,punch,compact",
+    "occupancies": [
+      80,
+      95
+    ],
+    "payload_sizes": [
+      65536
+    ],
+    "qds": [
+      2
+    ],
+    "io_modes": "direct",
+    "persist": "batch",
+    "capacity_per_worker": 8388608,
+    "container_bytes": 1048576,
+    "steps": 2000,
+    "seconds": 0,
+    "warmup": 200,
+    "read_percent": 50,
+    "batch_size": 32,
+    "repeat": 2,
+    "timeout": 120,
+    "preallocate": false,
+    "extent_hint": 0,
+    "file_batch_sync": null,
+    "filestreams": false,
+    "compare": true,
+    "seed": 42,
+    "hot_set_percent": 10,
+    "hot_access_percent": 90,
+    "dry_run": false
+  },
+  "uname": [
+    "Linux",
+    "xorinox",
+    "6.12.0-211.61.1.el10_2.x86_64",
+    "#1 SMP PREEMPT_DYNAMIC Tue Sep 29 12:35:33 UTC 2026",
+    "x86_64"
+  ],
+  "started_utc": "2026-10-08T14:23:06.060871+00:00",
+  "targets": [
+    {
+      "target": 0,
+      "root": "/data1/efs/bench/w90-comparison-20261008/target-a",
+      "device_id": 66308
+    },
+    {
+      "target": 1,
+      "root": "/data1/efs/bench/w90-comparison-20261008/target-b",
+      "device_id": 66308
+    }
+  ]
+}

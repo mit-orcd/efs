@@ -135,6 +135,41 @@ sectors. Keep filesystem free-space headroom; any SSD-GC benefit also depends
 on discard delivery or device provisioning. Preserve metadata checksums,
 ordering and required persistence barriers rather than trading them for numbers.
 
+## W90 xorinox follow-up (Oct 8, 2026)
+
+The AMD USB observations above remain historical evidence. The independent
+[W90 workload](work-items.md#w90) now runs on xorinox under the private
+`/data1/efs/bench/w90-20261008/` root. This host has XFS on `/dev/nvme1n1`,
+a 4 TB HP SSD FX900 Pro, 4 KiB blocks and 16 allocation groups, with
+`noatime,logbufs=8,logbsize=256k` already set. About 3.3 TiB was free before
+measurement. No cluster services or global mount options were changed.
+
+| Opportunity | Current experiment / next step |
+|---|---|
+| 1 GiB containers vs 128 KiB files | Implemented matched files, fixed-slot punch/reuse, and append/survivor-compaction workloads; each payload has an identical 4 KiB checksum tail. |
+| Explicit preallocation | Opt-in container-only `--preallocate`; compare sparse allocation and unwritten-extent conversion with reserved extents. |
+| Extent-size hints | Opt-in `--extent-hint 1048576` or `8388608`; measure allocation overhead, waste and fragmentation before choosing a hint. |
+| Hole punching | Implemented aligned per-record retirement/reuse; investigate larger coalesced ranges separately. |
+| Filestream allocator | Opt-in `--filestreams` on private worker directories; compare local allocator behavior without changing the host mount. |
+| Batched parent sync | Implemented bounded batches; individual replacement-file bodies still require separate flushes. No durable index is modeled. |
+| Internal noatime | Already enabled on this host; no additional change tested. |
+| Journal buffers / size | Already eight buffers and 256 KiB, the maximum documented size; no larger-size proposal here. |
+| Reflink | Defer until a real cloning workload exists; later writes to shared extents incur COW. |
+| Periodic TRIM | Separate device/host investigation; no global discard or trim action in W90. |
+| External log / realtime device | Requires separate provisioning and recovery tests; outside this benchmark. |
+
+The [35-case xorinox evidence](../../results/measure/20261008-w90-xorinox/README.md)
+includes 128 KiB and 64 KiB results, repeated 95% baselines, and separate XFS
+variations. Filestreams improved throughput in three runs while increasing write
+p99. Preallocation reserved the extra spare container. High-occupancy append
+compaction incurred substantial survivor copying; the layout gap depends on
+payload size. These observations do not select a production default.
+
+For invocation and interpretation, see [storage churn](../how-it-works/storage-churn.md).
+These changes implement a bounded workload model, not a new production backend.
+XFS option semantics follow the [kernel XFS documentation](https://www.kernel.org/doc/html/latest/admin-guide/xfs.html)
+and [xfs_io manual](https://man7.org/linux/man-pages/man8/xfs_io.8.html).
+
 ## Proposed storage engine v2
 
 One candidate experiment uses large XFS files containing immutable fragment
@@ -381,3 +416,40 @@ microbenchmark.
 
 Design sizes and predicted benefits above are experiments, not measured results
 or accepted NAND placement guarantees.
+
+
+### Candidate range ownership and index recovery plan
+
+This is a design sketch for a future backend, not an implemented authority or a
+production decision. The [shared-range laboratory](../how-it-works/storage-ranges.md)
+tests physical I/O contention; its local locks do not replace EFS ownership,
+fencing, conditional publication or the recovery invariants above.
+
+An initial candidate keeps published fragment records immutable. A mapping
+identifies the authoritative fragment identity plus container, offset, length,
+allocation generation and checksum. A writer reserves a free slot, writes and
+flushes the body, then conditionally publishes the new mapping against the
+expected prior version. Readers resolve and pin a particular location/version
+before I/O and retain that pin until completion. Competing writers need an
+explicit conditional-publication winner; a whole valid checksum alone cannot
+detect a lost logical update.
+
+Retirement would first become durable under the existing authoritative
+protocol. Physical punching/reuse waits for readers, checkpoints and other
+references, and checks the exact allocation generation to avoid reusing a slot
+under a stale reader/deleter. Allocation bookkeeping may need a short allocator
+lock; ordinary reads of immutable, distinct slots should not require a mutex
+covering an entire 1 GiB file. A local range lock can coordinate a prototype's
+in-place updates, but a production ownership contract must cover every process
+and node that can act on the record.
+
+A durable index/checkpoint plus a bounded replay ledger would distinguish
+reserved, written/unpublished, published and retired allocations. Recovery
+would reject incomplete records, retain all committed referenced locations,
+and reconcile unreferenced allocations through authoritative retirement rather
+than age alone. Explicit crash gates belong between body flush and mapping
+publication, publication and retirement, retirement and punch/reuse, and each
+relocation step. Stale reader/writer/delete generations, concurrent publication,
+restart during cleaning, checkpoint references and idempotent replay are
+separate required tests before production integration. The W90 in-memory index
+cannot answer any of those recovery questions.

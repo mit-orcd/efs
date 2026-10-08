@@ -1,0 +1,22 @@
+[
+  "/data1/efs/bench/w90-20261008/src/efs-bench",
+  "--bench",
+  "ranges",
+  "--access",
+  "hot-locked",
+  "--qd",
+  "8",
+  "--steps",
+  "10000000",
+  "--seconds",
+  "10",
+  "--container-bytes",
+  "1073741824",
+  "--payload-size",
+  "65536",
+  "--persist",
+  "batch",
+  "--no-direct-io",
+  "--storage",
+  "/data1/efs/bench/w90-20261008/scratch/w90-ranges-kxza46y4"
+]

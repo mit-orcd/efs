@@ -1,0 +1,16 @@
+[1/8] 65536-95-qd4-direct-files-r1
+  PASS 213.2s
+[2/8] 65536-95-qd4-direct-punch-r1
+  PASS 201.3s
+[3/8] 65536-95-qd4-direct-punch-r2
+  PASS 201.3s
+[4/8] 65536-95-qd4-direct-files-r2
+  PASS 212.2s
+[5/8] 65536-95-qd4-direct-files-r3
+  PASS 213.5s
+[6/8] 65536-95-qd4-direct-punch-r3
+  PASS 201.4s
+[7/8] 65536-95-qd4-direct-punch-r4
+  PASS 200.9s
+[8/8] 65536-95-qd4-direct-files-r4
+  PASS 211.0s

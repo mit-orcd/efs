@@ -25,7 +25,7 @@ passes POSIX 216/0/1 skip, peer 64/64, append replay/leader recovery, append/fsy
 boundary, O_SYNC/O_DSYNC, dirty-stop recovery, leader shutdown, exact 800 cold
 append records during GC and physical inventory/quota zero after restart.
 Installed four-daemon/two-mount service was restored. Installed stores/binaries
-were not upgraded. [Raw evidence](../../results/measure/20261008-writeback-hour/).
+were not upgraded. [Raw evidence](../../results/measure/20261008-writeback-hour/README.md).
 
 This closes these specific PUT poll/backoff timing gaps, not universal D27
 whole-call timing/RSS or W88 production REPORT integration. W72 production

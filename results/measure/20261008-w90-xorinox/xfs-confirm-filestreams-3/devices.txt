@@ -1,0 +1,3 @@
+NAME    MODEL                      SIZE ROTA
+nvme0n1 KINGSTON OM8PGP41024Q-A0 953.9G    0
+nvme1n1 HP SSD FX900 Pro 4TB       3.7T    0
