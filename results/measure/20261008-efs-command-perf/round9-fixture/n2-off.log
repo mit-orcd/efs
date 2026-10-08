@@ -1,0 +1,21 @@
+2026-10-08T18:30:39.955Z Loaded 4 persisted cluster node(s) from /data1/efs/command-perf-fixture-r9-20261008/n2/meta/cluster_nodes.bin
+2026-10-08T18:30:39.955Z   persisted node 1: 127.0.0.1:24800
+2026-10-08T18:30:39.955Z   persisted node 2: 127.0.0.1:24801
+2026-10-08T18:30:39.955Z   persisted node 3: 127.0.0.1:24802
+2026-10-08T18:30:39.955Z   persisted node 4: 127.0.0.1:24803
+2026-10-08T18:30:39.956Z Joined cluster with 4 nodes
+2026-10-08T18:30:39.957Z heartbeat: enabled (2000 ms interval)
+2026-10-08T18:30:40.122Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-08T18:30:40.122Z kv-obs: mt_bytes=3630383 l0_bytes=184 l0=3 l1=60
+2026-10-08T18:30:40.122Z raft-host: up raft_id=1 n=4 boot=12384455926807172 salt=3304547719733237794 g0=hosted g2=hosted
+2026-10-08T18:30:40.122Z efsd 56127784-perf-r9 (branch devel-find-stats, built 2026-10-08T18:29:25Z on nuc), build=56127784-perf-r9: node 2 listening on 127.0.0.1:24801, storage=/data1/efs/command-perf-fixture-r9-20261008/n2 (1 paths, stripe=none), used=0, quota=1073741824, direct_io=off, writers=0 shared
+2026-10-08T18:30:41.136Z raft-host: gc-pass ms=9 orphan=9 reap=0 frag=0 spread=0 recover=0 fscans=1 fsegs=1 fkeys=615 femit=0 ftomb=615 scans=4 segs=65 keys=6687 emit=4097 tomb=2590 reap_scan=0 reap_sweep=0 reap_fence=0 reap_done=0
+2026-10-08T18:30:41.585Z raft-host: applied session index=26578 kind=8 shard=0 ino=5156
+2026-10-08T18:30:41.590Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=1 bytes=65536 errors=0 avg_us=2061 p50_us=2061 max_us=2061 wdisk ops=1 bytes=65536 errors=0 avg_us=1820 p50_us=1820 max_us=1820
+2026-10-08T18:30:41.591Z raft-host: applied session index=26580 kind=9 shard=0 ino=5156
+2026-10-08T18:30:41.594Z raft-host: applied session index=26583 kind=8 shard=0 ino=9252
+2026-10-08T18:30:41.598Z raft-host: applied session index=26585 kind=9 shard=0 ino=9252
+2026-10-08T18:30:41.610Z raft-host: applied session index=32927 kind=8 shard=0 ino=4287
+2026-10-08T18:30:41.613Z raft-host: applied session index=32929 kind=9 shard=0 ino=4287
+2026-10-08T18:30:41.957Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=820 passes=2 sampled=2 pending=0,0 reap=0,0 removed=0 file_bytes=0 payload_bytes=0 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-08T18:30:42.147Z raft-host: gc-pass ms=6 orphan=2 reap=3 frag=0 spread=0 recover=0 fscans=1 fsegs=1 fkeys=616 femit=1 ftomb=615 scans=4 segs=45 keys=5335 emit=4100 tomb=1235 reap_scan=0 reap_sweep=0 reap_fence=3 reap_done=0

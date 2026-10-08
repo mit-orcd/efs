@@ -1,0 +1,626 @@
+[
+  {
+    "concurrency": 1,
+    "seconds": 3.2327684609917924,
+    "throughput": 12.37329566984462,
+    "median_rpc": 0.060073248503613286,
+    "samples": [
+      {
+        "rpc_seconds": 0.08121504599694163,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.058284487982746214,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06527332300902344,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.060262230021180585,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06046329697710462,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06183672102633864,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.09679284901358187,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06689586699940264,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06060865300241858,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05735969901434146,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05955659598112106,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05863526900066063,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05634249598369934,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.056811394984833896,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05865674401866272,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06024959500064142,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05854065500898287,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05789349501719698,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05942290899110958,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.058242902014171705,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06049237700062804,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06316979700932279,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.059171808999963105,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.057392136979615316,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05741233401931822,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.058957638015272096,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05571730900555849,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05986256300820969,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06010021601105109,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.061090077011613175,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06004628099617548,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.05831264398875646,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.058765355992363766,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06674492498859763,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06303941700025462,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06643693399382755,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06147626898018643,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06040503300027922,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06482773702009581,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06220611199387349,
+        "bytes": 3188259,
+        "generation": 94
+      }
+    ]
+  },
+  {
+    "concurrency": 2,
+    "seconds": 2.126339349022601,
+    "throughput": 18.81167275505037,
+    "median_rpc": 0.0783879985101521,
+    "samples": [
+      {
+        "rpc_seconds": 0.09483711401117034,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.12336855501052924,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07973372499691322,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.08944885298842564,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07834846500190906,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07643805202678777,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06178046599961817,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.11209667197545059,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07614062097854912,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06135006801923737,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.11263650402543135,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07681119101471268,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.061798990005627275,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.11067248901235871,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07718861100147478,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06694096900173463,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.11029283702373505,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07462793597369455,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.0618282689829357,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.11188030999619514,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07842753201839514,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.06569680001121014,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.1195064389903564,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07565185698331334,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07810279200202785,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.08969265298219398,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.08187786300550215,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07980624301126227,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07816837501013651,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.08810431099846028,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07588340400252491,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07663367100758478,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07106803599162959,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.12425123099819757,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.08336964499903843,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.08862889799638651,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.08895567699801177,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07953444399754517,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.07748346400330774,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.062127608980517834,
+        "bytes": 3188259,
+        "generation": 94
+      }
+    ]
+  },
+  {
+    "concurrency": 4,
+    "seconds": 2.4886635819857474,
+    "throughput": 16.07288357074093,
+    "median_rpc": 0.21745395901962183,
+    "samples": [
+      {
+        "rpc_seconds": 0.21626942601869814,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.24887969298288226,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.26732412801356986,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.29217012799927033,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.08016557799419388,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.2606527449970599,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.26271465700119734,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.19983903001411818,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.2933936259942129,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.1653856830089353,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.2014872599975206,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.21863849202054553,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.340129985997919,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.2202569420041982,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.2059509730024729,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.18701535498257726,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.1840551400091499,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.187129066005582,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.2140363379730843,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.15222814001026563,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.21218429500004277,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.22727185499388725,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.2354596699879039,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.24804907699581236,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.14545423499657772,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.15424473900930025,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.139648220007075,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.15644370700465515,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.24710478700581007,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.19946313599939458,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.1707991290022619,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.19062707599368878,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.29277801400166936,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.248601208004402,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.25363999797264114,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.25372302398318425,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.22462919299141504,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.246267705981154,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.2465707600058522,
+        "bytes": 3188259,
+        "generation": 94
+      },
+      {
+        "rpc_seconds": 0.18161460501141846,
+        "bytes": 3188259,
+        "generation": 94
+      }
+    ]
+  }
+]

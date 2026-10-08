@@ -10,6 +10,8 @@ The [latest profiling report](efs-command-performance-20261008.md),
 [policy/catch-up report](efs-command-policy-20261008.md) and
 [command checkpoint](efs-commands-20261008.md) record implemented
 command/query infrastructure, tests, activation and remaining acceptance.
+Nine profiling rounds now include hardware-utilization and concurrent-query
+measurements; remaining software limits are recorded in that report.
 Earlier findings below are historical; do not mistake the former client tree
 walker or missing server catalog for the current source/deployment state.
 Loaded publication, publisher-loss and restart gates now pass; W92 remains open

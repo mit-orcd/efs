@@ -1,0 +1,152 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 4K of event 'cycles:P'
+# Event count (approx.): 79069263554
+#
+# Overhead  Command   Shared Object           Symbol                                             
+# ........  ........  ......................  ...................................................
+#
+    16.03%  efsd      efsd                    [.] cache_get
+            |          
+            |--14.42%--cache_get
+            |          |          
+            |           --13.92%--efs_txn_read_ex
+            |                     |          
+            |                     |--11.02%--efs_meta_apply_getattr
+            |                     |          efs_query_catalog_build
+            |                     |          host_query_thread
+            |                     |          start_thread
+            |                     |          
+            |                      --2.90%--efs_txn_reduce_read_ex
+            |                                efs_meta_apply_getattr
+            |                                efs_query_catalog_build
+            |                                host_query_thread
+            |                                start_thread
+            |          
+             --1.20%--memcmp@plt
+                       efs_txn_read_ex
+
+    11.01%  efsd      libc.so.6               [.] __memcmp_evex_movbe
+            |          
+            |--9.33%--__memcmp_evex_movbe
+            |          |          
+            |           --8.75%--efs_txn_read_ex
+            |                     |          
+            |                     |--6.68%--efs_meta_apply_getattr
+            |                     |          efs_query_catalog_build
+            |                     |          host_query_thread
+            |                     |          start_thread
+            |                     |          
+            |                      --2.06%--efs_txn_reduce_read_ex
+            |                                efs_meta_apply_getattr
+            |                                efs_query_catalog_build
+            |                                host_query_thread
+            |                                start_thread
+            |          
+             --1.68%--cache_get
+                       efs_txn_read_ex
+                       |          
+                        --1.19%--efs_meta_apply_getattr
+                                  efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     9.90%  efsd      efsd                    [.] add_edge
+            |          
+             --9.84%--add_edge
+                       efs_name_index_query_visits
+                       efs_name_index_query
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     4.45%  efsd      efsd                    [.] efs_meta_apply_getattr
+            |          
+             --4.00%--efs_meta_apply_getattr
+                       |          
+                        --3.97%--efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     3.97%  efsd      libc.so.6               [.] __memset_evex_unaligned_erms
+            |
+            ---__memset_evex_unaligned_erms
+               |          
+                --3.81%--efs_query_catalog_build
+                          host_query_thread
+                          start_thread
+
+     2.83%  efsd      efsd                    [.] efs_query_catalog_build
+            |          
+             --2.78%--efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     2.66%  efsd      libc.so.6               [.] __memmove_evex_unaligned_erms
+            |          
+             --2.48%--__memmove_evex_unaligned_erms
+                       |          
+                        --1.63%--efs_txn_read_ex
+                                  |          
+                                   --1.40%--efs_meta_apply_getattr
+                                             efs_query_catalog_build
+                                             host_query_thread
+                                             start_thread
+
+     2.36%  efsd      efsd                    [.] efs_txn_read_ex
+            |          
+             --1.91%--efs_txn_read_ex
+                       |          
+                        --1.44%--efs_meta_apply_getattr
+                                  efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     1.82%  efsd      efsd                    [.] add_node
+     1.63%  efsd      efsd                    [.] unpack_inode
+            |          
+             --1.54%--unpack_inode
+                       |          
+                        --1.49%--efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     1.43%  efsd      efsd                    [.] memcmp@plt
+            |
+            ---__memcmp_evex_movbe
+               |          
+                --1.37%--efs_txn_read_ex
+                          |          
+                           --1.26%--efs_meta_apply_getattr
+                                     efs_query_catalog_build
+                                     host_query_thread
+                                     start_thread
+
+     1.42%  efsd      [vdso]                  [.] 0x00000000000008d5
+     1.31%  efsd      efsd                    [.] lookup
+            |
+            ---lookup
+               lsm_get
+               |          
+                --1.14%--dent_get_tx
+                          |          
+                           --1.09%--efs_meta_apply_lookup_row_tx
+                                     query_emit.part.0
+                                     |          
+                                      --1.05%--find_candidate
+                                                efs_name_index_query_visits
+                                                efs_query_catalog_find
+                                                query_consume.part.0
+                                                server_raft_host_query_snapshot
+                                                server_handle_conn
+                                                conn_thread
+                                                start_thread
+
+
+
+#
+# (Tip: System-wide collection from all CPUs: perf record -a)
+#

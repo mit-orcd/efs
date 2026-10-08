@@ -1,0 +1,240 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 778  of event 'cycles:P'
+# Event count (approx.): 6363025787
+#
+# Overhead  Command  Shared Object      Symbol                                       
+# ........  .......  .................  .............................................
+#
+    10.30%  efsd     efsd               [.] lookup
+            |          
+             --10.07%--lookup
+                       lsm_get
+                       |          
+                        --9.63%--dent_get_tx
+                                  efs_meta_apply_lookup_row_tx
+                                  query_emit.part.0
+                                  find_candidate
+                                  efs_name_index_query_visits
+                                  efs_query_catalog_find
+                                  query_consume.part.0
+                                  server_raft_host_query_snapshot
+                                  server_handle_conn
+                                  conn_thread
+                                  start_thread
+
+     7.77%  efsd     efsd               [.] efs_query_catalog_inode
+            |
+            ---efs_query_catalog_inode
+               query_emit.part.0
+               find_candidate
+               efs_name_index_query_visits
+               efs_query_catalog_find
+               query_consume.part.0
+               server_raft_host_query_snapshot
+               server_handle_conn
+               conn_thread
+               start_thread
+
+     7.75%  efsd     efsd               [.] find_candidate
+            |          
+             --6.85%--find_candidate
+                       |          
+                        --6.62%--efs_name_index_query_visits
+                                  efs_query_catalog_find
+                                  query_consume.part.0
+                                  server_raft_host_query_snapshot
+                                  server_handle_conn
+                                  conn_thread
+                                  start_thread
+
+     7.43%  efsd     libc.so.6          [.] __strncmp_evex
+            |          
+             --7.20%--__strncmp_evex
+                       efs_query_catalog_find
+                       query_consume.part.0
+                       server_raft_host_query_snapshot
+                       server_handle_conn
+                       conn_thread
+                       start_thread
+
+     7.29%  efsd     efsd               [.] efs_query_catalog_path.part.0.constprop.0
+            |          
+             --6.84%--efs_query_catalog_path.part.0.constprop.0
+                       find_candidate
+                       efs_name_index_query_visits
+                       efs_query_catalog_find
+                       query_consume.part.0
+                       server_raft_host_query_snapshot
+                       server_handle_conn
+                       conn_thread
+                       start_thread
+
+     6.12%  efsd     libc.so.6          [.] __memcmp_evex_movbe
+            |          
+             --5.55%--__memcmp_evex_movbe
+                       |          
+                        --3.20%--lookup
+                                  lsm_get
+                                  |          
+                                   --2.96%--dent_get_tx
+                                             efs_meta_apply_lookup_row_tx
+                                             query_emit.part.0
+                                             find_candidate
+                                             efs_name_index_query_visits
+                                             efs_query_catalog_find
+                                             query_consume.part.0
+                                             server_raft_host_query_snapshot
+                                             server_handle_conn
+                                             conn_thread
+                                             start_thread
+
+     4.00%  efsd     efsd               [.] query_emit.part.0
+            |
+            ---query_emit.part.0
+               find_candidate
+               efs_name_index_query_visits
+               efs_query_catalog_find
+               query_consume.part.0
+               server_raft_host_query_snapshot
+               server_handle_conn
+               conn_thread
+               start_thread
+
+     3.66%  efsd     efsd               [.] kv_seg_probe
+            |          
+             --2.78%--kv_seg_probe
+                       lookup
+                       lsm_get
+                       |          
+                        --2.33%--dent_get_tx
+                                  efs_meta_apply_lookup_row_tx
+                                  query_emit.part.0
+                                  find_candidate
+                                  efs_name_index_query_visits
+                                  efs_query_catalog_find
+                                  query_consume.part.0
+                                  server_raft_host_query_snapshot
+                                  server_handle_conn
+                                  conn_thread
+                                  start_thread
+
+     3.39%  efsd     efsd               [.] efs_name_index_query_visits
+            |          
+             --2.47%--efs_name_index_query_visits
+                       efs_query_catalog_find
+                       query_consume.part.0
+                       server_raft_host_query_snapshot
+                       server_handle_conn
+                       conn_thread
+                       start_thread
+
+     2.67%  efsd     libc.so.6          [.] __memmove_evex_unaligned_erms
+            |          
+             --2.41%--__memmove_evex_unaligned_erms
+                       |          
+                        --1.83%--find_candidate
+                                  efs_name_index_query_visits
+                                  efs_query_catalog_find
+                                  query_consume.part.0
+                                  server_raft_host_query_snapshot
+                                  server_handle_conn
+                                  conn_thread
+                                  start_thread
+
+     2.52%  efsd     efsd               [.] search_block
+            |          
+             --2.30%--search_block
+                       lookup
+                       lsm_get
+                       dent_get_tx
+                       efs_meta_apply_lookup_row_tx
+                       query_emit.part.0
+                       find_candidate
+                       efs_name_index_query_visits
+                       efs_query_catalog_find
+                       query_consume.part.0
+                       server_raft_host_query_snapshot
+                       server_handle_conn
+                       conn_thread
+                       start_thread
+
+     1.93%  efsd     efsd               [.] cache_get
+            |
+            ---cache_get
+               |          
+                --1.15%--dent_get_tx
+                          lookup_at
+                          find_candidate
+                          efs_name_index_query_visits
+                          efs_query_catalog_find
+                          query_consume.part.0
+                          server_raft_host_query_snapshot
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+
+     1.90%  efsd     libc.so.6          [.] __strlen_evex
+            |
+            ---__strlen_evex
+               find_candidate
+               efs_name_index_query_visits
+               efs_query_catalog_find
+               query_consume.part.0
+               server_raft_host_query_snapshot
+               server_handle_conn
+               conn_thread
+               start_thread
+
+     1.89%  efsd     libc.so.6          [.] pthread_mutex_lock@@GLIBC_2.2.5
+            |
+            ---pthread_mutex_lock@@GLIBC_2.2.5
+               |          
+                --1.11%--dent_get_tx
+                          efs_meta_apply_lookup_row_tx
+                          query_emit.part.0
+                          find_candidate
+                          efs_name_index_query_visits
+                          efs_query_catalog_find
+                          query_consume.part.0
+                          server_raft_host_query_snapshot
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+
+     1.80%  efsd     libc.so.6          [.] __printf_buffer
+            |
+            ---__printf_buffer
+
+     1.61%  efsd     [vdso]             [.] 0x00000000000008d5
+            |
+            ---0x7f54b30708d8
+               clock_gettime@@GLIBC_2.17
+               |          
+                --1.38%--query_emit
+                          find_candidate
+                          efs_name_index_query_visits
+                          efs_query_catalog_find
+                          query_consume.part.0
+                          server_raft_host_query_snapshot
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+
+     1.40%  efsd     efsd               [.] host_pump
+            |          
+             --1.24%--host_pump
+                       start_thread
+
+     1.07%  efsd     libc.so.6          [.] __memset_evex_unaligned_erms
+            |
+            ---__memset_evex_unaligned_erms
+
+
+
+#
+# (Tip: To change sampling frequency to 100 Hz: perf record -F 100)
+#
