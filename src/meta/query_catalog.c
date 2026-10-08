@@ -7,6 +7,8 @@ struct record { uint32_t key, klen, val, vlen; };
 struct partition {
     uint32_t refs, count, capacity, used, arena_cap;
     uint64_t revision, bytes, limit;
+    /* Exact bounds for retained key kinds; absent transaction kinds are O(1). */
+    uint32_t kind_begin[256], kind_end[256];
     struct record *records;
     uint8_t *arena;
     struct efs_name_index *names;
@@ -35,7 +37,7 @@ static int compare_key(const uint8_t *a, uint32_t an, const uint8_t *b, uint32_t
 }
 static uint32_t seek_record(const struct partition *p, const uint8_t *key, uint32_t len)
 {
-    uint32_t lo=0,hi=p->count;
+    uint32_t lo=p->kind_begin[key[2]],hi=p->kind_end[key[2]];
     while (lo<hi) {
         uint32_t mid=lo+(hi-lo)/2;
         const struct record *r=&p->records[mid];
@@ -52,7 +54,7 @@ static int cache_get(void *ctx, const uint8_t *key, uint32_t len, uint8_t *value
     if (shard>=4096 || !c->part[shard]) return EFS_ERR_NOT_FOUND;
     struct partition *p=c->part[shard];
     uint32_t at=seek_record(p,key,len);
-    if (at==p->count) return EFS_ERR_NOT_FOUND;
+    if (at==p->kind_end[key[2]]) return EFS_ERR_NOT_FOUND;
     const struct record *r=&p->records[at];
     if (compare_key(p->arena+r->key,r->klen,key,len)) return EFS_ERR_NOT_FOUND;
     if (*vn<r->vlen || (r->vlen && !value)) { *vn=r->vlen;return EFS_ERR_INVAL; }
@@ -70,7 +72,7 @@ static int cache_scan(void *ctx, const uint8_t *prefix, uint32_t plen,
     if (shard>=4096 || !c->part[shard]) return EFS_OK;
     struct partition *p=c->part[shard];
     uint32_t at=seek_record(p,slen ? start : prefix,slen ? slen : plen);
-    for (;at<p->count;at++) {
+    for (;at<p->kind_end[prefix[2]];at++) {
         const struct record *r=&p->records[at];
         const uint8_t *key=p->arena+r->key;
         if (r->klen<plen || memcmp(key,prefix,plen)) break;
@@ -139,7 +141,9 @@ static int partition_build(struct efs_kv_lsm_snapshot *source, uint32_t shard,
     int rc=EFS_OK;
     for (uint32_t i=0;i<sizeof(kinds) && !rc;i++) {
         prefix[2]=kinds[i];
+        p->kind_begin[kinds[i]]=p->count;
         rc=efs_kv_lsm_snapshot_scan(source,prefix,3,NULL,0,save_record,p);
+        p->kind_end[kinds[i]]=p->count;
     }
     if (!rc && p->count && p->count<p->capacity) {
         struct record *tight=realloc(p->records,(size_t)p->count*sizeof(*tight));
