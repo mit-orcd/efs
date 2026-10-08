@@ -339,3 +339,11 @@ W88, then D30; preserve existing validation until equivalence is proven.
 [Accepted contracts and gates](../backlog/decision-contracts.md#d28--client-death-and-unpublished-writes)
 supersede earlier unresolved-policy statements in this dated ledger. No code
 activation or new gate pass is claimed by recording these decisions.
+
+## Merged query branch acceptance — Oct 8, 2026
+
+`devel-find-stats` was merged into devel at the user's request. The merged
+production source passes full AMD units and direct/TCP private query/POSIX/peer
+and replay/sync/GC/shutdown/cold recovery gates. Installed AMD service restored;
+no installed-binary rollout, push or activation. [Merge checkpoint](find-stats-merge-20261008.md)
+records exact commits, source/binary hashes, results and remaining obligations.

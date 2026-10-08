@@ -1,0 +1,10 @@
+{"case": "recovery", "status": "PASS", "seconds": 7.421}
+{"case": "snapshot", "status": "PASS", "seconds": 8.058}
+{"case": "stats", "status": "PASS", "seconds": 2.372}
+{"case": "stats_mutations", "status": "PASS", "seconds": 11.479}
+{"case": "invalid", "status": "PASS", "seconds": 0.0}
+{"case": "permissions", "status": "PASS", "seconds": 0.01}
+{"case": "nested_authorization", "status": "PASS", "seconds": 4.43}
+{"case": "name_limits", "status": "PASS", "seconds": 5.349}
+{"case": "fd_capacity", "status": "PASS", "seconds": 0.06}
+{"root": "/data1/efs/mnt/w90-gates-3846902", "results": [{"case": "recovery", "status": "PASS", "seconds": 7.421}, {"case": "snapshot", "status": "PASS", "seconds": 8.058}, {"case": "stats", "status": "PASS", "seconds": 2.372}, {"case": "stats_mutations", "status": "PASS", "seconds": 11.479}, {"case": "invalid", "status": "PASS", "seconds": 0.0}, {"case": "permissions", "status": "PASS", "seconds": 0.01}, {"case": "nested_authorization", "status": "PASS", "seconds": 4.43}, {"case": "name_limits", "status": "PASS", "seconds": 5.349}, {"case": "fd_capacity", "status": "PASS", "seconds": 0.06}]}

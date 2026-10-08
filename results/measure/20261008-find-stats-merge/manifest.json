@@ -1,0 +1,47 @@
+{
+  "merge_commit": "9ad82cb1",
+  "mode": "direct",
+  "transport": "tcp",
+  "installed_stores_modified": false,
+  "binary_sha256": {
+    "efsd": "8b0ef04e516eb4d5eb1e3523da088b2680672e4b42361858c4a559497283d7ba",
+    "efs-fuse": "891f0d97991f4f3d48a8d0a912e7b85ed1abbe6704969883da6720570ad2c597",
+    "efs-mgmt": "21d8e31f76242309e06dd6dd72b1cfb3b7f004601672b3232df751a9e1fc08d2"
+  },
+  "tested_devel": "23c087fc",
+  "merge_parents": [
+    "ddef257a",
+    "f8eb0c61"
+  ],
+  "source_tree_sha256": "64d776929e8d316c14990e3ba87164f3dfce1a6818904ec209d92bc2b319072a",
+  "unit_exit": 0,
+  "live_driver_exit": 0,
+  "query_virtual_gates_passed": 9,
+  "query_posix": {
+    "pass": 216,
+    "fail": 0,
+    "skip": 1
+  },
+  "query_peer": {
+    "pass": 64,
+    "fail": 0
+  },
+  "replay_posix": {
+    "pass": 216,
+    "fail": 0,
+    "skip": 1
+  },
+  "replay_peer": {
+    "pass": 64,
+    "fail": 0
+  },
+  "installed_service_restored": true,
+  "initial_compiler_warnings": 20,
+  "test_source_sha256": {
+    "tests/test_lookup_errno.py": "0bbd5647ba008b742be0f96ab4728df8b1822231f96ee731a95382c27685b628",
+    "tests/test_wb_runtime.py": "6296b92af5221d25bea387528c1ed6c7a31cc214722c7d18646681ce8342fc1e",
+    "tests/test_open_lease.py": "c11d6c4998440369ee30a281e9af06909d8ff5b37f6ce91e58057e43df5ba177",
+    "tests/live/query_publication.py": "cb97c7697f5195cfe69bcbec12dd5e015d6963141498e717ff625eebe1e08209",
+    "tests/live/gc_reclamation.py": "ba6ba4764da5f71bfe3a6f7d6e0a28888cc6629a76b78b2bfbc261073d32d9ef"
+  }
+}
