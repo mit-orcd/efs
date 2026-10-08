@@ -33,6 +33,8 @@ p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second
 p.add_argument('--posix', action='store_true')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
+p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
+p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
 p.add_argument('--create-lease',action='store_true',help='initial CREATE lease atomicity on local and first-use cross-group hashed lanes, cold replay/unlink/close')
 p.add_argument('--fuse-reply-failure',action='store_true',help='reject CREATE/OPEN descriptor replies and prove local handle/server lease cleanup')
 p.add_argument('--tiny-churn',action='store_true',help='tiny/full-fragment fsynced create/overwrite/delete/recreate, cold exact generations and physical reclamation')
@@ -88,6 +90,8 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if not 8 <= a.tiny_mixed_files <= 8192 or a.tiny_mixed_files % 8:
+    p.error("--tiny-mixed-files must be 8..8192 and divisible by eight")
 assert bool(a.ior_binary)==bool(a.mpi_run),'IOR and MPI launcher must be supplied together'
 if a.ior_clients==9:assert a.ior_binary,'nine-client gate requires IOR'
 if a.ior_binary:
@@ -199,7 +203,7 @@ def start():
     for i,root in enumerate(roots):
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
-        cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota','16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G'),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
+        cmd=[a.server_binary or source/'efsd','--node-id',str(i+1),'--addr','127.0.0.1','--port',str(a.port+i),'--storage',root,'--quota',a.fixture_quota or ('16G' if (a.ior_binary or a.gc_bulk_gib) else ('4G' if a.compactor_pressure else '1G')),'--'+('direct-io' if a.mode=='direct' else 'no-direct-io')]
         if a.storage_roots==2:
             first=root/'storage0';second=root/'storage1'
             first.mkdir(exist_ok=True);second.mkdir(exist_ok=True)
@@ -365,12 +369,12 @@ try:
         print('tiny create/overwrite/delete/recreate: exact cold identities and physical reclamation PASS',flush=True)
     if a.tiny_mixed or a.tiny_mixed_only:
         from tiny_mixed import exercise,verify_and_delete
-        mixed=exercise(mount,[client.pid,*[proc.pid for proc in servers]])
+        mixed=exercise(mount,[client.pid,*[proc.pid for proc in servers]],a.tiny_mixed_files)
         unmount();stop(crash=True);start();mount_client()
-        verify_and_delete(mount)
-        wait(drained,'mixed tiny/large cold bytes and physical deletion drained',180)
+        verify_and_delete(mount,a.tiny_mixed_files)
+        wait(drained,'mixed tiny/large cold bytes and physical deletion drained',180+a.tiny_mixed_files//16)
         (work/'tiny-mixed.json').write_text(json.dumps(mixed,indent=2))
-        print('512 tiny CREATE/close under bounded large writers; exact cold bytes and reclaim PASS',flush=True)
+        print(f'{a.tiny_mixed_files} tiny CREATE/close under bounded large writers; exact cold bytes and reclaim PASS',flush=True)
         if a.tiny_mixed_only:
             raise SystemExit(0)  # finally still drains all owned processes
     if a.create_lease:

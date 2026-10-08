@@ -11,9 +11,10 @@ def body(worker,index):
     return hashlib.sha256(f'{worker}:{index}'.encode()).digest()*16
 
 
-def exercise(mount,pids):
+def exercise(mount,pids,files=512):
+    assert 8<=files<=8192 and files%8==0
     folder=Path(mount)/'tiny-mixed';folder.mkdir()
-    tiny_workers,large_workers,count=8,4,64
+    tiny_workers,large_workers,count=8,4,files//8
     gate=threading.Barrier(tiny_workers+large_workers)
     done=threading.Event();monitor_done=threading.Event()
     opened=[];closed=[];rss={str(pid):0 for pid in pids};samples=0
@@ -70,10 +71,11 @@ def exercise(mount,pids):
             'peak_rss_kib':rss,'rss_samples':samples}
 
 
-def verify_and_delete(mount):
+def verify_and_delete(mount,files=512):
+    assert 8<=files<=8192 and files%8==0
     folder=Path(mount)/'tiny-mixed'
     for worker in range(8):
-        for index in range(64):
+        for index in range(files//8):
             path=folder/f'tiny-{worker}-{index}';assert path.read_bytes()==body(worker,index),path
             path.unlink()
     for worker in range(4):
