@@ -29,13 +29,15 @@ static void *serve(void *arg)
     while(!atomic_load(&p->done))usleep(1000);
     close(fd);return NULL;
 }
-int main(void)
+int main(int argc, char **argv)
 {
+    int default_budget=argc==2 && !strcmp(argv[1],"--default-budget");
+    assert(argc==1 || default_budget);
     assert(!setenv("EFS_TRANSPORT","tcp",1));assert(!setenv("EFS_CLIENT_CONNS_PER_NODE","1",1));
     g_client.node_count=3;g_client.export_id=1;efs_client_conn_init();
     uint8_t bytes[65536]={0};const uint8_t *fragments[3]={bytes,bytes,bytes};
     uint8_t hashes[3][EFS_HASH_SIZE]={{0}};
-    for(unsigned round=0;round<8;round++){
+    for(unsigned round=0;round<(default_budget?1u:8u);round++){
         unsigned mode=round%4;struct peer peers[3];pthread_t threads[3];
         efs_node_id_t nodes[3]={1,2,3};
         for(unsigned i=0;i<3;i++){
@@ -46,9 +48,10 @@ int main(void)
             g_client.nodes[i].id=i+1;strcpy(g_client.nodes[i].addr,"127.0.0.1");g_client.nodes[i].port=ntohs(addr.sin_port);
             assert(!pthread_create(&threads[i],NULL,serve,&peers[i]));
         }
-        uint64_t start=now_ms(),deadline=start+75,object=0;efs_client_rpc_set_deadline_ms(deadline);
+        uint64_t start=now_ms(),deadline=default_budget?0:start+75,object=0;efs_client_rpc_set_deadline_ms(deadline);
         int rc=efs_client_put_fragments_parallel(4097,0,nodes,fragments,sizeof(bytes),hashes,&object);
-        uint64_t elapsed=now_ms()-start;assert(object && elapsed<500);
+        uint64_t elapsed=now_ms()-start;assert(object && elapsed<(default_budget?35000u:500u));
+        if(default_budget)assert(elapsed>=29000);
         assert(rc==(mode?EFS_OK:EFS_ERR_BUSY));assert(efs_client_rpc_deadline_ms()==deadline);
         for(unsigned i=0;i<3;i++){
             assert(!g_client.conn_busy[i][0]);assert(!g_client.node_fail_streak[i] && !g_client.node_down_until_ms[i]);

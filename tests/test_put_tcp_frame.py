@@ -18,10 +18,10 @@ code=r'''
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
-static unsigned noted;
+static unsigned noted,quick,spin;
 void efs_conn_note_ok(struct efs_conn *c){(void)c;noted++;}
-int efs_conn_reply_watch_quick(struct efs_conn *c){(void)c;assert(0);return -1;}
-int efs_conn_reply_watch_us(struct efs_conn *c,int b){(void)c;(void)b;assert(0);return -1;}
+int efs_conn_reply_watch_quick(struct efs_conn *c){assert(c->rc);quick++;return EFS_CONN_REPLY_READY;}
+int efs_conn_reply_watch_us(struct efs_conn *c,int b){assert(c->rc && b==24);spin++;return EFS_CONN_REPLY_READY;}
 int efs_recv_put_reply(int fd,uint8_t *t,uint8_t *s,uint8_t *p){(void)fd;(void)t;(void)s;(void)p;assert(0);return -1;}
 static int conn_rdma_frame(struct efs_conn *c,uint8_t *t,const uint8_t **p,uint32_t *n){(void)c;(void)t;(void)p;(void)n;assert(0);return -1;}
 int efs_rdma_recv_repost(struct efs_rdma_conn *c){(void)c;assert(0);return -1;}
@@ -47,8 +47,15 @@ int main(void){
   uint32_t be=htonl(len);assert(write(fd[1],&be,4)==4);
   assert(efs_conn_put_reply_watch(&c,0)==-1);c.put_reply_used=0;
  }
+ uint32_t bad=htonl(UINT32_MAX);assert(write(fd[1],&bad,4)==4);
+ assert(efs_conn_put_reply_watch(&c,0)==-1);c.put_reply_used=0;
+ uint8_t partial=0;assert(write(fd[1],&partial,1)==1);
+ assert(efs_conn_put_reply_watch(&c,0)==fd[0] && c.put_reply_used==1);
  close(fd[1]);assert(efs_conn_put_reply_watch(&c,0)==-1);close(fd[0]);
- puts("PUT TCP frames: bytewise header/body, legacy lengths, reuse, malformed length and EOF PASS");return 0;
+ c.rc=(void *)1;c.recv_chan=EFS_CONN_RDMA;c.put_reply_used=0;
+ assert(efs_conn_put_reply_watch(&c,0)==EFS_CONN_REPLY_READY && quick==1 && !spin);
+ assert(efs_conn_put_reply_watch(&c,24)==EFS_CONN_REPLY_READY && quick==1 && spin==1 && !c.put_reply_used);
+ puts("PUT TCP frames: bytewise header/body, legacy lengths, reuse, malformed length, partial EOF and RDMA delegation PASS");return 0;
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-put-frame-') as d:
