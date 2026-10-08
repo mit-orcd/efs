@@ -184,3 +184,13 @@ every final generation after abrupt private-daemon restart, then proves
 physical deletion and queue drain. This is functional correctness evidence,
 not an independent packed-index crash test or a power-loss claim.
 [Evidence](../../results/measure/20261008-w93-w96-implementation/w95-live-churn/live.log).
+
+## W93 / W53 end-to-end mixed-load finding
+
+Three baseline and candidate mixed-load samples pass exact cold bytes and
+physical reclamation. The two balanced uncontaminated pairs show baseline
+tiny-close p99 237–249 ms versus candidate 266–282 ms; this tail gate fails
+acceptance despite lower median latency in some samples. A four-request bound
+experiment did not establish a fix, so no default-bound change was made.
+[All samples and contamination limits](../../results/measure/20261008-w93-w96-implementation/w93-mixed-load/README.md).
+The subsequent durable-ACK-before-apply change is being measured separately.

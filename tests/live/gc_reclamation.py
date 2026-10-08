@@ -31,7 +31,11 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
+p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--create-lease',action='store_true',help='initial CREATE lease atomicity on local and first-use cross-group hashed lanes, cold replay/unlink/close')
+p.add_argument('--fuse-reply-failure',action='store_true',help='reject CREATE/OPEN descriptor replies and prove local handle/server lease cleanup')
+p.add_argument('--tiny-churn',action='store_true',help='tiny/full-fragment fsynced create/overwrite/delete/recreate, cold exact generations and physical reclamation')
 p.add_argument('--wal-tail-recovery',action='store_true',help='repair private WAL invalid tails, append acknowledged data, then verify another cold restart')
 p.add_argument('--sync-write-fault',action='store_true',help='actual O_SYNC/O_DSYNC callback failure retains bytes for later fsync recovery')
 p.add_argument('--sync-writes',action='store_true',help='O_SYNC/O_DSYNC publication before write replies, including queued append across lane groups')
@@ -226,7 +230,11 @@ def stop(crash=False):
 def mount_client():
     global client
     log=open(work/'fuse.log','ab');handles.append(log)
-    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=env,stdout=log,stderr=log)
+    client_env=env
+    if a.fuse_reply_failure:
+        from fuse_reply_failure import prepare
+        client_env=prepare(work,env)
+    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=client_env,stdout=log,stderr=log)
     def ready():
         if client.poll() is not None:raise AssertionError('FUSE exited')
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
@@ -342,6 +350,29 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.fuse_reply_failure:
+        from fuse_reply_failure import exercise as reject_replies
+        evidence=reject_replies(mount,work,source,a.port,env)
+        (work/'fuse-reply-failure.json').write_text(json.dumps(evidence,indent=2))
+        print('rejected CREATE/OPEN replies release handles and reclaim server inodes PASS',flush=True)
+    if a.tiny_churn:
+        from tiny_churn import exercise as churn,verify_and_delete as verify_churn
+        record=churn(mount)
+        unmount();stop(crash=True);start();mount_client()
+        verify_churn(mount)
+        wait(drained,'tiny churn cold generations and physical deletion drained',180)
+        (work/'tiny-churn.json').write_text(json.dumps(record,indent=2))
+        print('tiny create/overwrite/delete/recreate: exact cold identities and physical reclamation PASS',flush=True)
+    if a.tiny_mixed or a.tiny_mixed_only:
+        from tiny_mixed import exercise,verify_and_delete
+        mixed=exercise(mount,[client.pid,*[proc.pid for proc in servers]])
+        unmount();stop(crash=True);start();mount_client()
+        verify_and_delete(mount)
+        wait(drained,'mixed tiny/large cold bytes and physical deletion drained',180)
+        (work/'tiny-mixed.json').write_text(json.dumps(mixed,indent=2))
+        print('512 tiny CREATE/close under bounded large writers; exact cold bytes and reclaim PASS',flush=True)
+        if a.tiny_mixed_only:
+            raise SystemExit(0)  # finally still drains all owned processes
     if a.create_lease:
         helper=work/'create-lease'
         run(['cc','-I'+str(source/'include'),source/'tests/live/create_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
