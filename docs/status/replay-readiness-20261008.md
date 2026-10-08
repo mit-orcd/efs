@@ -207,6 +207,31 @@ The earlier failed candidate remains historical evidence, not an outstanding
 routing failure. Hardware power loss and the final multi-mode matrix are owed;
 D25 remains staged.
 
+## W64 bounded capture memory and streaming frontier — 07:34 UTC
+
+Coordinated completion now emits a bounded image set directly. It no longer
+allocates a copy of every reservation and every historical deletion merely
+to filter them out. Ordered reservation keys allow the frontier to advance
+from its current offset until the first OPEN range; completed prefixes are
+not rescanned. OPEN enumeration uses a bounded page from that frontier, and
+foreign-owner checks stream their rows without a burst-sized allocation.
+Legacy APPEND_RES log replay retains its original deletion semantics.
+
+The measured 200-reservation reverse-completion unit visits **399 frontier
+rows**, replacing full-burst collection per completion. An eight-entry OPEN
+page visits **8 rows**; a count-only query reads the cursor without scanning.
+Prepared inode ownership is checked before scanning, exact image/CAS checks
+still protect all mutations, and malformed reservation state fails closed.
+Lost COMMIT, partial participant resolution, bounded retirement and abrupt
+LSM recovery still pass. AMD targeted tests, actual meta/txn ASan+UBSan, full
+units and the complete direct/TCP synchronous-write/append/replay/POSIX/GC/
+shutdown/recovery gate all pass.
+[Measured unit evidence](../../results/measure/20261008-replay-readiness/streaming-append-pass/unit-evidence.json),
+[live console](../../results/measure/20261008-replay-readiness/streaming-append-pass/console.log).
+Foreign-owner admission remains linear in the outstanding reservation rows;
+this change bounds memory and removes completion's full-burst copies, not a
+claim of thousand-client metadata scalability.
+
 ## Evidence
 
 [Recorded evidence](../../results/measure/20261008-replay-readiness/README.md)

@@ -137,6 +137,15 @@ static void bounds_and_pending(void)
  q=identity(18,17);assert(efs_meta_capture_append(kv,ino,UINT64_MAX,&q,decision,kv,b)==EFS_ERR_INVAL);
  assert(efs_meta_apply_check(kv)==EFS_OK);free(a);free(b);efs_kv_mem_free(kv);
 }
+struct visit_source {struct efs_kv *base;unsigned rows;};
+struct visit_callback {struct visit_source *source;int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t);void *user;};
+static int visit_row(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *value,uint32_t vl)
+{struct visit_callback *v=ctx;++v->source->rows;return v->cb(v->user,key,kl,value,vl);}
+static int visit_get(void *ctx,const uint8_t *key,uint32_t kl,uint8_t *value,uint32_t *vl)
+{struct visit_source *s=ctx;return efs_kv_get(s->base,key,kl,value,vl);}
+static int visit_from(void *ctx,const uint8_t *prefix,uint32_t pl,const uint8_t *start,uint32_t sl,
+                         int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
+{struct visit_source *s=ctx;struct visit_callback v={s,cb,user};return efs_kv_scan_from(s->base,prefix,pl,start,sl,visit_row,&v);}
 static void completion(void)
 {
  struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino;uint64_t gen;
@@ -146,11 +155,19 @@ static void completion(void)
   q=identity(i,i-1);assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,a)==EFS_OK);
   t.bytes[0]=i;t.bytes[1]=1;assert(efs_meta_execute_append(a,&t,&ops,kv)==EFS_OK);
  }
+ struct visit_source source={kv,0};
+ const struct efs_kv_ops view_ops={.get=visit_get,.scan_from=visit_from};
+ struct efs_kv view={.ops=&view_ops,.ctx=&source};
+ uint64_t offsets[8],lengths[8];uint32_t n=8;
+ assert(efs_meta_apply_append_open(&view,ino,offsets,lengths,&n)==EFS_OK && n==8 && source.rows==8);
+ for(unsigned i=0;i<8;++i)assert(offsets[i]==200+i*8 && lengths[i]==8);
+ source.rows=0;n=0;
+ assert(efs_meta_apply_append_open(&view,ino,NULL,NULL,&n)==EFS_OK && n==200 && !source.rows);
  /* Reverse completion retains frontier dependencies, then the final
   * transaction retains DONE rows and clears BOTH groups. */
  for(unsigned i=200;i>1;--i){
   t.bytes[0]=i;t.bytes[1]=2;
-  assert(efs_meta_finish_append(kv,ino,200+(i-1)*8,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_OK);
+  assert(efs_meta_finish_append(&view,ino,200+(i-1)*8,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_OK);
  }
  unsigned removed=999;t.bytes[0]=222;t.bytes[1]=6;
  assert(efs_meta_append_prune_pending(kv,ino)==0);
@@ -158,8 +175,10 @@ static void completion(void)
  uint64_t wm,frontier;uint32_t open;
  assert(efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)==EFS_OK && open==1 && frontier==200);
  struct efs_meta_append_ops lost={prepare,lost_decision,resolve};t.bytes[0]=1;
- assert(efs_meta_finish_append(kv,ino,200,EFS_META_APPEND_ABORTED_HOLE,&t,&lost,kv)==EFS_ERR_IO);
- assert(efs_meta_finish_append(kv,ino,200,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_ERR_BUSY);
+ assert(efs_meta_finish_append(&view,ino,200,EFS_META_APPEND_ABORTED_HOLE,&t,&lost,kv)==EFS_ERR_IO);
+ assert(source.rows==399); /* 199 single-row stops + one 200-row frontier pass */
+ assert(efs_meta_finish_append(&view,ino,200,EFS_META_APPEND_COMPLETED,&t,&ops,kv)==EFS_ERR_BUSY);
+ assert(source.rows==399); /* prepared inode refuses before rescanning */
  assert(resolve(kv,&t,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
  assert(efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open)==EFS_OK && !open && !wm);
  struct efs_meta_stat st;assert(efs_meta_apply_getattr(kv,ino,decision,kv,&st)==EFS_OK && st.size==1800);

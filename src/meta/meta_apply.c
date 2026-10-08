@@ -6807,29 +6807,31 @@ static int load_rsvs(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     return rc;
 }
 
-/* 0 = ok, 1 = other uuid has OPEN, <0 = error. */
-static int append_foreign_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
-                               const uint8_t uuid[EFS_OPID_UUID_LEN])
+struct append_foreign_scan {const uint8_t *uuid;int foreign,rc;};
+static int append_foreign_cb(void *user,const uint8_t *key,uint32_t kl,
+                               const uint8_t *value,uint32_t length)
 {
-    struct rsv_scan scan;
-    uint32_t i;
-    int rc, foreign = 0;
-
-    rc = load_rsvs(kv, ino, gen, &scan);
-    if (rc != EFS_OK) {
-        free(scan.r);
-        return rc;
+    struct append_foreign_scan *s=user;struct append_rsv r;
+    (void)key;(void)kl;
+    s->rc=unpack_append_rsv(value,length,&r);
+    if(s->rc!=EFS_OK)return 1;
+    if(r.state>APPEND_DONE){s->rc=EFS_ERR_PROTO;return 1;}
+    if(r.state==APPEND_OPEN && memcmp(r.uuid,s->uuid,EFS_OPID_UUID_LEN)) {
+        s->foreign=1;return 1;
     }
-    for (i = 0; i < scan.n; i++) {
-        if (scan.r[i].state != APPEND_OPEN)
-            continue;
-        if (memcmp(scan.r[i].uuid, uuid, EFS_OPID_UUID_LEN) != 0) {
-            foreign = 1;
-            break;
-        }
-    }
-    free(scan.r);
-    return foreign;
+    return 0;
+}
+/* 0 = ok, 1 = other uuid has OPEN, <0 = error. No burst-sized allocation. */
+static int append_foreign_open(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+                                 const uint8_t uuid[EFS_OPID_UUID_LEN])
+{
+    uint8_t prefix[EFS_KV_KEY_MAX];uint32_t pl;
+    struct append_foreign_scan scan={.uuid=uuid};
+    int rc=efs_kv_key_append_rsv_prefix(efs_kv_inode_shard(ino),ino,gen,prefix,&pl);
+    if(rc==EFS_OK)rc=efs_kv_scan_prefix(kv,prefix,pl,append_foreign_cb,&scan);
+    if(scan.rc!=EFS_OK)return scan.rc;
+    if(rc!=EFS_OK && rc!=1)return rc;
+    return scan.foreign;
 }
 
 int efs_meta_apply_append_foreign(struct efs_kv *kv, efs_ino_t ino,
@@ -7290,13 +7292,44 @@ int efs_meta_execute_append(const struct efs_meta_append_plan *plan,
     return ops->resolve(ctx, t, &plan->parts, EFS_TXN_COMMIT);
 }
 
-int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
-                                  int outcome)
+/* Ordered reservations let the frontier advance in one streaming pass.
+ * Stop at the first unresolved range; no full-burst allocation is needed. */
+struct append_frontier_scan {uint64_t frontier,completed;int rc;};
+static int append_frontier_cb(void *user,const uint8_t *key,uint32_t kl,
+                                const uint8_t *value,uint32_t length)
+{
+    struct append_frontier_scan *s=user;struct append_rsv r;
+    (void)key;(void)kl;
+    s->rc=unpack_append_rsv(value,length,&r);
+    if(s->rc!=EFS_OK)return 1;
+    if(!r.len || r.len>UINT64_MAX-r.off || r.state>APPEND_DONE) {
+        s->rc=EFS_ERR_PROTO;return 1;
+    }
+    if(r.off<s->frontier)return 0;
+    if(r.off!=s->frontier || (r.state!=APPEND_DONE && r.off!=s->completed))return 1;
+    s->frontier=r.off+r.len;return 0;
+}
+static int append_frontier_collect(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+                                     uint64_t completed,uint64_t *frontier)
+{
+    uint8_t prefix[EFS_KV_KEY_MAX],start[EFS_KV_KEY_MAX];uint32_t pl,sl;
+    struct append_frontier_scan scan={.frontier=*frontier,.completed=completed};
+    int rc=efs_kv_key_append_rsv_prefix(efs_kv_inode_shard(ino),ino,gen,prefix,&pl);
+    if(rc==EFS_OK)rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,gen,*frontier,start,&sl);
+    if(rc==EFS_OK)rc=efs_kv_scan_from(kv,prefix,pl,start,sl,append_frontier_cb,&scan);
+    if(scan.rc!=EFS_OK)return scan.rc;
+    if(rc!=EFS_OK && rc!=1)return rc;
+    *frontier=scan.frontier;return EFS_OK;
+}
+
+static int meta_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off,
+                                  int outcome,
+                                  int (*emit)(void *,const struct efs_kv_item *,uint32_t),void *ctx)
 {
     struct efs_meta_row row;
     struct append_cur cur;
     struct append_rsv rsv;
-    struct rsv_scan scan;
+    struct rsv_scan scan = {0};
     uint8_t k_cur[EFS_KV_KEY_MAX], k_rsv[EFS_KV_KEY_MAX], k_ino[EFS_KV_KEY_MAX];
     uint8_t v_cur[APPEND_CUR_VAL], v_rsv[APPEND_RSV_VAL], v_ino[INO_VAL];
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
@@ -7316,6 +7349,11 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
     rc = efs_meta_apply_get_inode(kv, ino, &row);
     if (rc != EFS_OK)
         return rc;
+    if(emit) {
+        rc=efs_kv_key_inode(efs_kv_inode_shard(ino),ino,k_ino,&ki);
+        if(rc==EFS_OK)rc=meta_write_check(kv,k_ino,ki);
+        if(rc!=EFS_OK)return rc;
+    }
     rc = efs_kv_key_append_rsv(efs_kv_inode_shard(ino), ino, row.generation, off,
                                k_rsv, &kr);
     if (rc != EFS_OK)
@@ -7339,6 +7377,8 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
         if (rc != EFS_OK)
             return rc;
     }
+    if(emit && (rsv.off!=off || !rsv.len || rsv.len>UINT64_MAX-rsv.off ||
+                 rsv.state>APPEND_DONE))return EFS_ERR_PROTO;
     if (rsv.state == APPEND_DONE)
         return EFS_OK;
     hole = (outcome != EFS_META_APPEND_COMPLETED);
@@ -7351,30 +7391,37 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
     cur.nopen--;
     if (hole)
         row.base_size = max_u64(row.base_size, rsv.off + rsv.len);
-    rc = load_rsvs(kv, ino, row.generation, &scan);
-    if (rc != EFS_OK) {
-        free(scan.r);
-        return rc;
-    }
-    for (i = 0; i < scan.n; i++) {
-        if (scan.r[i].off == off)
-            scan.r[i].state = APPEND_DONE;
-    }
-    while (progressed) {
-        progressed = 0;
+    if(emit) {
+        rc=append_frontier_collect(kv,ino,row.generation,off,&cur.frontier);
+        if(rc!=EFS_OK)return rc;
+    } else {
+        rc = load_rsvs(kv, ino, row.generation, &scan);
+        if (rc != EFS_OK) {
+            free(scan.r);
+            return rc;
+        }
         for (i = 0; i < scan.n; i++) {
-            if (scan.r[i].state == APPEND_DONE &&
-                scan.r[i].off == cur.frontier) {
-                cur.frontier = scan.r[i].off + scan.r[i].len;
-                progressed = 1;
-                scan.r[i].state = 0xff;
+            if (scan.r[i].off == off)
+                scan.r[i].state = APPEND_DONE;
+        }
+        while (progressed) {
+            progressed = 0;
+            for (i = 0; i < scan.n; i++) {
+                if (scan.r[i].state == APPEND_DONE &&
+                    scan.r[i].off == cur.frontier) {
+                    cur.frontier = scan.r[i].off + scan.r[i].len;
+                    progressed = 1;
+                    scan.r[i].state = 0xff;
+                }
             }
         }
     }
     it = malloc(((size_t)scan.n + EFS_META_LANES + 4) * sizeof(*it));
-    del_keys = malloc((size_t)(scan.n ? scan.n : 1) * sizeof(*del_keys));
-    del_kl = malloc((size_t)(scan.n ? scan.n : 1) * sizeof(*del_kl));
-    if (!it || !del_keys || !del_kl) {
+    if(!emit) {
+        del_keys = malloc((size_t)(scan.n ? scan.n : 1) * sizeof(*del_keys));
+        del_kl = malloc((size_t)(scan.n ? scan.n : 1) * sizeof(*del_kl));
+    }
+    if (!it || (!emit && (!del_keys || !del_kl))) {
         rc = EFS_ERR_NOMEM;
         goto out;
     }
@@ -7389,7 +7436,11 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
         it[n].key = k_cur;
         it[n].klen = kc;
         n++;
-        if (scan.n == 0) {
+        if(emit) {
+            pack_append_rsv(v_rsv,&rsv);
+            it[n].op=EFS_KV_PUT;it[n].key=k_rsv;it[n].klen=kr;
+            it[n].val=v_rsv;it[n++].vlen=APPEND_RSV_VAL;
+        } else if (scan.n == 0) {
             it[n].op = EFS_KV_DEL;
             it[n].key = k_rsv;
             it[n].klen = kr;
@@ -7436,13 +7487,31 @@ int efs_meta_apply_append_resolve(struct efs_kv *kv, efs_ino_t ino, uint64_t off
     it[n].val = v_ino;
     it[n].vlen = INO_VAL;
     n++;
-    rc = meta_write_batch(kv, it, n);
+    if(emit) {
+        for(uint32_t j=0;j<n;++j) {
+            rc=meta_write_check(kv,it[j].key,it[j].klen);
+            if(rc!=EFS_OK)goto out;
+        }
+        rc=emit(ctx,it,n);
+    } else rc=meta_write_batch(kv,it,n);
 out:
     free(scan.r);
     free(del_keys);
     free(del_kl);
     free(it);
     return rc;
+}
+
+int efs_meta_apply_append_resolve(struct efs_kv *kv,efs_ino_t ino,uint64_t off,int outcome)
+{
+    return meta_append_resolve(kv,ino,off,outcome,NULL,NULL);
+}
+int efs_meta_collect_append_completion(struct efs_kv *kv,efs_ino_t ino,uint64_t off,
+                                        int outcome,
+                                        int (*emit)(void *,const struct efs_kv_item *,uint32_t),void *ctx)
+{
+    if(!emit)return EFS_ERR_INVAL;
+    return meta_append_resolve(kv,ino,off,outcome,emit,ctx);
 }
 
 int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
@@ -7470,53 +7539,48 @@ int efs_meta_apply_append_state(struct efs_kv *kv, efs_ino_t ino,
     return EFS_OK;
 }
 
-int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
-                               uint64_t *lens, uint32_t *n)
-{
-    struct efs_meta_row row;
-    struct rsv_scan scan;
-    uint32_t i, cap, outn = 0;
+struct append_open_page {
+    uint64_t *offs,*lens;
+    uint32_t n,limit;
     int rc;
-
-    if (!kv || !n || ino == 0)
-        return EFS_ERR_INVAL;
-    cap = *n;
-    *n = 0;
-    rc = efs_meta_apply_get_inode(kv, ino, &row);
-    if (rc != EFS_OK)
-        return rc;
-    /* nopen is the count of OPEN rows, kept on the cursor and deleted
-     * with them when it hits 0 (same batch). append_foreign already
-     * trusts nopen==0 and skips the prefix scan; this path is the one
-     * every close REPORT hits, and the scan is one pread per LSM
-     * segment under the LSM lock. A file that never reserved has no
-     * cursor (NOT_FOUND → nopen 0). */
-    {
-        struct append_cur cur;
-
-        rc = load_append_cur(kv, ino, row.generation, &cur);
-        if (rc != EFS_OK)
-            return rc;
-        if (cur.nopen == 0)
-            return EFS_OK;
+};
+static int append_open_cb(void *user,const uint8_t *key,uint32_t kl,
+                            const uint8_t *value,uint32_t length)
+{
+    struct append_open_page *p=user;struct append_rsv r;
+    (void)key;(void)kl;
+    p->rc=unpack_append_rsv(value,length,&r);
+    if(p->rc!=EFS_OK)return 1;
+    if(!r.len || r.len>UINT64_MAX-r.off || r.state>APPEND_DONE) {
+        p->rc=EFS_ERR_PROTO;return 1;
     }
-    rc = load_rsvs(kv, ino, row.generation, &scan);
-    if (rc != EFS_OK) {
-        free(scan.r);
-        return rc;
-    }
-    for (i = 0; i < scan.n; i++) {
-        if (scan.r[i].state != APPEND_OPEN)
-            continue;
-        if (outn < cap && offs && lens) {
-            offs[outn] = scan.r[i].off;
-            lens[outn] = scan.r[i].len;
-        }
-        outn++;
-    }
-    *n = (cap && outn > cap) ? cap : outn;
-    free(scan.r);
-    return EFS_OK;
+    if(r.state!=APPEND_OPEN)return 0;
+    if(p->offs && p->lens){p->offs[p->n]=r.off;p->lens[p->n]=r.len;}
+    return ++p->n==p->limit;
+}
+int efs_meta_apply_append_open(struct efs_kv *kv,efs_ino_t ino,uint64_t *offs,
+                                uint64_t *lens,uint32_t *n)
+{
+    struct efs_meta_row row;struct append_cur cur;
+    uint8_t prefix[EFS_KV_KEY_MAX],start[EFS_KV_KEY_MAX];uint32_t pl,sl;
+    if(!kv || !n || !ino)return EFS_ERR_INVAL;
+    uint32_t cap=*n;*n=0;
+    int rc=efs_meta_apply_get_inode(kv,ino,&row);
+    if(rc==EFS_OK)rc=load_append_cur(kv,ino,row.generation,&cur);
+    if(rc!=EFS_OK)return rc;
+    if(!cur.nopen)return EFS_OK;
+    if(!cap){*n=cur.nopen;return EFS_OK;}
+    struct append_open_page page={.offs=offs,.lens=lens,
+        .limit=cap<cur.nopen?cap:cur.nopen};
+    rc=efs_kv_key_append_rsv_prefix(efs_kv_inode_shard(ino),ino,row.generation,prefix,&pl);
+    if(rc==EFS_OK)rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,row.generation,cur.frontier,start,&sl);
+    if(rc==EFS_OK)rc=efs_kv_scan_from(kv,prefix,pl,start,sl,append_open_cb,&page);
+    if(page.rc!=EFS_OK)return page.rc;
+    if(rc!=EFS_OK && rc!=1)return rc;
+    /* A concurrent cursor change invalidates this page; never report an
+     * empty page as proof of completion while the captured cursor is OPEN. */
+    if(page.n!=page.limit)return EFS_ERR_BUSY;
+    *n=page.n;return EFS_OK;
 }
 
 #define DROP_RSV_MAX 32
