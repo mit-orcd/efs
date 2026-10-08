@@ -19,14 +19,18 @@ import argparse
 import errno
 import json
 import os
+import stat
 import time
 
 MAX_OUTPUT = 16 << 20
 MAX_TERM_BYTES = 120
 MATCHES = {"exact": 0, "prefix": 1, "suffix": 2, "contains": 3}
+UINT64_MAX = (1 << 64) - 1
+TYPES = (None, "file", "dir", "symlink")
+FILTER_FIELDS = ("min_size", "max_size", "modified_after_ns", "modified_before_ns")
 
 
-def query_name(command, term=b"", match="contains"):
+def query_name(command, term=b"", match="contains", filters=None):
     if command not in ("find", "ls", "stats"):
         raise ValueError("unknown command")
     if command != "find":
@@ -41,6 +45,13 @@ def query_name(command, term=b"", match="contains"):
         raise ValueError("patterns match names, not paths; slash and NUL are invalid")
     if not term and match not in ("prefix", "contains"):
         raise ValueError("empty exact/suffix pattern is invalid")
+    if filters is not None:
+        import base64
+        flags = sum(1 << i for i, key in enumerate(FILTER_FIELDS) if filters[key] is not None)
+        fields = "".join("%016x" % (filters[key] or 0) for key in FILTER_FIELDS)
+        encoded = base64.urlsafe_b64encode(term).decode("ascii").rstrip("=")
+        return "v2.find.%d.%d.%02x.%s.%s" % (MATCHES[match],
+            TYPES.index(filters["type"]), flags, fields, encoded)
     return "v1.find.%d.%s" % (MATCHES[match], term.hex())
 
 
@@ -68,7 +79,7 @@ def read_result(directory, name):
     raise AssertionError("unreachable")
 
 
-def validate_result(result, command):
+def validate_result(result, command, filters=None):
     if (not isinstance(result, dict) or result.get("version") != 1 or
             result.get("operation") != command or result.get("complete") is not True):
         raise ValueError("unsupported or incomplete query result")
@@ -85,6 +96,11 @@ def validate_result(result, command):
                                             for k in required_stats):
             raise ValueError("invalid server stats")
         return []
+    if filters is not None:
+        actual = result.get("filters")
+        if (not isinstance(actual, dict) or actual.keys() != filters.keys() or
+                any(type(actual[k]) is not type(v) or actual[k] != v for k, v in filters.items())):
+            raise ValueError("server did not confirm the requested filters")
     entries = result.get("entries")
     if not isinstance(entries, list):
         raise ValueError("query lacks entries")
@@ -92,6 +108,10 @@ def validate_result(result, command):
     for entry in entries:
         if not isinstance(entry, dict) or not isinstance(entry.get("path_hex"), str):
             raise ValueError("invalid query entry")
+        for field, limit in (("mode", (1 << 32) - 1), ("uid", (1 << 32) - 1),
+                             ("gid", (1 << 32) - 1), ("size", UINT64_MAX), ("mtime_ns", UINT64_MAX)):
+            if type(entry.get(field)) is not int or not 0 <= entry[field] <= limit:
+                raise ValueError("query entry lacks valid " + field + "; update server and client together")
         encoded = entry["path_hex"]
         if len(encoded) > 8192 or len(encoded) % 2:
             raise ValueError("invalid encoded filename")
@@ -110,6 +130,104 @@ def validate_result(result, command):
             raise ValueError("query path escapes its directory scope")
         paths.append(path)
     return paths
+
+
+def parse_size(text):
+    import re
+    from decimal import Decimal
+    units = {"": 1, "B": 1, "KiB": 1 << 10, "MiB": 1 << 20,
+             "GiB": 1 << 30, "TiB": 1 << 40, "KB": 1000,
+             "MB": 1000000, "GB": 1000000000, "TB": 1000000000000}
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([A-Za-z]*)", text)
+    if not match or match[2] not in units:
+        raise argparse.ArgumentTypeError("use bytes or a size such as 100MiB or 1.5GiB")
+    value = Decimal(match[1]) * units[match[2]]
+    if value != value.to_integral_value() or not 0 <= value <= UINT64_MAX:
+        raise argparse.ArgumentTypeError("size must be a whole number of bytes in uint64 range")
+    return int(value)
+
+
+def parse_timestamp(text):
+    import datetime
+    import re
+    match = re.fullmatch(r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?(Z|[+-]\d{2}:\d{2})", text)
+    if not match:
+        raise argparse.ArgumentTypeError("use an ISO timestamp with timezone, e.g. 2026-10-01T00:00:00Z")
+    try:
+        zone = match[3]
+        if zone != "Z" and (int(zone[1:3]) > 23 or int(zone[4:]) > 59):
+            raise ValueError("invalid UTC offset")
+        instant = datetime.datetime.fromisoformat(match[1] + ("+00:00" if zone == "Z" else zone))
+        delta = instant - datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+        value = (delta.days * 86400 + delta.seconds) * 1000000000 + int((match[2] or "").ljust(9, "0"))
+        if not 0 <= value <= UINT64_MAX:
+            raise ValueError("timestamp outside supported range")
+        return value
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from None
+
+
+def parse_duration(text):
+    import re
+    match = re.fullmatch(r"([0-9]+)(s|m|h|d|w)", text)
+    if not match:
+        raise argparse.ArgumentTypeError("use a positive duration such as 30m, 2h or 7d")
+    value = int(match[1]) * {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}[match[2]] * 1000000000
+    if not 0 < value <= UINT64_MAX:
+        raise argparse.ArgumentTypeError("duration outside supported range")
+    return value
+
+
+def make_filters(args, now_ns):
+    filters = dict(type=args.type, min_size=args.min_size, max_size=args.max_size,
+                   modified_after_ns=args.modified_after, modified_before_ns=args.modified_before)
+    if args.modified_within is not None:
+        after = max(0, now_ns - args.modified_within)
+        filters["modified_after_ns"] = max(after, args.modified_after or 0)
+        filters["modified_before_ns"] = min(now_ns, args.modified_before if args.modified_before is not None else now_ns)
+    if args.min_size is not None and args.max_size is not None and args.min_size > args.max_size:
+        raise ValueError("--min-size exceeds --max-size")
+    after, before = filters["modified_after_ns"], filters["modified_before_ns"]
+    if after is not None and before is not None and after >= before:
+        raise ValueError("modification-time interval is empty")
+    return filters if any(v is not None for v in filters.values()) else None
+
+
+def human_size(size):
+    from decimal import Decimal
+    value = Decimal(size)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"):
+        if value < 1024 or unit == "EiB":
+            return "%d B" % size if unit == "B" else "%.1f %s" % (value, unit)
+        value /= 1024
+
+
+def format_mtime(ns, style, now_ns):
+    import datetime
+    if style == "relative":
+        seconds = abs(now_ns - ns) // 1000000000
+        if seconds == 0:
+            return "just now"
+        for amount, unit in ((31536000, "year"), (86400, "day"), (3600, "hour"), (60, "minute"), (1, "second")):
+            if seconds >= amount:
+                n = seconds // amount
+                value = "%d %s%s" % (n, unit, "" if n == 1 else "s")
+                return value + " ago" if ns <= now_ns else "in " + value
+    stamp = datetime.datetime.fromtimestamp(ns // 1000000000, datetime.timezone.utc)
+    if style == "full":
+        return stamp.strftime("%Y-%m-%dT%H:%M:%S") + ".%09dZ" % (ns % 1000000000)
+    return stamp.strftime("%Y-%m-%d %H:%MZ")
+
+
+def ordered_entries(result, paths, sort, reverse, dirs_first=False):
+    paired = list(zip(result["entries"], paths))
+    def key(pair):
+        entry, path = pair
+        return (path,) if sort == "name" else (-entry["mtime_ns" if sort == "mtime" else "size"], path)
+    paired.sort(key=key, reverse=reverse)
+    if dirs_first:
+        paired.sort(key=lambda pair: not stat.S_ISDIR(pair[0]["mode"]))
+    return paired
 
 
 class HelpFormatter(argparse.RawDescriptionHelpFormatter):
@@ -158,7 +276,9 @@ def print_help(command, extended=False):
             ("-0", "NUL-separated paths (ls and find)"),
             ("--extended", "Show limits and requirements (help)"),
             ("-h, --help", "Show command-specific help")])
-        print("\nExamples:\n  .efs/find report\n  .efs/find .txt --match suffix\n  .efs/stats --json")
+        print("\nExamples:\n  .efs/ls -l --human-readable --sort mtime"
+              "\n  .efs/find .txt --match suffix --type file --modified-within 2d"
+              "\n  .efs/stats --json")
         print("\nNotes:\n  Run any command with --help for its options."
               "\n  Use .efs/help --extended for limits and requirements.")
         if extended:
@@ -182,8 +302,8 @@ def main(argv=None, script_path=None):
         description=".efs/%s - %s" % (command, descriptions[command]),
         formatter_class=HelpFormatter, add_help=False,
         epilog={"help": "Examples:\n  .efs/help --extended",
-                "ls": "Examples:\n  .efs/ls --json\n  .efs/ls -0",
-                "find": "Examples:\n  .efs/find report\n  .efs/find .txt --match suffix -0",
+                "ls": "Examples:\n  .efs/ls -l --human-readable --sort mtime\n  .efs/ls --dirs-first --relative",
+                "find": "Examples:\n  .efs/find report -l --sort mtime\n  .efs/find .log --match suffix --min-size 100MiB\n  .efs/find '' --type file --modified-within 2d -0",
                 "stats": "Examples:\n  .efs/stats --json"}[command] +
                "\n\nNotes:\n  Use .efs/help --extended for limits and requirements.")
     parser.add_argument("-h", "--help", action="help", help="Show this help")
@@ -192,35 +312,77 @@ def main(argv=None, script_path=None):
     parser.add_argument("--json", action="store_true", help="Structured results and snapshot details")
     if command in ("find", "ls"):
         parser.add_argument("-0", "--print0", action="store_true", help="NUL-separated paths")
+        parser.add_argument("-l", "--long", action="store_true", help="Permissions, uid:gid, size, modification date and path")
+        parser.add_argument("--human-readable", action="store_true", help="Format long-list sizes as KiB, MiB, GiB")
+        parser.add_argument("--sort", choices=("name", "mtime", "size"), default="name",
+                            help="Name ascending (default), newest first, or largest first")
+        parser.add_argument("-r", "--reverse", action="store_true", help="Reverse the selected sort order")
+        parser.add_argument("--time-style", choices=("iso", "relative", "full"),
+                            help="Long-list dates: UTC iso (default), relative age, or full UTC nanoseconds")
+        parser.add_argument("--relative", action="store_true", help="Paths relative to the directory containing .efs")
+    if command == "ls":
+        parser.add_argument("--dirs-first", action="store_true", help="Keep directories first, including with --reverse")
     if command == "find":
         parser.add_argument("pattern", help="Name pattern; matched literally")
         parser.add_argument("--match", choices=tuple(MATCHES), default="contains",
                             help="Match type (default: contains)")
+        parser.add_argument("--type", choices=TYPES[1:], help="Filter entry type; symlinks are not followed")
+        parser.add_argument("--min-size", type=parse_size, help="Minimum logical size, inclusive (bytes or e.g. 100MiB)")
+        parser.add_argument("--max-size", type=parse_size, help="Maximum logical size, inclusive")
+        parser.add_argument("--modified-after", type=parse_timestamp, help="mtime strictly after an ISO timestamp with timezone")
+        parser.add_argument("--modified-before", type=parse_timestamp, help="mtime strictly before an ISO timestamp with timezone")
+        parser.add_argument("--modified-within", type=parse_duration, help="mtime in the past duration (e.g. 2h, 7d); excludes future times")
     args = parser.parse_args(argv)
     if command == "help":
         print_help(command, args.extended)
         return 0
     if args.json and getattr(args, "print0", False):
         parser.error("--json and --print0 are mutually exclusive")
-    name = query_name(command, os.fsencode(args.pattern) if command == "find" else b"",
-                      args.match if command == "find" else "contains")
+    now_ns = time.time_ns()
+    filters = None
+    if command in ("ls", "find"):
+        if args.long and (args.json or args.print0):
+            parser.error("--long cannot be combined with --json or --print0")
+        if (args.human_readable or args.time_style) and not args.long:
+            parser.error("--human-readable and --time-style require --long")
+        if args.relative and args.json:
+            parser.error("JSON already carries relative path_hex; --relative applies to text and -0")
+    try:
+        if command == "find":
+            filters = make_filters(args, now_ns)
+        name = query_name(command, os.fsencode(args.pattern) if command == "find" else b"",
+                          args.match if command == "find" else "contains", filters)
+    except ValueError as error:
+        parser.error(str(error))
     directory = os.path.dirname(script)
     result = read_result(directory, name)
-    paths = validate_result(result, command)
+    paths = validate_result(result, command, filters)
+    ordered = [] if command == "stats" else ordered_entries(result, paths, args.sort, args.reverse,
+                                                           getattr(args, "dirs_first", False))
     if args.json:
+        if command != "stats":
+            result["entries"] = [entry for entry, _ in ordered]
         print(json.dumps(result, ensure_ascii=True, separators=(",", ":")))
     elif command == "stats":
         for key, value in result["stats"].items():
             print("%s=%d" % (safe_text(key), value))
         print("expiry=unavailable")
-    elif args.print0:
-        root = os.fsencode(os.path.dirname(directory))
-        for path in paths:
-            sys.stdout.buffer.write(os.path.join(root, path) + b"\0")
     else:
         root = os.fsencode(os.path.dirname(directory))
-        for path in paths:
-            print(safe_text(os.fsdecode(os.path.join(root, path))))
+        rendered = []
+        for entry, path in ordered:
+            visible = path if args.relative else os.path.join(root, path)
+            if args.print0:
+                rendered.append(visible + b"\0")
+            else:
+                prefix = ""
+                if args.long:
+                    size = human_size(entry["size"]) if args.human_readable else str(entry["size"])
+                    prefix = "%s %d:%d %10s %s  " % (stat.filemode(entry["mode"]), entry["uid"],
+                        entry["gid"], size, format_mtime(entry["mtime_ns"], args.time_style or "iso", now_ns))
+                rendered.append((prefix + safe_text(os.fsdecode(visible)) + "\n").encode("utf-8"))
+        # Complete validation and formatting precede the first output byte.
+        sys.stdout.buffer.write(b"".join(rendered))
     # NUL output is exclusively paths; status always goes to stderr.
     snap = result["snapshot"]
     age = max(0, time.time_ns() - snap["source_ns"]) / 1e9

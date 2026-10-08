@@ -10,6 +10,17 @@ class Request(C.Structure):
     _fields_=[('version',C.c_uint32),('operation',C.c_uint32),('root',C.c_uint64),
               ('uid',C.c_uint32),('gid',C.c_uint32),('ngroups',C.c_uint32),('match',C.c_uint32),
               ('max_output',C.c_uint32),('visit_budget',C.c_uint32),('groups',C.c_uint32*128),('term',C.c_char*256)]
+class Filters(C.Structure):
+    _fields_=[('flags',C.c_uint32),('kind',C.c_uint32),('min_size',C.c_uint64),
+              ('max_size',C.c_uint64),('after_ns',C.c_uint64),('before_ns',C.c_uint64)]
+class FilterRequest(C.Structure):
+    _anonymous_=('base',)
+    _fields_=[('base',Request),('filters',Filters)]
+assert C.sizeof(FilterRequest)==848,C.sizeof(FilterRequest)
+def filtered_request(**fields):
+    selected={key:fields.pop(key) for key,_ in Filters._fields_ if key in fields}
+    fields.setdefault('version',3);fields.setdefault('operation',1)
+    return FilterRequest(base=request(**fields),filters=Filters(**selected))
 class Reply(C.Structure):
     _fields_=[('version',C.c_uint32),('status',C.c_int32),('refresh_error',C.c_int32),
               ('primary_id',C.c_uint16),('reserved',C.c_uint16),('text_len',C.c_uint32),
@@ -37,7 +48,7 @@ def query(port,q,raw=None):
         payload=receive(s,n)
     assert payload[0]==124,payload[0]
     r=Reply.from_buffer_copy(payload[1:121]);text=payload[121:]
-    assert r.version==(q.version if raw is None and q.version in (1,2) else 1) and r.text_len==len(text),(r.version,r.text_len,len(text))
+    assert r.version==(q.version if raw is None and q.version in (1,2,3) else 1) and r.text_len==len(text),(r.version,r.text_len,len(text))
     assert not r.status or not text,'partial failure delivered bytes'
     return r,text
 

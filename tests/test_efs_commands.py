@@ -26,7 +26,7 @@ def envelope(op, paths=()):
         result["stats"] = dict(imm_files=1, imm_dirs=0, imm_bytes=7, imm_tmin=1, imm_tmax=2,
                                tree_files=1, tree_dirs=0, tree_bytes=7, tree_tmin=1, tree_tmax=2)
     else:
-        result["entries"] = [dict(path_hex=p.hex(), mode=0o100644, size=7, expiry=None) for p in paths]
+        result["entries"] = [dict(path_hex=p.hex(), mode=0o100644, size=7, uid=1000, gid=1001, mtime_ns=1700000000123456789, expiry=None) for p in paths]
     return result
 
 
@@ -91,7 +91,7 @@ class Commands(unittest.TestCase):
         self.result("ls", paths)
         p = self.run_command("ls", "-0")
         self.assertEqual(p.returncode, 0, p.stderr)
-        self.assertEqual(p.stdout, b"".join(os.fsencode(self.root) + b"/" + x + b"\0" for x in paths))
+        self.assertEqual(p.stdout, b"".join(os.fsencode(self.root) + b"/" + x + b"\0" for x in sorted(paths)))
         p = self.run_command("ls")
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertNotIn(b"\x1b", p.stdout)
@@ -167,6 +167,98 @@ class Commands(unittest.TestCase):
         self.assertLessEqual(len(commands.query_name("find", b"x" * 120)), 255)
         self.assertEqual(commands.query_name("find", b"*"), "v1.find.3.2a")
 
+    def test_long_dates_sizes_sort_and_relative(self):
+        path = self.result("ls", [b"z", b"a", b"dir", b"line\nbreak"])
+        result = json.loads(path.read_text())
+        for entry, size in zip(result["entries"], [2, 2048, 0, 2]):
+            entry["size"] = size
+            entry["mtime_ns"] = 1700000000000000000 + size
+        result["entries"][2]["mode"] = 0o40755
+        path.write_text(json.dumps(result))
+        def names(*args):
+            p = self.run_command("ls", *args, "-0", "--relative")
+            self.assertEqual(p.returncode, 0, p.stderr)
+            return p.stdout.split(b"\0")[:-1]
+        self.assertEqual(names(), [b"a", b"dir", b"line\nbreak", b"z"])
+        self.assertEqual(names("--sort", "size"), [b"a", b"line\nbreak", b"z", b"dir"])
+        self.assertEqual(names("--sort", "mtime", "--reverse", "--dirs-first"),
+                         [b"dir", b"z", b"line\nbreak", b"a"])
+        p = self.run_command("ls", "-l", "--human-readable", "--time-style", "full", "--relative")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn(b"-rw-r--r-- 1000:1001", p.stdout)
+        self.assertIn(b"2.0 KiB", p.stdout)
+        self.assertIn(b"2023-11-14T22:13:20.000002048Z", p.stdout)
+        self.assertIn(b"line\\u000abreak", p.stdout)
+        self.assertNotIn(os.fsencode(self.root), p.stdout)
+        p = self.run_command("ls", "--json", "--sort", "size")
+        self.assertEqual([bytes.fromhex(e["path_hex"]) for e in json.loads(p.stdout)["entries"]],
+                         [b"a", b"line\nbreak", b"z", b"dir"])
+
+    def test_scalar_parsers_and_relative_time(self):
+        self.assertEqual(commands.parse_size("1.5MiB"), 1572864)
+        self.assertEqual(commands.parse_size("1KB"), 1000)
+        self.assertEqual(commands.parse_size(str((1 << 64) - 1)), (1 << 64) - 1)
+        self.assertEqual(commands.parse_timestamp("1970-01-01T01:00:00.000000001+01:00"), 1)
+        self.assertEqual(commands.parse_timestamp("2023-11-14T22:13:20.123456789Z"), 1700000000123456789)
+        self.assertEqual(commands.parse_duration("2d"), 172800000000000)
+        self.assertEqual(commands.format_mtime(0, "relative", 4*3600*10**9), "4 hours ago")
+        self.assertEqual(commands.format_mtime(120*10**9, "relative", 0), "in 2 minutes")
+        for function, inputs in ((commands.parse_size, ["-1", "1.1B", "1e3", "1XB", str(1 << 64)]),
+                                 (commands.parse_duration, ["0d", "-1h", "2", "1.5d", "999999999999999d"]),
+                                 (commands.parse_timestamp, ["yesterday", "2026-10-01", "2026-10-01T00:00:00",
+                                  "2026-02-30T00:00:00Z", "2026-10-01T00:00:00+00:60", "1969-12-31T23:59:59Z"])):
+            for value in inputs:
+                with self.subTest(value=value), self.assertRaises(commands.argparse.ArgumentTypeError):
+                    function(value)
+
+    def test_conflicts_fail_before_query(self):
+        for op, args in (("ls", ["-l", "-0"]), ("ls", ["--json", "-l"]),
+                         ("ls", ["--human-readable"]), ("ls", ["--time-style", "iso"]),
+                         ("ls", ["--json", "--relative"]),
+                         ("find", ["file", "--min-size", "2", "--max-size", "1"]),
+                         ("find", ["file", "--modified-after", "2026-10-08T00:00:00Z",
+                                   "--modified-before", "2026-10-01T00:00:00Z"])):
+            p = self.run_command(op, *args)
+            self.assertEqual(p.returncode, 2, (args, p.stderr))
+            self.assertEqual(p.stdout, b"")
+            self.assertNotIn(b"No such file", p.stderr)
+
+    def test_filtered_query_echo_and_metadata_validation(self):
+        filters = dict(type="file", min_size=7, max_size=7, modified_after_ns=None, modified_before_ns=None)
+        path = self.directory / ".query" / commands.query_name("find", b"file", filters=filters)
+        result = envelope("find", [b"file"])
+        result["filters"] = filters
+        path.write_text(json.dumps(result))
+        args = ("file", "--type", "file", "--min-size", "7", "--max-size", "7", "-0", "--relative")
+        p = self.run_command("find", *args)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout, b"file\0")
+        for change in (None, dict(filters, min_size=True), dict(filters, type="dir")):
+            result["filters"] = change
+            path.write_text(json.dumps(result))
+            p = self.run_command("find", *args)
+            self.assertEqual(p.returncode, 1, p.stderr)
+            self.assertEqual(p.stdout, b"")
+        path = self.result("ls", [b"valid", b"bad"])
+        for field, value in (("mtime_ns", -1), ("mtime_ns", 1 << 64), ("uid", "user"),
+                             ("size", True), ("mode", None), ("gid", 1 << 32)):
+            result = envelope("ls", [b"valid", b"bad"])
+            result["entries"][1][field] = value
+            path.write_text(json.dumps(result))
+            p = self.run_command("ls", "-l")
+            self.assertEqual(p.returncode, 1, p.stderr)
+            self.assertEqual(p.stdout, b"")
+
+    def test_within_has_fixed_bounds_and_combines(self):
+        from types import SimpleNamespace
+        args = SimpleNamespace(type=None, min_size=None, max_size=None,
+                               modified_after=None, modified_before=None, modified_within=100)
+        self.assertEqual(commands.make_filters(args, 1000), dict(type=None, min_size=None,
+                         max_size=None, modified_after_ns=900, modified_before_ns=1000))
+        args.modified_after=950;args.modified_before=975
+        filters = commands.make_filters(args, 1000)
+        self.assertEqual((filters["modified_after_ns"], filters["modified_before_ns"]), (950, 975))
+
 
 class CCodec(unittest.TestCase):
     def test_python_c_roundtrip_and_refusals(self):
@@ -196,6 +288,43 @@ int main(int argc,char **argv) {
                         "v1.find.3.0", "v1.find.3.GG", "v1.find.3.FF", "v1.find.3.00", "v1.find.3.2f",
                         "v1.find.0.", "v1.find.2.", "v1.find.3." + "61" * 121):
                 self.assertNotEqual(subprocess.run([str(binary), bad], stdout=subprocess.PIPE).returncode, 0, bad)
+
+    def test_filtered_codec_and_predicate_bounds(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "filters.c"
+            source.write_text(r'''#include "efs/command_path.h"
+#include <stdio.h>
+#include <stdlib.h>
+int main(int argc,char **argv) {
+    struct efs_msg_query_snapshot_v3 q={0};
+    if (argc!=5 || efs_command_path_parse_v3(argv[1],&q)) return 1;
+    printf("%u %u %u %u %llu %llu %llu %llu %d ",q.base.version,q.base.match,q.filters.kind,q.filters.flags,
+       (unsigned long long)q.filters.min_size,(unsigned long long)q.filters.max_size,
+       (unsigned long long)q.filters.after_ns,(unsigned long long)q.filters.before_ns,
+       efs_query_filters_match(&q.filters,strtoul(argv[2],0,0),strtoull(argv[3],0,0),strtoull(argv[4],0,0)));
+    for (const unsigned char *p=(void *)q.base.term;*p;p++) printf("%02x",*p);
+    return 0;
+}
+''')
+            binary = Path(temp) / "filters"
+            subprocess.run([os.environ.get("CC", "cc"), "-std=c99", "-D_GNU_SOURCE", "-Wall", "-Wextra",
+                            "-Werror", "-I"+str(ROOT/"include"), str(source), "-o", str(binary)], check=True)
+            filters = dict(type="file", min_size=7, max_size=9, modified_after_ns=10, modified_before_ns=20)
+            for term in (b"", b"f", b"ff", b"fff", b"\xff\n*", b"x"*120):
+                name = commands.query_name("find", term, filters=filters)
+                self.assertLessEqual(len(name), 240)
+                for mode, size, stamp, match in ((0o100644, 7, 11, 1), (0o100644, 9, 19, 1),
+                     (0o100644, 6, 11, 0), (0o100644, 10, 11, 0), (0o100644, 7, 10, 0),
+                     (0o100644, 7, 20, 0), (0o40755, 7, 11, 0), (0o120777, 7, 11, 0)):
+                    p = subprocess.run([str(binary), name, str(mode), str(size), str(stamp)], capture_output=True)
+                    self.assertEqual(p.returncode, 0, p.stderr)
+                    self.assertEqual(p.stdout, ("3 3 1 15 7 9 10 20 %d %s" % (match, term.hex())).encode())
+            name = commands.query_name("find", b"f", filters=filters)
+            for bad in (name+"=", name[:-1]+"h", name[:80]+"A", name[:80]+"AA", name[:80]+"Lw",
+                        name[:12]+"ff"+name[14:], name[:12]+"00"+name[14:],
+                        name[:15]+"f"*16+name[31:], name[:79]+"x"+name[80:], name+"a"*200):
+                p = subprocess.run([str(binary), bad, "0", "0", "0"], capture_output=True)
+                self.assertNotEqual(p.returncode, 0, bad)
 
 
 if __name__ == "__main__":

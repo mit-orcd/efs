@@ -92,7 +92,7 @@ try:
     assert not any('query-publish:' in (work/f'n{node}.log').read_text() for node in (1,4)), 'partial hosts published namespace'
     print('quiet metadata refresh and partial-host refusal PASS',flush=True)
     if os.environ.get('EFS_QUERY_RPC')=='1':
-        from query_rpc import request,query
+        from query_rpc import request,query,filtered_request
         reply,text=query(base+1,request())
         assert reply.status==0,(reply.status,text)
         assert b'tree_files=4\n' in text and reply.checked_dirs==1,text
@@ -103,7 +103,7 @@ try:
             reply,text=query(base+1,request(operation=1,match=1,term=b'file-'))
             assert reply.status==0 and set(text.splitlines())=={f'file-{i}'.encode() for i in range(4)},(reply.status,text)
             assert reply.generation==generation and list(reply.applied)==applied,'query rebuilt catalog'
-        for fields,status in [({'version':3},-5),({'ngroups':129},-5),({'max_output':1},-22),
+        for fields,status in [({'version':4},-5),({'version':3},-5),({'ngroups':129},-5),({'max_output':1},-22),
                               ({'operation':1,'match':1,'term':b'file-','visit_budget':1},-13),
                               ({'operation':1,'term':b'bad*term'},-5),({'root':999999},-3)]:
             reply,text=query(base+1,request(**fields));assert reply.status==status,(fields,reply.status,status)
@@ -130,6 +130,19 @@ try:
             reply,text=query(base+1,request(**fields))
             assert reply.status and not text,('command limit delivered partial success',fields,reply.status,text)
         print('v2 command JSON stats/find/ls, immutable catalog identity and explicit limits PASS',flush=True)
+        for fields,status in ((dict(kind=1,flags=3,min_size=0,max_size=0),0),
+                              (dict(kind=2),0),(dict(kind=4),-5),(dict(flags=16),-5),
+                              (dict(min_size=1),-5),(dict(flags=3,min_size=2,max_size=1),-5),
+                              (dict(flags=12,after_ns=2,before_ns=1),-5),
+                              (dict(operation=0),-5),(dict(max_output=1),-22)):
+            reply,text=query(base+1,filtered_request(match=1,term=b'file-',max_output=fields.get('max_output',65536),
+                              **{k:v for k,v in fields.items() if k!='max_output'}))
+            assert reply.status==status,(fields,reply.status,status)
+            if not status:
+                result=json.loads(text)
+                assert len(result['entries'])==(0 if fields.get('kind')==2 else 4),result
+        print('v3 type/size predicates, canonical fields and explicit limits PASS',flush=True)
+
 
     expected_root='root_rc=0 files=4 dirs=0 logical=0'
     if os.environ.get('EFS_QUERY_FUSE')=='1':
@@ -145,6 +158,12 @@ try:
                                    *map(str,mounts)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=240)
         assert result.returncode==0,(work/'virtual-gates.log').read_text()
         print('two-mount virtual interface gates PASS',flush=True)
+        with (work/'options-gates.log').open('w') as output:
+            result=subprocess.run([sys.executable,str(source/'tests/live/efs_command_options.py'),
+                                   *map(str,mounts)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=180)
+        assert result.returncode==0,(work/'options-gates.log').read_text()
+        print('two-mount command display, sorting, server filters and timestamp oracles PASS',flush=True)
+
         if os.environ.get('EFS_QUERY_POSIX')=='1':
             suites=[('posix',[str(source/'tests/posix/posix_suite.py'),str(mounts[0]),'--results',str(work/'posix.tsv')]),
                     ('peer',[str(source/'tests/posix/posix_2client.py'),'--local',*map(str,mounts),'--results',str(work/'peer.tsv')])]
@@ -249,11 +268,11 @@ try:
             if node>1:args+=['--join',f'127.0.0.1:{base}']
             procs.append(subprocess.Popen(args,env=disabled_env,stdout=log,stderr=log))
             wait_for(lambda:'listening' in (work/f'n{node}-off.log').read_text(),10)
-        from query_rpc import request,query,features
+        from query_rpc import request,query,filtered_request,features
         for node in range(4):
             assert features(base+node)==0,('disabled feature mask',node)
-            for version in (1,2):
-                reply,text=query(base+node,request(version=version))
+            for version in (1,2,3):
+                reply,text=query(base+node,filtered_request() if version==3 else request(version=version))
                 assert reply.status==-3 and not text,('disabled RPC succeeded',node,version,reply.status)
         offmount=work/'server-off';offmount.mkdir();mounts.append(offmount)
         log=(work/'server-off-fuse.log').open('w');logs.append(log)
@@ -290,7 +309,7 @@ try:
         for proc in procs:proc.terminate()
         for proc in procs:proc.wait(10);assert proc.returncode==0
         procs.clear()
-        print('server-off: both RPC versions refused, client hidden, mutations persisted, no catalog publications PASS',flush=True)
+        print('server-off: all three RPC versions refused, client hidden, mutations persisted, no catalog publications PASS',flush=True)
     env['EFS_COMMANDS_SERVER']='1'
     for node in range(1,5):
         log=(work/f'n{node}-restart.log').open('w');logs.append(log)

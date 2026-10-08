@@ -594,4 +594,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
 int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text);
 
+int efs_client_rpc_query_snapshot_v3(const struct efs_msg_query_snapshot_v3 *req,
+                                    struct efs_msg_query_snapshot_reply *reply,char **text);
+
 #endif

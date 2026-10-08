@@ -6,6 +6,7 @@
 #include "efs/kv_lsm.h"
 #include "efs/kv_snap.h"
 #include "efs/meta_apply.h"
+#include "efs/query_filters.h"
 #include "efs/publication.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
@@ -7241,6 +7242,7 @@ struct query_auth {
 struct query_request {
     struct efs_raft_host *h;
     const struct efs_msg_query_snapshot *req;
+    const struct efs_query_filters *filters;
     struct efs_msg_query_snapshot_reply *reply;
     const struct efs_server_query_view *view;
     struct query_auth *auth;
@@ -7337,13 +7339,37 @@ static int query_command_begin(struct query_request *q)
         (unsigned long long)pending_age,(unsigned long long)v->lag_sample_ns,
         v->pending_changes && pending_age>=HOST_QUERY_T_MS ? "true" : "false");
     if (n<0 || (size_t)n>=sizeof(header)) return EFS_ERR_OVERFLOW;
-    return query_append(q,header,(size_t)n);
+    int rc=query_append(q,header,(size_t)n);
+    if (!rc && q->filters) {
+        const struct efs_query_filters *f=q->filters;
+        char values[4][32];uint64_t raw[4]={f->min_size,f->max_size,f->after_ns,f->before_ns};
+        for (unsigned i=0;i<4;i++) {
+            if (f->flags&(1u<<i)) snprintf(values[i],sizeof(values[i]),"%llu",(unsigned long long)raw[i]);
+            else strcpy(values[i],"null");
+        }
+        const char *kind=f->kind==1 ? "\"file\"" : f->kind==2 ? "\"dir\"" : f->kind==3 ? "\"symlink\"" : "null";
+        n=snprintf(header,sizeof(header),
+            "\"filters\":{\"type\":%s,\"min_size\":%s,\"max_size\":%s,\"modified_after_ns\":%s,\"modified_before_ns\":%s},",
+            kind,values[0],values[1],values[2],values[3]);
+        rc=n<0 || (size_t)n>=sizeof(header) ? EFS_ERR_OVERFLOW : query_append(q,header,(size_t)n);
+    }
+    return rc;
 }
 static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *relative)
 {
     struct query_request *q=ctx;
-    int rc=query_ancestry(q,entry->parent,q->req->root,5);
+    struct efs_meta_stat stat;
+    int rc=EFS_OK;
+    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
+        rc=efs_query_catalog_inode(q->view->catalog,entry->dentry.ino,NULL,&stat);
+        if (rc) return rc;
+    }
+    rc=query_ancestry(q,entry->parent,q->req->root,5);
     if (rc) return rc;
+    /* Authorize/check deadline even for excluded entries: metadata predicates
+     * must not become a probe of inaccessible descendants. The index still
+     * charges every candidate; filters need no extra GETATTRs. */
+    if (q->filters && !efs_query_filters_match(q->filters,stat.mode,stat.size,stat.mtime)) return EFS_OK;
     /* A moved/deleted entry must not be rendered with stale ancestry while
      * using fresh permissions. A concurrent mutation refuses the whole result. */
     struct efs_meta_dentry fresh;
@@ -7353,7 +7379,7 @@ static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *r
     if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
     if (rc) return rc;
     if (fresh.ino!=entry->dentry.ino || fresh.generation!=entry->dentry.generation) return EFS_ERR_BUSY;
-    if (q->req->version==EFS_QUERY_COMMAND_VERSION) {
+    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
         if (q->len && q->text[q->len-1]!= '[') {
             rc=query_append(q,",",1);if (rc) return rc;
         }
@@ -7363,12 +7389,9 @@ static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *r
             char pair[2]={hex[*p>>4],hex[*p&15]};
             rc=query_append(q,pair,2);if (rc) return rc;
         }
-        struct efs_meta_row row;struct efs_meta_stat stat;
-        rc=efs_query_catalog_inode(q->view->catalog,entry->dentry.ino,&row,&stat);
-        if (rc) return rc;
-        char tail[192];
-        int n=snprintf(tail,sizeof(tail),"\",\"mode\":%u,\"size\":%llu,\"expiry\":null}",
-                       row.mode,(unsigned long long)stat.size);
+        char tail[256];
+        int n=snprintf(tail,sizeof(tail),"\",\"mode\":%u,\"uid\":%u,\"gid\":%u,\"size\":%llu,\"mtime_ns\":%llu,\"expiry\":null}",
+                       stat.mode,stat.uid,stat.gid,(unsigned long long)stat.size,(unsigned long long)stat.mtime);
         if (n<0 || (size_t)n>=sizeof(tail)) return EFS_ERR_OVERFLOW;
         return query_append(q,tail,(size_t)n);
     }
@@ -7400,7 +7423,7 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
     memcpy(r->applied,view->applied,sizeof(r->applied));memcpy(r->terms,view->terms,sizeof(r->terms));
     r->refresh_error=refresh_error;r->uid=root->uid;r->gid=root->gid;
     r->mtime=root->base_mtime;r->atime=root->base_atime;r->ctime=root->base_ctime;
-    if (q->req->version==EFS_QUERY_COMMAND_VERSION) {
+    if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
         rc=query_command_begin(q);
         if (!rc && q->req->operation==EFS_QUERY_STATS) {
             struct efs_query_rollup stats;
@@ -7476,18 +7499,20 @@ uint32_t server_raft_host_query_features(void)
 {
     return g_host && g_host->query_enabled && g_host->query_started ? EFS_FEATURES_DEFAULT : 0;
 }
-int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,void **out,uint32_t *len)
+int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,const struct efs_query_filters *filters,void **out,uint32_t *len)
 {
     if (out) *out=NULL;
     if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
-    if (!req || !out || !len || (req->version!=EFS_QUERY_VERSION && req->version!=EFS_QUERY_COMMAND_VERSION) || !req->root ||
+    if (!req || !out || !len || (req->version!=EFS_QUERY_VERSION && req->version!=EFS_QUERY_COMMAND_VERSION && req->version!=EFS_QUERY_FILTER_VERSION) || !req->root ||
         req->operation>(req->version==EFS_QUERY_VERSION ? EFS_QUERY_FIND : EFS_QUERY_LS) || req->match>EFS_NAME_CONTAINS || req->ngroups>EFS_QUERY_GROUPS ||
         !req->max_output || req->max_output>EFS_QUERY_MAX_OUTPUT ||
         !req->visit_budget || req->visit_budget>EFS_QUERY_MAX_VISITS ||
         !memchr(req->term,0,sizeof(req->term))) return EFS_ERR_INVAL;
+    if ((req->version==EFS_QUERY_FILTER_VERSION) != (filters!=NULL) ||
+        (filters && (req->operation!=EFS_QUERY_FIND || !efs_query_filters_valid(filters)))) return EFS_ERR_INVAL;
     if (req->operation==EFS_QUERY_FIND && (strchr(req->term,'/') ||
         (req->version==EFS_QUERY_VERSION && (strlen(req->term)<EFS_FIND_MIN_TERM || strchr(req->term,'*'))) ||
-        (req->version==EFS_QUERY_COMMAND_VERSION && (strlen(req->term)>120 ||
+        (req->version>=EFS_QUERY_COMMAND_VERSION && (strlen(req->term)>120 ||
         (!req->term[0] && req->match!=EFS_NAME_PREFIX && req->match!=EFS_NAME_CONTAINS)))))
         return EFS_ERR_INVAL;
     if (__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)>8) {
@@ -7506,7 +7531,7 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,voi
     a->bytes=bytes;
     struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
     struct query_request q={0};
-    q.h=g_host;q.req=req;q.reply=reply;q.text=(char *)(reply+1);q.deadline=query_mono_ms()+5000;
+    q.h=g_host;q.req=req;q.filters=filters;q.reply=reply;q.text=(char *)(reply+1);q.deadline=query_mono_ms()+5000;
     q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
     reply->version=req->version;
     int rc=q.auth ? server_raft_host_query_read(query_consume,&q,&reply->primary_id) : EFS_ERR_NOMEM;
