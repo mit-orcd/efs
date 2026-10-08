@@ -1,0 +1,63 @@
+2026-10-08T16:57:45.450Z efs-fuse: legacy export label 'w92-private' is ignored; mounting the single export 'default' (id=1)
+2026-10-08T16:57:45.451Z efs-fuse ecabac6ff587-commands-d2573704 (branch devel-find-stats, built 2026-10-08T16:57:18Z on nuc), build=ecabac6ff587-commands-d2573704: starting export=default mount=/data1/efs/commands-followups-final-20261008/mnt1
+2026-10-08T16:57:45.451Z Discovered 4 cluster nodes from 127.0.0.1:24804
+2026-10-08T16:57:45.451Z   node id=1 127.0.0.1:24804
+2026-10-08T16:57:45.451Z   node id=2 127.0.0.1:24805
+2026-10-08T16:57:45.451Z   node id=3 127.0.0.1:24806
+2026-10-08T16:57:45.451Z   node id=4 127.0.0.1:24807
+2026-10-08T16:57:45.451Z fetching metadata...
+2026-10-08T16:57:45.451Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-08T16:57:45.451Z export id=1 name=default
+2026-10-08T16:57:45.451Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T16:57:45.451Z efs-fuse daemon pid=2337130
+2026-10-08T16:57:45.453Z efs-fuse: workers max=10 idle=10
+2026-10-08T16:57:45.455Z fuse serving
+2026-10-08T16:57:51.056Z efs commands: real .efs takes precedence in directory 856
+2026-10-08T16:57:52.056Z efs: read hole ino=4166 ci=1 holes=1
+2026-10-08T16:57:52.772Z efs: rename_at 843/a -> 843/b rc=-12 after 1 tries
+2026-10-08T16:57:54.804Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:57:54.820Z efs: report rec ino=5115 ci=0 rejected unowned staging observation nodes=4,1,2 (putid miss, n=1)
+2026-10-08T16:57:57.875Z efs: read hole ino=4770 ci=0 holes=3
+2026-10-08T16:57:59.497Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:57:59.515Z efs: report rec ino=5041 ci=0 rejected unowned staging observation nodes=2,3,4 (putid miss, n=2)
+2026-10-08T16:58:00.254Z efs: read hole ino=6688 ci=0 holes=13
+2026-10-08T16:58:01.273Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1112998
+2026-10-08T16:58:06.013Z dcache-pressure live=263716864 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=77024 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-08T16:58:06.030Z dcache-pressure live=264241152 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=4648 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-08T16:58:07.410Z fsync-split ino=4559 flush_ms=538 report_ms=0 rc=0
+2026-10-08T16:58:08.450Z dcache-pressure live=264241152 reserved=0 backing=301989888 limit=335544320 request=5242880 metadata=6640 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-08T16:58:08.494Z dcache-pressure live=264241152 reserved=0 backing=301989888 limit=335544320 request=5242880 metadata=3984 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-08T16:58:09.934Z fsync-split ino=4143 flush_ms=547 report_ms=0 rc=0
+2026-10-08T16:58:14.107Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=2
+2026-10-08T16:58:14.112Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:14.119Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:14.129Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-08T16:58:14.140Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.153Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.206Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:14.210Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:14.216Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-08T16:58:15.685Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.690Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.697Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.705Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.715Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.727Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=1
+2026-10-08T16:58:15.856Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:15.860Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.867Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.877Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:15.888Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.901Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.916Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:15.955Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-08T16:58:15.960Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-08T16:58:15.968Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:15.977Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-08T16:58:16.048Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=1
+2026-10-08T16:58:16.056Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-08T16:58:20.130Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1106534
+2026-10-08T16:58:24.558Z efs: read hole ino=4777 ci=0 holes=15
+2026-10-08T16:58:45.715Z efs commands: real .efs takes precedence in directory 856
+2026-10-08T16:58:45.750Z inode-rpc: retry type=67 attempt=0 why=recv rc=-6 req_len=464 recv_ms=30000
+2026-10-08T16:58:45.801Z inode-rpc: retry type=67 attempt=1 why=recv rc=-6 req_len=464 recv_ms=30000

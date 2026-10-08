@@ -141,6 +141,17 @@ static int partition_build(struct efs_kv_lsm_snapshot *source, uint32_t shard,
         prefix[2]=kinds[i];
         rc=efs_kv_lsm_snapshot_scan(source,prefix,3,NULL,0,save_record,p);
     }
+    if (!rc && p->count && p->count<p->capacity) {
+        struct record *tight=realloc(p->records,(size_t)p->count*sizeof(*tight));
+        if (tight) {
+            p->bytes-=(uint64_t)(p->capacity-p->count)*sizeof(*tight);
+            p->records=tight;p->capacity=p->count;
+        }
+    }
+    if (!rc && p->used && p->used<p->arena_cap) {
+        uint8_t *tight=realloc(p->arena,p->used);
+        if (tight) { p->bytes-=p->arena_cap-p->used;p->arena=tight;p->arena_cap=p->used; }
+    }
     if (!rc) rc=efs_name_index_build(source,shard,limit-p->bytes,&p->names);
     if (rc) { partition_release(p);return rc; }
     p->bytes+=efs_name_index_bytes(p->names);
@@ -272,6 +283,13 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
         c->bytes+=c->part[shard]->bytes;
         uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_INODE};
         rc=cache_prefix(c,prefix,3,add_node,c);
+    }
+    if (!rc && c->count && c->count<c->capacity) {
+        struct node *tight=realloc(c->nodes,(size_t)c->count*sizeof(*tight));
+        if (tight) {
+            c->bytes-=(uint64_t)(c->capacity-c->count)*sizeof(*tight);
+            c->nodes=tight;c->capacity=c->count;
+        }
     }
     if (!rc && c->count>1) qsort(c->nodes,c->count,sizeof(*c->nodes),node_cmp);
     for (uint32_t i=0;i<c->count && !rc;i++) {
@@ -415,4 +433,76 @@ int efs_query_catalog_find(const struct efs_query_catalog *c, efs_ino_t root, en
         visit_budget-=visits;
     }
     return EFS_OK;
+}
+
+/* Per-query scan accounting must never mutate the shared immutable catalog.
+ * Charge every visited lane record, including tombstones skipped by readdir. */
+struct listing_scan {
+    const struct efs_query_catalog *catalog;
+    uint64_t remaining;
+    int (*stop)(void *);
+    void *stop_ctx;
+    int (*callback)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t);
+    void *user;
+};
+static int listing_record(void *ctx,const uint8_t *key,uint32_t kn,
+                          const uint8_t *value,uint32_t vn)
+{
+    struct listing_scan *s=ctx;
+    if (s->stop && s->stop(s->stop_ctx)) return EFS_ERR_BUSY;
+    if (!s->remaining) return EFS_ERR_OVERFLOW;
+    s->remaining--;
+    return s->callback(s->user,key,kn,value,vn);
+}
+static int listing_get(void *ctx,const uint8_t *key,uint32_t kn,uint8_t *value,uint32_t *vn)
+{
+    struct listing_scan *s=ctx;
+    return cache_get((void *)s->catalog,key,kn,value,vn);
+}
+static int listing_from(void *ctx,const uint8_t *prefix,uint32_t pn,
+                        const uint8_t *start,uint32_t sn,
+                        int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
+{
+    struct listing_scan *s=ctx;
+    s->callback=cb;s->user=user;
+    return cache_scan((void *)s->catalog,prefix,pn,start,sn,listing_record,s);
+}
+static int listing_prefix(void *ctx,const uint8_t *prefix,uint32_t pn,
+                          int (*cb)(void *,const uint8_t *,uint32_t,const uint8_t *,uint32_t),void *user)
+{
+    return listing_from(ctx,prefix,pn,NULL,0,cb,user);
+}
+static const struct efs_kv_ops listing_ops={
+    .get=listing_get,.scan_prefix=listing_prefix,.scan_from=listing_from
+};
+
+int efs_query_catalog_ls_bounded(const struct efs_query_catalog *c, efs_ino_t root,
+                          uint64_t budget,int (*stop)(void *),void *stop_ctx,
+                          int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
+{
+    if (!c || !emit || !budget) return EFS_ERR_INVAL;
+    struct node *node=find_node(c,root);
+    if (!node) return EFS_ERR_NOT_FOUND;
+    if (!S_ISDIR(node->row.mode)) return EFS_ERR_INVAL;
+    struct listing_scan scan={.catalog=c,.remaining=budget,.stop=stop,.stop_ctx=stop_ctx};
+    struct efs_kv bounded={.ops=&listing_ops,.ctx=&scan};
+    struct efs_meta_dir_cursor cursor={0};
+    while (!cursor.done) {
+        struct efs_meta_dir_ent entries[64];uint32_t n=0;
+        int rc=efs_meta_apply_readdir(&bounded,root,&cursor,entries,64,&n);
+        if (rc) return rc;
+        for (uint32_t i=0;i<n;i++) {
+            struct efs_name_entry e={0};e.parent=root;e.dentry=entries[i].d;
+            memcpy(e.name,entries[i].name,sizeof(e.name));
+            rc=emit(user,&e,e.name);
+            if (rc) return rc;
+        }
+    }
+    return EFS_OK;
+}
+
+int efs_query_catalog_ls(const struct efs_query_catalog *c,efs_ino_t root,uint64_t budget,
+                          int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
+{
+    return efs_query_catalog_ls_bounded(c,root,budget,NULL,NULL,emit,user);
 }

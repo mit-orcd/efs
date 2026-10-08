@@ -1,0 +1,15 @@
+2026-10-08T16:05:43.477Z Loaded 4 persisted cluster node(s) from /data1/efs/commands-3997575c-clean-20261008/n2/meta/cluster_nodes.bin
+2026-10-08T16:05:43.478Z   persisted node 1: 127.0.0.1:24800
+2026-10-08T16:05:43.478Z   persisted node 2: 127.0.0.1:24801
+2026-10-08T16:05:43.478Z   persisted node 3: 127.0.0.1:24802
+2026-10-08T16:05:43.478Z   persisted node 4: 127.0.0.1:24803
+2026-10-08T16:05:43.482Z Joined cluster with 4 nodes
+2026-10-08T16:05:43.482Z heartbeat: enabled (2000 ms interval)
+2026-10-08T16:05:43.705Z kv-obs: mt_bytes=2709925 l0_bytes=0 l0=0 l1=0
+2026-10-08T16:05:43.705Z raft-host: up raft_id=1 n=4 boot=8647038927269670 salt=7474283343927285162 g0=hosted g2=hosted
+2026-10-08T16:05:43.705Z efsd c22754236b38-cmd-3997575c (branch devel-find-stats, built 2026-10-08T16:04:43Z on nuc), build=c22754236b38-cmd-3997575c: node 2 listening on 127.0.0.1:24801, storage=/data1/efs/commands-3997575c-clean-20261008/n2 (1 paths, stripe=none), used=13959168, quota=1073741824, direct_io=off, writers=0 shared
+2026-10-08T16:05:44.397Z iostats: get ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 put ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0 wdisk ops=0 bytes=0 errors=0 avg_us=0 p50_us=0 max_us=0
+2026-10-08T16:05:44.797Z raft-host: gc-pass ms=88 orphan=0 reap=75 frag=12 spread=0 recover=0 fscans=2 fsegs=0 fkeys=7142 femit=494 ftomb=6648 scans=5 segs=0 keys=28517 emit=4624 tomb=23893 reap_scan=0 reap_sweep=9 reap_fence=65 reap_done=0
+2026-10-08T16:05:45.483Z gc-health: stage=0 group=2 elapsed_ms=0 last_pass_age_ms=685 passes=2 sampled=2 pending=0,193 reap=0,32 removed=66 file_bytes=4327488 payload_bytes=4325376 delete_errors=0 sweep_errors=0 reap_errors=0 ack_errors=0 missing_exports=0
+2026-10-08T16:05:45.816Z raft-host: gc-pass ms=14 orphan=0 reap=14 frag=0 spread=0 recover=0 fscans=2 fsegs=0 fkeys=3572 femit=154 ftomb=3418 scans=5 segs=0 keys=13200 emit=4285 tomb=8915 reap_scan=0 reap_sweep=9 reap_fence=4 reap_done=0
+2026-10-08T16:05:45.914Z query-publish: generation=1 g0=20472 g2=13848 rebuilt=4096 bytes=3333192 pin_ms=4 build_ms=14 root_rc=0 files=15 dirs=3 logical=46

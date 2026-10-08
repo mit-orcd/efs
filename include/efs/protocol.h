@@ -538,11 +538,15 @@ struct efs_user_stat {
  * Credentials use the same trusted mount boundary as inode RPCs; this does
  * not introduce an authentication protocol. Unknown versions fail explicitly. */
 #define EFS_QUERY_VERSION 1
+/* W91 commands use ASCII JSON envelopes and hex-encoded relative path bytes.
+ * The native request/reply layout is unchanged; legacy v1 is internal only. */
+#define EFS_QUERY_COMMAND_VERSION 2
 #define EFS_QUERY_GROUPS 128
 #define EFS_QUERY_MAX_OUTPUT (16u << 20)
 #define EFS_QUERY_MAX_VISITS 1000000u
 #define EFS_QUERY_STATS 0
 #define EFS_QUERY_FIND 1
+#define EFS_QUERY_LS 2
 struct efs_msg_query_snapshot {
     uint32_t version,operation;
     efs_ino_t root;

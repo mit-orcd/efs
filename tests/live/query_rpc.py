@@ -37,6 +37,6 @@ def query(port,q,raw=None):
         payload=receive(s,n)
     assert payload[0]==124,payload[0]
     r=Reply.from_buffer_copy(payload[1:121]);text=payload[121:]
-    assert r.version==1 and r.text_len==len(text),(r.version,r.text_len,len(text))
+    assert r.version==(q.version if raw is None and q.version in (1,2) else 1) and r.text_len==len(text),(r.version,r.text_len,len(text))
     assert not r.status or not text,'partial failure delivered bytes'
     return r,text

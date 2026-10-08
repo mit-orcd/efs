@@ -3489,9 +3489,23 @@ the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
-## W92 · Server-owned .find/.stats snapshots and large namespace acceptance
+## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
 Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
+Current user scope replaces synthetic `.find`/`.stats` with `.efs/find` and
+`.efs/stats`; W91 supplies Python commands and versioned query paths. Real
+legacy-named user entries are preserved. The [command implementation checkpoint](../status/efs-commands-20261008.md)
+records opt-in FUSE integration, wire v2 JSON, immediate ls, permissions, immutable
+results and private POSIX/peer/restart/resource gates. W91/W92 remain open for
+loaded/scale/fault/export-policy/NFS acceptance; W90 expiry is separate.
+
+Oct 8 follow-up: transaction-specific refresh fence, tombstone scan/deadline bounds,
+retained allocation compaction and sampled lag diagnostics implemented. Clean
+`ecabac6ff587-commands-d2573704` passes POSIX 216/0/1, peer 64/64, sustained-write
+publication/payload oracle, publisher loss/rejoin, noexec, cold opt-out and restart
+oracle. [Evidence and remaining acceptance](../status/efs-command-followups-20261008.md).
+This does not close 400 GiB, persistent remote export-policy or NFS/macOS gates.
+
 Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
 NUC target: staged population toward 400 GiB real logical payload, with a large
 small-file namespace, two cold mounts, shard-distributed queries and measured

@@ -1074,6 +1074,9 @@ send_reply:
             if (rc) {
                 struct efs_msg_query_snapshot_reply failure;
                 memset(&failure,0,sizeof(failure));failure.version=EFS_QUERY_VERSION;failure.status=rc;
+                if (payload_len==sizeof(struct efs_msg_query_snapshot) &&
+                    ((const struct efs_msg_query_snapshot *)payload)->version==EFS_QUERY_COMMAND_VERSION)
+                    failure.version=EFS_QUERY_COMMAND_VERSION;
                 efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,&failure,sizeof(failure));
             } else efs_conn_send_msg(conn,EFS_MSG_QUERY_SNAPSHOT_REPLY,reply,reply_len);
             server_raft_host_query_reply_free(reply);

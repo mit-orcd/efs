@@ -731,6 +731,10 @@ static void metadata_dirty(struct kv_lsm *l, const uint8_t *key, uint32_t len)
     if (len<3) return;
     uint32_t shard=((uint32_t)key[0]<<8)|key[1];
     if (shard>EFS_KV_SHARD_MASK) return;
+    if (key[2]==EFS_KV_KIND_INTENT || key[2]==EFS_KV_KIND_GUARD ||
+        key[2]==EFS_KV_KIND_REDUCE || key[2]==EFS_KV_KIND_DECISION) {
+        if (l->transaction_revision!=UINT64_MAX) l->transaction_revision++;
+    }
     switch (key[2]) {
     case EFS_KV_KIND_INODE: case EFS_KV_KIND_DENTRY: case EFS_KV_KIND_LANE:
     case EFS_KV_KIND_INTENT: case EFS_KV_KIND_GUARD: case EFS_KV_KIND_REDUCE:
@@ -1344,6 +1348,7 @@ int efs_kv_lsm_snapshot_pin(struct efs_kv *kv, uint64_t mt_limit,
         }
         s->input.mt.cap=l->mt.n;
     }
+    s->input.transaction_revision=l->transaction_revision;
     memcpy(s->input.metadata_revision,l->metadata_revision,
            sizeof(l->metadata_revision));
     /* Entries are already sorted, so each insertion is an append. */
@@ -1376,6 +1381,23 @@ int efs_kv_lsm_snapshot_revisions(struct efs_kv_lsm_snapshot *s,
     if (!s || !out || n<4096) return EFS_ERR_INVAL;
     memcpy(out,s->input.metadata_revision,sizeof(s->input.metadata_revision));
     return EFS_OK;
+}
+
+int efs_kv_lsm_transaction_revision(struct efs_kv *kv,uint64_t *out)
+{
+    if (!kv || kv->ops!=&lsm_ops || !kv->ctx || !out) return EFS_ERR_INVAL;
+    struct kv_lsm *l=kv->ctx;
+    pthread_mutex_lock(&l->mu);
+    int rc=l->io_failed ? EFS_ERR_IO : l->transaction_revision==UINT64_MAX ? EFS_ERR_BUSY : EFS_OK;
+    *out=l->transaction_revision;
+    pthread_mutex_unlock(&l->mu);
+    return rc;
+}
+int efs_kv_lsm_snapshot_transaction_revision(struct efs_kv_lsm_snapshot *s,uint64_t *out)
+{
+    if (!s || !out) return EFS_ERR_INVAL;
+    *out=s->input.transaction_revision;
+    return *out==UINT64_MAX ? EFS_ERR_BUSY : EFS_OK;
 }
 
 int efs_kv_lsm_snapshot_scan(struct efs_kv_lsm_snapshot *s,

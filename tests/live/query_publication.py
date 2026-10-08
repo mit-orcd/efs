@@ -32,6 +32,7 @@ io_flag='--direct-io' if args.mode=='direct' else '--no-direct-io'
 work.mkdir(parents=True,exist_ok=False)
 logs=[];procs=[];fuse_procs=[];mounts=[]
 env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
+if os.environ.get('EFS_QUERY_FUSE')=='1': env['EFS_COMMANDS']='1'
 # Reserve consecutive candidates while checking; no unrelated process is killed.
 for base in range(24800,25000,4):
     held=[]
@@ -102,13 +103,33 @@ try:
             reply,text=query(base+1,request(operation=1,match=1,term=b'file-'))
             assert reply.status==0 and set(text.splitlines())=={f'file-{i}'.encode() for i in range(4)},(reply.status,text)
             assert reply.generation==generation and list(reply.applied)==applied,'query rebuilt catalog'
-        for fields,status in [({'version':2},-5),({'ngroups':129},-5),({'max_output':1},-22),
+        for fields,status in [({'version':3},-5),({'ngroups':129},-5),({'max_output':1},-22),
                               ({'operation':1,'match':1,'term':b'file-','visit_budget':1},-13),
                               ({'operation':1,'term':b'bad*term'},-5),({'root':999999},-3)]:
             reply,text=query(base+1,request(**fields));assert reply.status==status,(fields,reply.status,status)
         reply,text=query(base+1,request(),raw=b'bad')
         assert reply.status==-5,reply.status
         print('v1 RPC stats/find, unchanged publication, redirects and explicit errors PASS',flush=True)
+        import json
+        sys.path.insert(0,str(source/'src/client/commands'))
+        from command import validate_result
+        for operation,command in ((0,'stats'),(1,'find'),(2,'ls')):
+            fields=dict(version=2,operation=operation,max_output=65536)
+            if operation==1: fields.update(match=3,term=b'file-')
+            reply,text=query(base+1,request(**fields))
+            assert reply.status==0,(command,reply.status,text)
+            result=json.loads(text)
+            paths=validate_result(result,command)
+            if command=='stats': assert result['stats']['tree_files']==4,result
+            else: assert set(paths)=={f'file-{i}'.encode() for i in range(4)},result
+            assert result['snapshot']['generation']==generation,'command rebuilt catalog'
+            assert result['expiry']=='unavailable',result
+        for fields in (dict(version=2,operation=2,max_output=1),
+                       dict(version=2,operation=2,visit_budget=1),
+                       dict(version=2,operation=1,match=3,term=b'x'*121)):
+            reply,text=query(base+1,request(**fields))
+            assert reply.status and not text,('command limit delivered partial success',fields,reply.status,text)
+        print('v2 command JSON stats/find/ls, immutable catalog identity and explicit limits PASS',flush=True)
 
     expected_root='root_rc=0 files=4 dirs=0 logical=0'
     if os.environ.get('EFS_QUERY_FUSE')=='1':
@@ -120,7 +141,7 @@ try:
             wait_for(lambda:os.path.ismount(mount),20)
         env['EFS_QUERY_TEST_PORT']=str(base+1)
         with (work/'virtual-gates.log').open('w') as output:
-            result=subprocess.run([sys.executable,str(source/'tests/live/virtual_interfaces.py'),
+            result=subprocess.run([sys.executable,str(source/'tests/live/efs_commands.py'),
                                    *map(str,mounts)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=240)
         assert result.returncode==0,(work/'virtual-gates.log').read_text()
         print('two-mount virtual interface gates PASS',flush=True)
@@ -133,12 +154,70 @@ try:
                 assert result.returncode==0,(work/f'{label}.log').read_text()
                 print(label+' full suite PASS',flush=True)
 
+        if os.environ.get('EFS_QUERY_FAILOVER')=='1':
+            # Remove only our own fixture's n2 (full-group publisher; possibly leader).
+            lost=procs.pop(1);lost.terminate();lost.wait(15)
+            marker=mounts[1]/'failover-marker'
+            marker.write_bytes(b'leader change payload')
+            def failover_query():
+                result=subprocess.run([sys.executable,str(mounts[0]/'.efs/find'),
+                                       'failover-marker','--match','exact','--json'],
+                                      env=env,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=20)
+                if result.returncode: return False
+                entries=json.loads(result.stdout)['entries']
+                return any(bytes.fromhex(e['path_hex'])==b'failover-marker' for e in entries)
+            wait_for(failover_query,45)
+            log=(work/'n2-rejoin.log').open('w');logs.append(log)
+            args=[str(source/'efsd'),'--node-id','2','--addr','127.0.0.1',
+                  '--port',str(base+1),'--storage',str(work/'n2'),'--quota','1G',
+                  '--writers','0',io_flag,'--join',f'127.0.0.1:{base}']
+            procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
+            wait_for(lambda:'listening' in (work/'n2-rejoin.log').read_text(),20)
+            wait_for(failover_query,30)
+            print('full-group publisher loss, peer query and persisted rejoin PASS',flush=True)
+        if os.environ.get('EFS_QUERY_LOAD')=='1':
+            with (work/'loaded-gates.log').open('w') as output:
+                result=subprocess.run([sys.executable,str(source/'tests/live/efs_commands_load.py'),
+                                       *map(str,mounts)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=150)
+            assert result.returncode==0,(work/'loaded-gates.log').read_text()
+            print('loaded publication and payload oracle PASS',flush=True)
+        if os.environ.get('EFS_QUERY_NOEXEC')=='1':
+            noexec=work/'noexec';noexec.mkdir();mounts.append(noexec)
+            log=(work/'noexec.log').open('w');logs.append(log)
+            proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
+                                   'w92-private',str(noexec),'-o','noexec'],env=env,stdout=log,stderr=log)
+            fuse_procs.append(proc)
+            wait_for(lambda:os.path.ismount(noexec),20)
+            try:
+                subprocess.run([str(noexec/'.efs/help')],check=True,timeout=10)
+            except PermissionError:
+                pass
+            else:
+                raise AssertionError('noexec allowed direct command execution')
+            result=subprocess.run([sys.executable,str(noexec/'.efs/stats'),'--json'],
+                                  check=True,stdout=subprocess.PIPE,timeout=15)
+            assert json.loads(result.stdout)['complete'] is True
+            print('noexec refuses execution; explicit interpreter PASS',flush=True)
+
+        if os.environ.get('EFS_QUERY_NOEXEC')=='1':
+            disabled=work/'disabled';disabled.mkdir();mounts.append(disabled)
+            log=(work/'disabled.log').open('w');logs.append(log)
+            off_env=dict(env,EFS_COMMANDS='0')
+            proc=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{base}',
+                                   'w92-private',str(disabled)],env=off_env,stdout=log,stderr=log)
+            fuse_procs.append(proc)
+            wait_for(lambda:os.path.ismount(disabled),20)
+            assert not os.path.lexists(disabled/'.efs'),'disabled mount exposed synthetic commands'
+            real=list(disabled.glob('efs-command-gates-*/collision/.efs'))
+            assert real and real[0].is_file(),'disabled mount hid real user .efs'
+            print('cold export opt-out and real .efs precedence PASS',flush=True)
+
         # Independent syscall oracle after workloads close; this test-only
         # walk is never part of a virtual query or server publication path.
         total_files=total_dirs=total_bytes=0
         for directory,dirs,files in os.walk(mounts[0]):
-            dirs[:]=[name for name in dirs if name not in ('.find','.stats')]
-            files=[name for name in files if name not in ('.find','.stats')]
+            # Synthetic .efs is lookup-only and never returned by READDIR.
+            # Real .efs/.find/.stats entries must remain in this oracle.
             total_dirs+=len(dirs);total_files+=len(files)
             total_bytes+=sum(os.lstat(Path(directory)/name).st_size for name in files)
         expected_root=f'root_rc=0 files={total_files} dirs={total_dirs} logical={total_bytes}'

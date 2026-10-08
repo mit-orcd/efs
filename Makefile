@@ -328,6 +328,7 @@ test: all
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py
 	python3 tests/test_raft_tail.py
+	python3 tests/test_efs_commands.py
 	python3 tests/test_namespace_bounds.py
 	python3 tests/test_rename_budget.py
 	./tests/test_session
@@ -484,6 +485,11 @@ test-gc-live: all
 
 tests/test_put_ticket: tests/test_put_ticket.o $(LIB)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDFLAGS)
+
+# The synthetic scripts are file bytes, embedded without running queries.
+src/client/commands/source.h: src/client/commands/command.py src/client/commands/embed.py
+	python3 src/client/commands/embed.py
+src/client/efs_fuse.o: src/client/commands/source.h include/efs/command_path.h
 
 # Native programs share one help renderer and option reference.
 $(SERVER_OBJS) $(CLIENT_OBJS) $(BENCH_CLIENT_OBJ) $(BENCH_STORE_OBJS) $(MGMT_OBJ) $(QUERY_OBJ): include/efs/cli_help.h

@@ -340,6 +340,7 @@ int server_raft_host_active(void);
 struct efs_server_query_view {
     struct efs_query_catalog *catalog;
     uint64_t boot_id,source_ns,built_ns,generation,applied[2],terms[2],pin_ms,build_ms;
+    uint64_t pending_changes,pending_since_ms,lag_sample_ms,lag_sample_ns;
 };
 int server_raft_host_query_read(int (*consume)(void *,const struct efs_server_query_view *,int),
                                  void *ctx,uint16_t *primary_id);

@@ -1,10 +1,16 @@
-# Fixing the virtual .find and .stats interfaces
+# W92 — .efs/find and .efs/stats replacement commands
 
-Status: open; implementation and live acceptance remain required. Reviewed
-Oct 7, 2026 against HEAD `5e7e2bd5` plus the current working tree. These are
-synthetic read-only FUSE interfaces, not block or character devices: `.stats`
-is a regular file; `.find` is a virtual directory with query files. Keep the
-existing lookup-only interface unless a separate product decision changes it.
+Status: open. The accepted Oct 8 user revision replaces synthetic `.find` and
+`.stats` with executable `.efs/find` and `.efs/stats`. W91 supplies readable
+Python command source and the separate versioned query path. Real user entries
+named `.find`, `.stats` or `.efs` must remain available. Compatibility with the
+legacy synthetic paths is not required.
+
+The [Oct 8 command checkpoint](efs-commands-20261008.md) records implemented
+command/query infrastructure, tests, activation and remaining acceptance.
+Earlier findings below are historical; do not mistake the former client tree
+walker or missing server catalog for the current source/deployment state.
+W92 remains open pending loaded/scale/fault and other declared gates.
 
 ## Required direction
 

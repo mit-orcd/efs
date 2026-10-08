@@ -1810,7 +1810,7 @@ int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
                 efs_client_conn_release(nid,conn);
                 if (type!=EFS_MSG_QUERY_SNAPSHOT_REPLY || len<sizeof(*reply)) { free(payload);return EFS_ERR_PROTO; }
                 memcpy(reply,payload,sizeof(*reply));
-                if (reply->version!=EFS_QUERY_VERSION || reply->text_len>req->max_output ||
+                if (reply->version!=req->version || reply->text_len>req->max_output ||
                     len!=sizeof(*reply)+reply->text_len || (reply->status && reply->text_len)) {
                     free(payload);return EFS_ERR_PROTO;
                 }

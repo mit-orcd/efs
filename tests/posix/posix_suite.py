@@ -2676,42 +2676,46 @@ def concurrent_write_and_readdir(d):
 # ==========================================================================
 @test
 def virt_stats_readable(d):
+    import json
     wr(os.path.join(d, "a"), b"x")
-    p = os.path.join(d, ".stats")
+    p = os.path.join(d, ".efs", "stats")
     if not os.path.exists(p):
-        raise Fail(".stats absent (feature off?)", soft=True)
+        raise Fail(".efs commands absent (opt-in disabled)", soft=True)
     st = os.lstat(p)
-    assert statmod.S_ISREG(st.st_mode), ".stats is a regular file"
-    text = rd(p)
-    if len(text) == 0:
-        raise Fail(".stats empty")
-    expect_err((errno.EPERM, errno.EACCES, errno.ENOENT, errno.EIO),
-               os.unlink, p)
+    assert statmod.S_ISREG(st.st_mode) and st.st_mode & 0o111
+    assert rd(p).startswith(b"#!/usr/bin/env python3"), "stats is readable source"
+    out = subprocess.check_output([sys.executable, p, "--json"], timeout=30)
+    result = json.loads(out)
+    assert result["complete"] is True and "tree_bytes" in result["stats"], result
+    expect_err((errno.EPERM, errno.EACCES, errno.ENOENT, errno.EIO, errno.ENOTDIR), os.unlink, p)
 
 
 @test
 def virt_find_query(d):
+    import json
     wr(os.path.join(d, "report.txt"), b"x")
-    finddir = os.path.join(d, ".find")
-    if not os.path.isdir(finddir) and not os.path.exists(finddir):
-        raise Fail(".find absent (feature off?)", soft=True)
-    q = os.path.join(d, ".find", "*report*")
-    try:
-        out = rd(q)
-    except OSError as e:
-        raise Fail(".find query: %s" % e, soft=True)
-    if b"report.txt" not in out:
-        raise Fail(".find *report* missed report.txt: %r" % out[:200])
+    p = os.path.join(d, ".efs", "find")
+    if not os.path.exists(p):
+        raise Fail(".efs commands absent (opt-in disabled)", soft=True)
+    deadline = time.monotonic() + 10
+    while True:
+        out = subprocess.check_output([sys.executable, p, "report", "--json"], timeout=30)
+        result = json.loads(out)
+        if b"report.txt" in {bytes.fromhex(e["path_hex"]) for e in result["entries"]}:
+            break
+        if time.monotonic() > deadline:
+            raise Fail(".efs/find missed report.txt")
+        time.sleep(.1)
 
 
 @test
 def virt_find_not_a_real_dir(d):
-    finddir = os.path.join(d, ".find")
-    if not os.path.exists(finddir) and not os.path.lexists(finddir):
-        raise Fail(".find absent (feature off?)", soft=True)
-    expect_err((errno.EPERM, errno.EACCES, errno.ENOENT, errno.EEXIST,
-                errno.ENOTDIR, errno.EIO),
-               wr, os.path.join(d, ".find", "not-a-create"), b"x")
+    commanddir = os.path.join(d, ".efs")
+    if not os.path.exists(commanddir):
+        raise Fail(".efs commands absent (opt-in disabled)", soft=True)
+    expect_err((errno.EPERM, errno.EACCES, errno.ENOENT, errno.EEXIST, errno.ENOTDIR, errno.EIO),
+               wr, os.path.join(commanddir, "not-a-create"), b"x")
+    assert ".efs" not in os.listdir(d), "synthetic commands excluded from traversal"
 
 
 # ==========================================================================

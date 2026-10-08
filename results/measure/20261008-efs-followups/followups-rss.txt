@@ -1,0 +1,11 @@
+    PID   RSS COMMAND
+2348981 304268 /data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --no-direct-io
+2349604 1142004 /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --no-direct-io --join 127.0.0.1:17432
+2350305 963920 /data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --no-direct-io --join 127.0.0.1:17432
+2351129 268064 /data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --no-direct-io --join 127.0.0.1:17432
+               total        used        free      shared  buff/cache   available
+Mem:           31713       10607         425         199       21339       21105
+Swap:              0           0           0
+Filesystem           Size  Used Avail Use% Mounted on
+/dev/sda             745G   77G  669G  11% /data1
+/dev/mapper/rl-home  843G   68G  776G   8% /home

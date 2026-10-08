@@ -84,6 +84,16 @@ int main(void)
     CHECK(!efs_query_catalog_stats(c,a,&stat) && stat.imm_files==1 && stat.imm_bytes==8192 &&
           stat.tree_files==2 && stat.tree_bytes==16384,"subtree rollup");
     CHECK(!efs_query_catalog_stats(c,b,&stat) && stat.imm_tmax==220,"folded file timestamps");
+    struct found listed={0};
+    CHECK(!efs_query_catalog_ls(c,a,100,collect,&listed) && listed.n==2,
+          "immediate listing excludes grandchildren and outside names");
+    int saw_b=0,saw_alias=0;
+    for (int i=0;i<listed.n;i++) { saw_b|=!strcmp(listed.path[i],"b");saw_alias|=!strcmp(listed.path[i],"alias.dat"); }
+    CHECK(saw_b && saw_alias,"listing reads catalog directory entries");
+    listed=(struct found){0};
+    CHECK(efs_query_catalog_ls(c,a,1,collect,&listed)==EFS_ERR_OVERFLOW,"listing budget refuses partial success");
+    listed=(struct found){.fail=1};
+    CHECK(efs_query_catalog_ls(c,a,100,collect,&listed)==EFS_ERR_ACCES,"listing preserves authorization callback errors");
     char path[128];
     CHECK(!efs_query_catalog_path(c,b,EFS_ROOT_INO,path,sizeof(path)) && !strcmp(path,"a/b"),"relative ancestry");
     CHECK(efs_query_catalog_path(c,a,b,path,sizeof(path))==EFS_ERR_NOT_FOUND,"outside scope");
@@ -103,9 +113,17 @@ int main(void)
     efs_query_catalog_free(newer);newer=NULL;
     CHECK(!efs_meta_apply_rename(kv,a,"b",EFS_ROOT_INO,"moved",230),"move subtree");
     CHECK(!efs_meta_apply_unlink(kv,a,"alias.dat",240),"unlink alias");
+    dent_put(kv,efs_kv_inode_shard(a),a,"deleted-one",0);
+    dent_put(kv,efs_kv_inode_shard(a),a,"deleted-two",0);
     CHECK(!capture(kv,c,&newer) && efs_query_catalog_rebuilt(newer)>0 &&
           efs_query_catalog_rebuilt(newer)<4096,"refresh changed partitions only");
     if (!newer) goto done;
+    listed=(struct found){0};
+    CHECK(efs_query_catalog_ls(newer,a,1,collect,&listed)==EFS_ERR_OVERFLOW && !listed.n,
+          "empty directory tombstones consume scan budget");
+    CHECK(efs_query_catalog_ls_bounded(newer,a,100,cancel,NULL,collect,&listed)==EFS_ERR_BUSY && !listed.n,
+          "tombstone-only listing observes cancellation before emission");
+
     CHECK(!efs_query_catalog_stats(newer,a,&stat) && !stat.tree_files && !stat.tree_dirs && !stat.tree_bytes,"moved source empty");
     CHECK(!efs_query_catalog_stats(c,a,&stat) && stat.tree_files==2,"old catalog immutable");
     CHECK(!efs_query_catalog_path(newer,b,EFS_ROOT_INO,path,sizeof(path)) && !strcmp(path,"moved"),"move changes path");
@@ -155,11 +173,28 @@ int main(void)
           "partial candidate allocations released on exhaustion");
     CHECK(efs_query_catalog_build(source,c,32<<20,cancel,NULL,&newer)==EFS_ERR_BUSY && !newer,"cancel candidate");
     efs_kv_lsm_snapshot_release(source);
+    uint64_t fence=0,live=0;
+    source=NULL;
+    CHECK(!efs_kv_lsm_snapshot_pin(kv,8<<20,&source),"transaction fence pin");
+    CHECK(!efs_kv_lsm_snapshot_transaction_revision(source,&fence),"captured transaction fence");
+    CHECK(!efs_meta_apply_get_inode(kv,b,&r),"ordinary mutation row");
+    row_put(kv,&r);
+    CHECK(!efs_kv_lsm_transaction_revision(kv,&live) && live==fence,
+          "ordinary writes do not invalidate transaction fence");
     uint8_t pending[]={0,0,EFS_KV_KIND_INTENT,1};
     CHECK(!efs_kv_put(kv,pending,sizeof(pending),(const uint8_t *)"x",1),"pending marker");
+    CHECK(!efs_kv_lsm_transaction_revision(kv,&live) && live>fence,
+          "prepare changes fence even when ordinary metadata is unchanged");
+    uint64_t pinned=0;
+    CHECK(!efs_kv_lsm_snapshot_transaction_revision(source,&pinned) && pinned==fence,
+          "captured fence remains immutable");
+    efs_kv_lsm_snapshot_release(source);
+    fence=live;
     CHECK(capture(kv,c,&newer)==EFS_ERR_BUSY && !newer,"unresolved transaction refuses publication");
     CHECK(!efs_query_catalog_stats(c,b,&stat) && stat.tree_bytes==6000,"failed refresh retains published image");
     CHECK(!efs_kv_del(kv,pending,sizeof(pending)),"clear pending");
+    CHECK(!efs_kv_lsm_transaction_revision(kv,&live) && live>fence,
+          "resolve deletion changes fence after pending records disappear");
     CHECK(!efs_meta_apply_get_inode(kv,b,&r),"dir for corruption");
     r.parent=a;row_put(kv,&r);
     CHECK(capture(kv,c,&newer)==EFS_ERR_PROTO && !newer,"mismatched parent fails closed");
