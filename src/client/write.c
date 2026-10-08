@@ -2363,6 +2363,12 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
     int acks = 0;
     int quota_errors = 0;
     int reachable = 0;
+    /* One budget spans checkout, sends, quorum replies and optional drain.
+     * Starting it after sends gave an inherited 8s flush a fresh 30s poll. */
+    int64_t deadline_ms = (int64_t)report_clock_ms() + EFS_IO_TIMEOUT_MS;
+    uint64_t outer_deadline = efs_client_rpc_deadline_ms();
+    if (outer_deadline && outer_deadline < (uint64_t)deadline_ms)
+        deadline_ms = (int64_t)outer_deadline;
 
     if (failed_out) {
         for (int i = 0; i < EFS_NUM_FRAGMENTS; i++)
@@ -2377,6 +2383,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
 
     /* Unreachable peers count as missing acks — do not abort the whole PUT. */
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        if ((int64_t)report_clock_ms() >= deadline_ms) {
+            if (failed_out) failed_out[i] = 2; /* local budget, not peer health */
+            continue;
+        }
         if (nodes[i] == 0) {
             if (failed_out)
                 failed_out[i] = 1;
@@ -2426,6 +2436,13 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
     for (int i = 0; i < EFS_NUM_FRAGMENTS; i++) {
         if (!conns[i])
             continue;
+        if ((int64_t)report_clock_ms() >= deadline_ms) {
+            /* No request sent on this connection: safely return it to pool. */
+            efs_client_conn_release(nodes[i], conns[i]);
+            if (failed_out) failed_out[i] = 2;
+            conns[i] = NULL;
+            continue;
+        }
         /* Never enter a blocking writev: a slow peer fills the TCP window
          * and SO_SNDTIMEO stalls the whole chunk. Wait for POLLOUT; a miss
          * is backpressure (failed=2), not a dead peer. 8ms was too short
@@ -2434,7 +2451,9 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
          * touching socket buffers, so the check is TCP-only. */
         if (!conns[i]->rc) {
             struct pollfd p = { .fd = conns[i]->fd, .events = POLLOUT };
-            int pr = poll(&p, 1, 100);
+            int64_t left = deadline_ms - (int64_t)report_clock_ms();
+            int wait_ms = left > 100 ? 100 : left > 0 ? (int)left : 0;
+            int pr = poll(&p, 1, wait_ms);
             if (pr < 0 || (p.revents & (POLLERR | POLLHUP | POLLNVAL))) {
                 efs_client_conn_drop(nodes[i], conns[i]);
                 efs_client_node_note_fail(nodes[i]);
@@ -2466,12 +2485,7 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
 
     /* Poll for replies; return as soon as we have ≥2 acks so one dead peer
      * cannot serialize a full SO_RCVTIMEO wait. */
-    struct timespec ts0;
-    clock_gettime(CLOCK_MONOTONIC, &ts0);
-    int64_t deadline_ms = (int64_t)ts0.tv_sec * 1000 +
-                          (int64_t)ts0.tv_nsec / 1000000 + EFS_IO_TIMEOUT_MS;
-
-    while (acks < 2) {
+    while (acks < 2 && (int64_t)report_clock_ms() < deadline_ms) {
         /* Harvest replies that are already here (RDMA CQE / readable fd).
          * Quick (non-spinning) checks: a full-budget spin per conn per
          * iteration was the single-client CPU sink (up to 6 spins per
@@ -2579,9 +2593,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
                 if (!pending[i] || conns[i] == NULL)
                     continue;
                 efs_client_conn_drop(nodes[i], conns[i]);
-                efs_client_node_note_fail(nodes[i]);
+                if (!efs_client_rpc_past_deadline())
+                    efs_client_node_note_fail(nodes[i]);
                 if (failed_out)
-                    failed_out[i] = 1;
+                    failed_out[i] = efs_client_rpc_past_deadline() ? 2 : 1;
                 conns[i] = NULL;
                 pending[i] = 0;
             }
@@ -2679,10 +2694,10 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         if (!conns[i])
             continue;
         efs_client_conn_drop(nodes[i], conns[i]);
-        if (acks < 2)
+        if (acks < 2 && !efs_client_rpc_past_deadline())
             efs_client_node_note_fail(nodes[i]);
         if (failed_out)
-            failed_out[i] = 1;
+            failed_out[i] = efs_client_rpc_past_deadline() ? 2 : 1;
         conns[i] = NULL;
         pending[i] = 0;
     }
@@ -2691,6 +2706,8 @@ static int put_fragments_parallel_once(efs_ino_t ino, uint32_t chunk_index,
         return EFS_ERR_QUOTA;
     if (acks >= 2)
         return EFS_OK;
+    if (efs_client_rpc_past_deadline())
+        return EFS_ERR_BUSY;
     if (reachable == 0)
         return EFS_ERR_NET;
     return EFS_ERR_NO_QUORUM;
@@ -2729,6 +2746,7 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                       const uint8_t checksums[EFS_NUM_FRAGMENTS][EFS_HASH_SIZE],
                                       uint64_t *object_out)
 {
+    if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
     uint64_t object_gen = new_chunk_object_gen(chunk_index);
     if (!object_gen) return EFS_ERR_IO;
     if (object_out) *object_out = object_gen;
@@ -2759,6 +2777,8 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
                                          frag_len, checksums, failed, object_gen, attempt == 1);
         if (rc == EFS_OK || rc == EFS_ERR_QUOTA)
             return rc;
+        if (efs_client_rpc_past_deadline())
+            return EFS_ERR_BUSY;
         /* Only hard I/O failures invalidate a node's idle pool. failed[] is
          * also set for POLLOUT soft-misses (window backpressure) and down-skip,
          * which must NOT trigger a reconnect storm — the node is not dead. */
@@ -2804,7 +2824,8 @@ int efs_client_put_fragments_parallel(efs_ino_t ino, uint32_t chunk_index,
         if (attempt < 4) {
             useconds_t base = 100000u << (attempt - 1); /* 100,200,400ms */
             useconds_t jitter = (useconds_t)(rand() % 50000);
-            usleep(base + jitter);
+            int pause_rc = report_retry_pause(base + jitter);
+            if (pause_rc != EFS_OK) return pause_rc;
         }
     }
     return rc;
