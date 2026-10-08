@@ -34,3 +34,63 @@ with tempfile.TemporaryDirectory(prefix='efs-rdma-budget-') as d:
  subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),str(root/'src/wire/wire.c'),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
 print('RDMA wrapper: shared deadline, late-frame repost, TCP fallback and malformed ownership PASS')
+
+# Exercise the production send-slot selector without requiring a local HCA.
+rdma=(root/'src/common/rdma.c').read_text()
+a=rdma.index('static int send_buf_prepare(');b=rdma.index('\n/* Describe a send failure.',a)
+slot_code=r'''
+#include <assert.h>
+#include <stdint.h>
+#include <sched.h>
+#define EFS_RDMA_NSEND 32
+#define EFS_RDMA_SEND_WAIT_US 5000000
+#define IBV_ACCESS_LOCAL_WRITE 1
+struct ibv_mr {unsigned lkey;};
+struct efs_rdma_dev {void *pd;};
+struct efs_rdma_conn {
+ struct efs_rdma_dev *dev;unsigned bufsz;uint8_t **send_bufs;
+ struct ibv_mr *send_mrs[32];int send_busy[32],send_rr,reserved,broken;
+};
+static struct ibv_mr regions[32];
+static int registrations,fail_registration,reap_error,complete_on_reap;
+static int64_t clock_us;
+static struct ibv_mr *ibv_reg_mr(void *pd,void *base,unsigned size,int access) {
+ assert(pd && base && size==86016 && access==1);
+ if(fail_registration)return 0;
+ assert(registrations<32);return &regions[registrations++];
+}
+static int reap_sends(struct efs_rdma_conn *rc) {
+ if(reap_error)return -1;
+ if(complete_on_reap)rc->send_busy[0]=0;
+ return 0;
+}
+static int64_t now_us(void){clock_us+=1000000;return clock_us;}
+'''+rdma[a:b]+r'''
+int main(void) {
+ struct efs_rdma_dev dev={.pd=&dev};uint8_t *buffers[32];uint8_t bytes[32];
+ for(int i=0;i<32;i++)buffers[i]=&bytes[i];
+ struct efs_rdma_conn rc={.dev=&dev,.bufsz=86016,.send_bufs=buffers,.reserved=-1};
+ for(int i=0;i<1000;i++)assert(send_buf_pick(&rc)==0);
+ assert(registrations==1);
+ rc.reserved=0;assert(send_buf_pick(&rc)==1 && registrations==2);
+ rc.reserved=-1;
+ for(int i=0;i<32;i++) {
+  int idx=send_buf_pick(&rc);assert(idx>=0 && !rc.send_busy[idx]);rc.send_busy[idx]=1;
+ }
+ assert(registrations==32);
+ assert(send_buf_pick(&rc)==-1 && rc.broken);
+ rc.broken=0;rc.send_rr=0;complete_on_reap=1;
+ assert(send_buf_pick(&rc)==0 && registrations==32);
+ reap_error=1;assert(send_buf_pick(&rc)==-1);
+ reap_error=complete_on_reap=0;
+ struct efs_rdma_conn cold={.dev=&dev,.bufsz=86016,.send_bufs=buffers,.reserved=-1};
+ fail_registration=1;assert(send_buf_pick(&cold)==-1 && !cold.send_mrs[0] && !cold.send_busy[0]);
+ assert(registrations==32);
+ return 0;
+}
+'''
+with tempfile.TemporaryDirectory(prefix='efs-rdma-slots-') as d:
+ p=Path(d)/'t.c';p.write_text(slot_code)
+ subprocess.run(['cc','-std=gnu11','-Wall','-Wextra','-Werror',str(p),'-o',str(p.with_suffix(''))],check=True)
+ subprocess.run([str(p.with_suffix(''))],check=True,timeout=5)
+print('RDMA slots: serial reuse, reserved ownership, full 32-slot pipeline, finite stall and registration refusal PASS')

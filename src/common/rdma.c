@@ -675,6 +675,7 @@ struct efs_rdma_conn {
     uint32_t psn;
     uint8_t **recv_bufs;
     uint8_t **send_bufs;
+    struct ibv_mr *send_mrs[EFS_RDMA_NSEND];
     int send_busy[EFS_RDMA_NSEND];
     int64_t send_posted_us[EFS_RDMA_NSEND]; /* when send_busy was set */
     uint64_t n_posted; /* sends posted / send CQEs reaped on this conn; a */
@@ -992,11 +993,11 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
     cq_unmoderate(rc->send_cq);
 
     size_t recv_stride = rc->bufsz + EFS_RDMA_RECV_STRIDE;
-    size_t total = (size_t)rc->nrecv * recv_stride +
-                   (size_t)EFS_RDMA_NSEND * rc->bufsz;
+    size_t recv_total = (size_t)rc->nrecv * recv_stride;
+    size_t total = recv_total + (size_t)EFS_RDMA_NSEND * rc->bufsz;
     if (posix_memalign((void **)&rc->arena, 4096, total) != 0)
         goto fail;
-    rc->mr = ibv_reg_mr(dev->pd, rc->arena, total, IBV_ACCESS_LOCAL_WRITE);
+    rc->mr = ibv_reg_mr(dev->pd, rc->arena, recv_total, IBV_ACCESS_LOCAL_WRITE);
     if (!rc->mr)
         goto fail;
 
@@ -1166,8 +1167,8 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
     static int logged;
     if (!__sync_lock_test_and_set(&logged, 1))
         fprintf(stderr, "efs: RDMA transport up on %s port %u "
-                "(lid %u, %u x %u KiB bufs/conn)\n",
-                dev->name, dev->port, dev->lid, rc->nrecv + EFS_RDMA_NSEND,
+                "(lid %u, %u recv + up to %u lazy send slots, %u KiB each)\n",
+                dev->name, dev->port, dev->lid, rc->nrecv, EFS_RDMA_NSEND,
                 rc->bufsz / 1024);
     if (rdma_first_log()) {
         struct sockaddr_in la;
@@ -1258,6 +1259,10 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
         ibv_destroy_cq(rc->send_cq);
     if (rc->efd >= 0)
         close(rc->efd);
+    for (int i = 0; i < EFS_RDMA_NSEND; i++) {
+        if (rc->send_mrs[i])
+            ibv_dereg_mr(rc->send_mrs[i]);
+    }
     if (rc->mr)
         ibv_dereg_mr(rc->mr);
     if (rc->cq_reserved) {
@@ -1357,17 +1362,44 @@ static int reap_or_dead(struct efs_rdma_conn *rc)
 /* Round-robin a pool send buffer, waiting (spin) if its previous send is
  * still in flight. A send that outlives EFS_RDMA_SEND_WAIT_US means the QP
  * is dead. */
+/* Register only slots actually needed by this connection. Registering all
+ * 32 send slots at handshake pinned ~3 MiB even for idle metadata RPCs.
+ * Keep the full pipeline capacity, but reuse idle registered slots first. */
+static int send_buf_prepare(struct efs_rdma_conn *rc, int idx)
+{
+    if (!rc->send_mrs[idx]) {
+        rc->send_mrs[idx] = ibv_reg_mr(rc->dev->pd, rc->send_bufs[idx],
+                                      rc->bufsz, IBV_ACCESS_LOCAL_WRITE);
+        if (!rc->send_mrs[idx])
+            return -1;
+    }
+    return idx;
+}
+
 static int send_buf_pick(struct efs_rdma_conn *rc)
 {
-    int idx = rc->send_rr;
-    rc->send_rr = (rc->send_rr + 1) % EFS_RDMA_NSEND;
     if (reap_sends(rc) != 0)
         return -1;
-    if (!rc->send_busy[idx])
-        return idx;
-    /* The CQE is a few microseconds behind post_send. sched_yield on the
-     * first miss hands the core away for the rest of a timeslice (~100us
-     * here, and longer when another thread is runnable). Spin first. */
+    for (int i = 0; i < EFS_RDMA_NSEND; i++) {
+        int idx = (rc->send_rr + i) % EFS_RDMA_NSEND;
+        if (!rc->send_busy[idx] && idx != rc->reserved && rc->send_mrs[idx]) {
+            rc->send_rr = (idx + 1) % EFS_RDMA_NSEND;
+            return idx;
+        }
+    }
+    for (int i = 0; i < EFS_RDMA_NSEND; i++) {
+        int idx = (rc->send_rr + i) % EFS_RDMA_NSEND;
+        if (!rc->send_busy[idx] && idx != rc->reserved) {
+            int result = send_buf_prepare(rc, idx);
+            if (result >= 0)
+                rc->send_rr = (idx + 1) % EFS_RDMA_NSEND;
+            return result;
+        }
+    }
+    int idx = rc->send_rr;
+    if (idx == rc->reserved)
+        idx = (idx + 1) % EFS_RDMA_NSEND;
+    /* Every usable slot is in flight. Preserve the bounded CQ wait. */
     int64_t end = now_us() + EFS_RDMA_SEND_WAIT_US;
     int64_t spin_end = now_us() + 200;
     while (rc->send_busy[idx]) {
@@ -1382,7 +1414,8 @@ static int send_buf_pick(struct efs_rdma_conn *rc)
         if (now_us() >= spin_end)
             sched_yield();
     }
-    return idx;
+    rc->send_rr = (idx + 1) % EFS_RDMA_NSEND;
+    return send_buf_prepare(rc, idx);
 }
 
 /* Describe a send failure. A send that neither completes nor errors leaves
@@ -1537,7 +1570,7 @@ static int post_send(struct efs_rdma_conn *rc, uint64_t wr_id,
     struct ibv_sge sge = {
         .addr = (uintptr_t)buf,
         .length = len,
-        .lkey = rc->mr->lkey,
+        .lkey = rc->send_mrs[wr_id & 0xffu]->lkey,
     };
     struct ibv_send_wr wr = {
         .wr_id = wr_id,
@@ -1565,7 +1598,7 @@ static int post_send2(struct efs_rdma_conn *rc, uint64_t wr_id,
                       uint32_t payload_lkey)
 {
     struct ibv_sge sge[2] = {
-        { .addr = (uintptr_t)hdr, .length = hdr_len, .lkey = rc->mr->lkey },
+        { .addr = (uintptr_t)hdr, .length = hdr_len, .lkey = rc->send_mrs[wr_id & 0xffu]->lkey },
         { .addr = (uintptr_t)payload, .length = payload_len,
           .lkey = payload_lkey },
     };
@@ -1619,7 +1652,7 @@ int efs_rdma_send_frame(struct efs_rdma_conn *rc, uint8_t type,
      * fine when the frame fits the QP's actual cap. */
     int idx = send_buf_pick(rc);
     if (idx < 0) {
-        send_fail_dump(rc, type, "send_buf_pick: prior send never completed");
+        send_fail_dump(rc, type, "send_buf_pick: unavailable registered slot");
         return EFS_ERR_NET;
     }
     uint8_t *b = rc->send_bufs[idx];
