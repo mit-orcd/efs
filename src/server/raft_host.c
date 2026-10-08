@@ -6402,8 +6402,11 @@ static void host_gc_record(struct efs_raft_host *h, struct efs_export *ex,
 /* REAP pass over one group's anchor shard: sweep every active lane of
  * each dead inode, then finish the reap on the inode's group. A failed
  * proposal skips the marker — the next pass re-drives it. */
+struct reap_times {
+    uint64_t scan, sweep, fence, done;
+};
 static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
-                              uint32_t anchor)
+                              uint32_t anchor, struct reap_times *times)
 {
     struct reap_scan_ctx c;
     uint8_t prefix[3];
@@ -6411,6 +6414,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     int i, lane;
 
     int prc, src;
+    uint64_t started = now_us_();
 
     (void)group;
     prc = efs_kv_key_reap_prefix(anchor, prefix, &plen);
@@ -6418,6 +6422,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
     src = (prc == EFS_OK)
           ? efs_kv_scan_prefix(h->kv, prefix, plen, reap_scan_cb, &c)
           : -999;
+    times->scan += now_us_() - started;
     if (env_on("EFS_GC_DBG"))
         fprintf(stderr, "raft-host: gc reap pass group=%u anchor=%u prc=%d src=%d markers=%d kv=%p\n",
                 group, anchor, prc, src, c.n, (void *)h->kv);
@@ -6441,6 +6446,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         int lanes_ok = 1;
         int lrc = 0, drc = 0;
 
+        started = now_us_();
         for (lane = 0; lane < EFS_META_LANES; lane++) {
             uint32_t lshard;
 
@@ -6457,6 +6463,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                 break; /* retry the whole marker next pass */
             }
         }
+        times->sweep += now_us_() - started;
         if (!lanes_ok) {
             if (env_on("EFS_GC_DBG"))
                 fprintf(stderr, "raft-host: gc reap ino=%llu lane_sweep rc=%d (retry)\n",
@@ -6465,14 +6472,19 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         }
         /* Include losing/never-published PUT objects. Namespace deletion
          * alone is insufficient evidence of physical reclamation. */
-        if (host_gc_inode_nodes(h,c.ino[i],c.gen[i]) != EFS_OK)
+        started = now_us_();
+        int frc = host_gc_inode_nodes(h,c.ino[i],c.gen[i]);
+        times->fence += now_us_() - started;
+        if (frc != EFS_OK)
             continue;
         cmd[0] = EFS_MD_CMD_REAP_DONE;
         wr64be(cmd + 1, c.ino[i]);
         wr64be(cmd + 9, c.gen[i]);
+        started = now_us_();
         drc = host_gc_propose(h,
                               efs_raft_shard_group(efs_kv_inode_shard(c.ino[i])),
                               cmd, 17);
+        times->done += now_us_() - started;
         if (env_on("EFS_GC_DBG"))
             fprintf(stderr, "raft-host: gc reap ino=%llu lanes=%llx sweep ok, reap_done rc=%d\n",
                     (unsigned long long)c.ino[i],
@@ -6879,8 +6891,9 @@ static void *host_gc_thread(void *arg)
     int g;
 
     while (h->gc_running) {
-        uint64_t t0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
+        uint64_t t0, t_orphan = 0, t_reap = 0, t_frag = 0, t_spread, t_rec, t_all;
         struct efs_kv_scan_stats sc_frag, sc_all;
+        struct reap_times reap_times = {0};
 
         __atomic_store_n(&h->s->gc_pass_start_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 1, __ATOMIC_RELAXED);
@@ -6918,7 +6931,9 @@ static void *host_gc_thread(void *arg)
             __atomic_store_n(&h->s->gc_group, h->g[g].group, __ATOMIC_RELAXED);
             __atomic_store_n(&h->s->gc_stage, 3, __ATOMIC_RELAXED);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
-            host_gc_reap_pass(h, h->g[g].group, anchor);
+            t_orphan += now_us_() - ta;
+            ta = now_us_();
+            host_gc_reap_pass(h, h->g[g].group, anchor, &reap_times);
             t_reap += now_us_() - ta;
             ta = now_us_();
             {
@@ -6956,11 +6971,13 @@ static void *host_gc_thread(void *arg)
          * one with `ftomb` in the thousands is tombstones under the GC
          * prefix. `EFS_GC_DBG` prints the line on every pass. */
         if (t_all > 5000 || env_on("EFS_GC_DBG"))
-            fprintf(stderr, "raft-host: gc-pass ms=%llu reap=%llu frag=%llu "
+            fprintf(stderr, "raft-host: gc-pass ms=%llu orphan=%llu reap=%llu frag=%llu "
                     "spread=%llu recover=%llu fscans=%llu fsegs=%llu "
                     "fkeys=%llu femit=%llu ftomb=%llu scans=%llu segs=%llu "
-                    "keys=%llu emit=%llu tomb=%llu\n",
+                    "keys=%llu emit=%llu tomb=%llu reap_scan=%llu "
+                    "reap_sweep=%llu reap_fence=%llu reap_done=%llu\n",
                     (unsigned long long)(t_all / 1000),
+                    (unsigned long long)(t_orphan / 1000),
                     (unsigned long long)(t_reap / 1000),
                     (unsigned long long)(t_frag / 1000),
                     (unsigned long long)(t_spread / 1000),
@@ -6974,7 +6991,11 @@ static void *host_gc_thread(void *arg)
                     (unsigned long long)sc_all.segs,
                     (unsigned long long)sc_all.keys,
                     (unsigned long long)sc_all.emitted,
-                    (unsigned long long)sc_all.tombstones);
+                    (unsigned long long)sc_all.tombstones,
+                    (unsigned long long)(reap_times.scan / 1000),
+                    (unsigned long long)(reap_times.sweep / 1000),
+                    (unsigned long long)(reap_times.fence / 1000),
+                    (unsigned long long)(reap_times.done / 1000));
         __atomic_store_n(&h->s->gc_last_pass_us, efs_iostats_now_us(), __ATOMIC_RELAXED);
         __atomic_fetch_add(&h->s->gc_passes, 1, __ATOMIC_RELAXED);
         __atomic_store_n(&h->s->gc_stage, 0, __ATOMIC_RELAXED);
