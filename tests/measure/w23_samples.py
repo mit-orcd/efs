@@ -48,9 +48,44 @@ def peaks(stream):
                                     for label, key in METRICS.items())
             for node, values in data.items()]
 
+def cap_proof(stream):
+    """Require complete simultaneous observations and a real follower cap.
+
+    This proves pressure was observed, never a memory or recovery bound.
+    Raw logs, queue accounting and acknowledged-byte oracles remain separate.
+    """
+    reader = csv.reader(stream, delimiter='\t')
+    if next(reader, None) != HEADER:
+        raise ValueError('unexpected TSV header')
+    ticks = {}
+    cap = False
+    required = ('mt_bytes', 'l0_bytes', 'n_l0', 'rss_kb', 'lag_max')
+    for line, values in enumerate(reader, 2):
+        validate(values)
+        record = dict(zip(HEADER, values))
+        for field in required:
+            if record[field] == 'NA':
+                raise ValueError(f'line {line}: {field} unavailable for cap proof')
+        if int(record['rss_kb']) == 0:
+            raise ValueError(f'line {line}: zero RSS is not a live replica sample')
+        nodes = ticks.setdefault(record['ts'], set())
+        if record['node'] in nodes:
+            raise ValueError('duplicate node/timestamp')
+        nodes.add(record['node'])
+        roles = set(record['role'].rstrip(',').split(','))
+        if not roles or not roles <= {'FOLLOWER', 'LEADER', 'CANDIDATE'}:
+            raise ValueError('unavailable or unknown replica role')
+        if roles == {'FOLLOWER'} and int(record['l0_bytes']) >= (1 << 30) and int(record['n_l0']) > 0:
+            cap = True
+    if len(ticks) < 2 or any(nodes != {'1', '2', '3'} for nodes in ticks.values()):
+        raise ValueError('at least two complete three-replica sample ticks required')
+    if not cap:
+        raise ValueError('no follower observed at the unchanged production 1 GiB L0 cap')
+    return 'production-cap follower observation confirmed; memory/lag/recovery bounds remain separate gates'
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['row', 'peaks'])
+    parser.add_argument('command', choices=['row', 'peaks', 'cap-proof'])
     parser.add_argument('values', nargs='*')
     args = parser.parse_args()
     try:
@@ -60,9 +95,9 @@ if __name__ == '__main__':
             print('\t'.join(row(*args.values)))
         else:
             if len(args.values) != 1:
-                raise ValueError('peaks requires one TSV file')
+                raise ValueError('reduction requires one TSV file')
             with open(args.values[0]) as stream:
-                print('\n'.join(peaks(stream)))
+                print(cap_proof(stream) if args.command == 'cap-proof' else '\n'.join(peaks(stream)))
     except ValueError as error:
         print(f'W23 samples: {error}', file=sys.stderr)
         sys.exit(1)

@@ -17,8 +17,11 @@ static unsigned long rss(void) {
 }
 static void sample(struct efs_kv *kv,const char *phase,unsigned n) {
     struct efs_kv_lsm_stats s;assert(efs_kv_lsm_stats(kv,&s)==EFS_OK);
-    printf("sample phase=%s writes=%u rss_kib=%lu mt_bytes=%llu l0_bytes=%llu l0=%u l1=%u hot=%d\n",
-      phase,n,rss(),(unsigned long long)s.mt_bytes,(unsigned long long)s.l0_bytes,s.n_l0,s.n_l1,efs_kv_lsm_l0_hot(kv));fflush(stdout);
+    struct efs_kv_lsm_pressure p;assert(!efs_kv_lsm_pressure(kv,&p));
+    assert(p.l0_hard_bytes==(1ull<<30) && p.l0_soft_bytes==(768ull<<20));
+    assert(p.soft==(p.hard || p.shape.l0_bytes>=p.l0_soft_bytes));
+    printf("sample phase=%s writes=%u rss_kib=%lu mt_bytes=%llu l0_bytes=%llu l0=%u l1=%u hot=%d soft=%d hard=%d io_failed=%d\n",
+      phase,n,rss(),(unsigned long long)s.mt_bytes,(unsigned long long)s.l0_bytes,s.n_l0,s.n_l1,efs_kv_lsm_l0_hot(kv),p.soft,p.hard,p.io_failed);fflush(stdout);
 }
 int main(int argc,char **argv) {
     assert(argc==3);assert(access(argv[1],F_OK)==-1 && errno==ENOENT);setenv("EFS_FAULT_COMPACT_STALL","1",1);setenv("EFS_FAULT_COMPACT_FILE",argv[2],1);
@@ -33,6 +36,8 @@ int main(int argc,char **argv) {
         if(n%16==15)sample(kv,"fill",n+1);
     }
     assert(efs_kv_lsm_l0_hot(kv));sample(kv,"cap",n);
+    struct efs_kv_lsm_pressure pressure;assert(!efs_kv_lsm_pressure(kv,&pressure));
+    assert(pressure.soft && pressure.hard && !pressure.io_failed);
     /* A finite 64 MiB post-cap tail measures growth; not a claim of a bound.
      * Keep these keys disjoint from the initial segment set. */
     for(unsigned i=0;i<8;i++) {
@@ -47,6 +52,7 @@ int main(int argc,char **argv) {
         assert(time(NULL)-start<120);}
     while(s.mt_bytes>=4u<<20 || s.n_l0>=4);
     assert(!efs_kv_lsm_quiesce(kv));sample(kv,"recovered",8);
+    assert(!efs_kv_lsm_pressure(kv,&pressure) && !pressure.soft && !pressure.hard);
     printf("recovery_seconds=%ld\n",(long)(time(NULL)-start));
     unsigned long recovered_rss=rss();
     for(unsigned round=0;round<4;round++) {
