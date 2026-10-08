@@ -247,7 +247,7 @@ static void test_pending_cold_edges(void)
     const uint64_t token = 1;
     uuid_of(uuid, 10);
     if (!mkdtemp(dir)) { CHECK(0, "pending cold directory"); return; }
-    for (unsigned phase = 0; phase < 4+guarded; phase++) {
+    for (unsigned phase = 0; phase < 4+2*guarded; phase++) {
         pid_t pid = fork();
         CHECK(pid >= 0, "pending cold fork");
         if (pid < 0) break;
@@ -279,6 +279,8 @@ static void test_pending_cold_edges(void)
                 rc = guarded ? efs_lease_guarded_edge(kv,ino,1,&edge,
                                EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING,token)
                              : efs_lease_pending_close(kv,ino,1,uuid,1,token,1);
+            } else if (rc == EFS_OK && phase==5) {
+                rc=efs_session_fence_local(kv,1,uuid,2);
             } else if (rc == EFS_OK) {
                 rc=efs_lease_guarded_edge(kv,ino+(UINT64_C(1)<<EFS_KV_SHARD_BITS),1,
                                            &edge,EFS_LEASE_EDGE_OPEN,0);
@@ -304,7 +306,7 @@ static void test_pending_cold_edges(void)
         uint8_t value[18], expected[18]={0};
         uint32_t len = sizeof(value);
         int rc = efs_kv_get(kv, key, klen, value, &len);
-        if ((!guarded && phase==3) || phase==4) {
+        if ((!guarded && phase==3) || phase>=4) {
             CHECK(rc==EFS_ERR_NOT_FOUND,"cold acknowledged cleanup remains absent");
         } else {
             uint32_t expected_len=EFS_LEASE_PENDING_VALUE_LEN;
@@ -320,7 +322,13 @@ static void test_pending_cold_edges(void)
             if (guarded && phase==3)
                 CHECK(efs_lease_any(kv,ino,1)==0,"cold closed record holds no ownership");
         }
-        if (guarded && phase==4) {
+        if (guarded && phase==5) {
+            uint8_t wkey[EFS_KV_KEY_MAX];uint32_t wl=0;
+            CHECK(efs_kv_key_opid(1,uuid,1,wkey,&wl)==EFS_OK,"cold fenced window key");
+            wkey[2]=EFS_KV_KIND_LEASE_EDGE;len=sizeof(value);
+            CHECK(efs_kv_get(kv,wkey,wl,value,&len)==EFS_ERR_NOT_FOUND,"cold local fence removed guarded window");
+        }
+        if (guarded && phase>=4) {
             struct efs_opid_req old={0};memcpy(old.id.client_uuid,uuid,sizeof(uuid));
             old.id.session_epoch=1;old.id.seq=2;old.ack=1;
             CHECK(efs_lease_guarded_edge(kv,ino,1,&old,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,
@@ -441,8 +449,17 @@ static void test_guarded_pending_and_fence(void)
     q.id.seq=5;q.ack=4;
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK && efs_lease_any(kv,ino,1)==0,"normal last close after pending cleanup");
     CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_BUSY,"cannot retire floor before durable global fence");
+    q.id.seq=6;q.ack=5;
+    CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"active owner before revocation");
+    uint8_t window[EFS_KV_KEY_MAX],value[1024];uint32_t wl=0,vl=sizeof(value);
+    CHECK(efs_kv_key_opid(1,uuid,1,window,&wl)==EFS_OK,"guarded retirement window key");
+    window[2]=EFS_KV_KIND_LEASE_EDGE;
+    CHECK(efs_kv_get(kv,window,wl,value,&vl)==EFS_OK,"guarded replay window before fence");
     CHECK(efs_session_begin_fence(kv,uuid)==EFS_OK,"begin guarded fence");
     CHECK(efs_session_fence_local(kv,1,uuid,2)==EFS_OK,"durable local reject floor");
+    vl=sizeof(value);
+    CHECK(efs_kv_get(kv,window,wl,value,&vl)==EFS_ERR_NOT_FOUND,"local fence retires redundant guarded verdicts");
+    CHECK(efs_lease_any(kv,ino,1)==1,"local fence retains active ownership until global barrier");
     CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_BUSY,"local floor alone cannot retire replay identity");
     q.id.seq=6;q.ack=5;
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,"local fence rejects old edges before global barrier finishes");

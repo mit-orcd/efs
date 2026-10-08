@@ -356,6 +356,15 @@ int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,
             if (rc == EFS_ERR_NOT_FOUND)
                 rc = EFS_OK;
         }
+        if (rc == EFS_OK) {
+            /* The durable local floor supersedes both replay windows.
+             * Ownership still waits for the completed global barrier/drop;
+             * no session-owner row is assumed present on this inode lane. */
+            okey[2] = EFS_KV_KIND_LEASE_EDGE;
+            rc = efs_kv_del(kv, okey, olen);
+            if (rc == EFS_ERR_NOT_FOUND)
+                rc = EFS_OK;
+        }
     }
     return rc;
 }
