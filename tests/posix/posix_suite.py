@@ -3585,7 +3585,8 @@ def link_of_symlink(d):
     """Linux link() does not follow: both names are the same symlink inode."""
     wr(os.path.join(d, "t"), b"data")
     os.symlink("t", os.path.join(d, "l"))
-    os.link(os.path.join(d, "l"), os.path.join(d, "h"))
+    os.link(os.path.join(d, "l"), os.path.join(d, "h"),
+            follow_symlinks=False)
     if not os.path.islink(os.path.join(d, "h")):
         raise Fail("link() of a symlink followed the target")
     eq(os.lstat(os.path.join(d, "l")).st_ino,

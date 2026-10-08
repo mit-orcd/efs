@@ -111,7 +111,7 @@ SERVER_OBJS = $(SERVER_SRCS:.c=.o)
 CLIENT_SRCS = src/client/efs_fuse.c
 CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 
-BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c src/bench/io_bench.c
+BENCH_CLIENT_SRC = src/client/efs_bench.c src/bench/bench_local.c src/bench/blake3_bench.c src/bench/io_bench.c src/bench/storage_principles.c
 # Reuse production storage/writer code without linking daemon/network startup.
 # Separate sectioned objects let the linker discard unrelated server functions.
 BENCH_STORE_OBJS = src/bench/store.o src/bench/store_nvme.o \
@@ -122,6 +122,8 @@ src/bench/%.o: src/server/%.c .build_id.stamp
 BENCH_CLIENT_OBJ = $(BENCH_CLIENT_SRC:.c=.o)
 src/bench/bench_local.o src/bench/io_bench.o: src/bench/perf_control.h
 src/bench/bench_local.o: src/bench/latency.h
+src/bench/storage_principles.o: src/bench/storage_principles.h src/bench/perf_control.h src/bench/latency.h
+src/client/efs_bench.o: src/bench/storage_principles.h
 $(BENCH_CLIENT_OBJ): src/bench/bench_local.h src/bench/blake3_bench.h src/bench/io_bench.h
 $(BENCH_STORE_OBJS) src/bench/bench_local.o src/server/thread.o: src/server/server_internal.h
 
@@ -272,6 +274,7 @@ test: all
 	python3 tests/test_publication_rpc.py
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py
+	python3 tests/test_storage_principles.py
 	python3 docs/check-architecture.py
 	$(MAKE) test-fence-read
 	$(MAKE) test-fence-view

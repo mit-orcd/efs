@@ -1078,6 +1078,8 @@ struct efs_msg_rdma_setup {
     uint32_t psn;      /* sender initial PSN */
     uint32_t mtu;      /* sender active MTU (enum ibv_mtu value) */
     uint32_t buf_size; /* sender recv buffer size = max RDMA frame accepted */
+    uint32_t address_version; /* 1: Ethernet/RoCE GID extension; 0: legacy IB */
+    uint8_t gid[16];
 };
 
 struct efs_msg_rdma_setup_reply {
@@ -1087,6 +1089,8 @@ struct efs_msg_rdma_setup_reply {
     uint32_t psn;
     uint32_t mtu;
     uint32_t buf_size;
+    uint32_t address_version;
+    uint8_t gid[16];
 };
 
 /* Send a single message. */

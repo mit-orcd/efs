@@ -201,11 +201,14 @@ struct efs_rdma_dev {
     uint8_t port;
     uint16_t lid;
     enum ibv_mtu mtu;
+    int roce, gid_index;
+    union ibv_gid gid;
     /* Shared recv completion channel: every conn's QP posts recvs here and
      * ONE poller thread harvests all completions, pushing frames onto
      * per-conn SPSC rings. Replaces per-conn CQs, whose spin-polling by
      * every conn thread was the top CPU consumer on client AND server. */
     struct ibv_cq *recv_cq;
+    int recv_capacity, recv_reserved;
     struct ibv_comp_channel *recv_chan;
     pthread_t poller;
     int poller_started;
@@ -350,8 +353,7 @@ static int rdma_port_no(void)
     return v;
 }
 
-/* Open + validate one device (active IB port, non-zero LID). RoCE/Ethernet
- * link layers are rejected: the address vector uses dlid only. */
+/* Native IB uses LID routing; RoCE uses an explicit nonzero local GID. */
 static int dev_open(const char *name, struct efs_rdma_dev *out)
 {
     struct ibv_device **list = ibv_get_device_list(NULL);
@@ -374,10 +376,33 @@ static int dev_open(const char *name, struct efs_rdma_dev *out)
         return -1;
     struct ibv_port_attr pa;
     if (ibv_query_port(ctx, rdma_port_no(), &pa) != 0 ||
-        pa.state != IBV_PORT_ACTIVE || pa.lid == 0 ||
-        pa.link_layer != IBV_LINK_LAYER_INFINIBAND) {
+        pa.state != IBV_PORT_ACTIVE ||
+        (pa.link_layer != IBV_LINK_LAYER_INFINIBAND && pa.link_layer != IBV_LINK_LAYER_ETHERNET) ||
+        (pa.link_layer == IBV_LINK_LAYER_INFINIBAND && pa.lid == 0)) {
         ibv_close_device(ctx);
         return -1;
+    }
+    int roce = pa.link_layer == IBV_LINK_LAYER_ETHERNET;
+    int gid_index = -1;
+    union ibv_gid gid = {0};
+    if (roce) {
+        const char *env = getenv("EFS_RDMA_GID_INDEX");
+        int first = 0, last = pa.gid_tbl_len;
+        if (env && *env) {
+            char *end; long v = strtol(env, &end, 10);
+            if (*end || v < 0 || v >= pa.gid_tbl_len) {
+                ibv_close_device(ctx); return -1;
+            }
+            first = (int)v; last = first + 1;
+        }
+        for (int i = first; i < last; i++) {
+            union ibv_gid candidate;
+            if (ibv_query_gid(ctx, rdma_port_no(), i, &candidate)) continue;
+            unsigned nonzero = 0;
+            for (unsigned j = 0; j < sizeof(candidate.raw); j++) nonzero |= candidate.raw[j];
+            if (nonzero) { gid = candidate; gid_index = i; break; }
+        }
+        if (gid_index < 0) { ibv_close_device(ctx); return -1; }
     }
     struct ibv_pd *pd = ibv_alloc_pd(ctx);
     if (!pd) {
@@ -391,6 +416,7 @@ static int dev_open(const char *name, struct efs_rdma_dev *out)
     out->port = (uint8_t)rdma_port_no();
     out->lid = pa.lid;
     out->mtu = pa.active_mtu;
+    out->roce = roce; out->gid_index = gid_index; out->gid = gid;
     return 0;
 }
 
@@ -637,6 +663,7 @@ int efs_rdma_available(void)
 /* ---------------- connection ---------------- */
 
 struct efs_rdma_conn {
+    int cq_reserved;
     struct efs_rdma_dev *dev;
     struct ibv_qp *qp;
     struct ibv_cq *send_cq;
@@ -895,15 +922,22 @@ static int dev_shared_cq_start(struct efs_rdma_dev *dev)
     }
     /* Sized for every conn's posted recvs with headroom; CQ entries are
      * cheap driver-side. */
-    dev->recv_cq = ibv_create_cq(dev->ctx, 1 << 16, NULL, dev->recv_chan, 0);
-    if (!dev->recv_cq)
-        return -1;
+    struct ibv_device_attr caps;
+    if (ibv_query_device(dev->ctx, &caps) || caps.max_cqe < 2) goto cq_fail;
+    int capacity = caps.max_cqe < (1 << 16) ? caps.max_cqe : (1 << 16);
+    dev->recv_cq = ibv_create_cq(dev->ctx, capacity, NULL, dev->recv_chan, 0);
+    if (!dev->recv_cq) goto cq_fail;
+    dev->recv_capacity = dev->recv_cq->cqe / 2; /* reserve teardown headroom */
     cq_unmoderate(dev->recv_cq);
-    if (pthread_create(&dev->poller, NULL, recv_poller, dev) != 0)
-        return -1;
+    if (pthread_create(&dev->poller, NULL, recv_poller, dev) != 0) {
+        ibv_destroy_cq(dev->recv_cq); dev->recv_cq = NULL; goto cq_fail;
+    }
     pthread_detach(dev->poller);
     dev->poller_started = 1;
     return 0;
+cq_fail:
+    ibv_destroy_comp_channel(dev->recv_chan); dev->recv_chan = NULL;
+    return -1;
 }
 
 static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
@@ -923,6 +957,9 @@ static struct efs_rdma_conn *conn_create(struct efs_rdma_dev *dev)
 
     pthread_mutex_lock(&g_dev_lock);
     int cq_rc = dev_shared_cq_start(dev);
+    if (!cq_rc && dev->recv_reserved + rc->nrecv <= dev->recv_capacity) {
+        dev->recv_reserved += rc->nrecv; rc->cq_reserved = rc->nrecv;
+    } else cq_rc = -1;
     pthread_mutex_unlock(&g_dev_lock);
     if (cq_rc != 0)
         goto fail;
@@ -1016,7 +1053,7 @@ fail:
 }
 
 static int qp_rtr(struct efs_rdma_conn *rc, uint32_t lid, uint32_t qpn,
-                  uint32_t psn, enum ibv_mtu mtu)
+                  uint32_t psn, enum ibv_mtu mtu, const uint8_t *gid)
 {
     struct ibv_qp_attr attr;
     memset(&attr, 0, sizeof(attr));
@@ -1029,7 +1066,16 @@ static int qp_rtr(struct efs_rdma_conn *rc, uint32_t lid, uint32_t qpn,
     attr.ah_attr.dlid = (uint16_t)lid;
     attr.ah_attr.sl = 0;
     attr.ah_attr.src_path_bits = 0;
-    attr.ah_attr.is_global = 0;
+    attr.ah_attr.is_global = rc->dev->roce;
+    if (rc->dev->roce) {
+        if (!gid) return -1;
+        unsigned nonzero = 0;
+        for (int i = 0; i < 16; i++) nonzero |= gid[i];
+        if (!nonzero) return -1;
+        memcpy(attr.ah_attr.grh.dgid.raw, gid, 16);
+        attr.ah_attr.grh.sgid_index = rc->dev->gid_index;
+        attr.ah_attr.grh.hop_limit = 64;
+    }
     attr.ah_attr.port_num = rc->dev->port;
     return ibv_modify_qp(rc->qp, &attr,
                          IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU |
@@ -1081,20 +1127,25 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
     req.psn = rc->psn;
     req.mtu = (uint32_t)dev->mtu;
     req.buf_size = rc->bufsz;
+    req.address_version = dev->roce ? 1 : 0;
+    memcpy(req.gid, dev->gid.raw, 16);
 
     uint8_t type = 0;
     void *payload = NULL;
     uint32_t payload_len = 0;
     struct efs_msg_rdma_setup_reply *rep = NULL;
     int ok = 0;
-    if (efs_send_msg(c->fd, EFS_MSG_RDMA_SETUP, &req, sizeof(req)) == 0 &&
+    uint32_t peer_qpn = 0;
+    if (efs_send_msg(c->fd, EFS_MSG_RDMA_SETUP, &req, dev->roce ? sizeof(req) : 20) == 0 &&
         efs_recv_msg(c->fd, &type, &payload, &payload_len) == 0 &&
         type == EFS_MSG_RDMA_SETUP_REPLY &&
-        payload_len >= sizeof(struct efs_msg_rdma_setup_reply)) {
+        payload_len >= 24) {
         rep = payload;
-        if (rep->status == EFS_RDMA_STATUS_OK &&
+        peer_qpn = rep->qpn;
+        int gid_ok = payload_len >= sizeof(*rep) && rep->address_version == 1;
+        if ((!dev->roce || gid_ok) && rep->status == EFS_RDMA_STATUS_OK &&
             qp_rtr(rc, rep->lid, rep->qpn, rep->psn,
-                   mtu_min(dev->mtu, (int)rep->mtu)) == 0 &&
+                   mtu_min(dev->mtu, (int)rep->mtu), dev->roce ? rep->gid : NULL) == 0 &&
             qp_rts(rc) == 0) {
             rc->max_frame = rep->buf_size < rc->bufsz ? rep->buf_size
                                                       : rc->bufsz;
@@ -1127,7 +1178,7 @@ int efs_rdma_client_upgrade(struct efs_conn *c)
         fprintf(stderr,
                 "rdma-first: upgrade ok fd=%d qpn=%u dest_qpn=%u local_port=%u "
                 "lid=%u max_frame=%u\n",
-                c->fd, rc->qp->qp_num, rep->qpn, lport, dev->lid,
+                c->fd, rc->qp->qp_num, peer_qpn, lport, dev->lid,
                 rc->max_frame);
     }
     return 0;
@@ -1139,10 +1190,10 @@ int efs_rdma_server_accept(struct efs_conn *c, const void *setup_payload,
 {
     struct efs_msg_rdma_setup_reply *rep = reply;
     memset(rep, 0, sizeof(*rep));
-    *reply_len = sizeof(*rep);
+    *reply_len = payload_len >= sizeof(struct efs_msg_rdma_setup) ? sizeof(*rep) : 24;
     rep->status = EFS_RDMA_STATUS_UNSUPPORTED;
 
-    if (payload_len < sizeof(struct efs_msg_rdma_setup) || c->rc)
+    if (payload_len < 20 || c->rc)
         return -1;
     if (!efs_rdma_available())
         return -1;
@@ -1151,11 +1202,12 @@ int efs_rdma_server_accept(struct efs_conn *c, const void *setup_payload,
         return -1;
 
     const struct efs_msg_rdma_setup *req = setup_payload;
+    if (dev->roce && (payload_len < sizeof(*req) || req->address_version != 1)) return -1;
     struct efs_rdma_conn *rc = conn_create(dev);
     if (!rc)
         return -1;
     if (qp_rtr(rc, req->lid, req->qpn, req->psn,
-               mtu_min(dev->mtu, (int)req->mtu)) != 0 ||
+               mtu_min(dev->mtu, (int)req->mtu), dev->roce ? req->gid : NULL) != 0 ||
         qp_rts(rc) != 0) {
         efs_rdma_conn_destroy(rc);
         return -1;
@@ -1168,6 +1220,8 @@ int efs_rdma_server_accept(struct efs_conn *c, const void *setup_payload,
     rep->psn = rc->psn;
     rep->mtu = (uint32_t)dev->mtu;
     rep->buf_size = rc->bufsz;
+    rep->address_version = dev->roce ? 1 : 0;
+    memcpy(rep->gid, dev->gid.raw, 16);
 
     c->rc = rc;
     c->kind = EFS_CONN_RDMA;
@@ -1206,6 +1260,11 @@ void efs_rdma_conn_destroy(struct efs_rdma_conn *rc)
         close(rc->efd);
     if (rc->mr)
         ibv_dereg_mr(rc->mr);
+    if (rc->cq_reserved) {
+        pthread_mutex_lock(&g_dev_lock);
+        rc->dev->recv_reserved -= rc->cq_reserved;
+        pthread_mutex_unlock(&g_dev_lock);
+    }
     int counted = rc->counted;
     free(rc->arena);
     free(rc->recv_bufs);
