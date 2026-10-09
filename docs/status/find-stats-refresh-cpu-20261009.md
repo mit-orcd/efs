@@ -234,3 +234,12 @@ Raw deployment/profile evidence is retained in
 [results/measure/20261009-catalog-incremental](../../results/measure/20261009-catalog-incremental/)
 and on NUC at `/data1/efs/deploy-query-5084f8c2`. Native unit/build logs and private
 fixture logs remain under `/data1/efs/query-incremental-*`.
+
+
+## Follow-up: bounded display and full export
+
+The subsequent `abcd9b7b1b6f` deployment adds bounded query pages, a default
+100-result display cap, an override up to 10,000, and complete streaming file
+exports. Root `.txt` queries and a 1,068,326-path export now pass on NUC; the
+historical failure above remains reproducible only on the old command/wire
+path. See [the contract and acceptance](efs-command-pages-20261009.md).

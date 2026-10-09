@@ -93,3 +93,12 @@ for example:
 
 No runtime fix is implemented or claimed by this investigation.
 [Raw evidence](../../results/measure/20261009-find-output-overflow/).
+
+
+## Follow-up: bounded display and full export
+
+The subsequent `abcd9b7b1b6f` deployment adds bounded query pages, a default
+100-result display cap, an override up to 10,000, and complete streaming file
+exports. Root `.txt` queries and a 1,068,326-path export now pass on NUC; the
+historical failure above remains reproducible only on the old command/wire
+path. See [the contract and acceptance](efs-command-pages-20261009.md).

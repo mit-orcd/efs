@@ -82,7 +82,9 @@ def open_query(path):
             time.sleep(.025*(attempt+1))
 
 # Open a query result directly: multi-read/seek/fstat remains immutable.
-query = root / '.efs/.query/v1.find.3.747874'
+# Exact probes keep immutable-FD/slot gates independent of the legacy global
+# scan ceiling; broad-result behavior is covered by the v4 page gates.
+query = root / '.efs/.query/v1.find.0.66696c652e747874'
 with open_query(query) as stream:
     first = stream.read(17)
     size = os.fstat(stream.fileno()).st_size
@@ -148,7 +150,7 @@ try:
     for i in range(80):
         pattern=('capacity-%03d'%i).encode().hex()
         try:
-            held.append(open_query(root / '.efs/.query' / ('v1.find.3.'+pattern)))
+            held.append(open_query(root / '.efs/.query' / ('v1.find.0.'+pattern)))
         except OSError as error:
             assert error.errno == errno.ENOMEM, error
             break
@@ -159,11 +161,11 @@ finally:
     for stream in held:
         stream.close()
 def recovered():
-    with open_query(root / '.efs/.query/v1.find.3.7265636f7665726564') as stream:
+    with open_query(root / '.efs/.query/v1.find.0.7265636f7665726564') as stream:
         assert json.load(stream)['complete'] is True
 eventually(recovered)
 for i in range(128):
-    with open_query(root / '.efs/.query' / ('v1.find.3.'+('released-%03d'%i).encode().hex())) as stream:
+    with open_query(root / '.efs/.query' / ('v1.find.0.'+('released-%03d'%i).encode().hex())) as stream:
         assert json.load(stream)['complete'] is True
 print('bounded identity exhaustion and sequential release/FORGET recovery PASS', flush=True)
 print('efs_commands: PASS (focused command gates; large-scale/fault/NFS acceptance remains)', flush=True)

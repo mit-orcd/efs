@@ -86,3 +86,43 @@ oracles, NUL and NDJSON exports, retained-generation identity through a fresh
 publication, no duplicates/missing entries, resource admission, close/stale
 sessions, and chmod revocation. Full POSIX/peer and restart gates accompany
 these tests. Deployment and million-file evidence will be recorded below.
+
+
+## NUC acceptance and deployment
+
+Installed source/binaries: **`abcd9b7b1b6f`, devel-find-stats**, all four nodes
+and both clients, direct I/O/TCP, `.efs` enabled, existing stores preserved.
+The generator was already stopped; no loader was restarted for these read
+checks. Previous binaries/source are retained at
+`/data1/efs/src-pre-pages-abcd9b7b-20261009T035940Z`.
+
+Both `/data1/efs/mnt` and `/data1/efs/mnt2` return 100 root `.txt` matches by
+default and 10,000 with the override, with `truncated: true` and the additional
+results notice. On the second mount these took 42.9 ms and 136.8 ms respectively;
+root ls returned all 39 immediate entries in 137.6 ms. These are single observed
+runs, not steady-state latency percentiles.
+
+A full root `.txt` NUL export completed in **22.0045 s**, returning **1,068,326
+paths / 78,196,854 bytes**. Independent streaming duplicate detection confirms
+1,068,326 unique paths and a final NUL terminator. The private fixed namespace
+provides the independent no-loss oracle; the large run proves completion and
+uniqueness beyond both former ceilings, without an independent full tree walk.
+The large output is retained on NUC at
+`/data1/efs/deploy-pages-abcd9b7b/all-txt-paths.bin`.
+
+Native focused catalog gates pass. Python command/codec gates pass **27 tests**.
+Final private direct/TCP command, export, permission, retained-generation,
+restart, POSIX and peer gates pass. **Full native `make test` passes**, including all five architecture checks.
+Private POSIX passes **212/212** (16.8 s), peer **64/64** (14.4 s).
+The live million-file focused command suite also passes: immutable output,
+permissions, real .efs collision precedence and slot exhaustion/recovery.
+Its descriptor/slot probes use exact legacy matches, separating those
+assertions from legacy broad-query limits; broad v4 behavior is validated by
+the cap and complete-export runs. An earlier live run with legacy broad probes
+hit the legacy cap as expected and is retained as historical failed evidence. These tests do not establish
+400 GiB real payload coverage, a hardware CPU ceiling, or full expiry support.
+
+Evidence: [results/measure/20261009-command-pages](../../results/measure/20261009-command-pages/),
+with full native logs under `/data1/efs/query-pages-*` and live artifacts under
+`/data1/efs/deploy-pages-abcd9b7b` on NUC. The file export is deliberately retained
+remotely rather than adding 78 MB of generated paths to Git.

@@ -5644,6 +5644,18 @@ Loaded broad command gates also hit the separate million-entry scan cap and
 retry EFS_ERR_BUSY; scoped traversal/paging and explicit limit errors remain open.
 [Perf/strace evidence](../status/find-stats-refresh-cpu-20261009.md).
 
+**Oct 9 bounded commands and export:** `30634dd1` + `abcd9b7b` implement a
+100-result display default, `--limit`/`--size` up to 10,000, truthful additional
+result notices, and `--file PATH` streaming from a retained immutable catalog.
+NUC both mounts pass 100/10,000 result caps; full export returns 1,068,326 unique
+paths (78,196,854 bytes) in 22.0 s. Per-page scan budgets and continuations remove
+the old global million-entry ceiling for the new command protocol; legacy
+protocol limits remain. Global ordering/top-N is not supplied: display sorting
+is within the selected subset, and export uses index order. W92 stays open for
+remaining payload-scale/platform/CPU/memory acceptance, not the old all-results
+response requirement. [Contract and evidence](../status/efs-command-pages-20261009.md).
+
+
 **Oct 8 New York loaded-namespace investigation:** devel merged into
 `devel-find-stats` at `ab050595`. NUC root `.efs/find .txt` exceeds the 16 MiB
 JSON response cap at roughly 992k files; it returns EOVERFLOW with zero partial
