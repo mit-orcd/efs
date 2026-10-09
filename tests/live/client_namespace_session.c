@@ -1,6 +1,7 @@
 /* Actual directory mutation session admission/fencing on private stores. */
 #include "../../src/client/client_internal.h"
 #include "efs/session.h"
+#include "efs/kv_key.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,7 +34,7 @@ static struct packet pack(uint8_t type,const void *body,uint32_t bytes,const str
 int main(int argc,char **argv)
 {
  assert(argc==4 || argc==5 || argc==6);unsigned port=atoi(argv[1]);efs_ino_t parent=strtoull(argv[2],0,10);
- if(argc==6){
+ if(argc==6 && !strcmp(argv[4],"cold")){
   assert(!strcmp(argv[4],"cold"));struct packet old[7];FILE *f=fopen(argv[5],"rb");assert(f);
   assert(fread(old,sizeof(old),1,f)==1 && fgetc(f)==EOF);fclose(f);
   for(unsigned i=0;i<7;i++){assert(old[i].bytes<=sizeof(old[i].body));struct efs_msg_inode_reply r=rpc(port,&old[i]);fprintf(stderr,"cold namespace case=%u status=%u\n",i,r.status);assert(r.status==EFS_INODE_RPC_STALE);}
@@ -63,7 +64,7 @@ int main(int argc,char **argv)
  pid_t child=fork();assert(child>=0);if(!child){execl(argv[3],argv[3],"raft-session",address,"fence",hex,(char *)NULL);_exit(127);}
  int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
  for(unsigned i=0;i<7;i++)assert(rpc(port,&saved[i]).status==EFS_INODE_RPC_STALE);
- if(argc==5){FILE *f=fopen(argv[4],"wb");assert(f);assert(fwrite(saved,sizeof(saved),1,f)==1);assert(!fclose(f));}
+ if(argc>=5){FILE *f=fopen(argv[4],"wb");assert(f);assert(fwrite(saved,sizeof(saved),1,f)==1);assert(!fclose(f));}
  create.mode=S_IFREG|0600;strcpy(create.name,"late");struct packet late=pack(EFS_MSG_INODE_CREATE,&create,sizeof(create),&id,8);
  assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
  create.mode=S_IFDIR|0700;strcpy(create.name,"late-dir");late=pack(EFS_MSG_INODE_CREATE,&create,sizeof(create),&id,9);
@@ -79,7 +80,15 @@ int main(int argc,char **argv)
  struct efs_inode found;assert(!efs_client_rpc_lookup(1,parent,"a",&found) && found.ino==ino);
  assert(!efs_client_rpc_lookup(1,parent,"still-empty",&found));
  for(unsigned i=0;i<4;i++)assert(efs_client_rpc_lookup(1,parent,(const char *[]){"late","late-dir","late-link","moved"}[i],NULL)==EFS_ERR_NOT_FOUND);
- if(argc==5){puts("namespace fenced names retained for cold restart PASS");return 0;}
+ if(argc==6){
+  efs_ino_t untouched=strtoull(argv[5],NULL,10);assert(untouched && efs_kv_inode_shard(untouched)!=efs_kv_inode_shard(parent));
+  create.parent=untouched;create.mode=S_IFREG|0600;strcpy(create.name,"late-first-touch");
+  late=pack(EFS_MSG_INODE_CREATE,&create,sizeof(create),&id,14);
+  assert(rpc(port,&late).status==EFS_INODE_RPC_STALE);
+  assert(efs_client_rpc_lookup(1,untouched,"late-first-touch",NULL)==EFS_ERR_NOT_FOUND);
+  puts("namespace first untouched shard: completed global revocation rejects old identity without a local floor PASS");
+ }
+ if(argc>=5){puts("namespace fenced names retained for cold restart PASS");return 0;}
  /* Independent new identity cleans only this helper's disposable namespace. */
  id.client_uuid[0]^=0x80;strcpy(unlink.name,"a");unlink.is_dir=0;late=pack(EFS_MSG_INODE_UNLINK,&unlink,sizeof(unlink),&id,1);assert(rpc(port,&late).status==EFS_INODE_RPC_OK);
  strcpy(unlink.name,"still-empty");unlink.is_dir=1;late=pack(EFS_MSG_INODE_UNLINK,&unlink,sizeof(unlink),&id,2);assert(rpc(port,&late).status==EFS_INODE_RPC_OK);

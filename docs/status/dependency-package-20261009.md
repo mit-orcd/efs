@@ -670,3 +670,17 @@ peer64/64, exact cold linked bytes and physical GC/restart pass; all code
 regressions pass, warning-free normal/fault builds, docs5/5. Installed service
 and both mounts restored, reservation released. Hour's commits retain staged
 activation: no push/merge/tag or production ticketed PUT/GC/D25 activation.
+
+## Revoked namespace first-touch boundary — gated
+
+An actual client helper now attempts old-epoch CREATE on a distinct untouched
+namespace shard after completed global revocation. It is STALE and the name
+remains absent, despite no existing local rejection floor for that helper on the
+new shard. Existing cached receipts also remain STALE after cold restart.
+The final proof is recorded alongside the namespace-session evidence.
+
+Final first-touch fixture: AMD core212/212, peer64/64, append800, physical
+reclamation/restart and cold namespace/ticket/lease gates pass. Code unchanged
+from the passing full regression run except these live helper assertions.
+Installed AMD service restored; docs5/5. Remaining package is explicitly listed
+above, and D25 / ticketed data-plane activation remains staged.

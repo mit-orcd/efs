@@ -23,3 +23,8 @@ and recover two guards, partial resolution, final revocation and delayed request
 See live.txt, namespace-proof.txt, guard-proof.txt, cold-unit.txt and
 regressions.txt for final results. AMD is one host / four daemons; these are
 process/WAL recovery gates, not hardware power-loss proof.
+
+Final boundary follow-up: first-touch-proof.txt / first-touch-live.txt record
+old-epoch CREATE rejected on a separate untouched namespace shard after global
+revocation, without relying on an existing local floor; the proposed name stays
+absent and all seven saved receipts remain STALE after cold restart.

@@ -587,7 +587,8 @@ try:
         namespace=work/'client-namespace-session';ns_path=mount/'namespace-session-fence';ns_path.mkdir()
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_namespace_session.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',namespace])
         ns_ino=ns_path.stat().st_ino;ns_saved=work/'namespace-session-packets.bin'
-        ns_result=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt',ns_saved],capture_output=True,text=True,timeout=180).stdout
+        ns_untouched=mount/'namespace-first-touch';ns_untouched.mkdir()
+        ns_result=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt',ns_saved,str(ns_untouched.stat().st_ino)],capture_output=True,text=True,timeout=180).stdout
         (work/'namespace-session-wire.txt').write_text(ns_result)
         retained=work/'client-retained-lease'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained])
@@ -607,7 +608,7 @@ try:
         unmount();stop(crash=True);start();mount_client()
         ns_result+=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt','cold',ns_saved],capture_output=True,text=True,timeout=90).stdout
         (work/'namespace-session-wire.txt').write_text(ns_result)
-        (ns_path/'a').unlink();(ns_path/'still-empty').rmdir();ns_path.rmdir()
+        (ns_path/'a').unlink();(ns_path/'still-empty').rmdir();ns_path.rmdir();ns_untouched.rmdir()
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)
         ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','cold',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
         (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
