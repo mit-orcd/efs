@@ -1,0 +1,6 @@
+2026-10-09T21:18:04.068Z storage-engine=files direct_io=on
+2026-10-09T21:18:04.069Z heartbeat: enabled (2000 ms interval)
+2026-10-09T21:18:04.070Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-09T21:18:04.070Z kv-obs: mt_bytes=0 l0_bytes=0 l0=0 l1=0
+2026-10-09T21:18:04.070Z raft-host: up raft_id=0 n=3 boot=10109542846048284 salt=14388972485887449378 g0=hosted g2=hosted
+2026-10-09T21:18:04.070Z efsd c2ab465b (branch devel-persistence-pressure, built 2026-10-09T21:09:30Z on nuc), build=c2ab465b-batch: node 1 listening on 127.0.0.1:22430, storage=/data1/efs/efs-checkpoint-fault-skg8dhc8/n0 (1 paths, stripe=none), used=0, quota=0, direct_io=on, writers=4 shared

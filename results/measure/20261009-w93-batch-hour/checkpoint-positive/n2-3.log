@@ -1,0 +1,11 @@
+2026-10-09T21:16:40.653Z storage-engine=files direct_io=on
+2026-10-09T21:16:40.653Z Loaded 3 persisted cluster node(s) from /data1/efs/efs-checkpoint-fault-ayu2b3ag/n2/meta/cluster_nodes.bin
+2026-10-09T21:16:40.653Z   persisted node 1: 127.0.0.1:22430
+2026-10-09T21:16:40.653Z   persisted node 2: 127.0.0.1:22431
+2026-10-09T21:16:40.653Z   persisted node 3: 127.0.0.1:22432
+2026-10-09T21:16:40.654Z Joined cluster with 3 nodes
+2026-10-09T21:16:40.654Z heartbeat: enabled (2000 ms interval)
+2026-10-09T21:16:40.655Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-09T21:16:40.655Z kv-obs: mt_bytes=1053 l0_bytes=0 l0=0 l1=0
+2026-10-09T21:16:40.655Z raft-host: up raft_id=2 n=3 boot=9867414610231229 salt=17667148540086252408 g0=hosted g2=hosted
+2026-10-09T21:16:40.656Z efsd 0bd7b5be (branch devel-persistence-pressure, built 2026-10-09T21:15:27Z on nuc), build=0bd7b5be-batch: node 3 listening on 127.0.0.1:22432, storage=/data1/efs/efs-checkpoint-fault-ayu2b3ag/n2 (1 paths, stripe=none), used=0, quota=0, direct_io=on, writers=4 shared

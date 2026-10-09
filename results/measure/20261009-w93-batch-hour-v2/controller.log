@@ -1,0 +1,48 @@
+START baseline noop 0 group 0
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2365805 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 2365852 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+/data1/efs/w93-batch-hour-v2-20261009/baseline
+DONE baseline [  {    "start": 7.322999954340048e-05,    "end": 80.00008154200259,    "files_per_second": 121.93748733069042  },  {    "start": 80.00008154200259,    "end": 160.00006320100147,    "files_per_second": 50.3000115319071  },  {    "start": 160.00006320100147,    "end": 240.000063599,    "files_per_second": 48.82499975709653  }]
+START noop noop 1 group 0
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2383673 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 2383712 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+/data1/efs/w93-batch-hour-v2-20261009/noop
+DONE noop [  {    "start": 7.650000043213367e-05,    "end": 80.00006371299969,    "files_per_second": 157.3500251504361  },  {    "start": 80.00006371299969,    "end": 160.00017782099894,    "files_per_second": 69.33740110059858  },  {    "start": 160.00017782099894,    "end": 240.00007394600107,    "files_per_second": 55.075071511536706  }]
+START both noop 1 group 1
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2414221 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 2414266 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+/data1/efs/w93-batch-hour-v2-20261009/both
+DONE both [  {    "start": 8.65259971760679e-05,    "end": 80.00008839599832,    "files_per_second": 118.37499723298275  },  {    "start": 80.00008839599832,    "end": 160.0000481850002,    "files_per_second": 44.8750225558681  },  {    "start": 160.0000481850002,    "end": 240.00004744899707,    "files_per_second": 61.78750056844742  }]
+START group noop 0 group 1
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2444801 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 2444848 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+/data1/efs/w93-batch-hour-v2-20261009/group
+DONE group [  {    "start": 7.87780008977279e-05,    "end": 80.00008460499885,    "files_per_second": 142.32498963340723  },  {    "start": 80.00008460499885,    "end": 160.00008099999832,    "files_per_second": 31.00000139693777  },  {    "start": 160.00008099999832,    "end": 240.00008158299897,    "files_per_second": 53.16249961257785  }]
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2475974 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 2476008 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=0
+four four-minute exploratory cases complete

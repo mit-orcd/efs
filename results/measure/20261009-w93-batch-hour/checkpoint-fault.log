@@ -1,0 +1,2 @@
+Evidence: /data1/efs/efs-checkpoint-fault-ayu2b3ag
+PASS: KV EIO cannot advance pump/shutdown checkpoints; retained Raft replay restores cold acknowledged inode

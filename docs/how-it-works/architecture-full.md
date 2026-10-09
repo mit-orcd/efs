@@ -1502,6 +1502,15 @@ routing and migration; W92 remains the local disk backend. W98 owns the scaling
 discussion and distributed query design. This item is outside the dated grouped
 count below.
 
+### Storage pressure policy
+
+[W99 — proactive capacity protection](../status/storage-pressure-read-only-20261009.md)
+records the user's requirement for every disk writer and shared/separate data,
+metadata and cache storage. Read-only admission must precede exhaustion and
+reflect placement/quorum availability and preserve authoritative metadata. The
+note explicitly corrects the assumed any-two-of-four guarantee. Thresholds and escalation details remain
+open; this new item is outside the dated grouped count below.
+
 ### 1. The task right now
 
 [AMD W73/W64 RXE completion](../status/amd-rxe-gate-closure-20261009.md): integrated
@@ -5813,6 +5822,25 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ### W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 further persistence-efficiency work:** Experimental no-op cohort
+continuation and bounded noncommitting-prefix group scheduling are implemented
+on `devel-persistence-pressure`, opt-in via `EFS_RAFT_BATCH_NOOP=1` and
+`EFS_RAFT_GROUP_DRAIN=1` (default off). Fresh read/control/commit/apply boundaries
+preserve order. Full Linux/core/async and NUC POSIX 212/212, peer 64/64 pass.
+Review also fixes a correctness prerequisite: pump and shutdown cannot advance
+applied markers after failed KV WAL release. A private injected-EIO/cold-replay
+gate passes on the fix and fails on the old binary (saved index 4 → 5 after EIO).
+Four 240-second same-binary exploratory trials complete: baseline/no-op/both/
+group-only means 73.69/93.92/75.01/75.50 files/s. Few eligible continuations,
+different background GC and sequential placement/state prevent attributing a
+repeatable gain. Both experiments remain default off. All leader-cut catch-up,
+256 exact cold-payload checks and applicable live sync/append/shutdown/WAL-tail/
+GC fault gates pass; no physical power-loss or hardware-ceiling claim.
+Measured serial KV/marker tail remains; safe bounded checkpoint overlap is
+designed but unimplemented. About four foreground metadata commands per tiny
+file confirm W94's guarded CREATE/lease adoption as an outstanding reduction.
+[Detailed scope, recovery contract and evidence](../status/w93-persistence-efficiency-20261009.md).
+
 **Oct 9 .efs-disabled control:** rate still declines 118.4 → 81.7 → 42.4
 files/s. n3 drops 112,982 inbox frames; all measured tail mismatches are
 behind the local log. Exact active-batch endings are behind-tail or empty
@@ -6274,6 +6302,30 @@ the local disk-backed query cache and should continue independently. Implementat
 requires the design/compatibility review above; this note does not change voters.
 
 **Discussion handoff:** [status note](../status/all-node-metadata-queries-20261009.md).
+
+<a id="w99"></a>
+
+### W99 · Proactive capacity protection across all disk writers
+
+**Class/state:** user-requested storage admission policy; open, Oct 9, 2026.
+Before storage exhaustion, protect data, metadata/Raft/KV and derived cache
+writers. Support separate disks, cache+metadata sharing, data+metadata sharing
+and all-shared layouts, including multiple data targets per node. Track actual
+shared capacity domains, bytes/inodes/quotas and concurrent consumption.
+
+Authoritative metadata must never be discarded to recover from storage pressure.
+Current four-node defaults do not guarantee survival of any two node losses;
+see the policy note for the data/metadata distinction and required failure audit.
+
+Node and cluster read-only admission must preserve accepted durable work,
+recovery and cleanup, and reflect writable placement and metadata quorum.
+Numeric thresholds, hysteresis and cache-only escalation remain to be selected;
+no runtime policy is implemented by this documentation. W92 cache budgeting
+remains separate implementation work.
+
+**Gate:** constrained-capacity tests for every topology, shared writers, byte/
+inode/quota pressure, cold restart, acknowledged-data integrity and recovery.
+See [policy and pending details](../status/storage-pressure-read-only-20261009.md).
 
 
 ## Appendix 5 — Naming

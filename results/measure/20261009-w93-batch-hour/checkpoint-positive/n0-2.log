@@ -1,0 +1,18 @@
+2026-10-09T21:16:39.032Z storage-engine=files direct_io=on
+2026-10-09T21:16:39.033Z Loaded 3 persisted cluster node(s) from /data1/efs/efs-checkpoint-fault-ayu2b3ag/n0/meta/cluster_nodes.bin
+2026-10-09T21:16:39.033Z   persisted node 1: 127.0.0.1:22430
+2026-10-09T21:16:39.033Z   persisted node 2: 127.0.0.1:22431
+2026-10-09T21:16:39.033Z   persisted node 3: 127.0.0.1:22432
+2026-10-09T21:16:39.033Z Trying to rejoin via persisted peer 127.0.0.1:22431 (node 2)...
+2026-10-09T21:16:39.033Z Cannot connect to peer 127.0.0.1:22431
+2026-10-09T21:16:39.033Z Failed to rejoin via 127.0.0.1:22431
+2026-10-09T21:16:39.033Z Trying to rejoin via persisted peer 127.0.0.1:22432 (node 3)...
+2026-10-09T21:16:39.033Z Cannot connect to peer 127.0.0.1:22432
+2026-10-09T21:16:39.033Z Failed to rejoin via 127.0.0.1:22432
+2026-10-09T21:16:39.033Z Could not rejoin any of the 2 persisted peer(s)
+2026-10-09T21:16:39.033Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-09T21:16:39.033Z heartbeat: enabled (2000 ms interval)
+2026-10-09T21:16:39.036Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-09T21:16:39.036Z kv-obs: mt_bytes=773 l0_bytes=0 l0=0 l1=0
+2026-10-09T21:16:39.036Z raft-host: up raft_id=0 n=3 boot=9861620112272110 salt=3921533731071732617 g0=hosted g2=hosted
+2026-10-09T21:16:39.036Z efsd 0bd7b5be (branch devel-persistence-pressure, built 2026-10-09T21:15:27Z on nuc), build=0bd7b5be-batch: node 1 listening on 127.0.0.1:22430, storage=/data1/efs/efs-checkpoint-fault-ayu2b3ag/n0 (1 paths, stripe=none), used=0, quota=0, direct_io=on, writers=4 shared
