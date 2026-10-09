@@ -3621,6 +3621,19 @@ static void host_durable_synced(struct efs_raft_host *h)
     }
 }
 
+/* Saturate observations: overflow must close admission, never create capacity. */
+static uint64_t host_pressure_add(uint64_t a, uint64_t b)
+{
+    return b > UINT64_MAX-a ? UINT64_MAX : a+b;
+}
+
+static uint64_t host_pressure_charge(uint64_t bytes, uint64_t count)
+{
+    uint64_t bodies = bytes > UINT64_MAX/16 ? UINT64_MAX : bytes*16;
+    uint64_t rows = count > UINT64_MAX/4096 ? UINT64_MAX : count*4096;
+    return host_pressure_add(bodies, rows);
+}
+
 static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
 {
     if (!cmd || !n || n > (256u<<10)) return 0;
@@ -3645,19 +3658,24 @@ static int host_pressure_admit(void *app, const struct efs_raft_entry *entries,
     if (!h->pressure_enabled) return EFS_OK;
     if (efs_kv_lsm_pressure(h->kv,&p) != EFS_OK || p.io_failed) return EFS_ERR_IO;
     for (uint32_t i=0; i<n; i++) {
-        incoming += entries[i].clen;
+        incoming = host_pressure_add(incoming, entries[i].clen);
         if (!host_pressure_recovery(entries[i].cmd,entries[i].clen)) recovery=0;
     }
     for (int i=0; i<HOST_NGROUPS; i++) {
         uint64_t c,b,l;
         if (!h->g[i].r) continue;
         if (efs_raft_backlog(h->g[i].r,&c,&b,&l) != EFS_OK) return EFS_ERR_IO;
-        count+=c; bytes+=b; logs+=l;
+        count=host_pressure_add(count,c);
+        bytes=host_pressure_add(bytes,b);
+        logs=host_pressure_add(logs,l);
     }
-    /* Includes retained log bodies plus a conservative state-machine expansion
-     * charge and per-entry metadata. A caller leaving cannot release this:
+    /* Includes retained log bodies plus the staged expansion estimate
+     * and per-entry metadata. This estimate is not an activation proof
+     * for commands whose state-machine writes exceed their wire size.
+     * A caller leaving cannot release this:
      * only actual apply/truncation/snapshot advances the durable owner. */
-    uint64_t charge=bytes*16+count*4096, need=incoming*16+(uint64_t)n*4096;
+    uint64_t charge=host_pressure_charge(bytes,count);
+    uint64_t need=host_pressure_charge(incoming,n);
     uint64_t cap=HOST_PRESSURE_PENDING_BYTES-(recovery ? 0 : HOST_PRESSURE_PENDING_RESERVE);
     uint64_t logcap=HOST_PRESSURE_LOG_BYTES-(recovery ? 0 : HOST_PRESSURE_LOG_RESERVE);
     uint64_t ncap=HOST_PRESSURE_COUNT-(recovery ? 0 : HOST_PRESSURE_RECOVERY_COUNT);

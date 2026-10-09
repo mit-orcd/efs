@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 root=Path(__file__).resolve().parents[1]
 source=(root/'src/server/raft_host.c').read_text()
-start=source.index('static int host_pressure_recovery(')
+start=source.index('static uint64_t host_pressure_add(')
 end=source.index('/* Propose one command.',start)
 policy=source[start:end]
 limits='\n'.join(re.findall(r'^#define HOST_PRESSURE_.*$',source,re.M))
@@ -64,6 +64,27 @@ int main(void) {
  assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
  log_bytes=0;pending_bytes=HOST_PRESSURE_PENDING_BYTES/16;
  assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ /* Values that wrapped the former multiplication to zero must refuse. */
+ pending_bytes=UINT64_MAX/16+1;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ pending_bytes=0;pending_n=UINT64_MAX/4096+1;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ /* Aggregate two group observations without wrapping count/bytes/logs. */
+ h.g[1].host=&h;h.g[1].r=(struct efs_raft*)&h;
+ pending_n=0;pending_bytes=UINT64_MAX/2+1;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_RECV)==EFS_ERR_BUSY);
+ pending_bytes=0;log_bytes=UINT64_MAX/2+1;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_RECV)==EFS_ERR_BUSY);
+ log_bytes=0;pending_n=UINT64_MAX/2+1;
+ assert(host_pressure_admit(&h.g[0],NULL,0,EFS_RAFT_ADMIT_LEAD)==EFS_ERR_BUSY);
+ pending_n=0;
+ assert(host_pressure_add(UINT64_MAX,1)==UINT64_MAX);
+ assert(host_pressure_charge(UINT64_MAX,UINT64_MAX)==UINT64_MAX);
+ assert(host_pressure_charge(2,3)==32+12288);
+ assert(host_pressure_charge(UINT64_MAX/16,0)==UINT64_MAX-15);
+ assert(host_pressure_charge(UINT64_MAX/16,1)==UINT64_MAX);
+ assert(host_pressure_charge(0,UINT64_MAX/4096)==UINT64_MAX-4095);
+ assert(host_pressure_charge(256,UINT64_MAX/4096)==UINT64_MAX);
  pending_bytes=0;observation.io_failed=1;
  assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_IO);
  assert(host_pressure_admit(&h.g[0],NULL,0,EFS_RAFT_ADMIT_LEAD)==EFS_ERR_IO);

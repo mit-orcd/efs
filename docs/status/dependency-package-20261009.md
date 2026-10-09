@@ -53,3 +53,19 @@ core POSIX212/212, peer64/64 and persistence26/26 pass. Backup ab050595 retained
 reservation released, both mounts serving, both command masks disabled.
 Next unresolved dependency is admission expansion accounting; do not activate
 pressure/D25 from this cleanup acceptance alone.
+
+## Admission arithmetic checkpoint
+
+The next D30 portion saturates cross-group backlog sums, body/entry charge
+multiplication and combined charges. Previously extreme observations could wrap
+to small values and reopen admission. Regression cases cover local admission,
+follower receive and leader eligibility, including multiplication, addition and
+cross-group overflow. Ordinary capacity/recovery reserve behavior is unchanged.
+
+AMD private source: full Linux `make all` and `make test` pass; final strict
+host-pressure fixture passes on AMD and macOS. Installed service remains
+978caaf7, direct/TCP, pressure off. No live activation claim is made for this
+arithmetic fix. Command-specific expansion accounting remains open: the staged
+16x wire-byte plus 4 KiB/entry estimate is not a universal bound, particularly
+for legacy whole-lane/reap replay. Retained charges must follow log ownership
+through apply, truncation and snapshot before pressure activation.
