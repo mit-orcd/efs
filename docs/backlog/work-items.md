@@ -3674,6 +3674,17 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 tracepoint rerun:** newly enabled kernel access allows tracing the running
+NUC daemons without restart. Continuous five-minute capture (1.7 million events,
+zero loss reported) yields n3/n4 1.60/1.47 entries per sync, median one,
+78%/69% single-entry syncs and mean 7.8/7.4 ms. Rare n3 cohorts reach 92 entries;
+the shorter prior traces missed some burst batching. Background GC/reap is
+about 14.5% of n2/n3 WAL traffic. This confirms persistence cost without proving
+a hardware ceiling; internal hold/queue/eligibility instrumentation and controlled
+policy A/B remain the next gate. The earlier generator stop claim is corrected:
+inherited ignored SIGINT prevented stopping; the same bounded loader was reused.
+[Tracepoint evidence and limitations](../status/durability-tracepoints-profile-20261009.md).
+
 **Oct 9 production measurement:** unchanged NUC build `800122c5e86d` was traced
 in three windows per daemon during a five-minute eight-worker tiny-file run.
 n3/n4 average 1.34/1.39 entries per WAL sync, with 76%/73% single-entry barriers

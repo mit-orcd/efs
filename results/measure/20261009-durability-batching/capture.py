@@ -16,7 +16,9 @@ assert len(servers) == 4
 out = '/data1/efs/mnt/tiny-batching-20261009'
 assert not Path(out).exists()
 progress = open(base/'progress.log', 'w')
-loader = subprocess.Popen(['python3', '/home/efs/tiny_files.py', '--max-depth', '8', '--max-files-per-folder', '1000', '--max-files', '50000', '--workers', '8', out], stdout=progress, stderr=progress)
+# Restore SIGINT before exec: nohup/background launch may inherit it ignored.
+# This collector is single-threaded at spawn; the production generator is unchanged.
+loader = subprocess.Popen(['python3', '/home/efs/tiny_files.py', '--max-depth', '8', '--max-files-per-folder', '1000', '--max-files', '50000', '--workers', '8', out], stdout=progress, stderr=progress, preexec_fn=lambda:signal.signal(signal.SIGINT,signal.SIG_DFL))
 (base/'loader.pid').write_text(str(loader.pid))
 start = time.monotonic()
 schedule = [(wave, node, 30+wave*100+(node-1)*8) for wave in range(3) for node in range(1,5)]

@@ -1,0 +1,18 @@
+{
+  "1": {
+    "path": "/data1/efs/n1/mdraft/log/raft.log",
+    "inode": 139396
+  },
+  "2": {
+    "path": "/data1/efs/n2/mdraft/log/raft.log",
+    "inode": 1879198860
+  },
+  "3": {
+    "path": "/home/efs/additional-work-dir/n3/mdraft/log/raft.log",
+    "inode": 1610612913
+  },
+  "4": {
+    "path": "/home/efs/additional-work-dir/n4/mdraft/log/raft.log",
+    "inode": 1342177459
+  }
+}

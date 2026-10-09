@@ -119,8 +119,12 @@ Separately compare n3/n4 device placement and filesystem configuration with the
 same workload. Do not disable barriers, weaken ACK durability or assume a larger
 batch cap helps when current batches are far below the existing limits.
 
-At 300 seconds the collector sends one SIGINT to stop generator scheduling;
-the executor drains already-queued tasks before exit. The recording is complete;
-no forced kill or data removal is used. Test data is retained. Consult remote
-`loader-exit.json` for eventual drain completion rather than treating the final
-capture count as a verified filesystem count.
+**Shutdown correction, discovered during the tracepoint rerun:** at 300 seconds
+the collector sends one SIGINT, but the nohup/background launch inherited
+SIGINT ignored. The generator therefore did not stop scheduling as previously
+reported; it continues toward its bounded 50,000-file target. The absence of
+`loader-exit.json` was not proof of draining. This affects shutdown interpretation,
+not the completed 300-second measurement. No forced kill or data removal was
+used. The rerun reuses this generator instead of starting a competing workload.
+Future collectors must explicitly restore SIGINT handling or use a cooperative
+stop event. Test data is retained; capture counts are not verified filesystem counts.
