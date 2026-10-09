@@ -24,6 +24,7 @@ from raft_tail import commands as raft_commands
 import time
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
 p.add_argument('--mount-sync',action='store_true',help='run only mount-wide sync acceptance: ordinary writes, peer-before-close, cold bytes and deletion')
 p.add_argument('--mode', choices=('buffered', 'direct'), required=True)
 p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
@@ -362,6 +363,28 @@ try:
     start()
     run([source/'efs-mgmt','raft-mkfs',f'127.0.0.1:{a.port}'])
     mount_client()
+    if a.append_truncate_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        for index in range(8):
+            run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+                 '--parent',f'append-truncate-{index}','--filter','peer_append_while_truncate',
+                 '--results',work/f'append-truncate-{index}.tsv'],timeout=120)
+            if index==3:
+                run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+                unmount();stop();start();mount_client()
+                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+                wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'cold peer mounted',40)
+        run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+             '--parent','append-handoff','--filter','peer_concurrent_append',
+             '--results',work/'append-handoff.tsv'],timeout=240)
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        wait(drained,'append/truncate physical deletion drained',180)
+        (work/'append-truncate-verdict.json').write_text(json.dumps({'pass':True,'truncate_repeats':8,'concurrent_append_records':800,'cold_restart_after_repeat':4},indent=2))
+        unmount();stop()
+        print('eight peer append/truncate races, concurrent handoff and cold restart PASS',flush=True)
+        raise SystemExit(0)
     if a.fuse_reply_failure:
         from fuse_reply_failure import exercise as reject_replies
         evidence=reject_replies(mount,work,source,a.port,env)

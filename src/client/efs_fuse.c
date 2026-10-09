@@ -1824,6 +1824,10 @@ static pthread_mutex_t g_open_mu = PTHREAD_MUTEX_INITIALIZER;
 struct efs_open_ref {
     efs_ino_t ino;
     uint64_t n;
+    uint32_t append_burst;
+    uint64_t append_burst_ms;
+    uint64_t append_handoff_ms;
+    int append_publishing;
     int leased; /* first open took HOLD; last close must release it */
     struct efs_open_ref *next;
 };
@@ -2903,6 +2907,26 @@ static int append_retry_wait(efs_ino_t ino,unsigned delay_us,int *held)
     return rc;
 }
 
+/* All local writers honor a publication handoff. In-flight writers finish
+ * before the publisher takes the append stripe; later reservations wait
+ * without owning it, allowing queued PUT/REPORT work to drain. */
+static int append_publication_wait(efs_ino_t ino,int *held)
+{
+    for (;;) {
+        uint64_t until=0,now=stats_now_ms();int publishing=0;
+        pthread_mutex_lock(&g_open_mu);
+        for(struct efs_open_ref *r=g_open_refs;r;r=r->next) {
+            if(r->ino!=ino)continue;
+            publishing=r->append_publishing;until=r->append_handoff_ms;break;
+        }
+        pthread_mutex_unlock(&g_open_mu);
+        if(!publishing && until<=now)return EFS_OK;
+        unsigned delay=publishing?2000u:(unsigned)((until-now)*1000u);
+        int rc=append_retry_wait(ino,delay,held);
+        if(rc!=EFS_OK)return rc;
+    }
+}
+
 /* Cross-client append: reserve the region at the metadata owner so two
  * clients never write at the same end offset. A second client's uuid is
  * BUSY while the first still has OPEN reservations (in-place fragments
@@ -2928,6 +2952,8 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
         int delay_us = 2000;
         for (int attempt = 0; attempt < 400; attempt++) {
             if(efs_client_rpc_past_deadline()){rc=EFS_ERR_BUSY;break;}
+            rc=append_publication_wait(ino,&held);
+            if(rc!=EFS_OK)break;
             rc = efs_client_rpc_append_reserve(g_client.export_id, ino, len, &q,
                                                &ns, &start);
             if (rc == EFS_OK && ns >= len)
@@ -2984,14 +3010,55 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
     efs_client_lock_dir(ino);
     pthread_mutex_lock(&g_client.idx_mu);
     struct efs_inode cur;
-    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0 &&
-        cur.size < ns)
+    /* The server's reserved EOF can move backwards after peer truncate.
+     * Keeping the older cached high-water would re-extend it in REPORT. */
+    if (efs_export_get_inode(&g_client.export, ino, &cur) == 0)
         efs_export_set_size(&g_client.export, ino, ns);
     pthread_mutex_unlock(&g_client.idx_mu);
     efs_client_unlock_dir(ino);
     if (off_out)
         *off_out = (off_t)off;
     return 0;
+}
+
+/* Bound unpublished append ownership even for an fd kept open indefinitely.
+ * Publishing at most 32 writes (or one second) amortizes PUT/REPORT while
+ * keeping reservation completion below the RPC budget and giving a peer
+ * an opportunity to acquire the append cursor. Never publish a reflected
+ * reservation before its bytes: this runs before accepting the NEXT write,
+ * through the same queued-write/stripe/PUT/REPORT barrier as fsync. */
+static int append_publish_burst(efs_ino_t ino)
+{
+    int publish = 0;
+    uint64_t now = stats_now_ms();
+    pthread_mutex_lock(&g_open_mu);
+    for (struct efs_open_ref *r = g_open_refs; r; r = r->next) {
+        if (r->ino != ino)continue;
+        if(r->append_publishing)break;
+        if (!r->append_burst_ms)r->append_burst_ms = now;
+        if (r->append_burst >= 32 || now - r->append_burst_ms >= 1000) {
+            publish = 1;
+            r->append_publishing = 1;
+            r->append_burst = 0;
+            r->append_burst_ms = now;
+        }
+        r->append_burst++;
+        break;
+    }
+    pthread_mutex_unlock(&g_open_mu);
+    if(!publish)return EFS_OK;
+    int rc=efs_append_flush_report(NULL,ino);
+    pthread_mutex_lock(&g_open_mu);
+    for(struct efs_open_ref *r=g_open_refs;r;r=r->next) {
+        if(r->ino!=ino)continue;
+        r->append_publishing=0;
+        /* BUSY backoff caps at 64 ms. Leave a 100 ms admission window
+         * after durable publication so a competing client can retry. */
+        if(rc==EFS_OK)r->append_handoff_ms=stats_now_ms()+100;
+        break;
+    }
+    pthread_mutex_unlock(&g_open_mu);
+    return rc;
 }
 
 /* Reserve worst-case chunk capacity before any append range is accepted.
@@ -3120,6 +3187,8 @@ static int efs_fuse_write_admitted(const char *path, const char *buf, size_t siz
         return -EINVAL;
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
+        int publish_rc = append_publish_burst(ino);
+        if (publish_rc != EFS_OK)return fuse_stat_errno(publish_rc);
         int lock_rc = wb_lock_budget(append_mu(ino));
         if (lock_rc != EFS_OK)
             return fuse_stat_errno(lock_rc);
@@ -3252,6 +3321,8 @@ static int efs_fuse_write_buf_admitted(const char *path, struct fuse_bufvec *buf
 
     int append = fi && (fi->flags & O_APPEND);
     if (append) {
+        int publish_rc = append_publish_burst(ino);
+        if (publish_rc != EFS_OK)return fuse_stat_errno(publish_rc);
         int lock_rc = wb_lock_budget(append_mu(ino));
         if (lock_rc != EFS_OK)
             return fuse_stat_errno(lock_rc);
