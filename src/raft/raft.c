@@ -1775,12 +1775,13 @@ int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg)
  * This deliberately starts narrower than all AE traffic: log matching must
  * already hold and every entry must extend the current tail. */
 static int recv_can_batch(struct efs_raft *r, const struct efs_raft_msg *m,
-                          uint64_t *bytes)
+                          uint64_t *bytes, enum efs_batch_counter *reject)
 {
     uint64_t index, term;
+    *reject = BO_ELIGIBLE;
     *bytes = 0;
     /* Preserve the original short-circuit order and admission callbacks. */
-#define REJECT_IF(test, reason) do { if (test) { BO_COUNT(reason); return 0; } } while (0)
+#define REJECT_IF(test, reason) do { if (test) { *reject = reason; BO_COUNT(reason); return 0; } } while (0)
     REJECT_IF(!r->store->batch_begin || !r->store->batch_end, BO_NO_STORE);
     REJECT_IF(r->role != EFS_RAFT_FOLLOWER, BO_ROLE);
     REJECT_IF(m->type != EFS_RAFT_MSG_AE_REQ, BO_TYPE);
@@ -1789,13 +1790,19 @@ static int recv_can_batch(struct efs_raft *r, const struct efs_raft_msg *m,
     REJECT_IF(!m->nentries, BO_EMPTY);
     REJECT_IF(m->nentries > EFS_RAFT_AE_MAX, BO_ENTRY_LIMIT);
     REJECT_IF(last_log(r, &index, &term) != EFS_OK, BO_LOG_READ);
-    REJECT_IF(m->prev_index != index || m->prev_term != term, BO_TAIL);
+    if (m->prev_index != index || m->prev_term != term) {
+        BO_COUNT(BO_TAIL);
+        *reject = m->prev_index < index ? BO_TAIL_BEHIND :
+                  m->prev_index > index ? BO_TAIL_AHEAD : BO_TAIL_TERM;
+        BO_COUNT(*reject);
+        return 0;
+    }
     for (uint32_t i = 0; i < m->nentries; i++) {
         REJECT_IF(is_cfg_cmd(m->entries[i].cmd, m->entries[i].clen), BO_CONFIG);
         *bytes += m->entries[i].clen;
     }
     if (r->admit && r->admit(r->app, m->entries, m->nentries,
-                             EFS_RAFT_ADMIT_RECV) != EFS_OK) { BO_COUNT(BO_ADMIT); return 0; }
+                             EFS_RAFT_ADMIT_RECV) != EFS_OK) { *reject = BO_ADMIT; BO_COUNT(BO_ADMIT); return 0; }
     REJECT_IF(*bytes > EFS_RAFT_AE_BYTES, BO_BYTES);
 #undef REJECT_IF
     BO_COUNT(BO_ELIGIBLE);
@@ -1856,15 +1863,17 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
     if (r->storage_failed) return EFS_ERR_IO;
     for (uint32_t i = 0; i < n; i++) {
         uint64_t bytes;
-        int eligible = recv_can_batch(r, &msgs[i], &bytes);
+        enum efs_batch_counter reject;
+        int eligible = recv_can_batch(r, &msgs[i], &bytes, &reject);
         if (r->recv_replies && (!eligible || total + bytes > EFS_RAFT_AE_BYTES)) {
             BO_COUNT(!eligible ? BO_FOLLOW_INELIGIBLE : BO_FOLLOW_BYTES);
+            if (!eligible && BO_ON()) efs_batch_obs_reject(reject);
             rc = recv_batch_finish(r, EFS_OK);
             if (rc != EFS_OK) return rc;
             replies.n = 0;
             replies.obs_entries = 0;
             total = 0;
-            eligible = recv_can_batch(r, &msgs[i], &bytes);
+            eligible = recv_can_batch(r, &msgs[i], &bytes, &reject);
         }
         if (eligible && !r->recv_replies) {
             rc = r->store->batch_begin(r->store_ctx);

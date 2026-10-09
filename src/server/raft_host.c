@@ -8345,6 +8345,7 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
 
         pthread_mutex_unlock(&h->inbox_mu);
         n = __atomic_add_fetch(&h->inbox_drop, 1, __ATOMIC_RELAXED);
+        BO_COUNT(BO_INBOX_DROP);
         if (n <= 10)
             fprintf(stderr,
                     "raft-host: inbox full, dropped frame type=%u group=%u "

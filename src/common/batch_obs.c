@@ -8,7 +8,7 @@
 
 int efs_batch_obs_on;
 static pthread_once_t once = PTHREAD_ONCE_INIT;
-static uint64_t counters[BO_COUNTER_N], last_dump;
+static uint64_t counters[BO_COUNTER_N], rejected[BO_COUNTER_N], last_dump;
 /* Bin 0 is exactly zero; bin 1 exactly one; subsequent bins are powers of
  * two with inclusive upper bounds, last bin overflow. Fixed resident memory. */
 #define BINS 25
@@ -18,7 +18,7 @@ static const char *cn[BO_COUNTER_N] = {
     "eligible", "reject_store", "reject_role", "reject_type", "reject_route", "reject_term",
     "reject_empty", "reject_entries", "reject_log", "reject_tail", "reject_config", "reject_admit", "reject_bytes",
     "follow_end", "follow_ineligible", "follow_bytes", "follow_error",
-    "host_end", "host_group", "host_count", "host_bytes", "inbox_empty", "spin_cap"
+    "host_end", "host_group", "host_count", "host_bytes", "inbox_empty", "spin_cap", "tail_behind", "tail_ahead", "tail_term", "inbox_drop"
 };
 static const char *hn[BH_HIST_N] = {
     "wal_entries", "wal_bytes", "sync_us", "sync_wait_us", "sync_waiters",
@@ -42,6 +42,10 @@ uint64_t efs_batch_obs_now_us(void)
 void efs_batch_obs_count(enum efs_batch_counter key)
 {
     __atomic_add_fetch(&counters[key], 1, __ATOMIC_RELAXED);
+}
+void efs_batch_obs_reject(enum efs_batch_counter key)
+{
+    __atomic_add_fetch(&rejected[key], 1, __ATOMIC_RELAXED);
 }
 void efs_batch_obs_hist(enum efs_batch_hist key, uint64_t value)
 {
@@ -69,6 +73,9 @@ void efs_batch_obs_dump(uint64_t now_us)
     fprintf(stderr,"batch-obs {\"mono_us\":%llu,\"counters\":{",(unsigned long long)now_us);
     for (i=0;i<BO_COUNTER_N;i++)
         fprintf(stderr,"%s\"%s\":%llu",i?",":"",cn[i],(unsigned long long)__atomic_load_n(&counters[i],__ATOMIC_RELAXED));
+    fprintf(stderr,"},\"follow_reject\":{");
+    for (i=0;i<BO_COUNTER_N;i++)
+        fprintf(stderr,"%s\"%s\":%llu",i?",":"",cn[i],(unsigned long long)__atomic_load_n(&rejected[i],__ATOMIC_RELAXED));
     fprintf(stderr,"},\"hist\":{");
     for (i=0;i<BH_HIST_N;i++) {
         fprintf(stderr,"%s\"%s\":{\"n\":%llu,\"sum\":%llu,\"max\":%llu,\"bins\":[",i?",":"",hn[i],

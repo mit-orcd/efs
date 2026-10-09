@@ -10,7 +10,7 @@ enum efs_batch_counter {
     BO_EMPTY, BO_ENTRY_LIMIT, BO_LOG_READ, BO_TAIL, BO_CONFIG, BO_ADMIT, BO_BYTES,
     BO_FOLLOW_END, BO_FOLLOW_INELIGIBLE, BO_FOLLOW_BYTES, BO_FOLLOW_ERROR,
     BO_HOST_END, BO_HOST_GROUP, BO_HOST_COUNT, BO_HOST_BYTES, BO_INBOX_EMPTY,
-    BO_SPIN_CAP, BO_COUNTER_N
+    BO_SPIN_CAP, BO_TAIL_BEHIND, BO_TAIL_AHEAD, BO_TAIL_TERM, BO_INBOX_DROP, BO_COUNTER_N
 };
 enum efs_batch_hist {
     BH_WAL_ENTRIES, BH_WAL_BYTES, BH_SYNC_US, BH_SYNC_WAIT_US,
@@ -22,6 +22,7 @@ extern int efs_batch_obs_on;
 void efs_batch_obs_init(void);
 uint64_t efs_batch_obs_now_us(void);
 void efs_batch_obs_count(enum efs_batch_counter key);
+void efs_batch_obs_reject(enum efs_batch_counter key);
 void efs_batch_obs_hist(enum efs_batch_hist key, uint64_t value);
 void efs_batch_obs_dump(uint64_t now_us);
 #define BO_ON() __atomic_load_n(&efs_batch_obs_on, __ATOMIC_RELAXED)
