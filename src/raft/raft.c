@@ -894,6 +894,12 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     }
     rc = send_msg(r, &m);
     if (rc == EFS_OK) {
+        if (m.nentries && BO_ON()) {
+            enum efs_batch_counter why = !r->ae_inflight[to] ? BO_AE_INITIAL :
+                r->ticks - r->ae_inflight_tick[to] >= (uint64_t)r->heartbeat_ticks ? BO_AE_TIMEOUT :
+                r->ae_inflight[to] == ni && ni + m.nentries - 1 > r->ae_inflight_end[to] ? BO_AE_EXTEND : BO_AE_OTHER;
+            BO_COUNT(why);
+        }
         ae_inflight_set(r, to, m.nentries ? ni : 0,
                         m.nentries ? ni + m.nentries - 1 : m.prev_index);
         /* Entries were left behind this window: it hit the entry or
@@ -1366,8 +1372,11 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     /* A commit probe echoes vote_granted. Clearing inflight here would
      * forget an entry batch that is still unanswered. */
-    if (!in->vote_granted)
+    if (!in->vote_granted) {
+        if (in->success && r->ae_inflight[in->from])
+            BO_COUNT(in->match_index < r->ae_inflight_end[in->from] ? BO_REPLY_PARTIAL : BO_REPLY_COVERED);
         r->ae_inflight[in->from] = 0;
+    }
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
         if (in->match_index > r->match_index[in->from])

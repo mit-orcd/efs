@@ -8346,6 +8346,8 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
         pthread_mutex_unlock(&h->inbox_mu);
         n = __atomic_add_fetch(&h->inbox_drop, 1, __ATOMIC_RELAXED);
         BO_COUNT(BO_INBOX_DROP);
+        if (BO_ON()) BO_COUNT(payload[0] != EFS_RAFT_MSG_AE_REQ ? BO_DROP_OTHER :
+                              outbox_nentries(payload, plen) ? BO_DROP_DATA : BO_DROP_EMPTY);
         if (n <= 10)
             fprintf(stderr,
                     "raft-host: inbox full, dropped frame type=%u group=%u "
@@ -8366,6 +8368,8 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
     h->inbox[h->inbox_n].buf = copy;
     h->inbox[h->inbox_n].len = plen;
     h->inbox_n++;
+    if (BO_ON() && payload[0] == EFS_RAFT_MSG_AE_REQ)
+        BO_COUNT(outbox_nentries(payload, plen) ? BO_ACCEPT_DATA : BO_ACCEPT_EMPTY);
     pthread_mutex_unlock(&h->inbox_mu);
     /* Wake the pump now (not at the next 5 ms tick). Lock-free on purpose:
      * this handler must never queue on h->mu — h->mu serializes all raft
