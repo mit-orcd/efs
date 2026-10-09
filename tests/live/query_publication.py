@@ -325,11 +325,23 @@ try:
         if node>1:args+=['--join',f'127.0.0.1:{base}']
         procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
         wait_for(lambda: 'listening' in (work/f'n{node}-restart.log').read_text(),10)
-    def rebuilt(node):
-        return any('generation=1 ' in line and 'rebuilt=4096 ' in line and expected_root in line
-                   for line in (work/f'n{node}-restart.log').read_text().splitlines() if 'query-publish:' in line)
-    wait_for(lambda:rebuilt(2) and rebuilt(3))
-    print('restart rebuild from persisted metadata PASS',flush=True)
+    def recovered(node):
+        lines=(work/f'n{node}-restart.log').read_text().splitlines()
+        restored=any('query-restore: rc=0 backend=disk' in line for line in lines)
+        return any('generation=1 ' in line and expected_root in line and
+                   ('rebuilt=4096 ' in line or restored)
+                   for line in lines if 'query-publish:' in line)
+    wait_for(lambda:recovered(2) and recovered(3))
+    print('restart catalog restore/rebuild from persisted metadata PASS',flush=True)
+    if os.environ.get('EFS_QUERY_RPC')=='1' and os.environ.get('EFS_QUERY_FUSE')!='1':
+        def recovered_names(node):
+            reply,text=query(base+node-1,request(operation=1,match=1,term=b'file-'))
+            if reply.status in (-8,-13):return False
+            assert reply.status==0,(node,reply.status,text)
+            assert set(text.splitlines())=={f'file-{i}'.encode() for i in range(4)},text
+            return True
+        for node in (2,3):wait_for(lambda node=node:recovered_names(node))
+        print('restart RPC filenames match independent CREATE oracle PASS',flush=True)
     if os.environ.get('EFS_QUERY_POLICY')=='1':
         import json
         for node in (2,3):
