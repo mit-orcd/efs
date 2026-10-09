@@ -1637,7 +1637,7 @@ positions do not assign an execution order or override the active handoff.
 | spec3 | **W73** · synchronous application-write publication | integration | implemented — explicit O_SYNC/O_DSYNC publication passes AMD direct/TCP small/queued/append, peer-before-close and cold crash gates; mount-sync and final mode matrix owed | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | fixed 2+1; no automatic repair/profile cutover; accepted design exceeds current capability | [evidence and gate](#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
-| spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: 512 concurrent identity owners refuse saturation safely; all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
+| spec6 | **W76** · opid table exhaustion sends unprotected namespace retries | conditional correctness | Closed: bounded identity admission refuses saturation safely; Oct9 reserves receipt capacity with16 unacknowledged positions (512 tracker slots); all four lost-reply mutations replay across leader death/restart with one effect | [evidence and gate](#w76) |
 | spec7 | **W77** · atomic multi-chunk public publication/observation | integration gap | per-group REPORT/per-chunk publication; request-wide decision/read-validation gate unestablished | [evidence and gate](#w77) |
 | op2 | **W78** · server wrapper trusts PID-file process identity | conditional operator correctness | identity-checked pidfd daemon/recorder retirement implemented; NUC ownership fixtures pass; daemon shutdown remains W65 | [evidence and gate](#w78) |
 | op3 | **W79** · mkfs help/name argument disagrees with single-export handler | operator observability | legacy label explicitly reported as ignored; extra arguments rejected; NUC repeated mkfs preserves salt/namespace | [evidence and gate](#w79) |
@@ -5105,6 +5105,14 @@ an unreviewed on-disk format change or claiming repair from a decode fallback.
 <a id="w76"></a>
 
 ### W76 · Namespace opid capacity exhaustion silently removes retry identity (queue row spec6)
+
+**Oct9 integration follow-up:** the FUSE sequenced ownership gate found that
+later known replies could fill all16 receipt slots and block the oldest unknown
+CLOSE. Admission now bounds unacknowledged sequence positions to16 while keeping
+the512-slot physical tracker. A free non-oldest slot does not bypass this bound.
+The updated threaded admission test and AMD212/212 + peer64/64 pass.
+[Evidence](../../results/measure/20261009-fuse-retained-create/README.md).
+
 
 **Closed on targeted acceptance (Oct 7):** 512 concurrent production
 identity owners have distinct slots/sequences. All four mutation callers send

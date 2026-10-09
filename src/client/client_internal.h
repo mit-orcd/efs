@@ -238,7 +238,8 @@ int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino,
                                    struct efs_msg_lane_writer_view_reply *out);
 int efs_client_publication_id(uint64_t sequence, struct efs_opid *);
 /* Explicit pre-write session admission; never call to reinterpret old bytes. */
-/* Retain exact q/generation/body until known=1 or proven session revocation.
+/* Retain identity/generation/body until known=1 or proven session revocation.
+ * ACK may advance only below the oldest unresolved shared operation.
  * Requires explicit session establishment; probing has no admission effects. */
 int efs_client_rpc_lease_edge(efs_ino_t,uint64_t,const struct efs_opid_req *,
     unsigned flags,uint64_t pending_token,int probe,uint64_t *known);
@@ -253,6 +254,20 @@ struct efs_client_lease_request {
     unsigned flags;
     int slot, active, admitted, attempted, complete, result;
 };
+/* Retained namespace identity and immutable pending-CREATE body. Discovery
+ * and result probes do not admit sessions or mutate namespace state. */
+struct efs_client_create_request {
+    struct efs_msg_create_retained wire;
+    struct efs_inode inode;
+    uint64_t generation;
+    int slot,active,attempted,admitted,complete,result;
+};
+int efs_client_create_begin(struct efs_client_create_request *,efs_ino_t,
+                             const char *,uint32_t,uid_t,gid_t);
+int efs_client_create_resume(struct efs_client_create_request *,int probe_only);
+int efs_client_create_reset(struct efs_client_create_request *);
+int efs_client_create_cancel(struct efs_client_create_request *);
+int efs_client_create_stage_result(const struct efs_client_create_request *);
 int efs_client_lease_begin(struct efs_client_lease_request *,efs_ino_t,
                            uint64_t,unsigned,uint64_t);
 int efs_client_lease_resume(struct efs_client_lease_request *,int probe_only);

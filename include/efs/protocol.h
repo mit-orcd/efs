@@ -177,6 +177,9 @@ enum efs_msg_type {
     EFS_MSG_GC_INODE_REPLY = 122,
     EFS_MSG_QUERY_SNAPSHOT = 123,
     EFS_MSG_QUERY_SNAPSHOT_REPLY = 124,
+    /* Opt-in pending CREATE with exact result proof and retained routing. */
+    EFS_MSG_CREATE_RETAINED = 125,
+    EFS_MSG_CREATE_RETAINED_REPLY = 126,
 };
 
 /* Trusted reaper only: all lanes swept and no remaining open lease.
@@ -736,6 +739,22 @@ struct efs_msg_inode_reply {
      * metadata primary (lowest-id live node) so the client can retry there. */
     efs_node_id_t primary_id;
     struct efs_inode inode;
+};
+
+/* Separate framing keeps historical inode replies unchanged. A read-only
+ * probe may discover routing; once routed, clients retain that shard across
+ * ambiguity. known=1 means a ReadIndex-confirmed namespace receipt. */
+struct efs_msg_create_retained {
+    struct efs_msg_inode_create create;
+    struct efs_opid_req q;
+    uint32_t shard;
+    uint8_t probe, routed;
+};
+struct efs_msg_create_retained_reply {
+    struct efs_msg_inode_reply rpc;
+    uint64_t generation;
+    uint32_t shard;
+    uint8_t routed, known;
 };
 
 #define EFS_READDIR_MAX 64

@@ -50,8 +50,8 @@ static int rpc_send_recv_dual(uint8_t type,const void *buf,uint32_t length,uint8
 static pthread_mutex_t hold_mu=PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t hold_cv=PTHREAD_COND_INITIALIZER;
 static unsigned ready;
-static int release_workers,slots[EFS_OPID_INFLIGHT];
-static struct efs_opid_req concurrent[EFS_OPID_INFLIGHT];
+static int release_workers,slots[EFS_OPID_REPLY_CACHE];
+static struct efs_opid_req concurrent[EFS_OPID_REPLY_CACHE];
 static void *hold_identity(void *value) {
     unsigned i=(unsigned)(uintptr_t)value;
     slots[i]=opid_begin(&concurrent[i]);assert(slots[i]>=0);
@@ -60,8 +60,8 @@ static void *hold_identity(void *value) {
     pthread_mutex_unlock(&hold_mu);opid_end(slots[i]);return NULL;
 }
 int main(void) {
-    struct efs_opid_req held[EFS_OPID_INFLIGHT],q;
-    for(int i=0;i<EFS_OPID_INFLIGHT;i++)assert(opid_begin(&held[i])==i);
+    struct efs_opid_req held[EFS_OPID_REPLY_CACHE],q;
+    for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(opid_begin(&held[i])==i);
     uint64_t next=g_client.opid_next;
     assert(efs_client_rpc_create(1,1,"test",S_IFREG|0600,0,0,0,NULL,NULL)==EFS_ERR_BUSY);
     assert(efs_client_rpc_unlink(1,1,"test",0)==EFS_ERR_BUSY);
@@ -69,17 +69,21 @@ int main(void) {
     assert(efs_client_rpc_link(1,2,1,"test",NULL)==EFS_ERR_BUSY);
     assert(!calls && g_client.opid_next==next);
     opid_end(7);
+    /* A free object slot is insufficient: higher known sequences are still
+     * unacknowledgeable while the oldest remains unresolved. */
+    assert(efs_client_rpc_unlink(1,1,"test",0)==EFS_ERR_BUSY && !calls);
+    opid_end(0);
     assert(efs_client_rpc_unlink(1,1,"test",0)==EFS_OK);
-    assert(calls==1 && last_seq==next && last_ack==held[0].id.seq-1);
-    assert(g_client.opid_inflight[0]==held[0].id.seq);
-    for(int i=0;i<EFS_OPID_INFLIGHT;i++)opid_end(i);
-    pthread_t workers[EFS_OPID_INFLIGHT];pthread_attr_t attr;
+    assert(calls==1 && last_seq==next && last_ack==held[1].id.seq-1);
+    assert(g_client.opid_inflight[1]==held[1].id.seq);
+    for(int i=0;i<EFS_OPID_REPLY_CACHE;i++)opid_end(i);
+    pthread_t workers[EFS_OPID_REPLY_CACHE];pthread_attr_t attr;
     assert(!pthread_attr_init(&attr));assert(!pthread_attr_setstacksize(&attr,256*1024));
-    for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++)assert(!pthread_create(&workers[i],&attr,hold_identity,(void *)(uintptr_t)i));
+    for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(!pthread_create(&workers[i],&attr,hold_identity,(void *)(uintptr_t)i));
     pthread_mutex_lock(&hold_mu);
-    while(ready<EFS_OPID_INFLIGHT)pthread_cond_wait(&hold_cv,&hold_mu);
+    while(ready<EFS_OPID_REPLY_CACHE)pthread_cond_wait(&hold_cv,&hold_mu);
     pthread_mutex_unlock(&hold_mu);
-    for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++)for(unsigned j=0;j<i;j++){
+    for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++)for(unsigned j=0;j<i;j++){
         assert(slots[i]!=slots[j]);assert(concurrent[i].id.seq!=concurrent[j].id.seq);
     }
     unsigned before=calls;
@@ -89,10 +93,10 @@ int main(void) {
     assert(efs_client_rpc_link(1,2,1,"test",NULL)==EFS_ERR_BUSY);
     assert(calls==before);
     pthread_mutex_lock(&hold_mu);release_workers=1;pthread_cond_broadcast(&hold_cv);pthread_mutex_unlock(&hold_mu);
-    for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++)assert(!pthread_join(workers[i],NULL));
+    for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(!pthread_join(workers[i],NULL));
     pthread_attr_destroy(&attr);
     assert(efs_client_rpc_unlink(1,1,"test",0)==EFS_OK && calls==before+1);
-    puts("512 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS");
+    puts("16 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS");
     g_client.opid_next=UINT64_MAX;
     assert(opid_begin(&q)<0 && !efs_opid_req_valid(&q));
     assert(g_client.opid_next==UINT64_MAX);

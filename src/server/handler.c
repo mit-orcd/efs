@@ -704,6 +704,14 @@ send_reply:
             }
             break;
         }
+        case EFS_MSG_CREATE_RETAINED: {
+            struct efs_msg_create_retained_reply reply;
+            memset(&reply,0,sizeof(reply));reply.rpc.status=EFS_INODE_RPC_INVAL;
+            if(payload_len==sizeof(struct efs_msg_create_retained) && server_raft_host_active())
+                server_raft_host_create_retained(payload,&reply);
+            efs_conn_send_msg(conn,EFS_MSG_CREATE_RETAINED_REPLY,&reply,sizeof(reply));
+            break;
+        }
         case EFS_MSG_INODE_LOOKUP:
         case EFS_MSG_INODE_CREATE:
         case EFS_MSG_INODE_GETATTR:

@@ -1137,6 +1137,18 @@ static void create_stage_inode(efs_ino_t parent, const char *name, uint32_t mode
     efs_client_stage_unpin(out->ino);
 }
 
+int efs_client_create_stage_result(const struct efs_client_create_request *request)
+{
+    if(!request || !request->complete || request->result!=EFS_OK ||
+       !request->inode.ino || !S_ISREG(request->inode.mode))return EFS_ERR_STALE;
+    int rc=efs_client_report_admit(2);
+    if(rc!=EFS_OK)return rc;
+    create_stage_inode(request->wire.create.parent,request->wire.create.name,
+        request->wire.create.mode,request->wire.create.uid,request->wire.create.gid,
+        &request->inode);
+    efs_client_report_unreserve();return EFS_OK;
+}
+
 int efs_client_create_result_inode(efs_ino_t parent, const char *name, uint32_t mode,
                                    uid_t uid, gid_t gid, uint32_t flags,
                                    efs_ino_t *ino, struct efs_inode *created)

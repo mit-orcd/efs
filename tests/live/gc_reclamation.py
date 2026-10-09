@@ -193,7 +193,13 @@ blocked=None
 posix_failure=None
 
 def run(args, **kwargs):
-    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+    try:
+        return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+    except subprocess.CalledProcessError as error:
+        # Captured helper assertions must remain visible in saved gate evidence.
+        if error.stdout: print(error.stdout,flush=True)
+        if error.stderr: print(error.stderr,flush=True)
+        raise
 def status_available():
     return status(3)
 
@@ -553,6 +559,21 @@ try:
             pending_path.unlink();pending_dir.rmdir()
             wait(lambda:not files(pending_ino),'pending CREATE adopted/closed inode physical reclaim',180)
         (work/'pending-create-wire.txt').write_text(''.join(pending_results))
+        retained_create=work/'client-retained-create'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_create.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained_create])
+        retained_dir=mount/'retained-create-request';retained_dir.mkdir()
+        retained_results=[]
+        for discard in (0,1):
+            name='retained'+str(discard)
+            retained_results.append(run([retained_create,str(a.port),str(retained_dir.stat().st_ino),name,str(discard)],capture_output=True,text=True,timeout=90).stdout)
+            retained_path=retained_dir/name
+            with retained_path.open('wb') as out:
+                out.write(b'retained create ownership'*4096);out.flush();os.fsync(out.fileno())
+            retained_ino=retained_path.stat().st_ino
+            retained_path.unlink()
+            wait(lambda:not files(retained_ino),'retained CREATE exact adoption and physical reclaim',180)
+        retained_dir.rmdir()
+        (work/'retained-create-wire.txt').write_text(''.join(retained_results))
         client_edge=work/'client-lease-edge'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_lease_edge.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',client_edge])
         edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048

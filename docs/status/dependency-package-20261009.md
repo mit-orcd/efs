@@ -530,3 +530,35 @@ pass; local docs5/5. Installed service restored and reservation released.
 This is compatibility groundwork, not activation of sequenced FUSE ownership.
 Retained FUSE CREATE/adoption/compensating release and OPEN/CLOSE integration,
 namespace/REPORT fencing and production PUT-ticket lifecycle remain open.
+
+
+## Retained FUSE CREATE/adoption and sequenced OPEN/CLOSE — implemented/gated
+
+Supersedes the staged FUSE ownership notes above. Regular CREATE now uses a
+caller-owned pending identity, pure routing/result probes and pinned shard.
+The returned FileID/token is adopted before returning a descriptor. Unknown
+adoption/OPEN/CLOSE stays attached to the inode; last close resolves it before
+compensation. Abandoned CREATE uses a bounded128-entry cleanup queue and clears
+only its exact token, preserving names another client may have moved. Background
+retry progresses old releases; clean stop includes CREATE ownership.
+
+Concurrent gating exposed a real replay-cache deadlock. Later known replies
+filled all16 slots before the oldest unknown CLOSE could commit. Shared nonce
+admission now reserves space for that oldest operation (16 unacknowledged
+sequence positions;512 physical tracker slots). A bounded wait precedes BUSY
+without sending an unidentified mutation. ACK is progress metadata, not frozen
+operation body: it advances only below the oldest unresolved identity. The
+UUID/epoch/sequence/FileID/flags/token remain fixed. This corrects the earlier
+immutable-ACK wording; namespace retries all refresh that safe watermark.
+
+AMD direct/TCP core212/212, peer64/64, discarded CREATE reply recovery, negative
+receipt, pending cold adoption, rejected FUSE replies, append800 and physical
+GC/restart pass. Full code regressions pass after updating the old512-owner
+admission expectation to the stricter16-position bound. Both mounts restored,
+reservation released; local docs5/5.
+[Evidence](../../results/measure/20261009-fuse-retained-create/README.md).
+
+Still open: explicit terminal identity recovery after proven global revocation,
+namespace/REPORT-wide fencing and production PUT-ticket admission, transport,
+durable storage fences, all-member collection and retirement. D25 remains staged;
+this substantial FUSE bridge does not close the entire package.

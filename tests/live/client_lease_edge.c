@@ -26,6 +26,7 @@ static uint64_t legacy_cached(unsigned port,unsigned *node,efs_ino_t ino,
   struct efs_msg_inode_reply reply;memcpy(&reply,body,length);free(body);
   if(reply.status==EFS_INODE_RPC_NOT_PRIMARY){*node=reply.primary_id?reply.primary_id-1:(*node+1)%4;assert(*node<4);usleep(10000);continue;}
   if(reply.status==EFS_INODE_RPC_BUSY){usleep(10000);continue;}
+  if(reply.status!=expected)fprintf(stderr,"legacy append status=%u expected=%u node=%u ino=%llu\n",reply.status,expected,*node,(unsigned long long)ino);
   assert(reply.status==expected);return reply.inode.atime;
  }
  assert(!"legacy cached append deadline");return 0;

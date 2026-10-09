@@ -1,0 +1,50 @@
+./tests/test_store_containers
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: buffered/direct, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS
+python3 tests/test_lookup_errno.py
+FUSE LOOKUP: IO/network/quorum errors stay IO, BUSY/memory/access preserved, only actual absence ENOENT PASS
+python3 tests/test_fuse_open_reply.py
+FUSE CREATE/OPEN: rejected replies and failed reply construction release exactly once PASS
+python3 tests/test_fuse_lease_retention.py
+FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS
+python3 tests/test_lookup_replacement.py
+LOOKUP replacement: missing captured inode retryable locally and forwarded; true absence and IO preserved PASS
+python3 tests/test_w23_samples.py
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+python3 tests/test_read_verify.py
+parallel GET: valid zero/nonzero and corrupt zero/nonzero replies PASS
+python3 tests/test_opid_admission.py
+test: /tmp/efs-opid-admit-_1oexqg4/test.c:272: main: Assertion `opid_begin(&held[i])==i' failed.
+Traceback (most recent call last):
+  File "/data1/efs/lease-retention-src-20261009/tests/test_opid_admission.py", line 107, in <module>
+    subprocess.run([str(binary)],check=True)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/tmp/efs-opid-admit-_1oexqg4/test']' died with <Signals.SIGABRT: 6>.
+Traceback (most recent call last):
+  File "<stdin>", line 8, in <module>
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command 'python3 tests/test_opid_admission.py' returned non-zero exit status 1.
