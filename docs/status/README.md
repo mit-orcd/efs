@@ -27,6 +27,14 @@ the recommended first priorities within this set. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
+## All-node metadata query discussion
+
+[W98 — serve metadata queries through all nodes](all-node-metadata-queries-20261009.md)
+is an open architecture discussion: compare forwarding, federation and derived
+index replication for larger clusters. W92 remains the local disk backend; W66
+retains consensus/routing ownership. This newly registered item is outside the
+dated grouped count below.
+
 ## 1. The task right now
 
 [AMD W73/W64 RXE completion](amd-rxe-gate-closure-20261009.md): integrated
