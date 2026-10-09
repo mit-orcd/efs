@@ -1,0 +1,20 @@
+Evidence: /tmp/efs-read-freshness-4l1kuzbk
+listening True
+listening True
+listening True
+initial leader 0
+both groups formatted True
+PASS: both mkfs aliases preserve namespace/salt and explain ignored legacy label
+majority leader 2
+majority setattr: raft-setattr status=0 primary=3 ino=1 mask=1 mode=040700 nlink=4 size=0 mtime=1791506476
+
+PASS: cross-parent transaction commits on majority; old leader refuses stale source/destination/inode views
+PASS: isolated former leader refuses old session epoch after majority fence
+PASS: majority changed root mode; eight isolated-leader GETATTRs refused stale authority
+PASS: isolated former leader refuses stale LOOKUP after majority rename
+new voter configuration committed True
+PASS: isolated former leader rejects reads across committed voter change
+original voter set restored through catch-up True
+healed renamed lookup True
+healed fenced session True
+healed forwarded read True
