@@ -1372,25 +1372,16 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     /* A commit probe echoes vote_granted. Clearing inflight here would
      * forget an entry batch that is still unanswered. */
-    int retain_window = !in->vote_granted && in->success &&
-                        r->ae_inflight[in->from] &&
-                        in->match_index < r->ae_inflight_end[in->from];
     if (!in->vote_granted) {
         if (in->success && r->ae_inflight[in->from])
             BO_COUNT(in->match_index < r->ae_inflight_end[in->from] ? BO_REPLY_PARTIAL : BO_REPLY_COVERED);
-        if (!retain_window) r->ae_inflight[in->from] = 0;
+        r->ae_inflight[in->from] = 0;
     }
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
         if (in->match_index > r->match_index[in->from])
             r->match_index[in->from] = in->match_index;
         r->next_index[in->from] = r->match_index[in->from] + 1;
-        /* A successful older window proves only a prefix of the newer
-         * outstanding request. Keep its end, age and full-window marker,
-         * aligning the remaining start with proven progress. A covering
-         * reply or rejection clears it; the original timeout still retries. */
-        if (retain_window)
-            r->ae_inflight[in->from] = r->next_index[in->from];
         if (r->read_in_flight == 1 && in->last_log_index == r->read_round &&
             is_voter(r, in->from))
             r->read_acks |= 1u << in->from;
