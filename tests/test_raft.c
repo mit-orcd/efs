@@ -1703,6 +1703,57 @@ static void test_recv_batch(void)
     }
 }
 
+/* Actual core: data/no-op/data share a barrier only when the middle request
+ * proves no log change and carries no fresh read. Failure sends no ACK. */
+static void test_recv_batch_noop(void)
+{
+    for (unsigned enabled=0; enabled<2; enabled++)
+    for (unsigned kind=0; kind<4; kind++)
+    for (unsigned fail=0; fail<2; fail++) {
+        memset(&recv_test,0,sizeof(recv_test));
+        struct efs_raft_store *store=efs_raft_mem_create();
+        struct efs_raft_store ops=*store;recv_test.original=ops;
+        ops.append=recv_test_append;ops.batch_begin=recv_test_begin;
+        ops.batch_end=recv_test_end;
+        struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.group=2;
+        cfg.election_ticks=10;cfg.heartbeat_ticks=1;cfg.store=&ops;
+        cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
+        cfg.batch_noop=(int)enabled;
+        struct efs_raft *r=efs_raft_new(&cfg);CHECK(r!=NULL,"noop fixture");
+        struct efs_raft_msg m[3];memset(m,0,sizeof(m));
+        m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;
+        m[0].group=2;m[0].term=2;
+        CHECK(efs_raft_recv(r,&m[0])==EFS_OK,"noop establish leader");
+        recv_test.replies=0;
+        m[0].nentries=1;m[0].entries[0].term=2;
+        m[0].entries[0].cmd=(const uint8_t*)"a";m[0].entries[0].clen=1;
+        m[0].leader_commit=1;
+        m[1]=m[0];m[1].nentries=0;m[1].vote_granted=1;
+        if(kind==1)m[1]=m[0]; /* duplicate of pending data */
+        if(kind==2)m[1].last_log_index=9; /* fresh read flushes */
+        if(kind==3){m[1].prev_index=1;m[1].prev_term=99;} /* conflict */
+        m[2]=m[0];m[2].prev_index=1;m[2].prev_term=2;m[2].leader_commit=2;
+        recv_test.fail_end=(int)fail;
+        int rc=efs_raft_recv_batch(r,m,3);
+        if(fail) {
+            CHECK(rc==EFS_ERR_IO && !recv_test.replies && !recv_test.applies,
+                  "no-op cohort sync failure never ACKs or applies");
+            recv_test.fail_end=0;
+            CHECK(efs_raft_tick(r)==EFS_ERR_IO,"noop persistence failure fences election");
+        } else if(kind==3) {
+            CHECK(rc==EFS_ERR_PROTO,"conflict with committed prefix is not hidden in noop cohort");
+        } else {
+            CHECK(rc==EFS_OK && recv_test.replies==3 && recv_test.applies==2,
+                  "noop replies and committed data preserved");
+            CHECK(recv_test.barriers==(enabled && kind<2 ? 1u : 2u),
+                  "only proven ordinary no-ops remove a durable boundary");
+            CHECK(recv_test.first_ack_applies==0,"noop cohort ACK remains ahead of apply");
+        }
+        CHECK(!recv_test.depth,"noop hold released on every path");
+        efs_raft_free(r);efs_raft_mem_free(store);
+    }
+}
+
 static int pressure_admit(void *app, const struct efs_raft_entry *e,
                            uint32_t n, int source)
 {
@@ -1775,6 +1826,7 @@ int main(void)
     test_pressure_quorum_and_owned_backlog();
     test_follower_apply_retry();
     test_recv_batch();
+    test_recv_batch_noop();
     test_election_i1();
     test_ae_full_window_not_resent_per_propose();
     test_step_down_no_campaign();

@@ -18,6 +18,7 @@ struct efs_raft {
     efs_raft_admit_fn admit;
     uint64_t pressure_retry_tick[EFS_RAFT_MAX_PEERS];
     int storage_failed; /* failed deferred persistence requires restart */
+    int batch_noop;
     int role;
     int leader;
     uint8_t group;
@@ -1694,6 +1695,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->store_ctx = cfg->store_ctx ? cfg->store_ctx : cfg->store;
     r->send = cfg->send;
     r->send_ready = cfg->send_ready;
+    r->batch_noop = cfg->batch_noop;
     r->net = cfg->net;
     r->apply = cfg->apply;
     r->app = cfg->app;
@@ -1829,6 +1831,32 @@ static int recv_can_batch(struct efs_raft *r, const struct efs_raft_msg *m,
     return 1;
 }
 
+/* Only extend an existing hold with a request that cannot change its log or
+ * hard state. Validate every duplicate term before suppressing the boundary;
+ * a conflict, new suffix, fresh read or changed leader/term keeps the normal
+ * path. Its ACK is queued behind the same durable barrier as the data. */
+static int recv_batch_noop(struct efs_raft *r, const struct efs_raft_msg *m)
+{
+    uint64_t tail, term, pt;
+    if (!r->batch_noop || !r->recv_replies ||
+        r->role != EFS_RAFT_FOLLOWER || m->type != EFS_RAFT_MSG_AE_REQ ||
+        m->group != r->group || m->to != r->id || m->from != r->leader ||
+        m->term != r->current_term || m->last_log_index ||
+        m->nentries > EFS_RAFT_AE_MAX ||
+        last_log(r, &tail, &term) != EFS_OK || m->prev_index > tail ||
+        m->nentries > tail - m->prev_index ||
+        log_term(r, m->prev_index, &pt) != EFS_OK || pt != m->prev_term)
+        return 0;
+    for (uint32_t i = 0; i < m->nentries; i++) {
+        if (is_cfg_cmd(m->entries[i].cmd, m->entries[i].clen) ||
+            log_term(r, m->prev_index + 1 + i, &pt) != EFS_OK ||
+            pt != m->entries[i].term)
+            return 0;
+    }
+    BO_COUNT(BO_BATCH_NOOP);
+    return 1;
+}
+
 static int recv_batch_finish(struct efs_raft *r, int prior)
 {
     struct recv_replies *q = r->recv_replies;
@@ -1884,7 +1912,11 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
     for (uint32_t i = 0; i < n; i++) {
         uint64_t bytes;
         enum efs_batch_counter reject;
-        int eligible = recv_can_batch(r, &msgs[i], &bytes, &reject);
+        int noop = recv_batch_noop(r, &msgs[i]);
+        int eligible;
+        bytes = 0;
+        reject = BO_ELIGIBLE;
+        eligible = noop || recv_can_batch(r, &msgs[i], &bytes, &reject);
         if (r->recv_replies && (!eligible || total + bytes > EFS_RAFT_AE_BYTES)) {
             BO_COUNT(!eligible ? BO_FOLLOW_INELIGIBLE : BO_FOLLOW_BYTES);
             if (!eligible && BO_ON()) efs_batch_obs_reject(reject);
@@ -1910,7 +1942,7 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
         }
         if (r->recv_replies) {
             total += bytes;
-            if (BO_ON()) replies.obs_entries += msgs[i].nentries;
+            if (BO_ON() && !noop) replies.obs_entries += msgs[i].nentries;
         }
     }
     if (r->recv_replies) BO_COUNT(BO_FOLLOW_END);

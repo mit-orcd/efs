@@ -258,7 +258,10 @@ static int log_write_locked(struct efs_raft_disk *d, uint8_t type,
         return rc;
     }
     d->bytes += len;
-    if (BO_ON() && type == RAFT_REC_ENTRY) d->obs_entries++;
+    if (BO_ON() && type == RAFT_REC_ENTRY) {
+        d->obs_entries++;
+        efs_batch_obs_command(clen ? cmd[0] : 0);
+    }
     if (d->allocated_bytes < d->bytes)
         d->allocated_bytes = d->bytes;
     return EFS_OK;
