@@ -102,3 +102,51 @@ release or fsync success. Mapping-committed/apply-pending proof and immutable
 ownership on the production REPORT path remain open; D29/W88 and D30 activation
 are not complete. The installed AMD service remains at its earlier deployment,
 with pressure admission disabled; these tests use private stores and ports.
+
+
+## Agent 4 follow-up: committed command while apply is pending
+
+The typed endpoint now distinguishes `APPLY_PENDING` (state 5) from admitted
+intent `PENDING` (state 4). On an apply timeout it obtains a fresh correlated
+quorum round from the current leader and searches at most 64 committed,
+unapplied log entries for the exact immutable mapping command. It checks the
+already-applied session admission and intent digest. Admission-only entries,
+proposed/uncommitted indices, changed payloads and missing retained commands
+cannot provide this proof. A follower redirects to the leader; absence of proof
+remains unknown. Retirement cannot use this fallback.
+
+The quorum-only inspection preserves the existing own-term commitment and
+configuration checks. It is independent of local apply; all ordinary KV reads
+still require apply through their fresh ReadIndex. The proof establishes command
+commitment, not a successful CAS or a fresh terminal KV verdict. The eventual
+mapping may reject. Clients refuse byte release and ordered ACK consumption for
+both pending states. The final receipt uses the same actual mapping index/term,
+including after cold replay in a later leadership term.
+
+[AMD evidence](../../results/measure/20261008-publication-apply-pending/README.md)
+includes full units, cache/ACK ownership tests, fault release and all-daemon
+crash after committed mapping but before apply. Only private daemons/stores are
+faulted. The live intent deliberately rejects; no hardware durability or active
+production REPORT claim follows from it.
+
+### Production REPORT integration findings
+
+The current production path still cannot be activated as typed publication by
+changing its RPC call alone. `put_id` retains one mutable latest PUT per chunk;
+newer PUTs can replace that identity. REPORT reconstructs base/size on later
+flushes, and aggregate STALE triggers a whole-set repull/replay. Direct full
+writes can release their body after fragment PUT before metadata publication.
+FileID is absent from the legacy inode cache, and production mount sessions are
+not established for typed publication. These are concrete ownership/admission
+requirements, not receipt-proof defects.
+
+The remaining migration must capture FileID/authority before byte admission,
+retain a budgeted immutable request and accepted bytes independently of newer
+writes, resolve and consume each exact terminal result before any rebase, and
+retain ordered retirement ownership across lost ACKs. It must cover both write
+entry points and both flush paths, including zero/full overwrites. Existing
+D25 typed helpers cannot adopt previously accepted legacy bytes. D25 public
+logical resize remains disabled; completing D29 must not silently enable it.
+
+D29/W88 and D30 default activation remain open until that migration and its
+real-byte FUSE fault/recovery gates pass. No new installed deployment is claimed.

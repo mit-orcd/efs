@@ -13,8 +13,11 @@ import time
 source=Path(__file__).resolve().parents[2]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('work',type=Path)
+p.add_argument('--apply-pending',action='store_true')
 a=p.parse_args();work=a.work.resolve();work.mkdir(parents=True,exist_ok=False)
 env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp')
+gate=work/'park-publication-apply'
+if a.apply_pending:env['EFS_FAULT_PUBLICATION_APPLY_FILE']=str(gate)
 for base in range(25000,25200,4):
     sockets=[]
     try:
@@ -78,7 +81,11 @@ try:
     subprocess.run([str(probe),str(base),str(source/'efs-mgmt'),'prepare',str(work/'request.bin'),created[0]],env=env,check=True,timeout=90)
     stop(crash=True)
     start('-restart');time.sleep(3)
-    subprocess.run([str(probe),str(base),str(source/'efs-mgmt'),'finish',str(work/'request.bin'),created[0]],env=env,check=True,timeout=90)
+    if a.apply_pending:gate.touch()
+    subprocess.run([str(probe),str(base),str(source/'efs-mgmt'),'park' if a.apply_pending else 'finish',str(work/'request.bin'),created[0]],env=env,check=True,timeout=90)
+    if a.apply_pending:
+        stop(crash=True);gate.unlink();start('-mapping-restart');time.sleep(3)
+        subprocess.run([str(probe),str(base),str(source/'efs-mgmt'),'resolve',str(work/'request.bin'),created[0]],env=env,check=True,timeout=90)
     stop()
     print('publication pending: direct/TCP lost ACK, four-daemon crash and cold recovery PASS',flush=True)
 finally:

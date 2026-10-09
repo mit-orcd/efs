@@ -2224,6 +2224,17 @@ uint64_t efs_raft_read_index(const struct efs_raft *r)
     return r ? r->read_index : 0;
 }
 
+int efs_raft_read_quorum(const struct efs_raft *r)
+{
+    uint64_t term=0;
+    if (!r || r->storage_failed || r->role!=EFS_RAFT_LEADER ||
+        !r->read_in_flight || r->read_cfg_old!=r->log_old ||
+        r->read_cfg_new!=r->log_new || !quorum_ok(r,r->read_acks)) return 0;
+    /* The same own-term commitment required by normal ReadIndex. */
+    return log_term((struct efs_raft *)r,r->commit_index,&term)==EFS_OK &&
+           term==r->current_term;
+}
+
 int efs_raft_read_done(const struct efs_raft *r)
 {
     return r && r->role == EFS_RAFT_LEADER && r->read_in_flight == 2;

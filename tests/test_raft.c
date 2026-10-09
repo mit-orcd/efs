@@ -68,6 +68,7 @@ static struct efs_raft_msg *msg_copy_deep(const struct efs_raft_msg *src)
 
 struct app {
     int n;
+    int park_apply;
     unsigned pressure_mask;
     struct efs_raft *owner;
     uint64_t pending_limit;
@@ -243,6 +244,7 @@ static int apply_cmd(void *app, uint64_t index, uint64_t term, const uint8_t *cm
                      uint32_t clen)
 {
     struct app *a = app;
+    if (a->park_apply) return EFS_ERR_BUSY;
     (void)index;
     (void)term;
     a->n++;
@@ -431,6 +433,45 @@ static void test_replicate_and_readindex(void)
         efs_raft_free(n.r[i]);
         efs_raft_mem_free(st[i]);
     }
+}
+
+/* A mapping command can be proven committed while KV apply is unavailable.
+ * Such proof must never authorize a KV read or reuse a pre-request quorum. */
+static void test_read_quorum_before_apply(void)
+{
+    struct net n={.n=3};struct app app[3]={0};struct efs_raft_store *store[3];
+    struct efs_raft_cfg cfg={0};
+    cfg.n=3;cfg.send=send_now;cfg.net=&n;cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
+    for(int i=0;i<3;i++) {
+        store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
+        cfg.election_ticks=4+i*4;cfg.app=&app[i];n.r[i]=efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n,20)==1,"proof fixture elects");
+    int leader=leader_id(&n);uint64_t index=0;uint8_t cmd='P';
+    for(int i=0;i<3;i++)app[i].park_apply=1;
+    (void)efs_raft_propose(n.r[leader],&cmd,1,&index);elect(&n,4);
+    CHECK(index && efs_raft_commit(n.r[leader])>=index,"mapping committed under parked apply");
+    CHECK(efs_raft_applied(n.r[leader])<index,"mapping not applied");
+    for(int i=0;i<3;i++)n.drop[i]=(i!=leader);
+    CHECK(efs_raft_read_begin(n.r[leader])==EFS_OK,"proof read starts");
+    CHECK(!efs_raft_read_quorum(n.r[leader]),"no proof from older write quorum");
+    struct efs_raft_msg old={0};old.type=EFS_RAFT_MSG_AE_REP;old.to=leader;
+    old.term=efs_raft_term(n.r[leader]);old.success=1;old.match_index=index;
+    old.last_log_index=efs_raft_read_round(n.r[leader])-1;
+    for(int i=0;i<3;i++)if(i!=leader){old.from=i;(void)efs_raft_recv(n.r[leader],&old);}
+    CHECK(!efs_raft_read_quorum(n.r[leader]),"old round replies cannot prove current request");
+    for(int i=0;i<3;i++)n.drop[i]=0;
+    elect(&n,4);
+    CHECK(efs_raft_read_quorum(n.r[leader]),"fresh quorum proof independent of apply");
+    CHECK(!efs_raft_read_ready(n.r[leader]) && !efs_raft_read_covers(n.r[leader],index),
+          "proof is not KV read authority");
+    for(int i=0;i<3;i++)app[i].park_apply=0;
+    elect(&n,4);
+    CHECK(efs_raft_read_ready(n.r[leader]) && efs_raft_applied(n.r[leader])>=index,
+          "release permits authoritative reads");
+    old.term++;old.from=(leader+1)%3;(void)efs_raft_recv(n.r[leader],&old);
+    CHECK(!efs_raft_read_quorum(n.r[leader]),"stepdown invalidates proof authority");
+    for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(store[i]);}
 }
 
 /* A fresh read must send its own context even when an older data batch
@@ -1684,6 +1725,7 @@ static void test_pressure_quorum_and_owned_backlog(void)
 
 int main(void)
 {
+    test_read_quorum_before_apply();
     test_pressure_quorum_and_owned_backlog();
     test_follower_apply_retry();
     test_recv_batch();

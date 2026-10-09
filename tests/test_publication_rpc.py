@@ -88,6 +88,12 @@ int main(void)
  }
  reset();query=1;replies[0].state=EFS_PUBLICATION_REJECTED;replies[0].verdict=EFS_ERR_STALE;
  assert(efs_client_rpc_publication(&request,1,&out)==EFS_OK && out.state==EFS_PUBLICATION_REJECTED);
+ reset();replies[0].state=EFS_PUBLICATION_APPLY_PENDING;replies[0].verdict=EFS_META_PUBLICATION_PENDING;
+ replies[0].receipt_group=efs_raft_shard_group(efs_kv_lane_shard(123,17));
+ replies[0].receipt_index=56;replies[0].receipt_term=8;
+ assert(efs_client_rpc_publication(&request,0,&out)==EFS_OK && out.state==EFS_PUBLICATION_APPLY_PENDING);
+ reset();replies[0].state=EFS_PUBLICATION_APPLY_PENDING;replies[0].verdict=EFS_META_PUBLICATION_PENDING;
+ assert(efs_client_rpc_publication(&request,0,&out)==EFS_ERR_PROTO && !out.state);
  reset();query=1;replies[0].state=EFS_PUBLICATION_PENDING;replies[0].verdict=EFS_META_PUBLICATION_PENDING;
  assert(efs_client_rpc_publication(&request,1,&out)==EFS_OK && out.state==EFS_PUBLICATION_PENDING);
  reset();replies[0].state=EFS_PUBLICATION_PENDING;replies[0].verdict=EFS_OK;

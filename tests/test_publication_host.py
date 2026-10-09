@@ -6,6 +6,7 @@ root=Path(__file__).resolve().parents[1]
 s=(root/'src/server/raft_host.c').read_text();a=s.index('void server_raft_host_publication(')
 fn=s[a:s.index('\n}',a)+2]
 pack_a=s.index('static int pack_publish_cmd(uint8_t *out');pack=s[pack_a:s.index('\n}',pack_a)+2]
+unpack_a=s.index('static void unpack_publication(');unpack=s[unpack_a:s.index('\n}',unpack_a)+2]
 apply_a=s.index('static int apply_one_publish(');apply=s[apply_a:s.index('\n}',apply_a)+2]
 source=r'''
 #include "efs/publication.h"
@@ -69,7 +70,7 @@ int efs_meta_apply_publication_admit(struct efs_kv *kv,const struct efs_meta_pub
 int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pub *p)
 {assert(efs_meta_apply_publish(kv,p)==EFS_OK);stored_verdict=EFS_META_PUBLICATION_RETIRED;return EFS_OK;}
 int efs_meta_apply_publish_stale_why(void){return 0;}
-''' + pack + '\n' + apply + r'''
+''' + pack + '\n' + unpack + '\n' + apply + r'''
 static int host_propose_wait(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uint32_t n,int *hint)
 {(void)h;(void)hint;assert(g==group && n==HOST_PUBLICATION_LEN);
  if(cmd[0]==EFS_MD_CMD_PUBLICATION_ADMIT) {
@@ -82,6 +83,9 @@ static int host_propose_wait(struct efs_raft_host *h,uint8_t g,const uint8_t *cm
  if(!admission_only){stored=store_on_propose;if(cmd[0]==EFS_MD_CMD_PUBLICATION)stored_verdict=wait_rc==EFS_ERR_BUSY?EFS_ERR_STALE:EFS_OK;}
  if(fence_after_propose)session_rc=EFS_ERR_STALE;
  return wait_rc;}
+''' + r'''
+static int host_publication_committed(struct efs_raft_host *h,uint8_t g,const struct efs_meta_pub *p,struct efs_publication_locator *l,int *hint)
+{(void)h;(void)g;(void)p;(void)l;(void)hint;return EFS_ERR_BUSY;}
 ''' +fn+r'''
 int main(void)
 {

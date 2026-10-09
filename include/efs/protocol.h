@@ -885,6 +885,7 @@ struct efs_chunk_rec {
 
 /* Per-publication transport status is separate from its durable verdict.
  * UNKNOWN (including NOT_FOUND) never authorizes dropping/rebasing ownership. */
+#define EFS_PUBLICATION_APPLY_PENDING 5u /* mapping command committed; verdict unknown; retain bytes */
 #define EFS_PUBLICATION_PENDING 4u /* durable intent only: retain bytes; fsync must wait */
 #define EFS_PUBLICATION_UNKNOWN 0u
 #define EFS_PUBLICATION_COMMITTED 1u
@@ -900,7 +901,8 @@ struct efs_msg_publication_reply {
     uint32_t state;
     int32_t verdict;
     uint8_t digest[EFS_HASH_SIZE];
-    /* Applied intent locator for PENDING; applied mapping/verdict for terminal.
+    /* Intent locator for PENDING; committed command for APPLY_PENDING;
+     * applied mapping/verdict for terminal.
      * Never authorize fsync or byte release from these fields alone. */
     uint32_t receipt_group;
     uint64_t receipt_index, receipt_term;

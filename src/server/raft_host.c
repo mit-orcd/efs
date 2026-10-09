@@ -2002,46 +2002,52 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 
 /* Same encoding as sim apply_publish_cmd (plus the host FileID/lane_local
  * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
+static void unpack_publication(const uint8_t *cmd, struct efs_meta_pub *p,
+                               uint64_t index, uint64_t term, uint8_t group)
+{
+    const uint8_t *q;
+    int i;
+    memset(p, 0, sizeof(*p));
+    p->ino = rd64be(cmd + 1);
+    p->chunk_index = rd32be(cmd + 9);
+    p->new_size = rd64be(cmd + 13);
+    p->now = rd64be(cmd + 21);
+    q = cmd + 29;
+    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
+        p->ch.nodes[i] = rd32be(q);
+        q += 4;
+        memcpy(p->ch.checksums[i], q, EFS_HASH_SIZE);
+        q += EFS_HASH_SIZE;
+    }
+    p->delta_off = rd32be(q + 0);
+    p->delta_len = rd32be(q + 4);
+    p->delta_base_n = rd32be(q + 8);
+    p->delta_base_seq = rd64be(q + 12);
+    q += EFS_OPID_UUID_LEN + 4;
+    p->candidate_gen = rd64be(q);
+    p->expected_gen = rd64be(q + 8);
+    p->content_epoch = rd64be(q + 16);
+    p->coding_profile_id = rd32be(q + 24);
+    q += 28;
+    p->inode_gen = rd64be(q);
+    p->mtime_gen = rd64be(q + 8);
+    p->lane_local = (q[16] & HOST_PUB_F_LANE_LOCAL) ? 1 : 0;
+    p->fresh_object = !!(q[16] & HOST_PUB_F_FRESH_OBJECT);
+    if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
+        p->durable_result = 1;
+        p->receipt_locator=(struct efs_publication_locator){group,index,term};
+        memcpy(p->publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
+        p->publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
+        p->publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
+    }
+}
+
 static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
                              uint64_t index, uint64_t term, uint8_t group)
 {
     struct efs_meta_pub p;
-    const uint8_t *q;
-    int i, rc;
-
-    memset(&p, 0, sizeof(p));
-    p.ino = rd64be(cmd + 1);
-    p.chunk_index = rd32be(cmd + 9);
-    p.new_size = rd64be(cmd + 13);
-    p.now = rd64be(cmd + 21);
-    q = cmd + 29;
-    for (i = 0; i < EFS_NUM_FRAGMENTS; i++) {
-        p.ch.nodes[i] = rd32be(q);
-        q += 4;
-        memcpy(p.ch.checksums[i], q, EFS_HASH_SIZE);
-        q += EFS_HASH_SIZE;
-    }
-    p.delta_off = rd32be(q + 0);
-    p.delta_len = rd32be(q + 4);
-    p.delta_base_n = rd32be(q + 8);
-    p.delta_base_seq = rd64be(q + 12);
-    q += EFS_OPID_UUID_LEN + 4;
-    p.candidate_gen = rd64be(q);
-    p.expected_gen = rd64be(q + 8);
-    p.content_epoch = rd64be(q + 16);
-    p.coding_profile_id = rd32be(q + 24);
-    q += 28;
-    p.inode_gen = rd64be(q);
-    p.mtime_gen = rd64be(q + 8);
-    p.lane_local = (q[16] & HOST_PUB_F_LANE_LOCAL) ? 1 : 0;
-    p.fresh_object = !!(q[16] & HOST_PUB_F_FRESH_OBJECT);
-    if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
-        p.durable_result = 1;
-        p.receipt_locator=(struct efs_publication_locator){group,index,term};
-        memcpy(p.publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
-        p.publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
-        p.publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
-    }
+    int rc;
+    unpack_publication(cmd,&p,index,term,group);
     rc = cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ?
         efs_meta_apply_publication_retire(h->kv, &p) :
         cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT ? efs_meta_apply_publication_admit(h->kv, &p) :
@@ -2226,6 +2232,12 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         g->arc_extra[index & HOST_APPLY_RC_MASK] = 0;
         return EFS_OK;
     }
+#if EFS_FAULTS
+    if (cmd[0]==EFS_MD_CMD_PUBLICATION) {
+        const char *gate=getenv("EFS_FAULT_PUBLICATION_APPLY_FILE");
+        if (gate && access(gate,F_OK)==0) return EFS_ERR_BUSY;
+    }
+#endif
     if (raft_obs_on())
         a0 = now_us_();
     h->apply_extra = 0;
@@ -2710,7 +2722,7 @@ static void host_publish_view(struct efs_raft_host *h, int gi)
     ridx = efs_raft_read_index(r);
     round = efs_raft_read_round(r);
     rpend = efs_raft_read_pending(r);
-    rdone = efs_raft_read_done(r);
+    rdone = efs_raft_read_quorum(r);
     changed = !V_LOAD(g->v_has) || V_LOAD(g->v_commit) != commit ||
               V_LOAD(g->v_applied) != applied || V_LOAD(g->v_term) != term ||
               V_LOAD(g->v_role) != role || V_LOAD(g->v_leader) != leader ||
@@ -13714,6 +13726,93 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     set_inode_rc(out, rc, hint);
 }
 
+/* A fresh quorum round proves current leadership and the committed prefix,
+ * without claiming that KV has applied it. Bounded search only; inability to
+ * locate the exact command remains unknown and retains client ownership. */
+static int host_publication_committed(struct efs_raft_host *h, uint8_t group,
+    const struct efs_meta_pub *request, struct efs_publication_locator *locator,
+    int *hint)
+{
+    struct timespec end;
+    struct host_view v;
+    uint64_t round, term, want;
+    host_deadline_us(&end,(long)HOST_READ_TRIES*HOST_TICK_US);
+    pthread_mutex_lock(&h->mu);
+    struct efs_raft *r=group_raft(h,group);
+    if (!r || efs_raft_role(r)!=EFS_RAFT_LEADER) {
+        pthread_mutex_unlock(&h->mu);
+        host_view_get(h,group,&v);*hint=v.leader;
+        return EFS_ERR_NOT_PRIMARY;
+    }
+    round=efs_raft_read_round(r);
+    if (round==UINT64_MAX) { pthread_mutex_unlock(&h->mu);return EFS_ERR_BUSY; }
+    round++;term=efs_raft_term(r);want=efs_raft_commit(r);
+    pthread_mutex_unlock(&h->mu);
+    for (;;) {
+        host_view_get(h,group,&v);*hint=v.leader;
+        if (!v.has || v.role!=EFS_RAFT_LEADER || v.term!=term)
+            return EFS_ERR_NOT_PRIMARY;
+        if (v.read_done && v.read_round>=round && v.read_index>=want) break;
+        if (host_past_deadline(&end)) return EFS_ERR_BUSY;
+        pthread_mutex_lock(&h->mu);
+        r=group_raft(h,group);
+        int rc=EFS_OK;
+        if (r && efs_raft_role(r)==EFS_RAFT_LEADER && efs_raft_term(r)==term &&
+            (!efs_raft_read_pending(r) || efs_raft_read_quorum(r)) &&
+            !(efs_raft_read_round(r)>=round && efs_raft_read_covers(r,want)))
+            rc=efs_raft_read_begin(r);
+        host_publish_group(h,group);
+        pthread_mutex_unlock(&h->mu);
+        if (rc!=EFS_OK) return rc;
+        host_pump_kick(h);
+        pthread_mutex_lock(&h->cv_mu);
+        host_view_get(h,group,&v);
+        if (v.has && v.role==EFS_RAFT_LEADER && v.term==term &&
+            !(v.read_done && v.read_round>=round && v.read_index>=want))
+            host_waiter_sleep(h,group,1,0,v.stamp,&end);
+        pthread_mutex_unlock(&h->cv_mu);
+    }
+    uint8_t digest[EFS_HASH_SIZE];
+    int rc=efs_publication_digest(request,digest);
+    if (rc!=EFS_OK) return rc;
+    pthread_mutex_lock(&h->mu);
+    r=group_raft(h,group);
+    if (!r || efs_raft_role(r)!=EFS_RAFT_LEADER || efs_raft_term(r)!=term) {
+        pthread_mutex_unlock(&h->mu);return EFS_ERR_NOT_PRIMARY;
+    }
+    /* Admission precedes mapping in this same log. An unapplied mapping
+     * cannot supply evidence for a payload that differs from that intent. */
+    int admitted;
+    rc=efs_session_accept(h->kv,efs_kv_lane_shard(request->ino,
+        request->chunk_index%EFS_META_LANES),request->publication_id.client_uuid,
+        request->publication_id.session_epoch);
+    if (rc==EFS_OK) rc=efs_meta_publication_result(h->kv,request,&admitted);
+    if (rc!=EFS_OK) { pthread_mutex_unlock(&h->mu);return rc; }
+    struct efs_raft_store *store=efs_raft_disk_group(h->disk,group);
+    uint64_t applied=efs_raft_applied(r),top=v.read_index;
+    rc=EFS_ERR_BUSY;
+    for (unsigned n=0;store && top>applied && n<64;n++,top--) {
+        uint8_t cmd[HOST_PUBLICATION_LEN],got_digest[EFS_HASH_SIZE];
+        uint32_t len=sizeof(cmd);uint64_t entry_term=0;
+        int grc=store->get(store,top,&entry_term,cmd,&len);
+        if ((grc==EFS_ERR_INVAL && len>sizeof(cmd)) || grc==EFS_ERR_NOT_FOUND) continue;
+        if (grc!=EFS_OK) { rc=grc;break; }
+        if (len!=sizeof(cmd) || cmd[0]!=EFS_MD_CMD_PUBLICATION || !entry_term) continue;
+        struct efs_meta_pub p;unpack_publication(cmd,&p,top,entry_term,group);
+        if (p.ino!=request->ino || p.inode_gen!=request->inode_gen ||
+            p.chunk_index!=request->chunk_index ||
+            p.publication_id.seq!=request->publication_id.seq ||
+            p.publication_id.session_epoch!=request->publication_id.session_epoch ||
+            memcmp(p.publication_id.client_uuid,request->publication_id.client_uuid,EFS_OPID_UUID_LEN)) continue;
+        rc=efs_publication_digest(&p,got_digest);
+        if (rc==EFS_OK && memcmp(digest,got_digest,sizeof(digest))) rc=EFS_ERR_PROTO;
+        if (rc==EFS_OK) *locator=p.receipt_locator;
+        break;
+    }
+    pthread_mutex_unlock(&h->mu);
+    return rc;
+}
+
 /* Staged endpoint: one immutable intent, one durable outcome. No aggregate
  * reply or transient apply-result ring is used as evidence of ownership. */
 void server_raft_host_publication(const struct efs_msg_publication *req, int query_only,
@@ -13784,6 +13883,18 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
         if(rc==EFS_OK) {
             out->receipt_group=locator.group;out->receipt_index=locator.index;
             out->receipt_term=locator.term;
+        }
+    }
+    if(rc==EFS_ERR_BUSY && query_only!=2) {
+        struct efs_publication_locator locator;
+        rc=host_publication_committed(h,group,&p,&locator,&hint);
+        if(rc==EFS_OK) {
+            out->receipt_group=locator.group;out->receipt_index=locator.index;
+            out->receipt_term=locator.term;
+            out->state=EFS_PUBLICATION_APPLY_PENDING;
+            out->verdict=EFS_META_PUBLICATION_PENDING;
+            set_inode_rc(&out->rpc,EFS_OK,hint);
+            return;
         }
     }
     if(rc==EFS_OK && query_only==2 && verdict!=EFS_META_PUBLICATION_RETIRED)rc=EFS_ERR_BUSY;

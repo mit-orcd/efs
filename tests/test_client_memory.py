@@ -279,6 +279,10 @@ int main(void) {
     memcpy(outcome.digest,owned->writer->publication.result_digest,EFS_HASH_SIZE);
     assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_BUSY);
     assert(owned->writer->has_publication && owned->dirty && owned->pin_held && owned->data);
+    outcome.state=EFS_PUBLICATION_APPLY_PENDING;outcome.verdict=EFS_META_PUBLICATION_PENDING;
+    outcome.receipt_index=55;outcome.receipt_term=8;
+    assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_BUSY);
+    assert(owned->writer->has_publication && owned->dirty && owned->pin_held && owned->data);
     outcome.state=EFS_PUBLICATION_RETIRED;outcome.verdict=EFS_META_PUBLICATION_RETIRED;
     memcpy(outcome.digest,owned->writer->publication.result_digest,EFS_HASH_SIZE);
     assert(efs_dcache_publication_result(1,7,0,10,sequence,&outcome)==EFS_ERR_BUSY);
