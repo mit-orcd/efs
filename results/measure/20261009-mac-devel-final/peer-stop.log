@@ -1,0 +1,3 @@
+Unmounting /mnt/efs-b
+Retiring drained efs-fuse PID 42990 for /mnt/efs-b
+Unmounted /mnt/efs-b

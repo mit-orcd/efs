@@ -1,0 +1,5 @@
+USER         PID COMMAND
+efs        37490 /tmp/efs/efsd --node-id 3 --addr 192.168.2.13 --port 17432 --storage /data1 --quota 15G --no-direct-io --join 192.168.2.11:17432
+efsd 43fcefe190dd (branch devel, built 2026-10-09T21:40:35Z on efs3)
+78b86946b52d0bfe9a82ec655bafeb32a9070b8b9087643d069af043b129706e  efsd
+6ed8a4ec0539d073ba4cdb5d0bb85cae8e60c2d234ab8b6e4bfd936c510bc9da  efs-fuse

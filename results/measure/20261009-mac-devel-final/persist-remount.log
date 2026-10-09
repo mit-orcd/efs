@@ -1,0 +1,16 @@
+cluster: mac
+efsgw already running
+efsgw up at 192.168.2.14
+shipping binaries from efs1
+mounting efs on efsgw (seed 192.168.2.11:17432)
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+/mnt/efs      	<world>
+gateway ready at 192.168.2.14 (from the Mac: ./mount-mac.sh)
+cluster: mac
+efs1: hosts + ssh config updated
+efs2: hosts + ssh config updated
+efs3: hosts + ssh config updated
+efsgw: hosts + ssh config updated
+mac: ~/.ssh/config updated (ssh efs1 efs2 efs3 efsgw)

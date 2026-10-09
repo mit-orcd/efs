@@ -1,0 +1,5 @@
+cluster: mac
+efs         8671       1 Ssl        11:20 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs -o allow_other
+efs        18206       1 Ssl        06:38 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs-b -o allow_other
+admin      30113    2045 Ss         00:00 bash -c ps -eo user,pid,ppid,stat,etime,args | grep -E "posix_2client|efs-fuse|scp"; sudo -n cat /proc/18251/status; sudo -n cat /proc/18251/task/23913/stack; sudo -n cat /proc/18251/task/23914/stack
+admin      30140   30113 S          00:00 grep -E posix_2client|efs-fuse|scp

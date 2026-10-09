@@ -1,0 +1,20 @@
+cluster: mac
+efs1   192.168.2.11    efsd up
+efs2   192.168.2.12    efsd up
+efs3   192.168.2.13    efsd up
+== efs-mgmt status (efs1)
+Cluster nodes (3):
+  node 1: 192.168.2.11:17432  up  used=1.54 GiB  quota=15.00 GiB (10.3%)  storage(1):
+      /data1
+  node 2: 192.168.2.12:17432  up  used=1.55 GiB  quota=15.00 GiB (10.3%)  storage(1):
+      /data1
+  node 3: 192.168.2.13:17432  up  used=1.55 GiB  quota=15.00 GiB (10.3%)  storage(1):
+      /data1
+Usable (2+1 logical): used=3.10 GiB  free=26.90 GiB  capacity=30.00 GiB (10.3%)
+Cluster state: OK (3 up, 0 down)
+Versions: efsd 43fcefe190dd (branch devel, built 2026-10-09T21:40:35Z) — 3/3 identical
+Node 192.168.2.11:17432 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle

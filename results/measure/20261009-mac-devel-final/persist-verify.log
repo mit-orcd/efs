@@ -1,0 +1,28 @@
+pass small_file                      
+pass closed_but_not_fsynced          
+pass fsynced_file                    
+pass multichunk_file                 
+pass chunk_boundary_write            
+pass overwrite_middle                
+pass appended_file                   
+pass sparse_file                     
+pass truncate_shrink                 
+pass truncate_extend                 
+pass empty_file                      
+pass dd_written_file                 
+FAIL many_files_in_one_dir            listing: 69/500 present, missing=['f0069', 'f0070', 'f0071', 'f0072', 'f0073'] extra=[]
+pass deep_tree                       
+pass strange_names                   
+pass renamed_file                    
+pass renamed_across_dirs             
+pass unlinked_file                   
+pass removed_dir                     
+pass hardlinks                       
+pass hardlink_after_unlink           
+pass symlinks                        
+pass file_mode                       
+pass dir_mode                        
+pass size_and_mtime                  
+pass large_file_size_only            
+
+verify: pass=25 fail=1 total=26 in 52.5s

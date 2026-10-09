@@ -1,0 +1,5 @@
+prepared /mnt/efs/timestamp-43fcefe190dd (64 testdirs)
+pass peer_dir_mtime_bump_visible     
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (17.2s)
+wrote /var/tmp/efs-mac-devel-43fcefe190dd/timestamp-local.tsv

@@ -1,0 +1,7 @@
+# posix-suite host=efsgw mnt=/mnt/efs 2026-10-09T22:08:49Z
+# suite=core
+# select	concurrent_write_and_readdir
+test	result	detail
+concurrent_write_and_readdir	FAIL	timeout after 30s
+# summary pass=0 fail=1 skip=0 notrun=0 total=1 dur=30.1
+# complete

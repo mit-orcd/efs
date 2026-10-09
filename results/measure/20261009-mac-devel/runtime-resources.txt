@@ -1,0 +1,9 @@
+cluster: mac
+USER         PID   RSS     ELAPSED COMMAND
+efs         8671 76308       01:15 ./efs-fuse 192.168.2.11:17432 fs /mnt/efs -o allow_other
+Filesystem      Size  Used Avail Use% Mounted on
+tmpfs           2.0G   15M  1.9G   1% /tmp
+USER         PID   RSS     ELAPSED COMMAND
+efs        13611 24924       01:35 /tmp/efs/efsd --node-id 1 --addr 192.168.2.11 --port 17432 --storage /data1 --quota 15G --no-direct-io
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/vdb         20G  3.7G   17G  19% /data1

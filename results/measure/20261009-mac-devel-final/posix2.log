@@ -1,0 +1,97 @@
+prepared /mnt/efs/posix-2c-43fcefe190dd (64 testdirs)
+pass peer_mkdir_visible              
+pass peer_create_visible             
+pass peer_write_read                 
+slow-step peer_listdir_siblings a 0 2.77s
+pass peer_listdir_siblings           
+pass peer_shared_creat               
+pass peer_open_existing              
+pass peer_creat_excl_eexist          
+pass peer_stat_size                  
+pass peer_rename_visible             
+pass peer_mkdir_then_create          
+slow-step peer_shared_pwrite ab 1 45.18s
+FAIL peer_shared_pwrite               exec ab-a step 1 rc=124 out='' err='ssh timeout after 45s'
+pass peer_unlink_gone                
+pass peer_chmod_visible              
+pass peer_utimens_visible            
+FAIL peer_dir_mtime_bump_visible      exec b step 2 rc=1 out="RESULT\tFAIL\tKeyError: 'm'\n" err=''
+pass peer_truncate_visible           
+pass peer_hardlink_visible           
+pass peer_symlink_visible            
+pass peer_negative_dentry            
+pass peer_fsync_then_read            
+pass peer_mkdir_rmdir_recreate       
+pass peer_oappend                    
+slow-step peer_rename_over a 0 2.78s
+pass peer_rename_over                
+slow-step peer_flock_exclusive a 0 4.68s
+slow-step peer_flock_exclusive a 2 3.16s
+pass peer_flock_exclusive            
+slow-step peer_unlink_while_b_has_fd b 1 3.53s
+slow-step peer_unlink_while_b_has_fd b 3 2.52s
+pass peer_unlink_while_b_has_fd      
+pass peer_rmdir_gone                 
+pass peer_nlink_after_link           
+slow-step peer_hardlink_write a 0 2.54s
+pass peer_hardlink_write             
+slow-step peer_rename_dir a 0 2.38s
+pass peer_rename_dir                 
+pass peer_o_trunc_visible            
+pass peer_unlink_recreate            
+pass peer_lstat_symlink_size         
+pass peer_listdir_after_unlink       
+pass peer_chmod_via_hardlink         
+pass peer_sparse_size                
+pass peer_overlap_pwrite_same_range  
+pass peer_overlap_pwrite_partial     
+pass peer_overlap_pwrite_chunk_straddle
+slow-step peer_concurrent_append ab 1 46.75s
+FAIL peer_concurrent_append           exec ab-a step 1 rc=124 out='' err='ssh timeout after 45s'
+slow-step peer_append_while_truncate ab 1 45.67s
+FAIL peer_append_while_truncate       exec ab-a step 1 rc=124 out='' err='ssh timeout after 45s'
+pass peer_disjoint_extend            
+pass peer_disjoint_extend_reverse_completion
+pass peer_extend_and_truncate        
+pass peer_stat_during_extend         
+slow-step peer_trunc_then_pwrite_old_fd a 1 3.44s
+slow-step peer_trunc_then_pwrite_old_fd a 3 2.46s
+pass peer_trunc_then_pwrite_old_fd   
+pass peer_trunc_zero_then_high_pwrite
+pass peer_pwrite_then_peer_truncate  
+pass peer_rename_same_src_two_dst    
+pass peer_rename_vs_unlink_src       
+slow-step peer_rename_vs_unlink_dst a 0 2.17s
+slow-step peer_rename_vs_unlink_dst ab 1 2.45s
+pass peer_rename_vs_unlink_dst       
+slow-step peer_rename_across_dirs_chase ab 1 2.60s
+pass peer_rename_across_dirs_chase   
+slow-step peer_creat_excl_race ab 0 2.60s
+pass peer_creat_excl_race            
+slow-step peer_create_unlink_stat_churn ab 0 45.44s
+FAIL peer_create_unlink_stat_churn    exec ab-a step 0 rc=124 out='' err='ssh timeout after 45s'
+pass peer_negative_after_unlink      
+pass peer_rename_negative            
+pass peer_unlink_recreate_stale_ino  
+slow-step peer_open_unlink_nlink a 1 3.66s
+slow-step peer_open_unlink_nlink a 3 2.63s
+pass peer_open_unlink_nlink          
+slow-step peer_open_rename_fd a 1 3.95s
+slow-step peer_open_rename_fd a 3 3.32s
+pass peer_open_rename_fd             
+slow-step peer_unlink_recreate_old_fd a 1 3.87s
+slow-step peer_unlink_recreate_old_fd a 3 3.50s
+pass peer_unlink_recreate_old_fd     
+pass peer_concurrent_hardlink        
+slow-step peer_concurrent_unlink_hardlinks a 0 2.01s
+pass peer_concurrent_unlink_hardlinks
+slow-step peer_fcntl_range_conflict a 0 4.38s
+slow-step peer_fcntl_range_conflict a 2 2.78s
+pass peer_fcntl_range_conflict       
+slow-step peer_fcntl_range_adjacent a 0 4.64s
+slow-step peer_fcntl_range_adjacent a 2 2.95s
+pass peer_fcntl_range_adjacent       
+pass peer_mtime_no_regress           
+============================================================
+POSIX 2-client: 59/64 pass, 5 fail  (367.8s)
+wrote /var/tmp/efs-mac-devel-43fcefe190dd/posix2.tsv

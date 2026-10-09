@@ -1,0 +1,25 @@
+cluster: mac
+2026-10-09T21:40:37.136Z fsync-split ino=4366 flush_ms=240 report_ms=0 rc=0
+2026-10-09T21:40:37.343Z fsync-split ino=4366 flush_ms=207 report_ms=0 rc=0
+2026-10-09T21:40:37.495Z fsync-split ino=4366 flush_ms=152 report_ms=0 rc=0
+2026-10-09T21:41:06.149Z fsync-split ino=19605 flush_ms=144 report_ms=0 rc=0
+2026-10-09T21:41:10.098Z fsync-split ino=27797 flush_ms=128 report_ms=0 rc=0
+2026-10-09T21:41:11.057Z fsync-split ino=31893 flush_ms=108 report_ms=0 rc=0
+2026-10-09T21:41:27.963Z inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=1156967
+2026-10-09T21:41:29.537Z fsync-split ino=7302 flush_ms=106 report_ms=0 rc=0
+2026-10-09T21:41:40.359Z fsync-split ino=4215 flush_ms=128 report_ms=0 rc=0
+2026-10-09T21:41:42.413Z fsync-split ino=7366 flush_ms=113 report_ms=0 rc=0
+2026-10-09T21:41:44.011Z fsync-split ino=4596 flush_ms=212 report_ms=0 rc=0
+2026-10-09T21:41:44.713Z fsync-split ino=4596 flush_ms=182 report_ms=0 rc=0
+2026-10-09T21:41:17.661Z fsync-split ino=20113 flush_ms=132 report_ms=0 rc=0
+2026-10-09T21:41:18.827Z fsync-split ino=24209 flush_ms=214 report_ms=0 rc=0
+2026-10-09T21:41:38.706Z efs: read hole ino=5695 ci=0 holes=1
+2026-10-09T21:41:40.230Z fsync-split ino=4215 flush_ms=189 report_ms=0 rc=0
+2026-10-09T21:41:42.614Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=42 replay_ms=67
+2026-10-09T21:41:42.674Z fsync-split ino=7366 flush_ms=324 report_ms=0 rc=0
+2026-10-09T21:41:42.674Z efs: report rec ino=7366 ci=0 rejected unowned staging observation nodes=2,3,1 (putid miss, n=1)
+2026-10-09T21:41:44.547Z fsync-split ino=4596 flush_ms=135 report_ms=0 rc=0
+    PID     TID STAT WCHAN                         ELAPSED
+  18251   18251 Sl   -                               04:08
+  18251   23913 Sl   -                               00:55
+  18251   23914 Sl   -                               00:55

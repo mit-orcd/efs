@@ -1,0 +1,26 @@
+cluster: mac
+== efsd on efs1 (192.168.2.11) id=1 
+Running as unit: efsd.service; invocation ID: f3300bfd37974551baf789862ac41975
+== efsd on efs2 (192.168.2.12) id=2 joining --join 192.168.2.11:17432
+Running as unit: efsd.service; invocation ID: 0da07f551b2c49489d833e8a7281e390
+== efsd on efs3 (192.168.2.13) id=3 joining --join 192.168.2.11:17432
+Running as unit: efsd.service; invocation ID: 7574b0b5f8f244df98a5158791d3d1d6
+== raft-mkfs (skipped if /data1/.mkfs-done exists on efs1)
+   already formatted — use wipe first for a fresh table
+== client mounts: gateway + test clients (storage nodes never mount)
+cluster: mac
+efsgw already running
+efsgw up at 192.168.2.14
+shipping binaries from efs1
+mounting efs on efsgw (seed 192.168.2.11:17432)
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+/mnt/efs      	<world>
+gateway ready at 192.168.2.14 (from the Mac: ./mount-mac.sh)
+cluster: mac
+efs1: hosts + ssh config updated
+efs2: hosts + ssh config updated
+efs3: hosts + ssh config updated
+efsgw: hosts + ssh config updated
+mac: ~/.ssh/config updated (ssh efs1 efs2 efs3 efsgw)

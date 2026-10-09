@@ -1,0 +1,13 @@
+cluster: mac
+root       64430    2045 Ss         02:22 sudo -n -H -u efs env PYTHONUNBUFFERED=1 python3 /var/tmp/efs-posix-remaining.py /var/tmp/efs-mac-devel-43fcefe190dd/posix.tsv /mnt/efs --jobs 4 --timeout-s 30 --tag remaining-43fcefe190dd --results /var/tmp/efs-mac-devel-43fcefe190dd/remaining.tsv
+efs        64457   64430 S          02:22 python3 /var/tmp/efs-posix-remaining.py /var/tmp/efs-mac-devel-43fcefe190dd/posix.tsv /mnt/efs --jobs 4 --timeout-s 30 --tag remaining-43fcefe190dd --results /var/tmp/efs-mac-devel-43fcefe190dd/remaining.tsv
+efs        67408   64457 Ss         00:47 /usr/sbin/python3 /tmp/efs/tests/posix/posix_suite.py --worker truncate_big_ftruncate_honest /mnt/efs/posix-efsgw-remaining-43fcefe190dd-lf6ir5re/truncate_big_ftruncate_honest /tmp/posix-result-05sif4ef
+admin      68742    2045 Ss         00:00 bash -c ps -eo user,pid,ppid,stat,etime,args | grep -E "remaining|isolated|posix_suite|posix-remaining"; tail -7 /mnt/efs-fuse-efs.log
+admin      68769   68742 S          00:00 grep -E remaining|isolated|posix_suite|posix-remaining
+2026-10-09T22:03:14.695Z inode-rpc: slow-ok type=45 attempts=1 saw_busy=0 status=0 us=1085288
+2026-10-09T22:03:19.145Z inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=1539267
+2026-10-09T22:03:20.704Z inode-rpc: slow-ok type=87 attempts=1 saw_busy=0 status=0 us=1241587
+2026-10-09T22:03:27.744Z efs: read hole ino=13278 ci=0 holes=9
+2026-10-09T22:03:28.477Z inode-rpc: slow-ok type=71 attempts=1 saw_busy=0 status=0 us=1143772
+2026-10-09T22:03:52.824Z dcache-pressure live=263585792 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T22:03:52.832Z dcache-pressure live=263979008 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=664 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body

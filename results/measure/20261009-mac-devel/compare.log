@@ -1,0 +1,92 @@
+================================================================
+POSIX baseline comparison: 212 tests
+  both pass        : 137
+  EFS BUGS         : 14  (baseline PASS, target FAIL)
+  both fail (match): 0
+  not equivalent   : 0  (status or detail differs)
+  target better    : 0
+  target skipped   : 0  (baseline PASS, target SKIP)
+  incomplete       : 61  (cut, missing, or NOTRUN)
+  target only      : 0
+  not finished     : target (no # complete marker; this is a snapshot, not a finished run)
+  verdict          : not an unqualified success
+================================================================
+
+--- EFS BUGS (pass on baseline, fail on target) ---
+  concurrent_appends               [FAIL] timeout after 30s; worker group still alive
+  concurrent_appends_two_proc      [FAIL] worker killed by signal 15
+  concurrent_create_unlink_two_proc [FAIL] worker killed by signal 15
+  concurrent_creates_same_dir      [FAIL] timeout after 30s
+  concurrent_write_and_readdir     [FAIL] worker killed by signal 15
+  content_random_roundtrip         [FAIL] timeout after 30s
+  dir_deep_nesting                 [FAIL] timeout after 30s
+  dir_deep_nesting_beyond_64       [FAIL] timeout after 30s
+  dir_many_files                   [FAIL] timeout after 75s
+  dir_readdir_listing              [FAIL] timeout after 30s
+  dir_readdir_while_unlink         [FAIL] timeout after 30s
+  names_control_and_high_bytes     [FAIL] timeout after 30s
+  names_crazy_dirs                 [FAIL] timeout after 30s
+  names_crazy_roundtrip            [FAIL] timeout after 30s
+
+--- incomplete (not an EFS bug) ---
+  access_f_ok_after_unlink         base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  attr_umask_respected             base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  case_sensitive_names             base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  chdir_dotdot_after_mkdir         base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  chmod_preserves_mtime            base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  concurrent_extend_high_then_low  base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  concurrent_overlap_write         base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  creat_existing_dir_eisdir        base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  create_excl_two_proc             base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  ctime_on_link_rename             base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  dir_mkdir_umask                  base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  dir_nlink_after_rmdir_child      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  dir_times_bump_on_child_mutation base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  direct_aligned_rdwr              base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  direct_rmw_4k_in_chunk           base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  direct_unaligned_einval          base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  err_chdir_into_file              base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  fcntl_setfl_oappend              base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  flock_second_fd_exclusive        base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  flock_unlock_on_close            base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  fstat_size_after_write           base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  fsync_then_fstat_size            base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  hardlink_three_names             base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  last_link_unlink_other_dir       base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  link_across_dirs                 base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  link_of_symlink                  base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  lstat_symlink_size               base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  mkdirat_unlinkat                 base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  mtime_bumps_on_write             base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  mtime_monotonic_many_writes      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  nlink_after_unlink_open          base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  o_append_pwrite_absolute         base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  o_directory                      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  o_nofollow                       base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  opt_copy_file_range              base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  opt_fallocate                    base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  opt_openat                       base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  opt_seek_hole_data               base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  opt_xattr                        base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  packed_then_grow_past_chunk      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  perm_dir_no_x_search             base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  rename_dir_same_parent           base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  rename_empty_over_empty_dir      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  rename_file_over_symlink         base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  rename_readdir_lookup_consistent base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  rename_to_self                   base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  st_ino_unique_hardlink_same      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  trailing_slash_on_file           base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  trunc_open_other_fd              base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  trunc_shrink_same_fd             base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  trunc_zero_then_high_pwrite      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  truncate_big_ftruncate_honest    base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  truncate_big_o_trunc_honest      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  two_fds_independent_offset       base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  two_fds_size_mtime               base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  unlink_open_then_recreate        base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  unlink_recreate_new_ino          base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  write_beyond_eof_then_seek_end   base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  write_hole_pread_zeros           base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  writev_readv_chunk_straddle      base=PASS target=NOTRUN incomplete: timed-out worker still alive
+  zero_length_write                base=PASS target=NOTRUN incomplete: timed-out worker still alive

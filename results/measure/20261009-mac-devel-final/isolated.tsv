@@ -1,0 +1,7 @@
+# posix-suite host=efsgw mnt=/mnt/efs 2026-10-09T22:07:39Z
+# suite=core
+# select	dir_readdir_listing
+test	result	detail
+dir_readdir_listing	FAIL	timeout after 30s
+# summary pass=0 fail=1 skip=0 notrun=0 total=1 dur=30.3
+# complete
