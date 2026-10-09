@@ -1,5 +1,20 @@
 # W92 NUC node 2 CPU — October 8, 2026 New York
 
+## Compact immutable inode blocks: a62cbd5f6ca2
+
+Deployed reference-counted partition-local decoded inode/stat blocks with
+inode/lane dependency validation and directory-only mutable rollups. Unchanged
+blocks are retained without global row decoding; accounting charges shared
+blocks fully. Full native, differential/lifetime, POSIX 212/212, peer 64/64,
+command/export/permission and restart gates pass. Data preserved, cap unchanged.
+Publication recovers past the former NOMEM point: 1,181,069 files at
+1,015,659,920 accounted bytes. Loaded export completes with 1,187,139 unique
+paths. Nearby warm median 147 ms versus prior healthy 284 ms; node-2 page-fault
+share 1.38% versus 23.63%. Live workload/host-load differences limit comparison;
+no aggregate CPU or controlled throughput claim. Global lookup index and
+pointer-vector/directory scans remain software hot paths. See
+[full evidence and limitations](../../results/measure/20261009-catalog-blocks/README.md).
+
 ## Deadline clock follow-up: 64cdf183d265
 
 Deployed one targeted fix: retain atomic shutdown checks per callback, read the

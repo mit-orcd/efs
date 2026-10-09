@@ -3542,6 +3542,15 @@ the original record and withdrawn interpretation remain retained.
 
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
+Oct 9 CPU/memory follow-up: deployed `a62cbd5f6ca2` on NUC. Immutable decoded
+inode/stat blocks are retained per partition with lane dependency invalidation;
+mutable rollups are allocated only for directories. Publication recovers beyond
+the former 1 GiB cap failure without raising the cap. Differential/lifetime,
+full native, POSIX 212/212, peer 64/64 and restart/command/export gates pass;
+loaded pinned export returns 1,187,139 unique paths. Global lookup-index and
+pointer-vector work remain. See [measured results](../status/find-stats-refresh-cpu-20261009.md).
+This performance result does not close unrelated scale/fault/NFS acceptance.
+
 Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
 Current user scope replaces synthetic `.find`/`.stats` with `.efs/find` and
 `.efs/stats`; W91 supplies Python commands and versioned query paths. Real
