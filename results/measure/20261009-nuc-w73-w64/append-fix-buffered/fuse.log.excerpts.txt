@@ -1,0 +1,81 @@
+2026-10-09T01:29:53.014Z report-irec ino=4758 size=0 only=4758 sync=1 rc=0
+2026-10-09T01:29:53.014Z release ino=4758 begin
+2026-10-09T01:29:53.017Z release ino=4758 rc=0
+2026-10-09T01:29:53.024Z release ino=4758 begin
+2026-10-09T01:29:53.031Z release ino=4758 rc=0
+2026-10-09T01:29:53.091Z append-reserve ino=4758 seq=3623 start=0 end=6 len=6
+2026-10-09T01:29:53.148Z append-reserve ino=4758 seq=3624 start=6 end=12 len=6
+2026-10-09T01:29:53.148Z dcache ino=4758 ci=0 patch-sparse off=6 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,12)
+2026-10-09T01:29:53.185Z append-reserve ino=4758 seq=3625 start=12 end=18 len=6
+2026-10-09T01:29:53.185Z dcache ino=4758 ci=0 patch-sparse off=12 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,18)
+2026-10-09T01:29:53.231Z append-reserve ino=4758 seq=3626 start=18 end=24 len=6
+2026-10-09T01:29:53.231Z dcache ino=4758 ci=0 patch-sparse off=18 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,24)
+2026-10-09T01:29:53.272Z append-reserve ino=4758 seq=3627 start=24 end=30 len=6
+2026-10-09T01:29:53.272Z dcache ino=4758 ci=0 patch-sparse off=24 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,30)
+2026-10-09T01:29:53.322Z append-reserve ino=4758 seq=3628 start=30 end=36 len=6
+2026-10-09T01:29:53.322Z dcache ino=4758 ci=0 patch-sparse off=30 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,36)
+2026-10-09T01:29:53.367Z append-reserve ino=4758 seq=3629 start=36 end=42 len=6
+2026-10-09T01:29:53.367Z dcache ino=4758 ci=0 patch-sparse off=36 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,42)
+2026-10-09T01:29:53.410Z append-reserve ino=4758 seq=3630 start=42 end=48 len=6
+2026-10-09T01:29:53.410Z dcache ino=4758 ci=0 patch-sparse off=42 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,48)
+2026-10-09T01:29:53.451Z append-reserve ino=4758 seq=3631 start=48 end=54 len=6
+2026-10-09T01:29:53.451Z dcache ino=4758 ci=0 patch-sparse off=48 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,54)
+2026-10-09T01:29:53.494Z append-reserve ino=4758 seq=3632 start=54 end=60 len=6
+2026-10-09T01:29:53.494Z dcache ino=4758 ci=0 patch-sparse off=54 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,60)
+2026-10-09T01:29:53.528Z append-reserve ino=4758 seq=3633 start=60 end=66 len=6
+2026-10-09T01:29:53.528Z dcache ino=4758 ci=0 patch-sparse off=60 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,66)
+2026-10-09T01:29:53.579Z append-reserve ino=4758 seq=3634 start=66 end=72 len=6
+2026-10-09T01:29:53.579Z dcache ino=4758 ci=0 patch-sparse off=66 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,72)
+2026-10-09T01:29:53.624Z append-reserve ino=4758 seq=3635 start=72 end=78 len=6
+2026-10-09T01:29:53.624Z dcache ino=4758 ci=0 patch-sparse off=72 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,78)
+2026-10-09T01:29:53.669Z append-reserve ino=4758 seq=3636 start=78 end=84 len=6
+2026-10-09T01:29:53.669Z dcache ino=4758 ci=0 patch-sparse off=78 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,84)
+2026-10-09T01:29:53.715Z append-reserve ino=4758 seq=3637 start=84 end=90 len=6
+2026-10-09T01:29:53.715Z dcache ino=4758 ci=0 patch-sparse off=84 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,90)
+2026-10-09T01:29:53.750Z append-reserve ino=4758 seq=3638 start=90 end=96 len=6
+2026-10-09T01:29:53.750Z dcache ino=4758 ci=0 patch-sparse off=90 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,96)
+2026-10-09T01:29:53.788Z append-reserve ino=4758 seq=3639 start=96 end=102 len=6
+2026-10-09T01:29:53.788Z dcache ino=4758 ci=0 patch-sparse off=96 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,102)
+2026-10-09T01:29:53.825Z append-reserve ino=4758 seq=3640 start=102 end=108 len=6
+2026-10-09T01:29:53.825Z dcache ino=4758 ci=0 patch-sparse off=102 len=6 | dirty=1 hb=0 bg=0 obj=0 oseq=0 sseq=0 r=[0,108)
+... full raw traces retained on NUC ...
+2026-10-09T01:30:48.801Z append-reserve ino=5169 seq=3733 start=192 end=198 len=6
+2026-10-09T01:30:48.803Z append-reserve ino=5169 seq=3734 start=198 end=204 len=6
+2026-10-09T01:30:48.803Z dcache ino=5169 ci=0 patch-sparse off=198 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,204)
+2026-10-09T01:30:48.805Z append-reserve ino=5169 seq=3735 start=204 end=210 len=6
+2026-10-09T01:30:48.805Z dcache ino=5169 ci=0 patch-sparse off=204 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,210)
+2026-10-09T01:30:48.807Z append-reserve ino=5169 seq=3736 start=210 end=216 len=6
+2026-10-09T01:30:48.807Z dcache ino=5169 ci=0 patch-sparse off=210 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,216)
+2026-10-09T01:30:48.809Z append-reserve ino=5169 seq=3737 start=216 end=222 len=6
+2026-10-09T01:30:48.809Z dcache ino=5169 ci=0 patch-sparse off=216 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,222)
+2026-10-09T01:30:48.811Z append-reserve ino=5169 seq=3738 start=222 end=228 len=6
+2026-10-09T01:30:48.811Z dcache ino=5169 ci=0 patch-sparse off=222 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,228)
+2026-10-09T01:30:48.813Z append-reserve ino=5169 seq=3739 start=228 end=234 len=6
+2026-10-09T01:30:48.813Z dcache ino=5169 ci=0 patch-sparse off=228 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,234)
+2026-10-09T01:30:48.815Z append-reserve ino=5169 seq=3740 start=234 end=240 len=6
+2026-10-09T01:30:48.815Z dcache ino=5169 ci=0 patch-sparse off=234 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,240)
+2026-10-09T01:30:48.817Z append-reserve ino=5169 seq=3741 start=240 end=246 len=6
+2026-10-09T01:30:48.817Z dcache ino=5169 ci=0 patch-sparse off=240 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,246)
+2026-10-09T01:30:48.819Z append-reserve ino=5169 seq=3742 start=246 end=252 len=6
+2026-10-09T01:30:48.819Z dcache ino=5169 ci=0 patch-sparse off=246 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,252)
+2026-10-09T01:30:48.821Z append-reserve ino=5169 seq=3743 start=252 end=258 len=6
+2026-10-09T01:30:48.821Z dcache ino=5169 ci=0 patch-sparse off=252 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,258)
+2026-10-09T01:30:48.824Z append-reserve ino=5169 seq=3744 start=258 end=264 len=6
+2026-10-09T01:30:48.824Z dcache ino=5169 ci=0 patch-sparse off=258 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,264)
+2026-10-09T01:30:48.826Z append-reserve ino=5169 seq=3745 start=264 end=270 len=6
+2026-10-09T01:30:48.826Z dcache ino=5169 ci=0 patch-sparse off=264 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,270)
+2026-10-09T01:30:48.829Z append-reserve ino=5169 seq=3746 start=270 end=276 len=6
+2026-10-09T01:30:48.829Z dcache ino=5169 ci=0 patch-sparse off=270 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,276)
+2026-10-09T01:30:48.831Z append-reserve ino=5169 seq=3747 start=276 end=282 len=6
+2026-10-09T01:30:48.831Z dcache ino=5169 ci=0 patch-sparse off=276 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,282)
+2026-10-09T01:30:48.833Z append-reserve ino=5169 seq=3748 start=282 end=288 len=6
+2026-10-09T01:30:48.833Z dcache ino=5169 ci=0 patch-sparse off=282 len=6 | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6594 r=[192,288)
+2026-10-09T01:30:48.833Z dcache ino=5169 ci=0 snap-copy | dirty=1 hb=1 bg=1fbbbe8c9602cfaf obj=0 oseq=6594 sseq=6595 r=[192,288)
+2026-10-09T01:30:48.842Z dcache ino=5169 ci=0 put-record obj=462c8b87d4dad842 seq=6595 | dirty=0 hb=1 bg=1fbbbe8c9602cfaf obj=462c8b87d4dad842 oseq=6595 sseq=6595 r=[192,288)
+2026-10-09T01:30:48.842Z dcache ino=5169 ci=0 install len=131072 seq=6595 | dirty=0 hb=1 bg=1fbbbe8c9602cfaf obj=462c8b87d4dad842 oseq=6595 sseq=6595 r=[192,288)
+2026-10-09T01:30:48.863Z report ino=5169 ci=0 only=5169 sync=1 rc=0
+2026-10-09T01:30:48.863Z report-irec ino=5169 size=288 only=5169 sync=1 rc=0
+2026-10-09T01:30:48.863Z release ino=5169 begin
+2026-10-09T01:30:48.864Z release ino=5169 rc=0
+2026-10-09T01:30:48.865Z release ino=5169 begin
+2026-10-09T01:30:48.865Z release ino=5169 rc=0

@@ -1,0 +1,83 @@
+{
+  "processes": [
+    {
+      "pid": 1080407,
+      "exe": "/data1/efs/src/efsd",
+      "args": "/data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io ",
+      "environment": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    },
+    {
+      "pid": 1081359,
+      "exe": "/data1/efs/src/efsd",
+      "args": "/data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "environment": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    },
+    {
+      "pid": 1082188,
+      "exe": "/data1/efs/src/efsd",
+      "args": "/data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "environment": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    },
+    {
+      "pid": 1083389,
+      "exe": "/data1/efs/src/efsd",
+      "args": "/data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "environment": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    },
+    {
+      "pid": 1084471,
+      "exe": "/data1/efs/src/efs-fuse",
+      "args": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt ",
+      "environment": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    },
+    {
+      "pid": 1084505,
+      "exe": "/data1/efs/src/efs-fuse",
+      "args": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt2 ",
+      "environment": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0"
+      }
+    }
+  ],
+  "mounts": [
+    "/data1/efs/mnt fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001",
+    "/data1/efs/mnt2 fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001"
+  ],
+  "versions": {
+    "efsd": "efsd 393f5bae2c00 (branch devel-gate-closure, built 2026-10-09T02:01:30Z on nuc)",
+    "efs-fuse": "efs-fuse 393f5bae2c00 (branch devel-gate-closure, built 2026-10-09T02:01:30Z on nuc)",
+    "efs-mgmt": "efs-mgmt 393f5bae2c00 (branch devel-gate-closure, built 2026-10-09T02:01:30Z on nuc)",
+    "efs-bench": "efs-bench 393f5bae2c00 (branch devel-gate-closure, built 2026-10-09T02:01:30Z on nuc)",
+    "efs-query": "efs-query 393f5bae2c00 (branch devel-gate-closure, built 2026-10-09T02:01:30Z on nuc)"
+  },
+  "source_tree_sha256": "7d080221cba7aec4163a3a2a1732d5a69e160dd7d10f8499e110dc6766150fc2",
+  "binary_sha256": {
+    "efsd": "353a9371054bc6f8f5b68a63ee9e208923e0f1eed2e30e80663e8eb30fb01ea9",
+    "efs-fuse": "cb281d6d869da9d42ee99be5d5e9b59f79226ee633f7c06d67d1788333a40797",
+    "efs-mgmt": "6d2a1451e1ff4757943c35edf8d8a5002a781c83b5f7d7c3d062d72702a58f80",
+    "efs-bench": "5d44254418dc01f0195363ea8ac5c5af1ea98d0a533f9f40b1e088c3eea3e1b0",
+    "efs-query": "d6d72440382c99e35cbd22df83c5686f6ae1eeafc11324df8371b22604960fe6"
+  }
+}

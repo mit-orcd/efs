@@ -2568,6 +2568,16 @@ results dirs; move this plan's finished rows to project-history.
 
 ## W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 9 NUC continuation:** commits `795a17c2`, `e5d95c1d` and `393f5bae`
+repair a required-close apply deadlock, legacy truncate retaining/conflicting
+with append reservations, and starvation between active append writers. Full
+units, captured-store deferred cleanup replay/restart, eight focused peer
+append/truncate races and mount-sync in both TCP I/O modes pass. Final direct and buffered TCP
+POSIX are each 213/0/4 and peers each 64/64; both cold 800-record append/GC
+audits pass. Evidence is recorded in the
+[NUC gate report](../status/nuc-gate-closure-20261009.md). These gates do not
+activate D25 or replace W72 production-session/unknown-outcome acceptance.
+
 **Oct 8 coordinated-authority acceptance:** `593becf3`, `3a2033d8` and
 `dc9fded0` coordinate one authoritative EOF and identical reservation images
 across shard groups, complete lane barriers atomically and prune DONE rows in
@@ -2891,11 +2901,14 @@ failure trace remain in the readiness evidence.
 **Oct 9 UTC NUC acceptance:** mount-wide `-o sync` passes ordinary/append,
 small/large peer-before-close and cold crash verification in direct/TCP and
 buffered/TCP. Initial broad runs hit the 30-second `concurrent_appends`
-budget; clean direct POSIX passes, but peer append returns EIO/BUSY. Final
-coverage/service verification is blocked by NUC becoming unreachable; W73 is
-not closed. See the [NUC gate report](../status/nuc-gate-closure-20261009.md).
+budget; clean baseline peer append then exposed a required-close apply deadlock
+and two append/truncate/handoff defects. NUC is reachable again. The repaired
+final direct/TCP run passes POSIX 213/0/4, peer 64/64, sync-write fault recovery,
+append replay/leader death and exact 800-record cold append/GC. Final buffered/TCP also passes POSIX 213/0/4 and peer 64/64 with the same
+recovery and cold append/GC gates. The runner restores service successfully.
+RXE remains unavailable on NUC, so W73 is not closed. See the [NUC gate report](../status/nuc-gate-closure-20261009.md).
 
-**Remaining gates:** final buffered/direct × TCP/RXE matrix. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
+**Remaining gates:** RXE buffered/direct acceptance; final TCP cells pass on NUC. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
 crash now pass for partial bodies; W71 retains
 hardware power-loss acceptance. Software RXE on one AMD host is not physical
 multi-host or hardware RDMA proof.
