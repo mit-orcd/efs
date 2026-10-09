@@ -2840,6 +2840,39 @@ static void mkop(struct efs_opid *op, uint8_t id, uint64_t seq)
     op->seq = seq;
 }
 
+static void test_truncate_append_cursor(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();
+    struct coord_ctx cc={.kv=kv};
+    struct efs_opid op;struct efs_meta_row before,after;
+    struct efs_meta_truncate t={.size=0,.lane_mask=~0ULL};
+    efs_ino_t ino=0;uint64_t off=0;
+    CHECK(efs_meta_apply_init(kv,T0)==EFS_OK &&
+          efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0644,"append-truncate",&ino)==EFS_OK,
+          "append truncate fixture");
+    mkop(&op,7,1);
+    CHECK(efs_meta_apply_append_reserve(kv,ino,6,&op,coord_fn,&cc,&off)==EFS_OK && off==0,
+          "append truncate reserve");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&before)==EFS_OK,"append truncate before");
+    CHECK(efs_meta_apply_truncate(kv,ino,T0+1,&t)==EFS_ERR_BUSY,
+          "truncate refuses outstanding append ranges");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&after)==EFS_OK &&
+          after.content_epoch==before.content_epoch && after.base_size==before.base_size,
+          "refused truncate leaves epoch and size unchanged");
+    CHECK(efs_meta_apply_append_resolve(kv,ino,off,EFS_META_APPEND_COMPLETED)==EFS_OK,
+          "append completes before truncate retry");
+    uint8_t key[EFS_KV_KEY_MAX],value[24]={0};uint32_t kl=0,vl=sizeof(value);
+    value[7]=64;value[15]=64;
+    CHECK(efs_kv_key_append_cur(efs_kv_inode_shard(ino),ino,before.generation,key,&kl)==EFS_OK &&
+          efs_kv_put(kv,key,kl,value,sizeof(value))==EFS_OK,"closed cursor fixture");
+    CHECK(efs_meta_apply_truncate(kv,ino,T0+2,&t)==EFS_OK,"truncate after completion");
+    CHECK(efs_kv_get(kv,key,kl,value,&vl)==EFS_ERR_NOT_FOUND,"truncate retires closed watermark");
+    mkop(&op,7,2);
+    CHECK(efs_meta_apply_append_reserve(kv,ino,6,&op,coord_fn,&cc,&off)==EFS_OK && off==0,
+          "next append uses truncated EOF without zero gap");
+    efs_kv_mem_free(kv);
+}
+
 static void test_append_reserve(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -5727,6 +5760,7 @@ int main(void)
     test_truncate_range_del();
     test_cross_group_lane();
     test_append_reserve();
+    test_truncate_append_cursor();
     test_link_nlink();
     test_rmdir_rename();
     test_export_salt();
