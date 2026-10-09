@@ -718,3 +718,21 @@ This supersedes the activation/completion gap in the previous checkpoint.
 REPORT's operation-result reconciliation, retention of other ambiguous namespace
 requests, production ticketed PUT/storage fences and all-member retirement
 remain open. D25 staged; no production activation or push.
+
+## Publication/WAL checkpoint durability — implemented/gated
+
+The pump previously logged a failed KV WAL release and still saved its applied
+index, including at shutdown. Both checkpoints now require successful WAL
+release. Legacy/typed publication and activation IO/NOMEM keep the pending apply
+index; a batch's earlier STALE cannot conceal later failed storage.
+
+An actual follower WAL fdatasync EIO leaves periodic/shutdown checkpoints
+unchanged. Cold restart replays the durable Raft tail and recovers exact bytes,
+eight follow-up files and nlink2; physical deletion drains. AMD normal
+core212/212, peer64/64, append800, retained session/REPORT gates and GC/restart
+pass. Complete code regressions pass; warning-free Linux build; docs5/5.
+[Evidence](../../results/measure/20261009-publication-durability/README.md).
+
+The initial fault hook targeted fsync; the KV WAL uses fdatasync. That no-fault
+timeout restored service, and the corrected actual fault run passed. Hardware
+power-loss and distributed RDMA remain unclaimed. Installed AMD service restored.
