@@ -1,0 +1,3 @@
+FAIL tests/test_raft.c:1467: partial reply does not resend outstanding suffix
+FAIL tests/test_raft.c:1469: duplicate partial reply does not resend suffix
+test_raft: 2 failure(s)

@@ -1,0 +1,65 @@
+node 1 counters {'sync': 53783, 'sync_error': 0, 'durable_skip': 0, 'hold_skip': 0, 'hold_open': 53825, 'hold_close': 53825, 'rotate': 0, 'eligible': 0, 'reject_store': 0, 'reject_role': 247206, 'reject_type': 0, 'reject_route': 0, 'reject_term': 0, 'reject_empty': 0, 'reject_entries': 0, 'reject_log': 0, 'reject_tail': 0, 'reject_config': 0, 'reject_admit': 0, 'reject_bytes': 0, 'follow_end': 0, 'follow_ineligible': 0, 'follow_bytes': 0, 'follow_error': 0, 'host_end': 231542, 'host_group': 0, 'host_count': 5, 'host_bytes': 0, 'inbox_empty': 199791, 'spin_cap': 0, 'tail_behind': 0, 'tail_ahead': 0, 'tail_term': 0, 'inbox_drop': 0, 'ae_initial': 51501, 'ae_extend': 32352, 'ae_timeout': 458, 'ae_other': 5625, 'reply_partial': 30197, 'reply_covered': 49925, 'drop_data': 0, 'drop_empty': 0, 'drop_other': 0, 'accept_data': 0, 'accept_empty': 0}
+wal_entries n 53783 mean 1.0069724634178085 p50<= 1 p95<= 1 one% 99.33994012978079 bin discrepancy 0
+wal_bytes n 53783 mean 131.02740642954095 p50<= 256 p95<= 256 one% 0.0 bin discrepancy 0
+sync_us n 53783 mean 103.77102430135916 p50<= 128 p95<= 256 one% 0.003718647156164587 bin discrepancy 0
+sync_wait_us n 1920 mean 78.9078125 p50<= 64 p95<= 256 one% 0.3125 bin discrepancy 0
+sync_waiters n 1920 mean 1.0703125 p50<= 1 p95<= 2 one% 93.17708333333333 bin discrepancy 0
+hold_us n 53825 mean 8.530478402229447 p50<= 8 p95<= 32 one% 0.0 bin discrepancy 0
+hold_depth n 53827 mean 1.0000371560740893 p50<= 1 p95<= 1 one% 99.99628439259108 bin discrepancy 0
+proposers n 54158 mean 1.0047453746445585 p50<= 1 p95<= 1 one% 99.53838768049042 bin discrepancy 0
+inbox n 231542 mean 1.0676507933765795 p50<= 1 p95<= 2 one% 93.95530832419172 bin discrepancy 0
+host_messages n 231547 mean 1.067627738644854 p50<= 1 p95<= 2 one% 93.95327946378058 bin discrepancy 0
+follow_messages n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+follow_entries n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+follow_assembly_us n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+follow_total_us n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+spins n 53827 mean 0.0725100785850967 p50<= 0 p95<= 0 one% 0.007431214817842347 bin discrepancy 0
+node 2 counters {'sync': 80230, 'sync_error': 0, 'durable_skip': 0, 'hold_skip': 0, 'hold_open': 39777, 'hold_close': 39777, 'rotate': 0, 'eligible': 50716, 'reject_store': 0, 'reject_role': 110675, 'reject_type': 0, 'reject_route': 0, 'reject_term': 0, 'reject_empty': 144021, 'reject_entries': 0, 'reject_log': 0, 'reject_tail': 2961, 'reject_config': 0, 'reject_admit': 0, 'reject_bytes': 0, 'follow_end': 49943, 'follow_ineligible': 773, 'follow_bytes': 0, 'follow_error': 0, 'host_end': 284615, 'host_group': 5544, 'host_count': 6, 'host_bytes': 0, 'inbox_empty': 108827, 'spin_cap': 0, 'tail_behind': 2961, 'tail_ahead': 0, 'tail_term': 0, 'inbox_drop': 0, 'ae_initial': 9383, 'ae_extend': 45040, 'ae_timeout': 233, 'ae_other': 4156, 'reply_partial': 45256, 'reply_covered': 6187, 'drop_data': 0, 'drop_empty': 0, 'drop_other': 0, 'accept_data': 53582, 'accept_empty': 143343}
+wal_entries n 80230 mean 1.1748722423033777 p50<= 1 p95<= 2 one% 89.05521625327184 bin discrepancy 0
+wal_bytes n 80230 mean 152.8230088495575 p50<= 256 p95<= 512 one% 0.0 bin discrepancy 0
+sync_us n 80230 mean 117.20749096348 p50<= 128 p95<= 256 one% 0.019942664838589058 bin discrepancy 0
+sync_wait_us n 12267 mean 116.31474688187821 p50<= 128 p95<= 256 one% 0.008151952392598028 bin discrepancy 0
+sync_waiters n 12267 mean 1.2611070351349147 p50<= 1 p95<= 2 one% 77.81038558734816 bin discrepancy 0
+hold_us n 39777 mean 81.9211856097745 p50<= 64 p95<= 512 one% 0.1508409382306358 bin discrepancy 0
+hold_depth n 44877 mean 1.130111192815919 p50<= 1 p95<= 2 one% 88.63560398422355 bin discrepancy 0
+proposers n 54046 mean 1.1854901380305665 p50<= 1 p95<= 2 one% 84.99056359397551 bin discrepancy 0
+inbox n 284615 mean 1.080758217240834 p50<= 1 p95<= 2 one% 93.65634277884159 bin discrepancy 0
+host_messages n 290165 mean 1.0600865025071942 p50<= 1 p95<= 2 one% 94.92013164923405 bin discrepancy 0
+follow_messages n 50716 mean 1.0 p50<= 1 p95<= 1 one% 100.0 bin discrepancy 0
+follow_entries n 50716 mean 1.0065265399479455 p50<= 1 p95<= 1 one% 99.38283776323054 bin discrepancy 0
+follow_assembly_us n 50716 mean 5.709243631201199 p50<= 4 p95<= 16 one% 0.21097878381575835 bin discrepancy 0
+follow_total_us n 50716 mean 114.194356810474 p50<= 128 p95<= 256 one% 0.0 bin discrepancy 0
+spins n 21200 mean 4.307688679245283 p50<= 0 p95<= 32 one% 0.6084905660377359 bin discrepancy 0
+node 3 counters {'sync': 43084, 'sync_error': 0, 'durable_skip': 0, 'hold_skip': 0, 'hold_open': 0, 'hold_close': 0, 'rotate': 0, 'eligible': 2004, 'reject_store': 0, 'reject_role': 0, 'reject_type': 0, 'reject_route': 0, 'reject_term': 0, 'reject_empty': 133950, 'reject_entries': 0, 'reject_log': 0, 'reject_tail': 47701, 'reject_config': 0, 'reject_admit': 0, 'reject_bytes': 0, 'follow_end': 681, 'follow_ineligible': 1323, 'follow_bytes': 0, 'follow_error': 0, 'host_end': 7106, 'host_group': 29028, 'host_count': 1484, 'host_bytes': 0, 'inbox_empty': 572, 'spin_cap': 0, 'tail_behind': 47701, 'tail_ahead': 0, 'tail_term': 0, 'inbox_drop': 79300, 'ae_initial': 0, 'ae_extend': 0, 'ae_timeout': 0, 'ae_other': 0, 'reply_partial': 0, 'reply_covered': 0, 'drop_data': 17560, 'drop_empty': 61740, 'drop_other': 0, 'accept_data': 48665, 'accept_empty': 133671}
+wal_entries n 43084 mean 2.2002831677652956 p50<= 1 p95<= 4 one% 78.78794912264414 bin discrepancy 0
+wal_bytes n 43084 mean 286.2146968712283 p50<= 256 p95<= 1024 one% 0.0 bin discrepancy 0
+sync_us n 43084 mean 5234.652167858138 p50<= 8192 p95<= 16384 one% 0.0 bin discrepancy 0
+sync_wait_us n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+sync_waiters n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+hold_us n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+hold_depth n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+proposers n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+inbox n 7106 mean 25.65887981987053 p50<= 8 p95<= 256 one% 5.3053757388122715 bin discrepancy 0
+host_messages n 37618 mean 4.846934977936095 p50<= 4 p95<= 16 one% 31.764049125418683 bin discrepancy 0
+follow_messages n 2004 mean 1.0 p50<= 1 p95<= 1 one% 100.0 bin discrepancy 0
+follow_entries n 2004 mean 2.0848303393213574 p50<= 1 p95<= 4 one% 55.63872255489022 bin discrepancy 0
+follow_assembly_us n 2004 mean 17.310878243512974 p50<= 16 p95<= 64 one% 0.0 bin discrepancy 0
+follow_total_us n 2004 mean 5594.213572854292 p50<= 8192 p95<= 16384 one% 0.0 bin discrepancy 0
+spins n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+node 4 counters {'sync': 26926, 'sync_error': 0, 'durable_skip': 0, 'hold_skip': 0, 'hold_open': 0, 'hold_close': 0, 'rotate': 0, 'eligible': 6795, 'reject_store': 0, 'reject_role': 0, 'reject_type': 0, 'reject_route': 0, 'reject_term': 1, 'reject_empty': 50447, 'reject_entries': 0, 'reject_log': 0, 'reject_tail': 24380, 'reject_config': 0, 'reject_admit': 0, 'reject_bytes': 0, 'follow_end': 4029, 'follow_ineligible': 2766, 'follow_bytes': 0, 'follow_error': 0, 'host_end': 24974, 'host_group': 0, 'host_count': 16, 'host_bytes': 0, 'inbox_empty': 154, 'spin_cap': 0, 'tail_behind': 24380, 'tail_ahead': 0, 'tail_term': 0, 'inbox_drop': 0, 'ae_initial': 0, 'ae_extend': 0, 'ae_timeout': 0, 'ae_other': 0, 'reply_partial': 0, 'reply_covered': 0, 'drop_data': 0, 'drop_empty': 0, 'drop_other': 0, 'accept_data': 28811, 'accept_empty': 50048}
+wal_entries n 26926 mean 1.4958404516081112 p50<= 1 p95<= 4 one% 66.06996954616356 bin discrepancy 0
+wal_bytes n 26926 mean 194.48796702072346 p50<= 256 p95<= 512 one% 0.0 bin discrepancy 0
+sync_us n 26926 mean 4755.706417588947 p50<= 4096 p95<= 16384 one% 0.0 bin discrepancy 0
+sync_wait_us n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+sync_waiters n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+hold_us n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+hold_depth n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+proposers n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+inbox n 24974 mean 3.157563866421078 p50<= 4 p95<= 8 one% 15.764394970769601 bin discrepancy 0
+host_messages n 24990 mean 3.155542216886755 p50<= 4 p95<= 8 one% 15.754301720688275 bin discrepancy 0
+follow_messages n 6795 mean 1.0 p50<= 1 p95<= 1 one% 100.0 bin discrepancy 0
+follow_entries n 6795 mean 1.6030905077262694 p50<= 1 p95<= 4 one% 62.61957321559971 bin discrepancy 0
+follow_assembly_us n 6795 mean 12.830610743193525 p50<= 16 p95<= 64 one% 0.0 bin discrepancy 0
+follow_total_us n 6795 mean 5147.614422369389 p50<= 8192 p95<= 16384 one% 0.0 bin discrepancy 0
+spins n 0 mean None p50<= None p95<= None one% None bin discrepancy 0
+rates [{'start': 7.875699998294294e-05, 'end': 100.00008595899999, 'files_per_second': 122.23999119627582}, {'start': 100.00008595899999, 'end': 200.00006286899998, 'files_per_second': 72.20001667098386}, {'start': 200.00006286899998, 'end': 300.0000628749999, 'files_per_second': 38.729999997676224}]

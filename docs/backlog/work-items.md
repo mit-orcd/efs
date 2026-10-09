@@ -3860,11 +3860,15 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
-**Investigation checkpoint:** Branch devel-persistence-pressure identifies
-extending small-entry windows, older reply tracking and shared inbox overflow
-as candidate amplification paths. NUC is unreachable; no policy fix or live
-candidate result is claimed.
-[Code findings and solution gates](../status/w97-solution-investigation-20261009.md).
+**Oct 9 solution trials:** Cross-group priority coalescing could overwrite an
+independent group's queued ACK/heartbeat. Fix a770290a isolates same-type
+replacement by group; actual-helper regression, Raft/store, 212/212 core
+POSIX, 64/64 peer and 128 sampled cold payload checks pass. A partial-reply
+tracking candidate was rejected and reverted after an append timeout and
+worse late throughput. Group isolation measures 139.6 → 43.7 → 70.1 files/s,
+versus baseline 112.2 → 60.5 → 48.4; n3 drops increase to 129,365. The defect
+is fixed, but pressure and inconsistent sustained performance remain open.
+[Trials, exact evidence and remaining solution gates](../status/w97-solution-investigation-20261009.md).
 
 **Class/status:** Performance investigation; open. Sustained tiny-file
 throughput declines alongside persistence latency and replication pressure.
