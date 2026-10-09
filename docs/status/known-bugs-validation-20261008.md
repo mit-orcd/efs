@@ -7,7 +7,9 @@ staged D25 activation, main merge or push.
 
 ## What changed
 
-No new production defect was established. The current CREATE RPC constructs
+No new production defect was established in the initial run. A later
+[ordinary negative-CREATE replay defect and fix](known-bugs-create-negative-verdict-20261008.md)
+is tracked separately. The current CREATE RPC constructs
 one opid outside its transport retry loop; CREATE returns a request-local result
 rather than reading shared `last_err`. Server replay probes precede namespace
 existence decisions. REPORT uses `report_fill_owned` to refuse staging-only
@@ -18,8 +20,9 @@ Added focused regressions:
 
 - Successful CREATE replay after unlink and reuse returns the original inode,
   preserves the replacement and does not reacquire closed ownership, for both
-  ordinary and pending CREATE apply paths. Negative replay likewise retains
-  EEXIST after name reuse and preserves the replacement.
+  ordinary and pending CREATE apply paths. The initial negative replay test
+  covered pending CREATE only; it retains EEXIST after name reuse and preserves
+  the replacement. The follow-up above adds ordinary negative CREATE coverage.
 - Production CREATE construction, suffix packing, routing retry loop and error
   mapping preserve one byte-identical request through send/receive loss, BUSY
   and leader redirects for files and directories. Exhausted BUSY remains BUSY;
