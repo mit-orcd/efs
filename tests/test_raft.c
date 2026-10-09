@@ -1754,6 +1754,72 @@ static void test_recv_batch_noop(void)
     }
 }
 
+static uint32_t overlap_admitted;
+static uint32_t overlap_admit_max;
+static int overlap_refuse;
+static int overlap_admit(void *app,const struct efs_raft_entry *e,uint32_t n,int source)
+{
+    (void)app;(void)e;(void)source;overlap_admitted=n;
+    if(n>overlap_admit_max)overlap_admit_max=n;
+    return overlap_refuse?EFS_ERR_BUSY:EFS_OK;
+}
+
+/* Ordinary data + matching old prefix/new suffix must retain one barrier.
+ * Exercise starting and extending holds, fresh reads, conflicts and EIO. */
+static void test_recv_batch_overlap(void)
+{
+    for (unsigned enabled=0;enabled<2;enabled++)
+    for (unsigned kind=0;kind<10;kind++) {
+        memset(&recv_test,0,sizeof(recv_test));overlap_admitted=overlap_admit_max=0;overlap_refuse=kind==6;
+        struct efs_raft_store *store=efs_raft_mem_create();
+        struct efs_raft_store ops=*store;recv_test.original=ops;
+        ops.append=recv_test_append;ops.batch_begin=recv_test_begin;ops.batch_end=recv_test_end;
+        struct efs_raft_cfg cfg={0};cfg.id=1;cfg.n=3;cfg.group=2;cfg.election_ticks=10;cfg.heartbeat_ticks=1;
+        cfg.store=&ops;cfg.store_ctx=store;cfg.send=recv_test_send;cfg.apply=recv_test_apply;
+        cfg.batch_overlap=(int)enabled;cfg.admit=overlap_admit;
+        struct efs_raft *r=efs_raft_new(&cfg);CHECK(r!=NULL,"overlap fixture");
+        struct efs_raft_msg m[3];memset(m,0,sizeof(m));
+        m[0].type=EFS_RAFT_MSG_AE_REQ;m[0].from=0;m[0].to=1;m[0].group=2;m[0].term=2;m[0].boot_id=2;
+        CHECK(efs_raft_recv(r,m)==EFS_OK,"overlap leader established");recv_test.replies=0;
+        m[0].nentries=1;m[0].entries[0]=(struct efs_raft_entry){2,1,(const uint8_t*)"a"};m[0].leader_commit=1;
+        m[1]=m[0];m[1].nentries=2;m[1].entries[1]=(struct efs_raft_entry){2,1,(const uint8_t*)"b"};m[1].leader_commit=2;
+        m[2]=m[0];m[2].prev_index=2;m[2].prev_term=2;m[2].leader_commit=3;
+        if(kind==1)m[1].last_log_index=77;
+        if(kind==2)m[1].entries[0].term=1; /* committed-prefix conflict */
+        if(kind==3)recv_test.fail_end=1;
+        if(kind==4){ /* overlapping request starts a hold from a durable seed */
+            CHECK(recv_test.original.append(store,1,2,(const uint8_t*)"a",1)==EFS_OK,"overlap seed");
+            recv_test.durable=1;
+        }
+        if(kind==5){m[1].term=3;m[1].entries[1].term=3;} /* changed term cannot join */
+        if(kind==7)m[1].boot_id=1; /* delayed frame from a retired incarnation */
+        if(kind==8){m[0].leader_commit=0;m[1].entries[0].term=1;} /* uncommitted conflict must flush/truncate */
+        uint8_t *big=NULL;
+        if(kind==9){
+            big=calloc(1,600*1024);CHECK(big!=NULL,"overlap byte fixture");
+            m[0].entries[0].cmd=big;m[0].entries[0].clen=600*1024;
+            m[1].entries[0]=m[0].entries[0];m[1].entries[1].cmd=big;m[1].entries[1].clen=300*1024;
+            m[2].entries[0].cmd=big;m[2].entries[0].clen=300*1024;
+        }
+        int rc=efs_raft_recv_batch(r,kind==4?m+1:m,kind==4?2:3);
+        if(kind==2)CHECK(rc==EFS_ERR_PROTO,"overlap never hides committed conflict");
+        else if(kind==3){CHECK(rc==EFS_ERR_IO && !recv_test.replies && !recv_test.applies,"overlap failed sync sends no ACK/apply");CHECK(efs_raft_tick(r)==EFS_ERR_IO,"overlap sync failure fenced");}
+        else if(kind==5)CHECK(rc==EFS_OK,"changed term uses normal conflict path");
+        else if(kind==6){uint64_t last,term;CHECK(rc==EFS_OK && ops.last(store,&last,&term)==EFS_OK && last==0,"refused suffix never persisted");}
+        else if(kind==7){uint64_t last,term;CHECK(rc==EFS_OK && ops.last(store,&last,&term)==EFS_OK && last==1 && recv_test.applies==1,"retired boot frame cannot enter cohort or advance log");}
+        else if(kind==8)CHECK(rc==EFS_OK && recv_test.barriers==3 && recv_test.applies==3,"uncommitted conflict keeps separate persistence/truncation boundaries");
+        else {
+            CHECK(rc==EFS_OK && recv_test.applies==3,"overlap applies exact committed suffix");
+            CHECK(recv_test.barriers==(enabled?((kind==1||kind==9)?2u:1u):(kind==4?2u:3u)),"only verified non-read overlap joins durable boundaries");
+            CHECK(overlap_admitted==1 && overlap_admit_max==1,"only novel suffix admitted");
+        }
+        CHECK(!recv_test.depth,"overlap releases every hold");
+        efs_raft_free(r);efs_raft_mem_free(store);
+        free(big);
+    }
+    overlap_refuse=0;
+}
+
 static int pressure_admit(void *app, const struct efs_raft_entry *e,
                            uint32_t n, int source)
 {
@@ -1837,6 +1903,7 @@ int main(void)
     test_follower_apply_retry();
     test_recv_batch();
     test_recv_batch_noop();
+    test_recv_batch_overlap();
     test_election_i1();
     test_ae_full_window_not_resent_per_propose();
     test_step_down_no_campaign();
