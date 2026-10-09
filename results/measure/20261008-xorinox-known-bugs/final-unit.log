@@ -1,0 +1,46 @@
+python3 tests/test_kv_wal_faults.py
+WAL sticky failures and reopen recovery PASS
+python3 tests/test_create_errors.py
+request-local create errors: concurrent BUSY/quota/success and lookup errors PASS
+python3 tests/test_create_retry_identity.py
+inode-rpc: retry type=45 attempt=0 why=send
+inode-rpc: retry type=45 attempt=0 why=send
+inode-rpc: retry type=45 attempt=0 why=recv rc=-1
+inode-rpc: retry type=45 attempt=0 why=recv rc=-1
+CREATE retry identity: send/recv loss, BUSY, leader redirect, real EEXIST and exhausted BUSY for files/directories PASS
+python3 tests/test_open_lease.py
+open leases: shared opens, failed HOLD, acquire/release serialization PASS
+python3 tests/test_unlink_verdict.py
+simple unlink: rejected apply, term mismatch, overwritten verdict and forwarding PASS
+python3 tests/test_gc_verdict.py
+raft-host: apply lane-sweep rc=-13 index=41 ino=42
+raft-host: apply reap-done rc=-13 index=41 ino=42
+raft-host: apply lane-sweep rc=-1 index=41 ino=42
+raft-host: apply reap-done rc=-1 index=41 ino=42
+raft-host: apply lane-sweep rc=-2 index=41 ino=42
+raft-host: apply reap-done rc=-2 index=41 ino=42
+raft-host: apply lane-sweep rc=-7 index=41 ino=42
+raft-host: apply reap-done rc=-7 index=41 ino=42
+raft-host: apply lane-sweep rc=-15 index=41 ino=42
+raft-host: apply reap-done rc=-15 index=41 ino=42
+raft-host: apply gc-ack rc=-13 index=41 cnt=1
+raft-host: apply gc-ack rc=-1 index=41 cnt=1
+raft-host: apply gc-ack rc=-2 index=41 cnt=1
+raft-host: apply gc-ack rc=-7 index=41 cnt=1
+raft-host: apply gc-ack rc=-15 index=41 cnt=1
+GC apply decoders and durable local/forwarded verdict propagation PASS
+python3 tests/test_put_hint.py
+PUT hints: lost-reply eviction probes and concurrent placement cache PASS
+test_meta_apply: OK
+store: put O_DIRECT zero-copy (payload+digest writev) len=4096
+store: put O_DIRECT bounce copy (buf align=1 len=4096)
+production PUT durability: buffered/direct/bounce file and pathname barriers, retries and fault refusal PASS
+span-only report marks: phantom cleared, dirty/stalled/pinned/unreported ownership retained PASS
+put_fragments ino=1 chunk=0 nodes=1,2,3 attempt 1/4 failed: injected (efs_rc=-6) — retrying
+PUT retry: inherited backoff, no expired sends/reprobes, stable object and terminal outcomes PASS
+mode=0 rc=-13 elapsed_ms=15 sent=3 drops=3 releases=0 peer_fail=0
+mode=1 rc=0 elapsed_ms=15 sent=3 drops=1 releases=2 peer_fail=0
+mode=2 rc=-13 elapsed_ms=0 sent=0 drops=0 releases=0 peer_fail=0
+mode=3 rc=-13 elapsed_ms=16 sent=3 drops=2 releases=1 peer_fail=0
+mode=4 rc=-11 elapsed_ms=0 sent=3 drops=0 releases=3 peer_fail=0
+parallel PUT: caller-bound quorum/drain, expired admission, one-ACK refusal, negative replies and no false peer failures PASS
