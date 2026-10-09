@@ -1145,14 +1145,40 @@ static inline int efs_getchunks_reply_valid(
  * struct efs_msg_inode_reply. */
 
 /* Phase 2b: batched dirty-metadata report (replaces the client blob flush).
- * The request payload is this header, then `count` struct efs_chunk_rec, then
+ * The request payload is this header, then `count` packed chunk records, then
  * `ino_count` struct efs_ino_size_rec. When sync is set, the primary commits
  * the export (server_flush_fragmented_meta) before replying — this is the
  * fsync durability barrier now that clients no longer blob-flush. */
+/* REPORT session suffix is UUID + big-endian epoch, independent of an
+ * operation receipt. Legacy 0/1 flags remain decodable for old log clients. */
+#define EFS_REPORT_F_SYNC 1u
+#define EFS_REPORT_F_SESSION 2u
+#define EFS_REPORT_SESSION_LEN 20u
+static inline int efs_report_session_valid(const struct efs_opid *id)
+{
+    uint8_t any = 0;
+    if (!id || !id->session_epoch) return 0;
+    for (unsigned i = 0; i < 16; i++) any |= id->client_uuid[i];
+    return any != 0;
+}
+static inline void efs_report_session_pack(uint8_t *p, const struct efs_opid *id)
+{
+    memcpy(p, id->client_uuid, 16);
+    for (unsigned i = 0; i < 4; i++)
+        p[16+i] = (uint8_t)(id->session_epoch >> (24 - 8*i));
+}
+static inline int efs_report_session_unpack(struct efs_opid *id, const uint8_t *p)
+{
+    memset(id, 0, sizeof(*id));
+    memcpy(id->client_uuid, p, 16);
+    for (unsigned i = 0; i < 4; i++) id->session_epoch = (id->session_epoch << 8) | p[16+i];
+    id->seq = 1; /* Internal participant admission only; not a REPORT receipt. */
+    return efs_report_session_valid(id);
+}
 struct efs_msg_report_chunks {
     efs_export_id_t export_id;
     uint32_t count;     /* chunk recs */
-    uint32_t sync;      /* 0 = async (mark dirty); 1 = commit before replying */
+    uint32_t sync;      /* EFS_REPORT_F_*; optional session suffix after inode recs */
     uint32_t ino_count; /* inode size/mtime recs (after the chunk recs) */
 };
 

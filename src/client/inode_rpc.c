@@ -2126,7 +2126,7 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     if (efs_client_rpc_past_deadline())
         return EFS_ERR_BUSY;
     size_t limit = EFS_MSG_MAX_LEN - 1u;
-    size_t len = sizeof(struct efs_msg_report_chunks);
+    size_t len = sizeof(struct efs_msg_report_chunks) + EFS_REPORT_SESSION_LEN;
     /* Reject impossible counts before touching arrays or allocating. Keep
      * every subtraction in size_t and the eventual wire cast representable. */
     if (ino_count > (limit - len) / sizeof(struct efs_ino_size_rec))
@@ -2145,13 +2145,18 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
             return EFS_ERR_INVAL;
         len += bytes;
     }
+    struct efs_opid session;
+    /* Query the shared mount identity; this does not allocate/ACK an operation. */
+    int identity_rc = efs_client_publication_id(1, &session);
+    if (identity_rc != EFS_OK) return identity_rc;
+    if (!efs_report_session_valid(&session)) return EFS_ERR_INVAL;
     uint8_t *buf = malloc(len);
     if (!buf)
         return EFS_ERR_NOMEM;
     struct efs_msg_report_chunks *hdr = (struct efs_msg_report_chunks *)buf;
     hdr->export_id = export_id;
     hdr->count = count;
-    hdr->sync = sync ? 1u : 0u;
+    hdr->sync = (sync ? EFS_REPORT_F_SYNC : 0u) | EFS_REPORT_F_SESSION;
     hdr->ino_count = ino_count;
     uint8_t *p = buf + sizeof(*hdr);
     if (count) {
@@ -2166,6 +2171,8 @@ int efs_client_rpc_report_dirty_raft(efs_export_id_t export_id,
     }
     if (ino_count)
         memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
+    p += (size_t)ino_count * sizeof(*irecs);
+    efs_report_session_pack(p, &session);
     struct efs_msg_inode_reply r;
     /* Reply wait sized to the work: the server packs, publishes and
      * waits for a Raft commit per record (13 us/rec alone, 8 concurrent
