@@ -326,7 +326,19 @@ int main(void)
         CHECK(efs_query_catalog_inode(c,indexed[i],NULL,NULL)==EFS_ERR_NOT_FOUND,"old image excludes new inode");
     }
     CHECK(newer && efs_query_catalog_inode(newer,UINT64_MAX,NULL,NULL)==EFS_ERR_NOT_FOUND,"absent inode lookup");
+    struct efs_query_catalog *shared=NULL;
+    CHECK(!capture(kv,newer,&shared) && !efs_query_catalog_refolded(shared),
+          "unchanged decoded inode blocks reused without refolding");
     efs_query_catalog_free(newer);newer=NULL;
+    for (unsigned i=0;i<512 && shared;i++) {
+        struct efs_meta_row row;struct efs_meta_stat value;
+        CHECK(!efs_query_catalog_inode(shared,indexed[i],&row,&value) &&
+              row.ino==indexed[i] && value.ino==indexed[i],
+              "shared inode blocks survive original catalog retirement");
+    }
+    CHECK(shared && !efs_query_catalog_stats(shared,EFS_ROOT_INO,&stat),
+          "directory rollup survives source catalog retirement");
+    efs_query_catalog_free(shared);
     CHECK(!efs_meta_apply_get_inode(kv,b,&r),"dir for corruption");
     r.parent=a;row_put(kv,&r);
     CHECK(capture(kv,c,&newer)==EFS_ERR_PROTO && !newer,"mismatched parent fails closed");
