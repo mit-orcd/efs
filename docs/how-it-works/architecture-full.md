@@ -1484,6 +1484,11 @@ recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
 ### 1. The task right now
 
+[AMD W73/W64 RXE completion](../status/amd-rxe-gate-closure-20261009.md): integrated
+source passes direct/buffered RXE core POSIX, peer, mount-sync, replay/recovery
+and exact cold append/GC. Accepted binaries are installed direct/RXE with
+runtime verbs proof. W72 and hardware durability remain separate open work.
+
 [AMD functional follow-up](../status/amd-functional-gates-20261008.md): append retry ownership,
 RXE memory/shutdown, exact namespace crash boundaries and cold physical GC.
 Short functional cycles default to direct-I/O/TCP. Remaining durable append,
@@ -4616,6 +4621,14 @@ results dirs; move this plan's finished rows to project-history.
 
 ### W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 8 New York / Oct 9 UTC RXE acceptance:** integrated source `f6233987`
+passes direct and buffered RXE core POSIX 212/212, peer 64/64, sync/failure
+recovery, durable replay/32-identical-request/leader-death and exact 800-record
+cold append/GC gates on AMD. The same binaries are deployed direct/RXE with
+all six processes verified using verbs. W72 session/unknown-outcome and broader
+physical-host obligations remain open. See the
+[RXE report](../status/amd-rxe-gate-closure-20261009.md).
+
 **Oct 9 NUC continuation:** commits `795a17c2`, `e5d95c1d` and `393f5bae`
 repair a required-close apply deadlock, legacy truncate retaining/conflicting
 with append reservations, and starvation between active append writers. Full
@@ -4925,7 +4938,8 @@ publication primitives or reclaiming state before revocation completes.
 ### W73 · Synchronous application-write publication and acceptance (queue row spec3)
 
 **Class:** synchronous-write integration. **Status:** implemented in `8bf38bfa`;
-AMD direct/TCP accepted; mount-sync and final mode/durability gates remain.
+supported software direct/buffered × TCP/RXE and mount-sync gates accepted;
+hardware power-loss acceptance remains separate under W71.
 
 Both production FUSE write callbacks now flush/publish positive O_SYNC/O_DSYNC
 writes before replying, after admission credits and append locks are released
@@ -4956,7 +4970,14 @@ append replay/leader death and exact 800-record cold append/GC. Final buffered/T
 recovery and cold append/GC gates. The runner restores service successfully.
 RXE remains unavailable on NUC, so W73 is not closed. See the [NUC gate report](../status/nuc-gate-closure-20261009.md).
 
-**Remaining gates:** RXE buffered/direct acceptance; final TCP cells pass on NUC. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
+**Oct 8 New York / Oct 9 UTC RXE completion:** integrated source `f6233987`
+passes both AMD RXE modes: core POSIX 212/212, peer 64/64, mount-sync, actual
+O_SYNC/O_DSYNC failure retention/recovery, cold exact bytes and mixed append/GC.
+The accepted exact binaries are installed direct/RXE, verified with verbs
+handles on four daemons and two clients. The optional suite has 1 pass / 4
+explicit capability skips. See the [AMD RXE report](../status/amd-rxe-gate-closure-20261009.md).
+
+**Remaining boundary:** the supported software TCP/RXE matrix is complete. Physical multi-host/hardware RDMA evidence is separate. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
 crash now pass for partial bodies; W71 retains
 hardware power-loss acceptance. Software RXE on one AMD host is not physical
 multi-host or hardware RDMA proof.

@@ -1,0 +1,9 @@
+parallel 5 tests jobs=1 (serial 0 after)
+SKIP mmap_write_read                  mmap unsupported: [Errno 19] No such device
+pass mmap_private_not_visible        
+SKIP virt_stats_readable              .efs commands absent (opt-in disabled)
+SKIP virt_find_query                  .efs commands absent (opt-in disabled)
+SKIP virt_find_not_a_real_dir         .efs commands absent (opt-in disabled)
+============================================================
+POSIX suite: 1/5 pass, 0 fail, 4 skip, 0 notrun  (0.6s)
+wrote /data1/efs/w73-w64-rxe-deploy-f6233987/posix-extras.tsv

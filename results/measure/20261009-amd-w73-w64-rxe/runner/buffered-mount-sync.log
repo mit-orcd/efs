@@ -1,0 +1,22 @@
+Evidence directory: /data1/efs/gc-buffered-ove11qsa
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=15078885698983515846
+client serving PASS
+sync peer mounted PASS
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 362719 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 362693 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+synchronous write physical deletion drained PASS
+Mount-wide sync ordinary small/queued/append before close and cold crash bytes PASS
+Mount-wide sync acceptance complete; physical deletion drained PASS

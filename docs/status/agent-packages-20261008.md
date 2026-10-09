@@ -101,3 +101,13 @@ Keep EFS_COMMANDS=0 and EFS_COMMANDS_SERVER=0 after every service restoration.
 No push, main merge, tag, reboot, forced discard or staged D25 activation.
 Commit focused logical portions and record passed, failed and unavailable gates;
 close an item only when its documented acceptance is actually met.
+
+
+## AMD-only gate continuation — October 8 New York
+
+`devel-gate-closure` fast-forwarded to integrated devel `f6233987` and completed
+both RXE modes plus mount-sync on AMD. Core POSIX 212/212, peer 64/64 and exact
+800-record cold append/GC pass in each mode. The same binaries are installed
+direct/RXE and runtime verified; no NUC/Xorinox operation was performed.
+See the [AMD RXE report](amd-rxe-gate-closure-20261009.md). W72 and hardware
+acceptance remain outside this software-matrix completion.
