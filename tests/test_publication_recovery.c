@@ -37,13 +37,22 @@ static void exercise(struct efs_kv *kv,efs_ino_t ino,uint64_t gen)
 {
     admit(kv,ino);
     struct efs_meta_pub first=publication(ino,gen,0,10),loser=publication(ino,gen,0,11);
+    first.receipt_locator=(struct efs_publication_locator){0,101,7};
+    loser.receipt_locator=(struct efs_publication_locator){2,102,9};
     struct efs_meta_pub next=publication(ino,gen,10,12);int v=123;
     assert(result(kv,&first,&v)==EFS_ERR_NOT_FOUND && v==123);
     assert(efs_meta_apply_publish(kv,&first)==EFS_OK);
+    struct efs_publication_locator locator;
+    assert(efs_meta_publication_receipt(kv,&first,&v,&locator)==EFS_OK &&
+           v==EFS_OK && locator.group==0 && locator.index==101 && locator.term==7);
+    first.receipt_locator.index=999;first.receipt_locator.term=99;
+    assert(efs_meta_apply_publish(kv,&first)==EFS_OK);
+    assert(efs_meta_publication_receipt(kv,&first,&v,&locator)==EFS_OK && locator.index==101 && locator.term==7);
     /* Aggregate STALE can now hide first's success, but each result is exact. */
     assert(efs_meta_apply_publish(kv,&loser)==EFS_ERR_STALE);
     assert(result(kv,&first,&v)==EFS_OK && v==EFS_OK);
     assert(result(kv,&loser,&v)==EFS_OK && v==EFS_ERR_STALE);
+    assert(efs_meta_publication_receipt(kv,&loser,&v,&locator)==EFS_OK && locator.group==2 && locator.index==102 && locator.term==9);
     assert(efs_meta_apply_publish(kv,&next)==EFS_OK);
     assert(efs_meta_apply_publish(kv,&first)==EFS_OK); /* reply lost, object superseded */
     struct efs_meta_chunk got;assert(efs_meta_apply_get_chunk(kv,ino,0,&got)==EFS_OK && got.generation==12);
@@ -258,15 +267,20 @@ int main(void)
     assert(efs_meta_apply_get_inode(kv,pi,&pr)==EFS_OK);admit(kv,pi);
     efs_kv_lsm_close(kv);child=fork();assert(child>=0);
     struct efs_meta_pub pending=publication(pi,pr.generation,0,1000);
+    pending.receipt_locator=(struct efs_publication_locator){2,500,11};
     if(!child) {kv=efs_kv_lsm_open(dir,NULL);assert(kv);
         assert(efs_meta_apply_publication_admit(kv,&pending)==EFS_OK);_exit(0);}
     assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
     kv=efs_kv_lsm_open(dir,NULL);assert(kv);
     assert(result(kv,&pending,&v)==EFS_OK && v==EFS_META_PUBLICATION_PENDING);
+    struct efs_publication_locator cold_locator;
+    assert(efs_meta_publication_receipt(kv,&pending,&v,&cold_locator)==EFS_OK && cold_locator.group==2 && cold_locator.index==500 && cold_locator.term==11);
     assert(efs_meta_apply_get_chunk(kv,pi,0,&got)==EFS_ERR_NOT_FOUND);
     assert(efs_meta_apply_publication_retire(kv,&pending)==EFS_ERR_BUSY);
+    pending.receipt_locator.index=501;pending.receipt_locator.term=12;
     assert(efs_meta_apply_publish(kv,&pending)==EFS_OK);
     assert(result(kv,&pending,&v)==EFS_OK && v==EFS_OK);
+    assert(efs_meta_publication_receipt(kv,&pending,&v,&cold_locator)==EFS_OK && cold_locator.index==501 && cold_locator.term==12);
     assert(efs_meta_apply_check(kv)==EFS_OK);efs_kv_lsm_close(kv);
     DIR *d=opendir(dir);assert(d);struct dirent *e;
     while((e=readdir(d))){if(e->d_name[0]=='.')continue;char p[512];snprintf(p,sizeof(p),"%s/%s",dir,e->d_name);assert(!unlink(p));}

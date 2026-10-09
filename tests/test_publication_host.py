@@ -58,8 +58,10 @@ static int host_inode_rpc_peer(struct efs_raft_host *h,int rid,uint8_t t,const v
 }
 int efs_meta_publication_result(struct efs_kv *kv,const struct efs_meta_pub *p,int *v)
 {(void)kv;assert(p->ino==123 && p->inode_gen==456 && p->chunk_index==17 && p->publication_id.seq==77);if(!stored)return EFS_ERR_NOT_FOUND;*v=stored_verdict;return EFS_OK;}
+int efs_meta_publication_receipt(struct efs_kv *kv,const struct efs_meta_pub *p,int *v,struct efs_publication_locator *locator)
+{memset(locator,0,sizeof(*locator));return efs_meta_publication_result(kv,p,v);}
 int efs_meta_apply_publish(struct efs_kv *kv,const struct efs_meta_pub *p)
-{(void)kv;assert(p->durable_result && p->lane_local && p->candidate_gen==789 &&
+{(void)kv;assert(p->receipt_locator.group==group && p->receipt_locator.index==1 && p->receipt_locator.term==1);assert(p->durable_result && p->lane_local && p->candidate_gen==789 &&
  p->inode_gen==456 && p->new_size==100 && p->publication_id.seq==77 &&
  p->publication_id.client_uuid[0]==1 && p->publication_id.session_epoch==1);return EFS_OK;}
 int efs_meta_apply_publication_admit(struct efs_kv *kv,const struct efs_meta_pub *p)
@@ -71,12 +73,12 @@ int efs_meta_apply_publish_stale_why(void){return 0;}
 static int host_propose_wait(struct efs_raft_host *h,uint8_t g,const uint8_t *cmd,uint32_t n,int *hint)
 {(void)h;(void)hint;assert(g==group && n==HOST_PUBLICATION_LEN);
  if(cmd[0]==EFS_MD_CMD_PUBLICATION_ADMIT) {
-  admissions++;assert(apply_one_publish(h,cmd,1)==EFS_OK);
+  admissions++;assert(apply_one_publish(h,cmd,1,1,group)==EFS_OK);
   if(store_on_propose){stored=1;stored_verdict=EFS_META_PUBLICATION_PENDING;}
   return wait_rc;
  }
  assert(cmd[0]==EFS_MD_CMD_PUBLICATION || cmd[0]==EFS_MD_CMD_PUBLICATION_RETIRE);
- proposals++;if(store_on_propose && !admission_only)assert(apply_one_publish(h,cmd,1)==EFS_OK);
+ proposals++;if(store_on_propose && !admission_only)assert(apply_one_publish(h,cmd,1,1,group)==EFS_OK);
  if(!admission_only){stored=store_on_propose;if(cmd[0]==EFS_MD_CMD_PUBLICATION)stored_verdict=wait_rc==EFS_ERR_BUSY?EFS_ERR_STALE:EFS_OK;}
  if(fence_after_propose)session_rc=EFS_ERR_STALE;
  return wait_rc;}

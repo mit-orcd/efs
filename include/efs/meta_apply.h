@@ -339,6 +339,11 @@ struct efs_meta_chunk {
  *
  * `now` is the leader-stamped time the lane's mtime/ctime marks take, for
  * the same determinism reason struct efs_meta_attrs exists. */
+struct efs_publication_locator {
+    uint32_t group;
+    uint64_t index, term;
+};
+
 struct efs_meta_pub {
     efs_ino_t ino;
     uint32_t chunk_index;
@@ -361,6 +366,7 @@ struct efs_meta_pub {
     uint64_t mtime_gen;
     uint8_t lane_local;
     uint8_t fresh_object; /* a new PUT, even when checksums match an older object */
+    struct efs_publication_locator receipt_locator; /* assigned by replicated apply, excluded from intent digest */
     struct efs_opid publication_id; /* mount/session + unique snapshot sequence */
     struct efs_opid put_id; /* immutable PUT identity, separate from CAS retries */
     uint32_t put_member_mask; /* staged: all configured members, not just EC placement */
@@ -808,6 +814,9 @@ int efs_meta_apply_publication_admit(struct efs_kv *, const struct efs_meta_pub 
 /* Internal durable inspection, NOT session admission. External callers must
  * gate the session under authoritative lane ReadIndex before returning it. */
 int efs_meta_publication_result(struct efs_kv *, const struct efs_meta_pub *, int *verdict);
+/* Legacy receipts have a zero locator. A locator alone never proves a mapping. */
+int efs_meta_publication_receipt(struct efs_kv *, const struct efs_meta_pub *,
+    int *verdict, struct efs_publication_locator *);
 /* Which rule STALEd the last efs_meta_apply_publish on this thread. */
 enum {
     EFS_PUB_STALE_NONE = 0,

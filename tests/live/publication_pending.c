@@ -79,6 +79,8 @@ int main(int argc,char **argv)
             out=request(&req,1);if(out.rpc.status==EFS_INODE_RPC_OK)break;usleep(100000);
         }
         assert(out.rpc.status==EFS_INODE_RPC_OK && out.state==EFS_PUBLICATION_PENDING && out.verdict==EFS_META_PUBLICATION_PENDING);
+        assert(out.receipt_index && out.receipt_term && out.receipt_group==efs_raft_shard_group(efs_kv_lane_shard(req.rec.ino,req.rec.chunk_index%EFS_META_LANES)));
+        printf("pending intent locator group=%u index=%llu term=%llu\n",out.receipt_group,(unsigned long long)out.receipt_index,(unsigned long long)out.receipt_term);
         out=request(&req,2);assert(out.rpc.status==EFS_INODE_RPC_BUSY && !out.state);
         puts("pending intent survives lost admission ACK; early retirement refused PASS");
     } else {
@@ -86,9 +88,14 @@ int main(int argc,char **argv)
         assert(fread(&req,1,sizeof(req),saved)==sizeof(req));fclose(saved);
         struct efs_msg_publication_reply out=request(&req,1);
         assert(out.rpc.status==EFS_INODE_RPC_OK && out.state==EFS_PUBLICATION_PENDING);
+        assert(out.receipt_index && out.receipt_term && out.receipt_group==efs_raft_shard_group(efs_kv_lane_shard(req.rec.ino,req.rec.chunk_index%EFS_META_LANES)));
+        printf("pending intent locator group=%u index=%llu term=%llu\n",out.receipt_group,(unsigned long long)out.receipt_index,(unsigned long long)out.receipt_term);
+        uint64_t pending_index=out.receipt_index;
         struct efs_msg_publication changed=req;changed.size++;
         out=request(&changed,0);assert(out.rpc.status!=EFS_INODE_RPC_OK && !out.state);
         out=request(&req,0);assert(out.rpc.status==EFS_INODE_RPC_OK && out.state==EFS_PUBLICATION_REJECTED && out.verdict==EFS_ERR_STALE);
+        assert(out.receipt_index>pending_index && out.receipt_term);
+        printf("terminal rejection locator group=%u index=%llu term=%llu\n",out.receipt_group,(unsigned long long)out.receipt_index,(unsigned long long)out.receipt_term);
         out=request(&req,1);assert(out.state==EFS_PUBLICATION_REJECTED && out.verdict==EFS_ERR_STALE);
         out=request(&req,2);assert(out.rpc.status==EFS_INODE_RPC_OK && out.state==EFS_PUBLICATION_RETIRED);
         out=request(&req,0);assert(out.rpc.status==EFS_INODE_RPC_OK && out.state==EFS_PUBLICATION_RETIRED);

@@ -11,6 +11,7 @@ identity=text[a:text.index('\n}',a)+2]
 source=r'''
 #include "efs/publication.h"
 #include "efs/kv_key.h"
+#include "efs/raft.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -74,6 +75,17 @@ int main(void)
  replies[1].rpc.status=EFS_INODE_RPC_BUSY;
  assert(efs_client_rpc_publication(&request,0,&out)==EFS_OK && out.state==EFS_PUBLICATION_COMMITTED);
  assert(calls==3 && sleeps==1 && last_target==2 && releases==3 && !drops);
+ reset();replies[0].receipt_group=efs_raft_shard_group(efs_kv_lane_shard(123,17));
+ replies[0].receipt_index=55;replies[0].receipt_term=8;
+ assert(efs_client_rpc_publication(&request,0,&out)==EFS_OK && out.receipt_index==55 && out.receipt_term==8);
+ for(unsigned i=0;i<3;i++) {
+  reset();replies[0].receipt_index=55;replies[0].receipt_term=8;
+  replies[0].receipt_group=efs_raft_shard_group(efs_kv_lane_shard(123,17));
+  if(i==0)replies[0].receipt_term=0;
+  if(i==1)replies[0].receipt_index=0;
+  if(i==2)replies[0].receipt_group^=2;
+  assert(efs_client_rpc_publication(&request,0,&out)==EFS_ERR_PROTO && out.state==EFS_PUBLICATION_UNKNOWN);
+ }
  reset();query=1;replies[0].state=EFS_PUBLICATION_REJECTED;replies[0].verdict=EFS_ERR_STALE;
  assert(efs_client_rpc_publication(&request,1,&out)==EFS_OK && out.state==EFS_PUBLICATION_REJECTED);
  reset();query=1;replies[0].state=EFS_PUBLICATION_PENDING;replies[0].verdict=EFS_META_PUBLICATION_PENDING;

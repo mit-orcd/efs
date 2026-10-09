@@ -61,9 +61,9 @@ This portion deliberately uses separate admission/publication proposals and
 retains all existing validation. It adds Raft/read cost to the staged endpoint;
 measure before activation rather than claiming a performance improvement. New
 command 31 and pending receipt encoding require updated participants; mixed-old
-binary replay/downgrade is not accepted by these tests. The accepted D29
-committed-mapping/apply-pending proof and group/index/term locator work remains
-separate: durable intent admission alone does not establish it.
+binary replay/downgrade is not accepted by these tests. The accepted D29 committed-mapping/apply-pending proof remains separate:
+durable intent admission alone does not establish it. Applied receipt locators
+are now implemented as described below.
 
 
 Follow-up [writeback hour](writeback-hour-20261008.md) adds actual immutable
@@ -71,3 +71,34 @@ fragment PUTs and exact cold FUSE reads through eight-span history eviction,
 physical GC, identical old-object re-PUT and durable retirement-floor recovery.
 Same-group and explicitly bootstrapped cross-group typed endpoints pass. These
 staged gates do not activate or close the production REPORT/session integration.
+
+
+## Agent 4 follow-up: durable receipt locators
+
+Agent 4 now owns D29/W88 alongside D30/W23/W89, with receipt/replay correctness
+before admission/pacing integration. The staged endpoint persists the applying
+Raft group, index and term with each new receipt. These come from the replicated
+apply callback, never from client fields or a proposed index. Replaying an exact
+identity preserves the first terminal locator; pending-to-terminal replacement
+stores the mapping/verdict locator atomically with its result. The immutable
+intent digest excludes the locator.
+
+Version 2 receipt values are 64 bytes and include a reserved zero word. Existing
+40-byte version 1 values remain readable and return an absent locator. Retired
+identities resolved from replay floors also return an absent locator. Malformed
+locators and receipt encodings are rejected. The staged RPC reply grows to carry
+the locator; all communicating participants must be upgraded together. This is
+not a mixed-binary wire compatibility or downgrade guarantee.
+
+[AMD evidence](../../results/measure/20261008-publication-locators/README.md)
+records a passing warning-free build and full unit suite, plus a four-daemon
+lost-admission-ACK/crash/restart test. Pending group 0/index 7/term 1 survives
+restart unchanged; the later rejection is group 0/index 12/term 2. Tests also
+cover replay preserving the original terminal locator, legacy values, malformed
+wire locators and metadata consistency checking.
+
+A pending locator proves durable intent admission only. It cannot authorize byte
+release or fsync success. Mapping-committed/apply-pending proof and immutable
+ownership on the production REPORT path remain open; D29/W88 and D30 activation
+are not complete. The installed AMD service remains at its earlier deployment,
+with pressure admission disabled; these tests use private stores and ports.

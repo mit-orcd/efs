@@ -900,6 +900,10 @@ struct efs_msg_publication_reply {
     uint32_t state;
     int32_t verdict;
     uint8_t digest[EFS_HASH_SIZE];
+    /* Applied intent locator for PENDING; applied mapping/verdict for terminal.
+     * Never authorize fsync or byte release from these fields alone. */
+    uint32_t receipt_group;
+    uint64_t receipt_index, receipt_term;
 };
 
 /* Resolve the publication epoch before any registration/proposal side effect.

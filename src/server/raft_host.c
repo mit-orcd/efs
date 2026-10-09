@@ -2003,7 +2003,7 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 /* Same encoding as sim apply_publish_cmd (plus the host FileID/lane_local
  * tail). clen may be N * HOST_PUBLISH_LEN — one Raft entry, many pubs. */
 static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
-                             uint64_t index)
+                             uint64_t index, uint64_t term, uint8_t group)
 {
     struct efs_meta_pub p;
     const uint8_t *q;
@@ -2037,6 +2037,7 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
     p.fresh_object = !!(q[16] & HOST_PUB_F_FRESH_OBJECT);
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT) {
         p.durable_result = 1;
+        p.receipt_locator=(struct efs_publication_locator){group,index,term};
         memcpy(p.publication_id.client_uuid,cmd+HOST_PUBLISH_LEN,EFS_OPID_UUID_LEN);
         p.publication_id.session_epoch=rd32be(cmd+HOST_PUBLISH_LEN+16);
         p.publication_id.seq=rd64be(cmd+HOST_PUBLISH_LEN+20);
@@ -2068,7 +2069,7 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
 }
 
 static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                             uint32_t clen, uint64_t index)
+                             uint32_t clen, uint64_t index, uint64_t term, uint8_t group)
 {
     uint32_t off = 0, n = 0;
     int held = 0;
@@ -2084,7 +2085,7 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
 
     while (off + HOST_PUBLISH_LEN <= clen) {
-        int prc = apply_one_publish(h, cmd + off, index);
+        int prc = apply_one_publish(h, cmd + off, index, term, group);
         if (first == EFS_OK && prc != EFS_OK)
             first = prc;
         off += HOST_PUBLISH_LEN;
@@ -2175,7 +2176,7 @@ static int apply_txn_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     return rc;
 }
 
-static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
+static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t term, uint8_t group,
                                const uint8_t *cmd, uint32_t clen);
 
 /* This replica applied a command whose row is missing here but present on
@@ -2235,7 +2236,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         rc=efs_kv_put(h->kv,key,sizeof(key),cmd+9,clen-9);
     } else
 #endif
-    rc = host_apply_dispatch(h, index, cmd, clen);
+    rc = host_apply_dispatch(h, index, term, g->group, cmd, clen);
     /* A successful CREATE/APPEND means this replica's KV has the row.
      * Re-enable campaign so one hollow apply cannot leave the group with
      * zero candidates. */
@@ -2608,7 +2609,7 @@ static int host_maybe_snapshot(struct efs_raft_host *h, int gi)
     return efs_raft_snapshot(h->g[gi].r);
 }
 
-static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
+static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t term, uint8_t group,
                                const uint8_t *cmd, uint32_t clen)
 {
     if (cmd[0] == EFS_MD_CMD_MKFS)
@@ -2622,9 +2623,9 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
     if (cmd[0] == EFS_MD_CMD_RMDIR)
         return apply_rmdir_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT)
-        return clen == HOST_PUBLICATION_LEN ? apply_one_publish(h,cmd,index) : EFS_ERR_PROTO;
+        return clen == HOST_PUBLICATION_LEN ? apply_one_publish(h,cmd,index,term,group) : EFS_ERR_PROTO;
     if (cmd[0] == EFS_MD_CMD_PUBLISH)
-        return apply_publish_cmd(h, cmd, clen, index);
+        return apply_publish_cmd(h, cmd, clen, index, term, group);
     if (cmd[0] == EFS_MD_CMD_SETATTR)
         return apply_setattr_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_XATTR)
@@ -13777,7 +13778,16 @@ void server_raft_host_publication(const struct efs_msg_publication *req, int que
             if(rc==EFS_OK)rc=efs_meta_publication_result(h->kv,&p,&verdict);
         }
     }
+    if(rc==EFS_OK) {
+        struct efs_publication_locator locator;
+        rc=efs_meta_publication_receipt(h->kv,&p,&verdict,&locator);
+        if(rc==EFS_OK) {
+            out->receipt_group=locator.group;out->receipt_index=locator.index;
+            out->receipt_term=locator.term;
+        }
+    }
     if(rc==EFS_OK && query_only==2 && verdict!=EFS_META_PUBLICATION_RETIRED)rc=EFS_ERR_BUSY;
+    if(rc!=EFS_OK)out->receipt_group=out->receipt_index=out->receipt_term=0;
     set_inode_rc(&out->rpc,rc,hint);
     if(rc==EFS_OK) {
         out->verdict=verdict;
