@@ -22,7 +22,8 @@ static struct host_inbox_item frame(unsigned group,unsigned bytes) {
  m.buf[0]=3;m.buf[1]=group;m.buf[11]=1;m.buf[79]=1;
  m.buf[88]=(bytes>>24)&255;m.buf[89]=(bytes>>16)&255;
  m.buf[90]=(bytes>>8)&255;m.buf[91]=bytes&255;
- if(bytes)m.buf[92]=1;return m;
+ if(bytes)m.buf[92]=1;
+ return m;
 }
 static void check(struct host_inbox_item *m,unsigned n) {
  unsigned o[256],seen[256]={0};int last[2]={-1,-1};host_inbox_order(m,n,view,o);
