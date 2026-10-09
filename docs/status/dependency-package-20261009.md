@@ -406,3 +406,24 @@ UUID/epoch through CREATE/adoption and all mutations, and production PUT-ticket
 admission/storage fencing/all-member collection remain open. Pressure and D25
 remain staged. Worktree changes through this checkpoint are committed; no push,
 merge, tag, reboot or forced installed write loss was performed.
+
+## Production FUSE legacy ownership retention prerequisite
+
+Merged devel da653c33 into this work branch at136fc54f. Failed last-close HOLD
+replies no longer discard the local inode lease record. Failed OPEN replies
+retain a compensating release because the server may already own the lease.
+Reopening the inode finishes old cleanup under the edge stripe first; clean
+stop retries retained releases and refuses to detach while unresolved.
+Authoritative already-reclaimed inode replies are terminal; transport/protocol
+ambiguity remains pinned. Threaded serialization and actual production-function
+failure injection pass. AMD direct/TCP core212/212, peer64/64, CREATE/rejected
+reply, guarded cold lease replay and physical GC/restart gates pass. Installed
+service restored, both mounts serving. The initial stop timeout was corrected
+and rerun, not accepted as a passing gate.
+
+[Evidence](../../results/measure/20261009-fuse-lease-retention/README.md).
+This closes the legacy forgotten-release hole only. Deferred sequenced FUSE
+OPEN/CLOSE generation/identity retention, one full versioned mount UUID/epoch,
+and production PUT admission/storage fencing/collection remain open. Pressure
+and D25 remain staged; bounded pending-identity capacity and durable client-death
+handoff belong to that production session integration.

@@ -1829,6 +1829,7 @@ struct efs_open_ref {
     uint64_t append_handoff_ms;
     int append_publishing;
     int leased; /* first open took HOLD; last close must release it */
+    int close_pending; /* retain ownership until release is confirmed */
     struct efs_open_ref *next;
 };
 static struct efs_open_ref *g_open_refs;
@@ -1961,8 +1962,12 @@ static int efs_close_note(efs_ino_t ino, int *leased)
             if (r->n == 0) {
                 if (leased)
                     *leased = r->leased;
-                *pp = r->next;
-                free(r);
+                if (r->leased) {
+                    r->close_pending = 1;
+                } else {
+                    *pp = r->next;
+                    free(r);
+                }
                 last = 1;
             }
             break;
@@ -1972,6 +1977,54 @@ static int efs_close_note(efs_ino_t ino, int *leased)
     return last;
 }
 
+/* Caller holds the inode edge stripe. A failed reply retains the old
+ * ownership, preventing a fresh OPEN from racing its delayed release. */
+static int efs_open_release_pending(efs_ino_t ino)
+{
+    int pending = 0;
+    pthread_mutex_lock(&g_open_mu);
+    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+        if (r->ino == ino) { pending = r->close_pending; break; }
+    pthread_mutex_unlock(&g_open_mu);
+    if (!pending) return EFS_OK;
+    int rc = efs_client_rpc_hold(g_client.export_id, ino, 0,
+                               g_client.flock_token);
+    /* The authoritative HOLD handler returns NOT_FOUND after a prior
+     * last-close reclaimed the inode (including a lost successful reply).
+     * No new OPEN can adopt this dead inode. Transport/protocol failures
+     * remain unresolved. */
+    if (rc != EFS_OK && rc != EFS_ERR_NOT_FOUND) return rc;
+    pthread_mutex_lock(&g_open_mu);
+    struct efs_open_ref **pp = &g_open_refs;
+    while (*pp) {
+        struct efs_open_ref *r = *pp;
+        if (r->ino == ino && !r->n && r->close_pending) {
+            *pp = r->next;
+            free(r);
+            break;
+        }
+        pp = &r->next;
+    }
+    pthread_mutex_unlock(&g_open_mu);
+    return EFS_OK;
+}
+
+/* One retained release per iteration, with no RPC under the table mutex. */
+static int efs_open_drain_pending(void)
+{
+    efs_ino_t ino = 0;
+    pthread_mutex_lock(&g_open_mu);
+    for (struct efs_open_ref *r = g_open_refs; r; r = r->next)
+        if (r->close_pending) { ino = r->ino; break; }
+    pthread_mutex_unlock(&g_open_mu);
+    if (!ino) return EFS_OK;
+    pthread_mutex_t *edge = open_edge_mu(ino);
+    pthread_mutex_lock(edge);
+    int rc = efs_open_release_pending(ino);
+    pthread_mutex_unlock(edge);
+    return rc == EFS_OK ? EFS_ERR_BUSY : rc;
+}
+
 /* Every returned regular descriptor, including CREATE, owns a server lease.
  * The edge stripe prevents a second open returning before the first HOLD,
  * and prevents a delayed last-close HOLD release deleting a new lease. */
@@ -1979,15 +2032,25 @@ static int efs_open_acquire(efs_ino_t ino)
 {
     pthread_mutex_t *edge = open_edge_mu(ino);
     pthread_mutex_lock(edge);
+    int rc = efs_open_release_pending(ino);
+    if (rc != EFS_OK) {
+        pthread_mutex_unlock(edge);
+        return rc;
+    }
     int first = efs_open_note(ino);
-    int rc = first < 0 ? first : EFS_OK;
+    rc = first < 0 ? first : EFS_OK;
     if (first > 0) {
         rc = efs_client_rpc_hold(g_client.export_id, ino, 1,
                                   g_client.flock_token);
         if (rc == EFS_OK)
             efs_open_set_leased(ino);
-        else
+        else {
+            /* Even a failed OPEN reply may have installed the HOLD. Retain
+             * a compensating release before permitting another open. */
+            efs_open_set_leased(ino);
             (void)efs_close_note(ino, NULL);
+            (void)efs_open_release_pending(ino);
+        }
     }
     pthread_mutex_unlock(edge);
     return rc;
@@ -4214,8 +4277,7 @@ static int efs_fuse_release_ino(fuse_ino_t ino, struct fuse_file_info *fi)
             }
         }
         if (leased)
-            (void)efs_client_rpc_hold(g_client.export_id, fh, 0,
-                                      g_client.flock_token);
+            (void)efs_open_release_pending(fh);
         efs_client_stage_evict_ino(fh);
     }
     pthread_mutex_unlock(edge);
@@ -4254,10 +4316,11 @@ static int efs_control_drain(uint64_t deadline, int force)
         efs_buf_drain_enter();
         int data_rc = efs_dcache_drain_pending();
         int report_rc = efs_client_report_dirty(1);
+        int lease_rc = efs_open_drain_pending();
         efs_buf_drain_leave();
         struct efs_report_pressure pressure;
         efs_client_report_pressure_stats(&pressure);
-        if (data_rc == EFS_OK && report_rc == EFS_OK &&
+        if (data_rc == EFS_OK && report_rc == EFS_OK && lease_rc == EFS_OK &&
             !pressure.pending_records && !pressure.reserved_records &&
             !pressure.inflight_records &&
             !efs_dcache_pending_records(NULL)) {
@@ -4267,7 +4330,7 @@ static int efs_control_drain(uint64_t deadline, int force)
         usleep(10000);
     }
     if (result)
-        fprintf(stderr, "stop-refused: unresolved writes remain; mount retained\n");
+        fprintf(stderr, "stop-refused: unresolved writes or lease releases remain; mount retained\n");
     efs_client_rpc_set_deadline_ms(previous);
     return result;
 }

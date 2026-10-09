@@ -82,7 +82,7 @@ code=r'''
 #define EFS_OK 0
 struct efs_report_pressure {uint64_t pending_records,inflight_records,reserved_records;};
 static struct {int ready,count,inflight;pthread_mutex_t mu;} g_wb;
-static uint64_t now,deadline;static unsigned rounds,flight_rounds;static int body_pending;
+static uint64_t now,deadline;static unsigned rounds,flight_rounds;static int body_pending,lease_pending;
 static uint64_t stats_now_ms(void) {return now;}
 static uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
 static void efs_client_rpc_set_deadline_ms(uint64_t value) {deadline=value;}
@@ -91,6 +91,7 @@ static void efs_buf_drain_enter(void) {}
 static void efs_buf_drain_leave(void) {}
 static int efs_dcache_drain_pending(void) {rounds++;return EFS_OK;}
 static int efs_client_report_dirty(int sync) {assert(sync);return EFS_OK;}
+static int efs_open_drain_pending(void) {return lease_pending?-16:EFS_OK;}
 static uint64_t efs_dcache_pending_records(const char *reason) {(void)reason;return body_pending;}
 static void efs_client_report_pressure_stats(struct efs_report_pressure *p) {
  *p=(struct efs_report_pressure){.inflight_records=rounds<=flight_rounds};
@@ -103,6 +104,9 @@ int main(void) {
  assert(efs_control_drain(25,0)==-1 && rounds==3 && deadline==777);
  rounds=0;now=0;flight_rounds=0;body_pending=1;
  assert(efs_control_drain(25,0)==-1 && rounds==3 && deadline==777);
+ rounds=0;now=0;body_pending=0;lease_pending=1;
+ assert(efs_control_drain(25,0)==-1 && rounds==3 && deadline==777);
+ lease_pending=0;rounds=0;now=0;assert(!efs_control_drain(25,0) && rounds==1);
  rounds=0;assert(!efs_control_drain(25,1) && !rounds && deadline==777);
  return 0;
 }

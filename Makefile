@@ -285,6 +285,7 @@ test: all
 	./tests/test_store_containers
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_fuse_open_reply.py
+	python3 tests/test_fuse_lease_retention.py
 	python3 tests/test_lookup_replacement.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
@@ -413,6 +414,7 @@ tests/test_bufpool: tests/test_bufpool.c src/common/common.c src/client/publicat
 test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
 	python3 tests/test_fuse_open_reply.py
+	python3 tests/test_fuse_lease_retention.py
 	./tests/test_reply_buffers
 	./tests/test_reply_buffers key-failure
 	./tests/test_bufpool
