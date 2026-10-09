@@ -1,0 +1,171 @@
+{
+  "seconds": 3.001937580003869,
+  "total_sampled_percent": 100.89999999999999,
+  "threads": [
+    {
+      "tid": 1488961,
+      "cpu_percent": 91.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488960,
+      "cpu_percent": 3.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488976,
+      "cpu_percent": 1.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488978,
+      "cpu_percent": 1.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1489149,
+      "cpu_percent": 0.7,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488861,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488862,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488863,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488864,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1489148,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1491075,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510002,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510005,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510008,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510009,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510032,
+      "cpu_percent": 0.3,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488325,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488865,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488901,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488962,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488963,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1488965,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1489921,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1489998,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1490033,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1491001,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1491206,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1491252,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510012,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510015,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510031,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1510695,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    },
+    {
+      "tid": 1515316,
+      "cpu_percent": 0.0,
+      "name": "efsd"
+    }
+  ]
+}

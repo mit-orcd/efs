@@ -5632,6 +5632,14 @@ server-side type, size and modification-time predicates. [Usage and acceptance](
 Expiry coverage is explicitly limited to unavailable/refusal behavior; W90
 lifecycle implementation and gates remain open.
 
+**Oct 8 New York publisher CPU investigation:** node 2's background query
+publisher consumes about 90% of sampled cycles. Despite reusing all but 8–13
+partitions, each 1.3–1.5 s build refolds the global million-inode catalog and
+rebuilds its edges/rollups. Catalog accounting is 897 MiB against a 1 GiB cap.
+Incremental folded metadata/rollups, explicit CPU/freshness budgeting and
+memory-per-entry acceptance remain W92 work; no fix is claimed by the trace.
+[Perf/strace evidence](../status/find-stats-refresh-cpu-20261009.md).
+
 **Oct 8 New York loaded-namespace investigation:** devel merged into
 `devel-find-stats` at `ab050595`. NUC root `.efs/find .txt` exceeds the 16 MiB
 JSON response cap at roughly 992k files; it returns EOVERFLOW with zero partial
