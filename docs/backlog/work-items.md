@@ -3545,8 +3545,10 @@ the original record and withdrawn interpretation remain retained.
 **Oct 9 disk backend progress:** [implementation checkpoint](../status/query-disk-backend-20261009.md)
 records the persistent partition backend, bounded scratch, immutable generation
 leases and validated cold restore. Functional differential and private live
-gates pass. Derived-stat refresh still performs a full disk pass; disk budgets,
-incremental derived maintenance and the scale gates below remain open.
+gates pass, including clean Xorinox mutation queries after an explicitly authorized
+wipe. Per-generation logical disk budgeting is implemented in `47e7b886`.
+Derived-stat refresh still performs a full disk pass; aggregate cache-space
+budgets, incremental derived maintenance and the scale gates below remain open.
 
 **Oct 9 user requirement — billions of files:** W92 remains open until the
 server query catalog uses a persistent, partitioned disk-backed index with

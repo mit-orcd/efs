@@ -47,9 +47,10 @@ and a synthetic partitioned-index gate of at least 2^32 entries. Staged real
 filesystem tests remain constrained by measured physical space/inodes; synthetic
 index tests must not be presented as real multi-billion-file EFS acceptance.
 [Oct 9 disk backend progress](query-disk-backend-20261009.md) records the new
-persistent partition implementation and initial functional gates. Its retained
-Xorinox namespace query gate is still under investigation. Incremental derived
-statistics, explicit disk quotas and large-scale acceptance remain open.
+persistent partition implementation and initial functional gates. The authorized clean Xorinox
+namespace passes mutation query oracles; the earlier retained-data refusal is
+historical. Per-generation logical disk budgeting is implemented. Incremental
+derived statistics, aggregate cache quotas and large-scale acceptance remain open.
 Raising the RAM cap alone cannot close W92. Full architecture implementation and
 these scale gates remain open.
 

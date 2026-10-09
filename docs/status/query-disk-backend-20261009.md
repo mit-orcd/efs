@@ -1,6 +1,6 @@
 # W92 — local disk-backed query catalog
 
-Implementation checkpoint, Oct 9, 2026, `devel-find-stats`, code commit `9eb3dd51`. W92 remains open;
+Implementation checkpoint, Oct 9, 2026, `devel-find-stats`, code commits `9eb3dd51` and `47e7b886`. W92 remains open;
 this is functional backend progress, not acceptance of 2^32-file capacity.
 
 ## Implementation
@@ -61,7 +61,9 @@ latest complete code gate passes. A further rerun encountered a transient
 `test_client_processes.py` process-identification race; the lifecycle, fold and
 writeback groups subsequently passed unchanged. Final complete code-gate rerun passed; evidence is listed in the ledger.
 
-Normal Xorinox deployment uses files/direct-I/O/TCP and retains existing stores.
+### Historical retained-namespace refusal (before authorized wipe)
+
+The first normal Xorinox deployment used files/direct-I/O/TCP and retained existing stores.
 The initial retained-namespace build returned EFS_ERR_IO after about 112 seconds;
 ordinary services/mounts started, but query publication was not accepted. A
 private stopped-state metadata clone reproduces this refusal. Inode 4113 is a
@@ -83,9 +85,33 @@ placement inconsistency. Private valid-namespace queries pass; normal-cluster
 query acceptance does not. Runtime and diagnostic evidence is retained in
 [the ledger](../../results/measure/20261009-w92-query-disk/README.md).
 
+## Clean-cluster acceptance and generation budget
+
+The user explicitly authorized wiping Xorinox on Oct 9. All three dedicated
+/data1 stores were erased and initialized afresh; this removed the historical
+wrong-placement artifact rather than repairing or explaining its origin. The
+clean cluster published an empty catalog. Build `47e7b886` adds
+`EFS_QUERY_DISK_MAX_MIB` (default 16384; range 1..16777216): a conservative
+logical-byte budget per generation, including indexes, sort overlap and linked
+partitions. Exceeding it returns QUOTA without publishing a partial candidate.
+It does not bound aggregate retained generations or physical allocation overhead.
+Unit gates pass for refusal before allocation and during raw partition ingestion,
+and 12000-file differential acceptance with a 100 MiB generation limit. Complete
+code gates pass; the private-copy architecture link gate remains excluded because
+its historical results archives are absent.
+
+An independent normal-cluster FUSE oracle created 1500 files in 16 directories
+(48000 logical bytes), then deleted 75, renamed 75 across directories and appended
+to 15. Exact query paths/counts/bytes and sampled payload hashes pass for the
+resulting 1425 files and 45855 bytes. The same oracle passes after full daemon restart and a fresh client mount.
+The outdated checkpoint was refused and rebuilt (4096 partitions, 137 ms),
+so this run verifies recovery by rebuilding, not checkpoint reuse. Results are recorded in the
+[clean-cluster ledger](../../results/measure/20261009-w92-clean-cluster/README.md).
+Ordinary mounts remain opted out; the acceptance mount explicitly enables commands.
+
 ## Remaining W92 obligations
 
-Incremental derived-stat maintenance, explicit cache disk quotas/reserves,
+Incremental derived-stat maintenance, total cache-space quotas/retention,
 resumable partial builds, larger measured RSS/latency/freshness gates, concurrent
 mutation/export and publisher-loss evidence remain open. No synthetic 2^32-entry
 gate has run. Global counts/offsets are 64-bit; each raw partition is limited to
