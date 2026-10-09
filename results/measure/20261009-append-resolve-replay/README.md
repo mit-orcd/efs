@@ -13,3 +13,14 @@ AMD full Linux regression PASS. Private direct/TCP staged-pressure gate
 (gc-direct-240eo93g): core POSIX 212/212, peer64/64, session cleanup and full
 physical GC/restart/late PUT checks PASS. Installed service restored, pressure
 unset; no activation or deployment of this candidate.
+
+Additional actual synchronous-LSM WAL fixture passes on AMD:
+`tests/live/append_resolve_recovery.c` injects a failed completion batch, exits
+without close, reopens and verifies identical reservation replay, completes an
+aborted hole, exits without delivering a reply, then reopens again and proves
+idempotent completion and exact size. This is process-crash proof, not a
+physical power-loss test.
+
+Compile with `cc -Wall -Wextra -Werror -Iinclude
+ tests/live/append_resolve_recovery.c libefs.a -pthread -lm -ldl -libverbs
+ -o /tmp/efs-append-resolve-recovery`, then pass a fresh private store path.
