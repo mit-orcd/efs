@@ -108,7 +108,7 @@ static inline int efs_mgmt_help(FILE *out,const char *command)
         {"mkfs","NODE:PORT [legacy-label]"},{"raft-mkfs","NODE:PORT [legacy-label]"},
         {"raft-status","NODE:PORT"},{"raft-change","NODE:PORT GROUP VOTERS"},
         {"raft-dir","NODE:PORT INO begin|migrate|finish"},
-        {"raft-session","NODE:PORT create|register|establish|get|fence UUID_HEX [epoch|shard] [shard]"},
+        {"raft-session","NODE:PORT create|register|establish|get|fence|cleanup-leases UUID_HEX [epoch|shard] [shard]"},
         {"raft-getattr","NODE:PORT [ino]"},{"raft-lookup","NODE:PORT PARENT NAME"},
         {"raft-create","NODE:PORT PARENT NAME [mode]"},{"raft-unlink","NODE:PORT PARENT NAME"},
         {"raft-rmdir","NODE:PORT PARENT NAME"},{"raft-link","NODE:PORT SRC_INO PARENT NAME"},

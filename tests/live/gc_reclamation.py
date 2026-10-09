@@ -506,7 +506,13 @@ try:
         assert all(files(ino) for ino in inos[8:]),'exact replay consumed next lease batch'
         unmount();stop(crash=True);start();mount_client()
         assert all(files(ino) for ino in inos[8:]),'cold replay lost remaining owners'
-        cleanup('finish')
+        # Resume the exact revoked epoch through the production management CLI.
+        # BEGIN again would revoke another epoch and lose the original work identity.
+        shard=inos[0] & 4095
+        result=run([source/'efs-mgmt','raft-session','127.0.0.1:'+str(a.port),'cleanup-leases',uuid,'1',str(shard)],capture_output=True,text=True,timeout=180)
+        assert 'rc=0' in result.stdout,result.stdout
+        records.append({'stage':'management-resume','result':result.stdout})
+        cleanup('finish') # Independently proves the lease/lock phase is now empty.
         wait(lambda:all(not files(ino) for ino in inos),'bounded session cold physical reclaim',180)
         (work/'session-cleanup.json').write_text(json.dumps({'inos':inos,'records':records},indent=2))
         print('bounded session lease/lock global barrier, exact replay, cold remaining owners and physical reclaim PASS',flush=True)

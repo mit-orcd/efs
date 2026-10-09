@@ -246,3 +246,17 @@ successor. The package remains open for production lease/session identity,
 ambiguous release retention, bounded session append cleanup and receipt/session
 retirement. Existing ordered frontier scans retain a CPU/time-bound follow-up;
 this is a finite allocation/entry-shape claim, not whole-call timing proof.
+
+## Bounded revoked lease/lock resume
+
+Management now exposes `raft-session NODE:PORT cleanup-leases UUID OLD_EPOCH
+SHARD`. It drains exact eight-row batches with a finite admission/work budget,
+stops ambiguous transport outcomes, and requires explicit empty proof. The
+server checks global barrier completion plus the local durable floor. Resuming
+uses the original epoch instead of BEGINing another revocation. AMD cold
+13-lease/8-lock gate, physical reclamation, full Linux regressions, core212/212,
+peer64/64 and cold GC pass; installed direct/TCP service restored.
+[Evidence](../../results/measure/20261009-bounded-lease-resume/README.md).
+Full fencing retains legacy append cleanup: substituting lease-only NEXT would
+omit abandoned reservation holes. Bounded session append and PUT-ticket phases
+remain dependencies before replacing the whole coordinator or activating it.

@@ -1,0 +1,35 @@
+{
+  "inos": [
+    5541,
+    9637,
+    13733,
+    17829,
+    21925,
+    26021,
+    30117,
+    34213,
+    38309,
+    42405,
+    46501,
+    50597,
+    54693
+  ],
+  "records": [
+    {
+      "stage": "prepare",
+      "result": "sub=1 rc=0 salt=0 index=3\nsub=2 rc=0 salt=0 index=4\nsub=7 rc=0 salt=0 index=56\nsub=8 rc=0 salt=0 index=57\nsub=8 rc=0 salt=0 index=58\nsub=8 rc=0 salt=0 index=59\nsub=8 rc=0 salt=0 index=60\nsub=8 rc=0 salt=0 index=61\nsub=8 rc=0 salt=0 index=62\nsub=8 rc=0 salt=0 index=63\nsub=8 rc=0 salt=0 index=64\nsub=8 rc=0 salt=0 index=65\nsub=8 rc=0 salt=0 index=66\nsub=8 rc=0 salt=0 index=67\nsub=8 rc=0 salt=0 index=68\nsub=8 rc=0 salt=0 index=69\nsub=1 rc=0 salt=0 index=70\nsub=1 rc=0 salt=0 index=71\nsub=1 rc=0 salt=0 index=72\nsub=1 rc=0 salt=0 index=73\nsub=1 rc=0 salt=0 index=74\nsub=1 rc=0 salt=0 index=75\nsub=1 rc=0 salt=0 index=76\nsub=1 rc=0 salt=0 index=77\nsub=14 rc=-13 salt=0 index=0\nactive cleanup refused PASS\n"
+    },
+    {
+      "stage": "first",
+      "result": "sub=3 rc=0 salt=0 index=5\nsub=4 rc=0 salt=0 index=92\nsub=14 rc=-13 salt=0 index=0\nsub=5 rc=0 salt=0 index=6\nsub=6 rc=0 salt=0 index=7\nsub=14 rc=0 salt=0 index=93\nsub=15 rc=0 salt=0 index=94\nglobal barrier and exact first-batch replay PASS\n"
+    },
+    {
+      "stage": "management-resume",
+      "result": "raft-session op=cleanup-leases epoch=1 shard=1445 rc=0\n"
+    },
+    {
+      "stage": "finish",
+      "result": "sub=14 rc=0 salt=1 index=151\nsub=14 rc=0 salt=1 index=151\ncold remaining lease/lock phase drained PASS\n"
+    }
+  ]
+}
