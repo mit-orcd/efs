@@ -1,0 +1,8 @@
+    PID     ELAPSED %CPU   RSS COMMAND
+2312683       09:59  9.7 581912 /data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io
+2314230       09:41 18.5 2287820 /data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432
+2315840       09:19 10.5 2148504 /data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432
+2317774       08:56  7.0 512020 /data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432
+2319366       08:38  3.0 113860 ./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt
+2369220       00:50  3.8 19084 python3 ./tiny_files.py --max-depth 8 --max-files-per-folder 1000 --max-files 50000 --workers 8 /data1/efs/mnt/tiny-profile-five-minutes
+efsd 800122c5e86d (branch devel-find-stats, built 2026-10-09T05:13:47Z on nuc)
