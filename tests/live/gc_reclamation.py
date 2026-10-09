@@ -37,6 +37,7 @@ p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny file
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
+p.add_argument('--create-live-retry',action='store_true',help='actual FUSE CREATE retries consumed committed reply then BUSY using one identity')
 p.add_argument('--create-negative-replay',action='store_true',help='ordinary CREATE EEXIST identity survives unlink, cold restart and name reuse')
 p.add_argument('--unique-create',action='store_true',help='16-worker unique O_EXCL, genuine EEXIST and name reuse, then cold exact bytes/reclamation')
 p.add_argument('--create-lease',action='store_true',help='initial CREATE lease atomicity on local and first-use cross-group hashed lanes, cold replay/unlink/close')
@@ -242,7 +243,9 @@ def stop(crash=False):
 def mount_client():
     global client
     log=open(work/'fuse.log','ab');handles.append(log)
-    client_env=env
+    client_env=dict(env)
+    if a.create_live_retry:
+        client_env['EFS_FAULT_CREATE_RETRY_FILE']=str(work/'create-retry-fault')
     if a.fuse_reply_failure:
         from fuse_reply_failure import prepare
         client_env=prepare(work,env)
@@ -376,6 +379,30 @@ try:
         wait(drained,'failed PUT barrier recovery cold bytes and deletion drained',180)
         (work/'put-barrier-fault.json').write_text(json.dumps(barrier,indent=2))
         print('failed server PUT barrier: no publication ACK, retained bytes, recovery and exact cold bytes PASS',flush=True)
+    if a.create_live_retry:
+        marker=work/'create-retry-fault';marker.touch()
+        path=mount/'w58-live-retry';payload=b'W58 committed reply lost, BUSY replay, same identity'
+        try:
+            with path.open('xb',buffering=0) as out:
+                assert out.write(payload)==len(payload)
+                os.fsync(out.fileno())
+            ino=path.stat().st_ino
+            try:os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+            except FileExistsError:pass
+            else:raise AssertionError('genuine O_EXCL conflict accepted')
+        finally:marker.unlink(missing_ok=True)
+        log=(work/'fuse.log').read_text()
+        stages=re.findall(r'test-create-retry: stage=(\d+) seq=(\d+) ino=(\d+) identical=1',log)
+        assert len(stages)==3 and [int(x[0]) for x in stages]==[0,1,2],stages
+        assert len({x[1:] for x in stages})==1 and int(stages[0][2])==ino,stages
+        unmount();stop(crash=True);start();mount_client()
+        assert path.read_bytes()==payload
+        path.unlink()
+        wait(drained,'live CREATE ambiguous/BUSY retry cold deletion drained',180)
+        (work/'create-live-retry.json').write_text(json.dumps({
+            'stages':stages,'original_durable_inode':ino,'cold_bytes':True,
+            'genuine_exclusive_conflict':True},indent=2))
+        print('actual FUSE CREATE lost committed reply, BUSY replay, same opid/inode and cold bytes PASS',flush=True)
     if a.create_negative_replay:
         helper=work/'create-negative-replay'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
