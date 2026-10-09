@@ -86,6 +86,7 @@ p.add_argument('--rename-cache', action='store_true', help='root rename evicts t
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
 p.add_argument('--ecrawl-binary',type=Path,help='run the actual ecrawl dense/sparse classification gate; requires --allocation')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
+p.add_argument('--transaction-apply-retry',action='store_true',help='fault follower transaction persistence, retain commit/apply lag, retry and cold namespace bytes')
 p.add_argument('--compactor-pressure', action='store_true', help='fault-build follower pressure with finite stop and recovery')
 p.add_argument('--du-audit',action='store_true',help='measure repeated GNU du on a cold never-writing client')
 p.add_argument('--lookup-barrier',action='store_true',help='delay an actual LOOKUP row across local chmod')
@@ -235,6 +236,9 @@ def start(prefer_single_host=False):
             node_env.update(LD_PRELOAD=str(work/'store-barrier-fault.so'),
                             EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'),
                             EFS_TEST_STORE_NODE=str(i+1))
+        if a.transaction_apply_retry:
+            assert a.server_binary,'transaction retry gate requires an explicitly selected fault build'
+            node_env['EFS_FAULT_TXN_APPLY_FILE']=str(work/f'transaction-apply-fault-{i+1}')
         if a.compactor_pressure:
             node_env['EFS_RAFT_OBS']='1'
             if i==3:node_env.update(EFS_FAULT_COMPACT_STALL='1',EFS_FAULT_COMPACT_FILE=str(work/'compactor-fault'))
@@ -1056,6 +1060,40 @@ os.close(fd)
         assert not misses,misses[:10]
         print('small-file cold verification with zero staging-identity fallback PASS',flush=True)
         wait(drained,'bulk REPORT-audit deletions drained before fault fixture',600)
+    if a.transaction_apply_retry:
+        assert a.server_binary,'transaction retry gate requires an explicitly selected fault build'
+        target=None
+        for candidate in (2,1,3,0):
+            text=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+candidate}'],capture_output=True,text=True).stdout
+            roles=re.findall(r'role=([-\w]+)',text)
+            pairs=re.findall(r'commit=(\d+) applied=(\d+)',text)
+            if len(roles)==2 and len(pairs)==2 and 'LEADER' not in roles and any(int(commit)>0 for commit,applied in pairs):
+                target=candidate;break
+        assert target is not None,'no actual caught-up follower to fault'
+        def transaction_lag():
+            text=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+target}'],capture_output=True,text=True).stdout
+            roles=re.findall(r'role=([-\w]+)',text)
+            pairs=re.findall(r'commit=(\d+) applied=(\d+)',text)
+            assert len(roles)==2 and len(pairs)==2 and 'LEADER' not in roles,text
+            return max(int(commit)-int(applied) for commit,applied in pairs)
+        path=mount/'txn-retry-source';body=b'transaction durable retry payload'*1024
+        with path.open('xb') as out:out.write(body);out.flush();os.fsync(out.fileno())
+        wait(lambda:transaction_lag()==0,'transaction follower baseline caught up',60)
+        fault=work/f'transaction-apply-fault-{target+1}';fault.touch()
+        linked=mount/'txn-retry-linked';moved=mount/'txn-retry-moved'
+        os.link(path,linked);linked.rename(moved)
+        wait(lambda:transaction_lag()>0,'transaction persistence failure retains follower apply lag',60)
+        assert 'txn-fault: refused persistence' in (work/f'n{target+1}.log').read_text(),'fault hook did not execute'
+        first=transaction_lag();time.sleep(2);second=transaction_lag()
+        assert first>0 and second>0,'failed follower advanced its pending transaction'
+        fault.unlink();wait(lambda:transaction_lag()==0,'transaction exact apply retries catch up after fault release',90)
+        assert path.read_bytes()==body and moved.read_bytes()==body
+        unmount();stop(crash=True);start();mount_client()
+        assert path.read_bytes()==body and moved.read_bytes()==body
+        assert path.stat().st_ino==moved.stat().st_ino and path.stat().st_nlink==2
+        path.unlink();moved.unlink()
+        (work/'transaction-apply-retry.json').write_text(json.dumps({'follower_node':target+1,'held_lag':[first,second],'cold_exact_bytes':True,'cold_nlink':2},indent=2))
+        print('transaction follower persistence refusal, held apply index, exact retry and cold linked namespace PASS',flush=True)
     if a.compactor_pressure:
         assert a.server_binary,'pressure gate requires an explicitly selected fault build'
         endpoint=f'127.0.0.1:{a.port+3}'

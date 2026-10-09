@@ -1,0 +1,15 @@
+Evidence directory: /data1/efs/lease-retention-fixtures/gc-direct-xwo2k908
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=12018146279712066379
+client serving PASS
+transaction follower baseline caught up PASS
+Traceback (most recent call last):
+  File "/data1/efs/txn-apply-fault-src-20261009/tests/live/gc_reclamation.py", line 1077, in <module>
+    wait(lambda:transaction_lag()>0,'transaction persistence failure retains follower apply lag',60)
+    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/txn-apply-fault-src-20261009/tests/live/gc_reclamation.py", line 221, in wait
+    raise AssertionError(label+' timed out')
+AssertionError: transaction persistence failure retains follower apply lag timed out
