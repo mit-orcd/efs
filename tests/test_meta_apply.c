@@ -5605,6 +5605,14 @@ static void test_pending_create_negative_replay(void)
     create_batch_calls=0;
     CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,"late CREATE cannot acquire abandoned ownership");
     CHECK(!create_batch_calls && efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,"negative replay cannot recreate removed name");
+    efs_ino_t replacement=0;
+    CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"atomic",&replacement)==EFS_OK,
+          "another request reuses negatively replayed name");
+    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,
+          "negative replay retains verdict after name reuse");
+    CHECK(efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_OK && dent.ino==replacement,
+          "negative replay preserves replacement inode");
+    CHECK(efs_meta_apply_unlink(kv,1,"atomic",T0+2)==EFS_OK,"remove replacement");
     q.id.seq=2;q.ack=1;
     CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_OK && out,"new request can create after negative retirement");
     kv->ops=original;efs_kv_mem_free(kv);
@@ -5667,6 +5675,16 @@ static void test_create_initial_lease_atomic(void)
     CHECK(test_create_lease_apply(pending,kv,&q,uuid,&replay)==EFS_OK && replay==ino,
           "CREATE replay returns original inode after unlink");
     CHECK(!create_batch_calls && efs_lease_any(kv,ino,1)==0,"old replay does not recreate a closed lease");
+    efs_ino_t replacement=0;
+    CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"atomic",&replacement)==EFS_OK && replacement!=ino,
+          "another request reuses successfully replayed name");
+    replay=0;create_batch_calls=0;
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&replay)==EFS_OK && replay==ino,
+          "successful CREATE replay cannot become EEXIST or return replacement");
+    CHECK(!create_batch_calls && efs_lease_any(kv,ino,1)==0 &&
+          efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_OK && dent.ino==replacement,
+          "successful replay preserves replacement and closed ownership");
+    CHECK(efs_meta_apply_unlink(kv,1,"atomic",T0+2)==EFS_OK,"remove successful replay replacement");
     if (pending) {
         struct efs_opid_req later = q;
         later.id.seq++; later.ack = q.id.seq;

@@ -16,8 +16,12 @@ terminal commands (mkdir, ln, dd, cp, mv, stat, ...) via subprocess.
 Usage:
     posix_suite.py <mount-dir> [--results <file>] [--keep] [--stop]
                    [--filter <substr>] [--timeout-s <sec>] [--jobs N]
+                   [--suite core|extras|all]
 
 Exit code: 0 if every selected test passes, 1 otherwise.
+
+Default core excludes optional mmap and .efs command checks. Use --suite extras
+(or posix_extras.py) to run those separately; --suite all includes both.
 
 Two-client visibility (create on A, see on B without remount) lives in
 posix_2client.py — run via `tests/run_tests.sh posix2`.
@@ -47,6 +51,18 @@ def test(fn):
     """Register a test function. The function name becomes the test id."""
     TESTS.append((fn.__name__, fn))
     return fn
+
+
+def extra(fn):
+    """Optional capability checks, selected only by the extras/all suites."""
+    fn._posix_extra = True
+    return test(fn)
+
+
+def _selected_tests(suite, filt=None):
+    return [(name, fn) for name, fn in TESTS
+            if (suite == "all" or getattr(fn, "_posix_extra", False) == (suite == "extras"))
+            and (not filt or filt in name)]
 
 
 def serial(fn):
@@ -2424,7 +2440,7 @@ def fcntl_byte_range_lock(d):
 # ==========================================================================
 # mmap (may be unsupported by the FUSE client — report, don't hard-fail)
 # ==========================================================================
-@test
+@extra
 def mmap_write_read(d):
     import mmap as mmapmod
     p = os.path.join(d, "f")
@@ -2442,7 +2458,7 @@ def mmap_write_read(d):
     eq(rd(p)[:5], b"mmap!", "mmap write visible")
 
 
-@test
+@extra
 def mmap_private_not_visible(d):
     import mmap as mmapmod
     p = os.path.join(d, "f")
@@ -2674,7 +2690,7 @@ def concurrent_write_and_readdir(d):
 # ==========================================================================
 # Virtual .stats / .find (efs FUSE extras; skip if feature off)
 # ==========================================================================
-@test
+@extra
 def virt_stats_readable(d):
     import json
     wr(os.path.join(d, "a"), b"x")
@@ -2690,7 +2706,7 @@ def virt_stats_readable(d):
     expect_err((errno.EPERM, errno.EACCES, errno.ENOENT, errno.EIO, errno.ENOTDIR), os.unlink, p)
 
 
-@test
+@extra
 def virt_find_query(d):
     import json
     wr(os.path.join(d, "report.txt"), b"x")
@@ -2708,7 +2724,7 @@ def virt_find_query(d):
         time.sleep(.1)
 
 
-@test
+@extra
 def virt_find_not_a_real_dir(d):
     commanddir = os.path.join(d, ".efs")
     if not os.path.exists(commanddir):
@@ -4214,6 +4230,7 @@ def _parse_cli(args):
     tag = None
     test_timeout = int(os.environ.get("POSIX_TEST_SEC", "15"))
     jobs = int(os.environ.get("POSIX_JOBS", "16"))
+    suite = "core"
     i = 1
     while i < len(args):
         if args[i] == "--results":
@@ -4234,12 +4251,17 @@ def _parse_cli(args):
         elif args[i] == "--jobs":
             jobs = int(args[i + 1])
             i += 2
+        elif args[i] == "--suite":
+            if i + 1 >= len(args) or args[i + 1] not in ("core", "extras", "all"):
+                return None
+            suite = args[i + 1]
+            i += 2
         elif args[i] == "--tag":
             tag = args[i + 1]
             i += 2
         else:
             i += 1
-    return (mnt, results_file, keep, stop, filt, tag, test_timeout, jobs)
+    return (mnt, results_file, keep, stop, filt, tag, test_timeout, jobs, suite)
 
 
 def _self_test():
@@ -4250,7 +4272,21 @@ def _self_test():
         if not cond:
             fails.append(msg)
 
-    td = tempfile.mkdtemp(prefix="posix-self-")
+    core = {n for n, _ in _selected_tests("core")}
+    extras = {n for n, _ in _selected_tests("extras")}
+    expect(not core & extras, "core and extras overlap")
+    expect(core | extras == {n for n, _ in TESTS}, "suite split loses tests")
+    expect(extras == {"mmap_write_read", "mmap_private_not_visible",
+                     "virt_stats_readable", "virt_find_query", "virt_find_not_a_real_dir"},
+           "unexpected extras selection")
+    expect(_parse_cli(["/tmp", "--suite", "invalid"]) is None,
+           "invalid suite accepted")
+    expect(_parse_cli(["/tmp", "--suite"]) is None, "missing suite accepted")
+    expect(_parse_cli(["/tmp"])[-1] == "core", "default is not core")
+    expect(_parse_cli(["/tmp", "--suite", "extras"])[-1] == "extras",
+           "extras selection ignored")
+
+    td = os.path.realpath(tempfile.mkdtemp(prefix="posix-self-"))
     old = os.getcwd()
     try:
         os.chdir(td)
@@ -4873,7 +4909,7 @@ def main(argv=None):
         print(__doc__)
         return 2
     (mnt, results_file, keep, stop, filt, tag,
-     test_timeout, jobs) = parsed
+     test_timeout, jobs, suite) = parsed
 
     if not os.path.isdir(mnt):
         print("ERROR: %s is not a mounted directory" % mnt)
@@ -4905,7 +4941,7 @@ def main(argv=None):
     # POSIX_PER_HOST siblings (each mkdtemp prefix is host+tag).
     # Testdirs under the base are created lazily in invoke() — 201
     # sequential mkdirs at ~0.3s each was another 60s before any test ran.
-    matched = [(n, fn) for n, fn in TESTS if not filt or filt in n]
+    matched = _selected_tests(suite, filt)
     if not matched:
         what = "filter %r" % filt if filt else "the suite"
         print("ERROR: no tests matched %s" % what)
@@ -4936,6 +4972,7 @@ def main(argv=None):
             f.write("# posix-suite host=%s mnt=%s %s\n" %
                     (host, mnt, time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                               time.gmtime())))
+            f.write("# suite=%s\n" % suite)
             for name, _fn, _td in selected:
                 f.write("# select\t%s\n" % name)
             f.write("test\tresult\tdetail\n")

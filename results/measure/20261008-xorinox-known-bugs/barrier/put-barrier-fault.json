@@ -1,0 +1,13 @@
+{
+  "ino": 4097,
+  "bytes": 2819,
+  "refused_fsync_errno": 5,
+  "unpublished_state": {
+    "base_gen": 0,
+    "spans": 0,
+    "seq": 0,
+    "live_spans": 0,
+    "tombstones": 0
+  },
+  "recovered_exact_bytes": true
+}
