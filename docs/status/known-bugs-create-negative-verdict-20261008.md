@@ -196,3 +196,24 @@ longer historical fresh-directory stress and MKDIR negative-verdict coverage.
 The Mac mount requires the user's sudo interaction; a request to run
 `CLUSTER=xorinox ./mount-mac.sh` was presented once the export was ready.
 No push, container work, D25 activation or changes to W66/D30/W23/W89 were made.
+
+## macOS NFS follow-up after user mount
+
+The mounted macOS NFS export was tested on Oct 9 UTC. Plain macOS `cp`
+failed on the first 2922-byte source while copying its `com.apple.provenance`
+extended attribute (`Operation not permitted`). Repeating outside the sandbox
+produced the same error. This is a separate compatibility failure, not evidence
+of W55 missing-fragment corruption; plain-copy acceptance has not passed.
+
+The explicit `--data-only-cp` gate uses macOS `cp -X`. All 20 copies completed
+and warm bytes matched, with no added fsync. After draining and restarting the
+gateway FUSE client, all 20 files were independently read through the fresh
+gateway with exact SHA256/length. Storage daemons were not restarted in this
+follow-up. The user then unmounted and freshly mounted macOS NFS. Ledger verification
+passed 20/20 exact byte hashes, lengths and inode identities through that fresh
+Mac mount. This completes the data-only client/gateway cold-state gate.
+The gateway remount completed; its trailing managed SSH-host refresh failed on
+local config permissions, after export readiness, and did not undo restoration.
+
+Evidence: `results/measure/20261009-xorinox-w58-w55/macos/`. W55 remains open;
+the attribute-copy failure and original NFS incident are not closed by `cp -X`.

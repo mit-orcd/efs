@@ -15,6 +15,8 @@ p.add_argument('phase', choices=('prepare', 'verify'))
 p.add_argument('directory', type=Path)
 p.add_argument('--ledger', type=Path, required=True)
 p.add_argument('--source', type=Path, help='existing source file; default deterministic 2922-byte body')
+p.add_argument('--data-only-cp', action='store_true',
+    help='macOS cp -X: omit extended attributes; separate from plain cp acceptance')
 a = p.parse_args()
 if a.phase == 'prepare':
     a.directory.mkdir()  # refuse existing names or previous contaminated runs
@@ -27,11 +29,13 @@ if a.phase == 'prepare':
     files = []
     for index in range(20):
         path = a.directory / f'copy-{index:02d}'
-        subprocess.run(['cp', str(source), str(path)], check=True)
+        subprocess.run(['cp'] + (['-X'] if a.data_only_cp else []) +
+            [str(source), str(path)], check=True)
         assert path.read_bytes() == data, path
         files.append({'name': path.name, 'ino': path.stat().st_ino})
     a.ledger.write_text(json.dumps({'platform': sys.platform,
         'directory': str(a.directory), 'bytes_per_file': len(data),
+        'copy_command': 'cp -X' if a.data_only_cp else 'cp',
         'sha256': digest, 'boundary': 'successful cp/close; no added fsync',
         'files': files, 'warm_verified': 20}, indent=2))
     print('20/20 cp and warm exact bytes PASS; cold restart/remount still required')
