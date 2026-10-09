@@ -542,6 +542,7 @@ struct efs_user_stat {
  * The native request/reply layout is unchanged; legacy v1 is internal only. */
 #define EFS_QUERY_COMMAND_VERSION 2
 #define EFS_QUERY_FILTER_VERSION 3
+#define EFS_QUERY_PAGE_VERSION 4
 #define EFS_QUERY_GROUPS 128
 #define EFS_QUERY_MAX_OUTPUT (16u << 20)
 #define EFS_QUERY_MAX_VISITS 1000000u
@@ -570,6 +571,14 @@ struct efs_query_filters {
 struct efs_msg_query_snapshot_v3 {
     struct efs_msg_query_snapshot base;
     struct efs_query_filters filters;
+};
+/* v4 bounded pages. Cursor is a physical index position, not a result offset.
+ * token=0 starts one retained generation; limit=0 closes it. */
+struct efs_msg_query_snapshot_v4 {
+    struct efs_msg_query_snapshot base;
+    struct efs_query_filters filters;
+    uint64_t token,cursor;
+    uint32_t limit,nonce;
 };
 struct efs_msg_query_snapshot_reply {
     uint32_t version;

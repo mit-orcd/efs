@@ -1,0 +1,18 @@
+Cluster nodes (4):
+  node 1: 127.0.0.1:17432  up  used=46.23 GiB  quota=187.50 GiB (24.7%)  storage(1):
+      /data1/efs/n1
+  node 2: 127.0.0.1:17433  up  used=46.20 GiB  quota=187.50 GiB (24.6%)  storage(1):
+      /data1/efs/n2
+  node 3: 127.0.0.1:17434  up  used=46.22 GiB  quota=187.50 GiB (24.6%)  storage(1):
+      /home/efs/additional-work-dir/n3
+  node 4: 127.0.0.1:17435  up  used=46.21 GiB  quota=187.50 GiB (24.6%)  storage(1):
+      /home/efs/additional-work-dir/n4
+Usable (2+1 logical): used=123.24 GiB  free=376.76 GiB  capacity=500.00 GiB (24.6%)
+Cluster state: OK (4 up, 0 down)
+Versions: efsd ab050595c3b8 (branch devel, built 2026-10-09T03:04:37Z) — 4/4 identical
+Node 127.0.0.1:17433 state: active
+Heal:
+  node 1: idle
+  node 2: idle
+  node 3: idle
+  node 4: idle

@@ -19,6 +19,36 @@ Loaded publication, publisher-loss and restart gates now pass; W92 remains open
 for 400 GiB scale, the broader fault matrix, platform and remote export-policy
 acceptance. Historical deployment statements below are superseded by these reports.
 
+## Billions of files — disk-backed, bounded-memory catalog
+
+Accepted Oct 9 user requirement, tracked in **W92**: support a design target of
+**2^32 files** using a persistent, partitioned query index and bounded resident
+memory. This target is not a claim that current EFS has passed that capacity.
+The current server catalog is entirely resident in RAM, derived from persistent
+filesystem metadata. The observed 1024 MiB cap near 1.25 million files is a
+query-catalog limit, not a filesystem capacity limit; failed refresh retains an
+older snapshot. Partition reuse and paging do not fix the namespace-dependent
+RAM footprint. The [latest profile](tiny-file-five-minute-profile-20261009.md)
+supersedes earlier smaller-namespace cap-recovery observations.
+
+Persist partition/shard indexes and incremental statistics, with bounded caches,
+refresh scratch, change queues and streaming buffers. Persist progress watermarks
+and define replay, restart and disable/re-enable catch-up without an unbounded
+backlog in RAM. Preserve authorization, immutable output, truthful freshness and
+explicit limits. Snapshot retention must not pin an entire catalog in RAM.
+Bounded commands and full exports must use the disk-backed index; never rebuild
+the namespace on command access. Document query access plans: literal contains
+matching may need a bounded disk scan unless a suitable secondary index is supplied.
+
+Acceptance requires explicit per-node/shard memory/disk budgets, cardinality and
+arithmetic audits, increasing-cardinality RSS/latency/freshness measurements,
+cold-cache and concurrent-mutation/export gates, restart/fault/recovery oracles,
+and a synthetic partitioned-index gate of at least 2^32 entries. Staged real
+filesystem tests remain constrained by measured physical space/inodes; synthetic
+index tests must not be presented as real multi-billion-file EFS acceptance.
+Raising the RAM cap alone cannot close W92. Architecture implementation and
+these scale gates remain open.
+
 ## Required direction
 
 The existing [server-owned refresh design](../backlog/ideas.md#parked-server-side-stats--find-refresh)

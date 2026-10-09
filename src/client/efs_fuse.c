@@ -1025,8 +1025,8 @@ static int find_res_caller(int i)
 static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
                              const char *pattern)
 {
-    struct efs_msg_query_snapshot_v3 command;
-    if (efs_command_path_parse_v3(pattern,&command)) return -EINVAL;
+    struct efs_msg_query_snapshot_v4 command;
+    if (efs_command_path_parse_v4(pattern,&command)) return -EINVAL;
     command.base.root=dir_ino;
     (void)query_path; /* Server supplies authoritative export-relative paths. */
 
@@ -1046,7 +1046,7 @@ static int find_query_ensure(efs_ino_t dir_ino, const char *query_path,
     uint64_t command_deadline=stats_now_ms()+8000;
     if (!previous_deadline || command_deadline<previous_deadline)
         efs_client_rpc_set_deadline_ms(command_deadline);
-    if (!qrc) qrc=efs_client_rpc_query_snapshot_v3(&command,&reply,&text);
+    if (!qrc) qrc=efs_client_rpc_query_snapshot_v4(&command,&reply,&text);
     efs_client_rpc_set_deadline_ms(previous_deadline);
     if (!qrc) { len=(int)reply.text_len;allocated=(size_t)len+1; }
     if (qrc != 0) {

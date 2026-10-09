@@ -5,6 +5,7 @@
  * order, so a group's state is a fold over its own records. */
 
 #include "raft_disk_internal.h"
+#include "efs/batch_obs.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -134,14 +135,18 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
 
     if (d->sync_mode != EFS_RAFT_DISK_SYNC)
         return EFS_OK;
-    if (honor_hold && d->sync_hold > 0)
+    if (honor_hold && d->sync_hold > 0) {
+        BO_COUNT(BO_SYNC_HOLD_SKIP);
         return EFS_OK;
+    }
     if (d->io_failed)
         return EFS_ERR_IO;
     /* A concurrent batch may already have persisted this tail. Creating
      * a fresh round here would issue a barrier with no new log bytes. */
-    if (d->synced_bytes >= d->bytes)
+    if (d->synced_bytes >= d->bytes) {
+        BO_COUNT(BO_SYNC_DURABLE_SKIP);
         return EFS_OK;
+    }
     want = ++d->sync_want;
     for (;;) {
         if (d->io_failed)
@@ -149,7 +154,16 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
         if (d->sync_done >= want)
             return EFS_OK;
         if (d->syncing) {
+            uint64_t began = 0;
+            if (BO_ON()) {
+                began = efs_batch_obs_now_us();
+                BO_HIST(BH_SYNC_WAITERS, ++d->obs_waiters);
+            }
             pthread_cond_wait(&d->cv, &d->mu);
+            if (BO_ON()) {
+                d->obs_waiters--;
+                BO_HIST(BH_SYNC_WAIT_US, efs_batch_obs_now_us()-began);
+            }
             continue;
         }
         /* Take the round that covers every append written so far.
@@ -159,6 +173,13 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
         want = d->sync_want;
         {
             uint64_t cover = d->bytes;
+            uint64_t entries = d->obs_entries, began = 0;
+            if (BO_ON()) {
+                began = efs_batch_obs_now_us();
+                BO_COUNT(BO_SYNC);
+                BO_HIST(BH_WAL_ENTRIES, entries-d->obs_synced_entries);
+                BO_HIST(BH_WAL_BYTES, cover-d->synced_bytes);
+            }
 
             pthread_mutex_unlock(&d->mu);
             /* Recovery requires the log bytes and length; fdatasync
@@ -166,13 +187,16 @@ static int log_sync_locked(struct efs_raft_disk *d, int honor_hold)
             if (fdatasync(d->fd) != 0) {
                 pthread_mutex_lock(&d->mu);
                 d->io_failed = 1;
+                BO_COUNT(BO_SYNC_ERROR);
             } else {
                 pthread_mutex_lock(&d->mu);
                 if (d->sync_done < want)
                     d->sync_done = want;
                 if (d->synced_bytes < cover)
                     d->synced_bytes = cover;
+                if (BO_ON()) d->obs_synced_entries = entries;
             }
+            if (BO_ON()) BO_HIST(BH_SYNC_US, efs_batch_obs_now_us()-began);
         }
         d->syncing = 0;
         pthread_cond_broadcast(&d->cv);
@@ -234,6 +258,7 @@ static int log_write_locked(struct efs_raft_disk *d, uint8_t type,
         return rc;
     }
     d->bytes += len;
+    if (BO_ON() && type == RAFT_REC_ENTRY) d->obs_entries++;
     if (d->allocated_bytes < d->bytes)
         d->allocated_bytes = d->bytes;
     return EFS_OK;
@@ -522,6 +547,8 @@ int raft_log_rotate_locked(struct efs_raft_disk *d)
     }
     d->live_bytes = d->bytes;
     d->synced_bytes = d->bytes;
+    if (BO_ON()) d->obs_synced_entries = d->obs_entries;
+    BO_COUNT(BO_ROTATE);
     /* The rewritten file is synced. Offsets recorded against the old
      * file would look past synced_bytes and hide every later append
      * from the durable scan. Zero means "already in a synced file". */
@@ -561,7 +588,12 @@ int efs_raft_disk_sync_hold(struct efs_raft_disk *d)
     if (!d)
         return EFS_ERR_INVAL;
     pthread_mutex_lock(&d->mu);
+    if (BO_ON() && d->sync_hold == 0) {
+        d->obs_hold_started = efs_batch_obs_now_us();
+        BO_COUNT(BO_HOLD_OPEN);
+    }
     d->sync_hold++;
+    BO_HIST(BH_HOLD_DEPTH, d->sync_hold);
     pthread_mutex_unlock(&d->mu);
     return EFS_OK;
 }
@@ -575,6 +607,11 @@ int efs_raft_disk_sync_release(struct efs_raft_disk *d)
     pthread_mutex_lock(&d->mu);
     if (d->sync_hold > 0)
         d->sync_hold--;
+    if (BO_ON() && !d->sync_hold && d->obs_hold_started) {
+        BO_HIST(BH_HOLD_US, efs_batch_obs_now_us()-d->obs_hold_started);
+        BO_COUNT(BO_HOLD_CLOSE);
+        d->obs_hold_started = 0;
+    }
     /* A hold/release that appended nothing (a propose that forwarded)
      * must not fsync. Nested holds fsync once, on the release that
      * drops the count to zero, covering every append in between. */
@@ -611,6 +648,11 @@ int efs_raft_disk_sync_release_wait(struct efs_raft_disk *d)
     pthread_mutex_lock(&d->mu);
     if (d->sync_hold > 0)
         d->sync_hold--;
+    if (BO_ON() && !d->sync_hold && d->obs_hold_started) {
+        BO_HIST(BH_HOLD_US, efs_batch_obs_now_us()-d->obs_hold_started);
+        BO_COUNT(BO_HOLD_CLOSE);
+        d->obs_hold_started = 0;
+    }
     mine = d->bytes;
     if (d->sync_mode != EFS_RAFT_DISK_SYNC) {
         pthread_mutex_unlock(&d->mu);

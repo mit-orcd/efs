@@ -1,0 +1,203 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 6K of event 'cycles:P'
+# Event count (approx.): 63147021220
+#
+# Overhead  Command  Shared Object           Symbol                                       
+# ........  .......  ......................  .............................................
+#
+    26.56%  efsd     efsd                    [.] efs_query_catalog_build
+            |          
+             --26.22%--efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     7.27%  efsd     efsd                    [.] add_node
+            |          
+            |--4.07%--asm_exc_page_fault
+            |          add_node
+            |          efs_query_catalog_build
+            |          host_query_thread
+            |          start_thread
+            |          
+             --2.83%--add_node
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     3.01%  efsd     [vdso]                  [.] 0x00000000000008d5
+            |
+            ---0x7f962819a8d8
+               clock_gettime@@GLIBC_2.17
+               |          
+                --2.94%--efs_query_catalog_build
+                          host_query_thread
+                          start_thread
+
+     2.52%  efsd     efsd                    [.] unpack_inode
+            |          
+             --2.37%--unpack_inode
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     1.97%  efsd     [kernel.kallsyms]       [k] sync_regs
+            |
+            ---sync_regs
+               |          
+                --1.97%--asm_exc_page_fault
+                          add_node
+                          efs_query_catalog_build
+                          host_query_thread
+                          start_thread
+
+     1.90%  efsd     [kernel.kallsyms]       [k] native_irq_return_iret
+            |          
+             --1.84%--add_node
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     1.24%  efsd     [kernel.kallsyms]       [k] __list_del_entry_valid_or_report
+            |          
+             --1.14%--__list_del_entry_valid_or_report
+                       |          
+                        --0.56%--rmqueue_bulk
+                                  __rmqueue_pcplist
+                                  rmqueue.isra.0
+                                  get_page_from_freelist
+                                  __alloc_pages_noprof
+                                  alloc_pages_mpol_noprof
+                                  |          
+                                   --0.55%--folio_alloc_mpol_noprof
+                                             vma_alloc_folio_noprof
+                                             alloc_anon_folio
+                                             do_anonymous_page
+                                             __handle_mm_fault
+                                             handle_mm_fault
+                                             do_user_addr_fault
+                                             exc_page_fault
+                                             asm_exc_page_fault
+                                             add_node
+                                             efs_query_catalog_build
+                                             host_query_thread
+                                             start_thread
+
+     1.17%  efsd     [kernel.kallsyms]       [k] clear_page_erms
+            |
+            ---clear_page_erms
+               |          
+                --0.93%--post_alloc_hook
+                          prep_new_page
+                          get_page_from_freelist
+                          __alloc_pages_noprof
+                          alloc_pages_mpol_noprof
+                          folio_alloc_mpol_noprof
+                          vma_alloc_folio_noprof
+                          alloc_anon_folio
+                          do_anonymous_page
+                          __handle_mm_fault
+                          handle_mm_fault
+                          do_user_addr_fault
+                          exc_page_fault
+                          asm_exc_page_fault
+                          add_node
+                          efs_query_catalog_build
+                          host_query_thread
+                          start_thread
+
+     1.13%  efsd     libc.so.6               [.] __memcmp_evex_movbe
+            |          
+             --0.99%--__memcmp_evex_movbe
+
+     1.11%  efsd     efsd                    [.] host_query_cancel
+            |          
+             --0.90%--host_query_cancel
+                       |          
+                        --0.62%--efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     0.87%  efsd     [kernel.kallsyms]       [k] its_return_thunk
+     0.86%  efsd     [kernel.kallsyms]       [k] zap_present_ptes.constprop.0
+            |          
+             --0.84%--zap_present_ptes.constprop.0
+                       zap_pte_range
+                       zap_pmd_range.isra.0
+                       unmap_page_range
+                       unmap_vmas
+                       vms_clear_ptes
+                       vms_complete_munmap_vmas
+                       do_vmi_align_munmap
+                       do_vmi_munmap
+                       __vm_munmap
+                       __x64_sys_munmap
+                       do_syscall_64
+                       entry_SYSCALL_64_after_hwframe
+                       __munmap
+
+     0.78%  efsd     [kernel.kallsyms]       [k] try_charge_memcg
+            |          
+             --0.77%--try_charge_memcg
+                       charge_memcg
+                       __mem_cgroup_charge
+                       alloc_anon_folio
+                       do_anonymous_page
+                       __handle_mm_fault
+                       handle_mm_fault
+                       do_user_addr_fault
+                       exc_page_fault
+                       asm_exc_page_fault
+                       add_node
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     0.68%  efsd     [kernel.kallsyms]       [k] __rcu_read_lock
+            |          
+             --0.54%--__rcu_read_lock
+
+     0.68%  efsd     [kernel.kallsyms]       [k] __mod_memcg_lruvec_state
+            |          
+             --0.62%--__mod_memcg_lruvec_state
+
+     0.68%  efsd     libc.so.6               [.] __memmove_evex_unaligned_erms
+            |          
+             --0.65%--__memmove_evex_unaligned_erms
+
+     0.66%  efsd     efsd                    [.] add_edge
+            |
+            ---add_edge
+               efs_name_index_query_visits
+               efs_name_index_query
+               efs_query_catalog_build
+               host_query_thread
+               start_thread
+
+     0.62%  efsd     [kernel.kallsyms]       [k] charge_memcg
+            |          
+             --0.54%--charge_memcg
+                       __mem_cgroup_charge
+                       alloc_anon_folio
+                       do_anonymous_page
+                       __handle_mm_fault
+                       handle_mm_fault
+                       do_user_addr_fault
+                       exc_page_fault
+                       asm_exc_page_fault
+                       add_node
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     0.61%  efsd     [kernel.kallsyms]       [k] do_anonymous_page
+     0.57%  efsd     libc.so.6               [.] clock_gettime@@GLIBC_2.17
+     0.50%  efsd     [kernel.kallsyms]       [k] __free_one_page
+
+
+#
+# (Tip: Profiling branch (mis)predictions with: perf record -b / perf report)
+#

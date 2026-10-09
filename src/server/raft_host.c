@@ -1,6 +1,7 @@
 #include "server_internal.h"
 #include "efs/checksum.h"
 #include "efs/raft.h"
+#include "efs/batch_obs.h"
 #include "efs/admission.h"
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
@@ -362,6 +363,7 @@ struct efs_raft_host {
     pthread_t query_tid;
     int query_running,query_started,query_error,query_enabled;
     uint64_t query_deadline_ms;
+    uint32_t query_cancel_checks; /* Owned by the query publisher thread. */
     struct efs_server_query_view query_view;
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
     int gc_running;
@@ -3184,7 +3186,8 @@ static unsigned propose_q;
 
 static void propose_q_add(void)
 {
-    __atomic_add_fetch(&propose_q, 1u, __ATOMIC_RELEASE);
+    unsigned depth = __atomic_add_fetch(&propose_q, 1u, __ATOMIC_RELEASE);
+    BO_HIST(BH_PROPOSERS, depth);
 }
 
 static void propose_q_sub(void)
@@ -3725,6 +3728,8 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                  * of new calls is cut off by the spin cap. */
                 while (propose_q_busy() && spins++ < 10000)
                     sched_yield();
+                BO_HIST(BH_SPINS, spins);
+                if (spins > 10000) BO_COUNT(BO_SPIN_CAP);
                 host_pump_kick(h);
                 rc = efs_raft_disk_sync_release_wait(h->disk);
                 if (rc == EFS_OK) {
@@ -5168,6 +5173,8 @@ static void drain_inbox(struct efs_raft_host *h)
     h->inbox_bytes = 0;
     pthread_mutex_unlock(&h->inbox_mu);
 
+    if (n) BO_HIST(BH_INBOX, n);
+    else BO_COUNT(BO_INBOX_EMPTY);
     /* Bounded, contiguous groups only: no message reordering or extra wait.
      * The core flushes before term/conflict/read/configuration boundaries. */
     struct efs_raft_msg msgs[EFS_RAFT_RECV_MAX];
@@ -5192,6 +5199,11 @@ static void drain_inbox(struct efs_raft_host *h)
         }
         if (count && (r != pending || count == EFS_RAFT_RECV_MAX ||
                       bytes + cmd_cap > EFS_RAFT_AE_BYTES)) {
+            BO_HIST(BH_HOST_MESSAGES, count);
+            if (i == n) BO_COUNT(BO_HOST_END);
+            else if (r != pending) BO_COUNT(BO_HOST_GROUP);
+            else if (count == EFS_RAFT_RECV_MAX) BO_COUNT(BO_HOST_COUNT);
+            else BO_COUNT(BO_HOST_BYTES);
             (void)efs_raft_recv_batch(pending, msgs, count);
             for (uint32_t j = 0; j < count; j++) free(commands[j]);
             count = 0;
@@ -5621,6 +5633,9 @@ static void *host_pump(void *arg)
         {
             uint64_t pnow = now_us_();
 
+            /* pnow is wall time for applied-index persistence; diagnostics
+             * use monotonic time, matching cohort/hold measurements. */
+            if (BO_ON()) efs_batch_obs_dump(efs_batch_obs_now_us());
             for (i = 0; i < HOST_NGROUPS; i++)
                 (void)persist_applied(h, i, applied_now[i], pnow, 0);
         }
@@ -7356,11 +7371,36 @@ static uint64_t query_mono_ms(void)
     clock_gettime(CLOCK_MONOTONIC,&ts);
     return (uint64_t)ts.tv_sec*1000+(uint64_t)ts.tv_nsec/1000000;
 }
+/* One retained export generation per host, bounded by the catalog cap.
+ * Fresh per-page permissions still apply. Idle expiry also runs without RPCs. */
+static pthread_mutex_t query_page_mu=PTHREAD_MUTEX_INITIALIZER;
+static struct {
+    uint64_t token,touched,born;
+    struct efs_msg_query_snapshot_v4 request;
+    struct efs_server_query_view view;
+    int refresh_error;
+} query_page_session;
+static void query_page_clear(void)
+{
+    efs_query_catalog_free(query_page_session.view.catalog);
+    memset(&query_page_session,0,sizeof(query_page_session));
+}
+static void query_page_sweep(int force)
+{
+    if (force) pthread_mutex_lock(&query_page_mu);
+    else if (pthread_mutex_trylock(&query_page_mu)) return;
+    uint64_t now=query_mono_ms();
+    if (force || (query_page_session.token &&
+        (now-query_page_session.touched>60000 || now-query_page_session.born>3600000))) query_page_clear();
+    pthread_mutex_unlock(&query_page_mu);
+}
 static int host_query_cancel(void *ctx)
 {
     struct efs_raft_host *h=ctx;
-    return !__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE) ||
-           query_mono_ms()>h->query_deadline_ms;
+    if (!__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) return 1;
+    /* Shutdown stays immediate; deadline reads are at most 256 callbacks apart. */
+    if (h->query_cancel_checks++ & 255u) return 0;
+    return query_mono_ms()>h->query_deadline_ms;
 }
 /* h->mu held: a pin is atomic with complete local apply dispatch. Import
  * batches can run outside that mutex, so their blockers must also be tested. */
@@ -7439,6 +7479,7 @@ static void *host_query_thread(void *ctx)
     }
     while (__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) {
         usleep(100000);
+        query_page_sweep(0);
         uint64_t now=query_mono_ms(),dirty=0;
         if (now-last_attempt<200) continue;
         int rc=efs_kv_lsm_metadata_revisions(h->kv,current,4096);
@@ -7470,12 +7511,14 @@ static void *host_query_thread(void *ctx)
         struct efs_server_query_view view;
         uint64_t revisions[4096];
         h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
+        h->query_cancel_checks=0;
         rc=host_query_source(h,&source,&view,revisions);
         struct efs_query_catalog *candidate=NULL;
         if (!rc && !host_query_cancel(h))
             rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
         else if (!rc) rc=EFS_ERR_BUSY;
         efs_kv_lsm_snapshot_release(source);
+        h->query_cancel_checks=0; /* Always enforce the deadline before publication. */
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
         pthread_rwlock_wrlock(&h->query_lock);
         h->query_error=rc;failed=rc!=EFS_OK;
@@ -7495,9 +7538,9 @@ static void *host_query_thread(void *ctx)
             h->query_view=view;
             struct efs_query_rollup root={0};
             int root_rc=efs_query_catalog_stats(candidate,EFS_ROOT_INO,&root);
-            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
+            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u refolded=%u edge_reused=%u bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
                 (unsigned long long)view.generation,(unsigned long long)view.applied[0],
-                (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),
+                (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),efs_query_catalog_refolded(candidate),efs_query_catalog_reused_edges(candidate),
                 (unsigned long long)efs_query_catalog_bytes(candidate),(unsigned long long)view.pin_ms,
                 (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
                 (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
@@ -7564,6 +7607,10 @@ struct query_auth {
 };
 struct query_request {
     struct efs_raft_host *h;
+    const struct efs_msg_query_snapshot_v4 *page;
+    uint64_t cursor;
+    uint32_t emitted;
+    int more_confirmed;
     const struct efs_msg_query_snapshot *req;
     const struct efs_query_filters *filters;
     struct efs_msg_query_snapshot_reply *reply;
@@ -7702,6 +7749,11 @@ static int query_emit(void *ctx,const struct efs_name_entry *entry,const char *r
     if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
     if (rc) return rc;
     if (fresh.ino!=entry->dentry.ino || fresh.generation!=entry->dentry.generation) return EFS_ERR_BUSY;
+    if (q->page && (q->emitted>=q->page->limit ||
+        strlen(relative)*2+300>q->req->max_output-q->len)) {
+        q->more_confirmed=1;return EFS_ERR_AGAIN;
+    }
+    q->emitted++;
     if (q->req->version>=EFS_QUERY_COMMAND_VERSION) {
         if (q->len && q->text[q->len-1]!= '[') {
             rc=query_append(q,",",1);if (rc) return rc;
@@ -7764,11 +7816,24 @@ static int query_consume(void *ctx,const struct efs_server_query_view *view,int 
             }
         } else if (!rc) {
             rc=query_append(q,"\"entries\":[",11);
-            if (!rc) rc=q->req->operation==EFS_QUERY_LS ?
+            if (!rc && q->page) {
+                q->cursor=q->page->cursor;
+                rc=efs_query_catalog_page(view->catalog,q->req->root,q->req->match,q->req->term,
+                    q->req->operation==EFS_QUERY_LS,&q->cursor,q->req->visit_budget,
+                    query_expired,q,query_emit,q);
+                if (!rc) {
+                    char tail[256];
+                    int more=q->cursor!=(UINT64_C(4096)<<32);
+                    int n=snprintf(tail,sizeof(tail),"],\"truncated\":%s,\"page\":{\"token\":\"%llu\",\"cursor\":\"%llu\",\"more\":%s,\"more_confirmed\":%s}}",
+                        more ? "true" : "false",(unsigned long long)query_page_session.token,
+                        (unsigned long long)q->cursor,more ? "true" : "false",q->more_confirmed ? "true" : "false");
+                    rc=n<0 || (size_t)n>=sizeof(tail) ? EFS_ERR_OVERFLOW : query_append(q,tail,(size_t)n);
+                }
+            } else if (!rc) rc=q->req->operation==EFS_QUERY_LS ?
                 efs_query_catalog_ls_bounded(view->catalog,q->req->root,q->req->visit_budget,query_expired,q,query_emit,q) :
                 efs_query_catalog_find(view->catalog,q->req->root,q->req->match,q->req->term,
                                        q->req->visit_budget,query_emit,q);
-            if (!rc) rc=query_append(q,"]}",2);
+            if (!rc && !q->page) rc=query_append(q,"]}",2);
         }
     } else if (q->req->operation==EFS_QUERY_STATS) {
         struct efs_query_rollup s;
@@ -7862,6 +7927,93 @@ int server_raft_host_query_snapshot(const struct efs_msg_query_snapshot *req,con
     reply->status=rc;
     if (rc) reply->text_len=0; /* never deliver a partial result as success */
     *out=reply;*len=sizeof(*reply)+reply->text_len;
+    return EFS_OK;
+}
+
+static int query_page_capture(void *ctx,const struct efs_server_query_view *view,int error)
+{
+    (void)ctx;
+    query_page_session.view=*view;query_page_session.refresh_error=error;
+    efs_query_catalog_retain(view->catalog);
+    return EFS_OK;
+}
+int server_raft_host_query_page(const struct efs_msg_query_snapshot_v4 *req,void **out,uint32_t *len)
+{
+    if (out) *out=NULL;
+    if (!g_host || !g_host->query_enabled) return EFS_ERR_NOT_FOUND;
+    if (!req || !out || !len || req->base.version!=EFS_QUERY_PAGE_VERSION ||
+        !req->base.root || req->base.operation<EFS_QUERY_FIND || req->base.operation>EFS_QUERY_LS ||
+        req->base.ngroups>EFS_QUERY_GROUPS || req->base.match>EFS_NAME_CONTAINS || req->limit>10000 ||
+        (!req->token && (!req->limit || req->cursor)) || req->cursor>(UINT64_C(4096)<<32) ||
+        req->base.max_output<16384 || req->base.max_output>EFS_QUERY_MAX_OUTPUT ||
+        !req->base.visit_budget || req->base.visit_budget>100000 ||
+        !memchr(req->base.term,0,sizeof(req->base.term)) || strlen(req->base.term)>120 ||
+        strchr(req->base.term,'/') || !efs_query_filters_valid(&req->filters) ||
+        (!req->base.term[0] && req->base.match!=EFS_NAME_PREFIX && req->base.match!=EFS_NAME_CONTAINS)) return EFS_ERR_INVAL;
+    if (pthread_mutex_trylock(&query_page_mu)) return EFS_ERR_BUSY;
+    int rc=EFS_OK,created=0;
+    uint64_t now=query_mono_ms();
+    if (query_page_session.token && (now-query_page_session.touched>60000 ||
+        now-query_page_session.born>3600000)) query_page_clear();
+    struct efs_msg_query_snapshot_v4 identity=*req;
+    identity.token=identity.cursor=0;identity.limit=0;
+    if (req->token) {
+        if (req->token!=query_page_session.token) rc=EFS_ERR_STALE;
+        else if (memcmp(&identity,&query_page_session.request,sizeof(identity))) rc=EFS_ERR_ACCES;
+    } else if (query_page_session.token && memcmp(&identity,&query_page_session.request,sizeof(identity))) rc=EFS_ERR_BUSY;
+    uint16_t primary=0;
+    if (!rc && !req->token && !query_page_session.token) {
+        rc=server_raft_host_query_read(query_page_capture,NULL,&primary);
+        if (!rc) {
+            created=1;query_page_session.request=identity;
+            query_page_session.token=((uint64_t)(g_host->raft_id+1)<<56)|
+                ((now_ns()^g_host->boot_id)&UINT64_C(0x00ffffffffffffff));
+            query_page_session.born=now;
+        }
+    }
+    /* Even continuations need current quorum/ReadIndex before fresh checks. */
+    if (!rc && query_page_session.token && req->limit) {
+        for (int i=0;i<HOST_NGROUPS && !rc;i++) { int hint=-1;rc=host_read_index(g_host,g_host->g[i].group,&hint); }
+        pthread_mutex_lock(&g_host->mu);
+        if (!rc && !host_query_capable(g_host)) rc=EFS_ERR_BUSY;
+        pthread_mutex_unlock(&g_host->mu);
+    }
+    uint64_t bytes=sizeof(struct query_allocation)+sizeof(struct efs_msg_query_snapshot_reply)+req->base.max_output;
+    /* Serialized pages share the existing reply budget with old protocol RPCs. */
+    struct query_allocation *a=NULL;
+    int admitted=__atomic_add_fetch(&query_requests,1,__ATOMIC_RELAXED)<=8;
+    int reserved=0;
+    if (admitted) {
+        uint64_t before=__atomic_load_n(&query_reply_bytes,__ATOMIC_RELAXED);
+        while (bytes<=HOST_QUERY_REPLY_BYTES-before) {
+            if (__atomic_compare_exchange_n(&query_reply_bytes,&before,before+bytes,0,__ATOMIC_RELAXED,__ATOMIC_RELAXED)) { reserved=1;break; }
+        }
+    }
+    if (reserved) {
+        a=calloc(1,bytes);
+        if (!a) __atomic_sub_fetch(&query_reply_bytes,bytes,__ATOMIC_RELAXED);
+    }
+    if (!a) {
+        __atomic_sub_fetch(&query_requests,1,__ATOMIC_RELAXED);
+        if (created) query_page_clear();
+        pthread_mutex_unlock(&query_page_mu);return EFS_ERR_BUSY;
+    }
+    a->bytes=bytes;
+    struct efs_msg_query_snapshot_reply *reply=(void *)(a+1);
+    reply->version=EFS_QUERY_PAGE_VERSION;reply->primary_id=primary;
+    if (!rc && !req->limit) query_page_clear();
+    else if (!rc) {
+        query_page_session.touched=now;
+        struct query_request q={.h=g_host,.req=&req->base,.filters=&req->filters,.page=req,
+            .reply=reply,.text=(char *)(reply+1),.deadline=query_mono_ms()+5000};
+        q.auth=calloc(HOST_QUERY_AUTH_N,sizeof(*q.auth));
+        rc=q.auth ? query_consume(&q,&query_page_session.view,query_page_session.refresh_error) : EFS_ERR_NOMEM;
+        free(q.auth);
+        if (rc && created) query_page_clear();
+    }
+    reply->status=rc;if (rc) reply->text_len=0;
+    *out=reply;*len=sizeof(*reply)+reply->text_len;
+    pthread_mutex_unlock(&query_page_mu);
     return EFS_OK;
 }
 
@@ -8095,6 +8247,7 @@ void server_raft_host_stop(void)
         return;
     __atomic_store_n(&h->query_running,0,__ATOMIC_RELEASE);
     if (h->query_started) pthread_join(h->query_tid,NULL);
+    query_page_sweep(1);
     pthread_rwlock_wrlock(&h->query_lock);
     efs_query_catalog_free(h->query_view.catalog);
     h->query_view.catalog=NULL;
@@ -8192,6 +8345,7 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
 
         pthread_mutex_unlock(&h->inbox_mu);
         n = __atomic_add_fetch(&h->inbox_drop, 1, __ATOMIC_RELAXED);
+        BO_COUNT(BO_INBOX_DROP);
         if (n <= 10)
             fprintf(stderr,
                     "raft-host: inbox full, dropped frame type=%u group=%u "

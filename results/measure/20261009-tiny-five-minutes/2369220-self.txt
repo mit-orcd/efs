@@ -1,0 +1,53 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 546  of event 'cycles:P'
+# Event count (approx.): 8516509885
+#
+# Overhead  Command  Shared Object                            Symbol                                    
+# ........  .......  .......................................  ..........................................
+#
+    15.06%  python3  libpython3.12.so.1.0                     [.] _PyEval_EvalFrameDefault
+     2.71%  python3  libpython3.12.so.1.0                     [.] _PyObject_GetMethod
+     1.64%  python3  [kernel.kallsyms]                        [k] _raw_spin_lock
+     1.61%  python3  [kernel.kallsyms]                        [k] __memcg_slab_post_alloc_hook
+     1.31%  python3  libpython3.12.so.1.0                     [.] _Py_hashtable_get
+     1.20%  python3  libpython3.12.so.1.0                     [.] _Py_dict_lookup
+     1.19%  python3  [kernel.kallsyms]                        [k] _raw_spin_lock_irqsave
+     1.11%  python3  libpython3.12.so.1.0                     [.] _PyObject_GenericGetAttrWithDict
+     1.09%  python3  libpython3.12.so.1.0                     [.] tupledealloc
+     1.02%  python3  [kernel.kallsyms]                        [k] __get_user_8
+     0.96%  python3  [kernel.kallsyms]                        [k] avc_lookup
+     0.95%  python3  libpython3.12.so.1.0                     [.] PyObject_IsTrue
+     0.94%  python3  [kernel.kallsyms]                        [k] map_id_range_down
+     0.82%  python3  libpython3.12.so.1.0                     [.] _PyObject_GC_New
+     0.79%  python3  [kernel.kallsyms]                        [k] __inode_security_revalidate
+     0.75%  python3  [kernel.kallsyms]                        [k] __lookup_mnt
+     0.73%  python3  libpython3.12.so.1.0                     [.] __errno_location@plt
+     0.70%  python3  [kernel.kallsyms]                        [k] __fput
+     0.70%  python3  libpython3.12.so.1.0                     [.] PyObject_GC_Del
+     0.69%  python3  [kernel.kallsyms]                        [k] kmem_cache_free
+     0.67%  python3  [kernel.kallsyms]                        [k] kmem_cache_alloc_noprof
+     0.64%  python3  [kernel.kallsyms]                        [k] prepare_to_wait_event
+     0.64%  python3  libpython3.12.so.1.0                     [.] _PyLong_AsInt
+     0.63%  python3  [kernel.kallsyms]                        [k] update_load_avg
+     0.60%  python3  [kernel.kallsyms]                        [k] __mod_memcg_lruvec_state
+     0.58%  python3  [fuse]                                   [k] fuse_finish_open
+     0.56%  python3  [kernel.kallsyms]                        [k] __list_del_entry_valid_or_report
+     0.56%  python3  libpython3.12.so.1.0                     [.] _io_BufferedWriter_write
+     0.55%  python3  libpython3.12.so.1.0                     [.] vectorcall_maybe.constprop.0
+     0.55%  python3  [kernel.kallsyms]                        [k] native_queued_spin_lock_slowpath
+     0.54%  python3  [kernel.kallsyms]                        [k] restore_fpregs_from_fpstate
+     0.54%  python3  libpython3.12.so.1.0                     [.] os_fspath
+     0.54%  python3  libpython3.12.so.1.0                     [.] PyEval_RestoreThread
+     0.53%  python3  [kernel.kallsyms]                        [k] update_curr
+     0.53%  python3  [kernel.kallsyms]                        [k] sched_balance_update_blocked_averages
+     0.53%  python3  libpython3.12.so.1.0                     [.] PyType_GetModuleByDef
+     0.51%  python3  libpython3.12.so.1.0                     [.] _PyObject_MakeTpCall
+
+
+#
+# (Tip: Use parent filter to see specific call path: perf report -p <regex>)
+#

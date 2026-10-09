@@ -21,6 +21,16 @@ def filtered_request(**fields):
     selected={key:fields.pop(key) for key,_ in Filters._fields_ if key in fields}
     fields.setdefault('version',3);fields.setdefault('operation',1)
     return FilterRequest(base=request(**fields),filters=Filters(**selected))
+class PageRequest(C.Structure):
+    _anonymous_ = ('base',)
+    _fields_ = [('base', Request), ('filters', Filters), ('token', C.c_uint64),
+                ('cursor', C.c_uint64), ('limit', C.c_uint32), ('nonce', C.c_uint32)]
+def page_request(**fields):
+    extras = {key: fields.pop(key) for key in ('token', 'cursor', 'limit', 'nonce') if key in fields}
+    fields.setdefault('version', 4);fields.setdefault('operation', 1)
+    fields.setdefault('match', 3);fields.setdefault('visit_budget', 100000)
+    fields.setdefault('max_output', 1 << 20);extras.setdefault('limit', 100);extras.setdefault('nonce', 1)
+    return PageRequest(base=request(**fields), **extras)
 class Reply(C.Structure):
     _fields_=[('version',C.c_uint32),('status',C.c_int32),('refresh_error',C.c_int32),
               ('primary_id',C.c_uint16),('reserved',C.c_uint16),('text_len',C.c_uint32),
@@ -48,7 +58,7 @@ def query(port,q,raw=None):
         payload=receive(s,n)
     assert payload[0]==124,payload[0]
     r=Reply.from_buffer_copy(payload[1:121]);text=payload[121:]
-    assert r.version==(q.version if raw is None and q.version in (1,2,3) else 1) and r.text_len==len(text),(r.version,r.text_len,len(text))
+    assert r.version==(q.version if raw is None and q.version in (1,2,3,4) else 1) and r.text_len==len(text),(r.version,r.text_len,len(text))
     assert not r.status or not text,'partial failure delivered bytes'
     return r,text
 

@@ -1,0 +1,8 @@
+2026-10-09T03:25:25.197Z query-publish: generation=693 g0=3032586 g2=2657445 rebuilt=8 bytes=940164685 pin_ms=2 build_ms=1296 root_rc=0 files=1010348 dirs=4302 logical=259316352
+2026-10-09T03:25:26.632Z query-publish: generation=694 g0=3032781 g2=2657567 rebuilt=10 bytes=940236630 pin_ms=2 build_ms=1314 root_rc=0 files=1010426 dirs=4303 logical=259336065
+2026-10-09T03:25:28.097Z query-publish: generation=695 g0=3033169 g2=2657669 rebuilt=8 bytes=940348437 pin_ms=4 build_ms=1353 root_rc=0 files=1010549 dirs=4303 logical=259368423
+2026-10-09T03:25:29.693Z query-publish: generation=696 g0=3033531 g2=2657791 rebuilt=13 bytes=940457235 pin_ms=3 build_ms=1474 root_rc=0 files=1010665 dirs=4307 logical=259397579
+2026-10-09T03:25:31.163Z query-publish: generation=697 g0=3033927 g2=2657902 rebuilt=8 bytes=940571869 pin_ms=3 build_ms=1356 root_rc=0 files=1010791 dirs=4307 logical=259430008
+2026-10-09T03:25:32.649Z query-publish: generation=698 g0=3034283 g2=2658011 rebuilt=8 bytes=940678831 pin_ms=2 build_ms=1365 root_rc=0 files=1010909 dirs=4307 logical=259456499
+2026-10-09T03:25:34.231Z query-publish: generation=699 g0=3034667 g2=2658105 rebuilt=8 bytes=940787102 pin_ms=3 build_ms=1454 root_rc=0 files=1011028 dirs=4307 logical=259488624
+2026-10-09T03:25:34.375Z query-refresh: rc=-13 cap_mib=1024 initial=0 elapsed_ms=25

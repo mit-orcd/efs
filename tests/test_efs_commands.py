@@ -26,6 +26,8 @@ def envelope(op, paths=()):
         result["stats"] = dict(imm_files=1, imm_dirs=0, imm_bytes=7, imm_tmin=1, imm_tmax=2,
                                tree_files=1, tree_dirs=0, tree_bytes=7, tree_tmin=1, tree_tmax=2)
     else:
+        result["truncated"] = False
+        result["page"] = dict(token="144115188075855873", cursor=str(4096 << 32), more=False, more_confirmed=False)
         result["entries"] = [dict(path_hex=p.hex(), mode=0o100644, size=7, uid=1000, gid=1001, mtime_ns=1700000000123456789, expiry=None) for p in paths]
     return result
 
@@ -44,7 +46,7 @@ class Commands(unittest.TestCase):
         self.temp.cleanup()
 
     def result(self, op, paths=(), term=b"", match="contains"):
-        path = self.directory / ".query" / commands.query_name(op, term, match)
+        path = self.directory / ".query" / (commands.query_name(op, term, match) if op == "stats" else commands.page_name(op, term, match, None, 100))
         path.write_text(json.dumps(envelope(op, paths)))
         return path
 
@@ -53,7 +55,9 @@ class Commands(unittest.TestCase):
         if link:
             path = Path(self.temp.name) / "symlink-command"
             path.symlink_to(self.directory / op)
-        return subprocess.run([sys.executable, os.fspath(path), *args], cwd="/",
+        return subprocess.run([sys.executable, "-c",
+                              "import os,runpy,sys;os.urandom=lambda n:bytes(n);sys.argv=sys.argv[1:];runpy.run_path(sys.argv[0],run_name='__main__')",
+                              os.fspath(path), *args], cwd="/",
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
     def test_snapshot_freshness_status(self):
@@ -73,7 +77,7 @@ class Commands(unittest.TestCase):
                  contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(stderr):
                 self.assertEqual(commands.main([], str(self.directory / "stats")), 0)
             self.assertIn("Results as of " + expected, stderr.getvalue())
-            self.assertIn("complete for this snapshot", stderr.getvalue())
+            self.assertIn("validated against this snapshot", stderr.getvalue())
             self.assertIn("Background refresh may lag recent writes", stderr.getvalue())
         result["snapshot"]["refresh_error"] = 5
         with patch.object(commands, "read_result", return_value=result), \
@@ -186,6 +190,58 @@ class Commands(unittest.TestCase):
                 self.assertEqual(p.stdout, b"")
         self.assertEqual(commands.validate_result(envelope("ls", [b"raw-\xff\n"]), "ls"), [b"raw-\xff\n"])
 
+    def test_caps_and_streaming_export(self):
+        first = envelope("ls", [str(i).encode() for i in range(100)])
+        first["page"].update(cursor="1", more=True, more_confirmed=True)
+        first["truncated"] = True
+        (self.directory / ".query" / commands.page_name("ls", b"", "contains", None, 100)).write_text(json.dumps(first))
+        p = self.run_command("ls", "--json")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(len(json.loads(p.stdout)["entries"]), 100)
+        self.assertIn(b"more results exist", p.stderr)
+        (self.directory / ".query" / commands.page_name("ls", b"", "contains", None, 1000)).write_text(json.dumps(first))
+        last = envelope("ls", [str(i).encode() for i in range(100, 135)])
+        (self.directory / ".query" / commands.page_name("ls", b"", "contains", None, 1000,
+             int(first["page"]["token"]), 1)).write_text(json.dumps(last))
+        destination = self.root / "export.jsonl"
+        p = self.run_command("ls", "--json", "--file", str(destination))
+        self.assertEqual(p.returncode, 0, p.stderr)
+        records = [json.loads(line) for line in destination.read_text().splitlines()]
+        self.assertEqual(sum("entry" in r for r in records), 135)
+        self.assertEqual(records[-1], dict(complete=True, exported=135))
+        self.assertEqual(p.stdout, b"")
+
+    def test_display_cap_across_short_scan_pages(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        first = envelope("ls", [str(i).encode() for i in range(50)])
+        last = envelope("ls", [str(i).encode() for i in range(50, 110)])
+        def pages(*args):
+            yield first, commands.validate_result(first, "ls")
+            yield last, commands.validate_result(last, "ls")
+        output, status = io.StringIO(), io.StringIO()
+        with patch.object(commands, "result_pages", pages), contextlib.redirect_stdout(output), contextlib.redirect_stderr(status):
+            self.assertEqual(commands.main(["--json"], str(self.directory / "ls")), 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual(len(result["entries"]), 100)
+        self.assertTrue(result["truncated"] and result["page"]["more_confirmed"])
+        self.assertIn("more results exist", status.getvalue())
+
+    def test_export_failure_preserves_destination_and_cleans_temporary(self):
+        first = envelope("ls", [b"first"])
+        first["page"].update(cursor="1", more=True)
+        (self.directory / ".query" / commands.page_name("ls", b"", "contains", None, 1000)).write_text(json.dumps(first))
+        destination = self.root / "existing"
+        destination.write_text("old content")
+        p = self.run_command("ls", "--file", str(destination))
+        self.assertEqual(p.returncode, 1, p.stderr)
+        self.assertEqual(destination.read_text(), "old content")
+        self.assertEqual(list(self.root.glob(".efs-export-*")), [])
+        for args in (("--limit", "0"), ("--size", "10001"), ("--file", "-"),
+                     ("--file", str(self.root)), ("--file", str(destination), "--sort", "size")):
+            self.assertNotEqual(self.run_command("ls", *args).returncode, 0, args)
+
     def test_invalid_pattern(self):
         for term in (b"a/b", b"a\0b", b"x" * 121):
             with self.assertRaises(ValueError):
@@ -251,7 +307,7 @@ class Commands(unittest.TestCase):
 
     def test_filtered_query_echo_and_metadata_validation(self):
         filters = dict(type="file", min_size=7, max_size=7, modified_after_ns=None, modified_before_ns=None)
-        path = self.directory / ".query" / commands.query_name("find", b"file", filters=filters)
+        path = self.directory / ".query" / commands.page_name("find", b"file", "contains", filters, 100)
         result = envelope("find", [b"file"])
         result["filters"] = filters
         path.write_text(json.dumps(result))
@@ -287,6 +343,33 @@ class Commands(unittest.TestCase):
 
 
 class CCodec(unittest.TestCase):
+    def test_page_codec(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / "pages.c"
+            source.write_text(r'''#include "efs/command_path.h"
+#include <stdio.h>
+int main(int argc,char **argv) {
+    struct efs_msg_query_snapshot_v4 q;
+    if (argc!=2 || efs_command_path_parse_v4(argv[1],&q)) return 1;
+    printf("%u %u %u %u %llu %llu %u %llu ",q.base.version,q.base.operation,q.base.match,q.limit,
+        (unsigned long long)q.token,(unsigned long long)q.cursor,q.nonce,(unsigned long long)q.filters.min_size);
+    for (const unsigned char *p=(void *)q.base.term;*p;p++) printf("%02x",*p);
+    return 0;
+}
+''')
+            binary = Path(temp) / "pages"
+            subprocess.run([os.environ.get("CC", "cc"), "-std=c99", "-D_GNU_SOURCE", "-Wall", "-Wextra", "-Werror",
+                            "-I" + str(ROOT / "include"), str(source), "-o", str(binary)], check=True)
+            filters = dict(type="file", min_size=7, max_size=None, modified_after_ns=None, modified_before_ns=None)
+            for term in (b"", b"f", b"ff", b"fff", b"\xff\n*", b"x"*120):
+                name = commands.page_name("find", term, "contains", filters, 10000, 144115188075855873, 4096 << 32, 123)
+                self.assertLessEqual(len(name), 255)
+                result = subprocess.run([str(binary), name], capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, ("4 1 3 10000 144115188075855873 %d 123 7 %s" % (4096 << 32, term.hex())).encode())
+            for bad in ("v3.", name+"=", name+"a"*300, "v3.GG"):
+                self.assertNotEqual(subprocess.run([str(binary), bad]).returncode, 0)
+
     def test_python_c_roundtrip_and_refusals(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / "codec.c"

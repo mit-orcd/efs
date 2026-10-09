@@ -12,15 +12,27 @@ struct efs_query_rollup {
  * group, at a transaction-safe cut established by the host. Local pending
  * records also refuse publication. Limits cover accounted allocations of one
  * candidate catalog; host must separately bound concurrent published versions.
- * A failed build leaves old untouched. Keep old alive throughout this call. All catalog build/free ownership must
- * be serialized by the host; immutable query readers must drain before free.
+ * A failed build leaves old untouched. Keep old alive throughout this call. A retained catalog may outlive publication; atomic references protect shared
+ * partitions and contributions. Borrowed readers must retain or hold the host
+ * publication lock.
  * stop may cancel long builds and must be cheap/nonblocking. */
 int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source,
                              const struct efs_query_catalog *old,
                              uint64_t max_bytes, int (*stop)(void *), void *ctx,
                              struct efs_query_catalog **out);
+void efs_query_catalog_retain(struct efs_query_catalog *catalog);
+/* Resume a name-index scan. stop/emit AGAIN retains the current candidate;
+ * BUSY from the scan budget becomes a successful page with a continuation. */
+int efs_query_catalog_page(const struct efs_query_catalog *catalog,efs_ino_t root,
+    enum efs_name_match match,const char *term,int immediate,uint64_t *cursor,
+    uint32_t budget,int (*stop)(void *),void *stop_ctx,
+    int (*emit)(void *,const struct efs_name_entry *,const char *),void *user);
 void efs_query_catalog_free(struct efs_query_catalog *catalog);
 uint64_t efs_query_catalog_bytes(const struct efs_query_catalog *catalog);
+/* Per-build work counters; dependency reuse includes inode and active lane
+ * partitions and assumes the same transaction-safe source contract above. */
+uint32_t efs_query_catalog_refolded(const struct efs_query_catalog *catalog);
+uint32_t efs_query_catalog_reused_edges(const struct efs_query_catalog *catalog);
 uint32_t efs_query_catalog_rebuilt(const struct efs_query_catalog *catalog);
 int efs_query_catalog_inode(const struct efs_query_catalog *catalog, efs_ino_t ino,
                              struct efs_meta_row *row, struct efs_meta_stat *stat);
