@@ -209,8 +209,9 @@ The explicit `--data-only-cp` gate uses macOS `cp -X`. All 20 copies completed
 and warm bytes matched, with no added fsync. After draining and restarting the
 gateway FUSE client, all 20 files were independently read through the fresh
 gateway with exact SHA256/length. Storage daemons were not restarted in this
-follow-up. A fresh macOS NFS mount and subsequent ledger verification remain
-pending user sudo authorization; cached Mac reads cannot establish that gate.
+follow-up. The user then unmounted and freshly mounted macOS NFS. Ledger verification
+passed 20/20 exact byte hashes, lengths and inode identities through that fresh
+Mac mount. This completes the data-only client/gateway cold-state gate.
 The gateway remount completed; its trailing managed SSH-host refresh failed on
 local config permissions, after export readiness, and did not undo restoration.
 

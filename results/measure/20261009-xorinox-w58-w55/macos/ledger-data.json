@@ -87,5 +87,6 @@
       "ino": 1342236
     }
   ],
-  "warm_verified": 20
+  "warm_verified": 20,
+  "cold_verified": 20
 }
