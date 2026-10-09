@@ -33,6 +33,15 @@ with tempfile.TemporaryDirectory(prefix='efs-processes-') as directory:
         return original_read(path)
     with patch.object(Path, 'read_bytes', exiting_cmdline):
         assert not m.clients(proc)
+    # Exit clears mm before Z; PF_EXITING is sufficient only for empty args.
+    fields=['S']+['0']*18+['99'];fields[6]='4'
+    (p/'stat').write_text('123 (efs-fuse) '+' '.join(fields))
+    (p/'cmdline').write_bytes(b'')
+    assert not m.clients(proc)
+    fields[6]='0';(p/'stat').write_text('123 (efs-fuse) '+' '.join(fields))
+    try: m.clients(proc)
+    except RuntimeError: pass
+    else: raise AssertionError('empty live command must remain ambiguous')
     (p/'comm').unlink();assert not m.clients(proc)
 if sys.platform.startswith('linux'):
     # Isolated synthetic daemon; never touch an actual cluster/client mount.
