@@ -1,0 +1,38 @@
+[
+  {
+    "pid": 2850512,
+    "env": [
+      "EFS_TRANSPORT=tcp",
+      "EFS_BATCH_OBS=0",
+      "EFS_QUERY_CATALOG_MIB=1024",
+      "EFS_COMMANDS_SERVER=1"
+    ]
+  },
+  {
+    "pid": 2852109,
+    "env": [
+      "EFS_TRANSPORT=tcp",
+      "EFS_BATCH_OBS=0",
+      "EFS_QUERY_CATALOG_MIB=1024",
+      "EFS_COMMANDS_SERVER=1"
+    ]
+  },
+  {
+    "pid": 2853859,
+    "env": [
+      "EFS_TRANSPORT=tcp",
+      "EFS_BATCH_OBS=0",
+      "EFS_QUERY_CATALOG_MIB=1024",
+      "EFS_COMMANDS_SERVER=1"
+    ]
+  },
+  {
+    "pid": 2856016,
+    "env": [
+      "EFS_TRANSPORT=tcp",
+      "EFS_BATCH_OBS=0",
+      "EFS_QUERY_CATALOG_MIB=1024",
+      "EFS_COMMANDS_SERVER=1"
+    ]
+  }
+]

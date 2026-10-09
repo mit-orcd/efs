@@ -1,0 +1,191 @@
+{
+  "first100": {
+    "start": 0.0001483699888922274,
+    "end": 100.00009251595475,
+    "sda": {
+      "busy_percent": 9.521005317865562,
+      "write_iops": 1180.9206595918283,
+      "write_mib_s": 14.197507929880928,
+      "write_await_ms": 0.16855502489584392,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 91.48605109865022,
+      "write_iops": 1435.500801785108,
+      "write_mib_s": 12.288937527929862,
+      "write_await_ms": 2.8319888540578195,
+      "flush_await_ms": 2.714788732394366
+    }
+  },
+  "middle100": {
+    "start": 100.00009251595475,
+    "end": 200.00014843099052,
+    "files_per_second": 22.62998734643448,
+    "sda": {
+      "busy_percent": 5.302997034827311,
+      "write_iops": 607.3496604002202,
+      "write_mib_s": 7.789839394308516,
+      "write_await_ms": 0.2568206141434099,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 93.28694783856974,
+      "write_iops": 951.6694678736766,
+      "write_mib_s": 7.059917927444365,
+      "write_await_ms": 4.033604085449788,
+      "flush_await_ms": 4.0561966628454975
+    }
+  },
+  "last100": {
+    "start": 200.00014843099052,
+    "end": 300.0000909229857,
+    "files_per_second": 24.25001394569919,
+    "sda": {
+      "busy_percent": 5.30200304907617,
+      "write_iops": 616.6003545945617,
+      "write_mib_s": 7.031605606236091,
+      "write_await_ms": 0.17468374959455077,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 92.8800534134656,
+      "write_iops": 985.020566465675,
+      "write_mib_s": 6.968578226240303,
+      "write_await_ms": 4.2036608393738195,
+      "flush_await_ms": 4.0432542200786905
+    }
+  },
+  "pretrace": {
+    "start": 5.000074237992521,
+    "end": 30.000514557992574,
+    "files_per_second": 95.9983092009795,
+    "sda": {
+      "busy_percent": 17.51569149962872,
+      "write_iops": 2351.878576832997,
+      "write_mib_s": 27.93716419831435,
+      "write_await_ms": 0.17801625905643048,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 88.04644925549837,
+      "write_iops": 2377.8781189082624,
+      "write_mib_s": 24.202894031767947,
+      "write_await_ms": 2.4203169156237383,
+      "flush_await_ms": 1.7370044052863436
+    }
+  },
+  "trace0": {
+    "start": 30.000514557992574,
+    "end": 60.00010448496323,
+    "files_per_second": 27.733712428249014,
+    "sda": {
+      "busy_percent": 5.376740161870872,
+      "write_iops": 628.8419290371606,
+      "write_mib_s": 8.265998405433555,
+      "write_await_ms": 0.18430956798303738,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 93.471277668333,
+      "write_iops": 1187.0495592336244,
+      "write_mib_s": 7.725610159437053,
+      "write_await_ms": 3.089185925697116,
+      "flush_await_ms": 3.127984527144191
+    }
+  },
+  "untraced0": {
+    "start": 60.00010448496323,
+    "end": 130.0003771679476,
+    "files_per_second": 21.614201516786082,
+    "sda": {
+      "busy_percent": 4.818552658038299,
+      "write_iops": 508.4551621846995,
+      "write_mib_s": 6.395789817527789,
+      "write_await_ms": 0.1856316026073275,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 93.34820779331592,
+      "write_iops": 938.1820596245159,
+      "write_mib_s": 6.105096195452138,
+      "write_await_ms": 3.713169795806496,
+      "flush_await_ms": 4.043316069682373
+    }
+  },
+  "trace1": {
+    "start": 130.0003771679476,
+    "end": 160.0000791499624,
+    "files_per_second": 21.33354525933917,
+    "sda": {
+      "busy_percent": 5.403387010216999,
+      "write_iops": 605.6393497139584,
+      "write_mib_s": 9.495276617106875,
+      "write_await_ms": 0.4120204744344763,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 93.79759844571014,
+      "write_iops": 1002.7766281823441,
+      "write_mib_s": 9.290001140414075,
+      "write_await_ms": 4.416746999966759,
+      "flush_await_ms": 3.9982080382285177
+    }
+  },
+  "untraced1": {
+    "start": 160.0000791499624,
+    "end": 230.00039432599442,
+    "files_per_second": 23.114181642342096,
+    "sda": {
+      "busy_percent": 5.304261831768615,
+      "write_iops": 623.3257648951252,
+      "write_mib_s": 7.066374433544933,
+      "write_await_ms": 0.19464625398207777,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 93.08672373279686,
+      "write_iops": 958.1385431099409,
+      "write_mib_s": 6.811471842408322,
+      "write_await_ms": 4.203533621589385,
+      "flush_await_ms": 4.066826730692277
+    }
+  },
+  "trace2": {
+    "start": 230.00039432599442,
+    "end": 260.0000656139455,
+    "files_per_second": 31.967016931454467,
+    "sda": {
+      "busy_percent": 6.343402838431476,
+      "write_iops": 800.1754342435501,
+      "write_mib_s": 8.710512108342748,
+      "write_await_ms": 0.1517183920016663,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 92.16434318433625,
+      "write_iops": 934.8435764782488,
+      "write_mib_s": 7.036079698972479,
+      "write_await_ms": 3.895418078088786,
+      "flush_await_ms": 4.048013931503442
+    }
+  },
+  "posttrace": {
+    "start": 260.0000656139455,
+    "end": 300.0000909229857,
+    "files_per_second": 23.97498483040362,
+    "sda": {
+      "busy_percent": 4.799996962917096,
+      "write_iops": 526.7496667117877,
+      "write_mib_s": 6.278023371481351,
+      "write_await_ms": 0.18054105363075462,
+      "flush_await_ms": null
+    },
+    "nvme0n1": {
+      "busy_percent": 93.11244108533711,
+      "write_iops": 1000.374367037123,
+      "write_mib_s": 6.230147425211207,
+      "write_await_ms": 4.091165812820193,
+      "flush_await_ms": 4.05233788724264
+    }
+  }
+}

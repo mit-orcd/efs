@@ -13,18 +13,37 @@ struct partition {
     uint8_t *arena;
     struct efs_name_index *names;
 };
-struct node {
-    struct efs_meta_row row;
-    struct efs_meta_stat stat;
+struct contribution {
+    efs_ino_t parent;
+    struct efs_query_rollup rollup;
+    uint32_t children;
+};
+struct edge_fold {
+    uint32_t refs, count, capacity, nlinks, link_capacity;
+    uint64_t dependencies[64], bytes;
+    struct contribution *items;
+    const struct efs_name_entry **links;
+};
+struct inode_value { struct efs_meta_row row; struct efs_meta_stat stat; };
+struct inode_block {
+    uint32_t refs, count;
+    uint64_t bytes, dependencies[64];
+    struct inode_value values[];
+};
+struct directory_value {
     struct efs_query_rollup rollup;
     const struct efs_name_entry *link;
     uint32_t children;
 };
+struct node { struct inode_value *inode; struct directory_value *dir; };
 struct efs_query_catalog {
     struct partition *part[4096];
+    struct edge_fold *fold[4096];
     struct node *nodes;
-    uint32_t count, capacity, rebuilt;
-    uint32_t *node_index, node_slots;
+    struct inode_block *inodes[4096], *building;
+    uint32_t building_at;
+    uint32_t refs, count, capacity, rebuilt, refolded, reused_edges;
+    uint32_t node_begin[4097]; /* Ordered inode ranges for each retained partition. */
     uint64_t bytes, limit;
     struct efs_kv kv;
     int (*stop)(void *);
@@ -90,14 +109,21 @@ static int cache_prefix(void *ctx, const uint8_t *prefix, uint32_t plen,
 static const struct efs_kv_ops cache_ops={.get=cache_get,.scan_prefix=cache_prefix,.scan_from=cache_scan};
 static void partition_release(struct partition *p)
 {
-    if (!p || --p->refs) return;
+    if (!p || __atomic_sub_fetch(&p->refs,1,__ATOMIC_ACQ_REL)) return;
     efs_name_index_free(p->names);free(p->records);free(p->arena);free(p);
 }
 void efs_query_catalog_free(struct efs_query_catalog *c)
 {
-    if (!c) return;
-    for (uint32_t i=0;i<4096;i++) partition_release(c->part[i]);
-    free(c->node_index);free(c->nodes);free(c);
+    if (!c || __atomic_sub_fetch(&c->refs,1,__ATOMIC_ACQ_REL)) return;
+    for (uint32_t i=0;i<4096;i++) {
+        partition_release(c->part[i]);
+        struct inode_block *b=c->inodes[i];
+        if (b && !__atomic_sub_fetch(&b->refs,1,__ATOMIC_ACQ_REL)) free(b);
+        struct edge_fold *f=c->fold[i];
+        if (f && !__atomic_sub_fetch(&f->refs,1,__ATOMIC_ACQ_REL)) { free(f->items);free(f->links);free(f); }
+    }
+    for (uint32_t i=0;i<c->count;i++) free(c->nodes[i].dir);
+    free(c->nodes);free(c);
 }
 static int save_record(void *ctx, const uint8_t *key, uint32_t kl, const uint8_t *value, uint32_t vl)
 {
@@ -162,47 +188,25 @@ static int partition_build(struct efs_kv_lsm_snapshot *source, uint32_t shard,
     p->bytes+=efs_name_index_bytes(p->names);
     *out=p;return EFS_OK;
 }
-/* Compact immutable inode -> node table. Keeping the probe array separate
- * avoids binary-search cache misses across the much larger metadata rows. */
-static uint32_t node_hash(efs_ino_t ino)
+/* Sorted keys are retained alongside each immutable inode block. Lookup
+ * needs no generation-wide hash rebuild and touches compact keys first. */
+static efs_ino_t *inode_keys(struct inode_block *b)
 {
-    uint64_t x=ino;
-    x^=x>>30;x*=UINT64_C(0xbf58476d1ce4e5b9);
-    x^=x>>27;x*=UINT64_C(0x94d049bb133111eb);
-    x^=x>>31;return (uint32_t)x;
+    return (efs_ino_t *)(b->values+b->count);
 }
 static struct node *find_node(const struct efs_query_catalog *c, efs_ino_t ino)
 {
-    if (!c->node_slots) return NULL;
-    uint32_t at=node_hash(ino)&(c->node_slots-1);
-    for (uint32_t probes=0;probes<c->node_slots;probes++) {
-        uint32_t index=c->node_index[at];
-        if (!index) return NULL;
-        if (c->nodes[index-1].row.ino==ino) return &c->nodes[index-1];
-        at=(at+1)&(c->node_slots-1);
+    uint32_t shard=efs_kv_inode_shard(ino);
+    struct inode_block *b=c->inodes[shard];
+    if (!b) return NULL;
+    const efs_ino_t *keys=inode_keys(b);
+    uint32_t lo=0,hi=b->count;
+    while (lo<hi) {
+        uint32_t mid=lo+(hi-lo)/2;
+        if (keys[mid]<ino) lo=mid+1;else hi=mid;
     }
-    return NULL;
-}
-static int build_node_index(struct efs_query_catalog *c)
-{
-    if (!c->count) return EFS_OK;
-    uint64_t slots=1;
-    while (slots<(uint64_t)c->count*2) slots<<=1;
-    uint64_t bytes=slots*sizeof(*c->node_index);
-    if (slots>UINT32_MAX || bytes>c->limit-c->bytes) return EFS_ERR_NOMEM;
-    c->node_index=calloc((size_t)slots,sizeof(*c->node_index));
-    if (!c->node_index) return EFS_ERR_NOMEM;
-    c->node_slots=(uint32_t)slots;c->bytes+=bytes;
-    for (uint32_t i=0;i<c->count;i++) {
-        if (!(i&255) && c->stop && c->stop(c->stop_ctx)) return EFS_ERR_BUSY;
-        uint32_t at=node_hash(c->nodes[i].row.ino)&(c->node_slots-1);
-        while (c->node_index[at]) {
-            if (c->nodes[c->node_index[at]-1].row.ino==c->nodes[i].row.ino) return EFS_ERR_PROTO;
-            at=(at+1)&(c->node_slots-1);
-        }
-        c->node_index[at]=i+1;
-    }
-    return EFS_OK;
+    if (lo==b->count || keys[lo]!=ino) return NULL;
+    return &c->nodes[c->node_begin[shard]+lo];
 }
 static int add_node(void *ctx, const uint8_t *key, uint32_t kl, const uint8_t *value, uint32_t vl)
 {
@@ -215,15 +219,14 @@ static int add_node(void *ctx, const uint8_t *key, uint32_t kl, const uint8_t *v
     for (uint32_t i=3;i<11;i++) encoded=(encoded<<8)|key[i];
     if (encoded!=row.ino || (((uint32_t)key[0]<<8)|key[1])!=efs_kv_inode_shard(row.ino))
         return EFS_ERR_PROTO;
-    if (c->count==c->capacity) {
-        uint64_t capacity=c->capacity ? (uint64_t)c->capacity*2 : 128;
-        uint64_t add=(capacity-c->capacity)*sizeof(*c->nodes);
-        if (capacity>UINT32_MAX || add>c->limit-c->bytes) return EFS_ERR_NOMEM;
-        struct node *p=realloc(c->nodes,capacity*sizeof(*p));
-        if (!p) return EFS_ERR_NOMEM;
-        c->nodes=p;c->capacity=(uint32_t)capacity;c->bytes+=add;
-    }
-    memset(&c->nodes[c->count],0,sizeof(*c->nodes));c->nodes[c->count++].row=row;
+    if (c->count>=c->capacity || !c->building || c->building_at>=c->building->count)
+        return EFS_ERR_PROTO;
+    efs_ino_t *keys=inode_keys(c->building);
+    if (c->building_at && keys[c->building_at-1]>=row.ino) return EFS_ERR_PROTO;
+    keys[c->building_at]=row.ino;
+    struct node *n=&c->nodes[c->count++];
+    n->inode=&c->building->values[c->building_at++];n->inode->row=row;
+    return EFS_OK;
     return EFS_OK;
 }
 static int refuse_coord(void *ctx, const struct efs_txid *t, uint32_t shard, int *decision)
@@ -250,7 +253,85 @@ static uint64_t high_time(const struct efs_meta_stat *s)
     if (s->atime>t) t=s->atime;
     return t;
 }
-struct edge_context { struct efs_query_catalog *c; uint32_t shard; };
+struct edge_context { struct efs_query_catalog *c; uint32_t shard; struct edge_fold *fold; };
+static void depend(struct edge_fold *f,uint32_t shard)
+{
+    f->dependencies[shard/64]|=UINT64_C(1)<<(shard%64);
+}
+static void depend_node(struct edge_fold *f,const struct node *n)
+{
+    depend(f,efs_kv_inode_shard(n->inode->row.ino));
+    uint64_t lanes=S_ISDIR(n->inode->row.mode) ?
+        (n->inode->row.layout==EFS_META_LAYOUT_LOCAL ? 0 : n->inode->row.used_shards) : n->inode->row.active_lanes;
+    for (unsigned i=0;i<EFS_META_LANES;i++) if (lanes&(UINT64_C(1)<<i))
+        depend(f,efs_kv_lane_shard(n->inode->row.ino,(uint8_t)i));
+}
+static int same_fold_inputs(const struct efs_query_catalog *c,const struct efs_query_catalog *old,
+                            const struct edge_fold *f)
+{
+    if (!old || !f) return 0;
+    for (unsigned word=0;word<64;word++) {
+        uint64_t bits=f->dependencies[word];
+        while (bits) {
+            unsigned bit=(unsigned)__builtin_ctzll(bits);uint32_t shard=word*64+bit;
+            if (c->part[shard]!=old->part[shard]) return 0;
+            bits&=bits-1;
+        }
+    }
+    return 1;
+}
+static int fold_contribution(struct efs_query_catalog *c,struct edge_fold *f,
+                             const struct efs_name_entry *entry,const struct node *child)
+{
+    uint32_t at=0;
+    for (;at<f->count;at++) if (f->items[at].parent==entry->parent) break;
+    if (at==f->count) {
+        if (f->count==f->capacity) {
+            uint32_t cap=f->capacity ? f->capacity*2 : 4;
+            uint64_t extra=(uint64_t)(cap-f->capacity)*sizeof(*f->items);
+            if (cap<f->capacity || extra>c->limit-c->bytes) return EFS_ERR_NOMEM;
+            void *items=realloc(f->items,(size_t)cap*sizeof(*f->items));if (!items) return EFS_ERR_NOMEM;
+            f->items=items;f->capacity=cap;f->bytes+=extra;c->bytes+=extra;
+        }
+        memset(&f->items[at],0,sizeof(f->items[at]));f->items[at].parent=entry->parent;f->count++;
+    }
+    struct contribution *item=&f->items[at];struct efs_query_rollup *r=&item->rollup;
+    int has=r->imm_files+r->imm_dirs!=0;
+    if (S_ISDIR(child->inode->row.mode)) {
+        if (f->nlinks==f->link_capacity) {
+            uint32_t cap=f->link_capacity ? f->link_capacity*2 : 4;
+            uint64_t extra=(uint64_t)(cap-f->link_capacity)*sizeof(*f->links);
+            if (cap<f->link_capacity || extra>c->limit-c->bytes) return EFS_ERR_NOMEM;
+            void *links=realloc(f->links,(size_t)cap*sizeof(*f->links));if (!links) return EFS_ERR_NOMEM;
+            f->links=links;f->link_capacity=cap;f->bytes+=extra;c->bytes+=extra;
+        }
+        f->links[f->nlinks++]=entry;r->imm_dirs++;item->children++;
+    } else {
+        r->imm_files++;
+        if (UINT64_MAX-r->imm_bytes<child->inode->stat.size) return EFS_ERR_QUOTA;
+        r->imm_bytes+=child->inode->stat.size;
+    }
+    expand(&r->imm_tmin,&r->imm_tmax,low_time(&child->inode->stat),high_time(&child->inode->stat),has);
+    return EFS_OK;
+}
+static int reuse_fold(struct efs_query_catalog *c,struct edge_fold *f)
+{
+    for (uint32_t i=0;i<f->count;i++) {
+        if (c->stop && c->stop(c->stop_ctx)) return EFS_ERR_BUSY;
+        struct contribution *item=&f->items[i];struct node *parent=find_node(c,item->parent);
+        if (!parent || !parent->dir) return EFS_ERR_IO;
+        struct efs_query_rollup *r=&parent->dir->rollup,*s=&item->rollup;int has=r->imm_files+r->imm_dirs!=0;
+        if (UINT64_MAX-r->imm_bytes<s->imm_bytes) return EFS_ERR_QUOTA;
+        r->imm_files+=s->imm_files;r->imm_dirs+=s->imm_dirs;r->imm_bytes+=s->imm_bytes;
+        expand(&r->imm_tmin,&r->imm_tmax,s->imm_tmin,s->imm_tmax,has);parent->dir->children+=item->children;
+    }
+    for (uint32_t i=0;i<f->nlinks;i++) {
+        const struct efs_name_entry *entry=f->links[i];struct node *child=find_node(c,entry->dentry.ino);
+        if (!child || !child->dir || child->dir->link || child->inode->row.parent!=entry->parent) return EFS_ERR_PROTO;
+        child->dir->link=entry;
+    }
+    return EFS_OK;
+}
 static int stopped(struct efs_query_catalog *c);
 static int add_edge(void *ctx, const struct efs_name_entry *entry)
 {
@@ -258,32 +339,35 @@ static int add_edge(void *ctx, const struct efs_name_entry *entry)
     struct efs_query_catalog *c=e->c;
     if (stopped(c)) return EFS_ERR_BUSY;
     struct node *parent=find_node(c,entry->parent);
-    if (!parent || !S_ISDIR(parent->row.mode)) return EFS_ERR_IO;
-    uint32_t chosen=efs_kv_inode_shard(parent->row.ino);
-    if (parent->row.layout!=EFS_META_LAYOUT_LOCAL) {
+    if (!parent || !S_ISDIR(parent->inode->row.mode)) return EFS_ERR_IO;
+    depend(e->fold,efs_kv_inode_shard(parent->inode->row.ino));
+    uint32_t chosen=efs_kv_inode_shard(parent->inode->row.ino);
+    if (parent->inode->row.layout!=EFS_META_LAYOUT_LOCAL) {
         uint32_t hashed=efs_kv_dentry_shard(entry->parent,entry->name,EFS_META_LAYOUT_HASHED);
+        depend(e->fold,hashed);
         uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_DENT_BYTES];uint32_t kl,vl=sizeof(value);
         int rc=efs_kv_key_dentry(hashed,entry->parent,entry->name,key,&kl);
         if (!rc) rc=efs_kv_get(&c->kv,key,kl,value,&vl);
-        if (rc==EFS_OK || parent->row.layout==EFS_META_LAYOUT_HASHED) chosen=hashed;
+        if (rc==EFS_OK || parent->inode->row.layout==EFS_META_LAYOUT_HASHED) chosen=hashed;
         else if (rc!=EFS_ERR_NOT_FOUND) return rc;
     }
     if (chosen!=e->shard || !entry->dentry.ino || entry->dentry.type==EFS_META_DENT_TOMBSTONE)
         return EFS_OK;
     struct node *child=find_node(c,entry->dentry.ino);
-    if (!child || child->row.generation!=entry->dentry.generation) return EFS_ERR_IO;
-    struct efs_query_rollup *r=&parent->rollup;
+    if (!child || child->inode->row.generation!=entry->dentry.generation) return EFS_ERR_IO;
+    depend_node(e->fold,child);
+    struct efs_query_rollup *r=&parent->dir->rollup;
     int has=r->imm_files+r->imm_dirs!=0;
-    if (S_ISDIR(child->row.mode)) {
-        if (child->link || child->row.parent!=entry->parent) return EFS_ERR_PROTO;
-        child->link=entry;r->imm_dirs++;parent->children++;
+    if (S_ISDIR(child->inode->row.mode)) {
+        if (child->dir->link || child->inode->row.parent!=entry->parent) return EFS_ERR_PROTO;
+        child->dir->link=entry;r->imm_dirs++;parent->dir->children++;
     } else {
         r->imm_files++;
-        if (UINT64_MAX-r->imm_bytes<child->stat.size) return EFS_ERR_QUOTA;
-        r->imm_bytes+=child->stat.size;
+        if (UINT64_MAX-r->imm_bytes<child->inode->stat.size) return EFS_ERR_QUOTA;
+        r->imm_bytes+=child->inode->stat.size;
     }
-    expand(&r->imm_tmin,&r->imm_tmax,low_time(&child->stat),high_time(&child->stat),has);
-    return EFS_OK;
+    expand(&r->imm_tmin,&r->imm_tmax,low_time(&child->inode->stat),high_time(&child->inode->stat),has);
+    return fold_contribution(c,e->fold,entry,child);
 }
 static int stopped(struct efs_query_catalog *c)
 {
@@ -299,13 +383,13 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
     if (max_bytes<sizeof(struct efs_query_catalog)) return EFS_ERR_NOMEM;
     struct efs_query_catalog *c=calloc(1,sizeof(*c));
     if (!c) return EFS_ERR_NOMEM;
-    c->bytes=sizeof(*c);c->limit=max_bytes;c->kv=(struct efs_kv){&cache_ops,c};
+    c->refs=1;c->bytes=sizeof(*c);c->limit=max_bytes;c->kv=(struct efs_kv){&cache_ops,c};
     c->stop=stop;c->stop_ctx=ctx;
     int rc=efs_kv_lsm_snapshot_revisions(source,revisions,4096);
     for (uint32_t shard=0;shard<4096 && !rc;shard++) {
         if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
         if (old && old->part[shard]->revision==revisions[shard]) {
-            c->part[shard]=old->part[shard];c->part[shard]->refs++;
+            c->part[shard]=old->part[shard];__atomic_add_fetch(&c->part[shard]->refs,1,__ATOMIC_RELAXED);
         } else {
             rc=partition_build(source,shard,revisions[shard],max_bytes-c->bytes,&c->part[shard]);
             if (rc) break;
@@ -313,25 +397,92 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
         }
         if (c->part[shard]->bytes>max_bytes-c->bytes) { rc=EFS_ERR_NOMEM;break; }
         c->bytes+=c->part[shard]->bytes;
-        uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_INODE};
-        rc=cache_prefix(c,prefix,3,add_node,c);
     }
-    if (!rc && c->count && c->count<c->capacity) {
-        struct node *tight=realloc(c->nodes,(size_t)c->count*sizeof(*tight));
-        if (tight) {
-            c->bytes-=(uint64_t)(c->capacity-c->count)*sizeof(*tight);
-            c->nodes=tight;c->capacity=c->count;
+    /* Exact allocation avoids a transient doubled inode vector crossing the
+     * catalog cap even when the final compact candidate fits. */
+    uint64_t total=0;
+    for (uint32_t shard=0;shard<4096 && !rc;shard++)
+        total+=c->part[shard]->kind_end[EFS_KV_KIND_INODE]-c->part[shard]->kind_begin[EFS_KV_KIND_INODE];
+    if (!rc && total) {
+        uint64_t bytes=total*sizeof(*c->nodes);
+        if (total>UINT32_MAX || bytes>max_bytes-c->bytes) rc=EFS_ERR_NOMEM;
+        else {
+            c->nodes=calloc((size_t)total,sizeof(*c->nodes));
+            if (!c->nodes) rc=EFS_ERR_NOMEM;
+            else { c->capacity=(uint32_t)total;c->bytes+=bytes; }
         }
-    }
-    if (!rc) rc=build_node_index(c);
-    for (uint32_t i=0;i<c->count && !rc;i++) {
-        if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
-        rc=efs_meta_apply_getattr(&c->kv,c->nodes[i].row.ino,refuse_coord,NULL,&c->nodes[i].stat);
     }
     for (uint32_t shard=0;shard<4096 && !rc;shard++) {
         if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
-        struct edge_context edge={c,shard};uint32_t cursor=0;
-        rc=efs_name_index_query(c->part[shard]->names,EFS_NAME_PREFIX,"",&cursor,UINT32_MAX,add_edge,&edge);
+        c->node_begin[shard]=c->count;
+        struct inode_block *b=old ? old->inodes[shard] : NULL;
+        int reuse=b && c->part[shard]==old->part[shard];
+        for (unsigned word=0;reuse && word<64;word++) {
+            uint64_t bits=b->dependencies[word];
+            while (bits) {
+                unsigned bit=(unsigned)__builtin_ctzll(bits);
+                uint32_t dep=word*64+bit;bits&=bits-1;
+                if (c->part[dep]!=old->part[dep]) { reuse=0;break; }
+            }
+        }
+        if (reuse) {
+            if (b->bytes>max_bytes-c->bytes) { rc=EFS_ERR_NOMEM;break; }
+            __atomic_add_fetch(&b->refs,1,__ATOMIC_RELAXED);
+            c->inodes[shard]=b;c->bytes+=b->bytes;
+            for (uint32_t i=0;i<b->count;i++) {
+                if (!(i&255) && stopped(c)) { rc=EFS_ERR_BUSY;break; }
+                c->nodes[c->count++].inode=&b->values[i];
+            }
+        } else {
+            uint32_t count=c->part[shard]->kind_end[EFS_KV_KIND_INODE]-
+                           c->part[shard]->kind_begin[EFS_KV_KIND_INODE];
+            uint64_t bytes=sizeof(*b)+(uint64_t)count*(sizeof(b->values[0])+sizeof(efs_ino_t));
+            if (bytes>max_bytes-c->bytes) { rc=EFS_ERR_NOMEM;break; }
+            b=calloc(1,(size_t)bytes);
+            if (!b) { rc=EFS_ERR_NOMEM;break; }
+            b->refs=1;b->count=count;b->bytes=bytes;
+            c->inodes[shard]=b;c->bytes+=bytes;c->building=b;c->building_at=0;
+            uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_INODE};
+            rc=cache_prefix(c,prefix,3,add_node,c);
+            for (uint32_t i=c->node_begin[shard];i<c->count && !rc;i++) {
+                if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
+                struct node *n=&c->nodes[i];
+                uint64_t lanes=S_ISDIR(n->inode->row.mode) ?
+                    (n->inode->row.layout==EFS_META_LAYOUT_LOCAL ? 0 : n->inode->row.used_shards) :
+                    n->inode->row.active_lanes;
+                while (lanes) {
+                    unsigned lane=(unsigned)__builtin_ctzll(lanes);lanes&=lanes-1;
+                    uint32_t dep=efs_kv_lane_shard(n->inode->row.ino,(uint8_t)lane);
+                    b->dependencies[dep/64]|=UINT64_C(1)<<(dep%64);
+                }
+                c->refolded++;
+                rc=efs_meta_apply_getattr(&c->kv,n->inode->row.ino,refuse_coord,NULL,&n->inode->stat);
+            }
+        }
+        for (uint32_t i=c->node_begin[shard];i<c->count && !rc;i++) {
+            if (!S_ISDIR(c->nodes[i].inode->row.mode)) continue;
+            uint64_t bytes=sizeof(*c->nodes[i].dir);
+            if (bytes>max_bytes-c->bytes) { rc=EFS_ERR_NOMEM;break; }
+            c->nodes[i].dir=calloc(1,(size_t)bytes);
+            if (!c->nodes[i].dir) { rc=EFS_ERR_NOMEM;break; }
+            c->bytes+=bytes;
+        }
+    }
+    c->building=NULL;c->node_begin[4096]=c->count;
+    for (uint32_t shard=0;shard<4096 && !rc;shard++) {
+        if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
+        struct edge_fold *f=old ? old->fold[shard] : NULL;
+        if (same_fold_inputs(c,old,f)) {
+            if (f->bytes>max_bytes-c->bytes) { rc=EFS_ERR_NOMEM;break; }
+            __atomic_add_fetch(&f->refs,1,__ATOMIC_RELAXED);c->fold[shard]=f;c->bytes+=f->bytes;c->reused_edges++;
+            rc=reuse_fold(c,f);
+        } else {
+            if (sizeof(*f)>max_bytes-c->bytes) { rc=EFS_ERR_NOMEM;break; }
+            f=calloc(1,sizeof(*f));if (!f) { rc=EFS_ERR_NOMEM;break; }
+            f->refs=1;f->bytes=sizeof(*f);c->bytes+=f->bytes;c->fold[shard]=f;depend(f,shard);
+            struct edge_context edge={c,shard,f};uint32_t cursor=0;
+            rc=efs_name_index_query(c->part[shard]->names,EFS_NAME_PREFIX,"",&cursor,UINT32_MAX,add_edge,&edge);
+        }
     }
     uint32_t *queue=NULL,head=0,tail=0,dirs=0;
     if (!rc) {
@@ -341,25 +492,25 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
     }
     for (uint32_t i=0;i<c->count && !rc;i++) {
         struct node *n=&c->nodes[i];
-        if (!S_ISDIR(n->row.mode)) continue;
-        if (n->row.nlink && n->row.ino!=EFS_ROOT_INO && !n->link) { rc=EFS_ERR_IO;break; }
+        if (!S_ISDIR(n->inode->row.mode)) continue;
+        if (n->inode->row.nlink && n->inode->row.ino!=EFS_ROOT_INO && !n->dir->link) { rc=EFS_ERR_IO;break; }
         dirs++;
-        n->rollup.tree_files=n->rollup.imm_files;n->rollup.tree_dirs=n->rollup.imm_dirs;
-        n->rollup.tree_bytes=n->rollup.imm_bytes;n->rollup.tree_tmin=n->rollup.imm_tmin;
-        n->rollup.tree_tmax=n->rollup.imm_tmax;
-        if (!n->children) queue[tail++]=i;
+        n->dir->rollup.tree_files=n->dir->rollup.imm_files;n->dir->rollup.tree_dirs=n->dir->rollup.imm_dirs;
+        n->dir->rollup.tree_bytes=n->dir->rollup.imm_bytes;n->dir->rollup.tree_tmin=n->dir->rollup.imm_tmin;
+        n->dir->rollup.tree_tmax=n->dir->rollup.imm_tmax;
+        if (!n->dir->children) queue[tail++]=i;
     }
     while (head<tail && !rc) {
         if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
         struct node *child=&c->nodes[queue[head++]];
-        if (!child->link) continue;
-        struct node *parent=find_node(c,child->link->parent);
-        struct efs_query_rollup *a=&parent->rollup,*b=&child->rollup;
+        if (!child->dir->link) continue;
+        struct node *parent=find_node(c,child->dir->link->parent);
+        struct efs_query_rollup *a=&parent->dir->rollup,*b=&child->dir->rollup;
         int has=a->tree_files+a->tree_dirs!=0;
         if (UINT64_MAX-a->tree_bytes<b->tree_bytes) { rc=EFS_ERR_QUOTA;break; }
         a->tree_files+=b->tree_files;a->tree_dirs+=b->tree_dirs;a->tree_bytes+=b->tree_bytes;
         if (b->tree_files+b->tree_dirs) expand(&a->tree_tmin,&a->tree_tmax,b->tree_tmin,b->tree_tmax,has);
-        if (!--parent->children) queue[tail++]=(uint32_t)(parent-c->nodes);
+        if (!--parent->dir->children) queue[tail++]=(uint32_t)(parent-c->nodes);
     }
     if (!rc && head!=dirs) rc=EFS_ERR_PROTO; /* cyclic directory graph */
     free(queue);
@@ -367,7 +518,13 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
     c->stop=NULL;c->stop_ctx=NULL;
     *out=c;return EFS_OK;
 }
+void efs_query_catalog_retain(struct efs_query_catalog *c)
+{
+    if (c) __atomic_add_fetch(&c->refs,1,__ATOMIC_RELAXED);
+}
 uint64_t efs_query_catalog_bytes(const struct efs_query_catalog *c) { return c ? c->bytes : 0; }
+uint32_t efs_query_catalog_refolded(const struct efs_query_catalog *c) { return c ? c->refolded : 0; }
+uint32_t efs_query_catalog_reused_edges(const struct efs_query_catalog *c) { return c ? c->reused_edges : 0; }
 uint32_t efs_query_catalog_rebuilt(const struct efs_query_catalog *c) { return c ? c->rebuilt : 0; }
 int efs_query_catalog_inode(const struct efs_query_catalog *c, efs_ino_t ino,
                              struct efs_meta_row *row, struct efs_meta_stat *stat)
@@ -375,8 +532,8 @@ int efs_query_catalog_inode(const struct efs_query_catalog *c, efs_ino_t ino,
     if (!c) return EFS_ERR_INVAL;
     struct node *n=find_node(c,ino);
     if (!n) return EFS_ERR_NOT_FOUND;
-    if (row) *row=n->row;
-    if (stat) *stat=n->stat;
+    if (row) *row=n->inode->row;
+    if (stat) *stat=n->inode->stat;
     return EFS_OK;
 }
 int efs_query_catalog_stats(const struct efs_query_catalog *c, efs_ino_t ino, struct efs_query_rollup *out)
@@ -384,15 +541,15 @@ int efs_query_catalog_stats(const struct efs_query_catalog *c, efs_ino_t ino, st
     if (!c || !out) return EFS_ERR_INVAL;
     struct node *n=find_node(c,ino);
     if (!n) return EFS_ERR_NOT_FOUND;
-    if (!S_ISDIR(n->row.mode)) return EFS_ERR_INVAL;
-    *out=n->rollup;return EFS_OK;
+    if (!S_ISDIR(n->inode->row.mode)) return EFS_ERR_INVAL;
+    *out=n->dir->rollup;return EFS_OK;
 }
 int efs_query_catalog_directory_link(const struct efs_query_catalog *c,efs_ino_t ino,struct efs_name_entry *out)
 {
     if (!c || !out) return EFS_ERR_INVAL;
     struct node *n=find_node(c,ino);
-    if (!n || !n->link) return EFS_ERR_NOT_FOUND;
-    *out=*n->link;return EFS_OK;
+    if (!n || !n->dir || !n->dir->link) return EFS_ERR_NOT_FOUND;
+    *out=*n->dir->link;return EFS_OK;
 }
 int efs_query_catalog_path(const struct efs_query_catalog *c, efs_ino_t dir, efs_ino_t root, char *out, size_t cap)
 {
@@ -400,12 +557,12 @@ int efs_query_catalog_path(const struct efs_query_catalog *c, efs_ino_t dir, efs
     size_t len=0;out[0]=0;
     for (uint32_t steps=0;dir!=root && steps<=c->count;steps++) {
         struct node *n=find_node(c,dir);
-        if (!n || !S_ISDIR(n->row.mode) || !n->link) return EFS_ERR_NOT_FOUND;
-        size_t nl=strlen(n->link->name),add=nl+(len ? 1 : 0);
+        if (!n || !S_ISDIR(n->inode->row.mode) || !n->dir->link) return EFS_ERR_NOT_FOUND;
+        size_t nl=strlen(n->dir->link->name),add=nl+(len ? 1 : 0);
         if (add>=cap-len) return EFS_ERR_NAMETOOLONG;
-        memmove(out+add,out,len+1);memcpy(out,n->link->name,nl);
+        memmove(out+add,out,len+1);memcpy(out,n->dir->link->name,nl);
         if (len) out[nl]='/';
-        len+=add;dir=n->link->parent;
+        len+=add;dir=n->dir->link->parent;
     }
     return dir==root ? EFS_OK : EFS_ERR_PROTO;
 }
@@ -418,14 +575,19 @@ struct find_context {
     /* Direct-mapped, query-local negative scope memo (16 KiB). Collisions
      * only cause recomputation; no permissions or successful paths are cached. */
     efs_ino_t outside[2048];
+    int immediate;
+    int (*stop)(void *);
+    void *stop_ctx;
 };
 static int find_candidate(void *ctx, const struct efs_name_entry *entry)
 {
     struct find_context *f=ctx;
+    if (f->stop && f->stop(f->stop_ctx)) return EFS_ERR_AGAIN;
+    if (f->immediate && entry->parent!=f->root) return EFS_OK;
     uint32_t scope_slot=(uint32_t)((entry->parent^(entry->parent>>32))*2654435761U)&2047U;
     if (entry->parent && f->outside[scope_slot]==entry->parent) return EFS_OK;
     struct node *parent=find_node(f->c,entry->parent);
-    if (!parent) return EFS_ERR_IO;
+    if (!parent || !parent->dir) return EFS_ERR_IO;
     /* Membership is immutable and independent of a candidate binding. Avoid
      * KV/directory-layout lookups for names outside the requested subtree. */
     char path[EFS_MAX_PATH];
@@ -442,12 +604,12 @@ static int find_candidate(void *ctx, const struct efs_name_entry *entry)
         authoritative.generation!=entry->dentry.generation) return EFS_OK;
     /* Select exactly one physical source during directory spreading. */
     uint32_t chosen=efs_kv_inode_shard(entry->parent);
-    if (parent->row.layout!=EFS_META_LAYOUT_LOCAL) {
+    if (parent->inode->row.layout!=EFS_META_LAYOUT_LOCAL) {
         uint32_t hashed=efs_kv_dentry_shard(entry->parent,entry->name,EFS_META_LAYOUT_HASHED);
         uint8_t key[EFS_KV_KEY_MAX],value[EFS_META_DENT_BYTES];uint32_t kl,vl=sizeof(value);
         rc=efs_kv_key_dentry(hashed,entry->parent,entry->name,key,&kl);
         if (!rc) rc=efs_kv_get((struct efs_kv *)&f->c->kv,key,kl,value,&vl);
-        if (rc==EFS_OK || parent->row.layout==EFS_META_LAYOUT_HASHED) chosen=hashed;
+        if (rc==EFS_OK || parent->inode->row.layout==EFS_META_LAYOUT_HASHED) chosen=hashed;
         else if (rc!=EFS_ERR_NOT_FOUND) return rc;
     }
     if (chosen!=f->shard) return EFS_OK;
@@ -464,7 +626,7 @@ int efs_query_catalog_find(const struct efs_query_catalog *c, efs_ino_t root, en
     if (!c || !term || !emit || !visit_budget) return EFS_ERR_INVAL;
     struct node *n=find_node(c,root);
     if (!n) return EFS_ERR_NOT_FOUND;
-    if (!S_ISDIR(n->row.mode)) return EFS_ERR_INVAL;
+    if (!S_ISDIR(n->inode->row.mode)) return EFS_ERR_INVAL;
     struct find_context f={.c=c,.root=root,.emit=emit,.user=user};
     for (uint32_t shard=0;shard<4096;shard++) {
         f.shard=shard;uint32_t cursor=0;
@@ -474,6 +636,32 @@ int efs_query_catalog_find(const struct efs_query_catalog *c, efs_ino_t root, en
         if (rc) return rc;
         visit_budget-=visits;
     }
+    return EFS_OK;
+}
+
+int efs_query_catalog_page(const struct efs_query_catalog *c,efs_ino_t root,
+    enum efs_name_match match,const char *term,int immediate,uint64_t *position,
+    uint32_t budget,int (*stop)(void *),void *stop_ctx,
+    int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
+{
+    if (!c || !position || !budget || *position>(UINT64_C(4096)<<32)) return EFS_ERR_INVAL;
+    struct node *n=find_node(c,root);
+    if (!n) return EFS_ERR_NOT_FOUND;
+    if (!S_ISDIR(n->inode->row.mode)) return EFS_ERR_INVAL;
+    struct find_context f={.c=c,.root=root,.emit=emit,.user=user,
+                          .immediate=immediate,.stop=stop,.stop_ctx=stop_ctx};
+    uint32_t shard=(uint32_t)(*position>>32),at=(uint32_t)*position;
+    for (;shard<4096;shard++,at=0) {
+        if (stop && stop(stop_ctx)) { *position=((uint64_t)shard<<32)|at;return EFS_OK; }
+        f.shard=shard;uint32_t visits=0;
+        int rc=efs_name_index_query_visits(c->part[shard]->names,match,term,&at,budget,find_candidate,&f,&visits);
+        *position=((uint64_t)shard<<32)|at;
+        if (rc==EFS_ERR_AGAIN || rc==EFS_ERR_BUSY) return EFS_OK;
+        if (rc) return rc;
+        budget-=visits;
+        if (!budget) { *position=(uint64_t)(shard+1)<<32;return EFS_OK; }
+    }
+    *position=UINT64_C(4096)<<32;
     return EFS_OK;
 }
 
@@ -525,7 +713,7 @@ int efs_query_catalog_ls_bounded(const struct efs_query_catalog *c, efs_ino_t ro
     if (!c || !emit || !budget) return EFS_ERR_INVAL;
     struct node *node=find_node(c,root);
     if (!node) return EFS_ERR_NOT_FOUND;
-    if (!S_ISDIR(node->row.mode)) return EFS_ERR_INVAL;
+    if (!S_ISDIR(node->inode->row.mode)) return EFS_ERR_INVAL;
     struct listing_scan scan={.catalog=c,.remaining=budget,.stop=stop,.stop_ctx=stop_ctx};
     struct efs_kv bounded={.ops=&listing_ops,.ctx=&scan};
     struct efs_meta_dir_cursor cursor={0};

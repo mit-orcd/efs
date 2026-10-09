@@ -1,0 +1,31 @@
+#ifndef EFS_BATCH_OBS_H
+#define EFS_BATCH_OBS_H
+#include <stdint.h>
+
+/* Opt-in diagnostics only: never used for admission, ACK or persistence. */
+enum efs_batch_counter {
+    BO_SYNC, BO_SYNC_ERROR, BO_SYNC_DURABLE_SKIP, BO_SYNC_HOLD_SKIP,
+    BO_HOLD_OPEN, BO_HOLD_CLOSE, BO_ROTATE,
+    BO_ELIGIBLE, BO_NO_STORE, BO_ROLE, BO_TYPE, BO_ROUTE, BO_TERM,
+    BO_EMPTY, BO_ENTRY_LIMIT, BO_LOG_READ, BO_TAIL, BO_CONFIG, BO_ADMIT, BO_BYTES,
+    BO_FOLLOW_END, BO_FOLLOW_INELIGIBLE, BO_FOLLOW_BYTES, BO_FOLLOW_ERROR,
+    BO_HOST_END, BO_HOST_GROUP, BO_HOST_COUNT, BO_HOST_BYTES, BO_INBOX_EMPTY,
+    BO_SPIN_CAP, BO_TAIL_BEHIND, BO_TAIL_AHEAD, BO_TAIL_TERM, BO_INBOX_DROP, BO_COUNTER_N
+};
+enum efs_batch_hist {
+    BH_WAL_ENTRIES, BH_WAL_BYTES, BH_SYNC_US, BH_SYNC_WAIT_US,
+    BH_SYNC_WAITERS, BH_HOLD_US, BH_HOLD_DEPTH, BH_PROPOSERS,
+    BH_INBOX, BH_HOST_MESSAGES, BH_FOLLOW_MESSAGES, BH_FOLLOW_ENTRIES,
+    BH_FOLLOW_ASSEMBLY_US, BH_FOLLOW_TOTAL_US, BH_SPINS, BH_HIST_N
+};
+extern int efs_batch_obs_on;
+void efs_batch_obs_init(void);
+uint64_t efs_batch_obs_now_us(void);
+void efs_batch_obs_count(enum efs_batch_counter key);
+void efs_batch_obs_reject(enum efs_batch_counter key);
+void efs_batch_obs_hist(enum efs_batch_hist key, uint64_t value);
+void efs_batch_obs_dump(uint64_t now_us);
+#define BO_ON() __atomic_load_n(&efs_batch_obs_on, __ATOMIC_RELAXED)
+#define BO_COUNT(k) do { if (BO_ON()) efs_batch_obs_count(k); } while (0)
+#define BO_HIST(k,v) do { if (BO_ON()) efs_batch_obs_hist(k,(v)); } while (0)
+#endif

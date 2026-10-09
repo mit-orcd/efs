@@ -1,0 +1,2 @@
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 1.109 MB /data1/efs/profile-all-20261009-0433/perf.data (6814 samples) ]

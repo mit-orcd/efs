@@ -1,0 +1,1260 @@
+ Percent |	Source code & Disassembly of efsd for cycles:P (1409 samples, percent: local period)
+----------------------------------------------------------------------------------------------------
+         : 0      0x4694a0 <efs_query_catalog_build>:
+    0.00 :   4694a0:        leaq    0x8(%rsp), %r10
+    0.00 :   4694a5:        andq    $-0x20, %rsp
+    0.00 :   4694a9:        pushq   -0x8(%r10)
+    0.00 :   4694ad:        pushq   %rbp
+    0.00 :   4694ae:        movq    %rsp, %rbp
+    0.00 :   4694b1:        pushq   %r15
+    0.00 :   4694b3:        pushq   %r14
+    0.00 :   4694b5:        pushq   %r13
+    0.00 :   4694b7:        pushq   %r12
+    0.00 :   4694b9:        pushq   %r10
+    0.00 :   4694bb:        pushq   %rbx
+    0.00 :   4694bc:        subq    $0x8080, %rsp
+    0.00 :   4694c3:        movq    %rdi, -0x8068(%rbp)
+    0.00 :   4694ca:        movq    %rsi, -0x8070(%rbp)
+    0.00 :   4694d1:        movq    %rdx, -0x8098(%rbp)
+    0.00 :   4694d8:        movq    %r9, -0x80a0(%rbp)
+    0.00 :   4694df:        testq   %r9, %r9
+    0.00 :   4694e2:        je      0x46989d <efs_query_catalog_build+0x3fd>
+    0.00 :   4694e8:        cmpq    $0x0, -0x8068(%rbp)
+    0.00 :   4694f0:        movq    $0x0, (%r9)
+    0.00 :   4694f7:        je      0x46989d <efs_query_catalog_build+0x3fd>
+    0.00 :   4694fd:        cmpq    $0x1405f, -0x8098(%rbp)
+    0.00 :   469508:        jbe     0x46ab5e <efs_query_catalog_build+0x16be>
+    0.00 :   46950e:        movl    $0x14060, %esi
+    0.00 :   469513:        movl    $0x1, %edi
+    0.00 :   469518:        movq    %rcx, %r12
+    0.00 :   46951b:        movq    %r8, %rbx
+    0.00 :   46951e:        callq   0x404910 <_init+0x910>
+    0.00 :   469523:        movq    %rax, -0x8090(%rbp)
+    0.00 :   46952a:        movq    %rax, %r14
+    0.00 :   46952d:        testq   %rax, %rax
+    0.00 :   469530:        je      0x46ab5e <efs_query_catalog_build+0x16be>
+    0.00 :   469536:        movq    -0x8098(%rbp), %rsi
+    0.00 :   46953d:        movl    $0x1, 0x10008(%rax)
+    0.00 :   469547:        movl    $0x1000, %edx
+    0.00 :   46954c:        movq    $0x14060, 0x14030(%rax)
+    0.00 :   469557:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46955e:        movq    %rsi, 0x14038(%rax)
+    0.00 :   469565:        leaq    -0x8030(%rbp), %rsi
+    0.00 :   46956c:        movq    $0x4dd680, 0x14040(%rax)
+    0.00 :   469577:        movq    %rax, 0x14048(%rax)
+    0.00 :   46957e:        movq    %r12, 0x14050(%rax)
+    0.00 :   469585:        movq    %rbx, 0x14058(%rax)
+    0.00 :   46958c:        callq   0x45f870 <efs_kv_lsm_snapshot_revisions>
+    0.00 :   469591:        testl   %eax, %eax
+    0.00 :   469593:        jne     0x46ab57 <efs_query_catalog_build+0x16b7>
+    0.00 :   469599:        xorl    %r12d, %r12d
+    0.00 :   46959c:        leaq    -0x8051(%rbp), %r13
+    0.00 :   4695a3:        movq    0x14050(%r14), %rax
+    0.00 :   4695aa:        testq   %rax, %rax
+    0.00 :   4695ad:        je      0x4695d8 <efs_query_catalog_build+0x138>
+    0.00 :   4695af:        movq    0x14058(%r14), %rdi
+    0.00 :   4695b6:        callq   *%rax
+    0.00 :   4695b8:        testl   %eax, %eax
+    0.00 :   4695ba:        je      0x4695d8 <efs_query_catalog_build+0x138>
+    0.00 :   4695bc:        movl    $0xfffffff3, %edx
+    0.00 :   4695c1:        movq    -0x8090(%rbp), %rax
+    0.00 :   4695c8:        movl    0x1000c(%rax), %eax
+    0.00 :   4695ce:        jmp     0x469840 <efs_query_catalog_build+0x3a0>
+    0.00 :   4695d3:        nopl    (%rax,%rax)
+    0.00 :   4695d8:        cmpq    $0x0, -0x8070(%rbp)
+    0.00 :   4695e0:        movq    -0x8030(%rbp,%r12,8), %r15
+    0.00 :   4695e8:        je      0x4695ff <efs_query_catalog_build+0x15f>
+    0.00 :   4695ea:        movq    -0x8070(%rbp), %rax
+    0.00 :   4695f1:        movq    (%rax,%r12,8), %rax
+    0.00 :   4695f5:        cmpq    %r15, 0x18(%rax)
+    0.25 :   4695f9:        je      0x4698b9 <efs_query_catalog_build+0x419>
+    0.00 :   4695ff:        movq    -0x8098(%rbp), %rax
+    0.00 :   469606:        subq    0x14030(%r14), %rax
+    0.00 :   46960d:        movq    $0x0, (%r14,%r12,8)
+    0.00 :   469615:        movq    %rax, -0x8078(%rbp)
+    0.00 :   46961c:        cmpq    $0x847, %rax
+    0.00 :   469622:        jbe     0x46aae0 <efs_query_catalog_build+0x1640>
+    0.00 :   469628:        movl    $0x848, %esi
+    0.00 :   46962d:        movl    $0x1, %edi
+    0.00 :   469632:        callq   0x404910 <_init+0x910>
+    0.00 :   469637:        movq    %rax, %rbx
+    0.00 :   46963a:        testq   %rax, %rax
+    0.00 :   46963d:        je      0x46aae0 <efs_query_catalog_build+0x1640>
+    0.00 :   469643:        movq    %r15, 0x18(%rax)
+    0.00 :   469647:        movl    $0x1311, %edi
+    0.00 :   46964c:        movl    $0x1, %r15d
+    0.00 :   469652:        movl    $0x1, (%rax)
+    0.00 :   469658:        movq    $0x848, 0x20(%rax)
+    0.00 :   469660:        movq    -0x8078(%rbp), %rax
+    0.00 :   469667:        movl    $0xc050302, -0x8050(%rbp)
+    0.00 :   469671:        movw    %di, -0x804c(%rbp)
+    0.00 :   469678:        movq    %rax, 0x28(%rbx)
+    0.00 :   46967c:        movl    0x4(%rbx), %eax
+    0.00 :   46967f:        movl    %r12d, -0x8088(%rbp)
+    0.00 :   469686:        movbew  %r12w, -0x8054(%rbp)
+    0.00 :   469690:        movq    %r12, -0x8080(%rbp)
+    0.00 :   469697:        movq    %r15, %r12
+    0.00 :   46969a:        nopw    (%rax,%rax)
+    0.00 :   4696a0:        movzbl  (%r13,%r12), %r15d
+    0.00 :   4696a6:        subq    $0x8, %rsp
+    0.00 :   4696aa:        movq    -0x8068(%rbp), %rdi
+    0.00 :   4696b1:        xorl    %ecx, %ecx
+    0.00 :   4696b3:        xorl    %r8d, %r8d
+    0.00 :   4696b6:        movl    $0x3, %edx
+    0.00 :   4696bb:        leaq    -0x8054(%rbp), %rsi
+    0.00 :   4696c2:        movl    $0x467ee0, %r9d
+    0.00 :   4696c8:        movb    %r15b, -0x8052(%rbp)
+    0.00 :   4696cf:        movl    %eax, 0x30(%rbx,%r15,4)
+    0.00 :   4696d4:        pushq   %rbx
+    0.00 :   4696d5:        callq   0x45f990 <efs_kv_lsm_snapshot_scan>
+    0.00 :   4696da:        cmpq    $0x6, %r12
+    0.00 :   4696de:        movl    %eax, %edx
+    0.00 :   4696e0:        movl    0x4(%rbx), %eax
+    0.00 :   4696e3:        movl    %eax, 0x430(%rbx,%r15,4)
+    0.00 :   4696eb:        popq    %rcx
+    0.00 :   4696ec:        popq    %rsi
+    0.00 :   4696ed:        setne   %sil
+    0.00 :   4696f1:        testl   %edx, %edx
+    0.00 :   4696f3:        sete    %cl
+    0.00 :   4696f6:        incq    %r12
+    0.00 :   4696f9:        testb   %cl, %sil
+    0.00 :   4696fc:        jne     0x4696a0 <efs_query_catalog_build+0x200>
+    0.00 :   4696fe:        movq    -0x8080(%rbp), %r12
+    0.00 :   469705:        testl   %edx, %edx
+    0.00 :   469707:        jne     0x46974e <efs_query_catalog_build+0x2ae>
+    0.00 :   469709:        testl   %eax, %eax
+    0.00 :   46970b:        je      0x469716 <efs_query_catalog_build+0x276>
+    0.00 :   46970d:        cmpl    0x8(%rbx), %eax
+    0.00 :   469710:        jb      0x4699ad <efs_query_catalog_build+0x50d>
+    0.00 :   469716:        movl    0xc(%rbx), %eax
+    0.00 :   469719:        testl   %eax, %eax
+    0.00 :   46971b:        jne     0x469858 <efs_query_catalog_build+0x3b8>
+    0.00 :   469721:        movq    0x20(%rbx), %rax
+    0.00 :   469725:        movq    -0x8078(%rbp), %rdx
+    0.00 :   46972c:        movl    -0x8088(%rbp), %esi
+    0.00 :   469732:        leaq    0x840(%rbx), %rcx
+    0.00 :   469739:        movq    -0x8068(%rbp), %rdi
+    0.00 :   469740:        subq    %rax, %rdx
+    0.00 :   469743:        callq   0x46bc30 <efs_name_index_build>
+    0.00 :   469748:        movl    %eax, %edx
+    0.00 :   46974a:        testl   %eax, %eax
+    0.00 :   46974c:        je      0x469794 <efs_query_catalog_build+0x2f4>
+    0.00 :   46974e:        lock
+    0.00 :   46974f:        decl    (%rbx)
+    0.00 :   469751:        jne     0x4695c1 <efs_query_catalog_build+0x121>
+    0.00 :   469757:        movq    0x840(%rbx), %rdi
+    0.00 :   46975e:        movl    %edx, -0x8068(%rbp)
+    0.00 :   469764:        callq   0x46bbb0 <efs_name_index_free>
+    0.00 :   469769:        movq    0x830(%rbx), %rdi
+    0.00 :   469770:        callq   0x404450 <_init+0x450>
+    0.00 :   469775:        movq    0x838(%rbx), %rdi
+    0.00 :   46977c:        callq   0x404450 <_init+0x450>
+    0.00 :   469781:        movq    %rbx, %rdi
+    0.00 :   469784:        callq   0x404450 <_init+0x450>
+    0.00 :   469789:        movl    -0x8068(%rbp), %edx
+    0.00 :   46978f:        jmp     0x4695c1 <efs_query_catalog_build+0x121>
+    0.00 :   469794:        movq    0x840(%rbx), %rdi
+    0.00 :   46979b:        callq   0x46bc10 <efs_name_index_bytes>
+    0.00 :   4697a0:        movq    %rbx, (%r14,%r12,8)
+    0.00 :   4697a4:        addq    0x20(%rbx), %rax
+    0.00 :   4697a8:        incl    0x10014(%r14)
+    0.00 :   4697af:        movq    %rax, 0x20(%rbx)
+    0.00 :   4697b3:        movq    0x14030(%r14), %rdx
+    0.00 :   4697ba:        movq    -0x8098(%rbp), %rcx
+    0.00 :   4697c1:        subq    %rdx, %rcx
+    0.00 :   4697c4:        cmpq    %rax, %rcx
+    0.00 :   4697c7:        jb      0x46aae0 <efs_query_catalog_build+0x1640>
+    0.00 :   4697cd:        addq    %rax, %rdx
+    0.00 :   4697d0:        incq    %r12
+    0.00 :   4697d3:        movq    %rdx, 0x14030(%r14)
+    0.00 :   4697da:        cmpq    $0x1000, %r12
+    0.00 :   4697e1:        jne     0x4695a3 <efs_query_catalog_build+0x103>
+    0.00 :   4697e7:        movq    -0x8090(%rbp), %rbx
+    0.00 :   4697ee:        movq    %rbx, %rax
+    0.00 :   4697f1:        leaq    0x8000(%rbx), %rsi
+    0.00 :   4697f8:        xorl    %ebx, %ebx
+    0.00 :   4697fa:        nopw    (%rax,%rax)
+    0.00 :   469800:        movq    (%rax), %rcx
+    0.00 :   469803:        addq    $0x8, %rax
+    0.08 :   469807:        movl    0x438(%rcx), %edx
+    0.00 :   46980d:        subl    0x38(%rcx), %edx
+    0.00 :   469810:        addq    %rdx, %rbx
+    0.00 :   469813:        cmpq    %rax, %rsi
+    0.00 :   469816:        jne     0x469800 <efs_query_catalog_build+0x360>
+    0.00 :   469818:        testq   %rbx, %rbx
+    0.00 :   46981b:        je      0x469936 <efs_query_catalog_build+0x496>
+    0.00 :   469821:        movq    %rbx, %rax
+    0.00 :   469824:        shrq    $0x20, %rax
+    0.00 :   469828:        je      0x4698cd <efs_query_catalog_build+0x42d>
+    0.00 :   46982e:        movq    -0x8090(%rbp), %rax
+    0.00 :   469835:        movl    $0xfffffffe, %edx
+    0.00 :   46983a:        movl    0x1000c(%rax), %eax
+    0.00 :   469840:        movq    -0x8090(%rbp), %rbx
+    0.00 :   469847:        movl    %eax, 0x1402c(%rbx)
+    0.00 :   46984d:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   469852:        nopw    (%rax,%rax)
+    0.00 :   469858:        cmpl    0x10(%rbx), %eax
+    0.00 :   46985b:        jae     0x469721 <efs_query_catalog_build+0x281>
+    0.00 :   469861:        movq    0x838(%rbx), %rdi
+    0.00 :   469868:        movl    %eax, %esi
+    0.00 :   46986a:        callq   0x404a70 <_init+0xa70>
+    0.00 :   46986f:        movq    %rax, %rdx
+    0.00 :   469872:        movq    0x20(%rbx), %rax
+    0.00 :   469876:        testq   %rdx, %rdx
+    0.00 :   469879:        je      0x469725 <efs_query_catalog_build+0x285>
+    0.00 :   46987f:        movl    0xc(%rbx), %esi
+    0.00 :   469882:        movl    0x10(%rbx), %ecx
+    0.00 :   469885:        movq    %rdx, 0x838(%rbx)
+    0.00 :   46988c:        subl    %esi, %ecx
+    0.00 :   46988e:        movl    %esi, 0x10(%rbx)
+    0.00 :   469891:        subq    %rcx, %rax
+    0.00 :   469894:        movq    %rax, 0x20(%rbx)
+    0.00 :   469898:        jmp     0x469725 <efs_query_catalog_build+0x285>
+    0.00 :   46989d:        movl    $0xfffffffb, %edx
+    0.00 :   4698a2:        leaq    -0x30(%rbp), %rsp
+    0.00 :   4698a6:        movl    %edx, %eax
+    0.00 :   4698a8:        popq    %rbx
+    0.00 :   4698a9:        popq    %r10
+    0.00 :   4698ab:        popq    %r12
+    0.00 :   4698ad:        popq    %r13
+    0.00 :   4698af:        popq    %r14
+    0.00 :   4698b1:        popq    %r15
+    0.00 :   4698b3:        popq    %rbp
+    0.00 :   4698b4:        leaq    -0x8(%r10), %rsp
+    0.00 :   4698b8:        retq
+    0.00 :   4698b9:        movq    %rax, (%r14,%r12,8)
+    0.21 :   4698bd:        lock
+    0.00 :   4698be:        incl    (%rax)
+    0.00 :   4698c0:        movq    (%r14,%r12,8), %rax
+    0.00 :   4698c4:        movq    0x20(%rax), %rax
+    0.00 :   4698c8:        jmp     0x4697b3 <efs_query_catalog_build+0x313>
+    0.00 :   4698cd:        movq    -0x8090(%rbp), %rdi
+    0.00 :   4698d4:        movq    -0x8098(%rbp), %rax
+    0.00 :   4698db:        imulq   $0x130, %rbx, %r13
+    0.00 :   4698e2:        movq    0x14030(%rdi), %r12
+    0.00 :   4698e9:        subq    %r12, %rax
+    0.00 :   4698ec:        cmpq    %r13, %rax
+    0.00 :   4698ef:        jae     0x469907 <efs_query_catalog_build+0x467>
+    0.00 :   4698f1:        movl    0x1000c(%rdi), %eax
+    0.00 :   4698f7:        movl    %eax, 0x1402c(%rdi)
+    0.00 :   4698fd:        movl    $0xfffffffe, %edx
+    0.00 :   469902:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   469907:        movq    %r13, %rdi
+    0.00 :   46990a:        callq   0x4042b0 <_init+0x2b0>
+    0.00 :   46990f:        movq    -0x8090(%rbp), %rsi
+    0.00 :   469916:        movq    %rax, 0x10000(%rsi)
+    0.00 :   46991d:        testq   %rax, %rax
+    0.00 :   469920:        je      0x46abb8 <efs_query_catalog_build+0x1718>
+    0.00 :   469926:        addq    %r13, %r12
+    0.00 :   469929:        movl    %ebx, 0x10010(%rsi)
+    0.00 :   46992f:        movq    %r12, 0x14030(%rsi)
+    0.00 :   469936:        xorl    %r15d, %r15d
+    0.00 :   469939:        leaq    -0x8050(%rbp), %r12
+    0.00 :   469940:        movq    %r15, %r14
+    0.00 :   469943:        movq    -0x8090(%rbp), %r15
+    0.00 :   46994a:        nopw    (%rax,%rax)
+    0.09 :   469950:        movq    0x14050(%r15), %rax
+    0.00 :   469957:        testq   %rax, %rax
+    0.00 :   46995a:        je      0x469a00 <efs_query_catalog_build+0x560>
+    0.00 :   469960:        movq    0x14058(%r15), %rdi
+    0.00 :   469967:        callq   *%rax
+    0.00 :   469969:        testl   %eax, %eax
+    0.00 :   46996b:        je      0x469a00 <efs_query_catalog_build+0x560>
+    0.00 :   469971:        movq    -0x8090(%rbp), %rbx
+    0.00 :   469978:        movl    $0xfffffff3, %edx
+    0.00 :   46997d:        movl    0x1000c(%rbx), %eax
+    0.00 :   469983:        movl    %eax, 0x1402c(%rbx)
+    0.00 :   469989:        nopl    (%rax)
+    0.00 :   469990:        movq    -0x8090(%rbp), %rdi
+    0.00 :   469997:        movl    %edx, -0x8068(%rbp)
+    0.00 :   46999d:        callq   0x4693c0 <efs_query_catalog_free>
+    0.00 :   4699a2:        movl    -0x8068(%rbp), %edx
+    0.00 :   4699a8:        jmp     0x4698a2 <efs_query_catalog_build+0x402>
+    0.00 :   4699ad:        shlq    $0x4, %rax
+    0.00 :   4699b1:        movq    0x830(%rbx), %rdi
+    0.00 :   4699b8:        movq    %rax, %rsi
+    0.00 :   4699bb:        callq   0x404a70 <_init+0xa70>
+    0.00 :   4699c0:        movq    %rax, %rdx
+    0.00 :   4699c3:        testq   %rax, %rax
+    0.00 :   4699c6:        je      0x469716 <efs_query_catalog_build+0x276>
+    0.00 :   4699cc:        movl    0x4(%rbx), %ecx
+    0.00 :   4699cf:        movl    0x8(%rbx), %eax
+    0.00 :   4699d2:        movq    %rdx, 0x830(%rbx)
+    0.00 :   4699d9:        subl    %ecx, %eax
+    0.00 :   4699db:        movl    %ecx, 0x8(%rbx)
+    0.00 :   4699de:        shlq    $0x4, %rax
+    0.00 :   4699e2:        subq    %rax, 0x20(%rbx)
+    0.00 :   4699e6:        movl    0xc(%rbx), %eax
+    0.00 :   4699e9:        testl   %eax, %eax
+    0.00 :   4699eb:        jne     0x469858 <efs_query_catalog_build+0x3b8>
+    0.00 :   4699f1:        jmp     0x469721 <efs_query_catalog_build+0x281>
+    0.00 :   4699f6:        nopw    %cs:(%rax,%rax)
+    0.00 :   469a00:        movl    0x1000c(%r15), %eax
+    0.00 :   469a07:        movq    (%r15,%r14,8), %r9
+    0.00 :   469a0b:        movbew  %r14w, -0x8050(%rbp)
+    0.00 :   469a15:        movb    $0x2, -0x804e(%rbp)
+    0.00 :   469a1c:        movl    %eax, 0x1002c(%r15,%r14,4)
+    0.00 :   469a24:        testq   %r9, %r9
+    0.00 :   469a27:        je      0x469b9e <efs_query_catalog_build+0x6fe>
+    0.28 :   469a2d:        movl    0x38(%r9), %ebx
+    0.36 :   469a31:        movl    0x438(%r9), %eax
+    0.00 :   469a38:        cmpl    %eax, %ebx
+    0.00 :   469a3a:        jae     0x469b9e <efs_query_catalog_build+0x6fe>
+    0.05 :   469a40:        movq    0x830(%r9), %r13
+    0.00 :   469a47:        movq    0x838(%r9), %rdx
+    0.00 :   469a4e:        movq    %r15, -0x8080(%rbp)
+    0.00 :   469a55:        movq    %r14, -0x80b0(%rbp)
+    0.00 :   469a5c:        movl    %ebx, %r14d
+    0.00 :   469a5f:        movq    %r13, %r15
+    0.00 :   469a62:        movq    %r9, -0x8088(%rbp)
+    0.00 :   469a69:        movl    %eax, %r13d
+    0.00 :   469a6c:        movl    %eax, -0x80a4(%rbp)
+    0.00 :   469a72:        movq    %rdx, -0x8078(%rbp)
+    0.00 :   469a79:        jmp     0x469a89 <efs_query_catalog_build+0x5e9>
+    0.00 :   469a7b:        nopl    (%rax,%rax)
+    0.00 :   469a80:        leal    0x1(%rbx), %r14d
+    0.00 :   469a84:        cmpl    %r13d, %r14d
+    0.00 :   469a87:        jae     0x469aed <efs_query_catalog_build+0x64d>
+    0.00 :   469a89:        movl    %r13d, %r8d
+    0.00 :   469a8c:        subl    %r14d, %r8d
+    0.00 :   469a8f:        shrl    %r8d
+    0.07 :   469a92:        leal    (%r8,%r14), %eax
+    0.00 :   469a96:        movq    %rax, %rbx
+    0.00 :   469a99:        shlq    $0x4, %rax
+    0.00 :   469a9d:        addq    %r15, %rax
+    0.47 :   469aa0:        movl    0x4(%rax), %r10d
+    0.00 :   469aa4:        testl   %r10d, %r10d
+    0.00 :   469aa7:        je      0x469a80 <efs_query_catalog_build+0x5e0>
+    0.00 :   469aa9:        movl    $0x3, %edx
+    0.00 :   469aae:        movl    (%rax), %edi
+    0.00 :   469ab0:        movq    -0x8078(%rbp), %rax
+    0.00 :   469ab7:        movq    %r12, %rsi
+    0.00 :   469aba:        cmpl    %edx, %r10d
+    0.00 :   469abd:        movl    %r10d, -0x8068(%rbp)
+    0.00 :   469ac4:        cmovbeq %r10, %rdx
+    0.00 :   469ac8:        addq    %rax, %rdi
+    0.00 :   469acb:        callq   0x404900 <_init+0x900>
+    0.00 :   469ad0:        testl   %eax, %eax
+    0.00 :   469ad2:        jne     0x469db0 <efs_query_catalog_build+0x910>
+    0.00 :   469ad8:        movl    -0x8068(%rbp), %r10d
+    0.00 :   469adf:        cmpl    $0x2, %r10d
+    0.00 :   469ae3:        jbe     0x469a80 <efs_query_catalog_build+0x5e0>
+    0.00 :   469ae5:        movl    %ebx, %r13d
+    0.00 :   469ae8:        cmpl    %r13d, %r14d
+    0.00 :   469aeb:        jb      0x469a89 <efs_query_catalog_build+0x5e9>
+    0.00 :   469aed:        movl    -0x80a4(%rbp), %eax
+    0.00 :   469af3:        movl    %r14d, %ebx
+    0.00 :   469af6:        movq    %r15, %r13
+    0.00 :   469af9:        movq    -0x8088(%rbp), %r9
+    0.00 :   469b00:        movq    -0x80b0(%rbp), %r14
+    0.00 :   469b07:        movq    -0x8080(%rbp), %r15
+    0.00 :   469b0e:        movq    -0x8078(%rbp), %rdx
+    0.00 :   469b15:        cmpl    %eax, %ebx
+    0.00 :   469b17:        jae     0x469b9e <efs_query_catalog_build+0x6fe>
+    0.00 :   469b1d:        movl    %ebx, %r10d
+    0.00 :   469b20:        movq    %r13, %rax
+    0.00 :   469b23:        shlq    $0x4, %r10
+    0.00 :   469b27:        movq    %r10, %r13
+    0.00 :   469b2a:        jmp     0x469b84 <efs_query_catalog_build+0x6e4>
+    0.00 :   469b2c:        nopl    (%rax)
+    0.00 :   469b30:        movzbl  0x2(%r12), %ecx
+    0.00 :   469b36:        cmpb    %cl, 0x2(%rsi)
+    0.00 :   469b39:        jne     0x469b9e <efs_query_catalog_build+0x6fe>
+    0.00 :   469b3b:        movl    0x8(%rax), %ecx
+    0.29 :   469b3e:        movl    0xc(%rax), %r8d
+    0.00 :   469b42:        movq    %r9, -0x8068(%rbp)
+    0.00 :   469b49:        addq    %rdx, %rcx
+    0.00 :   469b4c:        movl    %edi, %edx
+    0.37 :   469b4e:        movq    %r15, %rdi
+    0.29 :   469b51:        callq   0x467aa0 <add_node>
+    0.00 :   469b56:        movl    %eax, %edx
+    0.00 :   469b58:        testl   %eax, %eax
+    0.00 :   469b5a:        jne     0x4695c1 <efs_query_catalog_build+0x121>
+    0.06 :   469b60:        movq    -0x8068(%rbp), %r9
+    0.31 :   469b67:        incl    %ebx
+    0.00 :   469b69:        addq    $0x10, %r13
+    0.06 :   469b6d:        cmpl    0x438(%r9), %ebx
+    0.00 :   469b74:        jae     0x469b9e <efs_query_catalog_build+0x6fe>
+    0.00 :   469b76:        movq    0x830(%r9), %rax
+    0.27 :   469b7d:        movq    0x838(%r9), %rdx
+    0.00 :   469b84:        addq    %r13, %rax
+    0.22 :   469b87:        movl    (%rax), %esi
+    0.00 :   469b89:        movl    0x4(%rax), %edi
+    0.00 :   469b8c:        addq    %rdx, %rsi
+    0.00 :   469b8f:        cmpl    $0x2, %edi
+    0.00 :   469b92:        jbe     0x469b9e <efs_query_catalog_build+0x6fe>
+    0.00 :   469b94:        movzwl  (%r12), %ecx
+    0.00 :   469b99:        cmpw    %cx, (%rsi)
+    1.04 :   469b9c:        je      0x469b30 <efs_query_catalog_build+0x690>
+    0.00 :   469b9e:        incq    %r14
+    0.00 :   469ba1:        cmpq    $0x1000, %r14
+    0.00 :   469ba8:        jne     0x469950 <efs_query_catalog_build+0x4b0>
+    0.00 :   469bae:        movq    -0x8090(%rbp), %rbx
+    0.00 :   469bb5:        movl    0x1000c(%rbx), %eax
+    0.00 :   469bbb:        movl    %eax, 0x1402c(%rbx)
+    0.00 :   469bc1:        testl   %eax, %eax
+    0.00 :   469bc3:        je      0x469d1b <efs_query_catalog_build+0x87b>
+    0.00 :   469bc9:        cmpl    0x10010(%rbx), %eax
+    0.00 :   469bcf:        jb      0x46aa85 <efs_query_catalog_build+0x15e5>
+    0.00 :   469bd5:        addq    %rax, %rax
+    0.00 :   469bd8:        movl    $0x1, %ebx
+    0.00 :   469bdd:        nopl    (%rax)
+    0.00 :   469be0:        addq    %rbx, %rbx
+    0.00 :   469be3:        cmpq    %rax, %rbx
+    0.00 :   469be6:        jb      0x469be0 <efs_query_catalog_build+0x740>
+    0.00 :   469be8:        movq    %rbx, %rax
+    0.00 :   469beb:        leaq    (,%rbx,4), %r12
+    0.00 :   469bf3:        shrq    $0x20, %rax
+    0.00 :   469bf7:        jne     0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   469bfd:        movq    -0x8090(%rbp), %r15
+    0.00 :   469c04:        movq    0x14038(%r15), %rax
+    0.00 :   469c0b:        movq    0x14030(%r15), %r13
+    0.00 :   469c12:        movq    %rax, -0x8068(%rbp)
+    0.00 :   469c19:        subq    %r13, %rax
+    0.00 :   469c1c:        cmpq    %r12, %rax
+    0.00 :   469c1f:        jb      0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   469c25:        movq    %rbx, %rdi
+    0.00 :   469c28:        movl    $0x4, %esi
+    0.00 :   469c2d:        callq   0x404910 <_init+0x910>
+    0.00 :   469c32:        movq    %rax, 0x10020(%r15)
+    0.00 :   469c39:        movq    %rax, %rdi
+    0.00 :   469c3c:        testq   %rax, %rax
+    0.00 :   469c3f:        je      0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   469c45:        addq    %r13, %r12
+    0.00 :   469c48:        movl    %ebx, 0x10028(%r15)
+    0.00 :   469c4f:        movabsq $-0x40a7b892e31b1a47, %r14
+    0.00 :   469c59:        xorl    %ebx, %ebx
+    0.00 :   469c5b:        movq    %r12, 0x14030(%r15)
+    0.00 :   469c62:        movabsq $-0x6b2fb644ecceee15, %r13
+    0.00 :   469c6c:        xorl    %r12d, %r12d
+    0.00 :   469c6f:        testb   %bl, %bl
+    0.35 :   469c71:        jne     0x469c97 <efs_query_catalog_build+0x7f7>
+    0.00 :   469c73:        movq    0x14050(%r15), %rax
+    0.00 :   469c7a:        testq   %rax, %rax
+    0.00 :   469c7d:        je      0x469c97 <efs_query_catalog_build+0x7f7>
+    0.00 :   469c7f:        movq    0x14058(%r15), %rdi
+    0.00 :   469c86:        callq   *%rax
+    0.00 :   469c88:        testl   %eax, %eax
+    0.00 :   469c8a:        jne     0x469da1 <efs_query_catalog_build+0x901>
+    0.00 :   469c90:        movq    0x10020(%r15), %rdi
+    0.00 :   469c97:        movq    0x10000(%r15), %r9
+    0.00 :   469c9e:        movl    0x10028(%r15), %esi
+    1.17 :   469ca5:        movq    (%r9,%r12), %r8
+    0.35 :   469ca9:        decl    %esi
+    0.00 :   469cab:        movq    %r8, %rax
+    0.00 :   469cae:        shrq    $0x1e, %rax
+    0.00 :   469cb2:        xorq    %r8, %rax
+    0.40 :   469cb5:        imulq   %r14, %rax
+    0.00 :   469cb9:        movq    %rax, %rdx
+    0.00 :   469cbc:        shrq    $0x1b, %rdx
+    0.00 :   469cc0:        xorq    %rdx, %rax
+    0.27 :   469cc3:        imulq   %r13, %rax
+    0.00 :   469cc7:        movq    %rax, %rdx
+    0.00 :   469cca:        shrq    $0x1f, %rdx
+    0.00 :   469cce:        xorq    %rdx, %rax
+    0.14 :   469cd1:        jmp     0x469cf5 <efs_query_catalog_build+0x855>
+    0.00 :   469cd3:        nopw    %cs:(%rax,%rax)
+    0.00 :   469cde:        nop
+    0.21 :   469ce0:        decl    %edx
+    0.15 :   469ce2:        imulq   $0x130, %rdx, %rdx
+   12.57 :   469ce9:        cmpq    (%r9,%rdx), %r8
+    0.00 :   469ced:        je      0x46a716 <efs_query_catalog_build+0x1276>
+    0.06 :   469cf3:        incl    %eax
+    0.00 :   469cf5:        andl    %esi, %eax
+    0.00 :   469cf7:        movl    %eax, %edx
+    0.14 :   469cf9:        leaq    (%rdi,%rdx,4), %rcx
+   14.84 :   469cfd:        movl    (%rcx), %edx
+    0.36 :   469cff:        testl   %edx, %edx
+    0.29 :   469d01:        jne     0x469ce0 <efs_query_catalog_build+0x840>
+    0.00 :   469d03:        incl    %ebx
+    0.00 :   469d05:        addq    $0x130, %r12
+    0.21 :   469d0c:        movl    %ebx, (%rcx)
+    0.00 :   469d0e:        cmpl    0x1000c(%r15), %ebx
+    0.37 :   469d15:        jb      0x469c6f <efs_query_catalog_build+0x7cf>
+    0.00 :   469d1b:        movq    -0x8090(%rbp), %r15
+    0.00 :   469d22:        movl    $0x1, %ebx
+    0.00 :   469d27:        leaq    0x14040(%r15), %r14
+    0.00 :   469d2e:        movq    %r14, -0x8088(%rbp)
+    0.00 :   469d35:        nopl    (%rax)
+    0.00 :   469d38:        movq    -0x8070(%rbp), %rsi
+    0.00 :   469d3f:        movl    0x1002c(%r15,%rbx,4), %eax
+    0.00 :   469d47:        movb    $0x1, -0x8080(%rbp)
+    0.00 :   469d4e:        testq   %rsi, %rsi
+    0.00 :   469d51:        je      0x469d63 <efs_query_catalog_build+0x8c3>
+    0.00 :   469d53:        movq    -0x8(%rsi,%rbx,8), %rdi
+    0.00 :   469d58:        cmpq    %rdi, -0x8(%r15,%rbx,8)
+    0.00 :   469d5d:        je      0x46a568 <efs_query_catalog_build+0x10c8>
+    0.00 :   469d63:        movl    0x10028(%r15,%rbx,4), %r12d
+    0.00 :   469d6b:        cmpl    %eax, %r12d
+    0.00 :   469d6e:        jae     0x46a5a0 <efs_query_catalog_build+0x1100>
+    0.00 :   469d74:        movl    %r12d, %r13d
+    0.00 :   469d77:        imulq   $0x130, %r13, %rax
+    0.00 :   469d7e:        movq    %rax, -0x8078(%rbp)
+    0.00 :   469d85:        movq    0x14050(%r15), %rax
+    0.00 :   469d8c:        testq   %rax, %rax
+    0.00 :   469d8f:        je      0x469dc0 <efs_query_catalog_build+0x920>
+    0.00 :   469d91:        movq    0x14058(%r15), %rdi
+    0.53 :   469d98:        vzeroupper
+    0.50 :   469d9b:        callq   *%rax
+    0.00 :   469d9d:        testl   %eax, %eax
+    0.20 :   469d9f:        je      0x469dc0 <efs_query_catalog_build+0x920>
+    0.00 :   469da1:        movl    $0xfffffff3, %edx
+    0.00 :   469da6:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   469dab:        nopl    (%rax,%rax)
+    0.00 :   469db0:        js      0x469a80 <efs_query_catalog_build+0x5e0>
+    0.00 :   469db6:        jmp     0x469ae5 <efs_query_catalog_build+0x645>
+    0.00 :   469dbb:        nopl    (%rax,%rax)
+    0.00 :   469dc0:        movq    -0x8078(%rbp), %r13
+    0.00 :   469dc7:        addq    0x10000(%r15), %r13
+    0.00 :   469dce:        cmpb    $0x0, -0x8080(%rbp)
+    4.60 :   469dd5:        movq    (%r13), %rsi
+    0.17 :   469dd9:        je      0x46a458 <efs_query_catalog_build+0xfb8>
+    0.00 :   469ddf:        vzeroupper
+    0.00 :   469de2:        incl    0x10018(%r15)
+    0.00 :   469de9:        movq    -0x8088(%rbp), %rdi
+    0.00 :   469df0:        xorl    %ecx, %ecx
+    0.00 :   469df2:        movl    $0x467a00, %edx
+    0.00 :   469df7:        leaq    0x80(%r13), %r8
+    0.00 :   469dfe:        callq   0x495aa0 <efs_meta_apply_getattr>
+    0.00 :   469e03:        testl   %eax, %eax
+    0.00 :   469e05:        sete    %dl
+    0.00 :   469e08:        incl    %r12d
+    0.00 :   469e0b:        addq    $0x130, -0x8078(%rbp)
+    0.43 :   469e16:        cmpl    0x1002c(%r15,%rbx,4), %r12d
+    0.00 :   469e1e:        jae     0x469e28 <efs_query_catalog_build+0x988>
+    0.00 :   469e20:        testb   %dl, %dl
+    0.22 :   469e22:        jne     0x469d85 <efs_query_catalog_build+0x8e5>
+    0.00 :   469e28:        cmpq    $0x1000, %rbx
+    0.00 :   469e2f:        setne   %cl
+    0.00 :   469e32:        incq    %rbx
+    0.00 :   469e35:        testb   %dl, %cl
+    0.00 :   469e37:        jne     0x469d38 <efs_query_catalog_build+0x898>
+    0.00 :   469e3d:        movl    %eax, %edx
+    0.00 :   469e3f:        testl   %eax, %eax
+    0.00 :   469e41:        jne     0x46abb0 <efs_query_catalog_build+0x1710>
+    0.00 :   469e47:        xorl    %r15d, %r15d
+    0.00 :   469e4a:        movq    -0x8090(%rbp), %rbx
+    0.00 :   469e51:        movq    -0x8070(%rbp), %r12
+    0.00 :   469e58:        movl    %r15d, %r14d
+    0.00 :   469e5b:        vzeroupper
+    0.00 :   469e5e:        nop
+    0.00 :   469e60:        movq    0x14050(%rbx), %rax
+    0.00 :   469e67:        testq   %rax, %rax
+    0.00 :   469e6a:        je      0x469e7d <efs_query_catalog_build+0x9dd>
+    0.00 :   469e6c:        movq    0x14058(%rbx), %rdi
+    0.00 :   469e73:        callq   *%rax
+    0.00 :   469e75:        testl   %eax, %eax
+    0.00 :   469e77:        jne     0x469da1 <efs_query_catalog_build+0x901>
+    0.00 :   469e7d:        testq   %r12, %r12
+    0.00 :   469e80:        je      0x469ede <efs_query_catalog_build+0xa3e>
+    0.00 :   469e82:        movl    %r14d, %eax
+    0.00 :   469e85:        movq    0x8000(%r12,%rax,8), %r8
+    0.00 :   469e8d:        movq    %r8, -0x8068(%rbp)
+    0.00 :   469e94:        testq   %r8, %r8
+    0.00 :   469e97:        je      0x469ede <efs_query_catalog_build+0xa3e>
+    0.00 :   469e99:        xorl    %esi, %esi
+    0.28 :   469e9b:        movq    0x18(%r8,%rsi), %rdx
+    0.00 :   469ea0:        testq   %rdx, %rdx
+    0.00 :   469ea3:        je      0x46a72d <efs_query_catalog_build+0x128d>
+    0.00 :   469ea9:        leal    (,%rsi,8), %edi
+    0.00 :   469eb0:        jmp     0x469ecb <efs_query_catalog_build+0xa2b>
+    0.00 :   469eb2:        nopw    %cs:(%rax,%rax)
+    0.00 :   469ebd:        nopl    (%rax)
+    0.00 :   469ec0:        blsrq   %rdx, %rdx
+    0.00 :   469ec5:        je      0x46a72d <efs_query_catalog_build+0x128d>
+    0.00 :   469ecb:        tzcntq  %rdx, %rcx
+    0.00 :   469ed0:        addl    %edi, %ecx
+    0.00 :   469ed2:        movl    %ecx, %ecx
+    0.07 :   469ed4:        movq    (%r12,%rcx,8), %r11
+    0.00 :   469ed8:        cmpq    %r11, (%rbx,%rcx,8)
+    0.00 :   469edc:        je      0x469ec0 <efs_query_catalog_build+0xa20>
+    0.00 :   469ede:        movq    0x14030(%rbx), %r13
+    0.00 :   469ee5:        movq    -0x8098(%rbp), %rax
+    0.00 :   469eec:        subq    %r13, %rax
+    0.00 :   469eef:        cmpq    $0x22f, %rax
+    0.00 :   469ef5:        jbe     0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   469efb:        movl    $0x230, %esi
+    0.00 :   469f00:        movl    $0x1, %edi
+    0.00 :   469f05:        callq   0x404910 <_init+0x910>
+    0.00 :   469f0a:        testq   %rax, %rax
+    0.00 :   469f0d:        je      0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   469f13:        movl    %r14d, %edx
+    0.00 :   469f16:        movl    %r14d, %esi
+    0.00 :   469f19:        addq    $0x230, %r13
+    0.00 :   469f20:        movl    $0x1, %ecx
+    0.00 :   469f25:        shrl    $0x6, %edx
+    0.00 :   469f28:        movl    $0x1, (%rax)
+    0.00 :   469f2e:        shlxq   %r14, %rcx, %rcx
+    0.00 :   469f33:        subq    $0x8, %rsp
+    0.00 :   469f37:        movl    $0x468c60, %r9d
+    0.00 :   469f3d:        movq    $0x230, 0x218(%rax)
+    0.00 :   469f48:        movl    $0xffffffff, %r8d
+    0.00 :   469f4e:        orq     %rcx, 0x18(%rax,%rdx,8)
+    0.00 :   469f53:        movl    $0x4d602b, %edx
+    0.00 :   469f58:        leaq    -0x8054(%rbp), %rcx
+    0.00 :   469f5f:        movq    %r13, 0x14030(%rbx)
+    0.00 :   469f66:        movq    %rax, -0x8040(%rbp)
+    0.00 :   469f6d:        movq    %rax, 0x8000(%rbx,%rsi,8)
+    0.00 :   469f75:        movq    (%rbx,%rsi,8), %rax
+    0.00 :   469f79:        movl    $0x1, %esi
+    0.00 :   469f7e:        movq    %rbx, -0x8050(%rbp)
+    0.00 :   469f85:        movq    0x840(%rax), %rdi
+    0.00 :   469f8c:        leaq    -0x8050(%rbp), %rax
+    0.00 :   469f93:        movl    %r14d, -0x8048(%rbp)
+    0.00 :   469f9a:        movl    $0x0, -0x8054(%rbp)
+    0.00 :   469fa4:        pushq   %rax
+    0.00 :   469fa5:        callq   0x46c2d0 <efs_name_index_query>
+    0.00 :   469faa:        popq    %r10
+    0.00 :   469fac:        testl   %eax, %eax
+    0.00 :   469fae:        movl    %eax, %edx
+    0.00 :   469fb0:        popq    %r11
+    0.00 :   469fb2:        sete    %al
+    0.00 :   469fb5:        incl    %r14d
+    0.00 :   469fb8:        cmpl    $0x1000, %r14d
+    0.00 :   469fbf:        je      0x469fc9 <efs_query_catalog_build+0xb29>
+    0.00 :   469fc1:        testb   %al, %al
+    0.00 :   469fc3:        jne     0x469e60 <efs_query_catalog_build+0x9c0>
+    0.00 :   469fc9:        testl   %edx, %edx
+    0.00 :   469fcb:        jne     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   469fd1:        movq    -0x8090(%rbp), %rbx
+    0.00 :   469fd8:        movq    -0x8098(%rbp), %rcx
+    0.00 :   469fdf:        movl    0x1000c(%rbx), %eax
+    0.00 :   469fe5:        subq    0x14030(%rbx), %rcx
+    0.00 :   469fec:        movq    %rax, %r12
+    0.00 :   469fef:        shlq    $0x2, %rax
+    0.00 :   469ff3:        cmpq    %rax, %rcx
+    0.00 :   469ff6:        jb      0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   469ffc:        testq   %rax, %rax
+    0.00 :   469fff:        movl    $0x1, %edi
+    0.00 :   46a004:        movl    %edx, -0x8070(%rbp)
+    0.00 :   46a00a:        cmovneq %rax, %rdi
+    0.00 :   46a00e:        callq   0x4042b0 <_init+0x2b0>
+    0.00 :   46a013:        movq    %rax, -0x8068(%rbp)
+    0.00 :   46a01a:        movq    %rax, %rdi
+    0.00 :   46a01d:        testq   %rax, %rax
+    0.00 :   46a020:        je      0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   46a026:        testl   %r12d, %r12d
+    0.00 :   46a029:        movl    -0x8070(%rbp), %edx
+    0.00 :   46a02f:        je      0x46ab86 <efs_query_catalog_build+0x16e6>
+    0.00 :   46a035:        movq    -0x8090(%rbp), %rax
+    0.00 :   46a03c:        xorl    %esi, %esi
+    0.00 :   46a03e:        xorl    %r13d, %r13d
+    0.00 :   46a041:        xorl    %ebx, %ebx
+    0.00 :   46a043:        movq    0x10000(%rax), %r8
+    0.00 :   46a04a:        movq    %r8, %rax
+    0.00 :   46a04d:        nopl    (%rax)
+    4.55 :   46a050:        movl    0x10(%rax), %ecx
+    0.07 :   46a053:        andl    $0xf000, %ecx
+    0.00 :   46a059:        cmpl    $0x4000, %ecx
+    0.46 :   46a05f:        jne     0x46a0b0 <efs_query_catalog_build+0xc10>
+    0.08 :   46a061:        movl    0x14(%rax), %r9d
+    0.00 :   46a065:        testl   %r9d, %r9d
+    0.00 :   46a068:        je      0x46a07e <efs_query_catalog_build+0xbde>
+    0.07 :   46a06a:        cmpq    $0x1, (%rax)
+    0.00 :   46a06e:        je      0x46a07e <efs_query_catalog_build+0xbde>
+    0.00 :   46a070:        cmpq    $0x0, 0x120(%rax)
+    0.00 :   46a078:        je      0x46ab72 <efs_query_catalog_build+0x16d2>
+    0.08 :   46a07e:        movq    0xf0(%rax), %rcx
+    0.00 :   46a085:        vmovdqu 0xd0(%rax), %ymm0
+    0.00 :   46a08d:        incl    %r13d
+    0.00 :   46a090:        movq    %rcx, 0x118(%rax)
+    0.00 :   46a097:        movl    0x128(%rax), %ecx
+    0.00 :   46a09d:        vmovdqu %ymm0, 0xf8(%rax)
+    0.00 :   46a0a5:        testl   %ecx, %ecx
+    0.00 :   46a0a7:        jne     0x46a0b0 <efs_query_catalog_build+0xc10>
+    0.00 :   46a0a9:        movl    %ebx, %ecx
+    0.00 :   46a0ab:        incl    %ebx
+    0.00 :   46a0ad:        movl    %esi, (%rdi,%rcx,4)
+    0.07 :   46a0b0:        incl    %esi
+    0.00 :   46a0b2:        addq    $0x130, %rax
+    0.00 :   46a0b8:        cmpl    %esi, %r12d
+    0.20 :   46a0bb:        jne     0x46a050 <efs_query_catalog_build+0xbb0>
+    0.00 :   46a0bd:        testl   %ebx, %ebx
+    0.00 :   46a0bf:        je      0x46aba3 <efs_query_catalog_build+0x1703>
+    0.00 :   46a0c5:        movl    %r13d, -0x8078(%rbp)
+    0.00 :   46a0cc:        xorl    %r15d, %r15d
+    0.00 :   46a0cf:        movq    -0x8090(%rbp), %r13
+    0.00 :   46a0d6:        movl    %edx, -0x8080(%rbp)
+    0.00 :   46a0dc:        vzeroupper
+    0.00 :   46a0df:        movq    0x14050(%r13), %r12
+    0.00 :   46a0e6:        testq   %r12, %r12
+    0.00 :   46a0e9:        je      0x46a104 <efs_query_catalog_build+0xc64>
+    0.00 :   46a0eb:        movq    0x14058(%r13), %rdi
+    0.00 :   46a0f2:        callq   *%r12
+    0.00 :   46a0f5:        testl   %eax, %eax
+    0.00 :   46a0f7:        jne     0x46aa1f <efs_query_catalog_build+0x157f>
+    0.00 :   46a0fd:        movq    0x10000(%r13), %r8
+    0.00 :   46a104:        leal    0x1(%r15), %eax
+    0.00 :   46a108:        movl    %eax, -0x8070(%rbp)
+    0.00 :   46a10e:        movq    -0x8068(%rbp), %rax
+    0.00 :   46a115:        movl    (%rax,%r15,4), %r10d
+    0.00 :   46a119:        imulq   $0x130, %r10, %r10
+    0.00 :   46a120:        addq    %r8, %r10
+    0.28 :   46a123:        movq    0x120(%r10), %rax
+    0.00 :   46a12a:        testq   %rax, %rax
+    0.00 :   46a12d:        je      0x46a273 <efs_query_catalog_build+0xdd3>
+    0.00 :   46a133:        movl    0x10028(%r13), %r9d
+    0.90 :   46a13a:        movq    (%rax), %rdi
+    0.00 :   46a13d:        testl   %r9d, %r9d
+    0.00 :   46a140:        je      0x404cec <efs_query_catalog_build.cold>
+    0.00 :   46a146:        movq    %rdi, %rax
+    0.00 :   46a149:        movabsq $-0x40a7b892e31b1a47, %rdx
+    0.00 :   46a153:        leal    -0x1(%r9), %r11d
+    0.00 :   46a157:        movq    0x10020(%r13), %r14
+    0.00 :   46a15e:        shrq    $0x1e, %rax
+    0.00 :   46a162:        xorl    %ecx, %ecx
+    0.00 :   46a164:        xorq    %rdi, %rax
+    0.00 :   46a167:        imulq   %rdx, %rax
+    0.00 :   46a16b:        movq    %rax, %rdx
+    0.00 :   46a16e:        shrq    $0x1b, %rdx
+    0.00 :   46a172:        xorq    %rdx, %rax
+    0.00 :   46a175:        movabsq $-0x6b2fb644ecceee15, %rdx
+    0.00 :   46a17f:        imulq   %rdx, %rax
+    0.00 :   46a183:        movq    %rax, %rdx
+    0.00 :   46a186:        shrq    $0x1f, %rdx
+    0.00 :   46a18a:        xorq    %rdx, %rax
+    0.00 :   46a18d:        andl    %r11d, %eax
+    0.00 :   46a190:        jmp     0x46a1a8 <efs_query_catalog_build+0xd08>
+    0.00 :   46a192:        nopw    (%rax,%rax)
+    0.00 :   46a198:        incl    %eax
+    0.00 :   46a19a:        incl    %ecx
+    0.00 :   46a19c:        andl    %r11d, %eax
+    0.00 :   46a19f:        cmpl    %ecx, %r9d
+    0.00 :   46a1a2:        je      0x46abee <efs_query_catalog_build+0x174e>
+    0.00 :   46a1a8:        movl    %eax, %edx
+    0.14 :   46a1aa:        movl    (%r14,%rdx,4), %edx
+    0.00 :   46a1ae:        testl   %edx, %edx
+    0.00 :   46a1b0:        je      0x404cec <efs_query_catalog_build.cold>
+    0.00 :   46a1b6:        decl    %edx
+    0.07 :   46a1b8:        imulq   $0x130, %rdx, %rdx
+    0.00 :   46a1bf:        leaq    (%r8,%rdx), %rsi
+    0.21 :   46a1c3:        cmpq    (%rsi), %rdi
+    0.06 :   46a1c6:        jne     0x46a198 <efs_query_catalog_build+0xcf8>
+    0.00 :   46a1c8:        vmovdqu 0xf8(%rsi), %xmm0
+    0.00 :   46a1d0:        movq    0x108(%r10), %rax
+    0.00 :   46a1d7:        vpsrldq $0x8, %xmm0, %xmm1
+    0.00 :   46a1dc:        vpaddq  %xmm1, %xmm0, %xmm1
+    0.00 :   46a1e0:        vmovq   %xmm1, %rcx
+    0.00 :   46a1e5:        addq    0x108(%rsi), %rax
+    0.00 :   46a1ec:        jb      0x46ab68 <efs_query_catalog_build+0x16c8>
+    0.00 :   46a1f2:        vpaddq  0xf8(%r10), %xmm0, %xmm0
+    0.00 :   46a1fb:        movq    %rax, 0x108(%rsi)
+    0.00 :   46a202:        vmovdqu %xmm0, 0xf8(%rsi)
+    0.00 :   46a20a:        vmovdqu 0xf8(%r10), %xmm0
+    0.00 :   46a213:        vpsrldq $0x8, %xmm0, %xmm1
+    0.00 :   46a218:        vpaddq  %xmm1, %xmm0, %xmm0
+    0.00 :   46a21c:        vmovq   %xmm0, %rax
+    0.00 :   46a221:        testq   %rax, %rax
+    0.00 :   46a224:        je      0x46a24b <efs_query_catalog_build+0xdab>
+    0.00 :   46a226:        movq    0x118(%r10), %rax
+    0.00 :   46a22d:        movq    0x110(%r10), %rdi
+    0.00 :   46a234:        testq   %rcx, %rcx
+    0.00 :   46a237:        jne     0x46aa41 <efs_query_catalog_build+0x15a1>
+    0.00 :   46a23d:        movq    %rdi, 0x110(%rsi)
+    0.00 :   46a244:        movq    %rax, 0x118(%rsi)
+    0.00 :   46a24b:        decl    0x128(%rsi)
+    0.00 :   46a251:        jne     0x46a273 <efs_query_catalog_build+0xdd3>
+    0.00 :   46a253:        sarq    $0x4, %rdx
+    0.00 :   46a257:        movabsq $-0x79435e50d79435e5, %rcx
+    0.00 :   46a261:        movq    -0x8068(%rbp), %rsi
+    0.00 :   46a268:        movl    %ebx, %eax
+    0.00 :   46a26a:        imulq   %rcx, %rdx
+    0.00 :   46a26e:        incl    %ebx
+    0.00 :   46a270:        movl    %edx, (%rsi,%rax,4)
+    0.00 :   46a273:        cmpl    %ebx, -0x8070(%rbp)
+    0.00 :   46a279:        jae     0x46ab45 <efs_query_catalog_build+0x16a5>
+    0.00 :   46a27f:        incq    %r15
+    0.00 :   46a282:        testq   %r12, %r12
+    0.00 :   46a285:        jne     0x46a0df <efs_query_catalog_build+0xc3f>
+    0.00 :   46a28b:        movq    -0x8068(%rbp), %rsi
+    0.00 :   46a292:        movl    %r15d, %eax
+    0.00 :   46a295:        movl    -0x8078(%rbp), %r13d
+    0.00 :   46a29c:        movl    -0x8080(%rbp), %edx
+    0.00 :   46a2a2:        leaq    (%rsi,%rax,4), %r15
+    0.00 :   46a2a6:        movl    (%r15), %r9d
+    0.00 :   46a2a9:        imulq   $0x130, %r9, %r9
+    0.00 :   46a2b0:        addq    %r8, %r9
+    0.00 :   46a2b3:        movq    0x120(%r9), %rax
+    0.00 :   46a2ba:        testq   %rax, %rax
+    0.00 :   46a2bd:        je      0x46a40e <efs_query_catalog_build+0xf6e>
+    0.00 :   46a2c3:        movq    -0x8090(%rbp), %rdi
+    0.00 :   46a2ca:        movq    (%rax), %r11
+    0.00 :   46a2cd:        movl    0x10028(%rdi), %r10d
+    0.00 :   46a2d4:        testl   %r10d, %r10d
+    0.00 :   46a2d7:        je      0x404cec <efs_query_catalog_build.cold>
+    0.00 :   46a2dd:        movq    %r11, %rax
+    0.00 :   46a2e0:        movabsq $-0x40a7b892e31b1a47, %rsi
+    0.00 :   46a2ea:        leal    -0x1(%r10), %r14d
+    0.00 :   46a2ee:        movq    0x10020(%rdi), %r12
+    0.00 :   46a2f5:        shrq    $0x1e, %rax
+    0.00 :   46a2f9:        xorq    %r11, %rax
+    0.00 :   46a2fc:        imulq   %rsi, %rax
+    0.00 :   46a300:        xorl    %esi, %esi
+    0.00 :   46a302:        movq    %rax, %rcx
+    0.00 :   46a305:        shrq    $0x1b, %rcx
+    0.00 :   46a309:        xorq    %rax, %rcx
+    0.00 :   46a30c:        movabsq $-0x6b2fb644ecceee15, %rax
+    0.00 :   46a316:        imulq   %rax, %rcx
+    0.00 :   46a31a:        movq    %rcx, %rax
+    0.00 :   46a31d:        shrq    $0x1f, %rax
+    0.00 :   46a321:        xorq    %rcx, %rax
+    0.00 :   46a324:        andl    %r14d, %eax
+    0.00 :   46a327:        jmp     0x46a340 <efs_query_catalog_build+0xea0>
+    0.00 :   46a329:        nopl    (%rax)
+    0.00 :   46a330:        incl    %eax
+    0.00 :   46a332:        incl    %esi
+    0.00 :   46a334:        andl    %r14d, %eax
+    0.00 :   46a337:        cmpl    %r10d, %esi
+    0.00 :   46a33a:        je      0x46abe9 <efs_query_catalog_build+0x1749>
+    0.00 :   46a340:        movl    %eax, %ecx
+    0.00 :   46a342:        movl    (%r12,%rcx,4), %ecx
+    0.00 :   46a346:        testl   %ecx, %ecx
+    0.00 :   46a348:        je      0x404cec <efs_query_catalog_build.cold>
+    0.00 :   46a34e:        decl    %ecx
+    0.00 :   46a350:        imulq   $0x130, %rcx, %rcx
+    0.00 :   46a357:        leaq    (%r8,%rcx), %rdi
+    0.00 :   46a35b:        cmpq    %r11, (%rdi)
+    0.00 :   46a35e:        jne     0x46a330 <efs_query_catalog_build+0xe90>
+    0.00 :   46a360:        vmovdqu 0xf8(%rdi), %xmm0
+    0.00 :   46a368:        movq    0x108(%r9), %rax
+    0.00 :   46a36f:        vpsrldq $0x8, %xmm0, %xmm1
+    0.00 :   46a374:        vpaddq  %xmm1, %xmm0, %xmm1
+    0.00 :   46a378:        vmovq   %xmm1, %rsi
+    0.00 :   46a37d:        addq    0x108(%rdi), %rax
+    0.00 :   46a384:        jb      0x46ab68 <efs_query_catalog_build+0x16c8>
+    0.00 :   46a38a:        vpaddq  0xf8(%r9), %xmm0, %xmm0
+    0.00 :   46a393:        movq    %rax, 0x108(%rdi)
+    0.00 :   46a39a:        vmovdqu %xmm0, 0xf8(%rdi)
+    0.00 :   46a3a2:        vmovdqu 0xf8(%r9), %xmm0
+    0.00 :   46a3ab:        vpsrldq $0x8, %xmm0, %xmm1
+    0.00 :   46a3b0:        vpaddq  %xmm1, %xmm0, %xmm0
+    0.00 :   46a3b4:        vmovq   %xmm0, %rax
+    0.00 :   46a3b9:        testq   %rax, %rax
+    0.00 :   46a3bc:        je      0x46a3e3 <efs_query_catalog_build+0xf43>
+    0.00 :   46a3be:        movq    0x118(%r9), %r10
+    0.00 :   46a3c5:        movq    0x110(%r9), %rax
+    0.00 :   46a3cc:        testq   %rsi, %rsi
+    0.00 :   46a3cf:        jne     0x46aa63 <efs_query_catalog_build+0x15c3>
+    0.00 :   46a3d5:        movq    %rax, 0x110(%rdi)
+    0.00 :   46a3dc:        movq    %r10, 0x118(%rdi)
+    0.00 :   46a3e3:        decl    0x128(%rdi)
+    0.00 :   46a3e9:        jne     0x46a40e <efs_query_catalog_build+0xf6e>
+    0.00 :   46a3eb:        movq    %rcx, %rax
+    0.00 :   46a3ee:        movabsq $-0x79435e50d79435e5, %rcx
+    0.00 :   46a3f8:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46a3ff:        movl    %ebx, %esi
+    0.00 :   46a401:        sarq    $0x4, %rax
+    0.00 :   46a405:        incl    %ebx
+    0.00 :   46a407:        imulq   %rcx, %rax
+    0.00 :   46a40b:        movl    %eax, (%rdi,%rsi,4)
+    0.00 :   46a40e:        incl    -0x8070(%rbp)
+    0.00 :   46a414:        addq    $0x4, %r15
+    0.00 :   46a418:        movl    -0x8070(%rbp), %eax
+    0.00 :   46a41e:        cmpl    %ebx, %eax
+    0.00 :   46a420:        jb      0x46a2a6 <efs_query_catalog_build+0xe06>
+    0.00 :   46a426:        movl    -0x8070(%rbp), %eax
+    0.00 :   46a42c:        movl    %edx, -0x8078(%rbp)
+    0.00 :   46a432:        cmpl    %eax, %r13d
+    0.00 :   46a435:        je      0x46ab07 <efs_query_catalog_build+0x1667>
+    0.00 :   46a43b:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46a442:        callq   0x404450 <_init+0x450>
+    0.00 :   46a447:        movl    $0xfffffff9, %edx
+    0.00 :   46a44c:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   46a451:        nopl    (%rax)
+    0.00 :   46a458:        movq    -0x8070(%rbp), %rdi
+    0.00 :   46a45f:        movq    %rsi, %rax
+    0.00 :   46a462:        andl    $0xfff, %eax
+    0.22 :   46a467:        movq    (%rdi,%rax,8), %rdi
+    0.13 :   46a46b:        cmpq    %rdi, (%r15,%rax,8)
+    0.00 :   46a46f:        jne     0x469ddf <efs_query_catalog_build+0x93f>
+    0.17 :   46a475:        movl    0x10(%r13), %eax
+    0.36 :   46a479:        andl    $0xf000, %eax
+    0.08 :   46a47e:        cmpl    $0x4000, %eax
+    0.00 :   46a483:        je      0x46a5b0 <efs_query_catalog_build+0x1110>
+    0.60 :   46a489:        movq    0x28(%r13), %rcx
+    0.00 :   46a48d:        xorl    %r14d, %r14d
+    0.49 :   46a490:        jmp     0x46a4a9 <efs_query_catalog_build+0x1009>
+    0.00 :   46a492:        nopw    %cs:(%rax,%rax)
+    0.00 :   46a49d:        nopl    (%rax)
+    0.06 :   46a4a0:        incl    %r14d
+    1.61 :   46a4a3:        cmpl    $0x40, %r14d
+    0.30 :   46a4a7:        je      0x46a4f0 <efs_query_catalog_build+0x1050>
+    2.34 :   46a4a9:        btq     %r14, %rcx
+   20.70 :   46a4ad:        jae     0x46a4a0 <efs_query_catalog_build+0x1000>
+    0.06 :   46a4af:        movq    %rcx, -0x8068(%rbp)
+    0.52 :   46a4b6:        movq    (%r13), %rdi
+    0.00 :   46a4ba:        movl    %r14d, %esi
+    0.66 :   46a4bd:        vzeroupper
+    0.36 :   46a4c0:        callq   0x45a200 <efs_kv_lane_shard>
+    0.00 :   46a4c5:        movq    -0x8070(%rbp), %rsi
+    0.00 :   46a4cc:        movq    -0x8068(%rbp), %rcx
+    0.00 :   46a4d3:        movl    %eax, %eax
+    0.45 :   46a4d5:        movq    (%rsi,%rax,8), %rdi
+    0.00 :   46a4d9:        cmpq    %rdi, (%r15,%rax,8)
+    0.30 :   46a4dd:        je      0x46a4a0 <efs_query_catalog_build+0x1000>
+    0.00 :   46a4df:        movq    (%r13), %rsi
+    0.00 :   46a4e3:        jmp     0x469de2 <efs_query_catalog_build+0x942>
+    0.00 :   46a4e8:        nopl    (%rax,%rax)
+    4.60 :   46a4f0:        movq    -0x8070(%rbp), %rdi
+    0.00 :   46a4f7:        movq    (%r13), %rsi
+    1.73 :   46a4fb:        movl    0x10028(%rdi,%rbx,4), %eax
+    0.80 :   46a502:        addl    %r12d, %eax
+    0.38 :   46a505:        subl    0x10028(%r15,%rbx,4), %eax
+    0.71 :   46a50d:        imulq   $0x130, %rax, %rax
+    0.65 :   46a514:        addq    0x10000(%rdi), %rax
+    2.86 :   46a51b:        cmpq    %rsi, (%rax)
+    0.00 :   46a51e:        jne     0x46a720 <efs_query_catalog_build+0x1280>
+    3.52 :   46a524:        vmovdqu 0x80(%rax), %ymm0
+    0.00 :   46a52c:        movl    $0x1, %edx
+    0.47 :   46a531:        vmovdqu %ymm0, 0x80(%r13)
+    0.72 :   46a53a:        vmovdqu 0xa0(%rax), %ymm0
+    0.30 :   46a542:        vmovdqu %ymm0, 0xa0(%r13)
+    0.19 :   46a54b:        vmovdqu 0xc0(%rax), %xmm0
+    0.06 :   46a553:        xorl    %eax, %eax
+    0.00 :   46a555:        vmovdqu %xmm0, 0xc0(%r13)
+    0.40 :   46a55e:        jmp     0x469e08 <efs_query_catalog_build+0x968>
+    0.00 :   46a563:        nopl    (%rax,%rax)
+    0.00 :   46a568:        movl    0x1002c(%rsi,%rbx,4), %edx
+    0.00 :   46a56f:        movl    %eax, %ecx
+    0.00 :   46a571:        subl    0x10028(%r15,%rbx,4), %ecx
+    0.00 :   46a579:        subl    0x10028(%rsi,%rbx,4), %edx
+    0.00 :   46a580:        cmpl    %edx, %ecx
+    0.00 :   46a582:        jne     0x46a720 <efs_query_catalog_build+0x1280>
+    0.00 :   46a588:        movl    0x10028(%r15,%rbx,4), %r12d
+    0.00 :   46a590:        movb    $0x0, -0x8080(%rbp)
+    0.00 :   46a597:        cmpl    %eax, %r12d
+    0.00 :   46a59a:        jb      0x469d74 <efs_query_catalog_build+0x8d4>
+    0.00 :   46a5a0:        xorl    %eax, %eax
+    0.00 :   46a5a2:        movl    $0x1, %edx
+    0.00 :   46a5a7:        jmp     0x469e28 <efs_query_catalog_build+0x988>
+    0.00 :   46a5ac:        nopl    (%rax)
+    0.00 :   46a5b0:        xorl    %ecx, %ecx
+    0.06 :   46a5b2:        cmpb    $0x0, 0x38(%r13)
+    0.00 :   46a5b7:        je      0x46a48d <efs_query_catalog_build+0xfed>
+    0.00 :   46a5bd:        movq    0x48(%r13), %rcx
+    0.00 :   46a5c1:        jmp     0x46a48d <efs_query_catalog_build+0xfed>
+    0.00 :   46a5c6:        vmovdqu 0xd0(%rax), %xmm0
+    0.00 :   46a5ce:        movq    0x18(%r12), %rcx
+    0.00 :   46a5d3:        vpsrldq $0x8, %xmm0, %xmm1
+    0.00 :   46a5d8:        vpaddq  %xmm1, %xmm0, %xmm1
+    0.00 :   46a5dc:        vmovq   %xmm1, %rdx
+    0.00 :   46a5e1:        addq    0xe0(%rax), %rcx
+    0.00 :   46a5e8:        jb      0x46aaea <efs_query_catalog_build+0x164a>
+    0.00 :   46a5ee:        vpaddq  0x8(%r12), %xmm0, %xmm0
+    0.00 :   46a5f5:        movq    %rcx, 0xe0(%rax)
+    0.00 :   46a5fc:        vmovdqu %xmm0, 0xd0(%rax)
+    0.00 :   46a604:        movq    0x28(%r12), %rcx
+    0.00 :   46a609:        movq    0x20(%r12), %r11
+    0.00 :   46a60e:        testq   %rdx, %rdx
+    0.00 :   46a611:        jne     0x46a9fd <efs_query_catalog_build+0x155d>
+    0.00 :   46a617:        movq    %r11, 0xe8(%rax)
+    0.00 :   46a61e:        movq    %rcx, 0xf0(%rax)
+    0.00 :   46a625:        movl    0x58(%r12), %edx
+    0.00 :   46a62a:        incl    %r13d
+    0.00 :   46a62d:        addq    $0x60, %r15
+    0.00 :   46a631:        addl    %edx, 0x128(%rax)
+    0.00 :   46a637:        cmpl    %r10d, %r13d
+    0.00 :   46a63a:        jb      0x46a910 <efs_query_catalog_build+0x1470>
+    0.00 :   46a640:        movl    -0x8070(%rbp), %r14d
+    0.00 :   46a647:        movq    -0x8078(%rbp), %r12
+    0.00 :   46a64e:        movq    -0x8068(%rbp), %rax
+    0.00 :   46a655:        movl    0xc(%rax), %eax
+    0.00 :   46a658:        testl   %eax, %eax
+    0.00 :   46a65a:        je      0x46aafb <efs_query_catalog_build+0x165b>
+    0.00 :   46a660:        movl    0x10028(%rbx), %r9d
+    0.00 :   46a667:        testl   %r9d, %r9d
+    0.00 :   46a66a:        je      0x46a716 <efs_query_catalog_build+0x1276>
+    0.00 :   46a670:        movq    -0x8068(%rbp), %rsi
+    0.00 :   46a677:        movq    0x10020(%rbx), %rdi
+    0.00 :   46a67e:        movl    %r14d, -0x8068(%rbp)
+    0.00 :   46a685:        leal    -0x1(%r9), %r8d
+    0.00 :   46a689:        movabsq $-0x40a7b892e31b1a47, %r15
+    0.00 :   46a693:        movabsq $-0x6b2fb644ecceee15, %r13
+    0.00 :   46a69d:        movq    0x228(%rsi), %r10
+    0.00 :   46a6a4:        movq    (%r10), %r11
+    0.00 :   46a6a7:        leaq    (%r10,%rax,8), %rax
+    0.00 :   46a6ab:        movq    %rax, %r14
+    0.00 :   46a6ae:        movq    0x8(%r11), %rsi
+    0.00 :   46a6b2:        nopw    (%rax,%rax)
+    0.00 :   46a6b8:        movq    %rsi, %rax
+    0.00 :   46a6bb:        xorl    %ecx, %ecx
+    0.00 :   46a6bd:        shrq    $0x1e, %rax
+    0.00 :   46a6c1:        xorq    %rsi, %rax
+    0.00 :   46a6c4:        imulq   %r15, %rax
+    0.00 :   46a6c8:        movq    %rax, %rdx
+    0.00 :   46a6cb:        shrq    $0x1b, %rdx
+    0.00 :   46a6cf:        xorq    %rdx, %rax
+    0.00 :   46a6d2:        imulq   %r13, %rax
+    0.00 :   46a6d6:        movq    %rax, %rdx
+    0.00 :   46a6d9:        shrq    $0x1f, %rdx
+    0.00 :   46a6dd:        xorq    %rdx, %rax
+    0.00 :   46a6e0:        andl    %r8d, %eax
+    0.00 :   46a6e3:        nopl    (%rax,%rax)
+    0.00 :   46a6e8:        movl    %eax, %edx
+    0.00 :   46a6ea:        movl    (%rdi,%rdx,4), %edx
+    0.00 :   46a6ed:        testl   %edx, %edx
+    0.00 :   46a6ef:        je      0x46a716 <efs_query_catalog_build+0x1276>
+    0.00 :   46a6f1:        decl    %edx
+    0.00 :   46a6f3:        imulq   $0x130, %rdx, %rdx
+    0.00 :   46a6fa:        addq    0x10000(%rbx), %rdx
+    0.14 :   46a701:        cmpq    %rsi, (%rdx)
+    0.22 :   46a704:        je      0x46a9c2 <efs_query_catalog_build+0x1522>
+    0.00 :   46a70a:        incl    %eax
+    0.00 :   46a70c:        incl    %ecx
+    0.00 :   46a70e:        andl    %r8d, %eax
+    0.00 :   46a711:        cmpl    %ecx, %r9d
+    0.00 :   46a714:        jne     0x46a6e8 <efs_query_catalog_build+0x1248>
+    0.00 :   46a716:        movl    $0xfffffff9, %edx
+    0.00 :   46a71b:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   46a720:        movl    $0xfffffff9, %edx
+    0.00 :   46a725:        vzeroupper
+    0.00 :   46a728:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   46a72d:        addq    $0x8, %rsi
+    0.00 :   46a731:        cmpq    $0x200, %rsi
+    0.14 :   46a738:        jne     0x469e9b <efs_query_catalog_build+0x9fb>
+    0.00 :   46a73e:        movq    -0x8098(%rbp), %rdx
+    0.00 :   46a745:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46a74c:        subq    0x14030(%rbx), %rdx
+    0.00 :   46a753:        cmpq    0x218(%rdi), %rdx
+    0.00 :   46a75a:        jb      0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   46a760:        lock
+    0.00 :   46a761:        incl    (%rdi)
+    0.00 :   46a763:        xorl    %r15d, %r15d
+    0.00 :   46a766:        xorl    %r13d, %r13d
+    0.00 :   46a769:        movq    %rdi, 0x8000(%rbx,%rax,8)
+    0.00 :   46a771:        movq    0x218(%rdi), %rax
+    0.00 :   46a778:        incl    0x1001c(%rbx)
+    0.00 :   46a77e:        addq    %rax, 0x14030(%rbx)
+    0.00 :   46a785:        movl    0x4(%rdi), %eax
+    0.00 :   46a788:        testl   %eax, %eax
+    0.00 :   46a78a:        je      0x46a64e <efs_query_catalog_build+0x11ae>
+    0.00 :   46a790:        movl    %r14d, -0x8070(%rbp)
+    0.00 :   46a797:        movq    %r12, -0x8078(%rbp)
+    0.00 :   46a79e:        nop
+    0.00 :   46a7a0:        movq    0x14050(%rbx), %r12
+    0.00 :   46a7a7:        testq   %r12, %r12
+    0.00 :   46a7aa:        je      0x46a7be <efs_query_catalog_build+0x131e>
+    0.00 :   46a7ac:        movq    0x14058(%rbx), %rdi
+    0.00 :   46a7b3:        callq   *%r12
+    0.00 :   46a7b6:        testl   %eax, %eax
+    0.00 :   46a7b8:        jne     0x469da1 <efs_query_catalog_build+0x901>
+    0.00 :   46a7be:        movq    -0x8068(%rbp), %rax
+    0.00 :   46a7c5:        movl    0x10028(%rbx), %r8d
+    0.00 :   46a7cc:        movq    0x220(%rax), %r14
+    0.00 :   46a7d3:        leaq    (%r14,%r15), %r11
+    0.07 :   46a7d7:        movq    (%r11), %r10
+    0.00 :   46a7da:        testl   %r8d, %r8d
+    0.00 :   46a7dd:        je      0x46a85d <efs_query_catalog_build+0x13bd>
+    0.00 :   46a7df:        movq    %r10, %rdx
+    0.00 :   46a7e2:        movabsq $-0x40a7b892e31b1a47, %rax
+    0.00 :   46a7ec:        leal    -0x1(%r8), %r9d
+    0.00 :   46a7f0:        movq    0x10020(%rbx), %rdi
+    0.00 :   46a7f7:        shrq    $0x1e, %rdx
+    0.00 :   46a7fb:        xorl    %ecx, %ecx
+    0.00 :   46a7fd:        xorq    %r10, %rdx
+    0.00 :   46a800:        imulq   %rax, %rdx
+    0.00 :   46a804:        movq    %rdx, %rax
+    0.00 :   46a807:        shrq    $0x1b, %rax
+    0.00 :   46a80b:        xorq    %rax, %rdx
+    0.00 :   46a80e:        movabsq $-0x6b2fb644ecceee15, %rax
+    0.00 :   46a818:        imulq   %rax, %rdx
+    0.00 :   46a81c:        movq    %rdx, %rax
+    0.00 :   46a81f:        shrq    $0x1f, %rax
+    0.00 :   46a823:        xorq    %rax, %rdx
+    0.00 :   46a826:        andl    %r9d, %edx
+    0.00 :   46a829:        nopl    (%rax)
+    0.00 :   46a830:        movl    %edx, %eax
+    0.91 :   46a832:        movl    (%rdi,%rax,4), %eax
+    0.00 :   46a835:        testl   %eax, %eax
+    0.00 :   46a837:        je      0x46a85d <efs_query_catalog_build+0x13bd>
+    0.00 :   46a839:        decl    %eax
+    0.00 :   46a83b:        movq    0x10000(%rbx), %rsi
+    0.00 :   46a842:        imulq   $0x130, %rax, %rax
+    0.00 :   46a849:        addq    %rsi, %rax
+    0.33 :   46a84c:        cmpq    (%rax), %r10
+    0.36 :   46a84f:        je      0x46a870 <efs_query_catalog_build+0x13d0>
+    0.00 :   46a851:        incl    %edx
+    0.00 :   46a853:        incl    %ecx
+    0.00 :   46a855:        andl    %r9d, %edx
+    0.00 :   46a858:        cmpl    %ecx, %r8d
+    0.00 :   46a85b:        jne     0x46a830 <efs_query_catalog_build+0x1390>
+    0.00 :   46a85d:        movl    $0xffffffff, %edx
+    0.00 :   46a862:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   46a867:        nopw    (%rax,%rax)
+    0.07 :   46a870:        vmovdqu 0xd0(%rax), %xmm0
+    0.00 :   46a878:        movq    0x18(%r11), %rcx
+    0.00 :   46a87c:        vpsrldq $0x8, %xmm0, %xmm1
+    0.00 :   46a881:        vpaddq  %xmm1, %xmm0, %xmm1
+    0.00 :   46a885:        vmovq   %xmm1, %rdx
+    0.00 :   46a88a:        addq    0xe0(%rax), %rcx
+    0.00 :   46a891:        jb      0x46aaea <efs_query_catalog_build+0x164a>
+    0.00 :   46a897:        vpaddq  0x8(%r11), %xmm0, %xmm0
+    0.00 :   46a89d:        movq    %rcx, 0xe0(%rax)
+    0.00 :   46a8a4:        vmovdqu %xmm0, 0xd0(%rax)
+    0.00 :   46a8ac:        movq    0x28(%r11), %rcx
+    0.00 :   46a8b0:        movq    0x20(%r11), %r10
+    0.00 :   46a8b4:        testq   %rdx, %rdx
+    0.00 :   46a8b7:        jne     0x46a9a0 <efs_query_catalog_build+0x1500>
+    0.00 :   46a8bd:        movq    %r10, 0xe8(%rax)
+    0.00 :   46a8c4:        movq    %rcx, 0xf0(%rax)
+    0.00 :   46a8cb:        movl    0x58(%r11), %edx
+    0.00 :   46a8cf:        incl    %r13d
+    0.00 :   46a8d2:        addl    %edx, 0x128(%rax)
+    0.00 :   46a8d8:        movq    -0x8068(%rbp), %rax
+    0.00 :   46a8df:        movl    0x4(%rax), %r10d
+    0.00 :   46a8e3:        cmpl    %r10d, %r13d
+    0.00 :   46a8e6:        jae     0x46a640 <efs_query_catalog_build+0x11a0>
+    0.00 :   46a8ec:        addq    $0x60, %r15
+    0.00 :   46a8f0:        testq   %r12, %r12
+    0.00 :   46a8f3:        jne     0x46a7a0 <efs_query_catalog_build+0x1300>
+    0.00 :   46a8f9:        movl    %r13d, %eax
+    0.00 :   46a8fc:        leaq    (%rax,%rax,2), %rax
+    0.00 :   46a900:        shlq    $0x5, %rax
+    0.00 :   46a904:        movq    %rax, %r15
+    0.00 :   46a907:        nopw    (%rax,%rax)
+    0.00 :   46a910:        leaq    (%r14,%r15), %r12
+    0.00 :   46a914:        movabsq $-0x40a7b892e31b1a47, %rax
+    0.00 :   46a91e:        movabsq $-0x6b2fb644ecceee15, %rcx
+    0.00 :   46a928:        movq    (%r12), %r11
+    0.00 :   46a92c:        movq    %r11, %rdx
+    0.00 :   46a92f:        shrq    $0x1e, %rdx
+    0.00 :   46a933:        xorq    %r11, %rdx
+    0.00 :   46a936:        imulq   %rax, %rdx
+    0.00 :   46a93a:        movq    %rdx, %rax
+    0.00 :   46a93d:        shrq    $0x1b, %rax
+    0.00 :   46a941:        xorq    %rdx, %rax
+    0.00 :   46a944:        imulq   %rcx, %rax
+    0.00 :   46a948:        xorl    %ecx, %ecx
+    0.00 :   46a94a:        movq    %rax, %rdx
+    0.00 :   46a94d:        shrq    $0x1f, %rdx
+    0.00 :   46a951:        xorq    %rax, %rdx
+    0.00 :   46a954:        andl    %r9d, %edx
+    0.00 :   46a957:        nopw    (%rax,%rax)
+    0.00 :   46a960:        movl    %edx, %eax
+    0.00 :   46a962:        movl    (%rdi,%rax,4), %eax
+    0.00 :   46a965:        testl   %eax, %eax
+    0.00 :   46a967:        je      0x46a85d <efs_query_catalog_build+0x13bd>
+    0.00 :   46a96d:        decl    %eax
+    0.00 :   46a96f:        imulq   $0x130, %rax, %rax
+    0.00 :   46a976:        addq    %rsi, %rax
+    0.00 :   46a979:        cmpq    %r11, (%rax)
+    0.00 :   46a97c:        je      0x46a5c6 <efs_query_catalog_build+0x1126>
+    0.00 :   46a982:        incl    %edx
+    0.00 :   46a984:        incl    %ecx
+    0.00 :   46a986:        andl    %r9d, %edx
+    0.00 :   46a989:        cmpl    %ecx, %r8d
+    0.00 :   46a98c:        jne     0x46a960 <efs_query_catalog_build+0x14c0>
+    0.00 :   46a98e:        movl    $0xffffffff, %edx
+    0.00 :   46a993:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   46a998:        nopl    (%rax,%rax)
+    0.00 :   46a9a0:        cmpq    0xe8(%rax), %r10
+    0.00 :   46a9a7:        jae     0x46a9b0 <efs_query_catalog_build+0x1510>
+    0.00 :   46a9a9:        movq    %r10, 0xe8(%rax)
+    0.00 :   46a9b0:        cmpq    %rcx, 0xf0(%rax)
+    0.00 :   46a9b7:        jae     0x46a8cb <efs_query_catalog_build+0x142b>
+    0.00 :   46a9bd:        jmp     0x46a8c4 <efs_query_catalog_build+0x1424>
+    0.00 :   46a9c2:        cmpq    $0x0, 0x120(%rdx)
+    0.00 :   46a9ca:        jne     0x46a716 <efs_query_catalog_build+0x1276>
+    0.00 :   46a9d0:        movq    (%r11), %rax
+    0.00 :   46a9d3:        cmpq    %rax, 0x18(%rdx)
+    0.00 :   46a9d7:        jne     0x46a716 <efs_query_catalog_build+0x1276>
+    0.00 :   46a9dd:        addq    $0x8, %r10
+    0.00 :   46a9e1:        movq    %r11, 0x120(%rdx)
+    0.00 :   46a9e8:        cmpq    %r10, %r14
+    0.00 :   46a9eb:        je      0x46aaf4 <efs_query_catalog_build+0x1654>
+    0.00 :   46a9f1:        movq    (%r10), %r11
+    0.00 :   46a9f4:        movq    0x8(%r11), %rsi
+    0.00 :   46a9f8:        jmp     0x46a6b8 <efs_query_catalog_build+0x1218>
+    0.00 :   46a9fd:        cmpq    0xe8(%rax), %r11
+    0.00 :   46aa04:        jae     0x46aa0d <efs_query_catalog_build+0x156d>
+    0.00 :   46aa06:        movq    %r11, 0xe8(%rax)
+    0.00 :   46aa0d:        cmpq    %rcx, 0xf0(%rax)
+    0.00 :   46aa14:        jae     0x46a625 <efs_query_catalog_build+0x1185>
+    0.00 :   46aa1a:        jmp     0x46a61e <efs_query_catalog_build+0x117e>
+    0.00 :   46aa1f:        movl    $0xfffffff3, %edx
+    0.00 :   46aa24:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46aa2b:        movl    %edx, -0x8070(%rbp)
+    0.00 :   46aa31:        callq   0x404450 <_init+0x450>
+    0.00 :   46aa36:        movl    -0x8070(%rbp), %edx
+    0.00 :   46aa3c:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   46aa41:        cmpq    0x110(%rsi), %rdi
+    0.00 :   46aa48:        jae     0x46aa51 <efs_query_catalog_build+0x15b1>
+    0.00 :   46aa4a:        movq    %rdi, 0x110(%rsi)
+    0.00 :   46aa51:        cmpq    %rax, 0x118(%rsi)
+    0.00 :   46aa58:        jae     0x46a24b <efs_query_catalog_build+0xdab>
+    0.00 :   46aa5e:        jmp     0x46a244 <efs_query_catalog_build+0xda4>
+    0.00 :   46aa63:        cmpq    0x110(%rdi), %rax
+    0.00 :   46aa6a:        jae     0x46aa73 <efs_query_catalog_build+0x15d3>
+    0.00 :   46aa6c:        movq    %rax, 0x110(%rdi)
+    0.00 :   46aa73:        cmpq    %r10, 0x118(%rdi)
+    0.00 :   46aa7a:        jae     0x46a3e3 <efs_query_catalog_build+0xf43>
+    0.00 :   46aa80:        jmp     0x46a3dc <efs_query_catalog_build+0xf3c>
+    0.00 :   46aa85:        imulq   $0x130, %rax, %rsi
+    0.00 :   46aa8c:        movq    0x10000(%rbx), %rdi
+    0.00 :   46aa93:        callq   0x404a70 <_init+0xa70>
+    0.00 :   46aa98:        movq    %rax, %rcx
+    0.00 :   46aa9b:        movl    0x1000c(%rbx), %eax
+    0.00 :   46aaa1:        testq   %rcx, %rcx
+    0.00 :   46aaa4:        je      0x46aac9 <efs_query_catalog_build+0x1629>
+    0.00 :   46aaa6:        movl    0x10010(%rbx), %edx
+    0.00 :   46aaac:        movq    %rcx, 0x10000(%rbx)
+    0.00 :   46aab3:        movl    %eax, 0x10010(%rbx)
+    0.00 :   46aab9:        subl    %eax, %edx
+    0.00 :   46aabb:        imulq   $0x130, %rdx, %rdx
+    0.00 :   46aac2:        subq    %rdx, 0x14030(%rbx)
+    0.00 :   46aac9:        testl   %eax, %eax
+    0.00 :   46aacb:        jne     0x469bd5 <efs_query_catalog_build+0x735>
+    0.00 :   46aad1:        jmp     0x469d1b <efs_query_catalog_build+0x87b>
+    0.00 :   46aad6:        nopw    %cs:(%rax,%rax)
+    0.00 :   46aae0:        movl    $0xfffffffe, %edx
+    0.00 :   46aae5:        jmp     0x4695c1 <efs_query_catalog_build+0x121>
+    0.00 :   46aaea:        movl    $0xfffffff5, %edx
+    0.00 :   46aaef:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   46aaf4:        movl    -0x8068(%rbp), %r14d
+    0.00 :   46aafb:        xorl    %edx, %edx
+    0.00 :   46aafd:        movl    $0x1, %eax
+    0.00 :   46ab02:        jmp     0x469fb5 <efs_query_catalog_build+0xb15>
+    0.00 :   46ab07:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46ab0e:        callq   0x404450 <_init+0x450>
+    0.00 :   46ab13:        movl    -0x8078(%rbp), %edx
+    0.00 :   46ab19:        movq    -0x8090(%rbp), %rax
+    0.00 :   46ab20:        movq    -0x80a0(%rbp), %rbx
+    0.00 :   46ab27:        movq    $0x0, 0x14050(%rax)
+    0.00 :   46ab32:        movq    $0x0, 0x14058(%rax)
+    0.00 :   46ab3d:        movq    %rax, (%rbx)
+    0.00 :   46ab40:        jmp     0x4698a2 <efs_query_catalog_build+0x402>
+    0.00 :   46ab45:        movl    -0x8078(%rbp), %r13d
+    0.00 :   46ab4c:        movl    -0x8080(%rbp), %edx
+    0.00 :   46ab52:        jmp     0x46a426 <efs_query_catalog_build+0xf86>
+    0.00 :   46ab57:        movl    %eax, %edx
+    0.00 :   46ab59:        jmp     0x4695c1 <efs_query_catalog_build+0x121>
+    0.00 :   46ab5e:        movl    $0xfffffffe, %edx
+    0.00 :   46ab63:        jmp     0x4698a2 <efs_query_catalog_build+0x402>
+    0.00 :   46ab68:        movl    $0xfffffff5, %edx
+    0.00 :   46ab6d:        jmp     0x46aa24 <efs_query_catalog_build+0x1584>
+    0.00 :   46ab72:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46ab79:        vzeroupper
+    0.00 :   46ab7c:        callq   0x404450 <_init+0x450>
+    0.00 :   46ab81:        jmp     0x46a85d <efs_query_catalog_build+0x13bd>
+    0.00 :   46ab86:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46ab8d:        movl    %edx, -0x8070(%rbp)
+    0.00 :   46ab93:        callq   0x404450 <_init+0x450>
+    0.00 :   46ab98:        movl    -0x8070(%rbp), %edx
+    0.00 :   46ab9e:        jmp     0x46ab19 <efs_query_catalog_build+0x1679>
+    0.00 :   46aba3:        testl   %r13d, %r13d
+    0.00 :   46aba6:        je      0x46abc9 <efs_query_catalog_build+0x1729>
+    0.00 :   46aba8:        vzeroupper
+    0.00 :   46abab:        jmp     0x46a43b <efs_query_catalog_build+0xf9b>
+    0.00 :   46abb0:        vzeroupper
+    0.00 :   46abb3:        jmp     0x469990 <efs_query_catalog_build+0x4f0>
+    0.00 :   46abb8:        movl    0x1000c(%rsi), %eax
+    0.00 :   46abbe:        movl    %eax, 0x1402c(%rsi)
+    0.00 :   46abc4:        jmp     0x4698fd <efs_query_catalog_build+0x45d>
+    0.00 :   46abc9:        movl    %edx, -0x8070(%rbp)
+    0.00 :   46abcf:        movq    -0x8068(%rbp), %rdi
+    0.00 :   46abd6:        vzeroupper
+    0.00 :   46abd9:        callq   0x404450 <_init+0x450>
+    0.00 :   46abde:        movl    -0x8070(%rbp), %edx
+    0.00 :   46abe4:        jmp     0x46ab19 <efs_query_catalog_build+0x1679>
+    0.00 :   46abe9:        jmp     0x404cec <efs_query_catalog_build.cold>
+    0.00 :   46abee:        jmp     0x404cec <efs_query_catalog_build.cold>

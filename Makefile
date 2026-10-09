@@ -50,6 +50,7 @@ endif
 COMMON_SRCS = src/common/admission.c src/meta/append_plan.c $(COMMON_DIR)/publication.c $(COMMON_DIR)/publication_ack.c \
               $(COMMON_DIR)/common.c \
               $(COMMON_DIR)/log_ts.c \
+              $(COMMON_DIR)/batch_obs.c \
               $(COMMON_DIR)/version.c \
               $(COMMON_DIR)/protocol.c \
               src/wire/wire.c \

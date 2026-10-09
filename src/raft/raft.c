@@ -1,4 +1,5 @@
 #include "efs/raft.h"
+#include "efs/batch_obs.h"
 #include "efs/wire.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +9,7 @@ struct recv_replies {
     struct { int to, success, probe; uint64_t match, read; } reply[EFS_RAFT_RECV_MAX];
     uint32_t n;
     uint64_t term, boot;
+    uint64_t obs_started, obs_entries;
 };
 
 struct efs_raft {
@@ -1641,6 +1643,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     uint32_t voters;
     int rc;
 
+    efs_batch_obs_init();
     if (!cfg || !cfg->store || cfg->n < 1 || cfg->n > EFS_RAFT_MAX_PEERS)
         return NULL;
     if (cfg->id < 0 || cfg->id >= EFS_RAFT_MAX_PEERS)
@@ -1772,31 +1775,50 @@ int efs_raft_recv(struct efs_raft *r, const struct efs_raft_msg *msg)
  * This deliberately starts narrower than all AE traffic: log matching must
  * already hold and every entry must extend the current tail. */
 static int recv_can_batch(struct efs_raft *r, const struct efs_raft_msg *m,
-                          uint64_t *bytes)
+                          uint64_t *bytes, enum efs_batch_counter *reject)
 {
     uint64_t index, term;
+    *reject = BO_ELIGIBLE;
     *bytes = 0;
-    if (!r->store->batch_begin || !r->store->batch_end ||
-        r->role != EFS_RAFT_FOLLOWER || m->type != EFS_RAFT_MSG_AE_REQ ||
-        m->group != r->group || m->to != r->id || m->from != r->leader ||
-        m->term != r->current_term || !m->nentries ||
-        m->nentries > EFS_RAFT_AE_MAX ||
-        last_log(r, &index, &term) != EFS_OK ||
-        m->prev_index != index || m->prev_term != term)
+    /* Preserve the original short-circuit order and admission callbacks. */
+#define REJECT_IF(test, reason) do { if (test) { *reject = reason; BO_COUNT(reason); return 0; } } while (0)
+    REJECT_IF(!r->store->batch_begin || !r->store->batch_end, BO_NO_STORE);
+    REJECT_IF(r->role != EFS_RAFT_FOLLOWER, BO_ROLE);
+    REJECT_IF(m->type != EFS_RAFT_MSG_AE_REQ, BO_TYPE);
+    REJECT_IF(m->group != r->group || m->to != r->id, BO_ROUTE);
+    REJECT_IF(m->from != r->leader || m->term != r->current_term, BO_TERM);
+    REJECT_IF(!m->nentries, BO_EMPTY);
+    REJECT_IF(m->nentries > EFS_RAFT_AE_MAX, BO_ENTRY_LIMIT);
+    REJECT_IF(last_log(r, &index, &term) != EFS_OK, BO_LOG_READ);
+    if (m->prev_index != index || m->prev_term != term) {
+        BO_COUNT(BO_TAIL);
+        *reject = m->prev_index < index ? BO_TAIL_BEHIND :
+                  m->prev_index > index ? BO_TAIL_AHEAD : BO_TAIL_TERM;
+        BO_COUNT(*reject);
         return 0;
+    }
     for (uint32_t i = 0; i < m->nentries; i++) {
-        if (is_cfg_cmd(m->entries[i].cmd, m->entries[i].clen)) return 0;
+        REJECT_IF(is_cfg_cmd(m->entries[i].cmd, m->entries[i].clen), BO_CONFIG);
         *bytes += m->entries[i].clen;
     }
     if (r->admit && r->admit(r->app, m->entries, m->nentries,
-                             EFS_RAFT_ADMIT_RECV) != EFS_OK) return 0;
-    return *bytes <= EFS_RAFT_AE_BYTES;
+                             EFS_RAFT_ADMIT_RECV) != EFS_OK) { *reject = BO_ADMIT; BO_COUNT(BO_ADMIT); return 0; }
+    REJECT_IF(*bytes > EFS_RAFT_AE_BYTES, BO_BYTES);
+#undef REJECT_IF
+    BO_COUNT(BO_ELIGIBLE);
+    return 1;
 }
 
 static int recv_batch_finish(struct efs_raft *r, int prior)
 {
     struct recv_replies *q = r->recv_replies;
+    if (BO_ON()) {
+        BO_HIST(BH_FOLLOW_MESSAGES, q->n);
+        BO_HIST(BH_FOLLOW_ENTRIES, q->obs_entries);
+        BO_HIST(BH_FOLLOW_ASSEMBLY_US, efs_batch_obs_now_us()-q->obs_started);
+    }
     int rc = r->store->batch_end(r->store_ctx);
+    if (BO_ON()) BO_HIST(BH_FOLLOW_TOTAL_US, efs_batch_obs_now_us()-q->obs_started);
     r->recv_replies = NULL;
     if (rc != EFS_OK || prior != EFS_OK) {
         /* Never allow a later heartbeat to apply an unproven tail. */
@@ -1841,26 +1863,37 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
     if (r->storage_failed) return EFS_ERR_IO;
     for (uint32_t i = 0; i < n; i++) {
         uint64_t bytes;
-        int eligible = recv_can_batch(r, &msgs[i], &bytes);
+        enum efs_batch_counter reject;
+        int eligible = recv_can_batch(r, &msgs[i], &bytes, &reject);
         if (r->recv_replies && (!eligible || total + bytes > EFS_RAFT_AE_BYTES)) {
+            BO_COUNT(!eligible ? BO_FOLLOW_INELIGIBLE : BO_FOLLOW_BYTES);
+            if (!eligible && BO_ON()) efs_batch_obs_reject(reject);
             rc = recv_batch_finish(r, EFS_OK);
             if (rc != EFS_OK) return rc;
             replies.n = 0;
+            replies.obs_entries = 0;
             total = 0;
-            eligible = recv_can_batch(r, &msgs[i], &bytes);
+            eligible = recv_can_batch(r, &msgs[i], &bytes, &reject);
         }
         if (eligible && !r->recv_replies) {
             rc = r->store->batch_begin(r->store_ctx);
             if (rc != EFS_OK) return rc;
             replies.term = r->current_term;
             replies.boot = r->boot_id;
+            if (BO_ON()) replies.obs_started = efs_batch_obs_now_us();
             r->recv_replies = &replies;
         }
         rc = efs_raft_recv(r, &msgs[i]);
-        if (rc != EFS_OK)
+        if (rc != EFS_OK) {
+            if (r->recv_replies) BO_COUNT(BO_FOLLOW_ERROR);
             return r->recv_replies ? recv_batch_finish(r, rc) : rc;
-        if (r->recv_replies) total += bytes;
+        }
+        if (r->recv_replies) {
+            total += bytes;
+            if (BO_ON()) replies.obs_entries += msgs[i].nentries;
+        }
     }
+    if (r->recv_replies) BO_COUNT(BO_FOLLOW_END);
     return r->recv_replies ? recv_batch_finish(r, EFS_OK) : EFS_OK;
 }
 

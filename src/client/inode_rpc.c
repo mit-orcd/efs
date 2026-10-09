@@ -1997,6 +1997,11 @@ static int query_snapshot_rpc(const struct efs_msg_query_snapshot *req,uint32_t 
     if (!req || !reply || !text) return EFS_ERR_INVAL;
     *text=NULL;memset(reply,0,sizeof(*reply));
     efs_node_id_t target=0,skip=0;
+    if (req->version==EFS_QUERY_PAGE_VERSION) {
+        uint64_t token=((const struct efs_msg_query_snapshot_v4 *)req)->token;
+        if (token) target=(efs_node_id_t)(token>>56);
+    }
+    efs_node_id_t pinned=target;
     int last=EFS_ERR_BUSY;
     for (unsigned attempt=0;attempt<16;attempt++) {
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
@@ -2028,6 +2033,7 @@ static int query_snapshot_rpc(const struct efs_msg_query_snapshot *req,uint32_t 
                 }
                 free(payload);
                 if (last!=EFS_ERR_BUSY && last!=EFS_ERR_NOT_PRIMARY && last!=EFS_ERR_NO_QUORUM) return last;
+                if (pinned) return last;
                 target=last==EFS_ERR_NOT_PRIMARY && reply->primary_id<=EFS_MAX_NODES ? reply->primary_id : 0;
                 skip=target ? 0 : nid;
             }
@@ -2049,4 +2055,12 @@ int efs_client_rpc_query_snapshot_v3(const struct efs_msg_query_snapshot_v3 *req
     if (!req) return EFS_ERR_INVAL;
     return query_snapshot_rpc(&req->base,req->base.version==EFS_QUERY_FILTER_VERSION ?
                               sizeof(*req) : sizeof(req->base),reply,text);
+}
+
+int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4 *req,
+                                    struct efs_msg_query_snapshot_reply *reply,char **text)
+{
+    if (!req) return EFS_ERR_INVAL;
+    return query_snapshot_rpc(&req->base,req->base.version==EFS_QUERY_PAGE_VERSION ? sizeof(*req) :
+        req->base.version==EFS_QUERY_FILTER_VERSION ? sizeof(struct efs_msg_query_snapshot_v3) : sizeof(req->base),reply,text);
 }

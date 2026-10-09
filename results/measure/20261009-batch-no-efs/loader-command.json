@@ -1,0 +1,1 @@
+["python3", "/data1/efs/batch-no-efs-loader.py", "--max-depth", "8", "--max-files-per-folder", "1000", "--max-files", "50000", "--workers", "8", "/data1/efs/mnt/tiny-batch-no-efs-20261009"]

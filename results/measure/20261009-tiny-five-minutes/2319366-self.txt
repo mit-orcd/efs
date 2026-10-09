@@ -1,0 +1,48 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles:P'
+# Event count (approx.): 23879570323
+#
+# Overhead  Command   Shared Object       Symbol                                     
+# ........  ........  ..................  ...........................................
+#
+     8.13%  efs-fuse  efs-fuse            [.] blake3_hash_many_avx512
+     3.88%  efs-fuse  libc.so.6           [.] __memmove_evex_unaligned_erms
+     2.36%  efs-fuse  [nf_tables]         [k] nft_do_chain
+     2.14%  efs-fuse  libc.so.6           [.] pthread_mutex_lock@@GLIBC_2.2.5
+     1.82%  efs-fuse  [kernel.kallsyms]   [k] _copy_from_iter
+     1.65%  efs-fuse  libc.so.6           [.] __memset_evex_unaligned_erms
+     1.58%  efs-fuse  efs-fuse            [.] xor_into
+     1.53%  efs-fuse  [kernel.kallsyms]   [k] _copy_to_iter
+     1.47%  efs-fuse  libc.so.6           [.] _int_malloc
+     1.09%  efs-fuse  libc.so.6           [.] malloc
+     0.95%  efs-fuse  libc.so.6           [.] __libc_calloc
+     0.94%  efs-fuse  [kernel.kallsyms]   [k] restore_fpregs_from_fpstate
+     0.89%  efs-fuse  [kernel.kallsyms]   [k] _raw_spin_lock_irqsave
+     0.86%  efs-fuse  [kernel.kallsyms]   [k] fdget
+     0.84%  efs-fuse  efs-fuse            [.] rpc_send_recv_shard
+     0.84%  efs-fuse  libc.so.6           [.] __GI___pthread_disable_asynccancel
+     0.81%  efs-fuse  [fuse]              [k] fuse_dev_do_read
+     0.77%  efs-fuse  [kernel.kallsyms]   [k] __tcp_transmit_skb
+     0.74%  efs-fuse  [kernel.kallsyms]   [k] its_return_thunk
+     0.70%  efs-fuse  efs-fuse            [.] inode_ptr
+     0.65%  efs-fuse  [kernel.kallsyms]   [k] _raw_spin_lock
+     0.64%  efs-fuse  libc.so.6           [.] __libc_recv
+     0.63%  efs-fuse  [kernel.kallsyms]   [k] __memcpy
+     0.59%  efs-fuse  [kernel.kallsyms]   [k] do_sys_poll
+     0.58%  efs-fuse  [kernel.kallsyms]   [k] read_tsc
+     0.57%  efs-fuse  libc.so.6           [.] clock_gettime@@GLIBC_2.17
+     0.54%  efs-fuse  [kernel.kallsyms]   [k] clear_bhb_loop
+     0.54%  efs-fuse  [kernel.kallsyms]   [k] __dev_queue_xmit
+     0.54%  efs-fuse  efs-fuse            [.] report_dirty_ino_run
+     0.54%  efs-fuse  [kernel.kallsyms]   [k] update_load_avg
+     0.53%  efs-fuse  [kernel.kallsyms]   [k] _raw_spin_lock_bh
+     0.52%  efs-fuse  [kernel.kallsyms]   [k] __sys_recvfrom
+
+
+#
+# (Tip: If you prefer Intel style assembly, try: perf annotate -M intel)
+#

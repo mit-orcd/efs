@@ -1,0 +1,49 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 904  of event 'cycles:P'
+# Event count (approx.): 7363182760
+#
+# Overhead  Command  Shared Object      Symbol                                     
+# ........  .......  .................  ...........................................
+#
+     3.28%  efsd     efsd               [.] blake3_hash_many_avx512
+     3.16%  efsd     libc.so.6          [.] __memmove_evex_unaligned_erms
+     1.99%  efsd     [kernel.kallsyms]  [k] __d_lookup_rcu
+     1.70%  efsd     [xfs]              [k] xfs_buf_lookup.constprop.0
+     1.47%  efsd     [kernel.kallsyms]  [k] crc32_body
+     1.22%  efsd     [nf_tables]        [k] nft_do_chain
+     1.11%  efsd     efsd               [.] kv_mtab_pos
+     1.10%  efsd     [kernel.kallsyms]  [k] sched_balance_update_blocked_averages
+     0.94%  efsd     [kernel.kallsyms]  [k] _copy_to_iter
+     0.90%  efsd     libc.so.6          [.] __memcmp_evex_movbe
+     0.79%  efsd     [kernel.kallsyms]  [k] _raw_spin_lock
+     0.77%  efsd     [kernel.kallsyms]  [k] _raw_spin_lock_irqsave
+     0.76%  efsd     efsd               [.] server_handle_conn
+     0.76%  efsd     [kernel.kallsyms]  [k] its_return_thunk
+     0.75%  efsd     efsd               [.] host_pump
+     0.74%  efsd     libc.so.6          [.] malloc
+     0.72%  efsd     [kernel.kallsyms]  [k] fdget
+     0.68%  efsd     [xfs]              [k] xfs_iext_lookup_extent
+     0.67%  efsd     [kernel.kallsyms]  [k] inode_permission
+     0.65%  efsd     [nf_conntrack]     [k] __nf_conntrack_find_get
+     0.62%  efsd     [kernel.kallsyms]  [k] __inet_lookup_established
+     0.61%  efsd     libc.so.6          [.] getenv
+     0.58%  efsd     efsd               [.] raft_group_install
+     0.58%  efsd     libc.so.6          [.] pthread_mutex_lock@@GLIBC_2.2.5
+     0.55%  efsd     [kernel.kallsyms]  [k] __inode_security_revalidate
+     0.53%  efsd     [kernel.kallsyms]  [k] clear_bhb_loop
+     0.53%  efsd     [kernel.kallsyms]  [k] do_syscall_64
+     0.53%  efsd     efsd               [.] search_block
+     0.53%  efsd     [kernel.kallsyms]  [k] kmem_cache_alloc_noprof
+     0.51%  efsd     [xfs]              [k] xfs_file_write_iter
+     0.51%  efsd     libc.so.6          [.] __GI___pthread_mutex_unlock_usercnt
+     0.50%  efsd     [kernel.kallsyms]  [k] __rcu_read_unlock
+     0.50%  efsd     [kernel.kallsyms]  [k] dequeue_entity
+
+
+#
+# (Tip: To collect Processor Trace with samples use perf record -e '{intel_pt//,cycles}' ; perf script --call-trace or --insn-trace --xed -F +ipc (remove --xed if no xed))
+#

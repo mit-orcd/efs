@@ -35,11 +35,43 @@ static void dent_put(struct efs_kv *kv,uint32_t sh,efs_ino_t parent,const char *
     CHECK(!efs_meta_pack_dentry(&d,v,sizeof(v)),"pack dentry");
     CHECK(!efs_kv_put(kv,k,kl,v,sizeof(v)),"write dentry");
 }
+struct compare_catalogs { const struct efs_query_catalog *incremental,*full; };
+static int compare_inode(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *v,uint32_t vl)
+{
+    (void)key;(void)kl;struct compare_catalogs *pair=ctx;struct efs_meta_row row,a,b;
+    struct efs_meta_stat sa,sb;struct efs_query_rollup ra,rb;
+    CHECK(!efs_meta_unpack_inode(v,vl,&row),"oracle unpack inode");
+    CHECK(!efs_query_catalog_inode(pair->incremental,row.ino,&a,&sa),"incremental inode");
+    CHECK(!efs_query_catalog_inode(pair->full,row.ino,&b,&sb),"full inode");
+    CHECK(!memcmp(&a,&b,sizeof(a)) && !memcmp(&sa,&sb,sizeof(sa)),"incremental folded metadata equals full rebuild");
+    if (S_ISDIR(row.mode)) {
+        CHECK(!efs_query_catalog_stats(pair->incremental,row.ino,&ra) &&
+              !efs_query_catalog_stats(pair->full,row.ino,&rb) && !memcmp(&ra,&rb,sizeof(ra)),
+              "incremental directory rollups equal independent full rebuild");
+        struct efs_name_entry ea,eb;
+        int ar=efs_query_catalog_directory_link(pair->incremental,row.ino,&ea);
+        int br=efs_query_catalog_directory_link(pair->full,row.ino,&eb);
+        CHECK(ar==br && (ar || !memcmp(&ea,&eb,sizeof(ea))),"incremental directory binding equals full rebuild");
+    }
+    return 0;
+}
 static int capture(struct efs_kv *kv,const struct efs_query_catalog *old,struct efs_query_catalog **out)
 {
     struct efs_kv_lsm_snapshot *s=NULL;
     int rc=efs_kv_lsm_snapshot_pin(kv,8<<20,&s);
     if (!rc) rc=efs_query_catalog_build(s,old,32<<20,NULL,NULL,out);
+    if (!rc && old) {
+        struct efs_query_catalog *full=NULL;
+        CHECK(!efs_query_catalog_build(s,NULL,32<<20,NULL,NULL,&full),"full rebuild oracle");
+        if (full) {
+            struct compare_catalogs pair={*out,full};
+            for (uint32_t shard=0;shard<4096;shard++) {
+                uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_INODE};
+                CHECK(!efs_kv_lsm_snapshot_scan(s,prefix,3,NULL,0,compare_inode,&pair),"oracle inode scan");
+            }
+            efs_query_catalog_free(full);
+        }
+    }
     efs_kv_lsm_snapshot_release(s);return rc;
 }
 struct found { int n; char path[32][1024]; int fail; };
@@ -49,6 +81,12 @@ static int collect(void *ctx,const struct efs_name_entry *e,const char *path)
     if (f->fail) return EFS_ERR_ACCES;
     if (f->n>=32 || strlen(path)>=sizeof(f->path[0])) return EFS_ERR_NOMEM;
     strcpy(f->path[f->n++],path);return EFS_OK;
+}
+static int page_collect(void *ctx,const struct efs_name_entry *e,const char *path)
+{
+    struct found *f=ctx;
+    if (f->n && f->n%2==0) return EFS_ERR_AGAIN;
+    return collect(ctx,e,path);
 }
 static int cancel(void *ctx) { (void)ctx;return 1; }
 int main(void)
@@ -110,7 +148,42 @@ int main(void)
     f=(struct found){.fail=1};
     CHECK(efs_query_catalog_find(c,a,EFS_NAME_EXACT,"report.dat",10,collect,&f)==EFS_ERR_ACCES,"emitter denial preserved");
     CHECK(!capture(kv,c,&newer) && efs_query_catalog_rebuilt(newer)==0,"unchanged partitions reused");
+    CHECK(newer && !efs_query_catalog_refolded(newer) && efs_query_catalog_reused_edges(newer)==4096,
+          "unchanged folded stats and every edge contribution reused");
     efs_query_catalog_free(newer);newer=NULL;
+    /* Inserting/removing an earlier shard shifts every later global ordinal.
+     * Unchanged inode partitions must map by their own local ordinal. */
+    CHECK(!efs_meta_apply_get_inode(kv,file,&r),"ordinal-shift source inode");
+    efs_ino_t detached=UINT64_C(999999)<<12;
+    CHECK(efs_kv_inode_shard(detached)<efs_kv_inode_shard(file),"earlier shard fixture");
+    r.ino=detached;r.nlink=0;r.active_lanes=0;r.base_size=777;row_put(kv,&r);
+    CHECK(!capture(kv,c,&newer),"earlier inode insertion shifts unchanged partitions");
+    struct efs_meta_stat shifted_stat;
+    CHECK(newer && !efs_query_catalog_inode(newer,file,NULL,&shifted_stat) && shifted_stat.size==8192,
+          "shifted unchanged inode retains its own folded size");
+    CHECK(!efs_kv_key_inode(efs_kv_inode_shard(detached),detached,key,&kl) && !efs_kv_del(kv,key,kl),
+          "remove earlier-shard inode");
+    struct efs_query_catalog *shrunk=NULL;
+    CHECK(!capture(kv,newer,&shrunk),"earlier inode removal shifts unchanged partitions back");
+    CHECK(shrunk && !efs_query_catalog_inode(shrunk,file,NULL,&shifted_stat) && shifted_stat.size==8192,
+          "shrunk ordinal maps to correct old inode");
+    CHECK(efs_query_catalog_inode(c,detached,NULL,NULL)==EFS_ERR_NOT_FOUND,"old generation remains immutable");
+    efs_query_catalog_free(shrunk);efs_query_catalog_free(newer);newer=NULL;
+    /* A lane-only change must invalidate a stat cached on another inode shard. */
+    CHECK(efs_kv_lane_shard(file,1)!=efs_kv_inode_shard(file),"cross-shard dependency fixture");
+    be64(lane,12288);be64(lane+8,225);be64(lane+24,2);
+    CHECK(!efs_kv_key_lane(efs_kv_lane_shard(file,1),file,1,1,key,&kl),"changed lane key");
+    CHECK(!efs_kv_put(kv,key,kl,lane,sizeof(lane)),"lane-only update");
+    CHECK(!capture(kv,c,&newer),"incremental lane-only refresh");
+    struct efs_meta_stat changed;
+    CHECK(newer && !efs_query_catalog_inode(newer,file,NULL,&changed) && changed.size==12288,
+          "cross-shard lane invalidates cached folded EOF");
+    CHECK(newer && efs_query_catalog_refolded(newer)>0 && efs_query_catalog_reused_edges(newer)<4096,
+          "lane invalidates dependent edge aggregates");
+    efs_query_catalog_free(newer);newer=NULL;
+    /* Restore original EOF so subsequent legacy oracle assertions stay useful. */
+    be64(lane,8192);be64(lane+8,200);be64(lane+24,3);
+    CHECK(!efs_kv_put(kv,key,kl,lane,sizeof(lane)),"restore lane EOF");
     CHECK(!efs_meta_apply_rename(kv,a,"b",EFS_ROOT_INO,"moved",230),"move subtree");
     CHECK(!efs_meta_apply_unlink(kv,a,"alias.dat",240),"unlink alias");
     dent_put(kv,efs_kv_inode_shard(a),a,"deleted-one",0);
@@ -223,6 +296,19 @@ int main(void)
     f=(struct found){0};
     CHECK(newer && !efs_query_catalog_find(newer,EFS_ROOT_INO,EFS_NAME_PREFIX,"scope-cache-",100,collect,&f) && f.n==6,
           "scope cache belongs to one query root");
+    uint64_t cursor=0;int pages=0,total=0;
+    do {
+        f=(struct found){0};uint64_t before=cursor;
+        CHECK(!efs_query_catalog_page(newer,EFS_ROOT_INO,EFS_NAME_PREFIX,"scope-cache-",0,
+              &cursor,3,NULL,NULL,page_collect,&f),"bounded page");
+        CHECK(cursor>before || f.n,"page progress");
+        total+=f.n;pages++;
+        CHECK(pages<5000,"bounded page completion");
+    } while (cursor!=(UINT64_C(4096)<<32) && pages<5000);
+    CHECK(total==6 && pages>1,"paging neither loses nor duplicates entries");
+    efs_query_catalog_retain(newer);
+    efs_query_catalog_free(newer);
+    CHECK(!efs_query_catalog_stats(newer,EFS_ROOT_INO,&stat),"retained catalog survives publisher retirement");
     efs_query_catalog_free(newer);newer=NULL;
     /* Exercise catalog lookup through a larger, same-shard inode population,
      * including misses and an older immutable generation. */
@@ -240,7 +326,23 @@ int main(void)
         CHECK(efs_query_catalog_inode(c,indexed[i],NULL,NULL)==EFS_ERR_NOT_FOUND,"old image excludes new inode");
     }
     CHECK(newer && efs_query_catalog_inode(newer,UINT64_MAX,NULL,NULL)==EFS_ERR_NOT_FOUND,"absent inode lookup");
+    CHECK(newer && efs_query_catalog_inode(newer,0,NULL,NULL)==EFS_ERR_NOT_FOUND,
+          "lookup below first retained key");
+    CHECK(newer && efs_query_catalog_inode(newer,indexed[0]+(UINT64_C(1)<<40),NULL,NULL)==EFS_ERR_NOT_FOUND,
+          "lookup above last key in a populated partition");
+    struct efs_query_catalog *shared=NULL;
+    CHECK(!capture(kv,newer,&shared) && !efs_query_catalog_refolded(shared),
+          "unchanged decoded inode blocks reused without refolding");
     efs_query_catalog_free(newer);newer=NULL;
+    for (unsigned i=0;i<512 && shared;i++) {
+        struct efs_meta_row row;struct efs_meta_stat value;
+        CHECK(!efs_query_catalog_inode(shared,indexed[i],&row,&value) &&
+              row.ino==indexed[i] && value.ino==indexed[i],
+              "shared inode blocks survive original catalog retirement");
+    }
+    CHECK(shared && !efs_query_catalog_stats(shared,EFS_ROOT_INO,&stat),
+          "directory rollup survives source catalog retirement");
+    efs_query_catalog_free(shared);
     CHECK(!efs_meta_apply_get_inode(kv,b,&r),"dir for corruption");
     r.parent=a;row_put(kv,&r);
     CHECK(capture(kv,c,&newer)==EFS_ERR_PROTO && !newer,"mismatched parent fails closed");

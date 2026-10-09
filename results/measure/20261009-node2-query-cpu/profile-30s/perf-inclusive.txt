@@ -1,0 +1,460 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 6K of event 'cycles:P'
+# Event count (approx.): 75656779702
+#
+# Children      Self  Command  Shared Object           Symbol                                             
+# ........  ........  .......  ......................  ...................................................
+#
+    94.87%     0.00%  efsd     libc.so.6               [.] start_thread
+            |
+            ---start_thread
+               |          
+               |--86.82%--host_query_thread
+               |          |          
+               |           --86.46%--efs_query_catalog_build
+               |                     |          
+               |                     |--48.83%--efs_meta_apply_getattr
+               |                     |          |          
+               |                     |          |--30.72%--efs_txn_read_ex
+               |                     |          |          |          
+               |                     |          |          |--15.78%--cache_get
+               |                     |          |          |          
+               |                     |          |           --9.18%--__memcmp_evex_movbe
+               |                     |          |          
+               |                     |           --10.65%--efs_txn_reduce_read_ex
+               |                     |                     |          
+               |                     |                      --8.95%--efs_txn_read_ex
+               |                     |                                |          
+               |                     |                                |--4.35%--cache_get
+               |                     |                                |          
+               |                     |                                 --3.04%--__memcmp_evex_movbe
+               |                     |          
+               |                     |--16.19%--efs_name_index_query
+               |                     |          |          
+               |                     |           --16.04%--efs_name_index_query_visits
+               |                     |                     |          
+               |                     |                      --15.68%--add_edge
+               |                     |          
+               |                     |--7.28%--add_node
+               |                     |          |          
+               |                     |           --5.89%--asm_exc_page_fault
+               |                     |                     |          
+               |                     |                      --4.12%--exc_page_fault
+               |                     |                                do_user_addr_fault
+               |                     |                                |          
+               |                     |                                 --3.79%--handle_mm_fault
+               |                     |                                           |          
+               |                     |                                            --3.58%--__handle_mm_fault
+               |                     |                                                      |          
+               |                     |                                                       --3.35%--do_anonymous_page
+               |                     |                                                                 |          
+               |                     |                                                                  --2.36%--alloc_anon_folio
+               |                     |          
+               |                      --4.35%--__memset_evex_unaligned_erms
+               |          
+               |--2.63%--host_pump
+               |          
+                --2.50%--conn_thread
+                          |          
+                           --2.47%--server_handle_conn
+
+    86.82%     0.00%  efsd     efsd                    [.] host_query_thread
+            |
+            ---host_query_thread
+               |          
+                --86.46%--efs_query_catalog_build
+                          |          
+                          |--48.83%--efs_meta_apply_getattr
+                          |          |          
+                          |          |--30.72%--efs_txn_read_ex
+                          |          |          |          
+                          |          |          |--15.78%--cache_get
+                          |          |          |          
+                          |          |           --9.18%--__memcmp_evex_movbe
+                          |          |          
+                          |           --10.65%--efs_txn_reduce_read_ex
+                          |                     |          
+                          |                      --8.95%--efs_txn_read_ex
+                          |                                |          
+                          |                                |--4.35%--cache_get
+                          |                                |          
+                          |                                 --3.04%--__memcmp_evex_movbe
+                          |          
+                          |--16.19%--efs_name_index_query
+                          |          |          
+                          |           --16.04%--efs_name_index_query_visits
+                          |                     |          
+                          |                      --15.68%--add_edge
+                          |          
+                          |--7.28%--add_node
+                          |          |          
+                          |           --5.89%--asm_exc_page_fault
+                          |                     |          
+                          |                      --4.12%--exc_page_fault
+                          |                                do_user_addr_fault
+                          |                                |          
+                          |                                 --3.79%--handle_mm_fault
+                          |                                           |          
+                          |                                            --3.58%--__handle_mm_fault
+                          |                                                      |          
+                          |                                                       --3.35%--do_anonymous_page
+                          |                                                                 |          
+                          |                                                                  --2.36%--alloc_anon_folio
+                          |          
+                           --4.35%--__memset_evex_unaligned_erms
+
+    86.56%     3.97%  efsd     efsd                    [.] efs_query_catalog_build
+            |          
+            |--82.59%--efs_query_catalog_build
+            |          |          
+            |          |--48.83%--efs_meta_apply_getattr
+            |          |          |          
+            |          |          |--30.72%--efs_txn_read_ex
+            |          |          |          |          
+            |          |          |          |--15.78%--cache_get
+            |          |          |          |          
+            |          |          |           --9.18%--__memcmp_evex_movbe
+            |          |          |          
+            |          |           --10.65%--efs_txn_reduce_read_ex
+            |          |                     |          
+            |          |                      --8.95%--efs_txn_read_ex
+            |          |                                |          
+            |          |                                |--4.35%--cache_get
+            |          |                                |          
+            |          |                                 --3.04%--__memcmp_evex_movbe
+            |          |          
+            |          |--16.19%--efs_name_index_query
+            |          |          |          
+            |          |           --16.04%--efs_name_index_query_visits
+            |          |                     |          
+            |          |                      --15.68%--add_edge
+            |          |          
+            |          |--7.28%--add_node
+            |          |          |          
+            |          |           --5.89%--asm_exc_page_fault
+            |          |                     |          
+            |          |                      --4.12%--exc_page_fault
+            |          |                                do_user_addr_fault
+            |          |                                |          
+            |          |                                 --3.79%--handle_mm_fault
+            |          |                                           |          
+            |          |                                            --3.58%--__handle_mm_fault
+            |          |                                                      |          
+            |          |                                                       --3.35%--do_anonymous_page
+            |          |                                                                 |          
+            |          |                                                                  --2.36%--alloc_anon_folio
+            |          |          
+            |           --4.35%--__memset_evex_unaligned_erms
+            |          
+             --3.97%--start_thread
+                       host_query_thread
+                       |          
+                        --3.87%--efs_query_catalog_build
+
+    49.55%     6.04%  efsd     efsd                    [.] efs_meta_apply_getattr
+            |          
+            |--43.51%--efs_meta_apply_getattr
+            |          |          
+            |          |--30.76%--efs_txn_read_ex
+            |          |          |          
+            |          |          |--15.78%--cache_get
+            |          |          |          
+            |          |           --9.18%--__memcmp_evex_movbe
+            |          |          
+            |           --10.68%--efs_txn_reduce_read_ex
+            |                     |          
+            |                      --8.96%--efs_txn_read_ex
+            |                                |          
+            |                                |--4.35%--cache_get
+            |                                |          
+            |                                 --3.04%--__memcmp_evex_movbe
+            |          
+             --6.04%--start_thread
+                       |          
+                        --6.03%--host_query_thread
+                                  efs_query_catalog_build
+                                  |          
+                                   --5.43%--efs_meta_apply_getattr
+
+    40.37%     2.39%  efsd     efsd                    [.] efs_txn_read_ex
+            |          
+            |--37.98%--efs_txn_read_ex
+            |          |          
+            |          |--20.13%--cache_get
+            |          |          
+            |          |--12.22%--__memcmp_evex_movbe
+            |          |          
+            |           --2.17%--__memmove_evex_unaligned_erms
+            |          
+             --2.39%--start_thread
+                       host_query_thread
+                       efs_query_catalog_build
+                       |          
+                        --2.36%--efs_meta_apply_getattr
+
+    22.51%    19.68%  efsd     efsd                    [.] cache_get
+            |          
+            |--19.68%--start_thread
+            |          host_query_thread
+            |          efs_query_catalog_build
+            |          efs_meta_apply_getattr
+            |          |          
+            |          |--15.20%--efs_txn_read_ex
+            |          |          |          
+            |          |           --13.69%--cache_get
+            |          |          
+            |           --4.17%--efs_txn_reduce_read_ex
+            |                     efs_txn_read_ex
+            |                     |          
+            |                      --3.85%--cache_get
+            |          
+             --2.83%--cache_get
+
+    16.19%     0.00%  efsd     efsd                    [.] efs_name_index_query
+            |
+            ---efs_name_index_query
+               |          
+                --16.04%--efs_name_index_query_visits
+                          |          
+                           --15.68%--add_edge
+
+    16.10%     0.28%  efsd     efsd                    [.] efs_name_index_query_visits
+            |          
+             --15.82%--efs_name_index_query_visits
+                       |          
+                        --15.68%--add_edge
+
+    15.73%    13.81%  efsd     efsd                    [.] add_edge
+            |          
+             --13.81%--start_thread
+                       host_query_thread
+                       efs_query_catalog_build
+                       efs_name_index_query
+                       efs_name_index_query_visits
+                       add_edge
+
+    14.60%    13.01%  efsd     libc.so.6               [.] __memcmp_evex_movbe
+            |          
+             --13.01%--start_thread
+                       |          
+                        --12.91%--host_query_thread
+                                  |          
+                                   --12.88%--efs_query_catalog_build
+                                             |          
+                                              --12.86%--efs_meta_apply_getattr
+                                                        |          
+                                                        |--9.65%--efs_txn_read_ex
+                                                        |          |          
+                                                        |           --7.85%--__memcmp_evex_movbe
+                                                        |          
+                                                         --3.21%--efs_txn_reduce_read_ex
+                                                                   efs_txn_read_ex
+                                                                   |          
+                                                                    --2.78%--__memcmp_evex_movbe
+
+    10.81%     0.68%  efsd     efsd                    [.] efs_txn_reduce_read_ex
+            |          
+             --10.14%--efs_txn_reduce_read_ex
+                       |          
+                        --8.96%--efs_txn_read_ex
+                                  |          
+                                  |--4.35%--cache_get
+                                  |          
+                                   --3.04%--__memcmp_evex_movbe
+
+     9.03%     0.04%  efsd     [kernel.kallsyms]       [k] entry_SYSCALL_64_after_hwframe
+            |          
+             --8.99%--entry_SYSCALL_64_after_hwframe
+                       do_syscall_64
+                       |          
+                        --2.12%--do_writev
+                                  |          
+                                   --2.09%--vfs_writev
+                                             |          
+                                              --2.04%--do_iter_readv_writev
+
+     8.99%     0.05%  efsd     [kernel.kallsyms]       [k] do_syscall_64
+            |          
+             --8.94%--do_syscall_64
+                       |          
+                        --2.12%--do_writev
+                                  |          
+                                   --2.09%--vfs_writev
+                                             |          
+                                              --2.04%--do_iter_readv_writev
+
+     7.35%     1.91%  efsd     efsd                    [.] add_node
+            |          
+             --5.44%--add_node
+                       |          
+                        --4.75%--asm_exc_page_fault
+                                  |          
+                                   --4.12%--exc_page_fault
+                                             do_user_addr_fault
+                                             |          
+                                              --3.79%--handle_mm_fault
+                                                        |          
+                                                         --3.58%--__handle_mm_fault
+                                                                   |          
+                                                                    --3.35%--do_anonymous_page
+                                                                              |          
+                                                                               --2.36%--alloc_anon_folio
+
+     6.27%     0.09%  efsd     [kernel.kallsyms]       [k] asm_exc_page_fault
+            |          
+             --6.18%--asm_exc_page_fault
+                       |          
+                        --4.40%--exc_page_fault
+                                  do_user_addr_fault
+                                  |          
+                                   --4.06%--handle_mm_fault
+                                             |          
+                                              --3.82%--__handle_mm_fault
+                                                        |          
+                                                         --3.54%--do_anonymous_page
+                                                                   |          
+                                                                    --2.44%--alloc_anon_folio
+
+     4.45%     4.33%  efsd     libc.so.6               [.] __memset_evex_unaligned_erms
+            |          
+             --4.31%--start_thread
+                       |          
+                        --4.26%--host_query_thread
+                                  efs_query_catalog_build
+                                  |          
+                                   --4.23%--__memset_evex_unaligned_erms
+
+     4.40%     0.00%  efsd     [kernel.kallsyms]       [k] exc_page_fault
+            |
+            ---exc_page_fault
+               do_user_addr_fault
+               |          
+                --4.06%--handle_mm_fault
+                          |          
+                           --3.82%--__handle_mm_fault
+                                     |          
+                                      --3.54%--do_anonymous_page
+                                                |          
+                                                 --2.44%--alloc_anon_folio
+
+     4.40%     0.09%  efsd     [kernel.kallsyms]       [k] do_user_addr_fault
+            |          
+             --4.31%--do_user_addr_fault
+                       |          
+                        --4.06%--handle_mm_fault
+                                  |          
+                                   --3.82%--__handle_mm_fault
+                                             |          
+                                              --3.54%--do_anonymous_page
+                                                        |          
+                                                         --2.44%--alloc_anon_folio
+
+     4.06%     0.14%  efsd     [kernel.kallsyms]       [k] handle_mm_fault
+            |          
+             --3.91%--handle_mm_fault
+                       |          
+                        --3.82%--__handle_mm_fault
+                                  |          
+                                   --3.54%--do_anonymous_page
+                                             |          
+                                              --2.44%--alloc_anon_folio
+
+     3.82%     0.13%  efsd     [kernel.kallsyms]       [k] __handle_mm_fault
+            |          
+             --3.70%--__handle_mm_fault
+                       |          
+                        --3.54%--do_anonymous_page
+                                  |          
+                                   --2.44%--alloc_anon_folio
+
+     3.65%     2.95%  efsd     libc.so.6               [.] __memmove_evex_unaligned_erms
+            |          
+             --2.77%--start_thread
+                       |          
+                        --2.40%--host_query_thread
+                                  |          
+                                   --2.34%--efs_query_catalog_build
+                                             efs_meta_apply_getattr
+
+     3.54%     0.17%  efsd     [kernel.kallsyms]       [k] do_anonymous_page
+            |          
+             --3.37%--do_anonymous_page
+                       |          
+                        --2.44%--alloc_anon_folio
+
+     3.26%     0.21%  efsd     libc.so.6               [.] clock_gettime@@GLIBC_2.17
+            |          
+             --3.05%--clock_gettime@@GLIBC_2.17
+
+     2.99%     1.52%  efsd     efsd                    [.] memcmp@plt
+     2.67%     0.20%  efsd     efsd                    [.] host_pump
+            |          
+             --2.47%--host_pump
+
+     2.50%     0.00%  efsd     efsd                    [.] conn_thread
+            |
+            ---conn_thread
+               |          
+                --2.47%--server_handle_conn
+
+     2.47%     0.02%  efsd     efsd                    [.] server_handle_conn
+            |          
+             --2.45%--server_handle_conn
+
+     2.44%     0.04%  efsd     [kernel.kallsyms]       [k] alloc_anon_folio
+            |          
+             --2.41%--alloc_anon_folio
+
+     2.20%     0.01%  efsd     libc.so.6               [.] __GI___writev
+            |          
+             --2.19%--__GI___writev
+                       |          
+                        --2.14%--entry_SYSCALL_64_after_hwframe
+                                  do_syscall_64
+                                  |          
+                                   --2.12%--do_writev
+                                             |          
+                                              --2.09%--vfs_writev
+                                                        |          
+                                                         --2.04%--do_iter_readv_writev
+
+     2.17%     0.00%  efsd     efsd                    [.] efs_conn_send_msg
+            |
+            ---efs_conn_send_msg
+               |          
+                --2.11%--__GI___writev
+                          |          
+                           --2.07%--entry_SYSCALL_64_after_hwframe
+                                     do_syscall_64
+                                     |          
+                                      --2.05%--do_writev
+                                                |          
+                                                 --2.03%--vfs_writev
+
+     2.12%     0.00%  efsd     [kernel.kallsyms]       [k] do_writev
+            |
+            ---do_writev
+               |          
+                --2.09%--vfs_writev
+                          |          
+                           --2.04%--do_iter_readv_writev
+
+     2.09%     0.02%  efsd     [kernel.kallsyms]       [k] vfs_writev
+            |          
+             --2.07%--vfs_writev
+                       |          
+                        --2.04%--do_iter_readv_writev
+
+     2.04%     0.00%  efsd     [kernel.kallsyms]       [k] do_iter_readv_writev
+            |
+            ---do_iter_readv_writev
+
+
+
+#
+# (Tip: Show user configuration overrides: perf config --user --list)
+#

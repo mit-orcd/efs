@@ -1,0 +1,144 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 4K of event 'cycles:P'
+# Event count (approx.): 51493549498
+#
+# Children      Self  Command  Shared Object           Symbol                                             
+# ........  ........  .......  ......................  ...................................................
+#
+    88.55%     0.00%  efsd     libc.so.6               [.] start_thread
+    73.86%     0.00%  efsd     efsd                    [.] host_query_thread
+    72.52%    30.12%  efsd     efsd                    [.] efs_query_catalog_build
+    30.31%     8.18%  efsd     efsd                    [.] add_node
+    24.10%     0.06%  efsd     [kernel.kallsyms]       [k] asm_exc_page_fault
+    19.61%     0.03%  efsd     [kernel.kallsyms]       [k] entry_SYSCALL_64_after_hwframe
+    19.58%     0.05%  efsd     [kernel.kallsyms]       [k] do_syscall_64
+    17.06%     0.03%  efsd     [kernel.kallsyms]       [k] exc_page_fault
+    17.01%     0.25%  efsd     [kernel.kallsyms]       [k] do_user_addr_fault
+    15.64%     0.34%  efsd     [kernel.kallsyms]       [k] handle_mm_fault
+    15.03%     0.55%  efsd     [kernel.kallsyms]       [k] __handle_mm_fault
+    14.06%     0.72%  efsd     [kernel.kallsyms]       [k] do_anonymous_page
+     9.96%     0.12%  efsd     [kernel.kallsyms]       [k] alloc_anon_folio
+     5.89%     0.49%  efsd     libc.so.6               [.] clock_gettime@@GLIBC_2.17
+     5.49%     0.21%  efsd     [kernel.kallsyms]       [k] __mem_cgroup_charge
+     5.46%     0.00%  efsd     [kernel.kallsyms]       [k] __vm_munmap
+     5.46%     0.00%  efsd     [kernel.kallsyms]       [k] __x64_sys_munmap
+     5.46%     0.00%  efsd     [kernel.kallsyms]       [k] do_vmi_align_munmap
+     5.46%     0.00%  efsd     [kernel.kallsyms]       [k] do_vmi_munmap
+     5.46%     0.00%  efsd     libc.so.6               [.] __munmap
+     5.42%     0.00%  efsd     [kernel.kallsyms]       [k] vms_clear_ptes
+     5.42%     0.00%  efsd     [kernel.kallsyms]       [k] vms_complete_munmap_vmas
+     5.23%     0.06%  efsd     [kernel.kallsyms]       [k] zap_pte_range
+     5.23%     0.00%  efsd     [kernel.kallsyms]       [k] unmap_page_range
+     5.23%     0.00%  efsd     [kernel.kallsyms]       [k] unmap_vmas
+     5.23%     0.00%  efsd     [kernel.kallsyms]       [k] zap_pmd_range.isra.0
+     4.60%     0.30%  efsd     efsd                    [.] host_pump
+     4.55%     0.00%  efsd     efsd                    [.] conn_thread
+     4.53%     0.08%  efsd     efsd                    [.] server_handle_conn
+     4.42%     1.93%  efsd     [kernel.kallsyms]       [k] charge_memcg
+     4.31%     0.06%  efsd     [kernel.kallsyms]       [k] vma_alloc_folio_noprof
+     4.17%     0.00%  efsd     [kernel.kallsyms]       [k] alloc_pages_mpol_noprof
+     4.16%     0.00%  efsd     [kernel.kallsyms]       [k] folio_alloc_mpol_noprof
+     4.01%     0.27%  efsd     [kernel.kallsyms]       [k] __alloc_pages_noprof
+     3.76%     0.06%  efsd     libc.so.6               [.] __GI___writev
+     3.71%     0.03%  efsd     efsd                    [.] efs_conn_send_msg
+     3.68%     0.21%  efsd     [kernel.kallsyms]       [k] get_page_from_freelist
+     3.59%     0.31%  efsd     [kernel.kallsyms]       [k] free_pages_and_swap_cache
+     3.59%     0.00%  efsd     [kernel.kallsyms]       [k] __tlb_batch_free_encoded_pages
+     3.56%     0.02%  efsd     [kernel.kallsyms]       [k] do_writev
+     3.47%     0.04%  efsd     [kernel.kallsyms]       [k] vfs_writev
+     3.41%     3.41%  efsd     [vdso]                  [.] 0x00000000000008d5
+     3.41%     0.00%  efsd     [vdso]                  [.] 0x00007f962819a8d8
+     3.40%     0.00%  efsd     [kernel.kallsyms]       [k] tlb_flush_mmu
+     3.36%     0.04%  efsd     [kernel.kallsyms]       [k] do_iter_readv_writev
+     3.35%     0.32%  efsd     [kernel.kallsyms]       [k] folios_put_refs
+     3.21%     0.04%  efsd     [kernel.kallsyms]       [k] sock_write_iter
+     3.07%     0.02%  efsd     [kernel.kallsyms]       [k] tcp_sendmsg
+     3.04%     0.09%  efsd     [kernel.kallsyms]       [k] tcp_sendmsg_locked
+     3.00%     2.97%  efsd     efsd                    [.] unpack_inode
+     2.80%     0.00%  efsd     efsd                    [.] drain_inbox
+     2.78%     0.00%  efsd     efsd                    [.] efs_raft_recv_batch
+     2.53%     0.11%  efsd     [kernel.kallsyms]       [k] __tcp_transmit_skb
+     2.49%     0.03%  efsd     [kernel.kallsyms]       [k] tcp_write_xmit
+     2.46%     0.00%  efsd     [kernel.kallsyms]       [k] __tcp_push_pending_frames
+     2.40%     0.02%  efsd     [kernel.kallsyms]       [k] __ip_queue_xmit
+     2.28%     0.10%  efsd     libc.so.6               [.] __libc_recv
+     2.23%     2.23%  efsd     [kernel.kallsyms]       [k] sync_regs
+     2.19%     0.19%  efsd     [kernel.kallsyms]       [k] free_unref_folios
+     2.18%     0.07%  efsd     efsd                    [.] host_sender
+     2.14%     0.04%  efsd     [kernel.kallsyms]       [k] schedule
+     2.10%     0.09%  efsd     [kernel.kallsyms]       [k] __schedule
+     2.07%     0.02%  efsd     [kernel.kallsyms]       [k] ip_output
+     2.05%     2.01%  efsd     [kernel.kallsyms]       [k] __list_del_entry_valid_or_report
+     2.05%     0.13%  efsd     [kernel.kallsyms]       [k] rmqueue.isra.0
+     1.97%     0.02%  efsd     [kernel.kallsyms]       [k] ip_finish_output2
+     1.95%     0.08%  efsd     [kernel.kallsyms]       [k] __dev_queue_xmit
+     1.89%     0.01%  efsd     [kernel.kallsyms]       [k] __x64_sys_futex
+     1.87%     0.00%  efsd     [kernel.kallsyms]       [k] do_futex
+     1.86%     0.05%  efsd     [kernel.kallsyms]       [k] __sys_recvfrom
+     1.86%     0.01%  efsd     [kernel.kallsyms]       [k] __x64_sys_recvfrom
+     1.83%     1.83%  efsd     [kernel.kallsyms]       [k] native_irq_return_iret
+     1.83%     0.14%  efsd     [kernel.kallsyms]       [k] free_unref_page_commit
+     1.81%     0.08%  efsd     [kernel.kallsyms]       [k] vfs_write
+     1.81%     0.00%  efsd     [kernel.kallsyms]       [k] handle_softirqs
+     1.80%     0.02%  efsd     [kernel.kallsyms]       [k] do_fsync
+     1.75%     1.27%  efsd     [kernel.kallsyms]       [k] zap_present_ptes.constprop.0
+     1.75%     0.02%  efsd     [kernel.kallsyms]       [k] __local_bh_enable_ip
+     1.73%     0.03%  efsd     [kernel.kallsyms]       [k] sock_recvmsg
+     1.72%     0.03%  efsd     [xfs]                   [k] xfs_file_fsync
+     1.72%     0.02%  efsd     [kernel.kallsyms]       [k] do_softirq
+     1.71%     0.09%  efsd     [kernel.kallsyms]       [k] free_pcppages_bulk
+     1.70%     0.00%  efsd     efsd                    [.] run_job
+     1.70%     0.00%  efsd     efsd                    [.] writer_thread
+     1.70%     0.30%  efsd     [kernel.kallsyms]       [k] __folio_batch_add_and_move
+     1.69%     0.00%  efsd     efsd                    [.] server_write_fragment_with_sum_sync
+     1.68%     0.02%  efsd     efsd                    [.] apply_committed
+     1.66%     0.05%  efsd     [kernel.kallsyms]       [k] net_rx_action
+     1.66%     0.06%  efsd     [kernel.kallsyms]       [k] __rmqueue_pcplist
+     1.66%     0.01%  efsd     [kernel.kallsyms]       [k] inet_recvmsg
+     1.65%     0.03%  efsd     [kernel.kallsyms]       [k] tcp_recvmsg
+     1.64%     0.00%  efsd     efsd                    [.] host_apply
+     1.64%     0.00%  efsd     efsd                    [.] host_apply_dispatch.constprop.0
+     1.59%     0.00%  efsd     efsd                    [.] server_write_fragment_to_path.isra.0
+     1.58%     1.24%  efsd     efsd                    [.] host_query_cancel
+     1.56%     0.01%  efsd     [kernel.kallsyms]       [k] process_backlog
+     1.56%     0.00%  efsd     [kernel.kallsyms]       [k] __napi_poll
+     1.55%     0.08%  efsd     [kernel.kallsyms]       [k] tcp_recvmsg_locked
+     1.51%     0.00%  efsd     [kernel.kallsyms]       [k] __netif_receive_skb_one_core
+     1.46%     0.00%  efsd     libc.so.6               [.] fdatasync
+     1.45%     0.00%  efsd     [kernel.kallsyms]       [k] __x64_sys_fdatasync
+     1.40%     0.12%  efsd     [kernel.kallsyms]       [k] rmqueue_bulk
+     1.38%     1.25%  efsd     [kernel.kallsyms]       [k] try_charge_memcg
+     1.37%     0.24%  efsd     [kernel.kallsyms]       [k] folio_batch_move_lru
+     1.35%     0.00%  efsd     efsd                    [.] on_ae_req
+     1.30%     0.16%  efsd     efsd                    [.] efs_meta_apply_getattr
+     1.29%     0.00%  efsd     [kernel.kallsyms]       [k] file_write_and_wait_range
+     1.28%     0.76%  efsd     [kernel.kallsyms]       [k] its_return_thunk
+     1.27%     0.09%  efsd     [kernel.kallsyms]       [k] prep_new_page
+     1.20%     0.01%  efsd     libc.so.6               [.] __GI___libc_write
+     1.19%     0.04%  efsd     [kernel.kallsyms]       [k] futex_wait
+     1.18%     0.05%  efsd     [kernel.kallsyms]       [k] post_alloc_hook
+     1.17%     0.06%  efsd     efsd                    [.] efs_txn_read_ex
+     1.16%     1.13%  efsd     [kernel.kallsyms]       [k] clear_page_erms
+     1.13%     0.73%  efsd     [kernel.kallsyms]       [k] __count_memcg_events
+     1.11%     0.15%  efsd     [kernel.kallsyms]       [k] memcg1_commit_charge
+     1.10%     0.03%  efsd     [kernel.kallsyms]       [k] __futex_wait
+     1.09%     0.47%  efsd     [kernel.kallsyms]       [k] __lruvec_stat_mod_folio
+     1.07%     0.02%  efsd     [kernel.kallsyms]       [k] __filemap_fdatawrite_range
+     1.05%     1.05%  efsd     [kernel.kallsyms]       [k] __free_one_page
+     1.05%     0.00%  efsd     [kernel.kallsyms]       [k] filemap_fdatawrite_wbc
+     1.04%     0.00%  efsd     [kernel.kallsyms]       [k] do_writepages
+     1.04%     0.03%  efsd     [xfs]                   [k] xfs_vm_writepages
+     1.02%     0.00%  efsd     [kernel.kallsyms]       [k] ksys_write
+     1.01%     0.02%  efsd     [kernel.kallsyms]       [k] iomap_writepages
+     1.01%     0.10%  efsd     [kernel.kallsyms]       [k] dequeue_entities
+     1.00%     0.02%  efsd     libc.so.6               [.] __futex_abstimed_wait_common
+     1.00%     0.00%  efsd     [kernel.kallsyms]       [k] ip_local_deliver
+
+
+#
+# (Tip: To not record events from perf itself add --exclude-perf)
+#

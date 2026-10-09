@@ -1,0 +1,27 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 997  of event 'cycles:P'
+# Event count (approx.): 8113483183
+#
+# Overhead  Command  Shared Object      Symbol                                      
+# ........  .......  .................  ............................................
+#
+     9.46%  efsd     efsd               [.] efs_query_catalog_build
+     1.99%  efsd     efsd               [.] add_node
+     1.95%  efsd     efsd               [.] blake3_hash_many_avx512
+     1.74%  efsd     libc.so.6          [.] __memmove_evex_unaligned_erms
+     1.34%  efsd     [kernel.kallsyms]  [k] __d_lookup_rcu
+     1.11%  efsd     [kernel.kallsyms]  [k] its_return_thunk
+     1.10%  efsd     efsd               [.] kv_mtab_pos
+     1.10%  efsd     [vdso]             [.] 0x00000000000008d5
+     1.08%  efsd     [kernel.kallsyms]  [k] _raw_spin_lock
+     1.06%  efsd     efsd               [.] lookup
+     1.03%  efsd     libc.so.6          [.] unlink_chunk.isra.0
+
+
+#
+# (Tip: Show user configuration overrides: perf config --user --list)
+#

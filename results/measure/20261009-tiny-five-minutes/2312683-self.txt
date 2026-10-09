@@ -1,0 +1,49 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 2K of event 'cycles:P'
+# Event count (approx.): 45060735560
+#
+# Overhead  Command  Shared Object         Symbol                                     
+# ........  .......  ....................  ...........................................
+#
+     2.10%  efsd     efsd                  [.] blake3_hash_many_avx512
+     1.99%  efsd     libc.so.6             [.] __memmove_evex_unaligned_erms
+     1.93%  efsd     [nf_tables]           [k] nft_do_chain
+     1.83%  efsd     [kernel.kallsyms]     [k] crc32_body
+     1.65%  efsd     libc.so.6             [.] pthread_mutex_lock@@GLIBC_2.2.5
+     1.42%  efsd     efsd                  [.] host_pump
+     1.37%  efsd     [kernel.kallsyms]     [k] _copy_to_iter
+     1.22%  efsd     libc.so.6             [.] __GI___pthread_mutex_unlock_usercnt
+     0.95%  efsd     libc.so.6             [.] __memcmp_evex_movbe
+     0.91%  efsd     [kernel.kallsyms]     [k] _copy_from_iter
+     0.85%  efsd     [kernel.kallsyms]     [k] _raw_spin_lock
+     0.84%  efsd     [kernel.kallsyms]     [k] clear_bhb_loop
+     0.79%  efsd     [kernel.kallsyms]     [k] _raw_spin_lock_irqsave
+     0.77%  efsd     [kernel.kallsyms]     [k] __d_lookup_rcu
+     0.76%  efsd     [kernel.kallsyms]     [k] its_return_thunk
+     0.73%  efsd     [kernel.kallsyms]     [k] __rcu_read_unlock
+     0.71%  efsd     [kernel.kallsyms]     [k] __rcu_read_lock
+     0.69%  efsd     [kernel.kallsyms]     [k] update_curr
+     0.66%  efsd     efsd                  [.] kv_mtab_pos
+     0.66%  efsd     [kernel.kallsyms]     [k] kmem_cache_alloc_noprof
+     0.65%  efsd     [kernel.kallsyms]     [k] restore_fpregs_from_fpstate
+     0.60%  efsd     libc.so.6             [.] __memset_evex_unaligned_erms
+     0.59%  efsd     [kernel.kallsyms]     [k] kmem_cache_free
+     0.59%  efsd     [kernel.kallsyms]     [k] fput
+     0.58%  efsd     efsd                  [.] kv_seg_excludes
+     0.57%  efsd     [kernel.kallsyms]     [k] __tcp_transmit_skb
+     0.56%  efsd     [xfs]                 [k] xfs_buf_lookup.constprop.0
+     0.55%  efsd     [kernel.kallsyms]     [k] fdget
+     0.55%  efsd     [kernel.kallsyms]     [k] fdget_pos
+     0.54%  efsd     [kernel.kallsyms]     [k] __intel_pmu_enable_all.isra.0
+     0.52%  efsd     [kernel.kallsyms]     [k] __memcpy
+     0.52%  efsd     [kernel.kallsyms]     [k] _raw_spin_lock_bh
+     0.52%  efsd     libc.so.6             [.] __GI___pthread_disable_asynccancel
+
+
+#
+# (Tip: Compare performance results with: perf diff [<old file> <new file>])
+#
