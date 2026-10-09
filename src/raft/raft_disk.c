@@ -10,6 +10,7 @@
  * Semantics match raft_mem.c exactly; see raft.h for the contract. */
 
 #include "raft_disk_internal.h"
+#include "efs/batch_obs.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -607,6 +608,7 @@ struct efs_raft_disk *efs_raft_disk_open(const char *dir, int sync_mode)
     struct stat st;
     size_t dlen;
 
+    efs_batch_obs_init();
     if (!dir)
         return NULL;
     dlen = strlen(dir);

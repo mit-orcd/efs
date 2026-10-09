@@ -1,6 +1,7 @@
 #include "server_internal.h"
 #include "efs/checksum.h"
 #include "efs/raft.h"
+#include "efs/batch_obs.h"
 #include "efs/admission.h"
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
@@ -3185,7 +3186,8 @@ static unsigned propose_q;
 
 static void propose_q_add(void)
 {
-    __atomic_add_fetch(&propose_q, 1u, __ATOMIC_RELEASE);
+    unsigned depth = __atomic_add_fetch(&propose_q, 1u, __ATOMIC_RELEASE);
+    BO_HIST(BH_PROPOSERS, depth);
 }
 
 static void propose_q_sub(void)
@@ -3726,6 +3728,8 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                  * of new calls is cut off by the spin cap. */
                 while (propose_q_busy() && spins++ < 10000)
                     sched_yield();
+                BO_HIST(BH_SPINS, spins);
+                if (spins > 10000) BO_COUNT(BO_SPIN_CAP);
                 host_pump_kick(h);
                 rc = efs_raft_disk_sync_release_wait(h->disk);
                 if (rc == EFS_OK) {
@@ -5169,6 +5173,8 @@ static void drain_inbox(struct efs_raft_host *h)
     h->inbox_bytes = 0;
     pthread_mutex_unlock(&h->inbox_mu);
 
+    if (n) BO_HIST(BH_INBOX, n);
+    else BO_COUNT(BO_INBOX_EMPTY);
     /* Bounded, contiguous groups only: no message reordering or extra wait.
      * The core flushes before term/conflict/read/configuration boundaries. */
     struct efs_raft_msg msgs[EFS_RAFT_RECV_MAX];
@@ -5193,6 +5199,11 @@ static void drain_inbox(struct efs_raft_host *h)
         }
         if (count && (r != pending || count == EFS_RAFT_RECV_MAX ||
                       bytes + cmd_cap > EFS_RAFT_AE_BYTES)) {
+            BO_HIST(BH_HOST_MESSAGES, count);
+            if (i == n) BO_COUNT(BO_HOST_END);
+            else if (r != pending) BO_COUNT(BO_HOST_GROUP);
+            else if (count == EFS_RAFT_RECV_MAX) BO_COUNT(BO_HOST_COUNT);
+            else BO_COUNT(BO_HOST_BYTES);
             (void)efs_raft_recv_batch(pending, msgs, count);
             for (uint32_t j = 0; j < count; j++) free(commands[j]);
             count = 0;
@@ -5622,6 +5633,7 @@ static void *host_pump(void *arg)
         {
             uint64_t pnow = now_us_();
 
+            efs_batch_obs_dump(pnow);
             for (i = 0; i < HOST_NGROUPS; i++)
                 (void)persist_applied(h, i, applied_now[i], pnow, 0);
         }

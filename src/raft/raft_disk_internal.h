@@ -106,6 +106,9 @@ struct efs_raft_disk {
     int sync_hold;   /* >0: append writes, skip fsync (W3 report batch) */
     int sync_need;   /* an append happened during a hold; release fsyncs */
     uint64_t synced_bytes; /* file offset covered by the last fsync */
+    /* Diagnostics only, under mu; never affect durable watermarks. */
+    uint64_t obs_entries, obs_synced_entries, obs_hold_started;
+    unsigned obs_waiters;
     int io_failed;
     uint8_t *rec; /* append scratch, RAFT_REC_MAX */
 };
