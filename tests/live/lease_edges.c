@@ -42,6 +42,15 @@ static void owner_rpc(unsigned port, const uint8_t *payload, unsigned length, in
             usleep(10000);
             continue;
         }
+        /* Sequenced mounted CLOSE can leave its real cleanup obligation
+         * queued briefly. An absent-value PREPARE must wait for that work;
+         * never replace or overwrite the pre-existing marker. */
+        if (payload[1] == EFS_MD_CMD_PREPARE && expected == EFS_OK &&
+            (reply.rc == EFS_ERR_STALE || reply.rc == EFS_ERR_BUSY)) {
+            usleep(10000);
+            continue;
+        }
+        fprintf(stderr,"owner command=%u rc=%d expected=%d\n", payload[1], reply.rc, expected);
         printf("owner command=%u rc=%d expected=%d\n", payload[1], reply.rc, expected);
         assert(reply.rc == expected);
         return;

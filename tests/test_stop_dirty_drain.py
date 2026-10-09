@@ -91,6 +91,8 @@ static void efs_buf_drain_enter(void) {}
 static void efs_buf_drain_leave(void) {}
 static int efs_dcache_drain_pending(void) {rounds++;return EFS_OK;}
 static int efs_client_report_dirty(int sync) {assert(sync);return EFS_OK;}
+static int create_pending;
+static int efs_pending_create_drain(void){return create_pending?-13:EFS_OK;}
 static int efs_open_drain_pending(void) {return lease_pending?-16:EFS_OK;}
 static uint64_t efs_dcache_pending_records(const char *reason) {(void)reason;return body_pending;}
 static void efs_client_report_pressure_stats(struct efs_report_pressure *p) {
@@ -106,7 +108,9 @@ int main(void) {
  assert(efs_control_drain(25,0)==-1 && rounds==3 && deadline==777);
  rounds=0;now=0;body_pending=0;lease_pending=1;
  assert(efs_control_drain(25,0)==-1 && rounds==3 && deadline==777);
- lease_pending=0;rounds=0;now=0;assert(!efs_control_drain(25,0) && rounds==1);
+ lease_pending=0;create_pending=1;rounds=0;now=0;
+ assert(efs_control_drain(25,0)==-1&&rounds==3&&deadline==777);
+ create_pending=0;rounds=0;now=0;assert(!efs_control_drain(25,0) && rounds==1);
  rounds=0;assert(!efs_control_drain(25,1) && !rounds && deadline==777);
  return 0;
 }

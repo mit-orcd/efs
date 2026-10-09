@@ -5,9 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <sys/wait.h>
 int main(int argc,char **argv)
 {
-    assert(argc==3);
+    assert(argc==4);
     unsigned port=(unsigned)atoi(argv[1]);
     efs_ino_t ino=strtoull(argv[2],NULL,10);
     g_client.export_id=1;g_client.node_count=4;
@@ -42,6 +44,23 @@ int main(int argc,char **argv)
         assert(efs_client_rpc_lease_edge(ino,generation,&r.q,flags,0,1,&known)==EFS_OK && known==1);
         assert(efs_client_lease_reset(&r)==EFS_OK);
     }
+    struct efs_opid old={0};memcpy(old.client_uuid,uuid,sizeof(uuid));old.session_epoch=g_client.opid_epoch;old.seq=1;
+    int revoked=1;
+    assert(efs_client_rpc_identity_revoked(&old,&revoked)==EFS_OK && !revoked);
+    char hex[33],address[64];for(unsigned i=0;i<16;i++)snprintf(hex+2*i,3,"%02x",uuid[i]);
+    snprintf(address,sizeof(address),"127.0.0.1:%u",port);
+    pid_t child=fork();assert(child>=0);
+    if(!child){execl(argv[3],argv[3],"raft-session",address,"fence",hex,(char *)NULL);_exit(127);}
+    int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
+    assert(efs_client_rpc_identity_revoked(&old,&revoked)==EFS_OK && revoked);
+    struct efs_opid future=old;future.session_epoch+=100;
+    assert(efs_client_rpc_identity_revoked(&future,&revoked)==EFS_OK && !revoked);
+    struct efs_opid missing=old;memset(missing.client_uuid,0xfe,16);
+    assert(efs_client_rpc_identity_revoked(&missing,&revoked)==EFS_ERR_NOT_FOUND && !revoked);
+    assert(efs_client_lease_begin(&r,ino,generation,EFS_LEASE_EDGE_OPEN,0)==EFS_OK);
+    assert(efs_client_lease_resume(&r,0)==EFS_ERR_STALE && r.complete && r.revoked && r.slot==-1 && !r.attempted);
+    assert(efs_client_lease_reset(&r)==EFS_OK);
+    puts("durably revoked epoch: authoritative global proof, future/missing rejection and terminal retained lease recovery PASS");
     puts("actual retained sequenced client lease: authoritative FileID, full UUID, OPEN/CLOSE stored proof, legacy mutation barrier and safe reset PASS");
     return 0;
 }

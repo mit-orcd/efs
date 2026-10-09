@@ -83,5 +83,5 @@ int main(void)
 '''
 with tempfile.TemporaryDirectory(prefix='efs-lease-rpc-') as t:
     p=Path(t);(p/'test.c').write_text(code)
-    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=c11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p/'test.c'),str(root/'src/sim/opid.c'),'-o',str(p/'test')],check=True)
+    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=c11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p/'test.c'),str(root/'src/sim/opid.c'),str(root/'src/kv/kv_key.c'),'-o',str(p/'test')],check=True)
     subprocess.run([str(p/'test')],check=True)

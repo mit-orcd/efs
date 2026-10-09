@@ -6,6 +6,7 @@
 #include "efs/kv_key.h"
 #include "efs/meta_cmd.h"
 #include "efs/publication.h"
+#include "efs/put_ticket.h"
 #include "efs/session.h"
 #include <stddef.h>
 #include <string.h>
@@ -178,7 +179,7 @@ static int stale_retryable(uint8_t type)
  * - 1, so a server window advances past seqs it never served. A slot is
  * held from before the first send to after the final return — every
  * BUSY / STALE / NOT_PRIMARY retry inside rpc_send_recv_* preserves the
- * identity and operation payload. CREATE may advance only its contiguous
+ * identity and operation payload. Retries may advance only their contiguous
  * ACK as older operations finish. Table full = the op
  * receives BUSY before any RPC; no mutation loses its identity. */
 static pthread_mutex_t opid_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -221,35 +222,35 @@ int efs_client_publication_id(uint64_t sequence, struct efs_opid *out)
 /* Fill q and take a slot (returned; -1 = none, q left invalid). */
 static int opid_begin(struct efs_opid_req *q)
 {
-    int i, slot = -1;
-    uint64_t low = 0;
-
-    memset(q, 0, sizeof(*q));
-    pthread_mutex_lock(&opid_mu);
-    opid_seed_locked();
-    for (i = 0; i < EFS_OPID_INFLIGHT; i++) {
-        uint64_t s = g_client.opid_inflight[i];
-
-        if (s == 0) {
-            if (slot < 0)
-                slot = i;
-        } else if (low == 0 || s < low) {
-            low = s;
+    memset(q,0,sizeof(*q));
+    /* A later known reply still occupies the server cache until the oldest
+     * unresolved identity finishes. Reserve space for that oldest identity:
+     * never issue more sequence positions than the smallest receipt cache.
+     * Otherwise later replies fill it and the missing oldest cannot commit. */
+    for(unsigned attempt=0;attempt<1000;attempt++) {
+        int slot=-1;uint64_t low=0;
+        pthread_mutex_lock(&opid_mu);
+        opid_seed_locked();
+        for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {
+            uint64_t seq=g_client.opid_inflight[i];
+            if(!seq){if(slot<0)slot=(int)i;}
+            else if(!low || seq<low)low=seq;
         }
+        int exhausted=g_client.opid_next==UINT64_MAX;
+        if(slot>=0 && !exhausted &&
+           (!low || g_client.opid_next-low<EFS_OPID_REPLY_CACHE)) {
+            uint64_t seq=g_client.opid_next++;
+            g_client.opid_inflight[slot]=seq;
+            memcpy(q->id.client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN);
+            q->id.session_epoch=g_client.opid_epoch;q->id.seq=seq;
+            q->ack=(low?low:seq)-1;
+            pthread_mutex_unlock(&opid_mu);return slot;
+        }
+        pthread_mutex_unlock(&opid_mu);
+        if(exhausted)return -1;
+        usleep(1000);
     }
-    if (slot >= 0 && g_client.opid_next != UINT64_MAX) {
-        uint64_t seq = g_client.opid_next++;
-
-        g_client.opid_inflight[slot] = seq;
-        memcpy(q->id.client_uuid, g_client.opid_uuid, EFS_OPID_UUID_LEN);
-        q->id.session_epoch = g_client.opid_epoch;
-        q->id.seq = seq;
-        q->ack = (low ? low : seq) - 1;
-    } else {
-        slot = -1;
-    }
-    pthread_mutex_unlock(&opid_mu);
-    return slot;
+    return -1;
 }
 
 static void opid_end(int slot)
@@ -286,26 +287,29 @@ static uint32_t opid_suffix(uint8_t *buf, uint32_t slen, const struct efs_opid_r
 
 /* The identity is immutable, but its contiguous ACK may advance while a
  * retry waits behind older operations. Never ACK this operation itself. */
+static void opid_refresh_ack(struct efs_opid_req *q)
+{
+    if (!efs_opid_req_valid(q)) return;
+    uint64_t low=0;int owned=0;
+    pthread_mutex_lock(&opid_mu);
+    for (unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {
+        uint64_t seq=g_client.opid_inflight[i];
+        if (seq==q->id.seq) owned=1;
+        if (seq && (!low || seq<low)) low=seq;
+    }
+    if (owned && low && low-1>q->ack && low<=q->id.seq &&
+        q->id.session_epoch==g_client.opid_epoch &&
+        !memcmp(q->id.client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN))
+        q->ack=low-1;
+    pthread_mutex_unlock(&opid_mu);
+}
 static void opid_retry_ack(void *packet, uint32_t length)
 {
     struct efs_opid_req q;
     uint8_t *suffix=(uint8_t *)packet+length-EFS_OPID_WIRE_LEN;
     efs_opid_req_unpack(&q,suffix);
-    if (!efs_opid_req_valid(&q)) return;
-    uint64_t low=0;int owned=0;
-    pthread_mutex_lock(&opid_mu);
-    for (unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {
-        uint64_t seq=g_client.opid_inflight[i];
-        if (seq==q.id.seq) owned=1;
-        if (seq && (!low || seq<low)) low=seq;
-    }
-    if (owned && low && low-1>q.ack && low<=q.id.seq &&
-        q.id.session_epoch==g_client.opid_epoch &&
-        !memcmp(q.id.client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN)) {
-        q.ack=low-1;
-        efs_opid_req_pack(&q,suffix);
-    }
-    pthread_mutex_unlock(&opid_mu);
+    opid_refresh_ack(&q);
+    efs_opid_req_pack(&q,suffix);
 }
 
 /* Phase 2b: the metadata primary is the lowest-id live node. Mutations must
@@ -549,8 +553,13 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
     int prof = rpc_prof_enabled();
     int saw_busy = 0;
     unsigned long long t_start = rpc_prof_now_us();
-    uint8_t create_retry[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN];
-    int identified_create=type==EFS_MSG_INODE_CREATE && req_len==sizeof(create_retry);
+    union { struct efs_msg_inode_create create; struct efs_msg_inode_unlink unlink;
+            struct efs_msg_inode_link link; struct efs_msg_inode_rename_at rename; } mutation;
+    uint8_t create_retry[sizeof(mutation)+EFS_OPID_WIRE_LEN];
+    int identified_create=(type==EFS_MSG_INODE_CREATE && req_len==sizeof(mutation.create)+EFS_OPID_WIRE_LEN) ||
+        (type==EFS_MSG_INODE_UNLINK && req_len==sizeof(mutation.unlink)+EFS_OPID_WIRE_LEN) ||
+        (type==EFS_MSG_INODE_LINK && req_len==sizeof(mutation.link)+EFS_OPID_WIRE_LEN) ||
+        (type==EFS_MSG_INODE_RENAME_AT && req_len==sizeof(mutation.rename)+EFS_OPID_WIRE_LEN);
     if (identified_create) { memcpy(create_retry,req,req_len);req=create_retry; }
     for (int attempt = 0; attempt < 16; attempt++) {
         if (identified_create) opid_retry_ack(create_retry,req_len);
@@ -634,7 +643,8 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             /* INODE_APPEND uses BUSY as the unflushed-reservation barrier.
              * The caller must flush + report before retrying; spinning here
              * holds g_append_mu for ~10s and deadlocks concurrent O_APPEND. */
-            if (type == EFS_MSG_INODE_APPEND || type == EFS_MSG_INODE_FLOCK) {
+            if (type == EFS_MSG_INODE_APPEND || type == EFS_MSG_INODE_FLOCK ||
+                type == EFS_MSG_CREATE_RETAINED) {
                 rpc_prof_add(type, t1 - t0, t2 - t1, t3 - t2, 0);
                 return EFS_OK;
             }
@@ -826,6 +836,88 @@ int efs_client_rpc_create(efs_export_id_t export_id, efs_ino_t parent,
     if (out)
         *out = r.inode;
     return EFS_OK;
+}
+
+int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t parent,
+                             const char *name,uint32_t mode,uid_t uid,gid_t gid)
+{
+    if(!r || !parent || !name || !name[0] ||
+       strnlen(name,EFS_MAX_NAME)>=EFS_MAX_NAME || !S_ISREG(mode))return EFS_ERR_INVAL;
+    if(r->active)return EFS_ERR_BUSY;
+    struct efs_opid_req q;int slot=opid_begin(&q);
+    if(slot<0)return EFS_ERR_BUSY;
+    memset(r,0,sizeof(*r));r->slot=slot;r->active=1;
+    r->wire.q=q;r->wire.create.export_id=g_client.export_id;
+    r->wire.create.parent=parent;r->wire.create.mode=mode;
+    r->wire.create.uid=uid;r->wire.create.gid=gid;
+    r->wire.create.flags=EFS_CREATE_F_PENDING;
+    memcpy(r->wire.create.name,name,strlen(name)+1);
+    return EFS_OK;
+}
+
+static int create_request_rpc(struct efs_client_create_request *r,int probe)
+{
+    struct efs_msg_create_retained request=r->wire;
+    request.probe=probe;
+    struct efs_msg_create_retained_reply reply={0};
+    int rc=rpc_send_recv_owner(request.create.parent,EFS_MSG_CREATE_RETAINED,
+        &request,sizeof(request),EFS_MSG_CREATE_RETAINED_REPLY,&reply,sizeof(reply));
+    if(rc!=EFS_OK)return rc;
+    if(reply.known>1 || reply.routed>1 || (reply.known && !reply.routed) ||
+       (reply.routed && reply.shard>=EFS_SESSION_BITS) ||
+       (r->wire.routed && reply.routed && r->wire.shard!=reply.shard))return EFS_ERR_PROTO;
+    if(reply.routed){r->wire.routed=1;r->wire.shard=reply.shard;}
+    rc=rpc_status_to_efs(reply.rpc.status);
+    if(reply.known) {
+        if(rc==EFS_ERR_BUSY || rc==EFS_ERR_NOT_PRIMARY ||
+           (rc==EFS_OK && (!reply.rpc.inode.ino || !reply.generation)))return EFS_ERR_PROTO;
+        r->inode=reply.rpc.inode;r->generation=reply.generation;
+        r->complete=1;r->result=rc;opid_end(r->slot);r->slot=-1;
+    }
+    return rc;
+}
+
+static int create_request_revocation(struct efs_client_create_request *r,int rc)
+{
+    if(!r->complete && (rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND)) {
+        int revoked=0;
+        if(efs_client_rpc_identity_revoked(&r->wire.q.id,&revoked)==EFS_OK && revoked) {
+            r->revoked=1;r->complete=1;r->result=EFS_ERR_STALE;
+            opid_end(r->slot);r->slot=-1;return EFS_ERR_STALE;
+        }
+    }
+    return rc;
+}
+
+int efs_client_create_resume(struct efs_client_create_request *r,int probe_only)
+{
+    if(!r || !r->active || probe_only<0 || probe_only>1)return EFS_ERR_INVAL;
+    if(r->complete)return r->result;
+    int rc=create_request_rpc(r,1);
+    if(r->complete || probe_only || rc!=EFS_ERR_BUSY)return create_request_revocation(r,rc);
+    if(!r->wire.routed)return EFS_ERR_PROTO;
+    if(!r->admitted) {
+        rc=efs_client_rpc_publication_session(r->wire.shard,&r->wire.q.id);
+        if(rc!=EFS_OK)return create_request_revocation(r,rc);
+        r->admitted=1;
+    }
+    opid_refresh_ack(&r->wire.q);
+    r->attempted=1;
+    return create_request_revocation(r,create_request_rpc(r,0));
+}
+
+int efs_client_create_reset(struct efs_client_create_request *r)
+{
+    if(!r)return EFS_ERR_INVAL;
+    if(r->active && !r->complete)return EFS_ERR_BUSY;
+    memset(r,0,sizeof(*r));return EFS_OK;
+}
+int efs_client_create_cancel(struct efs_client_create_request *r)
+{
+    if(!r)return EFS_ERR_INVAL;
+    if(r->active && r->attempted && !r->complete)return EFS_ERR_BUSY;
+    if(r->active && !r->complete)opid_end(r->slot);
+    memset(r,0,sizeof(*r));return EFS_OK;
 }
 
 int efs_client_rpc_getattr(efs_export_id_t export_id, efs_ino_t ino,
@@ -1033,6 +1125,8 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
     uint8_t body[EFS_MD_SESS_LEASE_EDGE_LEN+1];
     if(known)*known=0;
     if (bytes>sizeof(body)-1) return EFS_ERR_INVAL;
+    if(probe==2 && (!known || bytes!=22 || command[0]!=EFS_MD_CMD_SESSION ||
+                    command[1]!=0))return EFS_ERR_INVAL;
     body[0]=efs_raft_shard_group(shard);memcpy(body+1,command,bytes);
     efs_node_id_t target=0;
     for (unsigned attempt=0;attempt<8;attempt++) {
@@ -1053,7 +1147,8 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
         }
         struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,sizeof(reply));free(payload);
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
-        if(known) {
+        if(probe==2 && reply.rc==EFS_OK){*known=reply.salt;return EFS_OK;}
+        if(known && probe!=2) {
             if(reply.salt>1 || (reply.salt &&
                (reply.rc==EFS_ERR_NOT_PRIMARY || reply.rc==EFS_ERR_NO_QUORUM)))
                 return EFS_ERR_PROTO;
@@ -1069,6 +1164,25 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
         if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
     }
     return EFS_ERR_BUSY;
+}
+
+int efs_client_rpc_identity_revoked(const struct efs_opid *id,int *revoked)
+{
+    if(!revoked)return EFS_ERR_INVAL;
+    *revoked=0;
+    if(!id || !id->session_epoch)return EFS_ERR_INVAL;
+    unsigned nonzero=0;for(unsigned i=0;i<EFS_OPID_UUID_LEN;i++)nonzero|=id->client_uuid[i];
+    if(!nonzero)return EFS_ERR_INVAL;
+    uint8_t query[22]={EFS_MD_CMD_SESSION,0};
+    memcpy(query+2,id->client_uuid,EFS_OPID_UUID_LEN);
+    uint64_t view=0;
+    int rc=session_command_reply(efs_kv_session_shard(id->client_uuid),query,sizeof(query),&view,2);
+    if(rc!=EFS_OK)return rc;
+    uint32_t epoch=(uint32_t)view;unsigned state=(unsigned)((view>>32)&255u);
+    if((view>>41) || !epoch || (state!=EFS_SESSION_ACTIVE && state!=EFS_SESSION_FENCING))
+        return EFS_ERR_PROTO;
+    *revoked=state==EFS_SESSION_ACTIVE && epoch>id->session_epoch;
+    return EFS_OK;
 }
 
 static int publication_session_command(uint32_t shard,const uint8_t *command,uint32_t bytes)
@@ -1155,6 +1269,13 @@ static int lease_request_result(struct efs_client_lease_request *r,int rc,
         opid_end(r->slot);
         r->slot=-1;
     }
+    if(!r->complete && (rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND)) {
+        int revoked=0;
+        if(efs_client_rpc_identity_revoked(&r->q.id,&revoked)==EFS_OK && revoked) {
+            r->revoked=1;r->complete=1;r->result=EFS_ERR_STALE;
+            opid_end(r->slot);r->slot=-1;return EFS_ERR_STALE;
+        }
+    }
     return rc;
 }
 
@@ -1174,9 +1295,10 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
     }
     if (!r->admitted) {
         rc=efs_client_rpc_publication_session(efs_kv_inode_shard(r->ino),&r->q.id);
-        if (rc!=EFS_OK) return rc;
+        if (rc!=EFS_OK) return lease_request_result(r,rc,0);
         r->admitted=1;
     }
+    opid_refresh_ack(&r->q);
     r->attempted=1;
     rc=efs_client_rpc_lease_edge(r->ino,r->generation,&r->q,r->flags,
                                  r->pending_token,0,&known);
@@ -1189,6 +1311,53 @@ int efs_client_lease_reset(struct efs_client_lease_request *r)
     if (r->active && !r->complete) return EFS_ERR_BUSY;
     memset(r,0,sizeof(*r));
     return EFS_OK;
+}
+
+int efs_client_rpc_put_ticket(const struct efs_put_ticket *ticket,int probe_only,
+                                uint32_t *state)
+{
+    if(!state)return EFS_ERR_INVAL;
+    *state=0;
+    if(probe_only<0 || probe_only>1)return EFS_ERR_INVAL;
+    uint8_t body[2+EFS_PUT_TICKET_WIRE_LEN];
+    int rc=efs_put_ticket_encode(ticket,body+2);if(rc!=EFS_OK)return rc;
+    uint32_t shard=efs_kv_lane_shard(ticket->ino,ticket->ci%EFS_META_LANES);
+    body[0]=efs_raft_shard_group(shard);
+    body[1]=probe_only?EFS_MD_REQ_PUT_TICKET_STATUS:EFS_MD_CMD_PUT_TICKET_ADMIT;
+    efs_node_id_t target=0;
+    for(unsigned attempt=0;attempt<8;attempt++) {
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        efs_node_id_t nid=target;
+        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
+        if(!conn)return EFS_ERR_NET;
+        if(efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,sizeof(body))) {
+            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        uint8_t type=0;uint32_t bytes=0;void *payload=NULL;
+        if(efs_conn_recv_msg(conn,&type,&payload,&bytes)) {
+            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid,conn);
+        if(type!=EFS_MSG_RAFT_MKFS_REPLY || bytes!=sizeof(struct efs_msg_raft_mkfs_reply)) {
+            free(payload);return EFS_ERR_PROTO;
+        }
+        struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,bytes);free(payload);
+        if(efs_client_rpc_past_deadline())return EFS_ERR_BUSY;
+        if(reply.rc==EFS_OK) {
+            if(reply.salt<EFS_PUT_TICKET_ADMITTED || reply.salt>EFS_PUT_TICKET_RECLAIMING)
+                return EFS_ERR_PROTO;
+            if(!probe_only && reply.salt!=EFS_PUT_TICKET_ADMITTED)return EFS_ERR_STALE;
+            *state=(uint32_t)reply.salt;return EFS_OK;
+        }
+        if(reply.salt)return EFS_ERR_PROTO;
+        if(reply.rc==EFS_ERR_NOT_PRIMARY) {
+            if(reply.leader_hint< -1 || reply.leader_hint>=EFS_MAX_NODES)return EFS_ERR_PROTO;
+            target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid?
+                (efs_node_id_t)(reply.leader_hint+1):0;
+        } else if(reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM)return reply.rc;
+        if(rpc_writer_retry_pause(attempt)!=EFS_OK)return EFS_ERR_BUSY;
+    }
+    return EFS_ERR_BUSY;
 }
 
 int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,
@@ -1818,8 +1987,13 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
     int saw_busy = 0;
     int prof = rpc_prof_enabled();
     unsigned long long t_start = rpc_prof_now_us();
-    uint8_t create_retry[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN];
-    int identified_create=type==EFS_MSG_INODE_CREATE && req_len==sizeof(create_retry);
+    union { struct efs_msg_inode_create create; struct efs_msg_inode_unlink unlink;
+            struct efs_msg_inode_link link; struct efs_msg_inode_rename_at rename; } mutation;
+    uint8_t create_retry[sizeof(mutation)+EFS_OPID_WIRE_LEN];
+    int identified_create=(type==EFS_MSG_INODE_CREATE && req_len==sizeof(mutation.create)+EFS_OPID_WIRE_LEN) ||
+        (type==EFS_MSG_INODE_UNLINK && req_len==sizeof(mutation.unlink)+EFS_OPID_WIRE_LEN) ||
+        (type==EFS_MSG_INODE_LINK && req_len==sizeof(mutation.link)+EFS_OPID_WIRE_LEN) ||
+        (type==EFS_MSG_INODE_RENAME_AT && req_len==sizeof(mutation.rename)+EFS_OPID_WIRE_LEN);
     if (identified_create) { memcpy(create_retry,req,req_len);req=create_retry; }
     for (int attempt = 0; attempt < 16; attempt++) {
         if (identified_create) opid_retry_ack(create_retry,req_len);

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute production lease bookkeeping through ambiguous HOLD replies."""
+"""Execute production lease bookkeeping through ambiguous sequenced replies."""
 from pathlib import Path
 import os,re,shlex,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
@@ -16,26 +16,51 @@ source=r'''
 #include <stdlib.h>
 #include <stdio.h>
 #include <pthread.h>
-typedef uint64_t efs_ino_t;
-#define EFS_OK 0
-#define EFS_ERR_NOMEM -12
-#define EFS_ERR_BUSY -16
-#define EFS_ERR_NET -5
-#define EFS_ERR_NOT_FOUND -3
-static struct {int export_id;uint64_t flock_token;} g_client={1,123};
-static int open_rc,close_rc,opens,closes,server_hold;
-static int efs_client_rpc_hold(int export_id,efs_ino_t ino,int acquire,uint64_t token) {
- assert(export_id==1&&ino==42&&token==123);
+#include <string.h>
+#include <unistd.h>
+#include <time.h>
+#include "client_internal.h"
+#include "efs/session.h"
+struct efs_client g_client;
+static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold,revocation;
+int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *recs,uint32_t *count,uint64_t *out) {
+ (void)ex;(void)gen;(void)start;(void)recs;(void)count;assert(ino==42);*out=99;return EFS_OK;
+}
+int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,uint64_t gen,unsigned flags,uint64_t token) {
+ assert(!r->active&&ino==42&&gen==99);
+ assert((flags==EFS_LEASE_EDGE_CLEAR_PENDING&&token==3)||(!token&&flags!=EFS_LEASE_EDGE_CLEAR_PENDING));
+ *r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.flags=flags,.active=1};return EFS_OK;
+}
+int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
+ assert(!probe&&r->active);
  assert(!pthread_mutex_trylock(&g_open_mu));pthread_mutex_unlock(&g_open_mu);
- if(acquire){opens++;server_hold=1;return open_rc;}
- closes++; if(!close_rc||close_rc==EFS_ERR_NOT_FOUND)server_hold=0; return close_rc;
+ if(r->complete)return r->result;
+ int rc;
+ if(r->flags&EFS_LEASE_EDGE_OPEN){if(!r->attempted)opens++;server_hold=1;rc=open_rc;}
+ else if(r->flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;rc=adopt_rc;}
+ else {closes++;rc=close_rc;if(!rc)server_hold=0;}
+ r->attempted=1;
+ if(revocation && rc==EFS_ERR_STALE){r->revoked=1;r->complete=1;r->result=rc;server_hold=0;}
+ if(!rc){r->complete=1;r->result=rc;}return rc;
+}
+int efs_client_lease_reset(struct efs_client_lease_request *r) {
+ assert(!r->active||r->complete);memset(r,0,sizeof(*r));return EFS_OK;
 }
 '''
 # RPC mock references the production mutex, so place bookkeeping first.
-mock=source[source.index('static int efs_client_rpc_hold'):]
-source=source[:source.index('static int efs_client_rpc_hold')]+s[a:b]+mock
-for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','efs_open_acquire'):
+mock=source[source.index('int efs_client_rpc_getchunks_fileid'):]
+source=source[:source.index('int efs_client_rpc_getchunks_fileid')]+s[a:b]+mock
+for name in ('efs_open_note','efs_open_set_leased','efs_close_note','efs_open_release_pending','efs_open_drain_pending','efs_open_acquire','efs_open_adopt'):
  source+='\n'+function(name)
+w=s.index('/* A lost last-close reply must not pin')
+x=s.index('/* Client-cache design Part A, pin rule 2:',w)
+source+=r'''
+static _Thread_local uint64_t mock_deadline;
+uint64_t efs_client_rpc_deadline_ms(void){return mock_deadline;}
+void efs_client_rpc_set_deadline_ms(uint64_t deadline){mock_deadline=deadline;}
+static int efs_pending_create_drain(void){return EFS_OK;}
+static uint64_t stats_now_ms(void){struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
+'''+s[w:x]
 source+=r'''
 int main(void) {
  assert(!efs_open_acquire(42));assert(!efs_open_acquire(42));assert(opens==1);
@@ -52,15 +77,39 @@ int main(void) {
  open_rc=EFS_ERR_NET;close_rc=EFS_ERR_NET;
  assert(efs_open_acquire(42)==EFS_ERR_NET&&server_hold&&g_open_refs&&!g_open_refs->n);
  int prior=opens;assert(efs_open_acquire(42)==EFS_ERR_NET&&opens==prior);
- close_rc=0;assert(efs_open_drain_pending()==EFS_ERR_BUSY&&!g_open_refs&&!server_hold);
+ open_rc=0;close_rc=0;assert(efs_open_drain_pending()==EFS_ERR_BUSY&&!g_open_refs&&!server_hold);
  open_rc=0;assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
  assert(!efs_open_release_pending(42)&&!g_open_refs);
  assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
- close_rc=EFS_ERR_NOT_FOUND;assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold);
+ close_rc=EFS_ERR_NOT_FOUND;assert(efs_open_release_pending(42)==EFS_ERR_NOT_FOUND&&g_open_refs&&server_hold);
+ close_rc=0;assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold);
+ assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
+ g_open_refs->retry_order=1;
+ struct efs_open_ref *newer=calloc(1,sizeof(*newer));assert(newer);
+ newer->ino=43;newer->close_pending=1;newer->retry_order=99;newer->next=g_open_refs;g_open_refs=newer;
+ assert(efs_open_drain_pending()==EFS_ERR_BUSY&&g_open_refs==newer&&!newer->next);
+ g_open_refs=NULL;free(newer);
+ assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
+ efs_open_retry_start();assert(g_open_retry_started);usleep(200000);efs_open_retry_stop();
+ assert(!g_open_refs&&!server_hold&&!g_open_retry_started);
+ assert(!efs_open_acquire(42));int handed_off=0;
+ adopt_rc=EFS_ERR_NET;int old_closes=closes;
+ assert(efs_open_adopt(42,99,3,&handed_off)==EFS_ERR_NET&&handed_off&&g_open_refs->adoption.active);
+ assert(efs_close_note(42,&leased));
+ assert(efs_open_release_pending(42)==EFS_ERR_NET&&closes==old_closes&&server_hold);
+ assert(efs_open_acquire(42)==EFS_ERR_NET&&closes==old_closes);
+ adopt_rc=0;assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold&&adopts>=2);
+ assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
+ close_rc=EFS_ERR_STALE;assert(efs_open_release_pending(42)==EFS_ERR_STALE && g_open_refs);
+ revocation=1;assert(!efs_open_release_pending(42) && !g_open_refs && !server_hold);
+ close_rc=0;revocation=0;assert(!efs_open_acquire(42));
+ adopt_rc=EFS_ERR_NET;assert(efs_open_adopt(42,99,3,&handed_off)==EFS_ERR_NET);
+ assert(efs_close_note(42,&leased));adopt_rc=EFS_ERR_STALE;close_rc=EFS_ERR_STALE;revocation=1;
+ assert(!efs_open_release_pending(42) && !g_open_refs && !server_hold);
  puts("FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-lease-retention-') as d:
  p=Path(d)/'test.c';p.write_text(source)
- subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread',str(p),'-o',str(p.with_suffix(''))],check=True)
+ subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True)

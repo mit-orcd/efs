@@ -238,11 +238,15 @@ int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino,
                                    struct efs_msg_lane_writer_view_reply *out);
 int efs_client_publication_id(uint64_t sequence, struct efs_opid *);
 /* Explicit pre-write session admission; never call to reinterpret old bytes. */
-/* Retain exact q/generation/body until known=1 or proven session revocation.
+/* Retain identity/generation/body until known=1 or proven session revocation.
+ * ACK may advance only below the oldest unresolved shared operation.
  * Requires explicit session establishment; probing has no admission effects. */
 int efs_client_rpc_lease_edge(efs_ino_t,uint64_t,const struct efs_opid_req *,
     unsigned flags,uint64_t pending_token,int probe,uint64_t *known);
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *);
+/* ReadIndex of global owner: ACTIVE newer epoch proves completed revocation.
+ * Missing owner/fencing state/transport failure never proves revocation. */
+int efs_client_rpc_identity_revoked(const struct efs_opid *,int *);
 /* Caller serializes this object and must retain it while active. A completed
  * object returns its stored verdict without retransmission; reset cannot drop
  * ambiguous ownership. The shared ACK slot bounds concurrent retained edges. */
@@ -251,13 +255,31 @@ struct efs_client_lease_request {
     efs_ino_t ino;
     uint64_t generation, pending_token;
     unsigned flags;
-    int slot, active, admitted, attempted, complete, result;
+    int slot, active, admitted, attempted, complete, result, revoked;
 };
+/* Retained namespace identity and immutable pending-CREATE body. Discovery
+ * and result probes do not admit sessions or mutate namespace state. */
+struct efs_client_create_request {
+    struct efs_msg_create_retained wire;
+    struct efs_inode inode;
+    uint64_t generation;
+    int slot,active,attempted,admitted,complete,result,revoked;
+};
+int efs_client_create_begin(struct efs_client_create_request *,efs_ino_t,
+                             const char *,uint32_t,uid_t,gid_t);
+int efs_client_create_resume(struct efs_client_create_request *,int probe_only);
+int efs_client_create_reset(struct efs_client_create_request *);
+int efs_client_create_cancel(struct efs_client_create_request *);
+int efs_client_create_stage_result(const struct efs_client_create_request *);
 int efs_client_lease_begin(struct efs_client_lease_request *,efs_ino_t,
                            uint64_t,unsigned,uint64_t);
 int efs_client_lease_resume(struct efs_client_lease_request *,int probe_only);
 int efs_client_lease_reset(struct efs_client_lease_request *);
 
+struct efs_put_ticket;
+/* Opt-in durable ownership only. Caller retains immutable identity/body on
+ * ambiguity. STATUS does not establish a session; state is not a PUT permit. */
+int efs_client_rpc_put_ticket(const struct efs_put_ticket *,int probe_only,uint32_t *state);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,

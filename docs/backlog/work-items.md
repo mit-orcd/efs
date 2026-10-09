@@ -3051,6 +3051,14 @@ an unreviewed on-disk format change or claiming repair from a decode fallback.
 
 ## W76 · Namespace opid capacity exhaustion silently removes retry identity (queue row spec6)
 
+**Oct9 integration follow-up:** the FUSE sequenced ownership gate found that
+later known replies could fill all16 receipt slots and block the oldest unknown
+CLOSE. Admission now bounds unacknowledged sequence positions to16 while keeping
+the512-slot physical tracker. A free non-oldest slot does not bypass this bound.
+The updated threaded admission test and AMD212/212 + peer64/64 pass.
+[Evidence](../../results/measure/20261009-fuse-retained-create/README.md).
+
+
 **Closed on targeted acceptance (Oct 7):** 512 concurrent production
 identity owners have distinct slots/sequences. All four mutation callers send
 nothing at saturation and recover after release. These are extracted production

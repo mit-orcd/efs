@@ -193,7 +193,13 @@ blocked=None
 posix_failure=None
 
 def run(args, **kwargs):
-    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+    try:
+        return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+    except subprocess.CalledProcessError as error:
+        # Captured helper assertions must remain visible in saved gate evidence.
+        if error.stdout: print(error.stdout,flush=True)
+        if error.stderr: print(error.stderr,flush=True)
+        raise
 def status_available():
     return status(3)
 
@@ -553,6 +559,21 @@ try:
             pending_path.unlink();pending_dir.rmdir()
             wait(lambda:not files(pending_ino),'pending CREATE adopted/closed inode physical reclaim',180)
         (work/'pending-create-wire.txt').write_text(''.join(pending_results))
+        retained_create=work/'client-retained-create'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_create.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained_create])
+        retained_dir=mount/'retained-create-request';retained_dir.mkdir()
+        retained_results=[]
+        for discard in (0,1):
+            name='retained'+str(discard)
+            retained_results.append(run([retained_create,str(a.port),str(retained_dir.stat().st_ino),name,str(discard)],capture_output=True,text=True,timeout=90).stdout)
+            retained_path=retained_dir/name
+            with retained_path.open('wb') as out:
+                out.write(b'retained create ownership'*4096);out.flush();os.fsync(out.fileno())
+            retained_ino=retained_path.stat().st_ino
+            retained_path.unlink()
+            wait(lambda:not files(retained_ino),'retained CREATE exact adoption and physical reclaim',180)
+        retained_dir.rmdir()
+        (work/'retained-create-wire.txt').write_text(''.join(retained_results))
         client_edge=work/'client-lease-edge'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_lease_edge.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',client_edge])
         edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048
@@ -560,12 +581,23 @@ try:
         edge_ino=edge_path.stat().st_ino;edge_uuid=(os.urandom(8)+bytes(8)).hex();edge_results=[]
         retained=work/'client-retained-lease'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained])
-        edge_results.append(run([retained,str(a.port),str(edge_ino)],capture_output=True,text=True,timeout=90).stdout)
+        edge_results.append(run([retained,str(a.port),str(edge_ino),source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
+        tickets=work/'client-put-ticket'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_put_ticket.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',tickets])
+        ticket_results=[]
+        for discard in (0,1):
+            ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt',str(discard)],capture_output=True,text=True,timeout=90).stdout)
+        ticket_saved=work/'put-ticket.bin'
+        ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','save',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
+        (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
+
 
         for stage in ('open','close'):
             edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)
         unmount();stop(crash=True);start();mount_client()
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)
+        ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','cold',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
+        (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
         assert edge_path.read_bytes()==edge_body,'lease transport changed cold bytes'
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'cached',source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
         assert edge_path.read_bytes()==edge_body+bytes(8),'legacy cached append fence corrupts original bytes/hole'

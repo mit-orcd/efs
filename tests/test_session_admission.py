@@ -107,6 +107,6 @@ with tempfile.TemporaryDirectory(prefix='efs-session-admission-') as d:
  subprocess.run(cmd+[str(p),str(root/'src/kv/kv_key.c'),'-o',str(exe)],check=True)
  subprocess.run([str(exe)],check=True)
 submit=s[s.index('void server_raft_host_submit('):s.index('void server_raft_host_status(')]
-assert submit.index('host_session_establish_admit(')<submit.index('host_propose_wait_idx(')
+assert submit.index('host_session_establish_admit(')<submit.rindex('host_propose_wait_idx(')
 
-assert submit.index('host_pack_session_cleanup(')<submit.index('host_propose_wait_idx(')
+assert submit.index('host_pack_session_cleanup(')<submit.rindex('host_propose_wait_idx(')

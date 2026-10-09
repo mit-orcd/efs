@@ -11,6 +11,7 @@ def function(name):
 refs = text[text.index('static pthread_mutex_t g_open_mu'):text.index('/* Inodes this client has actually locked.')]
 source = r"""
 #include "client_internal.h"
+#include "efs/session.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -20,17 +21,28 @@ typedef uint64_t fuse_ino_t;
 static pthread_mutex_t gate = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t cv = PTHREAD_COND_INITIALIZER;
 static int holds, drops, fail, block, entered, unblock;
-int efs_client_rpc_hold(efs_export_id_t ex, efs_ino_t ino, int open, uint64_t owner) {
-    (void)ex; (void)ino; (void)owner;
-    pthread_mutex_lock(&gate);
-    if (open) ++holds; else ++drops;
-    if (block == (open ? 1 : 2)) {
-        entered = 1; pthread_cond_broadcast(&cv);
-        while (!unblock) pthread_cond_wait(&cv, &gate);
-    }
-    int rc = fail ? EFS_ERR_IO : EFS_OK;
-    pthread_mutex_unlock(&gate);
-    return rc;
+int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *recs,uint32_t *count,uint64_t *out) {
+ (void)ex;(void)ino;(void)gen;(void)start;(void)recs;(void)count;*out=99;return EFS_OK;
+}
+int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,uint64_t gen,unsigned flags,uint64_t token) {
+ assert(!r->active&&gen==99&&!token);*r=(struct efs_client_lease_request){.ino=ino,.generation=gen,.flags=flags,.active=1};return EFS_OK;
+}
+int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
+ assert(!probe&&r->active);if(r->complete)return r->result;
+ int open=!!(r->flags&EFS_LEASE_EDGE_OPEN);
+ pthread_mutex_lock(&gate);
+ if(!r->attempted){if(open)++holds;else ++drops;}
+ r->attempted=1;
+ if(block==(open?1:2)) {
+   entered=1;pthread_cond_broadcast(&cv);
+   while(!unblock)pthread_cond_wait(&cv,&gate);
+ }
+ int rc=fail?EFS_ERR_IO:EFS_OK;
+ if(!rc){r->complete=1;r->result=rc;}
+ pthread_mutex_unlock(&gate);return rc;
+}
+int efs_client_lease_reset(struct efs_client_lease_request *r) {
+ assert(!r->active||r->complete);memset(r,0,sizeof(*r));return EFS_OK;
 }
 static efs_ino_t efs_file_ino(struct fuse_file_info *fi, efs_ino_t fallback) { return fi->fh ? fi->fh : fallback; }
 static void efs_file_close(struct fuse_file_info *fi) { fi->fh = 0; }

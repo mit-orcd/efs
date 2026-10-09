@@ -301,6 +301,10 @@ test: all
 	python3 tests/test_publication_session_rpc.py
 	python3 tests/test_lease_edge_rpc.py
 	python3 tests/test_lease_request.py
+	python3 tests/test_identity_revocation.py
+	python3 tests/test_put_ticket_rpc.py
+	python3 tests/test_create_request.py
+	python3 tests/test_pending_create_cleanup.py
 	python3 tests/test_mount_identity_rpc.py
 	python3 tests/test_pending_create_command.py
 	python3 tests/test_lock_apply_verdict.py

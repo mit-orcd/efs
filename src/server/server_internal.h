@@ -375,6 +375,8 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
                              uint32_t uid, uint32_t gid, uint32_t flags,
                              uint64_t owner, const struct efs_opid_req *q,
                              struct efs_msg_inode_reply *out);
+void server_raft_host_create_retained(const struct efs_msg_create_retained *,
+                                      struct efs_msg_create_retained_reply *);
 void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                             uint32_t uid, uint32_t gid,
                             const struct efs_opid_req *q,

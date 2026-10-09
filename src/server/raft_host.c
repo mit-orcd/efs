@@ -10,6 +10,7 @@
 #include "efs/meta_apply.h"
 #include "efs/query_filters.h"
 #include "efs/publication.h"
+#include "efs/put_ticket.h"
 #include "efs/meta_cmd.h"
 #include "efs/dir_layout.h"
 #include "efs/dir_spread.h"
@@ -2531,7 +2532,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_APPEND_RES ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
-           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT ||
+           cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
@@ -2558,7 +2559,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
-         cmd[0] == EFS_MD_CMD_APPEND_RES ||
+         cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
@@ -2889,6 +2890,14 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_rmdir_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT)
         return clen == HOST_PUBLICATION_LEN ? apply_one_publish(h,cmd,index,term,group) : EFS_ERR_PROTO;
+    if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT) {
+        struct efs_put_ticket ticket;
+        int rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
+        if(rc!=EFS_OK)return rc;
+        if(group!=efs_raft_shard_group(efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES)))
+            return EFS_ERR_INVAL;
+        return efs_put_ticket_admit(h->kv,&ticket);
+    }
     if (cmd[0] == EFS_MD_CMD_PUBLISH)
         return apply_publish_cmd(h, cmd, clen, index, term, group);
     if (cmd[0] == EFS_MD_CMD_SETATTR)
@@ -9070,6 +9079,37 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))) {
         out->rc=EFS_ERR_INVAL;return;
     }
+    if(clen && (cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT || cmd[0]==EFS_MD_REQ_PUT_TICKET_STATUS)) {
+        struct efs_put_ticket ticket;
+        rc=efs_put_ticket_decode(cmd+1,clen-1,&ticket);
+        uint32_t shard=rc==EFS_OK?efs_kv_lane_shard(ticket.ino,ticket.ci%EFS_META_LANES):0;
+        if(rc!=EFS_OK || group!=efs_raft_shard_group(shard)) {
+            out->rc=rc==EFS_OK?EFS_ERR_INVAL:rc;return;
+        }
+        if(!host_hosts(h,group)) {
+            rc=host_remote_cmd(h,group,cmd,clen,out,-1);
+            if(rc!=EFS_OK)out->rc=rc;
+            return;
+        }
+        uint8_t admission[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_ESTABLISH};
+        memcpy(admission+2,ticket.id.client_uuid,16);
+        wr32be(admission+18,ticket.id.session_epoch);wr32be(admission+22,shard);
+        rc=host_session_establish_admit(h,admission,sizeof(admission),group,&hint);
+        if(rc!=EFS_OK){out->rc=rc;out->leader_hint=hint;return;}
+        if(cmd[0]==EFS_MD_CMD_PUT_TICKET_ADMIT)
+            rc=host_propose_wait_idx(h,group,cmd,clen,&hint,&idx);
+        /* Never grant admission from proposal/apply-ring success alone.
+         * Fresh authority plus exact immutable body resolves a lost reply. */
+        if(rc==EFS_OK || rc==EFS_ERR_BUSY || rc==EFS_ERR_STALE) {
+            int proof=host_read_index(h,group,&hint);uint32_t state=0;
+            if(proof==EFS_OK)proof=efs_session_accept(h->kv,shard,ticket.id.client_uuid,ticket.id.session_epoch);
+            if(proof==EFS_OK)proof=efs_put_ticket_get(h->kv,&ticket,&state);
+            if(proof==EFS_OK){rc=EFS_OK;salt=state;}
+            else if(rc==EFS_OK || proof!=EFS_ERR_NOT_FOUND)rc=proof;
+        }
+        out->rc=rc;out->salt=rc==EFS_OK?salt:0;out->index=idx;
+        out->leader_hint=hint;return;
+    }
     if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
        (cmd[1]==EFS_MD_SESS_LEASE_EDGE || cmd[1]==EFS_MD_SESS_LEASE_PROBE ||
         cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1]==EFS_MD_SESS_LEASE_PROBE_DEFERRED)) {
@@ -9998,9 +10038,10 @@ static void host_opid_reply_ino(struct efs_raft_host *h, efs_ino_t parent,
     strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
 }
 
-void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
+static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
                              uint32_t uid, uint32_t gid, uint32_t flags,
                              uint64_t owner, const struct efs_opid_req *q,
+                             uint32_t expected_shard, int pinned_route,
                              struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
@@ -10062,6 +10103,10 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         rc = EFS_ERR_INVAL;
     if (rc == EFS_OK) {
         dsh = efs_kv_dentry_shard(parent, name, prow.layout);
+        if (pinned_route && dsh != expected_shard) {
+            set_inode_rc(out,EFS_ERR_STALE,hint);
+            return;
+        }
         dg = efs_raft_shard_group(dsh);
         if (!host_hosts(h, dg)) {
             uint8_t need[2];
@@ -10157,6 +10202,106 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         out->inode.parent = parent;
         strncpy(out->inode.name, name, EFS_MAX_NAME - 1);
     }
+}
+
+void server_raft_host_create(efs_ino_t parent,const char *name,uint32_t mode,
+    uint32_t uid,uint32_t gid,uint32_t flags,uint64_t owner,
+    const struct efs_opid_req *q,struct efs_msg_inode_reply *out)
+{
+    host_create(parent,name,mode,uid,gid,flags,owner,q,0,0,out);
+}
+
+static void host_retained_create_forward(struct efs_raft_host *h,
+    const struct efs_msg_create_retained *request,
+    struct efs_msg_create_retained_reply *out,const uint8_t *groups,int ng)
+{
+    int skip=-1;
+    out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;
+    for(int attempt=0;attempt<h->n;attempt++) {
+        int peer=host_pick_peer(h,groups,ng,skip);
+        if(peer<0)return;
+        if(host_inode_rpc_peer(h,peer,EFS_MSG_CREATE_RETAINED,request,
+                sizeof(*request),EFS_MSG_CREATE_RETAINED_REPLY,out,sizeof(*out))==0 &&
+           out->rpc.status!=EFS_INODE_RPC_NOT_PRIMARY)return;
+        memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_NOT_PRIMARY;
+        skip=peer;
+    }
+}
+
+static int host_retained_create_proof(struct efs_raft_host *h,
+    const struct efs_msg_create_retained *request,
+    struct efs_msg_create_retained_reply *out,int *hint)
+{
+    int rc=host_read_index(h,efs_raft_shard_group(out->shard),hint);
+    if(rc!=EFS_OK)return rc;
+    struct efs_opid_reply receipt;
+    int hit=host_opid_replay(h,out->shard,&request->q,&receipt);
+    if(hit<0)return hit;
+    if(!hit)return EFS_ERR_BUSY;
+    out->known=1;
+    host_opid_reply_ino(h,request->create.parent,request->create.name,&receipt,&out->rpc);
+    if(receipt.rc==EFS_OK && receipt.ino) {
+        /* Pending CREATE always allocates generation 1. Preserve its FileID
+         * even after later revocation/deletion removed the attribute row. */
+        out->generation=1;
+        struct efs_meta_row row;
+        if(efs_meta_apply_get_inode(h->kv,receipt.ino,&row)==EFS_OK)
+            out->generation=row.generation;
+    }
+    return receipt.rc;
+}
+
+void server_raft_host_create_retained(const struct efs_msg_create_retained *request,
+                                      struct efs_msg_create_retained_reply *out)
+{
+    struct efs_raft_host *h=g_host;int hint=-1,rc;
+    memset(out,0,sizeof(*out));out->rpc.status=EFS_INODE_RPC_INVAL;
+    if(!h || !h->running || !request || request->probe>1 || request->routed>1 ||
+       request->create.flags!=EFS_CREATE_F_PENDING || request->create.owner ||
+       !request->create.parent || !request->create.name[0] ||
+       !memchr(request->create.name,0,sizeof(request->create.name)) ||
+       !S_ISREG(request->create.mode) || !efs_opid_req_valid(&request->q) ||
+       !request->q.id.session_epoch || request->q.ack>=request->q.id.seq ||
+       (request->routed && request->shard>=EFS_SESSION_BITS) ||
+       (!request->probe && !request->routed))return;
+    uint8_t groups[2];int ng=1;
+    groups[0]=efs_raft_shard_group(efs_kv_inode_shard(request->create.parent));
+    if(request->routed && request->probe) {
+        out->shard=request->shard;out->routed=1;
+        groups[0]=efs_raft_shard_group(out->shard);
+    } else {
+        if(!host_hosts(h,groups[0])) {
+            host_retained_create_forward(h,request,out,groups,ng);return;
+        }
+        rc=host_read_index(h,groups[0],&hint);
+        struct efs_meta_row parent;
+        if(rc==EFS_OK)rc=efs_meta_apply_get_inode(h->kv,request->create.parent,&parent);
+        if(rc==EFS_OK && !S_ISDIR(parent.mode))rc=EFS_ERR_INVAL;
+        if(rc!=EFS_OK){set_inode_rc(&out->rpc,rc,hint);return;}
+        out->shard=efs_kv_dentry_shard(request->create.parent,request->create.name,parent.layout);
+        out->routed=1;
+        if(request->routed && out->shard!=request->shard) {
+            out->shard=request->shard;set_inode_rc(&out->rpc,EFS_ERR_STALE,hint);return;
+        }
+        uint8_t group=efs_raft_shard_group(out->shard);
+        if(group!=groups[0])groups[ng++]=group;
+    }
+    for(int i=0;i<ng;i++)if(!host_hosts(h,groups[i])) {
+        host_retained_create_forward(h,request,out,groups,ng);return;
+    }
+    rc=host_retained_create_proof(h,request,out,&hint);
+    if(out->known)return;
+    if(request->probe || rc!=EFS_ERR_BUSY) {
+        set_inode_rc(&out->rpc,rc,hint);return;
+    }
+    host_create(request->create.parent,request->create.name,request->create.mode,
+        request->create.uid,request->create.gid,EFS_CREATE_F_PENDING,0,&request->q,
+        request->shard,1,&out->rpc);
+    /* Ordinary failure is not terminal proof. Query the retained shard after
+     * the mutation, including recorded negative verdicts and lost replies. */
+    struct efs_msg_inode_reply submitted=out->rpc;
+    rc=host_retained_create_proof(h,request,out,&hint);
+    if(!out->known)out->rpc=submitted;
 }
 
 static int host_namespace_capacity(const char *phase, uint32_t used)
