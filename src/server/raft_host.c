@@ -9075,10 +9075,12 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     }
     if (rc == EFS_OK) {
         rc = efs_meta_apply_lookup_tx(h->kv, parent, name, host_txn_coord, h, &dent);
-        if (rc == EFS_OK) {
+        if (rc == EFS_OK && !(q && efs_opid_req_valid(q))) {
             set_inode_rc(out, EFS_ERR_EXIST, hint);
             return;
         }
+        /* Identified requests must reach replicated apply, including EEXIST.
+         * Otherwise unlink can turn a delayed retry into a second operation. */
         if (rc == EFS_ERR_NOT_FOUND)
             rc = EFS_OK;
     }

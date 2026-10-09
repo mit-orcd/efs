@@ -1370,8 +1370,8 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
 
     rc = efs_meta_apply_lookup(kv, parent, name, &dent);
     if (rc == EFS_OK) {
-        if (lease_token) {
-            /* An ambiguous failed CREATE must not become a successful new
+        if (q && opid_hosted(&q->id)) {
+            /* A CREATE answered EEXIST must not become a successful new
              * CREATE when a delayed retry arrives after the name is removed.
              * Publish the negative verdict without namespace/lease effects. */
             memset(&rep, 0, sizeof(rep));
