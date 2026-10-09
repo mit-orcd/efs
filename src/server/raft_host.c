@@ -169,6 +169,10 @@ struct host_outbox {
      * queues behind forwarded client commands. Owned by the sender
      * thread only; reconnected on the next message after an error. */
     struct efs_conn *conn;
+    struct efs_raft_flow_sender flow;
+    uint64_t probe_sent[HOST_NGROUPS], probe_read[HOST_NGROUPS];
+    uint8_t probe_header[HOST_NGROUPS][EFS_WIRE_RAFT_HDR_LEN];
+    unsigned probe_valid[HOST_NGROUPS], pending_entries[HOST_NGROUPS];
     /* W14.2: two lanes. pri is heartbeats, AE replies, votes; ent is
      * entry-carrying AppendEntries and snapshot chunks, in order.
      * The sender drains pri first so a full entry lane cannot hide a
@@ -394,6 +398,11 @@ struct efs_raft_host {
     int inbox_n;
     uint64_t inbox_bytes, inbox_bytes_hi;
     int pressure_enabled;
+    int flow_enabled, inbox_pressure;
+    unsigned inbox_work_n;
+    uint64_t inbox_work_bytes;
+    uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
+    uint64_t inbox_probe_read[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
     struct efs_admission proposal_queue;
     uint64_t pressure_rejected, pressure_recv_rejected;
     /* Event-driven pump: pump_efd wakes the pump (inbox/propose/stop) between
@@ -720,6 +729,75 @@ static int host_sender_depth(struct efs_conn *pc)
  * them back to back, then collects that many acks in order. The peer
  * receives them on one conn and copies each into its inbox in order, so
  * ordering within a lane is unchanged. */
+/* Sender queue selection under outbox_mu; no network or Raft calls. */
+static void host_sender_take(struct host_outbox *tx, int priority, int index,
+                             uint8_t **buf, uint32_t *len)
+{
+    struct host_outbox_item *lane=priority ? tx->pri : tx->ent;
+    int *count=priority ? &tx->npri : &tx->nent;
+    int gi=efs_raft_flow_group(lane[index].buf[1]);
+    *buf=lane[index].buf; *len=lane[index].len;
+    tx->queued_bytes-=*len;
+    if (!priority && gi>=0) tx->pending_entries[gi]--;
+    memmove(lane+index,lane+index+1,(size_t)(*count-index-1)*sizeof(*lane));
+    (*count)--;
+}
+
+static int host_sender_pick(struct host_outbox *tx, uint8_t **bufs,
+                             uint32_t *lens, int depth, uint64_t now)
+{
+    int n=0,i,gi,control_depth=depth;
+    if (!tx->h->flow_enabled || !tx->flow.active) {
+        while (n<depth && tx->npri) { host_sender_take(tx,1,0,&bufs[n],&lens[n]); n++; }
+        while (n<depth && tx->nent) { host_sender_take(tx,0,0,&bufs[n],&lens[n]); n++; }
+        return n;
+    }
+    /* One due data slot cannot be starved by a steady stream of probes.
+     * Critical frames retain FIFO; at depth one they get the next loop. */
+    if (now>=tx->flow.deadline_us && tx->nent) control_depth=depth-1;
+    for (i=0;i<tx->npri && n<control_depth;) {
+        if (!efs_raft_flow_critical(tx->pri[i].buf,tx->pri[i].len)) { i++; continue; }
+        host_sender_take(tx,1,i,&bufs[n],&lens[n]); n++; BO_COUNT(BO_FLOW_CONTROL);
+    }
+    for (gi=0;gi<HOST_NGROUPS && n<control_depth;gi++) {
+        uint64_t read;
+        if (!tx->probe_valid[gi]) continue;
+        read=efs_raft_flow_rd64(tx->probe_header[gi]+28);
+        if (!efs_raft_flow_probe_due(tx->probe_sent[gi],tx->probe_read[gi],now,read)) continue;
+        bufs[n]=malloc(EFS_WIRE_RAFT_HDR_LEN);
+        if (!bufs[n]) continue;
+        /* Use the newest queued/current-term template. A stale template
+         * retains its old term/boot/read context and earns no new authority. */
+        efs_raft_flow_probe(bufs[n],tx->probe_header[gi]);
+        lens[n]=EFS_WIRE_RAFT_HDR_LEN; n++;
+        tx->probe_sent[gi]=now; tx->probe_read[gi]=read; BO_COUNT(BO_FLOW_PROBE);
+    }
+    if (now>=tx->flow.deadline_us) {
+        unsigned ordinary=0,window=tx->flow.window ? tx->flow.window : 1;
+        /* Replies/votes and bounded read/heartbeat escapes went first.
+         * Remaining commit probes must not starve entry catch-up. */
+        while (n<depth && ordinary<window && tx->nent) {
+            host_sender_take(tx,0,0,&bufs[n],&lens[n]); n++; ordinary++;
+        }
+        while (n<depth && ordinary<window && tx->npri) {
+            host_sender_take(tx,1,0,&bufs[n],&lens[n]); n++; ordinary++;
+        }
+        if (ordinary) tx->flow.deadline_us=now+efs_raft_flow_delay_us(&tx->flow);
+    }
+    return n;
+}
+
+/* cv uses CLOCK_MONOTONIC. Timed wakes also sustain a quiet peer's probes. */
+static void host_sender_wait(struct host_outbox *tx, uint64_t now)
+{
+    struct timespec until;
+    uint64_t wake=now+EFS_RAFT_FLOW_READ_US;
+    if (tx->flow.deadline_us>now && tx->flow.deadline_us<wake) wake=tx->flow.deadline_us;
+    until.tv_sec=(time_t)(wake/1000000); until.tv_nsec=(long)(wake%1000000)*1000;
+    BO_COUNT(BO_FLOW_WAIT);
+    pthread_cond_timedwait(&tx->cv,&tx->h->outbox_mu,&until);
+}
+
 static void *host_sender(void *arg)
 {
     struct host_outbox *tx = arg;
@@ -736,7 +814,8 @@ static void *host_sender(void *arg)
         int obs = raft_obs_on();
 
         pthread_mutex_lock(&h->outbox_mu);
-        while (tx->npri == 0 && tx->nent == 0 && h->tx_running)
+        while (tx->npri == 0 && tx->nent == 0 && h->tx_running &&
+               !(h->flow_enabled && tx->flow.active))
             pthread_cond_wait(&tx->cv, &h->outbox_mu);
         if (!h->tx_running) {
             for (i = 0; i < tx->npri; i++)
@@ -756,25 +835,12 @@ static void *host_sender(void *arg)
         /* The depth depends on the conn, which only this thread touches;
          * a conn that is not up yet is sized at one frame. */
         depth = tx->conn ? host_sender_depth(tx->conn) : 1;
-        /* Heartbeats and replies go out before entry AppendEntries.
-         * Each lane stays FIFO. */
-        while (n < depth && tx->npri > 0) {
-            bufs[n] = tx->pri[0].buf;
-            lens[n] = tx->pri[0].len;
-            memmove(&tx->pri[0], &tx->pri[1],
-                    (size_t)(tx->npri - 1) * sizeof(tx->pri[0]));
-            tx->npri--;
-            n++;
+        n=host_sender_pick(tx,bufs,lens,depth,efs_batch_obs_now_us());
+        if (!n) {
+            host_sender_wait(tx,efs_batch_obs_now_us());
+            pthread_mutex_unlock(&h->outbox_mu);
+            continue;
         }
-        while (n < depth && tx->nent > 0) {
-            bufs[n] = tx->ent[0].buf;
-            lens[n] = tx->ent[0].len;
-            memmove(&tx->ent[0], &tx->ent[1],
-                    (size_t)(tx->nent - 1) * sizeof(tx->ent[0]));
-            tx->nent--;
-            n++;
-        }
-        for (i=0; i<n; i++) tx->queued_bytes -= lens[i];
         pthread_mutex_unlock(&h->outbox_mu);
 
         if (obs)
@@ -836,6 +902,7 @@ static void *host_sender(void *arg)
                     bad = 1;
                     break;
                 }
+                BO_COUNT(BO_WIRE_SENT);
                 if (pc->recv_chan == EFS_CONN_RDMA)
                     n_rdma++;
                 else
@@ -855,6 +922,20 @@ static void *host_sender(void *arg)
                     free(reply);
                     bad = 1;
                     break;
+                }
+                if (h->flow_enabled) {
+                    struct efs_raft_flow_reply feedback;
+                    int decoded=efs_raft_flow_decode(reply,rlen,&feedback);
+                    if (decoded<0 || (!decoded && feedback.status==EFS_RAFT_FLOW_ERROR)) {
+                        free(reply); bad=1; break;
+                    }
+                    if (decoded) BO_COUNT(BO_FLOW_LEGACY);
+                    else {
+                        BO_COUNT(feedback.status==EFS_RAFT_FLOW_BUSY ? BO_FLOW_BUSY : BO_FLOW_ADMITTED);
+                        pthread_mutex_lock(&h->outbox_mu);
+                        efs_raft_flow_feedback(&tx->flow,&feedback,efs_batch_obs_now_us());
+                        pthread_mutex_unlock(&h->outbox_mu);
+                    }
                 }
                 free(reply);
                 if (pc->last_recv_chan == EFS_CONN_RDMA) {
@@ -1049,6 +1130,19 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         free(heap);
         return EFS_ERR_AGAIN;
     }
+    if (h->flow_enabled) {
+        int gi=efs_raft_flow_group(heap[1]);
+        if (gi>=0 && heap[0]==EFS_RAFT_MSG_AE_REQ) {
+            memcpy(tx->probe_header[gi],heap,EFS_WIRE_RAFT_HDR_LEN);
+            tx->probe_valid[gi]=1;
+        }
+        if (gi>=0 && tx->flow.active && outbox_entry_lane(heap,len) &&
+            tx->pending_entries[gi]) {
+            BO_COUNT(BO_FLOW_ENQUEUE_RETRY);
+            pthread_mutex_unlock(&h->outbox_mu);
+            host_wire_taken(msg); free(heap); return EFS_ERR_AGAIN;
+        }
+    }
     if (outbox_is_ae_rep(heap, len) &&
         outbox_pri_replace(tx, outbox_is_ae_rep, heap, len)) {
         tx->st_enq++;
@@ -1099,6 +1193,10 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         }
         slot->buf = heap;
         slot->len = len;
+        if (entry) {
+            int gi=efs_raft_flow_group(heap[1]);
+            if (gi>=0) tx->pending_entries[gi]++;
+        }
         (*np)++;
         tx->queued_bytes += len;
         if (tx->queued_bytes > tx->queued_bytes_hi) tx->queued_bytes_hi = tx->queued_bytes;
@@ -1110,6 +1208,10 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
                 tx->started = 1;
             else {
                 (*np)--;
+                if (entry) {
+                    int gi=efs_raft_flow_group(heap[1]);
+                    if (gi>=0) tx->pending_entries[gi]--;
+                }
                 tx->queued_bytes -= len;
                 pthread_mutex_unlock(&h->outbox_mu);
                 host_wire_taken(msg);
@@ -5168,13 +5270,14 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
     return EFS_OK;
 }
 
-static void drain_inbox(struct efs_raft_host *h)
+static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *done_bytes)
 {
     struct host_inbox_item local[HOST_INBOX_MAX];
     int n, i;
 
     pthread_mutex_lock(&h->inbox_mu);
     n = h->inbox_n;
+    *done_n=(unsigned)n; *done_bytes=h->inbox_bytes;
     memcpy(local, h->inbox, (size_t)n * sizeof(local[0]));
     h->inbox_n = 0;
     h->inbox_bytes = 0;
@@ -5497,6 +5600,15 @@ static void host_kv_obs_dump(struct efs_raft_host *h)
             s.n_l0, s.n_l1);
 }
 
+static void host_inbox_retire(struct efs_raft_host *h, unsigned n, uint64_t bytes)
+{
+    pthread_mutex_lock(&h->inbox_mu);
+    h->inbox_work_n-=n; h->inbox_work_bytes-=bytes;
+    if (h->inbox_work_n<=EFS_RAFT_FLOW_LOW_N &&
+        h->inbox_work_bytes<=EFS_RAFT_FLOW_LOW_BYTES) h->inbox_pressure=0;
+    pthread_mutex_unlock(&h->inbox_mu);
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -5507,6 +5619,8 @@ static void *host_pump(void *arg)
         uint64_t sink;
         uint64_t c0 = 0;
         uint64_t applied_now[HOST_NGROUPS];
+        unsigned done_n=0;
+        uint64_t done_bytes=0;
         int i;
         int obs = raft_obs_on();
         int batch_obs = BO_ON();
@@ -5563,7 +5677,7 @@ static void *host_pump(void *arg)
          * release, at most one cycle later than before. */
         (void)efs_kv_lsm_sync_hold(h->kv);
         if (batch_obs) phase_us = efs_batch_obs_now_us();
-        drain_inbox(h);
+        drain_inbox(h,&done_n,&done_bytes);
         if (batch_obs) BO_HIST(BH_PUMP_DRAIN_US, efs_batch_obs_now_us() - phase_us);
         if (obs) {
             t_drain = now_us_() - c0;
@@ -5657,6 +5771,7 @@ static void *host_pump(void *arg)
             for (i = 0; i < HOST_NGROUPS; i++)
                 (void)persist_applied(h, i, applied_now[i], pnow, 0);
         }
+        if (h->flow_enabled && done_n) host_inbox_retire(h,done_n,done_bytes);
         if (batch_obs) {
             BO_HIST(BH_APPLIED_PERSIST_US, efs_batch_obs_now_us() - phase_us);
             efs_batch_obs_dump(efs_batch_obs_now_us());
@@ -8057,6 +8172,8 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_INVAL;
     }
     int query_enabled=!commands || !strcmp(commands,"1");
+    const char *flow=getenv("EFS_RAFT_FLOW");
+    if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
     const char *pressure=getenv("EFS_ADMISSION_PRESSURE");
     if (pressure && strcmp(pressure,"0") && strcmp(pressure,"1")) return EFS_ERR_INVAL;
     ns = getenv("EFS_MD_RAFT_N");
@@ -8078,6 +8195,7 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_NOMEM;
     struct efs_admission_limits limits={8ull<<20,1ull<<20,64,8};
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
+    h->flow_enabled=flow && !strcmp(flow,"1"); /* candidate opt-in until acceptance */
     h->pressure_enabled=pressure && !strcmp(pressure,"1");
     h->s = s;
     h->query_enabled=query_enabled;
@@ -8115,11 +8233,16 @@ int server_raft_host_start(struct efsd_server *s)
     }
     {
         int i;
+        pthread_condattr_t attr;
+        pthread_condattr_init(&attr);
+        pthread_condattr_setclock(&attr,CLOCK_MONOTONIC);
         for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
             h->tx[i].h = h;
             h->tx[i].peer = i;
-            pthread_cond_init(&h->tx[i].cv, NULL);
+            h->tx[i].flow.sequence=(unsigned)i+1;
+            pthread_cond_init(&h->tx[i].cv, &attr);
         }
+        pthread_condattr_destroy(&attr);
     }
     h->pump_efd = eventfd(0, EFD_NONBLOCK);
 
@@ -8351,55 +8474,68 @@ void server_raft_host_stop(void)
     free(h);
 }
 
-int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
+int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
+                           struct efs_raft_flow_reply *feedback)
 {
     struct efs_raft_host *h = g_host;
     uint8_t *copy;
-
-    if (!h || !h->running)
-        return EFS_ERR_INVAL;
-    if (!payload || plen < EFS_WIRE_RAFT_HDR_LEN)
-        return EFS_ERR_PROTO;
+    int control=0,probe=0,gi=-1,from=-1;
+    uint64_t now=0,read=0;
+    memset(feedback,0,sizeof(*feedback));
+    if (!h || !h->running) return EFS_ERR_INVAL;
+    if (!h->flow_enabled) feedback->status=3;
+    if (!payload || plen < EFS_WIRE_RAFT_HDR_LEN) return EFS_ERR_PROTO;
     if (plen > HOST_FRAME_MAX) return EFS_ERR_INVAL;
-    pthread_mutex_lock(&h->inbox_mu);
-    if (h->inbox_n >= HOST_INBOX_MAX || plen > HOST_INBOX_BYTES-h->inbox_bytes) {
-        uint64_t n;
-
-        pthread_mutex_unlock(&h->inbox_mu);
-        n = __atomic_add_fetch(&h->inbox_drop, 1, __ATOMIC_RELAXED);
-        BO_COUNT(BO_INBOX_DROP);
-        if (BO_ON()) BO_COUNT(payload[0] != EFS_RAFT_MSG_AE_REQ ? BO_DROP_OTHER :
-                              outbox_nentries(payload, plen) ? BO_DROP_DATA : BO_DROP_EMPTY);
-        if (n <= 10)
-            fprintf(stderr,
-                    "raft-host: inbox full, dropped frame type=%u group=%u "
-                    "from=%d len=%u (drop #%llu)\n",
-                    (unsigned)payload[0], (unsigned)payload[1],
-                    (int)(int32_t)(((uint32_t)payload[4] << 24) |
-                                   ((uint32_t)payload[5] << 16) |
-                                   ((uint32_t)payload[6] << 8) |
-                                   (uint32_t)payload[7]),
-                    plen, (unsigned long long)n);
-        return EFS_ERR_BUSY;
+    if (h->flow_enabled) {
+        if (!efs_raft_flow_frame(payload,plen) ||
+            efs_raft_flow_rd32(payload+8)!=(unsigned)h->raft_id) return EFS_ERR_PROTO;
+        gi=efs_raft_flow_group(payload[1]); from=(int)efs_raft_flow_rd32(payload+4);
+        control=efs_raft_flow_critical(payload,plen);
+        now=efs_batch_obs_now_us(); read=efs_raft_flow_rd64(payload+28);
     }
+    pthread_mutex_lock(&h->inbox_mu);
+    if (h->flow_enabled) {
+        if (efs_raft_flow_empty(payload,plen) &&
+            efs_raft_flow_probe_due(h->inbox_probe_sent[gi][from],
+                h->inbox_probe_read[gi][from],now,read)) { control=1; probe=1; }
+        if (h->inbox_work_n>=EFS_RAFT_FLOW_HIGH_N ||
+            h->inbox_work_bytes+plen>EFS_RAFT_FLOW_HIGH_BYTES) h->inbox_pressure=1;
+        feedback->pressure=h->inbox_pressure; feedback->retry_ms=h->inbox_pressure ? 5 : 0;
+        if ((!control && (h->inbox_pressure ||
+              h->inbox_work_n>=HOST_INBOX_MAX-EFS_RAFT_FLOW_RESERVE_N ||
+              h->inbox_work_bytes+plen>HOST_INBOX_BYTES-EFS_RAFT_FLOW_RESERVE_BYTES)) ||
+            h->inbox_work_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_work_bytes)
+            goto busy;
+    }
+    if (h->inbox_n>=HOST_INBOX_MAX || plen>HOST_INBOX_BYTES-h->inbox_bytes) goto busy;
     copy = malloc(plen);
     if (!copy) { pthread_mutex_unlock(&h->inbox_mu); return EFS_ERR_NOMEM; }
-    memcpy(copy, payload, plen);
-    h->inbox_bytes += plen;
-    if (h->inbox_bytes > h->inbox_bytes_hi) h->inbox_bytes_hi = h->inbox_bytes;
-    h->inbox[h->inbox_n].buf = copy;
-    h->inbox[h->inbox_n].len = plen;
-    h->inbox[h->inbox_n].queued_us = BO_ON() ? efs_batch_obs_now_us() : 0;
+    memcpy(copy,payload,plen);
+    h->inbox_bytes+=plen;
+    if (h->inbox_bytes>h->inbox_bytes_hi) h->inbox_bytes_hi=h->inbox_bytes;
+    h->inbox[h->inbox_n].buf=copy; h->inbox[h->inbox_n].len=plen;
+    h->inbox[h->inbox_n].queued_us=BO_ON() ? efs_batch_obs_now_us() : 0;
     h->inbox_n++;
-    if (BO_ON() && payload[0] == EFS_RAFT_MSG_AE_REQ)
-        BO_COUNT(outbox_nentries(payload, plen) ? BO_ACCEPT_DATA : BO_ACCEPT_EMPTY);
+    if (h->flow_enabled) {
+        h->inbox_work_n++; h->inbox_work_bytes+=plen;
+        if (probe) { h->inbox_probe_sent[gi][from]=now; h->inbox_probe_read[gi][from]=read; }
+        if (h->inbox_work_n>=EFS_RAFT_FLOW_HIGH_N) {
+            h->inbox_pressure=1; feedback->pressure=1; feedback->retry_ms=5;
+        }
+    }
+    if (BO_ON() && payload[0]==EFS_RAFT_MSG_AE_REQ)
+        BO_COUNT(outbox_nentries(payload,plen) ? BO_ACCEPT_DATA : BO_ACCEPT_EMPTY);
     pthread_mutex_unlock(&h->inbox_mu);
-    /* Wake the pump now (not at the next 5 ms tick). Lock-free on purpose:
-     * this handler must never queue on h->mu — h->mu serializes all raft
-     * core work, and a handler that blocked on it would delay the
-     * RAFT_REPLY a peer's sender thread is waiting on. */
     host_pump_kick(h);
     return EFS_OK;
+busy:
+    pthread_mutex_unlock(&h->inbox_mu);
+    __atomic_add_fetch(&h->inbox_drop,1,__ATOMIC_RELAXED);
+    BO_COUNT(BO_INBOX_DROP);
+    if (BO_ON()) BO_COUNT(payload[0]!=EFS_RAFT_MSG_AE_REQ ? BO_DROP_OTHER :
+                          outbox_nentries(payload,plen) ? BO_DROP_DATA : BO_DROP_EMPTY);
+    if (h->flow_enabled) { feedback->pressure=1; feedback->retry_ms=5; }
+    return EFS_ERR_BUSY;
 }
 
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out)

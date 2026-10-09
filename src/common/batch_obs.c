@@ -21,7 +21,9 @@ static const char *cn[BO_COUNTER_N] = {
     "host_end", "host_group", "host_count", "host_bytes", "inbox_empty", "spin_cap", "tail_behind", "tail_ahead", "tail_term", "inbox_drop",
     "ae_initial", "ae_extend", "ae_timeout", "ae_other",
     "reply_partial", "reply_covered", "drop_data", "drop_empty",
-    "drop_other", "accept_data", "accept_empty"
+    "drop_other", "accept_data", "accept_empty",
+    "wire_sent", "flow_busy", "flow_admitted", "flow_legacy",
+    "flow_wait", "flow_control", "flow_probe", "flow_enqueue_retry"
 };
 static const char *hn[BH_HIST_N] = {
     "wal_entries", "wal_bytes", "sync_us", "sync_wait_us", "sync_waiters",

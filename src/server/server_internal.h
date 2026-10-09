@@ -6,6 +6,7 @@
 #include "efs/network.h"
 #include "efs/protocol.h"
 #include "efs/query_catalog.h"
+#include "efs/raft_flow.h"
 #include <pthread.h>
 #include <time.h>
 
@@ -328,9 +329,10 @@ void server_start_heartbeat(struct efsd_server *s);
 int server_raft_host_start(struct efsd_server *s);
 void server_raft_host_stop(void);
 /* Copy one encoded efs_raft_msg into the pump inbox. Delivery ack is the
- * caller's job (EFS_MSG_RAFT_REPLY). Drops when the host is off or the
- * inbox is full — Raft retries. */
-int server_raft_host_inbox(const uint8_t *payload, uint32_t plen);
+ * caller's job (EFS_MSG_RAFT_REPLY). Feedback reports bounded queue admission,
+ * never consensus authority. BUSY accepts no frame; Raft retries. */
+int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
+                           struct efs_raft_flow_reply *feedback);
 void server_raft_host_mkfs(struct efs_msg_raft_mkfs_reply *out);
 /* Non-empty RAFT_MKFS payload: group byte + command (or group-only =
  * ReadIndex). Leader-only; NOT_PRIMARY otherwise. */

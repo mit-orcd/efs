@@ -1037,8 +1037,17 @@ send_reply:
             break;
         }
         case EFS_MSG_RAFT: {
-            (void)server_raft_host_inbox(payload, payload_len);
-            efs_conn_send_msg(conn, EFS_MSG_RAFT_REPLY, NULL, 0);
+            struct efs_raft_flow_reply feedback;
+            uint8_t status[EFS_RAFT_FLOW_LEN];
+            int rc=server_raft_host_inbox(payload, payload_len, &feedback);
+            if (feedback.status==3) /* explicit same-code baseline mode */
+                efs_conn_send_msg(conn, EFS_MSG_RAFT_REPLY, NULL, 0);
+            else {
+                feedback.status=rc==EFS_OK ? EFS_RAFT_FLOW_OK :
+                    (rc==EFS_ERR_BUSY || rc==EFS_ERR_NOMEM) ? EFS_RAFT_FLOW_BUSY : EFS_RAFT_FLOW_ERROR;
+                efs_raft_flow_encode(status,&feedback);
+                efs_conn_send_msg(conn, EFS_MSG_RAFT_REPLY, status, sizeof(status));
+            }
             break;
         }
         case EFS_MSG_RAFT_MKFS: {

@@ -317,3 +317,55 @@ term/configuration/read/ACK ordering with the real async host before a live
 trial. Investigate the KV release and applied-index barriers separately as
 well; do not lengthen checkpoint intervals, skip syncs, or relax durability in
 this W97 feedback candidate. No hardware ceiling is established.
+
+## Implementation candidate: transport admission and bounded host pacing
+
+October 9: candidate implementation on `devel-persistence-pressure`, initially
+opt-in with **EFS_RAFT_FLOW=1**; unset/0 preserves the baseline admission and
+empty transport reply. The knob is independent of storage admission pressure.
+This is not yet sustained-performance acceptance or a W97 closure.
+
+The eight-byte transport reply is `EF`, version 1, status (0 admitted / 1 retryable
+pressure / 2 host/protocol error), overload flag, reserved zero and big-endian
+retry milliseconds. Exact length/version/status validation fails malformed
+replies through the existing connection-retry path. Legacy empty replies are
+accepted with admission unknown and cannot clear pressure. All outstanding
+transport replies are drained after BUSY, including mixed TCP/RDMA pipelines.
+Consensus AE_REP processing remains unchanged.
+
+Per-peer monotonic pacing starts at 5 ms and caps at 50 ms with bounded jitter;
+ordinary pipeline recovery doubles 1/2/4/8 after successive groups of eight
+low-pressure admissions. Control replies cannot move an already scheduled data
+retry into the future forever. Replies/votes bypass pacing; a due data slot is
+reserved before bounded probe selection. New entry accumulation during pressure
+is limited to one pending entry frame per group inside existing outbox bounds;
+refused enqueue returns AGAIN without marking an unsent Raft window as delivered.
+Existing entry-lane FIFO and same-group control coalescing remain in place.
+
+No new Raft wire flag is introduced. During pressure, cached current AE headers
+supply an empty zero-prefix probe per hosted group every 50 ms (new nonzero read
+context may escape after 5 ms). Existing vote_granted probe semantics preserve
+outstanding data tracking. Term/boot/group/read context are retained; zero-prefix
+proof cannot replicate or commit the refused tail. A stale cached context earns
+no new read authority. Receiver reserve access for empty probes has the same
+bounded peer/group cadence; other empty traffic uses ordinary capacity.
+
+Receiver framing, group, sender, recipient and entry lengths are checked before
+reserve access. Replies/votes and bounded empty probes can use capacity reserved
+inside 256 frames / 32 MiB. The combined accepted-work counter includes detached
+pump work until Raft drain, KV release and applied-index persistence finish.
+Ordinary-work high/low marks are 64/32 frames and 8/4 MiB; hard bounds apply to
+all accepted work. Rejection counts now include intentional soft-watermark
+refusals as well as hard overflow; compare physical sends and admission outcomes,
+not the old overflow interpretation of inbox_drop alone.
+
+New regression `tests/test_host_flow.py` compiles actual production admission,
+retirement, selection and sender functions against an asynchronous transport
+fixture. Linux passes bounded admission/detached accounting, both groups,
+control/fresh-read escape, non-starving data retry, independently ordered
+TCP/RDMA replies, BUSY pipeline draining, recovery, legacy/malformed/lost reply
+handling and shutdown. The transport fixture does not certify physical RDMA.
+A Raft regression proves fresh zero-prefix probes can establish read authority
+without committing refused data, then ordinary retry catches both groups up.
+Existing Raft/store/wire and group-isolated outbox tests pass. Live gates and
+repeated sustained comparisons remain required before promotion.

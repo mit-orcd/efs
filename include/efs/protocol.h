@@ -120,6 +120,8 @@ enum efs_msg_type {
      * efs_wire_raft_encode (wire.h); the reply is a delivery ack only —
      * Raft tolerates loss, so processing is asynchronous. */
     EFS_MSG_RAFT = 93,
+    /* Legacy empty transport reply, or EFS_RAFT_FLOW_LEN admission bytes
+     * defined in raft_flow.h. Neither form is a durable consensus ACK. */
     EFS_MSG_RAFT_REPLY = 94,
     /* Propose on a group leader (scratch/mgmt + host cross-group submit).
      * Empty payload: idempotent MKFS on the ROOT group's leader (not the
