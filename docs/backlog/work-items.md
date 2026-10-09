@@ -4047,3 +4047,23 @@ leadership and routing work; coordinate any proposed placement/routing changes
 with that owner. This item does not authorize changing voter sets or consensus.
 
 **Discussion handoff:** [status note](../status/all-node-metadata-queries-20261009.md).
+
+<a id="w99"></a>
+
+## W99 · Proactive capacity protection across all disk writers
+
+**Class/state:** user-requested storage admission policy; open, Oct 9, 2026.
+Before storage exhaustion, protect data, metadata/Raft/KV and derived cache
+writers. Support separate disks, cache+metadata sharing, data+metadata sharing
+and all-shared layouts, including multiple data targets per node. Track actual
+shared capacity domains, bytes/inodes/quotas and concurrent consumption.
+
+Node and cluster read-only admission must preserve accepted durable work,
+recovery and cleanup, and reflect writable placement and metadata quorum.
+Numeric thresholds, hysteresis and cache-only escalation remain to be selected;
+no runtime policy is implemented by this documentation. W92 cache budgeting
+remains separate implementation work.
+
+**Gate:** constrained-capacity tests for every topology, shared writers, byte/
+inode/quota pressure, cold restart, acknowledged-data integrity and recovery.
+See [policy and pending details](../status/storage-pressure-read-only-20261009.md).
