@@ -3856,6 +3856,64 @@ restart acceptance is required for a production port.
 **Forbidden:** count reserved zeros as records or durable data, keep O_APPEND
 behind a reserved EOF, zero-fill over valid records, remove durability barriers,
 or present the Raft improvement as measured KV acceptance.
+<a id="w97"></a>
+
+## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
+
+**Class/status:** Performance investigation; open. The .efs-disabled control
+establishes that catalog refresh is not necessary for the observed decline.
+The causal mechanism and a validated production fix remain open.
+
+**Finding (Oct 9, NUC):** With .efs disabled on all four servers and both mounts,
+eight tiny-file workers decline from **118.4 → 81.7 → 42.4 files/s** across
+three consecutive 100-second windows. n3 drops **112,982 replication frames**
+because its inbox fills. Every measured nonempty-request tail mismatch is
+behind the local log; none is ahead or an equal-index term mismatch.
+n3/n4 WAL sync sections rise from roughly 3 ms to 7–8 ms in the middle window.
+Device-wide NVMe write/flush completion times rise as well. These observations
+implicate persistence and replication pressure together; they do not establish
+which starts the feedback, why SSD latency rises, or a hardware ceiling.
+
+**Evidence:** Source diagnostic commit c227bcbd, build c227bcbd-batchobs,
+TCP/direct I/O; five-minute run 13:04:59–13:09:59 UTC, preserved existing data,
+fresh output tree and cooperative stop. Exact boundary reasons, cumulative
+histograms, device counters and final disabled settings are retained in the
+[measurement report](../status/batch-no-efs-profile-20261009.md) and
+[raw evidence](../../results/measure/20261009-batch-no-efs/README.md).
+Behind-tail counts include eligibility rechecks, not unique operations.
+Device counters include all users and queue time; enabled observer overhead
+is uncalibrated. Restart and random workload placement prevent a matched
+performance gain claim against prior .efs-enabled runs.
+
+**Action:** Correlate per-group offered/accepted replication traffic,
+in-flight requests, retry/overlap causes, queue residence/depth, sync blocking
+and dropped-frame recovery over time. Attribute persistence latency between
+filesystem/device completion, scheduler waits and competing I/O. Record
+device temperature/cache behavior where available before claiming a device
+limit. Reproduce the decline with fixed workload seeds and comparable
+initial namespace/device state; test one scheduling, flow-control or batching
+change at a time. Keep memory, queues and diagnostic volume bounded.
+
+**Acceptance gate:** Repeat sustained baseline/candidate runs long enough to
+capture the decline, with exact build/configuration IDs, interval files/s,
+operation and sync p50/p95/p99, inbox depth/drops, retries, durable cohort size,
+device counters and error totals. Demonstrate improved sustained completion
+and tail latency without starving other groups or idle/mixed workloads.
+Any production fix must pass Raft/store fault and recovery tests, cold verified
+payloads, full POSIX/peer suites and applicable W64/W73 durability gates.
+Report residual drops and late-run regression honestly; higher startup
+throughput alone does not close this item.
+
+**Related work:** W93 owns durable group-commit improvements; W97 owns the
+time-dependent decline and receiver/persistence feedback investigation.
+W95 covers tiny-payload storage principles, W96 KV WAL preallocation and W53
+mixed large-writer/tiny-close tails. W92's catalog memory cap is a separate
+issue and does not explain this disabled-control decline.
+
+**Forbidden:** Discard behind-tail traffic without Raft matching/ACK semantics,
+remove required persistence, grow queues without bounds, wipe existing stores,
+or declare the system hardware-bound from busy percentages or sync timings.
+
 <a id="w90"></a>
 
 ## W90 · Independent steady-state storage churn benchmark
