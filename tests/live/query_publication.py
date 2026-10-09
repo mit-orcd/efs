@@ -163,6 +163,12 @@ try:
                                    *map(str,mounts)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=180)
         assert result.returncode==0,(work/'options-gates.log').read_text()
         print('two-mount command display, sorting, server filters and timestamp oracles PASS',flush=True)
+        with (work/'page-gates.log').open('w') as output:
+            result=subprocess.run([sys.executable,str(source/'tests/live/efs_command_pages.py'),
+                                   *map(str,mounts),str(work)],env=env,stdout=output,stderr=subprocess.STDOUT,timeout=240)
+        assert result.returncode==0,(work/'page-gates.log').read_text()
+        print('bounded display, streaming export, pinned generation and permissions PASS',flush=True)
+
 
         if os.environ.get('EFS_QUERY_POSIX')=='1':
             suites=[('posix',[str(source/'tests/posix/posix_suite.py'),str(mounts[0]),'--results',str(work/'posix.tsv')]),

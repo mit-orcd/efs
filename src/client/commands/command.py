@@ -55,6 +55,81 @@ def query_name(command, term=b"", match="contains", filters=None):
     return "v1.find.%d.%s" % (MATCHES[match], term.hex())
 
 
+def page_name(command, term, match, filters, limit, token=0, cursor=0, nonce=0):
+    import base64
+    import struct
+    # Run the same argument validation as legacy paths before encoding.
+    query_name(command, term, match, filters)
+    f = filters or dict(type=None, **{key: None for key in FILTER_FIELDS})
+    flags = sum(1 << i for i, key in enumerate(FILTER_FIELDS) if f[key] is not None)
+    raw = struct.pack(">BBHQQIIIQQQQ", 1 if command == "find" else 2,
+        MATCHES[match], limit, token, cursor, nonce, flags, TYPES.index(f["type"]),
+        *(f[key] or 0 for key in FILTER_FIELDS)) + term
+    return "v3." + base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def result_pages(directory, command, term, match, filters, limit):
+    token = cursor = 0
+    nonce = int.from_bytes(os.urandom(4), "big")
+    identity = None
+    try:
+        while True:
+            result = read_result(directory, page_name(command, term, match, filters, limit, token, cursor, nonce))
+            paths = validate_result(result, command, filters)
+            page = result.get("page")
+            if (not isinstance(page, dict) or type(page.get("more")) is not bool or
+                    type(page.get("more_confirmed")) is not bool or
+                    not isinstance(page.get("token"), str) or not page["token"].isdigit() or
+                    not isinstance(page.get("cursor"), str) or not page["cursor"].isdigit()):
+                raise ValueError("server lacks bounded page support; update server and client together")
+            next_token, next_cursor = int(page["token"]), int(page["cursor"])
+            snap = result["snapshot"]
+            current = (snap["boot_id"], snap["generation"])
+            if (not 0 < next_token <= UINT64_MAX or not cursor <= next_cursor <= 4096 << 32 or
+                    (token and next_token != token) or (identity and current != identity) or
+                    (page["more"] and next_cursor == cursor and not paths)):
+                raise ValueError("invalid or inconsistent page continuation")
+            token, cursor, identity = next_token, next_cursor, current
+            yield result, paths
+            if not page["more"]:
+                break
+    finally:
+        if token:
+            try:
+                # Closing returns empty bytes; do not try to decode JSON.
+                path = os.path.join(directory, ".query", page_name(command, term, match, filters, 0, token, cursor, nonce))
+                with open(path, "rb") as stream:
+                    stream.read(1)
+            except OSError:
+                pass  # The bounded idle lease also cleans abandoned exports.
+
+
+def prepare_export(path):
+    import tempfile
+    if not path or path == "-":
+        raise ValueError("--file requires a writable destination file path")
+    target = os.path.abspath(path)
+    if os.path.lexists(target):
+        info = os.lstat(target)
+        if not stat.S_ISREG(info.st_mode) or not os.access(target, os.W_OK):
+            raise ValueError("--file destination must be a writable regular file")
+    parent = os.path.dirname(target)
+    fd, temporary = tempfile.mkstemp(prefix=".efs-export-", dir=parent)
+    return os.fdopen(fd, "wb"), temporary, target
+
+
+def render_entry(entry, path, args, root, now_ns):
+    visible = path if args.relative else os.path.join(root, path)
+    if args.print0:
+        return visible + b"\0"
+    prefix = ""
+    if args.long:
+        size = human_size(entry["size"]) if args.human_readable else str(entry["size"])
+        prefix = "%s %d:%d %10s %s  " % (stat.filemode(entry["mode"]), entry["uid"],
+            entry["gid"], size, format_mtime(entry["mtime_ns"], args.time_style or "iso", now_ns))
+    return (prefix + safe_text(os.fsdecode(visible)) + "\n").encode("utf-8")
+
+
 def safe_text(value):
     # Escape terminal controls, surrogates and Unicode format/control characters.
     # Printable Unicode is preserved; arbitrary raw filename bytes remain in hex.
@@ -274,6 +349,8 @@ def print_help(command, extended=False):
             ("stats", "Show directory and subtree totals"), ("help", "Show this help")])
         print_section("Options", [("--json", "Structured results and snapshot details"),
             ("-0", "NUL-separated paths (ls and find)"),
+            ("--limit N", "Show up to N results (default 100; maximum 10000)"),
+            ("--file PATH", "Stream all results to a writable destination"),
             ("--extended", "Show limits and requirements (help)"),
             ("-h, --help", "Show command-specific help")])
         print("\nExamples:\n  .efs/ls -l --human-readable --sort mtime"
@@ -283,7 +360,7 @@ def print_help(command, extended=False):
               "\n  Use .efs/help --extended for limits and requirements.")
         if extended:
             print("\nDetails:\n  Patterns are literal, at most 120 filename bytes; quote shell metacharacters."
-                  "\n  Queries are bounded and fail rather than return partial results."
+                  "\n  Display defaults to 100 results; --limit/--size allows up to 10000.\n  --file PATH streams all results in index order; JSON exports use NDJSON."
                   "\n  Snapshots may lag writes; they are not atomic full-tree snapshots."
                   "\n  Expiry: unavailable."
                   "\n  Python 3 is required on the machine executing these scripts."
@@ -311,10 +388,13 @@ def main(argv=None, script_path=None):
         parser.add_argument("--extended", action="store_true", help="Show limits and requirements")
     parser.add_argument("--json", action="store_true", help="Structured results and snapshot details")
     if command in ("find", "ls"):
+        parser.add_argument("--limit", "--size", type=int, default=100,
+                            help="Maximum displayed results: 1–10000 (default: 100)")
+        parser.add_argument("--file", metavar="PATH", help="Stream all results to a writable file; index order, JSON uses NDJSON")
         parser.add_argument("-0", "--print0", action="store_true", help="NUL-separated paths")
         parser.add_argument("-l", "--long", action="store_true", help="Permissions, uid:gid, size, modification date and path")
         parser.add_argument("--human-readable", action="store_true", help="Format long-list sizes as KiB, MiB, GiB")
-        parser.add_argument("--sort", choices=("name", "mtime", "size"), default="name",
+        parser.add_argument("--sort", choices=("name", "mtime", "size"), default=None,
                             help="Name ascending (default), newest first, or largest first")
         parser.add_argument("-r", "--reverse", action="store_true", help="Reverse the selected sort order")
         parser.add_argument("--time-style", choices=("iso", "relative", "full"),
@@ -341,6 +421,10 @@ def main(argv=None, script_path=None):
     now_ns = time.time_ns()
     filters = None
     if command in ("ls", "find"):
+        if not 1 <= args.limit <= 10000:
+            parser.error("--limit/--size must be between 1 and 10000")
+        if args.file and (args.sort or args.reverse or getattr(args, "dirs_first", False)):
+            parser.error("--file streams in index order; sorting, --reverse and --dirs-first are unavailable")
         if args.long and (args.json or args.print0):
             parser.error("--long cannot be combined with --json or --print0")
         if (args.human_readable or args.time_style) and not args.long:
@@ -355,10 +439,54 @@ def main(argv=None, script_path=None):
     except ValueError as error:
         parser.error(str(error))
     directory = os.path.dirname(script)
-    result = read_result(directory, name)
-    paths = validate_result(result, command, filters)
-    ordered = [] if command == "stats" else ordered_entries(result, paths, args.sort, args.reverse,
-                                                           getattr(args, "dirs_first", False))
+    if command == "stats":
+        result = read_result(directory, name)
+        paths = validate_result(result, command, filters)
+        ordered = []
+    else:
+        term = os.fsencode(args.pattern) if command == "find" else b""
+        match = args.match if command == "find" else "contains"
+        root = os.fsencode(os.path.dirname(directory))
+        output = prepare_export(args.file) if args.file else None  # Before the first query.
+        pages = result_pages(directory, command, term, match, filters, 1000 if output else args.limit)
+        entries, paths, exported = [], [], 0
+        header_written = False
+        try:
+            for result, chunk in pages:
+                if output:
+                    if args.json and not header_written:
+                        output[0].write((json.dumps({"operation": command, "snapshot": result["snapshot"]}, separators=(",", ":")) + "\n").encode("ascii"))
+                        header_written = True
+                    for entry, path in zip(result["entries"], chunk):
+                        if os.path.abspath(os.path.join(os.fsdecode(root), os.fsdecode(path))) == output[1]:
+                            continue  # Never export our own staging file if it is inside the scope.
+                        payload = (json.dumps({"entry": entry}, separators=(",", ":")) + "\n").encode("ascii") if args.json else render_entry(entry, path, args, root, now_ns)
+                        output[0].write(payload)
+                        exported += 1
+                else:
+                    remaining = args.limit - len(entries)
+                    entries.extend(result["entries"][:remaining]);paths.extend(chunk[:remaining])
+                    if len(entries) == args.limit:
+                        break
+            if output:
+                if args.json:
+                    output[0].write((json.dumps({"complete": True, "exported": exported}) + "\n").encode("ascii"))
+                output[0].flush();os.fsync(output[0].fileno());output[0].close()
+                os.replace(output[1], output[2])
+                print("Exported %d results to %s (index order)." % (exported, safe_text(output[2])), file=sys.stderr)
+            else:
+                result["entries"] = entries
+                ordered = ordered_entries(result, paths, args.sort or "name", args.reverse, getattr(args, "dirs_first", False))
+        finally:
+            pages.close()
+            if output:
+                output[0].close()
+                if os.path.exists(output[1]):
+                    os.unlink(output[1])
+        if output:
+            # The destination has all pages; stdout remains untouched.
+            args.json = False
+            ordered = []
     if args.json:
         if command != "stats":
             result["entries"] = [entry for entry, _ in ordered]
@@ -369,27 +497,20 @@ def main(argv=None, script_path=None):
         print("expiry=unavailable")
     else:
         root = os.fsencode(os.path.dirname(directory))
-        rendered = []
-        for entry, path in ordered:
-            visible = path if args.relative else os.path.join(root, path)
-            if args.print0:
-                rendered.append(visible + b"\0")
-            else:
-                prefix = ""
-                if args.long:
-                    size = human_size(entry["size"]) if args.human_readable else str(entry["size"])
-                    prefix = "%s %d:%d %10s %s  " % (stat.filemode(entry["mode"]), entry["uid"],
-                        entry["gid"], size, format_mtime(entry["mtime_ns"], args.time_style or "iso", now_ns))
-                rendered.append((prefix + safe_text(os.fsdecode(visible)) + "\n").encode("utf-8"))
-        # Complete validation and formatting precede the first output byte.
-        sys.stdout.buffer.write(b"".join(rendered))
+        sys.stdout.buffer.write(b"".join(render_entry(entry, path, args, root, now_ns) for entry, path in ordered))
+    if command != "stats" and not args.file:
+        more = result["page"]["more"]
+        confirmed = result["page"]["more_confirmed"]
+        print("Showing %d results; %s. Total matches were not counted." %
+              (len(paths), "more results exist" if more and confirmed else
+               "more results may exist" if more else "no more results"), file=sys.stderr)
     # NUL output is exclusively paths; status always goes to stderr.
     snap = result["snapshot"]
     status_now = time.time_ns()
     freshness = format_mtime(snap["source_ns"], "relative", status_now)
     if snap["source_ns"] > status_now:
         freshness = "unknown (server timestamp is ahead of client clock)"
-    print("Results as of %s; complete for this snapshot. "
+    print("Results as of %s; validated against this snapshot. "
           "Background refresh may lag recent writes." % freshness, file=sys.stderr)
     refresh = ("no refresh error recorded" if snap["refresh_error"] == 0 else
                "refresh error %d; showing the last available snapshot" % snap["refresh_error"])

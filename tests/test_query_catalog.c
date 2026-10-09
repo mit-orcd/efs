@@ -82,6 +82,12 @@ static int collect(void *ctx,const struct efs_name_entry *e,const char *path)
     if (f->n>=32 || strlen(path)>=sizeof(f->path[0])) return EFS_ERR_NOMEM;
     strcpy(f->path[f->n++],path);return EFS_OK;
 }
+static int page_collect(void *ctx,const struct efs_name_entry *e,const char *path)
+{
+    struct found *f=ctx;
+    if (f->n && f->n%2==0) return EFS_ERR_AGAIN;
+    return collect(ctx,e,path);
+}
 static int cancel(void *ctx) { (void)ctx;return 1; }
 int main(void)
 {
@@ -272,6 +278,19 @@ int main(void)
     f=(struct found){0};
     CHECK(newer && !efs_query_catalog_find(newer,EFS_ROOT_INO,EFS_NAME_PREFIX,"scope-cache-",100,collect,&f) && f.n==6,
           "scope cache belongs to one query root");
+    uint64_t cursor=0;int pages=0,total=0;
+    do {
+        f=(struct found){0};uint64_t before=cursor;
+        CHECK(!efs_query_catalog_page(newer,EFS_ROOT_INO,EFS_NAME_PREFIX,"scope-cache-",0,
+              &cursor,3,NULL,NULL,page_collect,&f),"bounded page");
+        CHECK(cursor>before || f.n,"page progress");
+        total+=f.n;pages++;
+        CHECK(pages<5000,"bounded page completion");
+    } while (cursor!=(UINT64_C(4096)<<32) && pages<5000);
+    CHECK(total==6 && pages>1,"paging neither loses nor duplicates entries");
+    efs_query_catalog_retain(newer);
+    efs_query_catalog_free(newer);
+    CHECK(!efs_query_catalog_stats(newer,EFS_ROOT_INO,&stat),"retained catalog survives publisher retirement");
     efs_query_catalog_free(newer);newer=NULL;
     /* Exercise catalog lookup through a larger, same-shard inode population,
      * including misses and an older immutable generation. */

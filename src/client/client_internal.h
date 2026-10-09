@@ -599,4 +599,6 @@ int efs_client_rpc_query_snapshot(const struct efs_msg_query_snapshot *req,
 int efs_client_rpc_query_snapshot_v3(const struct efs_msg_query_snapshot_v3 *req,
                                     struct efs_msg_query_snapshot_reply *reply,char **text);
 
+int efs_client_rpc_query_snapshot_v4(const struct efs_msg_query_snapshot_v4 *req,
+                                    struct efs_msg_query_snapshot_reply *reply,char **text);
 #endif
