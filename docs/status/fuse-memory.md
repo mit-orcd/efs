@@ -55,10 +55,12 @@ and four 128 MiB files while a concurrent sequential reader pressures the
 This extends coverage on the user-selected AMD cluster; it does not establish
 an Xorinox deployment result.
 
-**Remaining:** full-tree mixed reads on xorinox, including large files, with
-zero demand-read ENOMEM/EIO caused by speculation. No promise of admission
-under exhaustion by demand/dirty owners. Sub-chunk accounting and dedicated
-diagnostic counters remain follow-ups, not claims of completed fixes.
+**Closed Oct 9:** the user accepts AMD direct-I/O/TCP as the functional
+acceptance environment. The mixed-tree gate above satisfies the remaining
+speculative-starvation coverage; Xorinox is an optional deployment verification,
+not a closure requirement. This does not promise admission under exhaustion by
+demand/dirty owners. Sub-chunk accounting and dedicated diagnostic counters are
+optional enhancements outside the closed W60 fix.
 
 ## Recovery and deployment boundaries
 

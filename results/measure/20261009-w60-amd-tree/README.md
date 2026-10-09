@@ -19,8 +19,8 @@ Candidate binary SHA256:
 - efs-fuse: `a2557770ae79779ffccb9b72b9deb4c1fd724ac95667013148e3eb45b9046bd1`
 - efsd: `587c84bf41cb0a260bf310516e7b98928f58eab4dd0c32acc4b414a156689f37`
 
-The historical Xorinox full-tree deployment gate and demand/dirty-owner
-exhaustion limits remain open; this AMD run does not claim those results.
+The historical Xorinox deployment result is not claimed. Demand/dirty-owner
+exhaustion remains outside this speculative-starvation acceptance.
 
 Full follow-on acceptance passes: core POSIX212/212, peer64/64; cold fold/live
 base reads; offline-member reap-ledger retention and rejoin; final cold restart,
@@ -30,5 +30,5 @@ advance from 24 to 166 GC passes and 270 to 22374 removed fragments. See
 This measures the POSIX phase, separately from the earlier mixed-tree deletion.
 
 Installed AMD978caaf7 direct/TCP service remained intact. Both approved mounts
-were independently verified restored; reservation released. Historical Xorinox
-acceptance is retained, so the broader W60 queue item remains open.
+were independently verified restored; reservation released. On Oct 9 the user accepted AMD as the functional gate environment: W60 is
+closed on this evidence. Xorinox deployment verification is optional.

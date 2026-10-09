@@ -2274,6 +2274,15 @@ See the [round ledger](../status/three-package-gates-20261007.md).
 
 ## W60 · a concurrent sequential reader's prefetch queue can park the entire read-side body budget; demand reads then fail NOMEM, surfaced as EIO (queue row 0q)
 
+**Current status (Oct 9): CLOSED.** The user accepts AMD direct-I/O/TCP
+mixed-tree coverage in place of the historically named Xorinox deployment gate.
+2000 tiny files and four 128 MiB files verify under concurrent prefetch with
+32 MiB normal/32 MiB drain budgets; zero failures, core212/212, peer64/64 and
+cold physical GC pass. [Evidence](../../results/measure/20261009-w60-amd-tree/README.md).
+Historical gates below are superseded for closure; optional diagnostics and
+sub-chunk charging remain enhancements, not outstanding W60 correctness gates.
+
+
 **W60 · `rg --hidden --no-ignore --stats 'search text' /mnt/efs/` on xefsct1 (Oct 6 2026, xorinox cluster, build `b4a75492-dirty`) emitted thousands of `Input/output error (os error 5)` on tiny files (`tiny_files*/folder_*/level_4/*.txt`) while all three efsd logged zero errors. The client log holds 19,112 `efs-fuse read: out of memory (efs_rc=-2)` lines between 21:58:16Z and 22:57:01Z (per-10-min: 950, 6433, 4879, 2085, 1665, 1704, 1396 — onset ~40 min into the scan, decay as rg moved off the large files). The EIO is `efs_fuse_read_ino` mapping any `efs_client_read` error to -EIO while the log keeps the real code (`efs_fuse.c:2166-2169`). Root cause established by controlled A/B reproduction (below): queued prefetch buffers can hold the full 256 MiB read-side body budget, and the demand-read scratch allocation has no trim/wait/retry — best-effort readahead starves real reads.**
 
 **Mechanism (code).** The shared body pool (`bufpool.c`) admits demand reads only up to `EFS_DCACHE_HARD_BYTES` (default 256 MiB; the 64 MiB drain reserve is write/drain-only — `efs_buf_alloc` uses `g_hard` without a full reservation or drain context) and charges every buffer a minimum of one chunk (`buf_charge`, 128 KiB — a 3-byte file costs a full slot). A sequential reader arms prefetch after two in-order reads (`t_seq_run >= 2`, `read.c:1725-1732`); `prefetch_ahead` (`read.c:1508-1553`) allocates one pool buffer per queued chunk (`:1536`) into the GET pool, which queues up to `GET_POOL_QDEPTH=32` × `GET_POOL_N=64` (`:1194-1204`) = 2048 jobs ≈ 256 MiB — 100% of the read budget. Prefetch's own alloc failure is silent (`:1537-1539`). Any non-chunk-aligned read (every sub-chunk tiny file, every tail) needs a scratch buffer at `read.c:1797` and fails `EFS_ERR_NOMEM` (`:1802`) with no recovery — unlike the write path, which trims the read cache, drains and retries (`fuse_write_admit`, `efs_fuse.c:2900-2978`, the only `efs_rdcache_trim` caller). The log line blames the victim; the culprit is invisible.
