@@ -441,6 +441,11 @@ static void retired_append_receipts(int cold)
  assert(efs_kv_put(kv,key,kl,value,2)==EFS_OK);tx.bytes[1]=70;
  assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_PROTO && !progress);
  assert(efs_kv_put(kv,key,kl,value,vl)==EFS_OK);
+ uint8_t reservation[EFS_KV_KEY_MAX],body[48];uint32_t rl,bl=sizeof(body);
+ assert(efs_kv_key_append_rsv(shard,ino,gen,200,reservation,&rl)==EFS_OK && efs_kv_get(kv,reservation,rl,body,&bl)==EFS_OK);
+ body[0]^=1;assert(efs_kv_put(kv,reservation,rl,body,bl)==EFS_OK);
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_PROTO && !progress);
+ body[0]^=1;assert(efs_kv_put(kv,reservation,rl,body,bl)==EFS_OK);
  const struct efs_meta_append_ops lost={prepare,lost_decision,resolve};tx.bytes[1]=71;
  assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&lost,kv,&progress)==EFS_ERR_IO && !progress);
  if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}

@@ -269,7 +269,14 @@ struct prune_scan {struct finish_capture *capture;unsigned count;int rc;};
 static int prune_row(void *user,const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl)
 {
     struct prune_scan *s=user;uint32_t slot;
-    if(vl!=48 || val[44]!=1){s->rc=EFS_ERR_PROTO;return 1;}
+    if(kl!=27 || vl!=48 || val[44]!=1){s->rc=EFS_ERR_PROTO;return 1;}
+    uint64_t offset=0,stored=0,length=0;
+    for(unsigned i=0;i<8;i++) {
+        offset=offset<<8|key[19+i];stored=stored<<8|val[i];length=length<<8|val[8+i];
+    }
+    if(offset!=stored || !length || offset>UINT64_MAX-length) {
+        s->rc=EFS_ERR_PROTO;return 1;
+    }
     ++s->count;
     if(!s->capture)return 1;
     s->rc=finish_record(s->capture,key,kl,val,vl,&slot);
