@@ -5,6 +5,7 @@ import os, shlex, subprocess, tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/client/efs_fuse.c').read_text()
 a=s.index('static int efs_fuse_create_begin_wait(');b=s.index('\n}',a)+2
+e=s.index('static int efs_fuse_create_resume_wait(');f=s.index('\n}',e)+2
 c=s.index('static void ll_create(fuse_req_t req,');d=s.index('\n}',c)+2
 code=r'''
 #include "client_internal.h"
@@ -27,7 +28,14 @@ int efs_client_create_begin(struct efs_client_create_request *r,efs_ino_t p,
  if(!result)r->active=1;
  return result;
 }
-'''+s[a:b]+r'''
+static unsigned resume_calls,resume_failures;
+static int resume_rc,known;
+int efs_client_create_resume(struct efs_client_create_request *r,int probe){
+ assert(!probe && r->active && r->wire.q.id.seq==23);resume_calls++;now+=1000;
+ if(resume_calls<=resume_failures)return EFS_ERR_NET;
+ r->complete=known;return resume_rc;
+}
+'''+s[a:b]+s[e:f]+r'''
 typedef void *fuse_req_t;
 typedef uint64_t fuse_ino_t;
 struct fuse_file_info {int unused;};
@@ -60,6 +68,15 @@ int main(void){
  assert(runs==2 && left==2 && seen==30100 && !deadline);
  allow=0;ll_create(NULL,1,"f",0600,NULL);
  assert(runs==2 && left==2 && refused==1 && !deadline);
+ r=(struct efs_client_create_request){.active=1};r.wire.q.id.seq=23;
+ now=0;deadline=0;resume_failures=2;known=1;
+ assert(!efs_fuse_create_resume_wait(&r) && resume_calls==3 && r.complete && !deadline);
+ r.complete=0;resume_calls=0;resume_failures=99;now=0;deadline=2500;
+ assert(efs_fuse_create_resume_wait(&r)==EFS_ERR_BUSY && resume_calls==2 && r.active && !r.complete && deadline==2500);
+ now=0;deadline=0;resume_calls=0;resume_failures=0;resume_rc=EFS_ERR_BUSY;known=1;
+ assert(efs_fuse_create_resume_wait(&r)==EFS_ERR_BUSY && resume_calls==1 && r.complete);
+ r.complete=0;resume_calls=0;known=0;resume_rc=EFS_ERR_IO;
+ assert(efs_fuse_create_resume_wait(&r)==EFS_ERR_IO && resume_calls==1 && !r.complete);
  puts("CREATE admission: capacity recovery, inherited deadline, retained identity and terminal errors PASS");
 }
 '''

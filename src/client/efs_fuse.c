@@ -3913,6 +3913,26 @@ static int efs_fuse_create_begin_wait(struct efs_client_create_request *request,
     return rc;
 }
 
+/* A transport failure can hide a committed CREATE. Resume its retained
+ * request within the caller budget instead of returning EIO after one try. */
+static int efs_fuse_create_resume_wait(struct efs_client_create_request *request)
+{
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t deadline=stats_now_ms()+30000;
+    if(previous && previous<deadline)deadline=previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc=EFS_ERR_BUSY;
+    while(!efs_client_rpc_past_deadline()) {
+        rc=efs_client_create_resume(request,0);
+        if(request->complete || !request->active ||
+           (rc!=EFS_ERR_BUSY && rc!=EFS_ERR_NET))break;
+        usleep(1000);
+    }
+    if(!request->complete && efs_client_rpc_past_deadline())rc=EFS_ERR_BUSY;
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
+}
+
 static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
                               mode_t mode, struct fuse_file_info *fi,
                               efs_ino_t *out_ino, struct efs_inode *created)
@@ -3942,7 +3962,7 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     if(!pending_create)return -ENOMEM;
     int create_rc=efs_fuse_create_begin_wait(&pending_create->request,parent.ino,
         name,S_IFREG|mode,uid,gid);
-    if(create_rc==EFS_OK)create_rc=efs_client_create_resume(&pending_create->request,0);
+    if(create_rc==EFS_OK)create_rc=efs_fuse_create_resume_wait(&pending_create->request);
     if(create_rc==EFS_OK && pending_create->request.complete) {
         ino=pending_create->request.inode.ino;
         if(created)*created=pending_create->request.inode;
