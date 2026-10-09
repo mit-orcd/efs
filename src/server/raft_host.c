@@ -4791,6 +4791,11 @@ static int host_append_replay_get(struct efs_raft_host *h, efs_ino_t ino,
         memcmp(uuid, (uint8_t[EFS_OPID_UUID_LEN]){0}, EFS_OPID_UUID_LEN) == 0)
         return EFS_ERR_NOT_FOUND;
     pthread_mutex_lock(&h->mu);
+    /* A cached offset is not permission to bypass a later durable fence.
+     * Caller already crossed authoritative ReadIndex; serialize this local
+     * epoch check with apply before returning the retained result. */
+    int accepted=efs_session_accept_legacy(h->kv,efs_kv_inode_shard(ino),uuid,epoch);
+    if(accepted!=EFS_OK) {pthread_mutex_unlock(&h->mu);return accepted;}
     for (i = 0; i < 512; i++) {
         if (h->ap_rep[i].seq == seq && h->ap_rep[i].ino == ino &&
             h->ap_rep[i].epoch == epoch &&

@@ -7,13 +7,17 @@ def fn(p):
  a=s.index(p);return s[a:s.index('\n}',a)+2]
 code=r'''
 #include "efs/protocol.h"
+#include "efs/kv_key.h"
 #include <pthread.h>
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
 #define EFS_RAFT_LEADER 1
 struct efs_raft{int role,leader;};
-struct efs_raft_host{pthread_mutex_t mu;struct efs_raft r;struct {uint8_t uuid[16];uint32_t epoch;uint64_t seq;efs_ino_t ino;uint64_t len,off;}ap_rep[512];uint32_t ap_rep_i;};
+struct efs_raft_host{struct efs_kv *kv;pthread_mutex_t mu;struct efs_raft r;struct {uint8_t uuid[16];uint32_t epoch;uint64_t seq;efs_ino_t ino;uint64_t len,off;}ap_rep[512];uint32_t ap_rep_i;};
+static int acceptance;
+static int efs_session_accept_legacy(struct efs_kv *kv,uint32_t shard,const uint8_t uuid[16],uint32_t epoch)
+{(void)kv;(void)shard;(void)uuid;(void)epoch;return acceptance;}
 static struct efs_raft *group_raft(struct efs_raft_host*h,uint8_t g){return g==2?&h->r:NULL;}
 static int efs_raft_role(struct efs_raft*r){return r->role;}
 static int efs_raft_leader(struct efs_raft*r){return r->leader;}
@@ -41,6 +45,12 @@ int main(void){struct efs_msg_inode_reply r={0};host.r.role=0;host.r.leader=2;
  assert(host_append_replay_get(&host,42,a,7,10,16,&off)==EFS_ERR_INVAL);
  host_append_replay_put(&host,42,z,7,11,8,88);
  assert(!host_append_replay_get(&host,42,z,7,11,8,&off)&&off==88);
+ acceptance=EFS_ERR_STALE;off=999;
+ assert(host_append_replay_get(&host,42,a,7,10,8,&off)==EFS_ERR_STALE && off==999);
+ acceptance=EFS_ERR_IO;
+ assert(host_append_replay_get(&host,42,a,7,10,8,&off)==EFS_ERR_IO && off==999);
+ acceptance=EFS_OK;
+ assert(host_append_replay_get(&host,42,a,7,10,8,&off)==EFS_OK && off==80);
  uint8_t empty[16]={0};
  host_append_replay_put(&host,42,empty,7,12,8,96);
  assert(host_append_replay_get(&host,42,empty,7,12,8,&off)==EFS_ERR_NOT_FOUND);

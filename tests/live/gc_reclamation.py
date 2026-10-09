@@ -536,7 +536,8 @@ try:
         unmount();stop(crash=True);start();mount_client()
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)
         assert edge_path.read_bytes()==edge_body,'lease transport changed cold bytes'
-        run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','fence',edge_uuid],timeout=90)
+        edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'cached',source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
+        assert edge_path.read_bytes()==edge_body+bytes(8),'legacy cached append fence corrupts original bytes/hole'
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'revoked'],capture_output=True,text=True,timeout=90).stdout)
         edge_path.unlink();wait(lambda:not files(edge_ino),'actual client lease close physical reclaim',180)
         (work/'client-lease-transport.json').write_text(json.dumps(edge_results,indent=2))

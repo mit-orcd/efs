@@ -386,3 +386,23 @@ append token bytes differ from big-endian legacy HOLD/FLOCK UUIDs on AMD. The
 narrow explicitly registered identity gate is not full mount fencing. Production
 integration needs one full UUID/epoch, CREATE adoption and retained OPEN/CLOSE
 identity across ambiguity; those and PUT data-plane lifecycle remain open.
+
+## Legacy cached append fence bypass — fixed and gated
+
+Legacy append's in-memory offset lookup no longer bypasses the durable local
+rejection floor. The caller's authoritative view is followed by an epoch check
+serialized with apply before exposing the cached result. Actual cache-function
+STALE/IO refusal and400,000 concurrent cache operations pass. AMD warms a real
+legacy replay at offset45056, repeats exactly, completes revocation and proves
+identical hot replay STALE; original bytes +8-byte hole survive. Full Linux,
+core212/peer64/session/GC/cold restart gates pass; installed service restored.
+[Evidence](../../results/measure/20261009-legacy-append-cache-floor/README.md).
+
+Checkpoint: bounded revoked-session lease/lock and append OPEN/DONE/receipt
+phases are implemented/gated, prepared ownership and legacy replay/grant bypasses
+are fixed, and real deferred lease transport has cold proof. The broader package
+is not fully closed: retained FUSE OPEN/CLOSE ownership, one versioned full mount
+UUID/epoch through CREATE/adoption and all mutations, and production PUT-ticket
+admission/storage fencing/all-member collection remain open. Pressure and D25
+remain staged. Worktree changes through this checkpoint are committed; no push,
+merge, tag, reboot or forced installed write loss was performed.
