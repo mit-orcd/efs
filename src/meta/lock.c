@@ -2,6 +2,7 @@
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
 #include "efs/txn.h"
+#include "efs/session.h"
 #include <string.h>
 
 #define DROP_MAX 32
@@ -219,6 +220,9 @@ int efs_lock_grant(struct efs_kv *kv, const struct efs_lock_req *req)
     rc = check_gen(kv, req);
     if (rc != EFS_OK)
         return rc;
+    rc=efs_session_accept_legacy(kv,efs_kv_inode_shard(req->ino),
+                                 req->owner.uuid,req->owner.epoch);
+    if(rc!=EFS_OK)return rc;
     rc = load_domain(kv, req, &a);
     if (rc != EFS_OK)
         return rc;

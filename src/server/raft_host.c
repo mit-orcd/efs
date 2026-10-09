@@ -2079,7 +2079,7 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc = EFS_ERR_PROTO;
 
     if (clen < HOST_LOCK_LEN)
-        return EFS_OK;
+        return EFS_ERR_PROTO;
     memset(&r, 0, sizeof(r));
     r.ino = rd64be(cmd + 2);
     r.generation = rd64be(cmd + 10);
@@ -2098,16 +2098,7 @@ static int apply_lock_cmd(struct efs_raft_host *h, const uint8_t *cmd,
         rc = efs_lock_release(h->kv, &r);
     else
         return EFS_OK;
-    if (rc == EFS_ERR_AGAIN || rc == EFS_ERR_NOLCK || rc == EFS_ERR_NOT_FOUND ||
-        rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY || rc == EFS_ERR_STALE)
-        rc = EFS_OK;
-    if (rc != EFS_OK) {
-        fprintf(stderr,
-                "raft-host: apply lock rc=%d index=%llu ino=%llu kind=%u\n",
-                rc, (unsigned long long)index, (unsigned long long)r.ino,
-                (unsigned)cmd[1]);
-        return EFS_OK;
-    }
+    if(rc!=EFS_OK)return rc; /* business verdict is audible; storage retries */
     APPLY_LOG("raft-host: applied lock index=%llu ino=%llu kind=%u\n",
             (unsigned long long)index, (unsigned long long)r.ino,
             (unsigned)cmd[1]);
@@ -2404,6 +2395,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
+           cmd[0] == EFS_MD_CMD_LOCK ||
            cmd[0] == EFS_MD_CMD_UNLINK || cmd[0] == EFS_MD_CMD_SETATTR ||
            cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
            cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
@@ -2429,7 +2421,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES ||
-         (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN)) &&
+         (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
+         (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
         ret = rc;
     if (a0) {

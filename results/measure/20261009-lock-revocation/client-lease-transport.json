@@ -1,0 +1,6 @@
+[
+  "actual client lease open: generation=1 stored exact replay and unknown probe PASS\n",
+  "actual client lease close: generation=1 stored exact replay and unknown probe PASS\n",
+  "actual client lease replay: generation=1 stored exact replay and unknown probe PASS\n",
+  "actual legacy HOLD/FLOCK after durable revocation rejected STALE PASS\n"
+]

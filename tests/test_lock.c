@@ -5,6 +5,7 @@
 #include "efs/kv_key.h"
 #include "efs/common.h"
 #include "efs/txn.h"
+#include "efs/session.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -172,8 +173,29 @@ static void test_atomic_final_close(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_rejection_floor(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();efs_ino_t ino=0;struct efs_meta_row row;struct efs_lock_req r;
+ CHECK(kv!=NULL,"floor lock KV");if(!kv)return;
+ CHECK(efs_meta_apply_init(kv,1)==EFS_OK && efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"floor-lock",&ino)==EFS_OK && efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"floor lock file");
+ fill_req(&r,ino,row.generation,EFS_LOCK_FCNTL,EFS_LOCK_EX,0,1,EFS_LOCK_PROC,1,93);
+ CHECK(efs_kv_mem_fail_next_batch(kv)==EFS_OK,"inject grant storage failure");
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_IO && efs_lock_count(kv,ino,row.generation)==0,"failed grant owns no row and retains IO verdict");
+ CHECK(efs_lock_grant(kv,&r)==EFS_OK,"unknown legacy lock compatibility and exact retry");
+ CHECK(efs_session_fence_local(kv,efs_kv_inode_shard(ino),r.owner.uuid,2)==EFS_OK,"durable lock owner rejection floor");
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_STALE,"revoked identical lock is not false grant success");
+ CHECK(efs_lock_release(kv,&r)==EFS_OK,"old lock cleanup remains allowed");
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_STALE && efs_lock_count(kv,ino,row.generation)==0,"revoked range cannot recreate ownership");
+ r.domain=EFS_LOCK_FLOCK;r.owner.kind=EFS_LOCK_OFD;
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_STALE,"both lock domains honor floor");
+ r.owner.epoch=2;
+ CHECK(efs_lock_grant(kv,&r)==EFS_ERR_BUSY,"next lock epoch needs establishment");
+ efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_rejection_floor();
     test_conflict_and_domains();
     test_cap_and_drop();
     test_atomic_final_close();

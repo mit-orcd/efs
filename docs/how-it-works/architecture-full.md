@@ -4943,6 +4943,24 @@ checks shard-local session state: those are implemented primitives, not proof
 that all mounted production mutations participate. See the D25 routing page
 for staged I23 admission and remaining abandoned-stream cleanup.
 
+**Oct 9 dependency follow-up:** bounded revoked lease/lock and append
+OPEN/DONE/receipt cleanup now have AMD direct/TCP cold gates. Known local
+rejection floors reject legacy HOLD and FLOCK grants; rejected lock apply
+verdicts are audible and storage failures retain replay. Actual client deferred
+lease OPEN/CLOSE/probe transport has exact cold replay proof, but FUSE does not
+retain/use those identities yet. See the
+[dependency checkpoint](../status/dependency-package-20261009.md).
+
+The identity unification gate is concrete: `efs_client_append_begin` copies
+`flock_token` into UUID bytes in native order, whereas `host_hold_uuid` encodes
+legacy HOLD/FLOCK owners in big-endian order. On the tested little-endian hosts,
+these are different UUIDs. Fencing an explicitly registered append identity
+therefore does not establish revocation of the whole mount. Versioned production
+integration must carry one full mount UUID/epoch consistently through namespace,
+CREATE lease adoption, HOLD/FLOCK, append and publication; the OFD/process lock
+owner remains a separate identifier. Do not silently reinterpret historical rows
+or claim that the narrow legacy floor gate proves full mount fencing.
+
 **Change/gate:** establish real mount sessions, register every touched authority
 and connect the relevant production requests to that authority. Exercise a
 partitioned old client, coordinator restart and leader changes; old mutations

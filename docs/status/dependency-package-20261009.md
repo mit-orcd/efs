@@ -368,3 +368,21 @@ are not closed by these staged calls.
 Final DONE pruning audit also validates exact key/value offset, nonzero length
 and overflow before effects; malformed evidence returns PROTO. Memory and cold
 regressions prove no retirement from corrupted offsets. Full AMD Linux passes.
+
+## Legacy lock floor and apply-verdict hole — fixed and gated
+
+Legacy lock grants now honor retained local epoch/rejection floors before
+idempotent-grant checks. Release remains available for cleanup. Lock apply now
+preserves business verdicts for the proposer; conflicts advance Raft so later
+resolution can run, while IO/NOMEM retain committed replay. Previously rejected
+or failed grants were normalized to success. Previous source fails four new
+floor cases; atomic grant failure/no-effect/retry and actual apply/core verdict
+regressions pass. Full Linux and AMD actual HOLD/FLOCK STALE after completed
+revocation, core212/peer64/session/GC/cold restart gates pass; service restored.
+[Evidence](../../results/measure/20261009-lock-revocation/README.md).
+
+W72 now explicitly records the remaining mount identity mismatch: native-order
+append token bytes differ from big-endian legacy HOLD/FLOCK UUIDs on AMD. The
+narrow explicitly registered identity gate is not full mount fencing. Production
+integration needs one full UUID/epoch, CREATE adoption and retained OPEN/CLOSE
+identity across ambiguity; those and PUT data-plane lifecycle remain open.

@@ -1,0 +1,5 @@
+FAIL tests/test_lock.c:186: revoked identical lock is not false grant success
+FAIL tests/test_lock.c:188: revoked range cannot recreate ownership
+FAIL tests/test_lock.c:190: both lock domains honor floor
+FAIL tests/test_lock.c:192: next lock epoch needs establishment
+test_lock: 4 failure(s)
