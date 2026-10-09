@@ -492,5 +492,45 @@ static void retired_append_receipts(int cold)
   closedir(d);assert(!rmdir(dir));
  }else efs_kv_mem_free(kv);
 }
+static void session_owned_completion(int cold)
+{
+ char dir[]="/tmp/efs-owned-completion-XXXXXX";
+ if(cold)assert(mkdtemp(dir));
+ struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
+ efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_opid_req q=identity(1,0);uint32_t shard=efs_kv_inode_shard(ino);
+ struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_OK);
+ struct efs_txid reserve={{201}};
+ assert(efs_meta_execute_append(plan,&reserve,&ops,kv)==EFS_OK);
+ struct efs_txid complete={{202}};
+ assert(efs_meta_finish_append_owned(kv,ino,plan->offset,EFS_META_APPEND_COMPLETED,
+                                    &q.id,&complete,&ops,kv)==EFS_ERR_BUSY);
+ assert(efs_session_create(kv,q.id.client_uuid,1)==EFS_OK &&
+        efs_session_register(kv,q.id.client_uuid,1,shard)==EFS_OK &&
+        efs_session_establish(kv,shard,q.id.client_uuid,1)==EFS_OK);
+ const struct efs_meta_append_ops lost={owner_prepare,lost_decision,resolve};
+ assert(efs_meta_finish_append_owned(kv,ino,plan->offset,EFS_META_APPEND_COMPLETED,
+                                    &q.id,&complete,&lost,kv)==EFS_ERR_IO);
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_ERR_BUSY);
+ /* A partial lane resolution cannot release the reporting session guard. */
+ assert(efs_txn_resolve(kv,&complete,efs_kv_lane_shard(ino,1),EFS_TXN_COMMIT)==EFS_OK);
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_ERR_BUSY);
+ assert(resolve(kv,&complete,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
+ assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
+ complete.bytes[1]=1;
+ assert(efs_meta_finish_append_owned(kv,ino,plan->offset,EFS_META_APPEND_COMPLETED,
+                                    &q.id,&complete,&ops,kv)==EFS_ERR_STALE);
+ uint32_t open=99;assert(efs_meta_apply_append_state(kv,ino,NULL,NULL,&open)==EFS_OK && !open);
+ free(plan);
+ if(cold){
+  efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(dir));
+ }else efs_kv_mem_free(kv);
+}
+
 int main(void)
-{retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{session_owned_completion(0);session_owned_completion(1);retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

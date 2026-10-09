@@ -1,6 +1,9 @@
 /* REPORT mount-session fencing on disposable private live stores. */
 #include "../../src/client/client_internal.h"
 #include "efs/session.h"
+#include "efs/meta_cmd.h"
+#include "efs/kv_key.h"
+#include "efs/raft.h"
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +30,33 @@ static struct efs_msg_inode_reply rpc(unsigned port,const struct packet *p,int d
     }
     assert(!"REPORT routing deadline");return (struct efs_msg_inode_reply){0};
 }
+static void delayed_apply(unsigned port, efs_ino_t ino, const struct efs_opid *id)
+{
+    /* Submit directly to Raft, bypassing REPORT's leader-side admission.
+     * Both entries must reject at serialized apply, even for existing state. */
+    uint8_t commands[2][224] = {{0}};
+    uint32_t lengths[2] = {38, 224};
+    commands[0][0] = efs_raft_shard_group(efs_kv_inode_shard(ino));
+    commands[0][1] = EFS_MD_CMD_ACTIVATE_LANE;
+    for (unsigned i=0; i<8; i++) commands[0][2+i]=(uint8_t)(ino>>(56-8*i));
+    commands[0][17]=1;efs_report_session_pack(commands[0]+18,id);
+    commands[1][0] = efs_raft_shard_group(efs_kv_lane_shard(ino,0));
+    commands[1][1] = EFS_MD_CMD_REPORT_PUBLISH;
+    efs_report_session_pack(commands[1]+2,id);
+    commands[1][22] = EFS_MD_CMD_PUBLISH;
+    for (unsigned i=0; i<8; i++) commands[1][23+i]=(uint8_t)(ino>>(56-8*i));
+    for (unsigned c=0; c<2; c++) {
+        int fd=efs_connect_tcp("127.0.0.1",port);assert(fd>=0);
+        assert(!efs_set_recv_timeout(fd,10000));
+        assert(!efs_send_msg(fd,EFS_MSG_RAFT_MKFS,commands[c],lengths[c]));
+        uint8_t type;void *body=NULL;uint32_t bytes;
+        assert(!efs_recv_msg(fd,&type,&body,&bytes));close(fd);
+        assert(type==EFS_MSG_RAFT_MKFS_REPLY && bytes==sizeof(struct efs_msg_raft_mkfs_reply));
+        struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,body,bytes);free(body);
+        assert(reply.rc==EFS_ERR_STALE);
+    }
+}
+
 static struct packet pack(const struct efs_chunk_rec *rec,const struct efs_opid *id)
 {
     struct packet p={0};struct efs_msg_report_chunks h={.export_id=1,.count=1,.sync=EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION,.ino_count=1};
@@ -58,8 +88,9 @@ int main(int argc,char **argv)
     pid_t child=fork();assert(child>=0);if(!child){execl(argv[3],argv[3],"raft-session",address,"fence",hex,(char*)NULL);_exit(127);}
     int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
     assert(rpc(port,&p,0).status==EFS_INODE_RPC_STALE);
+    delayed_apply(port,ino,&id);
     assert(efs_client_rpc_report_dirty_raft(1,&rec,1,NULL,0,1)==EFS_ERR_STALE);
     rec.chunk_index=17;struct packet first=pack(&rec,&id);assert(rpc(port,&first,0).status==EFS_INODE_RPC_STALE);
     FILE *f=fopen(argv[4],"wb");assert(f && fwrite(&p,sizeof(p),1,f)==1 && !fclose(f));
-    puts("REPORT mount identity: discarded reply/exact mapping retry, malformed frame, revoked replay and first-touch rejection PASS");
+    puts("REPORT mount identity: discarded reply/exact mapping retry, malformed frame, revoked replay, delayed mapping/activation apply and first-touch rejection PASS");
 }

@@ -1527,15 +1527,27 @@ static int apply_truncate_cmd(struct efs_raft_host *h, const uint8_t *cmd,
 /* Host-generated lane maintenance (never client-originated, no session
  * suffix): EFS_MD_CMD_ACTIVATE_LANE on the inode group. */
 static int apply_activate_lane_cmd(struct efs_raft_host *h, const uint8_t *cmd,
-                                   uint32_t clen, uint64_t index)
+                                   uint32_t clen, uint64_t index, uint8_t group)
 {
     efs_ino_t ino;
     int rc;
 
-    if (clen < HOST_ACTIVATE_LANE_LEN)
-        return EFS_OK;
+    uint32_t base = clen;
+    struct efs_opid session;
+    int fenced = clen == HOST_ACTIVATE_LANE_LEN + EFS_REPORT_SESSION_LEN ||
+                 clen == HOST_ACTIVATE_MASK_LEN + EFS_REPORT_SESSION_LEN;
+    if (fenced) base -= EFS_REPORT_SESSION_LEN;
+    if (base != HOST_ACTIVATE_LANE_LEN && base != HOST_ACTIVATE_MASK_LEN)
+        return EFS_ERR_PROTO;
     ino = rd64be(cmd + 1);
-    if (clen >= HOST_ACTIVATE_MASK_LEN)
+    if (fenced) {
+        if (!efs_report_session_unpack(&session, cmd + base)) return EFS_ERR_INVAL;
+        uint32_t shard = efs_kv_inode_shard(ino);
+        if (efs_raft_shard_group(shard) != group) return EFS_ERR_INVAL;
+        rc = efs_session_accept(h->kv, shard, session.client_uuid, session.session_epoch);
+        if (rc != EFS_OK) return rc;
+    }
+    if (base == HOST_ACTIVATE_MASK_LEN)
         rc = efs_meta_apply_activate_lanes(h->kv, ino, rd64be(cmd + 9));
     else
         rc = efs_meta_apply_activate_lane(h->kv, ino, cmd[9]);
@@ -2492,7 +2504,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
-         cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
+         cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
@@ -2844,7 +2856,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     if (cmd[0] == EFS_MD_CMD_TRUNCATE)
         return apply_truncate_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_ACTIVATE_LANE)
-        return apply_activate_lane_cmd(h, cmd, clen, index);
+        return apply_activate_lane_cmd(h, cmd, clen, index, group);
     if (cmd[0] == EFS_MD_CMD_LANE_FENCE)
         return apply_lane_fence_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_APPEND_RSV)
@@ -13987,7 +13999,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
  * COMPLETED. No new opcode: REPORT already committed the data. Catch-up
  * with nopen==0 is a no-op (existing raft-smoke-p). */
 static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
-                                  uint64_t sz, int *hint)
+                                  uint64_t sz, const struct efs_opid *session, int *hint)
 {
     uint64_t offs[64], lens[64];
     uint32_t n = 64, i;
@@ -14019,8 +14031,11 @@ static int host_resolve_caught_up(struct efs_raft_host *h, efs_ino_t ino,
                 break;
             }
             fill_txid(h,&t);
-            rc=efs_meta_finish_append(h->kv,ino,offs[i],EFS_META_APPEND_COMPLETED,
-                                       &t,&host_append_ops,&ctx);
+            rc = session ?
+                efs_meta_finish_append_owned(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
+                                             session, &t, &host_append_ops, &ctx) :
+                efs_meta_finish_append(h->kv, ino, offs[i], EFS_META_APPEND_COMPLETED,
+                                       &t, &host_append_ops, &ctx);
             if(rc!=EFS_OK)return rc==EFS_ERR_STALE?EFS_ERR_BUSY:rc;
             did++;
         }
@@ -14064,7 +14079,7 @@ static uint64_t host_pub_candidate_gen(const struct efs_chunk_rec *rec,
  * inode row from the report's one get_inode; NULL falls back to a get. */
 static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *rec,
                          uint64_t new_size, int *hint, int skip_ri,
-                         struct efs_meta_row *cached,
+                         struct efs_meta_row *cached, const struct efs_opid *session,
                          uint8_t *cmd, uint32_t *clen, uint8_t *lg_out)
 {
     struct efs_meta_pub p;
@@ -14136,10 +14151,14 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
          * stat()'s collect set), then publish lane-local below. A crash
          * between the two leaves the bit set with no chunk — harmless
          * (stat treats an absent lane as 0). */
-        uint8_t acmd[HOST_ACTIVATE_LANE_LEN];
+        uint8_t acmd[HOST_ACTIVATE_LANE_LEN + EFS_REPORT_SESSION_LEN];
         uint32_t alen = 0;
 
         rc = pack_activate_lane_cmd(acmd, &alen, rec->ino, lane);
+        if (rc == EFS_OK && session) {
+            efs_report_session_pack(acmd + alen, session);
+            alen += EFS_REPORT_SESSION_LEN;
+        }
         if (rc == EFS_OK)
             rc = host_propose_wait(h, ig, acmd, alen, hint);
         if (rc != EFS_OK)
@@ -14605,7 +14624,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             }
         }
         for (k = 0; k < nic && rc == EFS_OK; k++) {
-            uint8_t acmd[HOST_ACTIVATE_MASK_LEN];
+            uint8_t acmd[HOST_ACTIVATE_MASK_LEN + EFS_REPORT_SESSION_LEN];
             uint32_t alen = 0;
             uint8_t ig;
 
@@ -14613,6 +14632,10 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                 continue;
             ig = efs_raft_shard_group(efs_kv_inode_shard(ic[k].ino));
             rc = pack_activate_mask_cmd(acmd, &alen, ic[k].ino, ic[k].need_act);
+            if (rc == EFS_OK && session) {
+                efs_report_session_pack(acmd + alen, session);
+                alen += EFS_REPORT_SESSION_LEN;
+            }
             if (rc == EFS_OK)
                 rc = host_propose_wait(h, ig, acmd, alen, &hint);
         }
@@ -14643,7 +14666,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                 }
             }
             t0 = now_us_();
-            rc = host_pub_pack(h, &recs[i], sz, &hint, 1, cached, cmd, &clen,
+            rc = host_pub_pack(h, &recs[i], sz, &hint, 1, cached, session, cmd, &clen,
                                &lg);
             t_pack += now_us_() - t0;
             if (raft_dbg_on())
@@ -14789,7 +14812,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         /* Once per inode, not per chunk: append_open is a KV scan, and a 2g
          * file is 16k recs. Doing it per rec times out the client as NET. */
         for (k = 0; k < nu && rc == EFS_OK; k++) {
-            int rrc = host_resolve_caught_up(h, uino[k], usz[k], &hint);
+            int rrc = host_resolve_caught_up(h, uino[k], usz[k], session, &hint);
 
             if (rrc != EFS_OK) {
                 fprintf(stderr,

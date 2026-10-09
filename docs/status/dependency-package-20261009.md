@@ -700,3 +700,21 @@ activation/append-completion effects still need their own serialized guard,
 partial batch results still need per-publication reconciliation, and production
 PUT tickets/storage fences/all-member retirement remain open. Broader fixture
 and regression completion will be recorded at the next checkpoint. D25 staged.
+
+## REPORT activation and append completion — implemented/gated
+
+Both cached mask and single-lane fallback activation now validate REPORT's
+mount UUID/epoch at serialized apply. Append completion freezes the reporting
+session's exact local row before all inode/cursor/lane images in the same
+transaction. Lost COMMIT and partial lane resolution keep session fencing
+BUSY; cold full resolution releases it, and old completed retries stay STALE.
+
+Actual AMD direct/TCP delayed mapping and activation entries submitted directly
+to Raft reject a completed revoked epoch, bypassing receive-side admission.
+Native cold/memory completion tests, core212/212, peer64/64, append800 and
+physical GC/restart pass. [Evidence](../../results/measure/20261009-report-effects/README.md).
+
+This supersedes the activation/completion gap in the previous checkpoint.
+REPORT's operation-result reconciliation, retention of other ambiguous namespace
+requests, production ticketed PUT/storage fences and all-member retirement
+remain open. D25 staged; no production activation or push.
