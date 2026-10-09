@@ -3893,6 +3893,26 @@ static int fuse_create_errno(int create_rc, efs_ino_t parent, const char *name)
     return fuse_stat_errno(found == EFS_ERR_NOT_FOUND ? EFS_ERR_IO : found);
 }
 
+/* Wait only before an identity is allocated. Retained requests always resume
+ * their exact identity; local receipt-window pressure must not turn a short
+ * burst of creates into an application-visible EBUSY. */
+static int efs_fuse_create_begin_wait(struct efs_client_create_request *request,
+    efs_ino_t parent, const char *name, uint32_t mode, uid_t uid, gid_t gid)
+{
+    uint64_t previous=efs_client_rpc_deadline_ms();
+    uint64_t deadline=stats_now_ms()+30000;
+    if(previous && previous<deadline)deadline=previous;
+    efs_client_rpc_set_deadline_ms(deadline);
+    int rc=EFS_ERR_BUSY;
+    while(!efs_client_rpc_past_deadline()) {
+        rc=efs_client_create_begin(request,parent,name,mode,uid,gid);
+        if(rc!=EFS_ERR_BUSY || request->active)break;
+        usleep(1000);
+    }
+    efs_client_rpc_set_deadline_ms(previous);
+    return rc;
+}
+
 static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
                               mode_t mode, struct fuse_file_info *fi,
                               efs_ino_t *out_ino, struct efs_inode *created)
@@ -3920,7 +3940,7 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
     efs_ino_t ino = 0;
     struct efs_pending_create *pending_create=efs_pending_create_alloc();
     if(!pending_create)return -ENOMEM;
-    int create_rc=efs_client_create_begin(&pending_create->request,parent.ino,
+    int create_rc=efs_fuse_create_begin_wait(&pending_create->request,parent.ino,
         name,S_IFREG|mode,uid,gid);
     if(create_rc==EFS_OK)create_rc=efs_client_create_resume(&pending_create->request,0);
     if(create_rc==EFS_OK && pending_create->request.complete) {

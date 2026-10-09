@@ -289,6 +289,7 @@ test: all
 	python3 tests/test_lookup_errno.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
+	python3 tests/test_create_admission_wait.py
 	python3 tests/test_lookup_replacement.py
 	python3 tests/test_w23_samples.py
 	python3 tests/test_read_verify.py
@@ -435,6 +436,7 @@ test-client-memory: tests/test_reply_buffers tests/test_bufpool
 	python3 tests/test_fuse_workers.py
 	python3 tests/test_fuse_open_reply.py
 	python3 tests/test_fuse_lease_retention.py
+	python3 tests/test_create_admission_wait.py
 	./tests/test_reply_buffers
 	./tests/test_reply_buffers key-failure
 	./tests/test_bufpool
