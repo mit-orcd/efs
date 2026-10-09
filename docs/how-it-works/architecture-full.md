@@ -1483,6 +1483,14 @@ the recommended first priorities within this set. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
+### All-node metadata query discussion
+
+[W98 — serve metadata queries through all nodes](../status/all-node-metadata-queries-20261009.md)
+is an open architecture discussion: compare forwarding, federation and derived
+index replication for larger clusters. W92 remains the local disk backend; W66
+retains consensus/routing ownership. This newly registered item is outside the
+dated grouped count below.
+
 ### 1. The task right now
 
 [AMD W73/W64 RXE completion](../status/amd-rxe-gate-closure-20261009.md): integrated
@@ -6133,6 +6141,49 @@ retirements were rejected. Short four-worker samples improved about 33%; the
 separate 60-second eight-worker sample improved 15% with a write-p99 tradeoff.
 These results do not close production durability/recovery or broader workload
 acceptance. Required body flushes and integrity verification remain present.
+
+<a id="w98"></a>
+
+### W98 · Serve metadata queries through all cluster nodes
+
+**Class/state:** architecture discussion / scaling enhancement; open, registered
+Oct 9, 2026. No placement or query-routing change is accepted by this note.
+
+**Request:** discuss how every node can serve `.efs/find`, `.efs/stats` and
+related metadata queries as the cluster grows, including an eight-node cluster.
+Serving a query need not mean storing the entire authoritative metadata set on
+every node; compare routing/federation with replicated derived indexes before
+choosing a design.
+
+**Current baseline:** `group_voters()` in `src/server/raft_host.c` places both
+metadata groups on all nodes for clusters of up to three nodes. With more than
+three nodes, the default voters are nodes 1/2/3 for group 0 and nodes 2/3/4 for
+group 2. Nodes 2 and 3 overlap; the current full-catalog publisher requires both
+groups locally. Nodes 5–8 do not automatically acquire metadata replicas. Data
+fragment placement is a separate concern. Losing either overlapping node alone
+leaves both default metadata quorums and one complete publisher; losing both
+nodes 2 and 3 loses both default quorums. Configured placement may differ.
+
+**Discussion:** evaluate (1) any-node entry points forwarding to eligible
+publishers, (2) partition-local indexes with federated execution, and (3)
+additional derived-index replicas independent of metadata voters. Compare
+mutation traffic, disk/RAM bounds, query fanout, hot spots, recovery cost and
+placement/failure domains. Specify complete snapshot cuts across groups, fresh
+permission checks, lag/age reporting, partial-result refusal, stable pagination
+and publisher-failure behavior. Avoid equating a local partial index with a
+complete namespace answer.
+
+**Acceptance before implementation:** record the selected design and topology
+for 1/3/4/8 nodes, then define correctness, bounded-resource, failover and scaling
+gates. Tests must distinguish query-service availability from the availability
+of authoritative metadata quorums.
+
+**Relation:** W92 owns the local disk-backed query cache; this discussion must
+not expand or block that backend implementation. W66 owns metadata consensus,
+leadership and routing work; coordinate any proposed placement/routing changes
+with that owner. This item does not authorize changing voter sets or consensus.
+
+**Discussion handoff:** [status note](../status/all-node-metadata-queries-20261009.md).
 
 
 ## Appendix 5 — Naming
