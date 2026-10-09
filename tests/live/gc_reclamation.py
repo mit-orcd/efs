@@ -526,6 +526,19 @@ try:
         (work/'session-cleanup.json').write_text(json.dumps({'inos':inos,'records':records},indent=2))
         print('bounded session lease/lock global barrier, exact replay, cold remaining owners and physical reclaim PASS',flush=True)
     if a.guarded_leases:
+        client_edge=work/'client-lease-edge'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_lease_edge.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',client_edge])
+        edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048
+        with edge_path.open('wb') as out:out.write(edge_body);out.flush();os.fsync(out.fileno())
+        edge_ino=edge_path.stat().st_ino;edge_uuid=os.urandom(16).hex();edge_results=[]
+        for stage in ('open','close'):
+            edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)
+        unmount();stop(crash=True);start();mount_client()
+        edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)
+        assert edge_path.read_bytes()==edge_body,'lease transport changed cold bytes'
+        edge_path.unlink();wait(lambda:not files(edge_ino),'actual client lease close physical reclaim',180)
+        (work/'client-lease-transport.json').write_text(json.dumps(edge_results,indent=2))
+        print('actual client sequenced lease OPEN/CLOSE/probe/exact cold replay PASS',flush=True)
         helper=work/'lease-edges'
         run(['cc','-Wall','-Wextra','-I'+str(source/'include'),source/'tests/live/lease_edges.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
         guard_path=mount/'legacy-close-guard';guard_path.write_bytes(b'guard')

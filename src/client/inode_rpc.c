@@ -6,6 +6,7 @@
 #include "efs/kv_key.h"
 #include "efs/meta_cmd.h"
 #include "efs/publication.h"
+#include "efs/session.h"
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
@@ -1036,9 +1037,11 @@ static int rpc_writer_retry_pause(unsigned attempt)
 
 /* Raw session replies carry an EFS rc, not an inode status byte. Keep this
  * separate from rpc_send_recv_shard so a Raft rc cannot be misinterpreted. */
-static int publication_session_command(uint32_t shard,const uint8_t *command,uint32_t bytes)
+static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t bytes,
+    uint64_t *known,int probe)
 {
-    uint8_t body[27];
+    uint8_t body[EFS_MD_SESS_LEASE_EDGE_LEN+1];
+    if(known)*known=0;
     if (bytes>sizeof(body)-1) return EFS_ERR_INVAL;
     body[0]=efs_raft_shard_group(shard);memcpy(body+1,command,bytes);
     efs_node_id_t target=0;
@@ -1060,6 +1063,14 @@ static int publication_session_command(uint32_t shard,const uint8_t *command,uin
         }
         struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,sizeof(reply));free(payload);
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        if(known) {
+            if(reply.salt>1 || (reply.salt &&
+               (reply.rc==EFS_ERR_NOT_PRIMARY || reply.rc==EFS_ERR_NO_QUORUM)))
+                return EFS_ERR_PROTO;
+            if(reply.salt) {*known=1;return reply.rc;}
+            if(reply.rc==EFS_OK)return EFS_ERR_PROTO; /* no proof of stored result */
+            if(probe && reply.rc==EFS_ERR_BUSY)return EFS_ERR_BUSY;
+        }
         if (reply.rc==EFS_ERR_NOT_PRIMARY) {
             if (reply.leader_hint < -1 || reply.leader_hint >= EFS_MAX_NODES) return EFS_ERR_PROTO;
             target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid ?
@@ -1068,6 +1079,35 @@ static int publication_session_command(uint32_t shard,const uint8_t *command,uin
         if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
     }
     return EFS_ERR_BUSY;
+}
+
+static int publication_session_command(uint32_t shard,const uint8_t *command,uint32_t bytes)
+{return session_command_reply(shard,command,bytes,NULL,0);}
+
+static void lease_command_be(uint8_t *out,uint64_t value,unsigned bytes)
+{while(bytes){out[--bytes]=(uint8_t)value;value>>=8;}}
+
+/* Identity, generation and body belong to the caller across ambiguity. Probe
+ * never registers a session or invents an edge. known=1 is durable result proof;
+ * an ordinary error with known=0 is not permission to forget pending ownership. */
+int efs_client_rpc_lease_edge(efs_ino_t ino,uint64_t generation,
+    const struct efs_opid_req *q,unsigned flags,uint64_t pending_token,
+    int probe,uint64_t *known)
+{
+    if(!known)return EFS_ERR_INVAL;
+    *known=0;
+    if(!ino || !generation || !q || !efs_opid_req_valid(q) ||
+       !q->id.session_epoch || q->ack>=q->id.seq || probe<0 || probe>1 ||
+       !flags || (flags&~7u) || (flags&3u)==3u ||
+       !!(flags&EFS_LEASE_EDGE_CLEAR_PENDING)!=!!pending_token)return EFS_ERR_INVAL;
+    uint8_t command[EFS_MD_SESS_LEASE_EDGE_LEN]={EFS_MD_CMD_SESSION,
+        probe?EFS_MD_SESS_LEASE_PROBE_DEFERRED:EFS_MD_SESS_LEASE_EDGE_DEFERRED};
+    memcpy(command+2,q->id.client_uuid,EFS_OPID_UUID_LEN);
+    lease_command_be(command+18,q->id.session_epoch,4);
+    lease_command_be(command+22,q->id.seq,8);lease_command_be(command+30,q->ack,8);
+    lease_command_be(command+38,ino,8);lease_command_be(command+46,generation,8);
+    lease_command_be(command+54,flags,4);lease_command_be(command+58,pending_token,8);
+    return session_command_reply(efs_kv_inode_shard(ino),command,sizeof(command),known,probe);
 }
 
 /* Call before byte admission. CREATE does not reset an existing session;

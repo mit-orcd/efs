@@ -4,13 +4,14 @@ from pathlib import Path
 import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/client/inode_rpc.c').read_text()
-a=s.index('static int publication_session_command(')
+a=s.index('static int session_command_reply(')
 b=s.index('int efs_client_rpc_publication(',a)
 code=r'''
 #include "efs/protocol.h"
 #include "efs/meta_cmd.h"
 #include "efs/kv_key.h"
 #include "efs/raft.h"
+#include "efs/session.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,5 +75,5 @@ int main(void)
 '''
 with tempfile.TemporaryDirectory(prefix='efs-session-rpc-') as d:
     path=Path(d);(path/'test.c').write_text(code)
-    subprocess.run([os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(path/'test.c'),'-o',str(path/'test')],check=True)
+    subprocess.run([os.environ.get('CC','cc'),'-std=c11','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(path/'test.c'),str(root/'src/sim/opid.c'),'-o',str(path/'test')],check=True)
     subprocess.run([str(path/'test')],check=True)

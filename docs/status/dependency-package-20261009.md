@@ -347,3 +347,24 @@ This closes the revoked append OPEN/DONE/receipt cleanup phase. It does not clos
 production sequenced lease identity/ambiguous release retention, mount-wide
 session integration or PUT-ticket data-plane lifecycle. Legacy mounted final
 close still uses its historical drain; pressure/D25 activation stays blocked.
+
+## Actual client deferred lease transport prerequisite
+
+The client now encodes the existing immutable deferred OPEN/CLOSE/probe protocol,
+preserves identity/generation/body through ambiguity, handles authoritative
+redirects and inherited deadlines, and distinguishes stored result proof from
+unknown outcome. Unknown probes issue no mutation or session admission. An OK
+reply without stored-proof is PROTO; deadline/transport ambiguity retains unknown
+status. Stored negative verdicts remain audible. Eight attempts bound retries.
+
+Actual AMD client RPC OPEN/CLOSE/probe/exact cold CLOSE replay and physical file
+reclamation pass, alongside full Linux/core212/peer64/GC/restart gates. Metadata
+generation is authoritatively resolved, never hardcoded. Installed service restored.
+[Evidence](../../results/measure/20261009-client-lease-transport/README.md).
+FUSE retained lease-edge identity and failed-release retry/drain remain open;
+this transport is not yet wired into the open-description lifecycle. W72/W86
+are not closed by these staged calls.
+
+Final DONE pruning audit also validates exact key/value offset, nonzero length
+and overflow before effects; malformed evidence returns PROTO. Memory and cold
+regressions prove no retirement from corrupted offsets. Full AMD Linux passes.

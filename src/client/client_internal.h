@@ -238,6 +238,10 @@ int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino,
                                    struct efs_msg_lane_writer_view_reply *out);
 int efs_client_publication_id(uint64_t sequence, struct efs_opid *);
 /* Explicit pre-write session admission; never call to reinterpret old bytes. */
+/* Retain exact q/generation/body until known=1 or proven session revocation.
+ * Requires explicit session establishment; probing has no admission effects. */
+int efs_client_rpc_lease_edge(efs_ino_t,uint64_t,const struct efs_opid_req *,
+    unsigned flags,uint64_t pending_token,int probe,uint64_t *known);
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
