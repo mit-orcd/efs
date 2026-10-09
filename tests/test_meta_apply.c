@@ -5650,6 +5650,14 @@ static void test_create_initial_lease_atomic(void)
         CHECK(efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,
               "replay pressure cannot create unprotected pending ownership");
     }
+    struct efs_opid_req pressure = q;
+    pressure.id.seq = EFS_OPID_BITMAP_BITS + 1;
+    create_batch_fail=0;create_batch_calls=0;
+    CHECK(test_create_lease_apply(pending,kv,&pressure,uuid,&ino)==EFS_ERR_BUSY,
+          "ordinary and pending CREATE refuse missing replay capacity");
+    CHECK(!create_batch_calls && !ino &&
+          efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,
+          "replay pressure has no namespace or lease effects");
     create_batch_calls=0;create_batch_fail=1;
     CHECK(test_create_lease_apply(pending,kv,&q,uuid,&ino)==EFS_ERR_IO,
           "failed combined CREATE reports error");

@@ -1519,8 +1519,8 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         rc = opid_item(kv, shard, q, &rep, k_opid, v_opid, &it[n]);
         if (rc < 0)
             return rc;
-        if (lease_token && rc != 1)
-            return EFS_ERR_BUSY; /* pending ownership requires a durable verdict */
+        if (opid_hosted(&q->id) && rc != 1)
+            return EFS_ERR_BUSY; /* never create without its replay verdict */
         n += (uint32_t)rc;
     }
 
