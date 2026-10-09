@@ -31,8 +31,17 @@ int main(int argc,char **argv)
         uint64_t known=0;
         assert(efs_client_rpc_lease_edge(ino,generation,&r.q,flags,0,1,&known)==EFS_OK && known==1);
         assert(efs_client_lease_resume(&r,1)==EFS_OK);
+        /* Existing wrappers share this exact full mount UUID/epoch. Legacy
+         * observation may succeed, but it cannot replace or erase the edge. */
+        if(!stage)
+            assert(efs_client_rpc_hold(1,ino,1,g_client.flock_token)==EFS_OK);
+        else
+            assert(efs_client_rpc_hold(1,ino,1,g_client.flock_token)==EFS_ERR_STALE);
+        assert(efs_client_rpc_hold(1,ino,0,g_client.flock_token)==EFS_ERR_STALE);
+        known=0;
+        assert(efs_client_rpc_lease_edge(ino,generation,&r.q,flags,0,1,&known)==EFS_OK && known==1);
         assert(efs_client_lease_reset(&r)==EFS_OK);
     }
-    puts("actual retained sequenced client lease: authoritative FileID, full UUID, OPEN/CLOSE stored proof and safe reset PASS");
+    puts("actual retained sequenced client lease: authoritative FileID, full UUID, OPEN/CLOSE stored proof, legacy mutation barrier and safe reset PASS");
     return 0;
 }

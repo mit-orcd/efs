@@ -403,7 +403,7 @@ static void test_guarded_lease_edges(void)
     CHECK(efs_lease_guarded_probe(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0,&verdict)==EFS_ERR_PROTO,"read-only probe rejects changed payload");
     q.id.seq=2;
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK && efs_lease_any(kv,ino,1)==1,"replayed CLOSE cannot delete later OPEN");
-    CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_ERR_PROTO && efs_lease_any(kv,ino,1)==1,"legacy edges refuse guarded records");
+    CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_ERR_STALE && efs_lease_any(kv,ino,1)==1,"legacy edges refuse guarded ownership mutation");
     uint8_t malformed_key[EFS_KV_KEY_MAX],saved_value[1024],bad_value[1024];
     uint32_t malformed_len=0,saved_len=sizeof(saved_value);
     CHECK(efs_kv_key_opid(1,uuid,1,malformed_key,&malformed_len)==EFS_OK,"guarded window corruption key");
@@ -1085,8 +1085,49 @@ static void test_legacy_rejection_floor(void)
  CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_PROTO && efs_lease_any(kv,ino,1)==0,"legacy malformed authority fails closed");
  efs_kv_mem_free(kv);
 }
+static void test_legacy_sequenced_handoff(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16];uuid_of(uuid,237);
+ CHECK(kv!=NULL,"handoff KV");if(!kv)return;
+ CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"handoff init");
+ efs_ino_t ino=0;CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"handoff",&ino)==EFS_OK,"handoff inode");
+ uint32_t shard=efs_kv_inode_shard(ino);
+ CHECK(efs_session_establish(kv,shard,uuid,1)==EFS_OK,"handoff establish");
+ struct efs_opid_req q={0};memcpy(q.id.client_uuid,uuid,16);q.id.session_epoch=1;q.id.seq=1;
+ CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"handoff sequenced OPEN");
+ uint8_t key[EFS_KV_KEY_MAX],before[18],after[18];uint32_t kl=0,n=sizeof(before);
+ CHECK(efs_kv_key_lease(shard,ino,1,uuid,1,key,&kl)==EFS_OK&&efs_kv_get(kv,key,kl,before,&n)==EFS_OK&&n==18,"handoff saved owner");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_OK,"legacy observes existing normal owner");
+ CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_ERR_STALE,"legacy CLOSE cannot erase sequenced owner");
+ CHECK(efs_lease_pending_close(kv,ino,1,uuid,1,1,1)==EFS_ERR_STALE,"legacy pending cleanup cannot erase sequenced owner");
+ n=sizeof(after);CHECK(efs_kv_get(kv,key,kl,after,&n)==EFS_OK&&n==18&&!memcmp(before,after,n),"handoff sequence bytes preserved");
+ q.id.seq=2;q.ack=1;
+ CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"handoff exact CLOSE");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_STALE,"legacy OPEN cannot resurrect closed sequenced owner");
+ CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_ERR_STALE&&!efs_lease_any(kv,ino,1),"legacy CLOSE cannot erase replay tombstone");
+ uint8_t pending[EFS_LEASE_PENDING_VALUE_LEN];
+ CHECK(efs_lease_pending_value(3,pending)==EFS_OK&&efs_kv_put(kv,key,kl,pending,sizeof(pending))==EFS_OK,"handoff pending fixture");
+ q.id.seq=4;q.ack=2;
+ CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"sequenced normal owner preserves pending token");
+ n=sizeof(before);CHECK(efs_kv_get(kv,key,kl,before,&n)==EFS_OK&&n==18,"handoff saved pending owner");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_OK,"legacy observes pending plus normal owner");
+ CHECK(efs_lease_pending_close(kv,ino,1,uuid,1,3,0)==EFS_ERR_STALE,"legacy matching token cannot downgrade sequenced pending owner");
+ n=sizeof(after);CHECK(efs_kv_get(kv,key,kl,after,&n)==EFS_OK&&n==18&&!memcmp(before,after,n),"handoff pending bytes preserved");
+ q.id.seq=5;q.ack=4;
+ CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING,3)==EFS_OK&&!efs_lease_any(kv,ino,1),"sequenced matching token clears both owners");
+ /* Strict format checks fail closed, including empty and short values. */
+ for(unsigned len=0;len<18;len++) {
+   memset(after,0,sizeof(after));after[0]=3;after[1]=1;after[9]=1;
+   CHECK(efs_kv_put(kv,key,kl,after,len)==EFS_OK,"handoff malformed fixture");
+   CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_PROTO,"handoff truncation refuses grant");
+ }
+ memset(after,0,sizeof(after));after[0]=3;after[1]=1;
+ CHECK(efs_kv_put(kv,key,kl,after,18)==EFS_OK&&efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_PROTO,"handoff zero sequence rejected");
+ efs_kv_mem_free(kv);
+}
 int main(void)
 {
+    test_legacy_sequenced_handoff();
     test_legacy_rejection_floor();
     test_legacy_lease_prepared();
     test_guarded_retire_cold();

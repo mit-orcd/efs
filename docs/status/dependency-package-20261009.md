@@ -510,3 +510,23 @@ No new live lost-decision/fence-during-PREPARE injection gate is claimed.
 Next: retained FUSE CREATE identity/result, pending adoption with sequenced
 OPEN/CLOSE and compensating release. Production PUT-ticket transport, durable
 storage fences, collection and retirement remain open. D25 remains staged.
+
+
+## Legacy/sequenced ownership handoff — implemented/gated prerequisite
+
+The legacy reader now understands valid sequenced records instead of treating
+all of them as protocol errors. An existing normal owner is observable without
+mutation; legacy CLOSE/pending cleanup and resurrection of closed/pending-only
+sequenced records deliberately return STALE. Sequence/tombstone/token bytes
+are preserved; ownership changes require exact sequenced edges. Historical
+pending records keep their original wire length.
+
+AMD direct/TCP actual client-wrapper compatibility proof, guarded cold replay,
+local/cross-group pending CREATE, core212/212, peer64/64, append800 and physical
+GC/restart pass. All code regressions plus strict pending-token preservation
+pass; local docs5/5. Installed service restored and reservation released.
+[Evidence](../../results/measure/20261009-sequenced-lease-handoff/README.md).
+
+This is compatibility groundwork, not activation of sequenced FUSE ownership.
+Retained FUSE CREATE/adoption/compensating release and OPEN/CLOSE integration,
+namespace/REPORT fencing and production PUT-ticket lifecycle remain open.
