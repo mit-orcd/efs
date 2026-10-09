@@ -448,3 +448,25 @@ UUID/epoch before adopting deferred edges; otherwise two owners can protect or
 complete the same inode independently. Production PUT-ticket lifecycle remains
 open. Legacy forgotten-release retention is active; sequenced FUSE/session/D25
 activation remains gated. No claim of full package closure.
+
+## Full mount identity for production append, HOLD and lock RPCs
+
+Append now retains its full seeded namespace UUID rather than native-order
+64-bit token bytes. HOLD and lock RPCs send that same full UUID/epoch through
+the existing session suffix. Grants admit the session first; release and GETLK
+do not register or mint another session.64-bit lock owners remain distinct
+open-description identities. Namespace/publication operation IDs already share
+the mount UUID. REPORT completes exact inode/range reservations and therefore
+does not need the removed token UUID.
+
+AMD direct/TCP full code regression, core212/212, peer64/64, registered grant
+revocation, guarded cold lease replay, append800 and physical GC/restart pass.
+Both installed mounts restored; local docs5/5. Mixed-version not certified.
+[Evidence](../../results/measure/20261009-full-mount-identity/README.md).
+
+This resolves the endian/truncated append versus HOLD/FLOCK identity mismatch
+for current client wrappers. Atomic pending CREATE/adoption still needs its
+versioned identity bridge; retained sequenced requests are not yet integrated
+into FUSE. Identity alignment alone does not enforce global revocation on every
+namespace/REPORT mutation. Production PUT tickets still need transport, durable
+storage fences, deletion on all members and retirement. Full package open.

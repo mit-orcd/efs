@@ -263,21 +263,11 @@ static void opid_end(int slot)
 
 /* A reservation identity lives across the entire FUSE BUSY retry loop,
  * not just one transport attempt. Share namespace's contiguous-ACK tracker;
- * append's distinct KV kind keeps its result namespace separate. Legacy
- * REPORT resolution still identifies appenders by flock_token. */
+ * append's distinct KV kind keeps its result namespace separate. The full
+ * mount UUID is shared with lease and lock ownership. */
 int efs_client_append_begin(struct efs_opid_req *q)
 {
-    int slot = opid_begin(q);
-    if (slot < 0) return slot;
-    pthread_mutex_lock(&opid_mu);
-    if (!g_client.flock_token) {
-        memcpy(&g_client.flock_token, g_client.opid_uuid, 8);
-        if (!g_client.flock_token) g_client.flock_token = 1;
-    }
-    memset(q->id.client_uuid, 0, EFS_OPID_UUID_LEN);
-    memcpy(q->id.client_uuid, &g_client.flock_token, 8);
-    pthread_mutex_unlock(&opid_mu);
-    return slot;
+    return opid_begin(q);
 }
 
 void efs_client_append_end(int slot)
@@ -1681,25 +1671,24 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
 int efs_client_rpc_hold(efs_export_id_t export_id, efs_ino_t ino, int open,
                         uint64_t owner)
 {
-    struct efs_msg_inode_hold req;
-    memset(&req, 0, sizeof(req));
-    if (!g_client.flock_token) {
-        g_client.flock_token = ((uint64_t)getpid() << 1) ^ 1ull;
-        if (!g_client.flock_token)
-            g_client.flock_token = 1;
+    uint8_t buf[sizeof(struct efs_msg_inode_hold)+EFS_SESS_WIRE_LEN];
+    struct efs_msg_inode_hold *req=(struct efs_msg_inode_hold *)buf;
+    struct efs_opid identity;
+    int rc=efs_client_publication_id(1,&identity);
+    if (rc!=EFS_OK) return rc;
+    if (open) {
+        rc=efs_client_rpc_publication_session(efs_kv_inode_shard(ino),&identity);
+        if (rc!=EFS_OK) return rc;
     }
-    if (!owner)
-        owner = g_client.flock_token;
-    req.export_id = export_id;
-    req.ino = ino;
-    req.flags = open ? 1u : 0u;
-    req.owner = owner;
-    struct efs_msg_inode_reply r;
-    int rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_HOLD, &req, sizeof(req),
-                                 EFS_MSG_INODE_HOLD_REPLY, &r, sizeof(r));
-    if (rc != EFS_OK)
-        return rc;
-    return rpc_status_to_efs(r.status);
+    memset(buf,0,sizeof(buf));
+    req->export_id=export_id;req->ino=ino;req->flags=open?1u:0u;
+    req->owner=owner?owner:g_client.flock_token;
+    memcpy(buf+sizeof(*req),identity.client_uuid,EFS_OPID_UUID_LEN);
+    memcpy(buf+sizeof(*req)+EFS_OPID_UUID_LEN,&identity.session_epoch,4);
+    struct efs_msg_inode_reply reply;
+    rc=rpc_send_recv_owner(ino,EFS_MSG_INODE_HOLD,buf,sizeof(buf),
+                           EFS_MSG_INODE_HOLD_REPLY,&reply,sizeof(reply));
+    return rc==EFS_OK?rpc_status_to_efs(reply.status):rc;
 }
 
 int efs_client_rpc_flock(efs_export_id_t export_id, efs_ino_t ino, uint32_t op,
@@ -1712,12 +1701,19 @@ int efs_client_rpc_flock_range(efs_export_id_t export_id, efs_ino_t ino,
                                uint32_t op, uint64_t owner, uint64_t start,
                                uint64_t end, struct efs_msg_inode_reply *reply_out)
 {
-    uint8_t buf[sizeof(struct efs_msg_inode_flock) + EFS_FLOCK_RANGE_LEN];
+    uint8_t buf[sizeof(struct efs_msg_inode_flock) + EFS_FLOCK_RANGE_LEN + EFS_SESS_WIRE_LEN];
     struct efs_msg_inode_flock *req = (struct efs_msg_inode_flock *)buf;
     struct efs_msg_inode_reply r;
     uint32_t slen = sizeof(*req);
     int rc;
 
+    struct efs_opid identity;
+    rc=efs_client_publication_id(1,&identity);
+    if (rc!=EFS_OK) return rc;
+    if (!(op & (EFS_FLOCK_UN | EFS_FLOCK_GETLK))) {
+        rc=efs_client_rpc_publication_session(efs_kv_inode_shard(ino),&identity);
+        if (rc!=EFS_OK) return rc;
+    }
     memset(buf, 0, sizeof(buf));
     req->export_id = export_id;
     req->ino = ino;
@@ -1732,6 +1728,9 @@ int efs_client_rpc_flock_range(efs_export_id_t export_id, efs_ino_t ino,
     memcpy(buf + sizeof(*req), &start, 8);
     memcpy(buf + sizeof(*req) + 8, &end, 8);
     slen += EFS_FLOCK_RANGE_LEN;
+    memcpy(buf+slen,identity.client_uuid,EFS_OPID_UUID_LEN);
+    memcpy(buf+slen+EFS_OPID_UUID_LEN,&identity.session_epoch,4);
+    slen += EFS_SESS_WIRE_LEN;
     rc = rpc_send_recv_owner(ino, EFS_MSG_INODE_FLOCK, buf, slen,
                              EFS_MSG_INODE_FLOCK_REPLY, &r, sizeof(r));
     if (rc != EFS_OK)

@@ -52,11 +52,12 @@ int main(int argc,char **argv)
  int opening=!strcmp(argv[4],"open"),replay=!strcmp(argv[4],"replay"),revoked=!strcmp(argv[4],"revoked");
  assert(opening || replay || revoked || !strcmp(argv[4],"close"));
  if(revoked) {
+  memcpy(g_client.opid_uuid,q.id.client_uuid,16);g_client.opid_epoch=1;g_client.opid_next=1;
   uint64_t owner=0;for(unsigned i=0;i<8;i++)owner=owner<<8|q.id.client_uuid[i];
   assert(owner && !memcmp(q.id.client_uuid+8,(uint8_t[8]){0},8));
   assert(efs_client_rpc_hold(1,ino,1,owner)==EFS_ERR_STALE);
   assert(efs_client_rpc_flock(1,ino,EFS_FLOCK_EX,owner)==EFS_ERR_STALE);
-  puts("actual legacy HOLD/FLOCK after durable revocation rejected STALE PASS");return 0;
+  puts("actual full-UUID HOLD/FLOCK after durable revocation rejected STALE PASS");return 0;
  }
  q.id.seq=opening?1:2;q.ack=opening?0:1;unsigned flags=opening?EFS_LEASE_EDGE_OPEN:EFS_LEASE_EDGE_CLOSE;
  if(opening)assert(efs_client_rpc_publication_session(efs_kv_inode_shard(ino),&q.id)==EFS_OK);

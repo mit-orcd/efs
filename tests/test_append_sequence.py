@@ -17,7 +17,7 @@ code=r'''
 #define N 8
 #define M 100000
 static struct {uint64_t opid_next,opid_inflight[EFS_OPID_INFLIGHT],flock_token;
- uint8_t opid_uuid[16];uint32_t opid_epoch;} g_client={.opid_next=1,.opid_epoch=1,.opid_uuid={1},.flock_token=42};
+ uint8_t opid_uuid[16];uint32_t opid_epoch;} g_client={.opid_next=1,.opid_epoch=1,.opid_uuid={1,[15]=77},.flock_token=42};
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
 static void opid_seed_locked(void) {}
 static uint64_t values[N][M];
@@ -26,7 +26,7 @@ static void *worker(void *arg) {
  unsigned i=(unsigned)(uintptr_t)arg;
  for(unsigned j=0;j<M;j++) {
   struct efs_opid_req q;int slot=efs_client_append_begin(&q);assert(slot>=0);
-  assert(q.ack<q.id.seq && q.id.session_epoch==1 && q.id.client_uuid[0]==42);
+  assert(q.ack<q.id.seq && q.id.session_epoch==1 && q.id.client_uuid[0]==1 && q.id.client_uuid[15]==77);
   values[i][j]=q.id.seq;efs_client_append_end(slot);
  }return NULL;
 }
