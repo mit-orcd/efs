@@ -233,6 +233,10 @@ static void refusals_and_corruption(void)
     snprintf(path, sizeof(path), "%s/.index-manifest", root);
     fd = open(path, O_RDWR);
     assert(fd >= 0);
+    /* This byte belongs to random manifest identity. Assigning 0xff can
+     * leave it unchanged, so always flip actual persisted evidence. */
+    assert(pread(fd, &bad, 1, 20) == 1);
+    bad ^= 0xff;
     assert(pwrite(fd, &bad, 1, 20) == 1);
     assert(!fsync(fd));
     close(fd);
