@@ -3674,6 +3674,17 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 production measurement:** unchanged NUC build `800122c5e86d` was traced
+in three windows per daemon during a five-minute eight-worker tiny-file run.
+n3/n4 average 1.34/1.39 entries per WAL sync, with 76%/73% single-entry barriers
+and mean sync elapsed 7.3/8.0 ms. Existing batching reduces WAL calls modestly;
+larger limits are not shown to help. Next measure internal durable-watermark
+cohorts, hold/waiter depth and follower flush reasons before a controlled policy
+A/B with idle/mixed p99 and durability fault gates. This is observational,
+syscall-boundary evidence with ptrace overhead, not hardware-ceiling proof or
+new end-to-end batching acceptance. See
+[measurement and limitations](../status/durability-batching-profile-20261009.md).
+
 **Implementation update (Oct 8):** Bounded follower durability batching, durable ACK ordering, storage-failure fencing and committed-prefix protection are implemented. Fault/full Linux/live AMD direct/TCP gates pass. Six balanced 4,096-file same-code mixed-load fixtures pass cold verification and physical reclamation, with overlapping close tails; separate pump/barrier diagnostics are retained.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
