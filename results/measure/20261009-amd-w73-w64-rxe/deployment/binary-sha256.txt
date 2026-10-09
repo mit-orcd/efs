@@ -1,0 +1,5 @@
+50a62f3a97480e334068a86dfa8dbab1c6eb0a12e370b38aca1035a7b64c60fe  /data1/efs/gate-rxe-f6233987/efsd
+2ec9adb42ac18ed430e0598935f34dc7b728dee0c66066a9a18c459a67ef21a7  /data1/efs/gate-rxe-f6233987/efs-fuse
+bb7050ba748fedc96409d4fdf742a9b5ff88aecfcbc5d206469e672201c908ff  /data1/efs/gate-rxe-f6233987/efs-mgmt
+49649581a0ce7b48145adf0421c8c60d6a377964725c1548177b29ab58e3cd12  /data1/efs/gate-rxe-f6233987/efs-bench
+d0f4571cc13c30f040c34df8ff2b18faf5bf4468a17e77acc09b1ba5c89ae355  /data1/efs/gate-rxe-f6233987/efs-query

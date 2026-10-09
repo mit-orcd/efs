@@ -29,6 +29,11 @@ recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
 ## 1. The task right now
 
+[AMD W73/W64 RXE completion](amd-rxe-gate-closure-20261009.md): integrated
+source passes direct/buffered RXE core POSIX, peer, mount-sync, replay/recovery
+and exact cold append/GC. Accepted binaries are installed direct/RXE with
+runtime verbs proof. W72 and hardware durability remain separate open work.
+
 [AMD functional follow-up](amd-functional-gates-20261008.md): append retry ownership,
 RXE memory/shutdown, exact namespace crash boundaries and cold physical GC.
 Short functional cycles default to direct-I/O/TCP. Remaining durable append,

@@ -1,0 +1,114 @@
+{
+  "time_unix": 1791512729.8639624,
+  "processes": [
+    {
+      "pid": 384628,
+      "exe": "/data1/efs/src/efsd",
+      "args": "/data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 37.5G --direct-io ",
+      "environment": {
+        "EFS_TRANSPORT": "rdma",
+        "EFS_RDMA_GID_INDEX": "1",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RDMA_DEV": "rxe0"
+      },
+      "verbs_devices": [
+        "/dev/infiniband/uverbs0"
+      ]
+    },
+    {
+      "pid": 384676,
+      "exe": "/data1/efs/src/efsd",
+      "args": "/data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 37.5G --direct-io --join 127.0.0.1:17432 ",
+      "environment": {
+        "EFS_TRANSPORT": "rdma",
+        "EFS_RDMA_GID_INDEX": "1",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RDMA_DEV": "rxe0"
+      },
+      "verbs_devices": [
+        "/dev/infiniband/uverbs0"
+      ]
+    },
+    {
+      "pid": 384919,
+      "exe": "/data1/efs/src/efsd",
+      "args": "/data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data1/efs/n3 --quota 37.5G --direct-io --join 127.0.0.1:17432 ",
+      "environment": {
+        "EFS_TRANSPORT": "rdma",
+        "EFS_RDMA_GID_INDEX": "1",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RDMA_DEV": "rxe0"
+      },
+      "verbs_devices": [
+        "/dev/infiniband/uverbs0"
+      ]
+    },
+    {
+      "pid": 385016,
+      "exe": "/data1/efs/src/efsd",
+      "args": "/data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data1/efs/n4 --quota 37.5G --direct-io --join 127.0.0.1:17432 ",
+      "environment": {
+        "EFS_TRANSPORT": "rdma",
+        "EFS_RDMA_GID_INDEX": "1",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RDMA_DEV": "rxe0"
+      },
+      "verbs_devices": [
+        "/dev/infiniband/uverbs0"
+      ]
+    },
+    {
+      "pid": 385082,
+      "exe": "/data1/efs/src/efs-fuse",
+      "args": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt ",
+      "environment": {
+        "EFS_RDMA_GID_INDEX": "1",
+        "EFS_TRANSPORT": "rdma",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RDMA_DEV": "rxe0"
+      },
+      "verbs_devices": [
+        "/dev/infiniband/uverbs0"
+      ]
+    },
+    {
+      "pid": 385118,
+      "exe": "/data1/efs/src/efs-fuse",
+      "args": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt2 ",
+      "environment": {
+        "EFS_RDMA_GID_INDEX": "1",
+        "EFS_TRANSPORT": "rdma",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_RDMA_DEV": "rxe0"
+      },
+      "verbs_devices": [
+        "/dev/infiniband/uverbs0"
+      ]
+    }
+  ],
+  "mounts": [
+    "/data1/efs/mnt fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001",
+    "/data1/efs/mnt2 fuse.efs-fuse rw,nosuid,nodev,relatime,user_id=1001,group_id=1001"
+  ],
+  "versions": {
+    "efsd": "efsd f6233987b9d1 (branch devel-gate-closure, built 2026-10-09T02:16:20Z on amd-395)",
+    "efs-fuse": "efs-fuse f6233987b9d1 (branch devel-gate-closure, built 2026-10-09T02:16:20Z on amd-395)",
+    "efs-mgmt": "efs-mgmt f6233987b9d1 (branch devel-gate-closure, built 2026-10-09T02:16:20Z on amd-395)",
+    "efs-bench": "efs-bench f6233987b9d1 (branch devel-gate-closure, built 2026-10-09T02:16:20Z on amd-395)",
+    "efs-query": "efs-query f6233987b9d1 (branch devel-gate-closure, built 2026-10-09T02:16:20Z on amd-395)"
+  },
+  "source_tree_sha256": "10b96918bab7eee98d5f39d9cd09adb4d6473b1522928a24679745d29a835c5c",
+  "binary_sha256": {
+    "efsd": "50a62f3a97480e334068a86dfa8dbab1c6eb0a12e370b38aca1035a7b64c60fe",
+    "efs-fuse": "2ec9adb42ac18ed430e0598935f34dc7b728dee0c66066a9a18c459a67ef21a7",
+    "efs-mgmt": "bb7050ba748fedc96409d4fdf742a9b5ff88aecfcbc5d206469e672201c908ff",
+    "efs-bench": "49649581a0ce7b48145adf0421c8c60d6a377964725c1548177b29ab58e3cd12",
+    "efs-query": "d0f4571cc13c30f040c34df8ff2b18faf5bf4468a17e77acc09b1ba5c89ae355"
+  }
+}

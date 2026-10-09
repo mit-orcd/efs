@@ -1,0 +1,71 @@
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 286738 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 286773 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+START direct RXE mount-sync 2026-10-09T02:17:13Z
+sync peer mounted PASS
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 339747 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 339714 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+synchronous write physical deletion drained PASS
+Mount-wide sync ordinary small/queued/append before close and cold crash bytes PASS
+Mount-wide sync acceptance complete; physical deletion drained PASS
+START direct RXE full 2026-10-09T02:17:23Z
+client serving PASS
+append audit physical deletion drained PASS
+mixed concurrent append/GC and exact 800 cold records PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 361051 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+physical inventory empty after restart PASS
+restart orphan and GC queues drained PASS
+restart quota zero and late PUT fenced on every member PASS
+physical fragment inventory empty after restart PASS
+GC reclamation direct PASS
+START buffered RXE mount-sync 2026-10-09T02:20:50Z
+sync peer mounted PASS
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 362719 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 362693 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+synchronous write physical deletion drained PASS
+Mount-wide sync ordinary small/queued/append before close and cold crash bytes PASS
+Mount-wide sync acceptance complete; physical deletion drained PASS
+START buffered RXE full 2026-10-09T02:21:00Z
+client serving PASS
+append audit physical deletion drained PASS
+mixed concurrent append/GC and exact 800 cold records PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 382787 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+physical inventory empty after restart PASS
+restart orphan and GC queues drained PASS
+restart quota zero and late PUT fenced on every member PASS
+physical fragment inventory empty after restart PASS
+GC reclamation buffered PASS
+RESTORE installed direct/TCP; gate runner exit=0

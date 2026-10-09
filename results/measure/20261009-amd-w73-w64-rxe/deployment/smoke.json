@@ -1,0 +1,8 @@
+{
+  "source_commit": "f6233987b9d1",
+  "ordinary_odsync_peer_before_close": true,
+  "append_odsync_peer_before_close": true,
+  "peer_truncate_then_append_exact": true,
+  "test_path": "/data1/efs/mnt/gate-release-f6233987-394995",
+  "time_unix": 1791512729.799801
+}
