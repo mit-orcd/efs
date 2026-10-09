@@ -3674,6 +3674,15 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 .efs-disabled control:** rate still declines 118.4 → 81.7 → 42.4
+files/s. n3 drops 112,982 inbox frames; all measured tail mismatches are
+behind the local log. Exact active-batch endings are behind-tail or empty
+requests. n3/n4 sync latency rises across windows; receiver pressure and
+persistence remain linked, without proving a device ceiling. Investigate
+group-specific in-flight/retry handling and sync-blocking feedback before
+policy changes. The cluster is left with .efs and diagnostics disabled.
+[Control evidence](../status/batch-no-efs-profile-20261009.md).
+
 **Oct 9 internal measurement:** opt-in counters on NUC capture actual durable
 cohorts, hold/waiter/proposer depths and host/follower boundaries. n3 inbox
 averages 29.7 messages, but 81.9% of host segments end on group switches and
