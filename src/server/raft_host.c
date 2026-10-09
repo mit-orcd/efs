@@ -15061,7 +15061,7 @@ void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *re
     struct efs_raft_host *h = g_host;
     memset(out, 0, sizeof(*out));
     out->view.status = EFS_INODE_RPC_INVAL;
-    if (!h || !h->running || !req->ino || !req->generation ||
+    if (!h || !h->running || !req->export_id || !req->ino || !req->generation ||
         !efs_chunk_size_valid(req->chunk_size))
         return;
     uint8_t groups[2] = {efs_raft_shard_group(efs_kv_inode_shard(req->ino)),
@@ -15086,11 +15086,17 @@ void server_raft_host_lane_bootstrap_rpc(const struct efs_msg_lane_bootstrap *re
     }
     pthread_mutex_lock(&h->s->lock);
     struct efs_export *ex = server_export_acquire_locked(h->s, req->export_id);
-    uint32_t cs = ex ? server_data_chunk_size(ex) : 0;
+    /* A cold member need not have received a data PUT yet. Use the same
+     * default geometry as GETCHUNKS; FileID and lane authority are captured
+     * by the transaction below, never inferred from this local absence. */
+    uint32_t cs = server_data_chunk_size(ex);
     pthread_mutex_unlock(&h->s->lock);
-    if (!ex)
+    /* Metadata currently has one formatted default export. Local absence
+     * cannot invent another export or configure new geometry. */
+    if (!ex && req->export_id != 1)
         return;
-    server_export_put(h->s, ex);
+    if (ex)
+        server_export_put(h->s, ex);
     if (cs != req->chunk_size) {
         out->view.status = EFS_INODE_RPC_STALE;
         return;
