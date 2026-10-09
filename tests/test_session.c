@@ -817,8 +817,98 @@ static void test_pending_create_session_fence(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_bounded_session_cleanup(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16],other[16];
+    struct efs_session_cleanup_key first[8],next[8],again[8],bad[8];uint32_t n=0,m=0;
+    uuid_of(uuid,61);uuid_of(other,62);
+    CHECK(kv!=NULL,"bounded cleanup KV");if(!kv)return;
+    CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"bounded cleanup init");
+    efs_ino_t ino=0;struct efs_meta_row row;
+    CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"bounded",&ino)==EFS_OK,
+          "bounded cleanup live inode");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"bounded cleanup generation");
+    uint32_t shard=efs_kv_inode_shard(ino);uint8_t key[EFS_KV_KEY_MAX],one=1;uint32_t len;
+    for (uint32_t i=0;i<13;i++) {
+        efs_ino_t file=ino+(uint64_t)i*4096;
+        CHECK(efs_kv_key_lease(shard,file,row.generation,uuid,1,key,&len)==EFS_OK &&
+              efs_kv_put(kv,key,len,&one,1)==EFS_OK,"seed old lease");
+    }
+    for (uint32_t i=0;i<8;i++) {
+        CHECK(efs_kv_key_lock(shard,ino,row.generation,1,0,UINT64_MAX,1,i+1,uuid,1,key,&len)==EFS_OK &&
+              efs_kv_put(kv,key,len,&one,1)==EFS_OK,"seed old lock");
+    }
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,first,&n)==EFS_ERR_BUSY && !n,
+          "missing floor is not empty cleanup");
+    CHECK(efs_session_establish(kv,shard,uuid,1)==EFS_OK,"cleanup establish");
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,first,&n)==EFS_ERR_BUSY,
+          "active session cannot be cleaned");
+    CHECK(efs_session_fence_local(kv,shard,uuid,2)==EFS_OK,"cleanup durable floor");
+    CHECK(efs_kv_key_lease(shard,ino,row.generation,other,1,key,&len)==EFS_OK &&
+          efs_kv_put(kv,key,len,&one,1)==EFS_OK,"seed foreign owner");
+    CHECK(efs_kv_key_lease(shard,ino,row.generation,uuid,2,key,&len)==EFS_OK &&
+          efs_kv_put(kv,key,len,&one,1)==EFS_OK,"seed newer epoch");
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,first,&n)==EFS_OK && n==8,
+          "select only bounded old-owner keys");
+    memcpy(bad,first,sizeof(bad));bad[1]=bad[0];
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,bad,n)==EFS_ERR_INVAL,"duplicate rejects whole batch");
+    memcpy(bad,first,sizeof(bad));bad[n-1].key[19]^=1;
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,bad,n)==EFS_ERR_INVAL,"foreign UUID rejects whole batch");
+    memcpy(bad,first,sizeof(bad));bad[n-1].key[38]=2;
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,bad,n)==EFS_ERR_INVAL,"newer epoch rejects whole batch");
+    struct efs_txid tx={{99}};struct efs_txn_parts parts={.n=1,.shard={shard}};
+    CHECK(efs_txn_prepare_excl_value(kv,&tx,&parts,first[0].key,first[0].len,&one,1,
+          EFS_TXN_PUT,&one,1)==EFS_OK,"prepared cleanup key fixture");
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_ERR_BUSY,
+          "prepared row refuses cleanup before any deletion");
+    CHECK(efs_txn_resolve(kv,&tx,shard,EFS_TXN_ABORT)==EFS_OK,"later resolution releases cleanup");
+    struct efs_kv_ops ops=*kv->ops;
+    guarded_batch_original=ops.batch;ops.batch=guarded_batch_fault;kv->ops=&ops;
+    guarded_batch_fail=1;
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_ERR_IO,"atomic cleanup failure");
+    guarded_batch_fail=0;
+    uint8_t before_marker[EFS_KV_KEY_MAX],before_value[8];uint32_t before_len,before_vlen=8;
+    CHECK(efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,before_marker,&before_len)==EFS_OK,"atomic marker key");
+    before_marker[2]=EFS_KV_KIND_CLOSE_CLEANUP;
+    CHECK(efs_kv_get(kv,before_marker,before_len,before_value,&before_vlen)==EFS_ERR_NOT_FOUND,
+          "failed cleanup cannot persist marker ahead of lease deletion");
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,again,&m)==EFS_OK && m==n,
+          "failed cleanup retains all old keys");
+    for(uint32_t i=0;i<n;i++) CHECK(again[i].len==first[i].len &&
+          !memcmp(again[i].key,first[i].key,first[i].len),"failure retains exact selected batch");
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_OK,"apply exact cleanup batch");
+    uint8_t marker[EFS_KV_KEY_MAX],value[8];uint32_t ml,vl=8;
+    CHECK(efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,marker,&ml)==EFS_OK,"close obligation key");
+    marker[2]=EFS_KV_KIND_CLOSE_CLEANUP;
+    CHECK(efs_kv_get(kv,marker,ml,value,&vl)==EFS_OK && vl==8,
+          "lease deletion atomically retains durable close obligation");
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,next,&m)==EFS_OK && m==8,"next bounded phase");
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_OK,"exact replay safe");
+    uint32_t k=0;
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,again,&k)==EFS_OK && k==m,"replay keeps next batch");
+    for(uint32_t i=0;i<m;i++) CHECK(again[i].len==next[i].len &&
+          !memcmp(again[i].key,next[i].key,next[i].len),"replay cannot consume later keys");
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,next,m)==EFS_OK,"second mixed batch");
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,next,&m)==EFS_OK && m==5,"final lock batch");
+    CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,next,m)==EFS_OK,"final exact batch");
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,next,&m)==EFS_OK && !m,"lease lock phase empty");
+    uint8_t got[8];uint32_t gl=sizeof(got);
+    CHECK(efs_kv_key_lease(shard,ino,row.generation,other,1,key,&len)==EFS_OK &&
+          efs_kv_get(kv,key,len,got,&gl)==EFS_OK,"foreign owner survives");
+    gl=sizeof(got);
+    CHECK(efs_kv_key_lease(shard,ino,row.generation,uuid,2,key,&len)==EFS_OK &&
+          efs_kv_get(kv,key,len,got,&gl)==EFS_OK,"new epoch survives");
+    /* A malformed matching row must not turn into a false empty phase. */
+    CHECK(efs_kv_key_lease(shard,ino,row.generation,uuid,1,key,&len)==EFS_OK &&
+          efs_kv_put(kv,key,len-1,&one,1)==EFS_OK,"malformed lease fixture");
+    CHECK(efs_session_cleanup_select(kv,shard,uuid,1,next,&m)==EFS_ERR_PROTO && !m,
+          "malformed cleanup fails closed");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_bounded_session_cleanup();
     test_pending_create_session_fence();
     test_prepared_owner_fence();
     test_prepared_owner_cold();

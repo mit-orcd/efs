@@ -17,6 +17,7 @@ code=r'''
 #include "efs/meta_cmd.h"
 #include "efs/meta_apply.h"
 #include "efs/txn.h"
+#include "efs/session.h"
 #include "efs/kv_key.h"
 #include <assert.h>
 #include <string.h>

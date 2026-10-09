@@ -1,0 +1,31 @@
+{
+  "inos": [
+    7992,
+    12088,
+    16184,
+    20280,
+    24376,
+    28472,
+    32568,
+    36664,
+    40760,
+    44856,
+    48952,
+    53048,
+    57144
+  ],
+  "records": [
+    {
+      "stage": "prepare",
+      "result": "sub=1 rc=0 salt=0 index=8\nsub=2 rc=0 salt=0 index=9\nsub=7 rc=0 salt=0 index=59\nsub=8 rc=0 salt=0 index=60\nsub=8 rc=0 salt=0 index=61\nsub=8 rc=0 salt=0 index=62\nsub=8 rc=0 salt=0 index=63\nsub=8 rc=0 salt=0 index=64\nsub=8 rc=0 salt=0 index=65\nsub=8 rc=0 salt=0 index=66\nsub=8 rc=0 salt=0 index=67\nsub=8 rc=0 salt=0 index=68\nsub=8 rc=0 salt=0 index=69\nsub=8 rc=0 salt=0 index=70\nsub=8 rc=0 salt=0 index=71\nsub=8 rc=0 salt=0 index=72\nsub=1 rc=0 salt=0 index=73\nsub=1 rc=0 salt=0 index=74\nsub=1 rc=0 salt=0 index=75\nsub=1 rc=0 salt=0 index=76\nsub=1 rc=0 salt=0 index=77\nsub=1 rc=0 salt=0 index=78\nsub=1 rc=0 salt=0 index=79\nsub=1 rc=0 salt=0 index=80\nsub=14 rc=-13 salt=0 index=0\nactive cleanup refused PASS\n"
+    },
+    {
+      "stage": "first",
+      "result": "sub=3 rc=0 salt=0 index=15\nsub=4 rc=0 salt=0 index=98\nsub=14 rc=-13 salt=0 index=0\nsub=5 rc=0 salt=0 index=16\nsub=6 rc=0 salt=0 index=17\nsub=14 rc=0 salt=0 index=99\nsub=15 rc=0 salt=0 index=100\nglobal barrier and exact first-batch replay PASS\n"
+    },
+    {
+      "stage": "finish",
+      "result": "sub=14 rc=0 salt=0 index=152\nsub=14 rc=0 salt=1 index=152\nsub=14 rc=0 salt=1 index=152\ncold remaining lease/lock phase drained PASS\n"
+    }
+  ]
+}

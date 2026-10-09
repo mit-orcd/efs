@@ -127,3 +127,30 @@ AMD private direct/TCP pressure-enabled core/peer POSIX and GC gate passes,
 including physical delete counters, offline member rejoin, cold inventory/quota
 zero and late PUT fences. Installed 978caaf7 restored, both mounts serving,
 pressure off. Evidence: results/measure/20261009-apply-expansion-audit.
+
+## Bounded session lease/lock phase (staged)
+
+New session subcommands LEASE_LOCK_NEXT (RPC only) and LEASE_LOCK_BATCH select
+and log at most eight exact lease/lock keys. Proposal first checks the session
+owner through ReadIndex for completed global revocation; replicated apply checks
+the local durable rejection floor, validates the entire key set and refuses
+prepared EXCL ownership. Missing authority is BUSY, not cleanup completion.
+Deletion plus live-inode CLOSE_CLEANUP obligations share one atomic KV batch.
+Exact replay cannot consume the next batch. Other sessions and newer epochs
+survive. salt=1 means only this lease/lock phase is empty, never full cleanup.
+
+Legacy LEASE_DROP replay remains unchanged and receives an unbounded pending
+charge with staged pressure enabled. Append cleanup, bounded close effects,
+receipt retirement and production coordinator integration remain open. The
+selector uses fixed memory but can scan unrelated shard keys; no CPU bound is
+claimed. Previous audit wording about RECLAIM was imprecise: guarded retire
+calls lease cleanup, whereas the session RECLAIM wire command calls inode
+reclaim. Both paths still require their own audit.
+
+AMD full regression and final focused tests pass, including batch I/O failure,
+prepared row BUSY/resolve, malformed/duplicate/foreign keys, local/remote global
+barriers and exact capacity. Actual WAL crash/reopen passes. Live cleanup RPC
+and physical reclaim pass; core POSIX212/212, peer63/64 due to append/truncate
+EIO. This full candidate is not accepted yet. Failed fixture gc-direct-igaguvk4
+retained; installed978caaf7 restored, pressure off. A deterministic regression
+now reproduces read retry losing authoritative absence after peer truncate.

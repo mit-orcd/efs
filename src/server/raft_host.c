@@ -1879,6 +1879,23 @@ static int host_unpack_lease_edge(const uint8_t *cmd,uint32_t clen,
     return EFS_OK;
 }
 
+static int host_unpack_session_cleanup(const uint8_t *cmd,uint32_t clen,
+    uint32_t *shard,uint32_t *epoch,struct efs_session_cleanup_key *keys,uint32_t *n)
+{
+    if (clen<27 || cmd[0]!=EFS_MD_CMD_SESSION ||
+        cmd[1]!=EFS_MD_SESS_LEASE_LOCK_BATCH) return EFS_ERR_INVAL;
+    *epoch=rd32be(cmd+18);*shard=rd32be(cmd+22);*n=cmd[26];
+    if (!*epoch || *shard>=EFS_SESSION_BITS || !*n || *n>EFS_SESSION_CLEANUP_MAX ||
+        clen!=27+66u*(*n)) return EFS_ERR_INVAL;
+    for (uint32_t i=0;i<*n;i++) {
+        const uint8_t *p=cmd+27+66*i;
+        if (p[0]!=39 && p[0]!=65) return EFS_ERR_INVAL;
+        for (uint32_t j=p[0];j<65;j++) if (p[1+j]) return EFS_ERR_INVAL;
+        keys[i].len=p[0];memcpy(keys[i].key,p+1,p[0]);
+    }
+    return EFS_OK;
+}
+
 static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index)
 {
@@ -1938,6 +1955,18 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     case EFS_MD_SESS_FINISH:
         rc = efs_session_finish_fence(h->kv, uuid);
         break;
+    case EFS_MD_SESS_LEASE_LOCK_BATCH: {
+        struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];uint32_t n;
+        rc=host_unpack_session_cleanup(cmd,clen,&shard,&epoch,keys,&n);
+        if (rc==EFS_OK) rc=efs_session_cleanup_apply(h->kv,shard,uuid,epoch,keys,n);
+        if (rc==EFS_OK) {
+            host_lock_wait_drop_session(h,uuid,epoch);
+            pthread_mutex_lock(&h->wait_mu);
+            for (uint32_t i=0;i<n;i++) lock_wait_signal_locked(h,rd64be(keys[i].key+3));
+            pthread_mutex_unlock(&h->wait_mu);
+        }
+        break;
+    }
     case EFS_MD_SESS_LEASE_DROP:
         if (clen < HOST_SESS_REG_LEN)
             return EFS_OK;
@@ -2007,7 +2036,7 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     /* A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
-    if (cmd[1] == EFS_MD_SESS_FENCE_LOC)
+    if (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH)
         return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
         rc == EFS_ERR_STALE)
@@ -2376,7 +2405,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     /* FENCE_LOC BUSY must let a later RESOLVE drain the owner intent. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        cmd[1] == EFS_MD_SESS_FENCE_LOC && rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
+        (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH) &&
+        rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
         ret = EFS_OK;
     /* Storage failure must retry this entry on every replica, rather than
      * advance a follower past cleanup it did not durably perform. */
@@ -3655,6 +3685,13 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
     if (!cmd || !n) return charge;
     if (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE)
         return UINT64_MAX;
+    if (cmd[0]==EFS_MD_CMD_SESSION && n>=2) {
+        if (cmd[1]==EFS_MD_SESS_LEASE_DROP) return UINT64_MAX;
+        if (cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH) {
+            uint64_t rows=host_pressure_rows_charge(2*EFS_SESSION_CLEANUP_MAX,1,8);
+            return charge>rows ? charge : rows;
+        }
+    }
     uint64_t work = 0;
     switch (cmd[0]) {
     case EFS_MD_CMD_LANE_SWEEP_BATCH: work=64u<<10; break;
@@ -3678,6 +3715,8 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
 static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
 {
     if (!cmd || !n || n > (256u<<10)) return 0;
+    if (cmd[0]==EFS_MD_CMD_SESSION && n>=2 && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH)
+        return 1;
     switch (cmd[0]) {
     case EFS_MD_CMD_DECIDE: case EFS_MD_CMD_RESOLVE: case EFS_MD_CMD_DROP:
     case EFS_MD_CMD_LANE_SWEEP: case EFS_MD_CMD_LANE_SWEEP_BATCH:
@@ -8471,6 +8510,52 @@ static int host_session_establish_admit(struct efs_raft_host *h,
     return (salt & (1ull<<40)) ? EFS_OK : EFS_ERR_BUSY;
 }
 
+/* Global authority is consulted before proposal, never during replicated
+ * apply. A completed epoch barrier is monotonic; local apply still requires
+ * its durable rejection floor. No missing owner/floor is interpreted as OK. */
+static int host_session_cleanup_admit(struct efs_raft_host *h,
+    const uint8_t *cmd,uint32_t clen,uint8_t group,int *hint)
+{
+    if (clen<HOST_SESS_REG_LEN || !rd32be(cmd+18) ||
+        rd32be(cmd+22)>=EFS_SESSION_BITS || group!=efs_raft_shard_group(rd32be(cmd+22)))
+        return EFS_ERR_INVAL;
+    uint8_t query[HOST_SESS_HDR_LEN+4];
+    memcpy(query,cmd,HOST_SESS_HDR_LEN);query[1]=HOST_SESS_GET;
+    wr32be(query+18,rd32be(cmd+22));
+    uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(cmd+2));
+    uint64_t salt=0;int rc;
+    if (host_hosts(h,owner)) rc=host_session_get(h,query,sizeof(query),owner,hint,&salt);
+    else {
+        struct efs_msg_raft_mkfs_reply reply;
+        memset(&reply,0,sizeof(reply));
+        rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);
+        if (rc==EFS_OK) salt=reply.salt;
+    }
+    if (rc!=EFS_OK) return rc;
+    return (uint8_t)(salt>>32)==EFS_SESSION_ACTIVE && (uint32_t)salt>rd32be(cmd+18) ?
+        EFS_OK : EFS_ERR_BUSY;
+}
+
+static int host_pack_session_cleanup(struct efs_raft_host *h,const uint8_t *cmd,
+    uint32_t clen,uint8_t group,int *hint,uint8_t *packed,uint32_t *size)
+{
+    if (clen!=HOST_SESS_REG_LEN) return EFS_ERR_INVAL;
+    int rc=host_session_cleanup_admit(h,cmd,clen,group,hint);
+    if (rc==EFS_OK) rc=host_read_index(h,group,hint);
+    if (rc!=EFS_OK) return rc;
+    struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];uint32_t n;
+    rc=efs_session_cleanup_select(h->kv,rd32be(cmd+22),cmd+2,rd32be(cmd+18),keys,&n);
+    if (rc!=EFS_OK) return rc;
+    if (!n) { *size=0;return EFS_OK; }
+    *size=27+66*n;memset(packed,0,*size);memcpy(packed,cmd,26);
+    packed[1]=EFS_MD_SESS_LEASE_LOCK_BATCH;packed[26]=(uint8_t)n;
+    for (uint32_t i=0;i<n;i++) {
+        packed[27+66*i]=keys[i].len;
+        memcpy(packed+28+66*i,keys[i].key,keys[i].len);
+    }
+    return EFS_OK;
+}
+
 /* A result lookup always crosses ReadIndex; seeing a durable verdict locally
  * is insufficient while apply may still owe last-close cleanup. */
 static int host_lease_edge_result(struct efs_raft_host *h,const uint8_t *cmd,
@@ -8503,6 +8588,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     uint8_t group;
     const uint8_t *cmd;
     uint8_t sweep_cmd[19+4*EFS_META_SWEEP_BATCH_MAX];
+    uint8_t cleanup_cmd[27+66*EFS_SESSION_CLEANUP_MAX];
     uint32_t clen;
     uint64_t idx = 0, term = 0;
     uint64_t salt = 0;
@@ -8523,6 +8609,20 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
         struct efs_opid_req q;efs_ino_t ino;uint64_t gen,token;unsigned flags;
         rc=host_unpack_lease_edge(cmd,clen,&q,&ino,&gen,&flags,&token);
         if(rc!=EFS_OK || group!=efs_raft_shard_group(efs_kv_inode_shard(ino))) {
+            out->rc=EFS_ERR_INVAL;return;
+        }
+    }
+    if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
+        (cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT || cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH)) {
+        uint32_t shard=0,epoch=0,n=0;
+        struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];
+        if (cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {
+            if (clen!=HOST_SESS_REG_LEN) {out->rc=EFS_ERR_INVAL;return;}
+            shard=rd32be(cmd+22);epoch=rd32be(cmd+18);
+        } else if (host_unpack_session_cleanup(cmd,clen,&shard,&epoch,keys,&n)!=EFS_OK) {
+            out->rc=EFS_ERR_INVAL;return;
+        }
+        if (!epoch || shard>=EFS_SESSION_BITS || group!=efs_raft_shard_group(shard)) {
             out->rc=EFS_ERR_INVAL;return;
         }
     }
@@ -8616,6 +8716,19 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                 out->leader_hint = v.leader;
             return;
         }
+    }
+    if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_NEXT) {
+        uint32_t packed=0;
+        rc=host_pack_session_cleanup(h,cmd,clen,group,&hint,cleanup_cmd,&packed);
+        if (rc!=EFS_OK) {out->rc=rc;out->leader_hint=hint;return;}
+        if (!packed) {
+            struct host_view v;host_view_get(h,group,&v);
+            out->rc=EFS_OK;out->salt=1;out->index=v.applied;return;
+        }
+        cmd=cleanup_cmd;clen=packed;
+    } else if (clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH) {
+        rc=host_session_cleanup_admit(h,cmd,clen,group,&hint);
+        if (rc!=EFS_OK) {out->rc=rc;out->leader_hint=hint;return;}
     }
     if (clen && cmd[0] == EFS_MD_REQ_SWEEP_NEXT) {
         rc=host_pack_sweep_next(h,group,cmd,clen,sweep_cmd,&clen);

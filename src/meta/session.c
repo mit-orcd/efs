@@ -568,6 +568,134 @@ int efs_lease_any(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
     return rc;
 }
 
+/* Exact-key cleanup never selects again during replay. The local rejection
+ * floor cannot decrease, so an old owner cannot recreate a deleted key. */
+static int cleanup_floor(struct efs_kv *kv, uint32_t shard,
+                         const uint8_t *uuid, uint32_t epoch)
+{
+    struct efs_sess_local local;
+    if (!kv || !uuid || !epoch || shard >= EFS_SESSION_BITS)
+        return EFS_ERR_INVAL;
+    int rc=load_local(kv,shard,uuid,&local);
+    if (rc==EFS_ERR_NOT_FOUND) return EFS_ERR_BUSY;
+    if (rc!=EFS_OK) return rc;
+    return local.reject_below>epoch ? EFS_OK : EFS_ERR_BUSY;
+}
+
+static uint64_t cleanup_rd64(const uint8_t *p)
+{
+    return (uint64_t)rd32(p)<<32 | rd32(p+4);
+}
+
+static int cleanup_key(const uint8_t *key, uint32_t len, uint32_t shard,
+                        const uint8_t *uuid, uint32_t epoch)
+{
+    uint32_t owner;
+    if (len==39 && key[2]==EFS_KV_KIND_LEASE) owner=19;
+    else if (len==65 && key[2]==EFS_KV_KIND_LOCK) owner=45;
+    else return EFS_ERR_INVAL;
+    if (((uint32_t)key[0]<<8 | key[1])!=shard ||
+        memcmp(key+owner,uuid,EFS_OPID_UUID_LEN) || rd32(key+owner+16)!=epoch ||
+        !cleanup_rd64(key+3) || !cleanup_rd64(key+11) ||
+        efs_kv_inode_shard(cleanup_rd64(key+3))!=shard)
+        return EFS_ERR_INVAL;
+    return EFS_OK;
+}
+
+struct cleanup_scan {
+    uint32_t shard,epoch,n;
+    int rc;
+    const uint8_t *uuid;
+    struct efs_session_cleanup_key *keys;
+};
+static int cleanup_cb(void *user,const uint8_t *key,uint32_t len,
+                       const uint8_t *val,uint32_t vlen)
+{
+    struct cleanup_scan *scan=user;
+    (void)val;(void)vlen;
+    uint32_t expected=key[2]==EFS_KV_KIND_LEASE ? 39 : 65;
+    if (len!=expected) {scan->rc=EFS_ERR_PROTO;return 1;}
+    uint32_t owner=expected==39 ? 19 : 45;
+    if (memcmp(key+owner,scan->uuid,16) || rd32(key+owner+16)!=scan->epoch) return 0;
+    if (cleanup_key(key,len,scan->shard,scan->uuid,scan->epoch)!=EFS_OK) {
+        scan->rc=EFS_ERR_PROTO;return 1;
+    }
+    scan->keys[scan->n].len=(uint8_t)len;
+    memcpy(scan->keys[scan->n++].key,key,len);
+    return scan->n==EFS_SESSION_CLEANUP_MAX;
+}
+
+int efs_session_cleanup_select(struct efs_kv *kv,uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
+    struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX],uint32_t *n)
+{
+    if (!keys || !n) return EFS_ERR_INVAL;
+    *n=0;
+    int rc=cleanup_floor(kv,shard,uuid,epoch);
+    if (rc!=EFS_OK) return rc;
+    struct cleanup_scan scan={.shard=shard,.epoch=epoch,.uuid=uuid,.keys=keys};
+    uint8_t prefix[EFS_KV_KEY_MAX];uint32_t len;
+    rc=efs_kv_key_lease_shard_prefix(shard,prefix,&len);
+    if (rc==EFS_OK) rc=efs_kv_scan_prefix(kv,prefix,len,cleanup_cb,&scan);
+    if (rc!=EFS_OK && rc!=1) return rc;
+    if (scan.rc!=EFS_OK) return scan.rc;
+    if (scan.n<EFS_SESSION_CLEANUP_MAX) {
+        rc=efs_kv_key_lock_shard_prefix(shard,prefix,&len);
+        if (rc==EFS_OK) rc=efs_kv_scan_prefix(kv,prefix,len,cleanup_cb,&scan);
+        if (rc!=EFS_OK && rc!=1) return rc;
+    }
+    if (scan.rc!=EFS_OK) return scan.rc;
+    *n=scan.n;
+    return EFS_OK;
+}
+
+int efs_session_cleanup_apply(struct efs_kv *kv,uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
+    const struct efs_session_cleanup_key *keys,uint32_t n)
+{
+    if (!keys || !n || n>EFS_SESSION_CLEANUP_MAX) return EFS_ERR_INVAL;
+    int rc=cleanup_floor(kv,shard,uuid,epoch);
+    if (rc!=EFS_OK) return rc;
+    /* Validate ALL keys before any effects, including duplicate/foreign keys. */
+    for (uint32_t i=0;i<n;i++) {
+        rc=cleanup_key(keys[i].key,keys[i].len,shard,uuid,epoch);
+        if (rc!=EFS_OK) return rc;
+        for (uint32_t j=0;j<i;j++)
+            if (keys[j].len==keys[i].len && !memcmp(keys[j].key,keys[i].key,keys[i].len))
+                return EFS_ERR_INVAL;
+    }
+    struct efs_kv_item items[2*EFS_SESSION_CLEANUP_MAX];
+    uint8_t markers[EFS_SESSION_CLEANUP_MAX][EFS_KV_KEY_MAX];
+    uint8_t generations[EFS_SESSION_CLEANUP_MAX][8];
+    uint32_t count=0,marked=0;
+    for (uint32_t i=0;i<n;i++) {
+        const uint8_t *key=keys[i].key;
+        rc=efs_txn_key_exclusive(kv,key,keys[i].len);
+        if (rc!=EFS_OK) return rc;
+        items[count++]=(struct efs_kv_item){EFS_KV_DEL,key,keys[i].len,NULL,0};
+        if (key[2]!=EFS_KV_KIND_LEASE) continue;
+        efs_ino_t ino=cleanup_rd64(key+3);uint64_t gen=cleanup_rd64(key+11);
+        struct efs_meta_row row;
+        rc=efs_meta_apply_get_inode(kv,ino,&row);
+        if (rc==EFS_ERR_NOT_FOUND || (rc==EFS_OK && row.generation!=gen)) continue;
+        if (rc!=EFS_OK) return rc;
+        uint32_t len=0;
+        rc=efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,markers[marked],&len);
+        if (rc!=EFS_OK) return rc;
+        markers[marked][2]=EFS_KV_KIND_CLOSE_CLEANUP;
+        int duplicate=0;
+        for (uint32_t j=0;j<marked;j++)
+            if (!memcmp(markers[j],markers[marked],len)) duplicate=1;
+        if (duplicate) continue;
+        rc=efs_txn_key_exclusive(kv,markers[marked],len);
+        if (rc!=EFS_OK) return rc;
+        memcpy(generations[marked],key+11,8);
+        items[count++]=(struct efs_kv_item){EFS_KV_PUT,markers[marked],len,generations[marked],8};
+        marked++;
+    }
+    return efs_kv_batch(kv,items,count);
+}
+
 #define DROP_MAX 32
 
 struct drop_acc {

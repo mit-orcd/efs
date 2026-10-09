@@ -38,6 +38,7 @@ p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer ove
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
+p.add_argument('--session-cleanup',action='store_true',help='staged bounded lease/lock cleanup, global barrier, exact replay and cold physical reclaim')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
 p.add_argument('--create-live-retry',action='store_true',help='actual FUSE CREATE retries consumed committed reply then BUSY using one identity')
@@ -478,6 +479,34 @@ try:
         print(f'{a.tiny_mixed_files} tiny CREATE/close under bounded large writers; exact cold bytes and reclaim PASS',flush=True)
         if a.tiny_mixed_only:
             raise SystemExit(0)  # finally still drains all owned processes
+    if a.session_cleanup:
+        helper=work/'session-cleanup'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/session_cleanup.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
+        directory=mount/'bounded-session-cleanup';directory.mkdir()
+        paths=[]
+        for i in range(13):
+            path=directory/str(i)
+            with path.open('wb') as f:
+                f.write(bytes([i+1])*4096);f.flush();os.fsync(f.fileno())
+            paths.append((path.stat().st_ino,path))
+        paths.sort();inos=[ino for ino,path in paths];uuid=os.urandom(16).hex()
+        records=[]
+        def cleanup(stage):
+            result=run([helper,stage,str(a.port),uuid,*map(str,inos)],capture_output=True,text=True,timeout=180).stdout
+            records.append({'stage':stage,'result':result})
+        cleanup('prepare')
+        for ino,path in paths:path.unlink()
+        directory.rmdir()
+        assert all(files(ino) for ino in inos),'active cleanup dropped owned file'
+        cleanup('first')
+        wait(lambda:all(not files(ino) for ino in inos[:8]),'bounded first lease batch physical reclaim',180)
+        assert all(files(ino) for ino in inos[8:]),'exact replay consumed next lease batch'
+        unmount();stop(crash=True);start();mount_client()
+        assert all(files(ino) for ino in inos[8:]),'cold replay lost remaining owners'
+        cleanup('finish')
+        wait(lambda:all(not files(ino) for ino in inos),'bounded session cold physical reclaim',180)
+        (work/'session-cleanup.json').write_text(json.dumps({'inos':inos,'records':records},indent=2))
+        print('bounded session lease/lock global barrier, exact replay, cold remaining owners and physical reclaim PASS',flush=True)
     if a.guarded_leases:
         helper=work/'lease-edges'
         run(['cc','-Wall','-Wextra','-I'+str(source/'include'),source/'tests/live/lease_edges.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])

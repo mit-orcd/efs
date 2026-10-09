@@ -42,6 +42,12 @@
 #define EFS_MD_SESS_LEASE_DROP  10
 #define EFS_MD_SESS_RECLAIM     11
 #define EFS_MD_SESS_LEASE_EDGE  12 /* staged guarded edge, fixed 66-byte command */
+/* Staged bounded lease/lock phase; append reservations are a separate phase.
+ * NEXT is RPC-only; leader selects exact keys before writing BATCH to Raft.
+ * [tag,sub,uuid:16,epoch:4,shard:4] + BATCH [n:1][len:1,key:65]*n.
+ * Reply salt=1 means this phase is empty; salt=0 means one batch progressed. */
+#define EFS_MD_SESS_LEASE_LOCK_NEXT 14
+#define EFS_MD_SESS_LEASE_LOCK_BATCH 15
 #define EFS_MD_SESS_LEASE_PROBE 13 /* host-only ReadIndex; never a log command */
 /* Both use [tag:1][sub:1][uuid:16][epoch:4][seq:8][ack:8]
  * [ino:8][generation:8][edge_flags:4][pending_token:8]. Route to the

@@ -18,6 +18,22 @@
 #define EFS_SESSION_VAL      1032
 #define EFS_SESS_LOCAL_VAL   8
 
+/* Staged exact lease/lock cleanup phase. The coordinator must prove completed
+ * global revocation before proposing; apply rechecks the durable LOCAL floor.
+ * This does not resolve append reservations or certify full session cleanup. */
+#define EFS_SESSION_CLEANUP_MAX 8u
+#define EFS_SESSION_CLEANUP_KEY_MAX 65u
+struct efs_session_cleanup_key {
+    uint8_t len;
+    uint8_t key[EFS_SESSION_CLEANUP_KEY_MAX];
+};
+int efs_session_cleanup_select(struct efs_kv *kv, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+    struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX], uint32_t *n);
+int efs_session_cleanup_apply(struct efs_kv *kv, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+    const struct efs_session_cleanup_key *keys, uint32_t n);
+
 struct efs_session_rec {
     uint32_t epoch;
     uint8_t state;
