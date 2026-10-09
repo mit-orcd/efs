@@ -176,6 +176,8 @@ test-report-pressure:
 	python3 tests/test_put_window_deadline.py
 	python3 tests/test_write_budget.py
 	python3 tests/test_append_sequence.py
+	python3 tests/test_append_session_admission.py
+	python3 tests/test_append_session_host.py
 	python3 tests/test_append_host_authority.py
 	python3 tests/test_report_orphan.py
 

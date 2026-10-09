@@ -1508,6 +1508,28 @@ int efs_client_rpc_setattr(efs_export_id_t export_id, efs_ino_t ino,
 /* Cross-client O_APPEND: reserve the next len bytes at the owner.
  * new_size_out is this reservation's end; start_out is the reserved
  * offset (reply atime) when the host stamped reserved+len. */
+static int append_session_admit(efs_ino_t ino,const struct efs_opid_req *q)
+{
+    uint32_t shard=efs_kv_inode_shard(ino),byte=shard/8;uint8_t bit=(uint8_t)(1u<<(shard%8));
+    pthread_mutex_lock(&opid_mu);
+    int same=g_client.append_session_epoch==q->id.session_epoch &&
+        !memcmp(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
+    int established=same && (g_client.append_session_shards[byte]&bit);
+    pthread_mutex_unlock(&opid_mu);
+    if(established)return EFS_OK;
+    int rc=efs_client_rpc_publication_session(shard,&q->id);
+    if(rc!=EFS_OK)return rc;
+    pthread_mutex_lock(&opid_mu);
+    if(g_client.append_session_epoch!=q->id.session_epoch ||
+       memcmp(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN)) {
+        memset(g_client.append_session_shards,0,sizeof(g_client.append_session_shards));
+        memcpy(g_client.append_session_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
+        g_client.append_session_epoch=q->id.session_epoch;
+    }
+    g_client.append_session_shards[byte]|=bit;
+    pthread_mutex_unlock(&opid_mu);return EFS_OK;
+}
+
 int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
                                   uint64_t len, const struct efs_opid_req *q,
                                   uint64_t *new_size_out, uint64_t *start_out)
@@ -1520,6 +1542,8 @@ int efs_client_rpc_append_reserve(efs_export_id_t export_id, efs_ino_t ino,
 
     if (!efs_opid_req_valid(q) || q->ack >= q->id.seq)
         return EFS_ERR_INVAL;
+    rc=append_session_admit(ino,q);
+    if(rc!=EFS_OK)return rc;
     memset(buf, 0, sizeof(buf));
     req->export_id = export_id;
     req->ino = ino;

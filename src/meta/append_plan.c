@@ -6,6 +6,56 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct append_owner_context {
+    const struct efs_meta_append_ops *ops;
+    void *ctx;
+    struct efs_meta_append_image owner;
+    unsigned first;
+};
+static int append_owner_prepare(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,const struct efs_meta_append_image *image)
+{
+    struct append_owner_context *c=user;int rc=EFS_OK;
+    if(c->first) {c->first=0;rc=c->ops->prepare(c->ctx,tx,parts,&c->owner);}
+    return rc==EFS_OK?c->ops->prepare(c->ctx,tx,parts,image):rc;
+}
+static int append_owner_decide(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,int decision)
+{struct append_owner_context *c=user;return c->ops->decide(c->ctx,tx,parts,decision);}
+static int append_owner_resolve(void *user,const struct efs_txid *tx,
+    const struct efs_txn_parts *parts,int decision)
+{struct append_owner_context *c=user;return c->ops->resolve(c->ctx,tx,parts,decision);}
+int efs_meta_execute_append_owned(struct efs_kv *kv,const struct efs_meta_append_plan *plan,
+    const struct efs_opid_req *q,const struct efs_txid *tx,
+    const struct efs_meta_append_ops *ops,void *ctx)
+{
+    if(!kv || !plan || !q || !efs_opid_req_valid(q) || !tx || !ops ||
+       !ops->prepare || !ops->decide || !ops->resolve)return EFS_ERR_INVAL;
+    if(!plan->count)return EFS_OK;
+    if(plan->count<4 || plan->images[2].klen!=31 ||
+       memcmp(plan->images[2].key+11,q->id.client_uuid,16) ||
+       ((uint32_t)plan->images[2].key[27]<<24 | (uint32_t)plan->images[2].key[28]<<16 |
+        (uint32_t)plan->images[2].key[29]<<8 | plan->images[2].key[30])!=q->id.session_epoch)
+        return EFS_ERR_INVAL;
+    uint32_t shard=((uint32_t)plan->images[0].key[0]<<8)|plan->images[0].key[1];
+    int rc=efs_session_accept(kv,shard,q->id.client_uuid,q->id.session_epoch);
+    if(rc!=EFS_OK)return rc;
+    struct append_owner_context c={.ops=ops,.ctx=ctx,.first=1};
+    rc=efs_kv_key_sess_local(shard,q->id.client_uuid,c.owner.key,&c.owner.klen);
+    c.owner.expected_len=EFS_SESS_LOCAL_VAL;
+    if(rc==EFS_OK)rc=efs_kv_get(kv,c.owner.key,c.owner.klen,c.owner.expected,&c.owner.expected_len);
+    if(rc!=EFS_OK)return rc;
+    if(c.owner.expected_len!=EFS_SESS_LOCAL_VAL)return EFS_ERR_PROTO;
+    uint32_t established=0,floor=0;
+    for(unsigned i=0;i<4;i++) {established=established<<8|c.owner.expected[i];floor=floor<<8|c.owner.expected[4+i];}
+    if(floor>q->id.session_epoch)return EFS_ERR_STALE;
+    if(established!=q->id.session_epoch)return EFS_ERR_BUSY;
+    c.owner.op=EFS_TXN_PUT;c.owner.new_len=EFS_SESS_LOCAL_VAL;
+    memcpy(c.owner.value,c.owner.expected,EFS_SESS_LOCAL_VAL);
+    const struct efs_meta_append_ops owned_ops={append_owner_prepare,append_owner_decide,append_owner_resolve};
+    return efs_meta_execute_append(plan,tx,&owned_ops,&c);
+}
+
 struct finish_image {
     uint8_t key[EFS_KV_KEY_MAX];
     uint32_t klen, expected_len, new_len;

@@ -74,6 +74,11 @@ struct efs_client {
     uint32_t opid_epoch;
     uint64_t opid_next;                        /* next seq; 0 = unseeded */
     uint64_t opid_inflight[EFS_OPID_INFLIGHT]; /* 0 = free slot */
+    /* Successful append session registration, per immutable mount identity.
+     * Protected by opid_mu; permission is still checked by the server. */
+    uint8_t append_session_uuid[EFS_OPID_UUID_LEN];
+    uint32_t append_session_epoch;
+    uint8_t append_session_shards[512];
 
     /* Persistent connection pool to each server. The server's accept
      * loop handles multiple requests per connection; a pool of conns lets

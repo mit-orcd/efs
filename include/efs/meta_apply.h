@@ -153,6 +153,12 @@ int efs_meta_execute_append(const struct efs_meta_append_plan *plan,
                              const struct efs_txid *t,
                              const struct efs_meta_append_ops *ops, void *ctx);
 
+/* Registered-session reservation: PREPARE the durable local session key
+ * before inode effects, with the SAME transaction/participant set. */
+int efs_meta_execute_append_owned(struct efs_kv *, const struct efs_meta_append_plan *,
+    const struct efs_opid_req *, const struct efs_txid *,
+    const struct efs_meta_append_ops *, void *ctx);
+
 /* Capture the existing completion state machine without writing the KV,
  * then commit its exact images across all affected lane authorities. Caller
  * supplies fresh authoritative views and the normal transaction transport. */

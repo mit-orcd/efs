@@ -3714,7 +3714,7 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
             return charge>rows?charge:rows;
         }
         if (cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH) {
-            uint64_t rows=host_pressure_rows_charge(2*EFS_SESSION_CLEANUP_MAX,1,8);
+            uint64_t rows=host_pressure_rows_charge(2*EFS_SESSION_CLEANUP_MAX,1,EFS_CLOSE_STEP_VALUE);
             return charge>rows ? charge : rows;
         }
     }
@@ -8617,6 +8617,35 @@ static int host_session_cleanup_admit(struct efs_raft_host *h,
         EFS_OK : EFS_ERR_BUSY;
 }
 
+/* Legacy unregistered append identities remain compatible. Once a session is
+ * registered, absence/error is never authority to bypass its global/local floor. */
+static int host_append_session_admit(struct efs_raft_host *h,efs_ino_t ino,
+    const struct efs_opid_req *q,int *hint,int *registered)
+{
+    uint32_t shard=efs_kv_inode_shard(ino);uint8_t query[HOST_SESS_HDR_LEN+4]={EFS_MD_CMD_SESSION,HOST_SESS_GET};
+    memcpy(query+2,q->id.client_uuid,16);wr32be(query+18,shard);
+    uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
+    uint64_t salt=0;int rc;
+    *registered=0;
+    if(host_hosts(h,owner))rc=host_session_get(h,query,sizeof(query),owner,hint,&salt);
+    else {
+        struct efs_msg_raft_mkfs_reply reply={0};
+        rc=host_remote_cmd(h,owner,query,sizeof(query),&reply,-1);salt=reply.salt;
+    }
+    if(rc==EFS_ERR_NOT_FOUND) {
+        uint8_t key[EFS_KV_KEY_MAX],value[EFS_SESS_LOCAL_VAL];uint32_t kl,vl=sizeof(value);
+        rc=efs_kv_key_sess_local(shard,q->id.client_uuid,key,&kl);
+        if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,value,&vl);
+        return rc==EFS_ERR_NOT_FOUND?EFS_OK:(rc==EFS_OK?EFS_ERR_NOT_FOUND:rc);
+    }
+    if(rc!=EFS_OK)return rc;
+    if((uint32_t)salt!=q->id.session_epoch)return EFS_ERR_STALE;
+    if((uint8_t)(salt>>32)!=EFS_SESSION_ACTIVE)return EFS_ERR_BUSY;
+    rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
+    if(rc==EFS_OK)*registered=1;
+    return rc;
+}
+
 static int host_pack_session_cleanup(struct efs_raft_host *h,const uint8_t *cmd,
     uint32_t clen,uint8_t group,int *hint,uint8_t *packed,uint32_t *size)
 {
@@ -10314,7 +10343,8 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
                                     const struct efs_opid_req *q,uint64_t *offset,int *hint)
 {
     struct host_resize_ctx ctx={h,hint};struct efs_txid t;
-    int rc=host_append_authority(h,hint);
+    int registered=0,rc=host_append_authority(h,hint);
+    if(rc==EFS_OK)rc=host_append_session_admit(h,ino,q,hint,&registered);
     if(rc!=EFS_OK)return rc;
     /* Replayed reservations do not need cleanup or a new transaction. */
     rc=efs_meta_append_result(h->kv,ino,len,q,offset);
@@ -10335,7 +10365,8 @@ static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_
     rc=efs_meta_capture_append(h->kv,ino,len,q,host_txn_coord,h,plan);
     if(rc==EFS_OK) {
         *offset=plan->offset;fill_txid(h,&t);
-        rc=efs_meta_execute_append(plan,&t,&host_append_ops,&ctx);
+        rc=registered?efs_meta_execute_append_owned(h->kv,plan,q,&t,&host_append_ops,&ctx):
+                      efs_meta_execute_append(plan,&t,&host_append_ops,&ctx);
         /* Exact-image conflicts are retryable; capture's retired identity
          * STALE is preserved and never allocated a second reservation. */
         if(rc==EFS_ERR_STALE)rc=EFS_ERR_BUSY;

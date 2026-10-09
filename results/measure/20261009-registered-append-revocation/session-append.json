@@ -1,0 +1,28 @@
+{
+  "ino": 20481,
+  "reserved": "reserved=64 first=1048576 end=9437184\n",
+  "records": [
+    "raft-session status=0 rc=0 primary=1 op=create ssh=1755 shard=1755 epoch=0 state=0 touched=0 index=285\n",
+    "raft-session status=0 rc=0 primary=1 op=register ssh=1755 shard=1 epoch=0 state=0 touched=0 index=286\n",
+    "raft-session status=0 rc=0 primary=1 op=establish ssh=1755 shard=1 epoch=0 state=0 touched=0 index=287\n",
+    "sub=73 rc=-13 salt=0 index=0\nsub=3 rc=0 salt=0 index=1156\nsub=4 rc=0 salt=0 index=1157\nsub=73 rc=-13 salt=0 index=0\nsub=5 rc=0 salt=0 index=1158\nsub=6 rc=0 salt=0 index=1159\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\nsub=73 rc=0 salt=0 index=0\ncompleted global barrier and one-reservation transactions: 32 of 64 PASS\n",
+    "fresh sequence65 after durable revocation rejected STALE PASS\n",
+    "raft-session op=cleanup-appends epoch=1 shard=1 rc=0\n",
+    "raft-session op=cleanup-appends epoch=1 shard=1 rc=0\n",
+    "fresh sequence65 after durable revocation rejected STALE PASS\n"
+  ],
+  "before": [
+    "markers=0 reservations=64 append_rc=0 open=32 watermark=9437184 frontier=5242880 locks=0\n",
+    "markers=0 reservations=64 append_rc=0 open=32 watermark=9437184 frontier=5242880 locks=0\n",
+    "markers=0 reservations=64 append_rc=0 open=32 watermark=9437184 frontier=5242880 locks=0\n",
+    "markers=0 reservations=0 append_rc=-3 open=0 watermark=0 frontier=0 locks=0\n"
+  ],
+  "after": [
+    "markers=0 reservations=64 append_rc=0 open=0 watermark=0 frontier=0 locks=0\n",
+    "markers=0 reservations=64 append_rc=0 open=0 watermark=0 frontier=0 locks=0\n",
+    "markers=0 reservations=64 append_rc=0 open=0 watermark=0 frontier=0 locks=0\n",
+    "markers=0 reservations=0 append_rc=-3 open=0 watermark=0 frontier=0 locks=0\n"
+  ],
+  "routing": "node 1 root=1 salt=3006968489309186667 groups=2\n  group 0 hosted=1 role=LEADER leader=0 term=9 commit=1330 applied=1330 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+  "expected_bytes": 9437184
+}

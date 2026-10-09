@@ -123,6 +123,8 @@ int efs_lease_pending_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
  * OPEN checks the obligation's prepared owner. Production activation requires
  * bounded close processing plus session/PUT lifecycle gates. */
 #define EFS_CLOSE_STEP_VALUE 36u
+/* Revocation obligation domain; production edge allocator never emits MAX. */
+#define EFS_CLOSE_SESSION_SEQ UINT64_MAX
 #define EFS_CLOSE_STEP_LOCKS 1u
 #define EFS_CLOSE_STEP_RETIRE 2u
 int efs_close_step_apply(struct efs_kv *kv, efs_ino_t ino,

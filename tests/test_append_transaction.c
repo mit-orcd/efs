@@ -359,5 +359,36 @@ static void fenced_completion(void)
  assert(efs_kv_put(kv,key,kl,value,vl)==EFS_OK);
  free(plan);efs_kv_mem_free(kv);
 }
+static int owner_prepare(void *kv,const struct efs_txid *t,const struct efs_txn_parts *parts,
+    const struct efs_meta_append_image *image)
+{
+ int rc=prepare(kv,t,parts,image);
+ if(rc==EFS_OK && image->key[2]==EFS_KV_KIND_SESS_LOCAL) {
+  uint32_t shard=(uint32_t)image->key[0]<<8|image->key[1];
+  assert(efs_session_fence_local(kv,shard,image->key+3,2)==EFS_ERR_BUSY);
+ }
+ return rc;
+}
+static void session_owned_append(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_opid_req q=identity(1,0);uint32_t shard=efs_kv_inode_shard(ino);
+ assert(efs_session_create(kv,q.id.client_uuid,1)==EFS_OK &&
+        efs_session_register(kv,q.id.client_uuid,1,shard)==EFS_OK &&
+        efs_session_establish(kv,shard,q.id.client_uuid,1)==EFS_OK);
+ struct efs_meta_append_plan *p=malloc(sizeof(*p));assert(p);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,p)==EFS_OK);
+ struct efs_txid tx={{199}};const struct efs_meta_append_ops lost={owner_prepare,lost_decision,resolve};
+ assert(efs_meta_execute_append_owned(kv,p,&q,&tx,&lost,kv)==EFS_ERR_IO);
+ assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_ERR_BUSY);
+ assert(resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
+ assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
+ q.id.seq=2;q.ack=1;
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,p)==EFS_OK);
+ tx.bytes[1]=2;
+ assert(efs_meta_execute_append_owned(kv,p,&q,&tx,&ops,kv)==EFS_ERR_STALE);
+ uint32_t open;assert(efs_meta_apply_append_state(kv,ino,NULL,NULL,&open)==EFS_OK && open==1);
+ free(p);efs_kv_mem_free(kv);
+}
 int main(void)
-{fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{session_owned_append();fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

@@ -893,9 +893,9 @@ static void test_bounded_session_cleanup(void)
     guarded_batch_fail=1;
     CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_ERR_IO,"atomic cleanup failure");
     guarded_batch_fail=0;
-    uint8_t before_marker[EFS_KV_KEY_MAX],before_value[8];uint32_t before_len,before_vlen=8;
+    uint8_t before_marker[EFS_KV_KEY_MAX],before_value[EFS_CLOSE_STEP_VALUE];uint32_t before_len,before_vlen=sizeof(before_value);
     CHECK(efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,before_marker,&before_len)==EFS_OK,"atomic marker key");
-    before_marker[2]=EFS_KV_KIND_CLOSE_CLEANUP;
+    before_marker[2]=EFS_KV_KIND_CLOSE_STEP;
     CHECK(efs_kv_get(kv,before_marker,before_len,before_value,&before_vlen)==EFS_ERR_NOT_FOUND,
           "failed cleanup cannot persist marker ahead of lease deletion");
     CHECK(efs_session_cleanup_select(kv,shard,uuid,1,again,&m)==EFS_OK && m==n,
@@ -903,13 +903,16 @@ static void test_bounded_session_cleanup(void)
     for(uint32_t i=0;i<n;i++) CHECK(again[i].len==first[i].len &&
           !memcmp(again[i].key,first[i].key,first[i].len),"failure retains exact selected batch");
     CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_OK,"apply exact cleanup batch");
-    uint8_t marker[EFS_KV_KEY_MAX],value[8];uint32_t ml,vl=8;
+    uint8_t marker[EFS_KV_KEY_MAX],value[EFS_CLOSE_STEP_VALUE];uint32_t ml,vl=sizeof(value);
     CHECK(efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,marker,&ml)==EFS_OK,"close obligation key");
-    marker[2]=EFS_KV_KIND_CLOSE_CLEANUP;
-    CHECK(efs_kv_get(kv,marker,ml,value,&vl)==EFS_OK && vl==8,
+    marker[2]=EFS_KV_KIND_CLOSE_STEP;
+    CHECK(efs_kv_get(kv,marker,ml,value,&vl)==EFS_OK && vl==sizeof(value) && value[35]==255,
           "lease deletion atomically retains durable close obligation");
     CHECK(efs_session_cleanup_select(kv,shard,uuid,1,next,&m)==EFS_OK && m==8,"next bounded phase");
+    CHECK(efs_kv_del(kv,marker,ml)==EFS_OK,"retire owned first obligation fixture");
     CHECK(efs_session_cleanup_apply(kv,shard,uuid,1,first,n)==EFS_OK,"exact replay safe");
+    vl=sizeof(value);
+    CHECK(efs_kv_get(kv,marker,ml,value,&vl)==EFS_ERR_NOT_FOUND,"exact lease cleanup replay cannot recreate retired obligation");
     uint32_t k=0;
     CHECK(efs_session_cleanup_select(kv,shard,uuid,1,again,&k)==EFS_OK && k==m,"replay keeps next batch");
     for(uint32_t i=0;i<m;i++) CHECK(again[i].len==next[i].len &&
@@ -1053,6 +1056,12 @@ static void test_legacy_lease_prepared(void)
  CHECK(efs_txn_prepare_excl_value(kv,&tx,&parts,key,kl,&one,1,EFS_TXN_PUT,&one,1)==EFS_OK,"legacy lease prepared owner");
  CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_BUSY,"legacy OPEN cannot bypass prepared lease");
  CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_ERR_BUSY && efs_lease_any(kv,ino,1)==1,"legacy CLOSE preserves prepared lease");
+ struct efs_opid_req edge=guarded_request(uuid,1,0);
+ CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&edge,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_BUSY,"guarded OPEN cannot bypass prepared pending lease");
+ edge.id.seq=2;
+ CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&edge,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_BUSY,"guarded CLOSE cannot bypass prepared pending lease");
+ int verdict=0;
+ CHECK(efs_lease_guarded_probe_deferred(kv,ino,1,&edge,EFS_LEASE_EDGE_CLOSE,0,&verdict)==0,"blocked pending lease never records false CLOSE success");
  CHECK(efs_txn_resolve(kv,&tx,shard,EFS_TXN_ABORT)==EFS_OK,"legacy prepared lease abort");
  CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK,"legacy close after resolution");
  efs_kv_mem_free(kv);

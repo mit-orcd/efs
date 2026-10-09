@@ -304,3 +304,25 @@ peer64/64 and cold GC pass; installed service restored.
 [Evidence](../../results/measure/20261009-lease-ownership-guards/README.md).
 Production sequenced identities, ambiguous release retention and PUT lifecycle
 remain open; this only supplies the shared prepared-ownership prerequisite.
+
+## Registered append ownership and bounded fence coordinator
+
+Full session fence now uses bounded lease/lock then OPEN-append cleanup. Lease
+removal atomically records replay-identified CLOSE_STEP obligations; exact retry
+cannot recreate already-retired obligations. Guarded lease retirement and target
+mutation respect prepared ownership. Revocation markers use a reserved sequence.
+
+A newly found race allowed a registered append transaction to commit after the
+session barrier. FUSE append now establishes its stable identity per shard;
+host admission checks authoritative global state/epoch and local establishment,
+and PREPARE owns the exact local-session row until decision resolution. Fencing
+cannot overtake an unresolved append. Missing global authority with a retained
+local row fails closed. Historical unregistered append compatibility remains.
+The global read per registered append is a correctness cost, not a scaling claim.
+
+AMD direct/TCP pressure-enabled full Linux/core212/peer64/cold-GC gates pass.
+Fresh sequence65 after durable revocation is STALE before/after cold restart;
+13-lease/8-lock cleanup leaves zero offline close obligations on all four stores.
+Installed service restored. DONE/receipt retirement, production sequenced lease
+identity/release retry and PUT lifecycle still block full package closure.
+[Evidence](../../results/measure/20261009-registered-append-revocation/README.md).

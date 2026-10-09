@@ -28,12 +28,14 @@ int main(int argc,char **argv)
    markers,reservations,rc,open,(unsigned long long)wm,(unsigned long long)frontier,efs_lock_count(kv,ino,1));
   efs_kv_lsm_close(kv);return 0;
  }
- assert(argc==7 && !strcmp(argv[1],"reserve"));
- unsigned port=atoi(argv[2]),total=atoi(argv[5]);efs_ino_t ino=strtoull(argv[3],NULL,10);
+ int late=argc==6 && !strcmp(argv[1],"late");
+ assert(late || (argc==7 && !strcmp(argv[1],"reserve")));
+ unsigned port=atoi(argv[2]),total=late?1:atoi(argv[5]);efs_ino_t ino=strtoull(argv[3],NULL,10);
  uint8_t uuid[16];assert(strlen(argv[4])==32);
  for(unsigned i=0;i<16;i++){unsigned x;assert(sscanf(argv[4]+2*i,"%2x",&x)==1);uuid[i]=x;}
- uint64_t length=strtoull(argv[6],NULL,10),first=0;
- for(unsigned i=1;i<=total;i++) {
+ uint64_t length=strtoull(argv[late?5:6],NULL,10),first=0;
+ for(unsigned step=0;step<total;step++) {
+  unsigned i=late?65:step+1;
   struct efs_msg_inode_append request={.export_id=1,.ino=ino,.len=length};
   uint8_t packet[sizeof(request)+EFS_APPEND_ACK_LEN];uint32_t epoch=1;uint64_t seq=i,ack=i-1;
   memcpy(packet,&request,sizeof(request));memcpy(packet+sizeof(request),uuid,16);
@@ -51,6 +53,7 @@ int main(int argc,char **argv)
    assert(type==EFS_MSG_INODE_APPEND_REPLY && size==sizeof(struct efs_msg_inode_reply));
    struct efs_msg_inode_reply reply;memcpy(&reply,body,sizeof(reply));free(body);
    if(reply.status==EFS_INODE_RPC_BUSY || reply.status==EFS_INODE_RPC_NOT_PRIMARY){usleep(10000);continue;}
+   if(late) {assert(reply.status==EFS_INODE_RPC_STALE);puts("fresh sequence65 after durable revocation rejected STALE PASS");return 0;}
    assert(reply.status==EFS_INODE_RPC_OK);if(i==1)first=reply.inode.atime;
    assert(reply.inode.atime==first+(i-1)*length);break;
   }

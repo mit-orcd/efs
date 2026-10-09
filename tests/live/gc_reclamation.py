@@ -515,6 +515,14 @@ try:
         records.append({'stage':'management-resume','result':result.stdout})
         cleanup('finish') # Independently proves the lease/lock phase is now empty.
         wait(lambda:all(not files(ino) for ino in inos),'bounded session cold physical reclaim',180)
+        inspector=work/'session-cleanup-inspect'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/close_step.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',inspector])
+        time.sleep(12)
+        unmount();stop()
+        retired=[run([inspector,'inspect',root/'mdraft/kv',str(inos[0])],capture_output=True,text=True).stdout for root in roots]
+        assert all('markers=0 ' in text and 'locks=0' in text for text in retired),retired
+        records.append({'stage':'offline-close-obligations-retired','result':retired})
+        start();mount_client()
         (work/'session-cleanup.json').write_text(json.dumps({'inos':inos,'records':records},indent=2))
         print('bounded session lease/lock global barrier, exact replay, cold remaining owners and physical reclaim PASS',flush=True)
     if a.guarded_leases:
@@ -611,6 +619,7 @@ try:
             records.append(run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,*extra],capture_output=True,text=True).stdout)
         reserved=run([inspector,'reserve',str(a.port),str(ino),uuid,'64','131072'],capture_output=True,text=True,timeout=180).stdout
         records.append(run([helper,'fence-half',str(a.port),uuid,str(ino)],capture_output=True,text=True,timeout=180).stdout)
+        records.append(run([inspector,'late',str(a.port),str(ino),uuid,'131072'],capture_output=True,text=True,timeout=45).stdout)
         unmount();stop(crash=True)
         before=[run([inspector,'inspect',root/'mdraft/kv',str(ino)],capture_output=True,text=True).stdout for root in roots]
         assert any('open=32 ' in text for text in before),before
@@ -621,6 +630,7 @@ try:
             result=run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','cleanup-appends',uuid,'1',str(shard)],capture_output=True,text=True,timeout=180)
             assert 'rc=0' in result.stdout,result.stdout
             records.append(result.stdout)
+        records.append(run([inspector,'late',str(a.port),str(ino),uuid,'131072'],capture_output=True,text=True,timeout=45).stdout)
         expected=len(body)+64*131072
         assert path.stat().st_size==expected and path.read_bytes()==body+bytes(expected-len(body)), 'revoked append cleanup corrupts original bytes/holes'
         unmount();stop()

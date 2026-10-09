@@ -1215,7 +1215,7 @@ static int sess_cleanup_bounded(const char *host, uint16_t port,
 }
 
 /* Coordinator-driven I23 barrier (10.5c-35c). BEGIN freezes touched[],
- * FENCE_LOC+ACK every set bit, FINISH, then LEASE_DROP(old_epoch) on
+ * FENCE_LOC+ACK every set bit, FINISH, then bounded lease/append cleanup on
  * each touched shard. GET shard>=4096 reads one word of the bitmap. */
 static int cmd_raft_session_fence(const char *host, uint16_t port,
                                   const uint8_t uuid[EFS_OPID_UUID_LEN])
@@ -1293,16 +1293,12 @@ static int cmd_raft_session_fence(const char *host, uint16_t port,
     if (rc != EFS_OK)
         goto out;
     for (i = 0; i < ntouch; i++) {
-        uint32_t sh = shards[i];
-
-        memset(payload, 0, sizeof(payload));
-        sess_pack_hdr(payload, efs_raft_shard_group(sh), EFS_MD_SESS_LEASE_DROP,
-                      uuid);
-        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN, old_epoch);
-        wr32be_mgmt(payload + 3 + EFS_OPID_UUID_LEN + 4, sh);
-        rc = sess_rpc(host, port, payload, 1 + 26, &r);
-        if (rc != EFS_OK)
+        rc=sess_cleanup_bounded(host,port,uuid,old_epoch,shards[i],0,&r);
+        if(rc==EFS_OK)rc=sess_cleanup_bounded(host,port,uuid,old_epoch,shards[i],1,&r);
+        if(rc!=EFS_OK) {
+            fprintf(stderr,"session cleanup incomplete: epoch=%u shard=%u rc=%d; resume cleanup-leases and cleanup-appends for that epoch/shard\n",old_epoch,shards[i],rc);
             goto out;
+        }
     }
     memset(payload, 0, sizeof(payload));
     sess_pack_hdr(payload, efs_raft_shard_group(ssh), 0, uuid);

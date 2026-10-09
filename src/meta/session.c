@@ -685,7 +685,7 @@ int efs_session_cleanup_apply(struct efs_kv *kv,uint32_t shard,
     }
     struct efs_kv_item items[2*EFS_SESSION_CLEANUP_MAX];
     uint8_t markers[EFS_SESSION_CLEANUP_MAX][EFS_KV_KEY_MAX];
-    uint8_t generations[EFS_SESSION_CLEANUP_MAX][8];
+    uint8_t identities[EFS_SESSION_CLEANUP_MAX][EFS_CLOSE_STEP_VALUE];
     uint32_t count=0,marked=0;
     for (uint32_t i=0;i<n;i++) {
         const uint8_t *key=keys[i].key;
@@ -693,6 +693,12 @@ int efs_session_cleanup_apply(struct efs_kv *kv,uint32_t shard,
         if (rc!=EFS_OK) return rc;
         items[count++]=(struct efs_kv_item){EFS_KV_DEL,key,keys[i].len,NULL,0};
         if (key[2]!=EFS_KV_KIND_LEASE) continue;
+        /* Exact replay of a deleted key must not recreate or replace a newer
+         * close obligation. Only an actually retained lease creates one. */
+        uint8_t old[18];uint32_t old_len=sizeof(old);
+        rc=efs_kv_get(kv,key,keys[i].len,old,&old_len);
+        if(rc==EFS_ERR_NOT_FOUND)continue;
+        if(rc!=EFS_OK)return rc;
         efs_ino_t ino=cleanup_rd64(key+3);uint64_t gen=cleanup_rd64(key+11);
         struct efs_meta_row row;
         rc=efs_meta_apply_get_inode(kv,ino,&row);
@@ -701,15 +707,17 @@ int efs_session_cleanup_apply(struct efs_kv *kv,uint32_t shard,
         uint32_t len=0;
         rc=efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,markers[marked],&len);
         if (rc!=EFS_OK) return rc;
-        markers[marked][2]=EFS_KV_KIND_CLOSE_CLEANUP;
+        markers[marked][2]=EFS_KV_KIND_CLOSE_STEP;
         int duplicate=0;
         for (uint32_t j=0;j<marked;j++)
             if (!memcmp(markers[j],markers[marked],len)) duplicate=1;
         if (duplicate) continue;
         rc=efs_txn_key_exclusive(kv,markers[marked],len);
         if (rc!=EFS_OK) return rc;
-        memcpy(generations[marked],key+11,8);
-        items[count++]=(struct efs_kv_item){EFS_KV_PUT,markers[marked],len,generations[marked],8};
+        memcpy(identities[marked],key+11,8);memcpy(identities[marked]+8,uuid,16);
+        be32(identities[marked]+24,epoch);
+        for(unsigned b=0;b<8;b++)identities[marked][28+b]=(uint8_t)(EFS_CLOSE_SESSION_SEQ>>(56-8*b));
+        items[count++]=(struct efs_kv_item){EFS_KV_PUT,markers[marked],len,identities[marked],EFS_CLOSE_STEP_VALUE};
         marked++;
     }
     return efs_kv_batch(kv,items,count);
@@ -910,6 +918,9 @@ static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     for(unsigned i=0;i<window.count;i++)if(window.replies[i].seq==q->id.seq)
         return memcmp(window.replies[i].digest,digest,32)?EFS_ERR_PROTO:window.replies[i].rc;
 
+    rc=efs_txn_key_exclusive(kv,wkey,wklen);
+    if(rc!=EFS_OK)return rc;
+
     /* At most 16 old closed rows are considered, and all retirement is atomic
      * with the new floor/effect. A later OPEN on the same key is preserved. */
     struct efs_kv_item items[EDGE_SLOTS+3];uint32_t count=0;
@@ -926,6 +937,8 @@ static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
         if(rc==EFS_OK)rc=edge_lease_load(kv,retired[count],rlen[count],&old);
         if(rc!=EFS_OK)return rc;
         if(!old.flags && old.seq==reply.seq) {
+            rc=efs_txn_key_exclusive(kv,retired[count],rlen[count]);
+            if(rc!=EFS_OK)return rc;
             items[count]=(struct efs_kv_item){EFS_KV_DEL,retired[count],rlen[count],NULL,0};
             count++;
         }
@@ -934,6 +947,7 @@ static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     if(window.count==EDGE_SLOTS)return EFS_ERR_BUSY;
     rc=efs_kv_key_lease(shard,ino,gen,q->id.client_uuid,q->id.session_epoch,lkey,&lklen);
     struct edge_lease lease;
+    if(rc==EFS_OK)rc=efs_txn_key_exclusive(kv,lkey,lklen);
     if(rc==EFS_OK)rc=edge_lease_load(kv,lkey,lklen,&lease);
     if(rc!=EFS_OK)return rc;
     int verdict=EFS_OK;
