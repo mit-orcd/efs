@@ -104,8 +104,45 @@ static void owner_fence(unsigned port, const char *hex, unsigned shard)
     owner_rpc(port, fence, sizeof(fence), EFS_OK);
     puts("prepared owner blocks wire fence ACK; resolution releases barrier PASS");
 }
+static void legacy_hold(unsigned port,efs_ino_t ino,uint64_t owner,unsigned flags,unsigned expected)
+{
+ struct efs_msg_inode_hold request={.export_id=1,.ino=ino,.flags=flags,.owner=owner};
+ for(unsigned attempt=0;attempt<120;attempt++) {
+  int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);if(fd<0){usleep(10000);continue;}
+  efs_set_recv_timeout(fd,2000);efs_set_send_timeout(fd,2000);
+  uint8_t type=0;void *body=NULL;uint32_t size=0;
+  int rc=efs_send_msg(fd,EFS_MSG_INODE_HOLD,&request,sizeof(request));
+  if(!rc)rc=efs_recv_msg(fd,&type,&body,&size);
+  close(fd);
+  if(rc){free(body);usleep(10000);continue;}
+  assert(type==EFS_MSG_INODE_HOLD_REPLY && size==sizeof(struct efs_msg_inode_reply));
+  struct efs_msg_inode_reply reply;memcpy(&reply,body,sizeof(reply));free(body);
+  if(reply.status==EFS_INODE_RPC_NOT_PRIMARY){usleep(10000);continue;}
+  assert(reply.status==expected);return;
+ }
+ assert(!"legacy hold guard deadline");
+}
+static void legacy_guard(unsigned port,efs_ino_t ino)
+{
+ uint8_t p[1024]={0},key[EFS_KV_KEY_MAX],value[EFS_CLOSE_STEP_VALUE]={0},txid[16]={191};
+ uint32_t shard=efs_kv_anchor_shard(efs_kv_inode_shard(ino)),kl=0,n=0;
+ assert(efs_kv_key_reap(shard,ino,key,&kl)==EFS_OK);key[2]=EFS_KV_KIND_CLOSE_STEP;
+ be(value,1,8);value[8]=191;be(value+24,1,4);be(value+28,1,8);
+ p[0]=efs_raft_shard_group(shard);p[1]=EFS_MD_CMD_PREPARE;p[2]=EFS_TXN_EXCL_VALUE;
+ memcpy(p+3,txid,16);p[19]=1;be(p+20,shard,4);be(p+24,kl,2);memcpy(p+26,key,kl);
+ assert(efs_txn_encode_excl_value(p+26+kl,sizeof(p)-26-kl,&n,NULL,EFS_TXN_ABSENT,EFS_TXN_PUT,value,sizeof(value))==EFS_OK);
+ owner_rpc(port,p,26+kl+n,EFS_OK);
+ legacy_hold(port,ino,UINT64_C(1910000001),1,EFS_INODE_RPC_BUSY);
+ uint8_t resolve[23]={0};resolve[0]=p[0];resolve[1]=EFS_MD_CMD_RESOLVE;
+ memcpy(resolve+2,txid,16);be(resolve+18,shard,4);resolve[22]=EFS_TXN_ABORT;
+ owner_rpc(port,resolve,sizeof(resolve),EFS_OK);
+ legacy_hold(port,ino,UINT64_C(1910000001),1,EFS_INODE_RPC_OK);
+ legacy_hold(port,ino,UINT64_C(1910000001),0,EFS_INODE_RPC_OK);
+ puts("legacy wire OPEN returns BUSY behind prepared close; later RESOLVE and retry acquire/release PASS");
+}
 int main(int argc,char **argv)
 {
+ if(argc==4&&!strcmp(argv[1],"--legacy-guard")){legacy_guard(atoi(argv[2]),strtoull(argv[3],NULL,10));return 0;}
  if(argc==5&&!strcmp(argv[1],"--owner-fence")){owner_fence(atoi(argv[2]),argv[3],atoi(argv[4]));return 0;}
  if(argc==3){
   unsigned port=atoi(argv[1]);struct efs_msg_inode_getattr q={0};q.export_id=1;q.ino=strtoull(argv[2],0,10);

@@ -475,6 +475,18 @@ int efs_lease_pending_close(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     return rc==EFS_ERR_NOT_FOUND?EFS_OK:rc;
 }
 
+/* Every OPEN protocol must respect the same prepared close and inode guards.
+ * Legacy peers cannot bypass a cleanup transaction merely by omitting identity. */
+static int lease_open_guard(struct efs_kv *kv,efs_ino_t ino)
+{
+    uint8_t key[EFS_KV_KEY_MAX];uint32_t len;
+    int rc=efs_kv_key_inode(efs_kv_inode_shard(ino),ino,key,&len);
+    if(rc==EFS_OK)rc=efs_txn_key_exclusive(kv,key,len);
+    if(rc!=EFS_OK)return rc;
+    rc=efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&len);
+    if(rc==EFS_OK) {key[2]=EFS_KV_KIND_CLOSE_STEP;rc=efs_txn_key_exclusive(kv,key,len);}
+    return rc;
+}
 int efs_lease_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch)
 {
@@ -491,9 +503,13 @@ int efs_lease_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     if (row.generation != gen)
         return EFS_ERR_STALE;
     shard = efs_kv_inode_shard(ino);
+    rc=lease_open_guard(kv,ino);
+    if(rc!=EFS_OK)return rc;
     rc = efs_kv_key_lease(shard, ino, gen, uuid, epoch, key, &klen);
     if (rc != EFS_OK)
         return rc;
+    rc=efs_txn_key_exclusive(kv,key,klen);
+    if(rc!=EFS_OK)return rc;
     uint8_t value[EFS_LEASE_PENDING_VALUE_LEN],flags;uint64_t token;
     rc=lease_value_read(kv,key,klen,value,&flags,&token);
     if(rc!=EFS_OK)return rc;
@@ -518,6 +534,8 @@ int efs_lease_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                           &klen);
     if (rc != EFS_OK)
         return rc;
+    rc=efs_txn_key_exclusive(kv,key,klen);
+    if(rc!=EFS_OK)return rc;
     uint8_t value[EFS_LEASE_PENDING_VALUE_LEN],flags;uint64_t token;
     rc=lease_value_read(kv,key,klen,value,&flags,&token);
     if(rc!=EFS_OK)return rc;
@@ -923,6 +941,8 @@ static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     if(verdict==EFS_OK && (flags&EFS_LEASE_EDGE_CLEAR_PENDING) &&
        (!(lease.flags&LEASE_PENDING) || lease.token!=token))verdict=EFS_ERR_STALE;
     if(verdict==EFS_OK && (flags&EFS_LEASE_EDGE_OPEN)) {
+        rc=lease_open_guard(kv,ino);
+        if(rc!=EFS_OK)return rc;
         struct efs_meta_row row;
         verdict=efs_meta_apply_get_inode(kv,ino,&row);
         if(verdict==EFS_OK && row.generation!=gen)verdict=EFS_ERR_STALE;

@@ -291,3 +291,16 @@ PUT tickets, production identity/retry retention and legacy lease mutation
 ownership guards still block full coordinator replacement/activation. Streaming
 scan CPU/time bounds remain a follow-up; fixed memory does not imply fixed scan
 latency.
+
+## Lease ownership guards before coordinator adoption
+
+Legacy OPEN now checks prepared inode/close keys, and legacy OPEN/CLOSE check
+prepared lease ownership. All guarded OPENs share the inode/close checks. Host
+legacy edge apply preserves BUSY without blocking later RESOLVE or acknowledging
+an unacquired lease; storage failures still retry. Old source fails the new
+prepared-close assertion. AMD actual legacy HOLD BUSY→RESOLVE→OPEN/CLOSE gate,
+full Linux, final units, deferred/session append64 cold gates, core212/212,
+peer64/64 and cold GC pass; installed service restored.
+[Evidence](../../results/measure/20261009-lease-ownership-guards/README.md).
+Production sequenced identities, ambiguous release retention and PUT lifecycle
+remain open; this only supplies the shared prepared-ownership prerequisite.

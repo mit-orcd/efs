@@ -2047,7 +2047,8 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     /* A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
     if (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
-        cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED) return rc;
+        cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
+        cmd[1] == EFS_MD_SESS_LEASE_CLOSE) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
         rc == EFS_ERR_STALE)
         rc = EFS_OK;
@@ -2417,7 +2418,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
         (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
-         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED) &&
+         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1] == EFS_MD_SESS_LEASE_OPEN ||
+         cmd[1] == EFS_MD_SESS_LEASE_CLOSE) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
         ret = EFS_OK;
     /* Storage failure must retry this entry on every replica, rather than

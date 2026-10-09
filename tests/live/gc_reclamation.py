@@ -520,6 +520,13 @@ try:
     if a.guarded_leases:
         helper=work/'lease-edges'
         run(['cc','-Wall','-Wextra','-I'+str(source/'include'),source/'tests/live/lease_edges.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
+        guard_path=mount/'legacy-close-guard';guard_path.write_bytes(b'guard')
+        guard_ino=guard_path.stat().st_ino
+        guarded_wire=run([helper,'--legacy-guard',str(a.port),str(guard_ino)],capture_output=True,text=True,timeout=45).stdout
+        assert 'later RESOLVE and retry' in guarded_wire,guarded_wire
+        (work/'legacy-close-guard.txt').write_text(guarded_wire)
+        guard_path.unlink();wait(lambda:not files(guard_ino),'legacy prepared-close guard physical reclaim',180)
+
         # Error constants are extracted from the build header, not host errno.
         header=(source/'include/efs/common.h').read_text()
         def error(name):

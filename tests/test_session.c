@@ -1040,8 +1040,26 @@ static void test_guarded_retire_cold(void)
     }
 }
 
+static void test_legacy_lease_prepared(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16];efs_ino_t ino=0;
+ CHECK(kv!=NULL,"legacy prepared KV");if(!kv)return;
+ guarded_session_init(kv,uuid);
+ CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"legacy-prepared",&ino)==EFS_OK,"legacy prepared file");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_OK,"legacy prepared initial owner");
+ uint32_t shard=efs_kv_inode_shard(ino),kl;uint8_t key[EFS_KV_KEY_MAX],one=1;
+ CHECK(efs_kv_key_lease(shard,ino,1,uuid,1,key,&kl)==EFS_OK,"legacy prepared key");
+ struct efs_txid tx={{188}};struct efs_txn_parts parts={.n=1,.shard={shard}};
+ CHECK(efs_txn_prepare_excl_value(kv,&tx,&parts,key,kl,&one,1,EFS_TXN_PUT,&one,1)==EFS_OK,"legacy lease prepared owner");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_BUSY,"legacy OPEN cannot bypass prepared lease");
+ CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_ERR_BUSY && efs_lease_any(kv,ino,1)==1,"legacy CLOSE preserves prepared lease");
+ CHECK(efs_txn_resolve(kv,&tx,shard,EFS_TXN_ABORT)==EFS_OK,"legacy prepared lease abort");
+ CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK,"legacy close after resolution");
+ efs_kv_mem_free(kv);
+}
 int main(void)
 {
+    test_legacy_lease_prepared();
     test_guarded_retire_cold();
     test_deferred_close_identity();
     test_bounded_session_cleanup();

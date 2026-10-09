@@ -1,0 +1,3 @@
+owner command=5 rc=0 expected=0
+owner command=7 rc=0 expected=0
+legacy wire OPEN returns BUSY behind prepared close; later RESOLVE and retry acquire/release PASS

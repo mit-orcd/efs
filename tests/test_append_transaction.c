@@ -257,6 +257,9 @@ static int close_prepare(void *ctx,const struct efs_txid *t,const struct efs_txn
  struct close_context *c=ctx;int rc=prepare(c->kv,t,parts,image);
  if(!rc && image->key[2]==EFS_KV_KIND_CLOSE_STEP) {
   assert(efs_lease_guarded_edge_deferred(c->kv,c->ino,c->gen,&c->reopen,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_BUSY);
+  uint8_t legacy[16]={119};
+  assert(efs_lease_open(c->kv,c->ino,c->gen,legacy,1)==EFS_ERR_BUSY);
+  assert(efs_lease_guarded_edge(c->kv,c->ino,c->gen,&c->reopen,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_BUSY);
   c->fenced++;
  }
  return rc;
