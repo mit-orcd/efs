@@ -1431,6 +1431,60 @@ static void test_noop_over_stale_tail(void)
  * carries the same entries again: 300 KiB entries × N proposes to a
  * silent follower must stay at one window per heartbeat interval, not
  * one per propose. Small entries keep the replacement behaviour. */
+/* W97: an older ACK must not forget the remainder of a newer window. */
+static void test_ae_partial_reply_preserves_window(void)
+{
+    struct net n = { .n = 3 };
+    struct efs_raft_store *st[3];
+    struct app app[3] = {{0}};
+    struct efs_raft_cfg cfg = {0};
+    uint8_t cmd = 'w';
+    uint64_t idx = 0, first = 0, last, term;
+    int lid, fol, before;
+    cfg.n=3; cfg.send=send_now; cfg.net=&n; cfg.apply=apply_cmd;
+    cfg.heartbeat_ticks=2;
+    for (int i=0;i<3;i++) {
+        st[i]=efs_raft_mem_create(); cfg.id=i; cfg.store=st[i];
+        cfg.store_ctx=st[i]; cfg.app=&app[i]; cfg.election_ticks=8+i*8;
+        n.r[i]=efs_raft_new(&cfg);
+    }
+    CHECK(elect(&n,40)==1,"elect partial reply fixture");
+    lid=leader_id(&n); fol=(lid+1)%3;
+    efs_raft_arm_durable(n.r[lid]); n.hold_ae_replies=1;
+    for (int i=0;i<2;i++) {
+        CHECK(efs_raft_propose_local(n.r[lid],&cmd,1,&idx)==EFS_OK,"local append");
+        if (!i) first=idx;
+        CHECK(efs_raft_submit(n.r[lid],idx)==EFS_OK,"submit");
+        CHECK(efs_raft_durable(n.r[lid],idx)==EFS_OK,"durable");
+        CHECK(efs_raft_flush(n.r[lid])==EFS_OK,"flush extending window");
+    }
+    CHECK(st[lid]->last(st[lid],&last,&term)==EFS_OK,"leader tail");
+    struct efs_raft_msg reply={0};
+    reply.type=EFS_RAFT_MSG_AE_REP; reply.from=fol; reply.to=lid;
+    reply.term=term; reply.success=1; reply.match_index=first;
+    before=n.batches[fol];
+    CHECK(efs_raft_recv(n.r[lid],&reply)==EFS_OK,"older partial success");
+    CHECK(n.batches[fol]==before,"partial reply does not resend outstanding suffix");
+    CHECK(efs_raft_recv(n.r[lid],&reply)==EFS_OK,"duplicate partial success");
+    CHECK(n.batches[fol]==before,"duplicate partial reply does not resend suffix");
+    for(int i=0;i<2;i++) CHECK(efs_raft_tick(n.r[lid])==EFS_OK,"age lost newer reply");
+    CHECK(n.batches[fol]>before,"timeout retries retained suffix");
+    before=n.batches[fol];
+    reply.success=0; reply.match_index=first;
+    CHECK(efs_raft_recv(n.r[lid],&reply)==EFS_OK,"rejection clears retained window");
+    CHECK(n.batches[fol]>before,"rejection immediately retries matching suffix");
+    reply.success=1;
+    n.hold_ae_replies=0;
+    CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK,"read while retained batch outstanding");
+    CHECK(efs_raft_read_ready(n.r[lid]),"fresh read quorum progresses");
+    reply.match_index=idx;
+    CHECK(efs_raft_recv(n.r[lid],&reply)==EFS_OK,"covering reply releases window");
+    CHECK(efs_raft_commit(n.r[lid])>=idx,"covering reply commits durable suffix");
+    CHECK(efs_raft_propose(n.r[lid],&cmd,1,&idx)==EFS_OK,"new proposals still progress");
+    CHECK(efs_raft_applied(n.r[lid])>=idx,"new proposal applied");
+    for(int i=0;i<3;i++){efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);}
+}
+
 static void test_ae_full_window_not_resent_per_propose(void)
 {
     struct net n = { .n = 3 };
@@ -1731,6 +1785,7 @@ int main(void)
     test_recv_batch();
     test_election_i1();
     test_ae_full_window_not_resent_per_propose();
+    test_ae_partial_reply_preserves_window();
     test_step_down_no_campaign();
     test_replicate_and_readindex();
     test_readindex_outstanding_batch();
