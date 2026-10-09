@@ -1,0 +1,18 @@
+2026-10-09T21:35:49.803Z query-publish: generation=14 g0=1810 g2=1782 rebuilt=16 refolded=895 edge_reused=0 bytes=1823752 pin_ms=0 build_ms=134 root_rc=0 files=877 dirs=17 logical=28032
+2026-10-09T21:35:50.042Z query-publish: generation=15 g0=1944 g2=1920 rebuilt=16 refolded=963 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=137 root_rc=0 files=945 dirs=17 logical=30176
+2026-10-09T21:35:50.286Z query-publish: generation=16 g0=2086 g2=2061 rebuilt=16 refolded=1034 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=142 root_rc=0 files=1016 dirs=17 logical=32416
+2026-10-09T21:35:50.559Z query-publish: generation=17 g0=2227 g2=2199 rebuilt=16 refolded=1104 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=171 root_rc=0 files=1086 dirs=17 logical=34656
+2026-10-09T21:35:50.816Z query-publish: generation=18 g0=2364 g2=2341 rebuilt=16 refolded=1173 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=156 root_rc=0 files=1155 dirs=17 logical=36896
+2026-10-09T21:35:51.071Z query-publish: generation=19 g0=2488 g2=2461 rebuilt=16 refolded=1234 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=154 root_rc=0 files=1216 dirs=17 logical=38848
+2026-10-09T21:35:51.351Z query-publish: generation=20 g0=2599 g2=2583 rebuilt=16 refolded=1292 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=177 root_rc=0 files=1274 dirs=17 logical=40736
+2026-10-09T21:35:51.637Z query-publish: generation=21 g0=2758 g2=2734 rebuilt=16 refolded=1371 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=185 root_rc=0 files=1353 dirs=17 logical=43168
+2026-10-09T21:35:51.909Z query-publish: generation=22 g0=2930 g2=2901 rebuilt=16 refolded=1455 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=169 root_rc=0 files=1437 dirs=17 logical=45888
+2026-10-09T21:35:52.152Z query-publish: generation=23 g0=3058 g2=3031 rebuilt=16 refolded=1518 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=140 root_rc=0 files=1500 dirs=17 logical=48000
+2026-10-09T21:35:55.808Z query-publish: generation=24 g0=3880 g2=3564 rebuilt=16 refolded=1443 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=146 root_rc=0 files=1425 dirs=17 logical=45855
+2026-10-09T21:35:58.004Z query-publish: generation=25 g0=3952 g2=3710 rebuilt=1 refolded=1443 edge_reused=0 bytes=1823752 pin_ms=2 build_ms=93 root_rc=0 files=1425 dirs=17 logical=45855
+2026-10-09T21:36:11.218Z efsd 47e7b886 (branch devel-find-stats, built 2026-10-09T21:32:32Z on xefs1), build=47e7b886: node 1 listening on 192.168.122.111:17432, storage=/data1 (1 paths, stripe=none), used=94371840, quota=107374182400, direct_io=on, writers=1 shared
+2026-10-09T21:36:21.359Z query-restore: rc=-14 backend=disk
+2026-10-09T21:36:21.493Z query-publish: generation=1 g0=4026 g2=3769 rebuilt=4096 refolded=1443 edge_reused=0 bytes=1823752 pin_ms=1 build_ms=137 root_rc=0 files=1425 dirs=17 logical=45855
+5752	/data1/mdraft/query-cache
+USER         PID   RSS COMMAND
+efs      2797046 28824 /tmp/efs/efsd --node-id 1 --addr 192.168.122.111 --port 17432 --storage /data1 --quota 100G --direct-io

@@ -131,6 +131,11 @@ allocation budget; it is not a process RSS limit.
 `EFS_QUERY_DISK_RESERVE_MIB` defaults to 64 and guards cache writes against low
 filesystem free space; it does not reserve capacity against other writers or
 provide a cache quota.
+`EFS_QUERY_DISK_MAX_MIB` defaults to 16384 (range 1..16777216) and caps
+conservatively accounted logical bytes per generation. A candidate exceeding
+this limit is refused with QUOTA. It includes hard-linked partition bytes and
+sort overlap, but does not cap the total of retained generations or physical
+filesystem allocation overhead.
 
 Check server `query-restore`, `query-refresh` and `query-publish` logs if commands
 fail. Stale/corrupt checkpoints are rebuilt after authority checks. A misplaced

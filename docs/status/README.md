@@ -32,9 +32,10 @@ recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
 [W92 local disk backend](query-disk-backend-20261009.md) implements persistent
 partition catalogs, bounded builder scratch, immutable snapshots and validated
-checkpoint recovery. Initial functional gates pass; normal Xorinox query
-publication refuses a retained wrong-shard directory entry. Incremental derived
-stats, disk quotas and large-scale acceptance remain open.
+checkpoint recovery. Functional gates and clean Xorinox mutation queries pass after the authorized
+wipe; the earlier wrong-shard artifact remains historical evidence. Per-generation
+logical disk budgeting is implemented. Incremental derived stats, aggregate cache
+quotas and large-scale acceptance remain open.
 
 ## Distributed metadata scaling discussion
 

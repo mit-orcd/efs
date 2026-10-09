@@ -41,7 +41,7 @@ struct efs_query_disk {
     struct disk_part part[SHARDS];
     struct fd_slot fds[FD_CACHE];
     pthread_mutex_t mutex;
-    uint64_t tick,count,bytes,limit;
+    uint64_t tick,count,bytes,limit,disk_bytes,disk_limit;
     uint32_t rebuilt,refolded;
     uint64_t watermark[4];
     struct efs_kv kv;
@@ -51,14 +51,20 @@ static int cancelled(const struct efs_query_disk *d) { return d->stop && d->stop
 static int kind_at(uint8_t kind) { for(int i=0;i<KINDS;i++)if(kinds[i]==kind)return i;return -1; }
 static pthread_once_t reserve_once=PTHREAD_ONCE_INIT;
 static uint64_t reserve_bytes=UINT64_C(64)<<20;
+static uint64_t generation_limit=UINT64_C(16384)<<20;
 static void configure_reserve(void)
 {
     const char *text=getenv("EFS_QUERY_DISK_RESERVE_MIB");
-    if(!text)return;
-    char *end=NULL;errno=0;unsigned long long mib=strtoull(text,&end,10);
-    if(errno || !end || *end || mib<1 || mib>1048576)
+    char *end=NULL;errno=0;unsigned long long mib=text?strtoull(text,&end,10):64;
+    if(text && (errno || !end || *end || mib<1 || mib>1048576))
         fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_RESERVE_MIB; using 64\n");
     else reserve_bytes=(uint64_t)mib<<20;
+    text=getenv("EFS_QUERY_DISK_MAX_MIB");
+    if(!text)return;
+    errno=0;end=NULL;mib=strtoull(text,&end,10);
+    if(errno || !end || *end || mib<1 || mib>16777216)
+        fprintf(stderr,"query-config: invalid EFS_QUERY_DISK_MAX_MIB; using 16384\n");
+    else generation_limit=(uint64_t)mib<<20;
 }
 /* A free-space guard, not a reservation against concurrent non-cache writers.
  * Check every 256 small writes; ENOSPC still propagates from every syscall. */
@@ -72,6 +78,20 @@ static int disk_reserve(int fd)
     uint64_t block=fs.f_frsize;
     if(block && fs.f_bavail<reserve_bytes/block+(reserve_bytes%block!=0))return EFS_ERR_IO;
     return EFS_OK;
+}
+/* Conservative logical storage admission: raw/index bytes, two name-sort
+ * copies, derived inode rows and a queue entry per inode. Shared hard links
+ * are charged to each generation. Filesystem allocation overhead and other
+ * retained generations remain separate from this per-generation limit. */
+static int charge_disk(struct efs_query_disk *d,uint64_t bytes)
+{
+    if(bytes>d->disk_limit || d->disk_bytes>d->disk_limit-bytes)return EFS_ERR_QUOTA;
+    d->disk_bytes+=bytes;return EFS_OK;
+}
+static uint64_t derived_charge(uint64_t inodes,uint64_t names)
+{
+    return inodes*(sizeof(struct disk_node)+sizeof(efs_ino_t))+
+           names*(2*sizeof(struct efs_name_entry));
 }
 static int io_at(int fd,void *buf,size_t n,uint64_t off,int write)
 {
@@ -245,8 +265,12 @@ struct writer { struct efs_query_disk *d;uint32_t shard;int raw,index;uint64_t o
 static int save(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *val,uint32_t vl)
 {
     struct writer *w=ctx;if(cancelled(w->d))return EFS_ERR_BUSY;
+    if(kl<3)return EFS_ERR_PROTO;
     if(kl>EFS_KV_KEY_MAX || vl>VALUE_MAX || w->count==UINT32_MAX)return EFS_ERR_OVERFLOW;
     if(w->offset>(uint64_t)INT64_MAX-kl-vl)return EFS_ERR_OVERFLOW;
+    uint64_t extra=(uint64_t)kl+vl+sizeof(struct slot)+
+        derived_charge(key[2]==EFS_KV_KIND_INODE,key[2]==EFS_KV_KIND_DENTRY);
+    int admitted=charge_disk(w->d,extra);if(admitted)return admitted;
     if(w->raw<0)w->raw=make_file(w->d,w->shard,'r');
     if(w->index<0)w->index=make_file(w->d,w->shard,'i');
     if(w->raw<0 || w->index<0)return EFS_ERR_IO;
@@ -507,6 +531,10 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
     if(max_bytes<working)return EFS_ERR_NOMEM;
     if(mkdir(root,0700) && errno!=EEXIST)return EFS_ERR_IO;
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return EFS_ERR_NOMEM;
+    pthread_once(&reserve_once,configure_reserve);
+    d->disk_limit=generation_limit;
+    d->disk_bytes=sizeof(d->part)+10*sizeof(uint64_t);
+    if(d->disk_bytes>d->disk_limit){free(d);return EFS_ERR_QUOTA;}
     d->bytes=working;d->limit=max_bytes;d->stop=stop;d->stop_ctx=ctx;
     d->kv=(struct efs_kv){.ops=&raw_ops,.ctx=d};pthread_mutex_init(&d->mutex,NULL);
     for(int i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
@@ -518,6 +546,14 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         d->part[shard].revision=revisions[shard];
         if(old && old->part[shard].revision==revisions[shard]) {
             d->part[shard]=old->part[shard];
+            if(old->part[shard].count) {
+                char raw[EFS_MAX_PATH];struct stat st;
+                rc=filename(old,shard,'r',raw,sizeof(raw));
+                if(!rc && stat(raw,&st))rc=EFS_ERR_IO;
+                if(!rc)rc=charge_disk(d,(uint64_t)st.st_size+
+                    old->part[shard].count*sizeof(struct slot)+
+                    derived_charge(old->part[shard].inodes,old->part[shard].names));
+            }
             const char files[]={'r','i','n'};
             for(unsigned f=0;f<sizeof(files) && !rc;f++) {
                 if(!old->part[shard].count || (files[f]=='n' && !old->part[shard].names))continue;
@@ -739,12 +775,15 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
     base[length]=0;if(strncmp(base,"view-",5) || strchr(base,'/'))return EFS_ERR_PROTO;
     struct efs_query_disk *d=calloc(1,sizeof(*d));if(!d)return EFS_ERR_NOMEM;
     pthread_mutex_init(&d->mutex,NULL);for(int i=0;i<FD_CACHE;i++)d->fds[i].fd=-1;
+    pthread_once(&reserve_once,configure_reserve);
+    d->disk_limit=generation_limit;d->disk_bytes=sizeof(d->part)+10*sizeof(uint64_t);
     d->bytes=bytes;d->limit=max_bytes;d->kv=(struct efs_kv){.ops=&raw_ops,.ctx=d};
     n=snprintf(d->path,sizeof(d->path),"%s/%s",root,base);
     if(n<0 || (size_t)n>=sizeof(d->path)){efs_query_disk_free(d);return EFS_ERR_NAMETOOLONG;}
     char manifest[EFS_MAX_PATH];n=snprintf(manifest,sizeof(manifest),"%s/manifest",d->path);
     int fd=n>0 && (size_t)n<sizeof(manifest)?open(manifest,O_RDONLY|O_CLOEXEC):-1;
     uint64_t header[10];int rc=fd<0?EFS_ERR_IO:io_at(fd,header,sizeof(header),0,0);
+    if(!rc && d->disk_bytes>d->disk_limit)rc=EFS_ERR_QUOTA;
     if(!rc && (header[0]!=UINT64_C(0x454653514449534b) || header[1]!=2 || header[2]!=sizeof(struct slot) ||
        header[3]!=sizeof(struct disk_node) || header[5]!=SHARDS))rc=EFS_ERR_PROTO;
     if(!rc && memcmp(header+6,watermark,4*sizeof(uint64_t)))rc=EFS_ERR_STALE;
@@ -764,6 +803,8 @@ int efs_query_disk_restore(const char *root,const uint64_t watermark[4],uint64_t
             if(fd<0 || fstat(fd,&st))rc=EFS_ERR_IO;
             uint64_t expected=i==1?p->count*sizeof(struct slot):i==2?p->names*sizeof(struct efs_name_entry):i==3?p->inodes*sizeof(struct disk_node):0;
             if(!rc && expected && (uint64_t)st.st_size!=expected)rc=EFS_ERR_PROTO;
+            if(!rc && i==0)rc=charge_disk(d,(uint64_t)st.st_size+p->count*sizeof(struct slot)+
+                derived_charge(p->inodes,p->names));
             if(!rc)rc=file_digest(fd,digest);
             if(!rc && memcmp(digest,p->digest[i],sizeof(digest)))rc=EFS_ERR_IO;
             if(fd>=0)close(fd);

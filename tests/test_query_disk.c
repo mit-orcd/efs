@@ -52,6 +52,11 @@ int main(void)
     CHECK(!efs_query_catalog_build(source,NULL,32<<20,NULL,NULL,&memory));
     if(!memory)return 1;
     int rc=efs_query_catalog_build_disk(root,source,NULL,4<<20,NULL,NULL,&disk);
+    if(getenv("EFS_QUERY_TEST_QUOTA")) {
+        CHECK(rc==EFS_ERR_QUOTA && !disk);
+        efs_query_catalog_free(memory);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
+        printf("query disk: generation quota %s\n",failures?"FAIL":"PASS");return failures?1:0;
+    }
     if(getenv("EFS_QUERY_TEST_NOSPACE")) {
         CHECK(rc==EFS_ERR_IO && !disk);
         efs_query_catalog_free(memory);efs_kv_lsm_snapshot_release(source);efs_kv_lsm_close(kv);
