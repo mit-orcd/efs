@@ -1,0 +1,291 @@
+Evidence directory: /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=10328055981037209
+client serving PASS
+peer mounted PASS
+Unmounting /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/peer
+Retiring drained efs-fuse PID 287091 for /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/peer
+Unmounted /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/peer
+two-peer adjacent writes and repeated folds complete
+fragment files present PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+span-only truncate then physical reclaim PASS
+fragment files present PASS
+GC runs while hardlink remains PASS
+hardlink protects stored fragments PASS
+GC runs while unlinked inode is open PASS
+open unlinked inode retains readable/writable fragments PASS
+last close physically reclaims fragments PASS
+GC passes, removal bytes and quota reflect last-close deletion PASS
+closed-unlinked inode allocated bytes: 15249408 -> 0 PASS
+fragment files present PASS
+valid late-PUT control accepted on live inode by every member PASS
+disk failure visible PASS
+failed fragment remains on disk pending retry PASS
+Unmounting /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/mnt
+Retiring drained efs-fuse PID 287071 for /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/mnt
+Unmounted /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+restart without client reclaims pending fragments PASS
+leader reap and fragment queues drain PASS
+client serving PASS
+cold two-peer fold and live-base reads after GC PASS
+fold fragments physically reclaimed PASS
+fragment files present PASS
+offline fourth member retains reap ledger PASS
+Unmounting /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/mnt
+Retiring drained efs-fuse PID 289407 for /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/mnt
+Unmounted /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+rejoined member completes reclamation PASS
+queues drain after member rejoins PASS
+client serving PASS
+sentinel physically reclaimed PASS
+all fixture GC records retired PASS
+parallel 205 tests jobs=4 (serial 7 after)
+pass basic_write_read                
+pass basic_empty_file                
+pass basic_append                    
+pass basic_seek_read                 
+pass basic_read_past_eof             
+pass basic_oappend_flag              
+pass basic_overwrite_middle          
+pass basic_pread_pwrite              
+pass basic_o_trunc                   
+pass basic_dd_rw                     
+pass basic_dup_write                 
+pass basic_chunk_boundary            
+pass basic_terminal_cp_cat           
+pass fsync_reopen_visible            
+pass basic_seek_end_then_write       
+pass basic_rdwr_no_reopen            
+pass basic_seek_cur_past_eof_write   
+pass basic_ftruncate_vs_truncate     
+pass trunc_grow_sparse               
+pass trunc_shrink                    
+pass trunc_to_zero                   
+pass sparse_st_blocks                
+pass sparse_write_huge_offset        
+pass dir_mkdir_rmdir                 
+pass dir_mkdir_p_terminal            
+pass dir_rename_file                 
+pass dir_rename_over_existing        
+pass dir_rename_file_over_dir        
+pass dir_rename_dir_with_contents    
+pass dir_move_into_subdir            
+pass dir_rename_dir_over_file        
+pass dir_rename_dir_over_nonempty    
+pass root_rename_dir_old_name_gone   
+pass dir_rename_noreplace            
+pass dir_rename_symlink              
+pass root_rename_file_old_name_gone  
+pass root_rename_from_subdir         
+pass root_rename_into_subdir         
+pass root_mkdir_rmdir_immediate      
+pass root_create_unlink_immediate    
+pass dir_times_create                
+pass dir_times_unlink                
+pass dir_times_mkdir_rmdir           
+pass dir_readdir_listing             
+pass dir_times_link                  
+pass dir_times_write_no_bump         
+pass dir_dot_entries                 
+pass dir_hidden_files                
+pass dir_chmod_and_create_denied     
+pass dir_times_rename                
+pass dir_nlink                       
+pass symlink_create_readlink         
+pass symlink_to_dir                  
+pass symlink_dangling                
+pass symlink_chain                   
+pass symlink_absolute                
+pass hardlink_basic                  
+pass hardlink_shared_data            
+pass hardlink_unlink_one             
+pass dir_readdir_while_unlink        
+pass hardlink_terminal_ln            
+pass hardlink_rename_one_name        
+pass symlink_unlink_keeps_target     
+pass dir_deep_nesting                
+pass symlink_chmod_follows           
+pass attr_chmod                      
+pass symlink_relative_after_parent_rename
+pass attr_chown_self                 
+pass attr_utimens                    
+pass attr_utimens_ns                 
+pass attr_touch_terminal             
+pass attr_access                     
+pass attr_stat_fields                
+pass attr_ctime_after_chmod          
+pass perm_file_000_denied            
+pass perm_file_write_only            
+pass perm_file_read_only_ops         
+pass perm_owner_bits_not_other       
+pass perm_owner_bits_not_group       
+pass perm_owner_chmod_restore        
+pass perm_create_mode_000_reopen     
+pass perm_open_fd_survives_chmod     
+pass perm_owner_utime_readonly       
+pass perm_fchmod                     
+pass perm_ftruncate_after_chmod      
+pass perm_exec_denied_no_x           
+pass perm_access_rwx                 
+pass perm_exec_allowed_with_x        
+pass perm_sticky_owner_can_unlink    
+pass perm_suid_sgid_sticky_stored    
+pass perm_chown_other_uid_denied     
+pass perm_chown_other_gid_denied     
+pass perm_dir_no_r_list              
+pass perm_dir_wx_no_r                
+pass perm_dir_readonly_mutate        
+pass perm_unlink_mode_000_file       
+pass perm_dir_000_restore            
+pass perm_nested_parent_no_x         
+pass perm_symlink_target_denied      
+pass perm_rename_into_readonly_dir   
+pass perm_hardlink_shares_mode       
+pass names_too_long_component        
+pass names_dash_prefix_terminal      
+pass names_reserved_dots             
+pass names_near_path_max             
+pass names_near_path_max_dir         
+pass names_path_too_long             
+pass names_unicode_nfc_nfd_coexist   
+pass names_control_and_high_bytes    
+pass names_crazy_roundtrip           
+pass content_random_roundtrip        
+FAIL dir_many_files                   timeout after 75s
+pass content_all_byte_values         
+pass content_nul_and_control         
+pass content_whitespace_and_line_endings
+pass content_random_overwrite_append 
+pass err_mkdir_existing              
+pass content_random_large_multichunk 
+pass err_rmdir_a_file                
+pass err_open_dir_for_write          
+pass err_read_from_dir               
+pass dir_deep_nesting_beyond_64      
+pass err_rmdir_nonempty              
+pass err_create_excl_existing        
+pass err_hardlink_to_dir             
+pass err_unlink_nonexistent          
+pass err_rename_dir_into_itself      
+pass err_hardlink_nonexistent_src    
+pass err_write_readonly_file         
+pass err_stat_nonexistent            
+pass err_create_under_a_file         
+pass err_unlink_a_directory          
+pass err_rmdir_dot_dotdot            
+pass fsync_write                     
+pass fdatasync_write                 
+pass unlink_open_file                
+pass fsync_dir                       
+pass err_symlink_loop                
+pass flock_basic                     
+pass fcntl_lock_basic                
+FAIL names_crazy_dirs                 timeout after 30s
+pass flock_shared_then_exclusive     
+pass statfs_sane                     
+pass flock_two_proc_exclusive        
+pass fcntl_byte_range_lock           
+pass concurrent_writes_disjoint      
+FAIL concurrent_creates_same_dir      timeout after 30s
+FAIL concurrent_appends               timeout after 30s
+FAIL concurrent_appends_two_proc      timeout after 30s; worker group still alive
+FAIL concurrent_create_unlink_two_proc worker killed by signal 15
+FAIL concurrent_write_and_readdir     worker killed by signal 15
+pass opt_fallocate                   
+NOTRUN truncate_big_ftruncate_honest    incomplete: timed-out worker still alive
+NOTRUN truncate_big_o_trunc_honest      incomplete: timed-out worker still alive
+NOTRUN dir_mkdir_umask                  incomplete: timed-out worker still alive
+NOTRUN attr_umask_respected             incomplete: timed-out worker still alive
+NOTRUN perm_dir_no_x_search             incomplete: timed-out worker still alive
+NOTRUN err_chdir_into_file              incomplete: timed-out worker still alive
+NOTRUN opt_xattr                        incomplete: timed-out worker still alive
+NOTRUN opt_seek_hole_data               incomplete: timed-out worker still alive
+NOTRUN opt_copy_file_range              incomplete: timed-out worker still alive
+NOTRUN opt_openat                       incomplete: timed-out worker still alive
+NOTRUN flock_second_fd_exclusive        incomplete: timed-out worker still alive
+NOTRUN direct_aligned_rdwr              incomplete: timed-out worker still alive
+NOTRUN direct_unaligned_einval          incomplete: timed-out worker still alive
+NOTRUN direct_rmw_4k_in_chunk           incomplete: timed-out worker still alive
+NOTRUN packed_then_grow_past_chunk      incomplete: timed-out worker still alive
+NOTRUN writev_readv_chunk_straddle      incomplete: timed-out worker still alive
+NOTRUN zero_length_write                incomplete: timed-out worker still alive
+NOTRUN fcntl_setfl_oappend              incomplete: timed-out worker still alive
+NOTRUN two_fds_size_mtime               incomplete: timed-out worker still alive
+NOTRUN trunc_open_other_fd              incomplete: timed-out worker still alive
+NOTRUN link_across_dirs                 incomplete: timed-out worker still alive
+NOTRUN last_link_unlink_other_dir       incomplete: timed-out worker still alive
+NOTRUN nlink_after_unlink_open          incomplete: timed-out worker still alive
+NOTRUN o_nofollow                       incomplete: timed-out worker still alive
+NOTRUN o_directory                      incomplete: timed-out worker still alive
+NOTRUN ctime_on_link_rename             incomplete: timed-out worker still alive
+NOTRUN st_ino_unique_hardlink_same      incomplete: timed-out worker still alive
+NOTRUN create_excl_two_proc             incomplete: timed-out worker still alive
+NOTRUN concurrent_overlap_write         incomplete: timed-out worker still alive
+NOTRUN fstat_size_after_write           incomplete: timed-out worker still alive
+NOTRUN trunc_shrink_same_fd             incomplete: timed-out worker still alive
+NOTRUN unlink_open_then_recreate        incomplete: timed-out worker still alive
+NOTRUN rename_to_self                   incomplete: timed-out worker still alive
+NOTRUN rename_empty_over_empty_dir      incomplete: timed-out worker still alive
+NOTRUN lstat_symlink_size               incomplete: timed-out worker still alive
+NOTRUN chmod_preserves_mtime            incomplete: timed-out worker still alive
+NOTRUN unlink_recreate_new_ino          incomplete: timed-out worker still alive
+NOTRUN case_sensitive_names             incomplete: timed-out worker still alive
+NOTRUN o_append_pwrite_absolute         incomplete: timed-out worker still alive
+NOTRUN two_fds_independent_offset       incomplete: timed-out worker still alive
+NOTRUN dir_nlink_after_rmdir_child      incomplete: timed-out worker still alive
+NOTRUN access_f_ok_after_unlink         incomplete: timed-out worker still alive
+NOTRUN write_hole_pread_zeros           incomplete: timed-out worker still alive
+NOTRUN hardlink_three_names             incomplete: timed-out worker still alive
+NOTRUN rename_file_over_symlink         incomplete: timed-out worker still alive
+NOTRUN flock_unlock_on_close            incomplete: timed-out worker still alive
+NOTRUN mkdirat_unlinkat                 incomplete: timed-out worker still alive
+NOTRUN trailing_slash_on_file           incomplete: timed-out worker still alive
+NOTRUN creat_existing_dir_eisdir        incomplete: timed-out worker still alive
+NOTRUN fsync_then_fstat_size            incomplete: timed-out worker still alive
+NOTRUN chdir_dotdot_after_mkdir         incomplete: timed-out worker still alive
+NOTRUN mtime_bumps_on_write             incomplete: timed-out worker still alive
+NOTRUN dir_times_bump_on_child_mutation incomplete: timed-out worker still alive
+NOTRUN rename_readdir_lookup_consistent incomplete: timed-out worker still alive
+NOTRUN rename_dir_same_parent           incomplete: timed-out worker still alive
+NOTRUN link_of_symlink                  incomplete: timed-out worker still alive
+NOTRUN concurrent_extend_high_then_low  incomplete: timed-out worker still alive
+NOTRUN mtime_monotonic_many_writes      incomplete: timed-out worker still alive
+NOTRUN trunc_zero_then_high_pwrite      incomplete: timed-out worker still alive
+NOTRUN write_beyond_eof_then_seek_end   incomplete: timed-out worker still alive
+left test tree (a timed-out worker is still alive): /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/mnt/posix-efs1-u6cdgf2h
+============================================================
+POSIX suite: 145/212 pass, 7 fail, 0 skip, 60 notrun  (135.0s)
+wrote /data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/posix.tsv
+Traceback (most recent call last):
+  File "/data1/efs-w66-src-20261008/tests/live/gc_reclamation.py", line 1832, in <module>
+    run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs-w66-src-20261008/tests/live/gc_reclamation.py", line 185, in run
+    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.13/subprocess.py", line 579, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['python3', '/data1/efs-w66-src-20261008/tests/posix/posix_suite.py', '/data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/mnt', '--jobs', '4', '--timeout-s', '30', '--results', '/data1/efs-w66-fixtures/gc-buffered-lf1vrn_i/posix.tsv']' returned non-zero exit status 1.

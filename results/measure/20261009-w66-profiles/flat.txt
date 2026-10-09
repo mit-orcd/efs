@@ -1,0 +1,24 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 8  of event 'cpu-clock'
+# Event count (approx.): 80808080
+#
+# Overhead  Shared Object         Symbol                              
+# ........  ....................  ....................................
+#
+    12.50%  [kernel.kallsyms]     [k] __memcg_slab_free_hook
+    12.50%  [kernel.kallsyms]     [k] __wake_up_sync_key
+    12.50%  [kernel.kallsyms]     [k] _raw_spin_unlock_irq
+    12.50%  [kernel.kallsyms]     [k] validate_xmit_skb
+    12.50%  [vdso]                [.] 0x00000000000004fc
+    12.50%  libpython3.13.so.1.0  [.] PyObject_Vectorcall
+    12.50%  libpython3.13.so.1.0  [.] _PyObject_GenericGetAttrWithDict
+    12.50%  libpython3.13.so.1.0  [.] 0x00000000000cea3c
+
+
+#
+# (Tip: For memory address profiling, try: perf mem record / perf mem report)
+#
