@@ -103,7 +103,9 @@ static void writer_state_lifetime(void)
     assert(efs_writer_state_report(state,1000,1,EFS_OK)==EFS_ERR_INVAL);
     assert(state->has_publication);
     *state=intact;
-    assert(efs_writer_ranges_admit(&state->ranges, &view, 0, 1) == EFS_OK);
+    uint8_t *new_body=calloc(1,EFS_CHUNK_SIZE);assert(new_body);uint8_t rewrite=1;
+    assert(efs_writer_state_write(&state,&view,new_body,EFS_CHUNK_SIZE,0,&rewrite,1)==EFS_OK);
+    free(new_body);
     assert(efs_writer_state_report(state, 1000, 1, EFS_OK) == EFS_ERR_STALE);
     assert(!state->has_publication && state->ranges.bytes.count);
     assert(efs_writer_state_free(state) == EFS_ERR_BUSY);
@@ -176,10 +178,15 @@ static void writer_body_snapshot(void)
     assert(efs_writer_state_owned(state) && !state->has_publication);
     assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&plan,snapshot)==EFS_OK);
     for(unsigned i=0;i<sizeof(snapshot);++i)
-        assert(snapshot[i]==(i<100?'A':i>=200 && i<250?'B':0));
+        assert(snapshot[i]==(i>=200 && i<250?'B':0));
     uint8_t peer[EFS_MIN_CHUNK_SIZE];memset(peer,'P',sizeof(peer));
     assert(efs_dirty_ranges_overlay(&plan.surviving,peer,sizeof(peer),snapshot)==EFS_OK);
-    assert(peer[0]=='A' && peer[100]=='P' && peer[200]=='B' && peer[250]=='P');
+    assert(peer[0]=='P' && peer[100]=='P' && peer[200]=='B' && peer[250]=='P');
+    /* A snapshot raced by an admission cannot bind after the rewrite. */
+    struct efs_writer_plan old_plan=plan;
+    assert(efs_writer_state_write(&state,&view,body,sizeof(body),300,incoming,1)==EFS_OK);
+    assert(efs_writer_state_put(state,&old_plan,401,2)==EFS_ERR_STALE && !state->has_publication);
+    assert(efs_writer_state_snapshot(state,&view,base,body,sizeof(body),&plan,snapshot)==EFS_OK);
     assert(efs_writer_state_put(state,&plan,401,2)==EFS_OK);
     assert(efs_writer_state_report(state,401,2,EFS_OK)==EFS_OK);
     assert(efs_writer_state_free(state)==EFS_OK && g_metadata==before);free(base);
