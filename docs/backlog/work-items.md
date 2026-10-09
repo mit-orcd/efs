@@ -3586,6 +3586,8 @@ the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
 
+<a id="w92"></a>
+
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
 **Oct 9 disk backend progress:** [implementation checkpoint](../status/query-disk-backend-20261009.md)
