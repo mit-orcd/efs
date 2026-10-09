@@ -330,25 +330,6 @@ struct drop_acc {
     int full;
 };
 
-static int drop_all_cb(void *user, const uint8_t *key, uint32_t klen,
-                       const uint8_t *val, uint32_t vlen)
-{
-    struct drop_acc *a = user;
-
-    (void)val;
-    (void)vlen;
-    if (klen < LOCK_KLEN)
-        return 0;
-    if (a->n >= DROP_MAX) {
-        a->full = 1;
-        return 1;
-    }
-    memcpy(a->keys[a->n], key, klen);
-    a->klen[a->n] = klen;
-    a->n++;
-    return 0;
-}
-
 /* Every lock record for one (ino, gen), any owner, both domains. The kernel
  * never relays a flock UNLOCK on close, so the last-close lease edge is the
  * only release signal for close-to-release semantics (§7.6). */
