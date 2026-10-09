@@ -2263,19 +2263,26 @@ static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     /* One WAL fsync for the whole Raft entry. Sequential efs_kv_batch
      * otherwise fsyncs per pub; group-commit only helps concurrent callers. */
     if (clen >= 2u * HOST_PUBLISH_LEN) {
-        (void)efs_kv_lsm_sync_hold(h->kv);
+        int rc = efs_kv_lsm_sync_hold(h->kv);
+        if (rc != EFS_OK) return rc;
         held = 1;
     }
 
     while (off + HOST_PUBLISH_LEN <= clen) {
         int prc = apply_one_publish(h, cmd + off, index, term, group);
+        if (prc == EFS_ERR_IO || prc == EFS_ERR_NOMEM) {
+            first = prc;
+            break; /* A prior business conflict must not hide failed storage. */
+        }
         if (first == EFS_OK && prc != EFS_OK)
             first = prc;
         off += HOST_PUBLISH_LEN;
         n++;
     }
-    if (held)
-        (void)efs_kv_lsm_sync_release(h->kv);
+    if (held) {
+        int rc = efs_kv_lsm_sync_release(h->kv);
+        if (rc != EFS_OK) return rc;
+    }
     if (n > 1 && raft_dbg_on())
         APPLY_LOG("raft-host: applied publish-batch index=%llu n=%u\n",
                 (unsigned long long)index, n);
@@ -2505,6 +2512,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
          cmd[0] == EFS_MD_CMD_REPORT_PUBLISH || cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
+         cmd[0] == EFS_MD_CMD_PUBLISH || cmd[0] == EFS_MD_CMD_PUBLICATION ||
+         cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
@@ -5582,6 +5591,23 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     return EFS_OK;
 }
 
+/* The saved applied index must never outrun the KV WAL durability boundary.
+ * WAL errors latch until restart; suppress both periodic and forced shutdown
+ * checkpoints so the durable Raft tail remains replayable. */
+static int host_persist_durable_tail(struct efs_raft_host *h,
+                                     const uint64_t idx[HOST_NGROUPS],
+                                     uint64_t now, int force)
+{
+    int rc = efs_kv_lsm_sync_release(h->kv);
+    if (rc != EFS_OK) return rc;
+    int first = EFS_OK;
+    for (int i=0; i<HOST_NGROUPS; i++) {
+        rc = persist_applied(h, i, idx[i], now, force);
+        if (first == EFS_OK && rc != EFS_OK) first = rc;
+    }
+    return first;
+}
+
 static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
 {
     char path[EFS_MAX_PATH];
@@ -5803,6 +5829,7 @@ static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
     uint64_t last_tick_us = 0;
+    int checkpoint_failed = 0;
 
     while (h->running) {
         struct pollfd pfd;
@@ -5939,17 +5966,11 @@ static void *host_pump(void *arg)
          * fsync themselves. */
         if (obs)
             c0 = now_us_();
-        if (efs_kv_lsm_sync_release(h->kv) != EFS_OK)
-            fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
-        {
-            uint64_t pnow = now_us_();
-
-            /* pnow is wall time for applied-index persistence; diagnostics
-             * use monotonic time, matching cohort/hold measurements. */
-            if (BO_ON()) efs_batch_obs_dump(efs_batch_obs_now_us());
-            for (i = 0; i < HOST_NGROUPS; i++)
-                (void)persist_applied(h, i, applied_now[i], pnow, 0);
-        }
+        if (BO_ON()) efs_batch_obs_dump(efs_batch_obs_now_us());
+        int durable_rc = host_persist_durable_tail(h, applied_now, now_us_(), 0);
+        if (durable_rc != EFS_OK && !checkpoint_failed)
+            fprintf(stderr, "raft-host: KV/applied durability failed; checkpoint retained\n");
+        checkpoint_failed = durable_rc != EFS_OK;
         if (obs) {
             t_persist = now_us_() - c0;
             if (t_persist > h->obs_persist_max_us)
@@ -5979,9 +6000,8 @@ static void *host_pump(void *arg)
             idx[i] = h->g[i].hosted && h->g[i].r
                          ? efs_raft_applied(h->g[i].r) : 0;
         pthread_mutex_unlock(&h->mu);
-        (void)efs_kv_lsm_sync_release(h->kv);
-        for (i = 0; i < HOST_NGROUPS; i++)
-            (void)persist_applied(h, i, idx[i], now_us_(), 1);
+        if (host_persist_durable_tail(h, idx, now_us_(), 1) != EFS_OK)
+            fprintf(stderr, "raft-host: shutdown durability failed; checkpoint retained\n");
     }
     return NULL;
 }

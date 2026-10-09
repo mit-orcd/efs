@@ -368,6 +368,7 @@ test: all
 	./tests/test_txn
 	./tests/test_txn_resolve_faults
 	python3 tests/test_txn_apply_retry.py
+	python3 tests/test_publication_persistence.py
 	python3 tests/test_follower_read_redirect.py
 	python3 tests/test_txn_parts_bounds.py
 	python3 tests/test_prepare_bounds.py

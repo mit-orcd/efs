@@ -18,7 +18,9 @@ static int policy(unsigned tag,unsigned sub,int rc) {
  return ret;
 }
 int main(void) {
- unsigned txn[]={EFS_MD_CMD_PREPARE,EFS_MD_CMD_DECIDE,EFS_MD_CMD_RESOLVE,EFS_MD_CMD_DROP};
+ unsigned txn[]={EFS_MD_CMD_PREPARE,EFS_MD_CMD_DECIDE,EFS_MD_CMD_RESOLVE,EFS_MD_CMD_DROP,
+ EFS_MD_CMD_PUBLISH,EFS_MD_CMD_PUBLICATION,EFS_MD_CMD_PUBLICATION_ADMIT,
+ EFS_MD_CMD_PUBLICATION_RETIRE,EFS_MD_CMD_REPORT_PUBLISH,EFS_MD_CMD_ACTIVATE_LANE};
  int business[]={EFS_OK,EFS_ERR_BUSY,EFS_ERR_STALE,EFS_ERR_PROTO,EFS_ERR_INVAL,EFS_ERR_NOT_FOUND};
  for(unsigned i=0;i<sizeof(txn)/sizeof(txn[0]);i++) {
   assert(policy(txn[i],0,EFS_ERR_IO)==EFS_ERR_IO);
@@ -28,7 +30,7 @@ int main(void) {
  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FENCE_LOC,EFS_ERR_BUSY)==EFS_OK);
  assert(policy(EFS_MD_CMD_SESSION,EFS_MD_SESS_FENCE_LOC,EFS_ERR_IO)==EFS_ERR_IO);
  assert(policy(EFS_MD_CMD_PUT_TICKET_ADMIT,0,EFS_ERR_IO)==EFS_ERR_IO);
- puts("transaction Raft apply: IO/NOMEM preserve pending index; business conflicts advance with ring verdict; session fence and ticket storage failures retry PASS");
+ puts("transaction/publication Raft apply: IO/NOMEM preserve pending index; business conflicts advance with ring verdict; session fence and ticket storage failures retry PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-txn-apply-return-') as d:
