@@ -1,5 +1,17 @@
 # W92 NUC node 2 CPU — October 8, 2026 New York
 
+## Deadline clock follow-up: 64cdf183d265
+
+Deployed one targeted fix: retain atomic shutdown checks per callback, read the
+deadline clock every 256 callbacks, and force a deadline check before publish.
+Repeated simultaneous four-node 30-second profile records 11,977 samples,
+zero lost. Node 2 clock_gettime inclusive share falls 5.89% to 0.23%. Private
+command/export/permission/restart gates, POSIX 212/212 and peer 64/64 pass.
+Data preserved; direct I/O/TCP and .efs remain enabled. The 8,000-file workload
+completed and live stats report no refresh error. Total CPU reduction is not
+established across these differing live windows; array rebuilding and page
+allocation still dominate. See [full comparison and raw evidence](../../results/measure/20261009-query-clock/README.md).
+
 ## Follow-up: partition-local stat reuse, 093295be288b
 
 October 9 UTC: profiled node 2 for 30 seconds at 199 Hz under the active
