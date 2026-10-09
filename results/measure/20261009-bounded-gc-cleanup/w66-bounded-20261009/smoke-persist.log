@@ -1,0 +1,63 @@
+pass small_file                      
+pass closed_but_not_fsynced          
+pass fsynced_file                    
+pass multichunk_file                 
+pass chunk_boundary_write            
+pass overwrite_middle                
+pass appended_file                   
+pass sparse_file                     
+pass truncate_shrink                 
+pass truncate_extend                 
+pass empty_file                      
+pass dd_written_file                 
+pass many_files_in_one_dir           
+pass deep_tree                       
+pass strange_names                   
+pass renamed_file                    
+pass renamed_across_dirs             
+pass unlinked_file                   
+pass removed_dir                     
+pass hardlinks                       
+pass hardlink_after_unlink           
+pass symlinks                        
+pass file_mode                       
+pass dir_mode                        
+pass size_and_mtime                  
+pass large_file_size_only            
+
+prepare: pass=26 fail=0 total=26 in 3.7s
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 848491 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Stop with: /data1/efs/src/scripts/client.sh stop /data1/efs/mnt
+Logging efs-fuse to /data1/efs/efs-fuse-mnt.log
+Mounted /data1/efs/mnt
+pass small_file                      
+pass closed_but_not_fsynced          
+pass fsynced_file                    
+pass multichunk_file                 
+pass chunk_boundary_write            
+pass overwrite_middle                
+pass appended_file                   
+pass sparse_file                     
+pass truncate_shrink                 
+pass truncate_extend                 
+pass empty_file                      
+pass dd_written_file                 
+pass many_files_in_one_dir           
+pass deep_tree                       
+pass strange_names                   
+pass renamed_file                    
+pass renamed_across_dirs             
+pass unlinked_file                   
+pass removed_dir                     
+pass hardlinks                       
+pass hardlink_after_unlink           
+pass symlinks                        
+pass file_mode                       
+pass dir_mode                        
+pass size_and_mtime                  
+pass large_file_size_only            
+
+verify: pass=26 fail=0 total=26 in 2.9s
+results: /data1/efs/logs/persist-{prepare,verify}-20261008-231803.tsv

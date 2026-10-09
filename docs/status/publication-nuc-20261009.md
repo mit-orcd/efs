@@ -59,3 +59,11 @@ and recovery evidence with the final production client. Pressure remains off on
 the installed cluster; the new session helper alone does not complete this migration.
 
 Evidence: [NUC run directory](../../results/measure/20261009-nuc-publication/README.md).
+
+## October 9 AMD successor
+
+The remote whole-lane and REAP_DONE cleanup gaps above are addressed for new
+proposals in 978caaf7, with exact-key batches and fair lane progress.
+[Dependency package and AMD acceptance](dependency-package-20261009.md).
+Historical replay remains unchanged; admission expansion and production
+publication/session/PUT-ticket integration remain open.
