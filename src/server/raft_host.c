@@ -9811,6 +9811,46 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const struct efs_opid_req *q, uint64_t hold,
                                   int pending, int *hint);
 
+/* First mutation on a namespace shard registers the full identity before
+ * any effect. Established shards use their authoritative local floor; the
+ * global owner is consulted only when admitting a new participant. */
+static int host_namespace_session_command(struct efs_raft_host *h,uint8_t group,
+    const uint8_t *cmd,uint32_t bytes,int *hint)
+{
+    if(host_hosts(h,group))return host_propose_wait(h,group,cmd,bytes,hint);
+    struct efs_msg_raft_mkfs_reply reply={0};
+    int rc=host_remote_cmd(h,group,cmd,bytes,&reply,-1);
+    if(reply.leader_hint>=0)*hint=reply.leader_hint;
+    return rc;
+}
+static int host_namespace_session_admit(struct efs_raft_host *h,uint32_t shard,
+    const struct efs_opid_req *q,int *hint)
+{
+    if(!q || !efs_opid_req_valid(q) || !q->id.session_epoch)return EFS_OK;
+    if(q->ack>=q->id.seq || shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
+    uint8_t group=efs_raft_shard_group(shard);
+    int rc=host_read_index(h,group,hint);if(rc!=EFS_OK)return rc;
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_SESS_LOCAL_VAL];uint32_t kl=0,vl=sizeof(value);
+    rc=efs_kv_key_sess_local(shard,q->id.client_uuid,key,&kl);
+    if(rc==EFS_OK)rc=efs_kv_get(h->kv,key,kl,value,&vl);
+    if(rc==EFS_OK)return efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
+    if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    uint8_t cmd[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+    memcpy(cmd+2,q->id.client_uuid,16);wr32be(cmd+18,q->id.session_epoch);wr32be(cmd+22,shard);
+    uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(q->id.client_uuid));
+    rc=host_namespace_session_command(h,owner,cmd,HOST_SESS_CREATE_LEN,hint);
+    if(rc!=EFS_OK)return rc;
+    cmd[1]=EFS_MD_SESS_REGISTER;
+    rc=host_namespace_session_command(h,owner,cmd,sizeof(cmd),hint);
+    if(rc!=EFS_OK)return rc;
+    cmd[1]=EFS_MD_SESS_ESTABLISH;
+    rc=host_session_establish_admit(h,cmd,sizeof(cmd),group,hint);
+    if(rc==EFS_OK)rc=host_namespace_session_command(h,group,cmd,sizeof(cmd),hint);
+    if(rc==EFS_OK)rc=host_read_index(h,group,hint);
+    if(rc==EFS_OK)rc=efs_session_accept(h->kv,shard,q->id.client_uuid,q->id.session_epoch);
+    return rc;
+}
+
 /* I16 leader-side probe: the op's window lives on `shard` (the dentry
  * shard of the named entry), which this host must hold. 1 = replay, reply
  * filled from the recorded verdict; 0 = new; <0 = KV error. */
@@ -9957,7 +9997,8 @@ static void host_create(efs_ino_t parent, const char *name, uint32_t mode,
             if (rc!=EFS_OK) {set_inode_rc(out,rc,hint);return;}
         }
         struct efs_opid_reply rep;
-        int hit = host_opid_replay(h, dsh, q, &rep);
+        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
             rc = hit;
@@ -11338,7 +11379,8 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
         dsh = 0;
     if (rc == EFS_OK) {
         struct efs_opid_reply rep;
-        int hit = host_opid_replay(h, dsh, q, &rep);
+        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
             rc = hit;
@@ -11606,7 +11648,8 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
         /* I16: a committed rmdir's retry finds no dentry; answer the
          * recorded OK instead of ENOENT. */
         struct efs_opid_reply rep;
-        int hit = host_opid_replay(h, dsh, q, &rep);
+        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
             rc = hit;
@@ -12156,7 +12199,8 @@ void server_raft_host_unlink(efs_ino_t parent, const char *name, int is_dir,
         /* I16: the retry of a committed unlink finds no dentry — answer
          * the recorded OK (ino, nlink after) instead of ENOENT. */
         struct efs_opid_reply rep;
-        int hit = host_opid_replay(h, dsh, q, &rep);
+        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
             rc = hit;
@@ -13083,7 +13127,8 @@ void server_raft_host_link(efs_ino_t src_ino, efs_ino_t new_parent,
         /* I16: the retry of a committed LINK sees its own new name and
          * would get EEXIST. */
         struct efs_opid_reply rep;
-        int hit = host_opid_replay(h, dsh, q, &rep);
+        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
             rc = hit;
@@ -13331,7 +13376,8 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
          * (ENOENT) or new_name present. The window is on the dest dentry
          * shard. */
         struct efs_opid_reply rep;
-        int hit = host_opid_replay(h, dsh, q, &rep);
+        int admitted=host_namespace_session_admit(h,dsh,q,&hint);
+        int hit=admitted==EFS_OK?host_opid_replay(h,dsh,q,&rep):admitted;
 
         if (hit < 0) {
             rc = hit;

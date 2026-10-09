@@ -137,6 +137,7 @@ static int store_local(struct efs_kv *kv, uint32_t shard, const uint8_t *uuid,
      * the rejection floor/established epoch past it and later let RESOLVE
      * overwrite the fence with its older snapshot. The host must drain it. */
     rc = efs_txn_key_exclusive(kv, key, klen);
+    if(rc==EFS_OK)rc=efs_txn_key_guarded(kv,key,klen);
     if (rc != EFS_OK) return rc;
     be32(val, loc->established);
     be32(val + 4, loc->reject_below);
@@ -406,6 +407,25 @@ int efs_session_accept_legacy(struct efs_kv *kv,uint32_t shard,
     if(rc!=EFS_OK)return rc;
     if(epoch<local.reject_below)return EFS_ERR_STALE;
     return local.established==epoch?EFS_OK:EFS_ERR_BUSY;
+}
+
+int efs_session_prepare_namespace(struct efs_kv *kv,uint32_t shard,
+    const struct efs_opid *id,const struct efs_txid *t,const struct efs_txn_parts *parts)
+{
+    if(!kv || !id || !t || !parts || !parts->n || parts->n>EFS_TXN_MAX_PART ||
+       shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
+    unsigned member=0;for(unsigned i=0;i<parts->n;i++)member+=parts->shard[i]==shard;
+    if(member!=1)return EFS_ERR_INVAL;
+    struct efs_sess_local local;int rc=load_local(kv,shard,id->client_uuid,&local);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK; /* historical unregistered log */
+    if(rc!=EFS_OK)return rc;
+    if(id->session_epoch<local.reject_below)return EFS_ERR_STALE;
+    if(local.established!=id->session_epoch)return EFS_ERR_BUSY;
+    uint8_t key[EFS_KV_KEY_MAX];uint32_t bytes=0;uint64_t version=0;
+    rc=efs_kv_key_sess_local(shard,id->client_uuid,key,&bytes);
+    if(rc==EFS_OK)rc=efs_txn_ver_get(kv,key,bytes,&version);
+    if(rc==EFS_OK)rc=efs_txn_prepare_guard(kv,t,parts,key,bytes,version);
+    return rc;
 }
 
 int efs_session_prepare_owner(struct efs_kv *kv, uint32_t shard,

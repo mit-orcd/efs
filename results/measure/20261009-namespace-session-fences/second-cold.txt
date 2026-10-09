@@ -1,0 +1,52 @@
+Evidence directory: /data1/efs/lease-retention-fixtures/gc-direct-25exjye8
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=16227418793322455703
+client serving PASS
+rejected CREATE/OPEN replies release handles and reclaim server inodes PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2113863 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+pending CREATE adopted/closed inode physical reclaim PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2114766 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+pending CREATE adopted/closed inode physical reclaim PASS
+retained CREATE exact adoption and physical reclaim PASS
+retained CREATE exact adoption and physical reclaim PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2115243 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+cold namespace case=0 status=11
+cold namespace case=1 status=11
+cold namespace case=2 status=1
+client-namespace-session: /data1/efs/lease-retention-src-20261009/tests/live/client_namespace_session.c:39: main: Assertion `r.status==EFS_INODE_RPC_STALE' failed.
+
+Traceback (most recent call last):
+  File "/data1/efs/lease-retention-src-20261009/tests/live/gc_reclamation.py", line 603, in <module>
+    ns_result+=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt','cold',ns_saved],capture_output=True,text=True,timeout=90).stdout
+               ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/lease-retention-src-20261009/tests/live/gc_reclamation.py", line 197, in run
+    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['/data1/efs/lease-retention-fixtures/gc-direct-25exjye8/client-namespace-session', '30240', '1450', '/data1/efs/lease-retention-src-20261009/efs-mgmt', 'cold', '/data1/efs/lease-retention-fixtures/gc-direct-25exjye8/namespace-session-packets.bin']' died with <Signals.SIGABRT: 6>.

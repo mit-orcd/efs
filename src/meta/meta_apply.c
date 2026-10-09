@@ -1057,6 +1057,8 @@ int efs_meta_apply_opid_probe(struct efs_kv *kv, uint32_t shard,
 
     if (!kv || !opid_hosted(id))
         return 0;
+    rc=efs_session_accept_legacy(kv,shard,id->client_uuid,id->session_epoch);
+    if(rc!=EFS_OK)return rc;
     rc = opid_get(kv, shard, id, key, &klen, val, &vlen);
     if (rc != EFS_OK)
         return rc;
@@ -1076,6 +1078,8 @@ static int opid_item(struct efs_kv *kv, uint32_t shard,
 
     if (!q || !opid_hosted(&q->id))
         return 0;
+    rc=efs_session_accept_legacy(kv,shard,q->id.client_uuid,q->id.session_epoch);
+    if(rc!=EFS_OK)return rc;
     rc = opid_get(kv, shard, &q->id, key, &klen, cur, &cn);
     if (rc != EFS_OK)
         return rc;
