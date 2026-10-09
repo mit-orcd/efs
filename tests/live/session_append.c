@@ -29,7 +29,8 @@ static struct efs_msg_raft_mkfs_reply rpc(const uint8_t *p,unsigned n,int expect
         if(reply.rc==EFS_ERR_NOT_PRIMARY || (reply.rc==EFS_ERR_BUSY && expected!=EFS_ERR_BUSY)) {
             usleep(10000);continue;
         }
-        printf("sub=%u rc=%d salt=%llu index=%llu\n",p[2],reply.rc,
+        printf("tag=%u sub=%u rc=%d salt=%llu index=%llu\n",p[1],
+               p[1]==EFS_MD_CMD_SESSION?p[2]:0,reply.rc,
                (unsigned long long)reply.salt,(unsigned long long)reply.index);fflush(stdout);
         assert(reply.rc==expected);return reply;
     }
