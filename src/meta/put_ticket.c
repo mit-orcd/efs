@@ -74,6 +74,36 @@ static int ticket_key(const struct efs_put_ticket *t, uint8_t key[51])
     wr32(key + 47, t->ci);
     return EFS_OK;
 }
+int efs_put_ticket_encode(const struct efs_put_ticket *t,
+                           uint8_t out[EFS_PUT_TICKET_WIRE_LEN])
+{
+    uint8_t key[EFS_PUT_TICKET_KEY_LEN];
+    if(!out)return EFS_ERR_INVAL;
+    int rc=ticket_key(t,key);if(rc!=EFS_OK)return rc;
+    memcpy(out,t->id.client_uuid,16);wr32(out+16,t->id.session_epoch);
+    wr64(out+20,t->id.seq);wr64(out+28,t->ino);wr64(out+36,t->inode_gen);
+    wr32(out+44,t->ci);wr64(out+48,t->object);memcpy(out+56,t->body_digest,32);
+    for(unsigned i=0;i<EFS_NUM_FRAGMENTS;i++)wr32(out+88+4*i,t->nodes[i]);
+    memcpy(out+100,t->checksums,sizeof(t->checksums));
+    wr32(out+196,t->delta_off);wr32(out+200,t->delta_len);
+    wr32(out+204,t->coding_profile);wr32(out+208,t->fragment_len);
+    wr32(out+212,t->member_mask);return EFS_OK;
+}
+int efs_put_ticket_decode(const uint8_t *in,uint32_t bytes,struct efs_put_ticket *out)
+{
+    if(!in || !out || bytes!=EFS_PUT_TICKET_WIRE_LEN)return EFS_ERR_INVAL;
+    struct efs_put_ticket t={0};uint8_t key[EFS_PUT_TICKET_KEY_LEN];
+    memcpy(t.id.client_uuid,in,16);t.id.session_epoch=rd32(in+16);t.id.seq=rd64(in+20);
+    t.ino=rd64(in+28);t.inode_gen=rd64(in+36);t.ci=rd32(in+44);
+    t.object=rd64(in+48);memcpy(t.body_digest,in+56,32);
+    for(unsigned i=0;i<EFS_NUM_FRAGMENTS;i++)t.nodes[i]=rd32(in+88+4*i);
+    memcpy(t.checksums,in+100,sizeof(t.checksums));
+    t.delta_off=rd32(in+196);t.delta_len=rd32(in+200);t.coding_profile=rd32(in+204);
+    t.fragment_len=rd32(in+208);t.member_mask=rd32(in+212);
+    int rc=ticket_key(&t,key);if(rc!=EFS_OK)return rc;
+    *out=t;return EFS_OK;
+}
+
 static void ticket_value(const struct efs_put_ticket *t, uint32_t state,
                          uint8_t val[EFS_PUT_TICKET_VAL_LEN])
 {

@@ -62,6 +62,28 @@ static void finish(struct efs_kv *kv, const struct efs_meta_pub *p)
     assert(efs_session_ack_fence(kv, u, efs_kv_lane_shard(p->ino, 0)) == EFS_OK);
     assert(efs_session_finish_fence(kv, u) == EFS_OK);
 }
+static void codec(void)
+{
+    struct efs_meta_pub p=make_pub(4097,8,0x0102030405060708ull);
+    p.chunk_index=17;p.candidate_gen=efs_meta_candidate_gen(p.put_id.client_uuid,1,p.put_id.seq,17,0);
+    struct efs_put_ticket t,decoded={0};assert(!efs_put_ticket_from_pub(&p,&t));
+    struct {uint8_t before,wire[EFS_PUT_TICKET_WIRE_LEN],after;} bytes={.before=29,.after=71};
+    assert(!efs_put_ticket_encode(&t,bytes.wire));assert(bytes.before==29 && bytes.after==71);
+    assert(bytes.wire[20]==1 && bytes.wire[27]==8 && bytes.wire[44]==0 && bytes.wire[47]==17);
+    assert(!efs_put_ticket_decode(bytes.wire,sizeof(bytes.wire),&decoded));
+    uint8_t again[EFS_PUT_TICKET_WIRE_LEN];assert(!efs_put_ticket_encode(&decoded,again));
+    assert(!memcmp(again,bytes.wire,sizeof(again)));
+    decoded.ino=123;
+    assert(efs_put_ticket_decode(bytes.wire,sizeof(bytes.wire)-1,&decoded)==EFS_ERR_INVAL && decoded.ino==123);
+    assert(efs_put_ticket_decode(bytes.wire,sizeof(bytes.wire)+1,&decoded)==EFS_ERR_INVAL && decoded.ino==123);
+    bytes.wire[48]^=1;
+    assert(efs_put_ticket_decode(bytes.wire,sizeof(bytes.wire),&decoded)==EFS_ERR_INVAL && decoded.ino==123);
+    bytes.wire[48]^=1;bytes.wire[212]=0xff;
+    assert(efs_put_ticket_decode(bytes.wire,sizeof(bytes.wire),&decoded)==EFS_ERR_INVAL && decoded.ino==123);
+    assert(efs_put_ticket_encode(NULL,again)==EFS_ERR_INVAL);
+    puts("PUT ticket codec: fixed endian, exact length, malformed geometry/object/members and output canaries PASS");
+}
+
 static void metadata(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -240,6 +262,7 @@ static void restart(void)
 }
 int main(void)
 {
+    codec();
     metadata();
     capacity();
     restart();

@@ -25,6 +25,11 @@ struct efs_put_ticket {
     uint32_t delta_off, delta_len, coding_profile, fragment_len;
     uint32_t member_mask; /* configured-member slots, captured at admission */
 };
+/* Fixed endian transport, no ABI padding or caller-supplied state. Decode
+ * validates the complete immutable body before any authority/admission work. */
+#define EFS_PUT_TICKET_WIRE_LEN 216u
+int efs_put_ticket_encode(const struct efs_put_ticket *,uint8_t[EFS_PUT_TICKET_WIRE_LEN]);
+int efs_put_ticket_decode(const uint8_t *,uint32_t,struct efs_put_ticket *);
 int efs_put_ticket_from_pub(const struct efs_meta_pub *, struct efs_put_ticket *);
 int efs_put_ticket_admit(struct efs_kv *, const struct efs_put_ticket *);
 /* Internal inspection only. An external PUT validator must authoritatively

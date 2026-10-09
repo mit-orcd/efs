@@ -585,3 +585,24 @@ not the complete production package.
 Final checkpoint: all code regression recipes pass after correcting the extracted
 append admission test header/window expectation; docs5/5. Both AMD mounts verified
 restored and reservation released. Build warning-free.
+
+## Durable PUT-ticket transport — groundwork implemented/gated
+
+Added opt-in replicated ADMIT and pure authoritative STATUS with a fixed endian
+immutable body. Both check the current global session/registration; replicated
+apply checks the local floor, and the endpoint reads back exact durable ticket
+state under fresh authority. IO/NOMEM does not advance failed ticket persistence.
+Client transport retains the caller's identity/body through retries, validates
+state and refuses to treat PUBLISHED/RECLAIMING as fresh admission. Probe never
+registers a session or admits a ticket.
+
+[Evidence](../../results/measure/20261009-put-ticket-transport/README.md) records
+AMD direct/TCP exact/discarded admission, body collisions, revocation and cold
+restart, with POSIX and GC gates. Data-plane PUT validation/fencing, all-member
+collection and retirement remain unactivated; an admitted ticket is ownership,
+not standalone authorization to write storage. Namespace/REPORT fencing remains
+open; D25 stays staged.
+
+Ticket transport checkpoint: AMD core212/212, peer64/64, append800,
+physical GC/restart and cold-ticket replay pass. All code regressions and docs5/5
+pass; installed service restored and reservation released.

@@ -276,6 +276,10 @@ int efs_client_lease_begin(struct efs_client_lease_request *,efs_ino_t,
 int efs_client_lease_resume(struct efs_client_lease_request *,int probe_only);
 int efs_client_lease_reset(struct efs_client_lease_request *);
 
+struct efs_put_ticket;
+/* Opt-in durable ownership only. Caller retains immutable identity/body on
+ * ambiguity. STATUS does not establish a session; state is not a PUT permit. */
+int efs_client_rpc_put_ticket(const struct efs_put_ticket *,int probe_only,uint32_t *state);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,

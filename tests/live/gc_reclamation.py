@@ -582,11 +582,22 @@ try:
         retained=work/'client-retained-lease'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained])
         edge_results.append(run([retained,str(a.port),str(edge_ino),source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
+        tickets=work/'client-put-ticket'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_put_ticket.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',tickets])
+        ticket_results=[]
+        for discard in (0,1):
+            ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt',str(discard)],capture_output=True,text=True,timeout=90).stdout)
+        ticket_saved=work/'put-ticket.bin'
+        ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','save',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
+        (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
+
 
         for stage in ('open','close'):
             edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)
         unmount();stop(crash=True);start();mount_client()
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)
+        ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','cold',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
+        (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
         assert edge_path.read_bytes()==edge_body,'lease transport changed cold bytes'
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'cached',source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
         assert edge_path.read_bytes()==edge_body+bytes(8),'legacy cached append fence corrupts original bytes/hole'
