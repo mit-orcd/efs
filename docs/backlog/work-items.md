@@ -3579,6 +3579,14 @@ server-side type, size and modification-time predicates. [Usage and acceptance](
 Expiry coverage is explicitly limited to unavailable/refusal behavior; W90
 lifecycle implementation and gates remain open.
 
+**Oct 8 New York loaded-namespace investigation:** devel merged into
+`devel-find-stats` at `ab050595`. NUC root `.efs/find .txt` exceeds the 16 MiB
+JSON response cap at roughly 992k files; it returns EOVERFLOW with zero partial
+bytes, while exact and directory-scoped queries pass. Add limit-specific
+command diagnostics and bounded immutable-snapshot paging with complete/sorted
+output semantics before claiming large-result acceptance. This is not fixed
+by the investigation. [Evidence and code path](../status/find-output-overflow-20261009.md).
+
 Scope and mandatory acceptance: [virtual interfaces](../status/virtual-find-stats.md).
 NUC target: staged population toward 400 GiB real logical payload, with a large
 small-file namespace, two cold mounts, shard-distributed queries and measured
