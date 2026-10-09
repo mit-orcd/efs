@@ -258,7 +258,9 @@ static int log_write_locked(struct efs_raft_disk *d, uint8_t type,
         return rc;
     }
     d->bytes += len;
-    if (BO_ON() && type == RAFT_REC_ENTRY) d->obs_entries++;
+    if (BO_ON() && type == RAFT_REC_ENTRY) {
+        d->obs_entries++;
+    }
     if (d->allocated_bytes < d->bytes)
         d->allocated_bytes = d->bytes;
     return EFS_OK;
@@ -276,6 +278,9 @@ int raft_log_append(struct efs_raft_disk *d, uint8_t type,
 
     if (rc != EFS_OK)
         return rc;
+    /* Count new append requests, not old records copied during rotation. */
+    if (BO_ON() && type == RAFT_REC_ENTRY)
+        efs_batch_obs_command(clen ? cmd[0] : 0);
     if (d->sync_hold > 0 || log_defer_depth > 0) {
         d->sync_need = 1;
         return EFS_OK;

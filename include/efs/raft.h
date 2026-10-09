@@ -190,6 +190,9 @@ struct efs_raft_cfg {
     void *store_ctx;
     efs_raft_send_fn send;
     efs_raft_send_ready_fn send_ready;
+    /* Experimental: keep proven no-op AE requests inside an open cohort.
+     * Fresh reads and any hard-state/conflict boundary still flush it. */
+    int batch_noop;
     void *net;
     efs_raft_apply_fn apply;
     void *app;

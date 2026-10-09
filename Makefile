@@ -343,6 +343,8 @@ test: all
 	python3 tests/test_host_pressure.py
 	python3 tests/test_host_outbox.py
 	python3 tests/test_host_flow.py
+	python3 tests/test_host_inbox.py
+	python3 tests/test_host_checkpoint.py
 	./tests/test_kv_lsm
 	./tests/test_query_catalog
 	./tests/test_name_index

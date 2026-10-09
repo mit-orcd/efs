@@ -399,7 +399,7 @@ struct efs_raft_host {
     int inbox_n;
     uint64_t inbox_bytes, inbox_bytes_hi;
     int pressure_enabled;
-    int flow_enabled, inbox_pressure;
+    int flow_enabled, inbox_pressure, group_drain;
     unsigned inbox_work_n;
     uint64_t inbox_work_bytes;
     uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
@@ -5476,6 +5476,66 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
     return EFS_OK;
 }
 
+/* Stable per-group order, bounded chunks, and global control fences. Only
+ * the initial stable-leader, noncommitting entry AE prefix may be grouped.
+ * Commit/apply boundaries retain cross-group metadata dependency order. Votes, replies,
+ * snapshots, empty probes and fresh-read contexts keep their inbox position.
+ * No new work is collected and no extra assembly delay is introduced. */
+struct host_drain_view { uint64_t applied, term; int leader, ready; };
+static void host_inbox_order(const struct host_inbox_item *local, unsigned n,
+                             const struct host_drain_view view[HOST_NGROUPS],
+                             unsigned *order)
+{
+    unsigned cursor=0, out=0;
+    int group[HOST_INBOX_MAX];
+    unsigned used[HOST_INBOX_MAX]={0};
+    for (unsigned i=0; i<n; i++) {
+        const uint8_t *p=local[i].buf;
+        uint32_t len=local[i].len;
+        group[i]=-1;
+        if (efs_raft_flow_frame(p,len) && p[0]==EFS_RAFT_MSG_AE_REQ &&
+            efs_raft_flow_rd32(p+76) && !efs_raft_flow_rd64(p+28)) {
+            int gi=efs_raft_flow_group(p[1]);
+            if (!view[gi].ready || efs_raft_flow_rd64(p+12)!=view[gi].term ||
+                (int)efs_raft_flow_rd32(p+4)!=view[gi].leader ||
+                efs_raft_flow_rd64(p+60)>view[gi].applied) continue;
+            group[i]=p[1];
+            uint32_t off=EFS_WIRE_RAFT_HDR_LEN;
+            for (uint32_t j=0; j<efs_raft_flow_rd32(p+76); j++) {
+                uint32_t bytes=efs_raft_flow_rd32(p+off+8);off+=12;
+                if (!bytes || p[off]==EFS_RAFT_CMD_JOINT || p[off]==EFS_RAFT_CMD_COLD)
+                    group[i]=-1;
+                off+=bytes;
+            }
+        }
+    }
+    while (cursor<n) {
+        if (group[cursor]<0) {
+            /* This control/apply boundary may invalidate the captured view.
+             * Preserve the entire remaining suffix instead of using stale
+             * eligibility after a transient apply failure or role change. */
+            while (cursor<n) order[out++]=cursor++;
+            break;
+        }
+        unsigned end=cursor;
+        while (end<n && group[end]>=0) end++;
+        for (unsigned first=cursor; first<end;) {
+            unsigned count=0;
+            uint64_t bytes=0;
+            int target=group[first];
+            for (unsigned i=first; i<end; i++) {
+                if (used[i] || group[i]!=target) continue;
+                uint32_t payload=local[i].len-EFS_WIRE_RAFT_HDR_LEN;
+                if (count && (count==EFS_RAFT_RECV_MAX ||
+                              bytes+payload>EFS_RAFT_AE_BYTES)) break;
+                order[out++]=i;used[i]=1;count++;bytes+=payload;
+            }
+            while (first<end && used[first]) first++;
+        }
+        cursor=end;
+    }
+}
+
 static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *done_bytes)
 {
     struct host_inbox_item local[HOST_INBOX_MAX];
@@ -5488,6 +5548,24 @@ static void drain_inbox(struct efs_raft_host *h, unsigned *done_n, uint64_t *don
     h->inbox_n = 0;
     h->inbox_bytes = 0;
     pthread_mutex_unlock(&h->inbox_mu);
+
+    if (h->group_drain && n>1) {
+        unsigned order[HOST_INBOX_MAX];
+        struct host_inbox_item sorted[HOST_INBOX_MAX];
+        struct host_drain_view view[HOST_NGROUPS]={0};
+        for (int gi=0; gi<HOST_NGROUPS; gi++) {
+            struct efs_raft *r=h->g[gi].r;
+            if (!r) continue;
+            view[gi].applied=efs_raft_applied(r);
+            view[gi].term=efs_raft_term(r);
+            view[gi].leader=efs_raft_leader(r);
+            view[gi].ready=efs_raft_role(r)==EFS_RAFT_FOLLOWER &&
+                view[gi].applied==efs_raft_commit(r);
+        }
+        host_inbox_order(local,(unsigned)n,view,order);
+        for (int j=0; j<n; j++) sorted[j]=local[order[j]];
+        memcpy(local,sorted,(size_t)n*sizeof(local[0]));
+    }
 
     if (n) BO_HIST(BH_INBOX, n);
     else BO_COUNT(BO_INBOX_EMPTY);
@@ -5592,6 +5670,20 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
         return EFS_ERR_IO;
     }
     h->g[gi].applied_saved = idx;
+    return EFS_OK;
+}
+
+/* A successful KV barrier is the prerequisite, not just an ordering hint.
+ * A failed release leaves in-memory applied ahead of durable KV; never save
+ * that index, including on shutdown. Persist failures retain the old marker. */
+static int host_save_applied(struct efs_raft_host *h, const uint64_t *idx,
+                              uint64_t now, int force, int kv_rc)
+{
+    if (kv_rc != EFS_OK) return kv_rc;
+    for (int i=0; i<HOST_NGROUPS; i++) {
+        int rc=persist_applied(h,i,idx[i],now,force);
+        if (rc != EFS_OK) return rc;
+    }
     return EFS_OK;
 }
 
@@ -5969,7 +6061,8 @@ static void *host_pump(void *arg)
         if (obs)
             c0 = now_us_();
         if (batch_obs) phase_us = efs_batch_obs_now_us();
-        if (efs_kv_lsm_sync_release(h->kv) != EFS_OK)
+        int kv_rc = efs_kv_lsm_sync_release(h->kv);
+        if (kv_rc != EFS_OK)
             fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
         if (batch_obs) {
             BO_HIST(BH_KV_RELEASE_US, efs_batch_obs_now_us() - phase_us);
@@ -5980,8 +6073,8 @@ static void *host_pump(void *arg)
 
             /* pnow is wall time for applied-index persistence; diagnostics
              * use monotonic time, matching cohort/hold measurements. */
-            for (i = 0; i < HOST_NGROUPS; i++)
-                (void)persist_applied(h, i, applied_now[i], pnow, 0);
+            if (host_save_applied(h,applied_now,pnow,0,kv_rc) != EFS_OK)
+                fprintf(stderr,"raft-host: applied checkpoint not advanced after persistence failure\n");
         }
         if (h->flow_enabled && done_n) host_inbox_retire(h,done_n,done_bytes);
         if (batch_obs) {
@@ -6017,9 +6110,9 @@ static void *host_pump(void *arg)
             idx[i] = h->g[i].hosted && h->g[i].r
                          ? efs_raft_applied(h->g[i].r) : 0;
         pthread_mutex_unlock(&h->mu);
-        (void)efs_kv_lsm_sync_release(h->kv);
-        for (i = 0; i < HOST_NGROUPS; i++)
-            (void)persist_applied(h, i, idx[i], now_us_(), 1);
+        int kv_rc = efs_kv_lsm_sync_release(h->kv);
+        if (host_save_applied(h,idx,now_us_(),1,kv_rc) != EFS_OK)
+            fprintf(stderr,"raft-host: shutdown applied checkpoint not advanced after persistence failure\n");
     }
     return NULL;
 }
@@ -6171,6 +6264,12 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.store_ctx = st;
     cfg.send = host_send;
     cfg.send_ready = h->flow_enabled ? host_send_ready : NULL;
+    {
+        const char *mode = getenv("EFS_RAFT_BATCH_NOOP");
+        if (mode && strcmp(mode, "0") && strcmp(mode, "1"))
+            return EFS_ERR_INVAL;
+        cfg.batch_noop = mode && !strcmp(mode, "1");
+    }
     cfg.net = h;
     cfg.apply = host_apply;
     cfg.admit = h->pressure_enabled ? host_pressure_admit : NULL;
@@ -8447,6 +8546,9 @@ int server_raft_host_start(struct efsd_server *s)
     int query_enabled=!commands || !strcmp(commands,"1");
     const char *flow=getenv("EFS_RAFT_FLOW");
     if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
+    const char *group_drain=getenv("EFS_RAFT_GROUP_DRAIN");
+    if (group_drain && strcmp(group_drain,"0") && strcmp(group_drain,"1"))
+        return EFS_ERR_INVAL;
     const char *pressure=getenv("EFS_ADMISSION_PRESSURE");
     if (pressure && strcmp(pressure,"0") && strcmp(pressure,"1")) return EFS_ERR_INVAL;
     ns = getenv("EFS_MD_RAFT_N");
@@ -8469,6 +8571,7 @@ int server_raft_host_start(struct efsd_server *s)
     struct efs_admission_limits limits={8ull<<20,1ull<<20,64,8};
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
     h->flow_enabled=flow && !strcmp(flow,"1"); /* candidate opt-in until acceptance */
+    h->group_drain=group_drain && !strcmp(group_drain,"1");
     h->pressure_enabled=pressure && !strcmp(pressure,"1");
     h->s = s;
     h->query_enabled=query_enabled;

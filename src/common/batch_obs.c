@@ -9,6 +9,7 @@
 int efs_batch_obs_on;
 static pthread_once_t once = PTHREAD_ONCE_INIT;
 static uint64_t counters[BO_COUNTER_N], rejected[BO_COUNTER_N], last_dump;
+static uint64_t commands[256];
 /* Bin 0 is exactly zero; bin 1 exactly one; subsequent bins are powers of
  * two with inclusive upper bounds, last bin overflow. Fixed resident memory. */
 #define BINS 25
@@ -23,7 +24,7 @@ static const char *cn[BO_COUNTER_N] = {
     "reply_partial", "reply_covered", "drop_data", "drop_empty",
     "drop_other", "accept_data", "accept_empty",
     "wire_sent", "flow_busy", "flow_admitted", "flow_legacy",
-    "flow_wait", "flow_control", "flow_probe", "flow_enqueue_retry", "flow_prebuild_retry"
+    "flow_wait", "flow_control", "flow_probe", "flow_enqueue_retry", "flow_prebuild_retry", "batch_noop"
 };
 static const char *hn[BH_HIST_N] = {
     "wal_entries", "wal_bytes", "sync_us", "sync_wait_us", "sync_waiters",
@@ -68,6 +69,11 @@ void efs_batch_obs_hist(enum efs_batch_hist key, uint64_t value)
     old = __atomic_load_n(&hist[key].max, __ATOMIC_RELAXED);
     while (old < value && !__atomic_compare_exchange_n(&hist[key].max, &old, value, 0, __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
 }
+void efs_batch_obs_command(uint8_t opcode)
+{
+    __atomic_add_fetch(&commands[opcode], 1, __ATOMIC_RELAXED);
+}
+
 void efs_batch_obs_dump(uint64_t now_us)
 {
     unsigned i, b;
@@ -83,6 +89,9 @@ void efs_batch_obs_dump(uint64_t now_us)
     fprintf(stderr,"},\"follow_reject\":{");
     for (i=0;i<BO_COUNTER_N;i++)
         fprintf(stderr,"%s\"%s\":%llu",i?",":"",cn[i],(unsigned long long)__atomic_load_n(&rejected[i],__ATOMIC_RELAXED));
+    fprintf(stderr,"},\"commands\":{");
+    for (i=0;i<256;i++)
+        fprintf(stderr,"%s\"%u\":%llu",i?",":"",i,(unsigned long long)__atomic_load_n(&commands[i],__ATOMIC_RELAXED));
     fprintf(stderr,"},\"hist\":{");
     for (i=0;i<BH_HIST_N;i++) {
         fprintf(stderr,"%s\"%s\":{\"n\":%llu,\"sum\":%llu,\"max\":%llu,\"bins\":[",i?",":"",hn[i],

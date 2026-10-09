@@ -1,0 +1,71 @@
+{
+  "cut": {
+    "0": 4618374,
+    "2": 4013876
+  },
+  "caught_up": true,
+  "observations": [
+    [
+      {
+        "node": 1,
+        "group": 0,
+        "hosted": 1,
+        "role": "LEADER",
+        "leader": 0,
+        "term": 1186,
+        "commit": 4618374,
+        "applied": 4618374
+      },
+      {
+        "node": 2,
+        "group": 0,
+        "hosted": 1,
+        "role": "FOLLOWER",
+        "leader": 0,
+        "term": 1186,
+        "commit": 4618374,
+        "applied": 4618374
+      },
+      {
+        "node": 2,
+        "group": 2,
+        "hosted": 1,
+        "role": "LEADER",
+        "leader": 1,
+        "term": 1301,
+        "commit": 4013876,
+        "applied": 4013876
+      },
+      {
+        "node": 3,
+        "group": 0,
+        "hosted": 1,
+        "role": "FOLLOWER",
+        "leader": 0,
+        "term": 1186,
+        "commit": 4618374,
+        "applied": 4618374
+      },
+      {
+        "node": 3,
+        "group": 2,
+        "hosted": 1,
+        "role": "FOLLOWER",
+        "leader": 1,
+        "term": 1301,
+        "commit": 4013876,
+        "applied": 4013876
+      },
+      {
+        "node": 4,
+        "group": 2,
+        "hosted": 1,
+        "role": "FOLLOWER",
+        "leader": 1,
+        "term": 1301,
+        "commit": 4013876,
+        "applied": 4013876
+      }
+    ]
+  ]
+}
