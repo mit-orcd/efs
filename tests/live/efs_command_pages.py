@@ -22,9 +22,10 @@ def command(*args, expected=0):
 
 end = time.monotonic() + 30
 while True:
+    complete = json.loads(command('--limit', '10000', '--json').stdout)
     result = command('--json')
     data = json.loads(result.stdout)
-    if len(data['entries']) == 100:
+    if len(complete['entries']) == 215 and len(data['entries']) == 100:
         break
     assert time.monotonic() < end, data
     time.sleep(.3)

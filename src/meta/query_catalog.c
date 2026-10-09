@@ -37,6 +37,7 @@ struct efs_query_catalog {
     struct node *nodes;
     uint32_t refs, count, capacity, rebuilt, refolded, reused_edges;
     uint32_t *node_index, node_slots;
+    uint32_t node_begin[4097]; /* Ordered inode ranges for each retained partition. */
     uint64_t bytes, limit;
     struct efs_kv kv;
     int (*stop)(void *);
@@ -439,9 +440,11 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
     }
     for (uint32_t shard=0;shard<4096 && !rc;shard++) {
         if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
+        c->node_begin[shard]=c->count;
         uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_INODE};
         rc=cache_prefix(c,prefix,3,add_node,c);
     }
+    c->node_begin[4096]=c->count;
     if (!rc && c->count && c->count<c->capacity) {
         struct node *tight=realloc(c->nodes,(size_t)c->count*sizeof(*tight));
         if (tight) {
@@ -450,12 +453,27 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
         }
     }
     if (!rc) rc=build_node_index(c);
-    for (uint32_t i=0;i<c->count && !rc;i++) {
-        if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
-        struct node *n=&c->nodes[i];
-        struct node *previous=same_node_inputs(c,old,n) ? find_node(old,n->row.ino) : NULL;
-        if (previous) n->stat=previous->stat;
-        else { c->refolded++;rc=efs_meta_apply_getattr(&c->kv,n->row.ino,refuse_coord,NULL,&n->stat); }
+    for (uint32_t shard=0;shard<4096 && !rc;shard++) {
+        int unchanged=old && c->part[shard]==old->part[shard];
+        /* The same retained partition contains exactly the same sorted inode
+         * keys. Its local ordinal maps directly to the old vector, even when
+         * other shards gained/lost rows and shifted global offsets. Avoid a
+         * random global hash probe for every unchanged inode's folded stat. */
+        if (unchanged && c->node_begin[shard+1]-c->node_begin[shard]!=
+                         old->node_begin[shard+1]-old->node_begin[shard]) {
+            rc=EFS_ERR_PROTO;break;
+        }
+        for (uint32_t i=c->node_begin[shard];i<c->node_begin[shard+1] && !rc;i++) {
+            if (stopped(c)) { rc=EFS_ERR_BUSY;break; }
+            struct node *n=&c->nodes[i];
+            if (unchanged && same_node_inputs(c,old,n)) {
+                const struct node *previous=&old->nodes[old->node_begin[shard]+i-c->node_begin[shard]];
+                if (previous->row.ino!=n->row.ino) { rc=EFS_ERR_PROTO;break; }
+                n->stat=previous->stat;
+            } else {
+                c->refolded++;rc=efs_meta_apply_getattr(&c->kv,n->row.ino,refuse_coord,NULL,&n->stat);
+            }
+        }
     }
     for (uint32_t shard=0;shard<4096 && !rc;shard++) {
         if (stopped(c)) { rc=EFS_ERR_BUSY;break; }

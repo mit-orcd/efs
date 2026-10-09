@@ -151,6 +151,24 @@ int main(void)
     CHECK(newer && !efs_query_catalog_refolded(newer) && efs_query_catalog_reused_edges(newer)==4096,
           "unchanged folded stats and every edge contribution reused");
     efs_query_catalog_free(newer);newer=NULL;
+    /* Inserting/removing an earlier shard shifts every later global ordinal.
+     * Unchanged inode partitions must map by their own local ordinal. */
+    CHECK(!efs_meta_apply_get_inode(kv,file,&r),"ordinal-shift source inode");
+    efs_ino_t detached=UINT64_C(999999)<<12;
+    CHECK(efs_kv_inode_shard(detached)<efs_kv_inode_shard(file),"earlier shard fixture");
+    r.ino=detached;r.nlink=0;r.active_lanes=0;r.base_size=777;row_put(kv,&r);
+    CHECK(!capture(kv,c,&newer),"earlier inode insertion shifts unchanged partitions");
+    struct efs_meta_stat shifted_stat;
+    CHECK(newer && !efs_query_catalog_inode(newer,file,NULL,&shifted_stat) && shifted_stat.size==8192,
+          "shifted unchanged inode retains its own folded size");
+    CHECK(!efs_kv_key_inode(efs_kv_inode_shard(detached),detached,key,&kl) && !efs_kv_del(kv,key,kl),
+          "remove earlier-shard inode");
+    struct efs_query_catalog *shrunk=NULL;
+    CHECK(!capture(kv,newer,&shrunk),"earlier inode removal shifts unchanged partitions back");
+    CHECK(shrunk && !efs_query_catalog_inode(shrunk,file,NULL,&shifted_stat) && shifted_stat.size==8192,
+          "shrunk ordinal maps to correct old inode");
+    CHECK(efs_query_catalog_inode(c,detached,NULL,NULL)==EFS_ERR_NOT_FOUND,"old generation remains immutable");
+    efs_query_catalog_free(shrunk);efs_query_catalog_free(newer);newer=NULL;
     /* A lane-only change must invalidate a stat cached on another inode shard. */
     CHECK(efs_kv_lane_shard(file,1)!=efs_kv_inode_shard(file),"cross-shard dependency fixture");
     be64(lane,12288);be64(lane+8,225);be64(lane+24,2);
