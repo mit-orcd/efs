@@ -1279,6 +1279,8 @@ static int lease_request_result(struct efs_client_lease_request *r,int rc,
     return rc;
 }
 
+static int append_session_admit(efs_ino_t ino,const struct efs_opid_req *q);
+
 int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
 {
     if (!r || !r->active || probe_only<0 || probe_only>1)
@@ -1294,7 +1296,9 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
         /* Unknown probe is not success; retry only the retained exact edge. */
     }
     if (!r->admitted) {
-        rc=efs_client_rpc_publication_session(efs_kv_inode_shard(r->ino),&r->q.id);
+        /* Reuse only a completed establishment for this exact UUID, epoch
+         * and shard. The guarded edge still validates server revocation. */
+        rc=append_session_admit(r->ino,&r->q);
         if (rc!=EFS_OK) return lease_request_result(r,rc,0);
         r->admitted=1;
     }

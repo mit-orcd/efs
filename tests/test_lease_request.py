@@ -6,6 +6,7 @@ root=Path(__file__).resolve().parents[1];s=(root/'src/client/inode_rpc.c').read_
 a=s.index('static int opid_begin(');b=s.index('/* A reservation identity',a)
 c=s.index('int efs_client_lease_begin(');d=s.index('int efs_client_rpc_put_ticket(',c)
 e=s.index('static void opid_refresh_ack(');f=s.index('static void opid_retry_ack(',e)
+h=s.index('static int append_session_admit(efs_ino_t ino,const struct efs_opid_req *q)\n{');j=s.index('\n}',h)+2
 code=r'''
 #include "client_internal.h"
 #include "efs/session.h"
@@ -32,7 +33,7 @@ int efs_client_rpc_lease_edge(efs_ino_t ino,uint64_t gen,const struct efs_opid_r
  assert(!memcmp(&q->id,&expected.id,sizeof(q->id)));assert(q->ack>=expected.ack&&q->ack<q->id.seq);calls++;
  *known=probe?probe_known:submit_known;return probe?probe_rc:submit_rc;
 }
-'''+s[a:b]+s[e:f]+s[c:d]+r'''
+'''+s[a:b]+s[e:f]+s[h:j]+s[c:d]+r'''
 int main(void) {
  struct efs_client_lease_request r={0};
  assert(efs_client_lease_begin(&r,4097,0,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_INVAL);
@@ -76,6 +77,7 @@ int main(void) {
  for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(!efs_client_lease_begin(&all[i],4097,99,EFS_LEASE_EDGE_CLOSE,0));
  assert(efs_client_lease_begin(&r,4097,99,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_BUSY&&!r.active);
  for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++) {expected=all[i].q;assert(efs_client_lease_resume(&all[i],1)==EFS_ERR_STALE);assert(!efs_client_lease_reset(&all[i]));}
+ assert(admits==2); /* one failed first touch, then one successful establishment */
  puts("retained sequenced lease: immutable retries, unknown probe, pinned ACK, durable negative proof and capacity PASS");
 }
 '''
