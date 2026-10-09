@@ -1,0 +1,10 @@
+2026-10-09T20:54:20.731Z query-refresh: rc=-1 cap_mib=256 initial=1 elapsed_ms=101219
+2026-10-09T20:54:20.836Z query-restore: rc=-3 backend=disk
+2026-10-09T20:54:33.023Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=12192
+2026-10-09T20:55:36.794Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=411
+2026-10-09T20:56:06.936Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=407
+2026-10-09T20:56:37.069Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=406
+2026-10-09T20:56:46.700Z query-restore: rc=-3 backend=disk
+2026-10-09T20:58:22.166Z query-disk: unlinked directory ino=4113 parent=9876 nlink=2
+2026-10-09T20:58:22.858Z query-refresh: rc=-1 cap_mib=256 initial=1 elapsed_ms=96162
+2026-10-09T20:58:22.965Z query-restore: rc=-3 backend=disk

@@ -3588,11 +3588,17 @@ the original record and withdrawn interpretation remain retained.
 
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
+**Oct 9 disk backend progress:** [implementation checkpoint](../status/query-disk-backend-20261009.md)
+records the persistent partition backend, bounded scratch, immutable generation
+leases and validated cold restore. Functional differential and private live
+gates pass. Derived-stat refresh still performs a full disk pass; disk budgets,
+incremental derived maintenance and the scale gates below remain open.
+
 **Oct 9 user requirement — billions of files:** W92 remains open until the
 server query catalog uses a persistent, partitioned disk-backed index with
 bounded resident memory. Target namespace cardinality is **2^32 files**;
 this is a design/validation target, not a demonstrated EFS capacity. The current
-implementation retains the complete query catalog in RAM. Partition reuse and
+RAM implementation retains the complete query catalog in RAM. Partition reuse and
 bounded result paging reduce work/output but do not bound resident memory as
 the namespace grows. The latest NUC run reaches the unchanged 1024 MiB catalog
 cap near 1.25 million files and leaves stale snapshots. The earlier recovery
@@ -3618,7 +3624,7 @@ partitioned synthetic-index gate exercising at least 2^32 entries, plus staged
 real-filesystem gates within measured space/inode limits. Record synthetic and
 real evidence separately; synthetic index acceptance does not certify end-to-end
 EFS capacity. Measure foreground latency, query latency and freshness under load.
-Implementation and these gates are pending. See
+Full implementation acceptance and these scale gates remain pending. See
 [architecture requirement](../status/virtual-find-stats.md#billions-of-files--disk-backed-bounded-memory-catalog)
 and [five-minute evidence](../status/tiny-file-five-minute-profile-20261009.md).
 

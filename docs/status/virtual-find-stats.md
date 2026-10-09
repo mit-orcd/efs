@@ -24,7 +24,7 @@ acceptance. Historical deployment statements below are superseded by these repor
 Accepted Oct 9 user requirement, tracked in **W92**: support a design target of
 **2^32 files** using a persistent, partitioned query index and bounded resident
 memory. This target is not a claim that current EFS has passed that capacity.
-The current server catalog is entirely resident in RAM, derived from persistent
+The prior server catalog is entirely resident in RAM, derived from persistent
 filesystem metadata. The observed 1024 MiB cap near 1.25 million files is a
 query-catalog limit, not a filesystem capacity limit; failed refresh retains an
 older snapshot. Partition reuse and paging do not fix the namespace-dependent
@@ -46,7 +46,11 @@ cold-cache and concurrent-mutation/export gates, restart/fault/recovery oracles,
 and a synthetic partitioned-index gate of at least 2^32 entries. Staged real
 filesystem tests remain constrained by measured physical space/inodes; synthetic
 index tests must not be presented as real multi-billion-file EFS acceptance.
-Raising the RAM cap alone cannot close W92. Architecture implementation and
+[Oct 9 disk backend progress](query-disk-backend-20261009.md) records the new
+persistent partition implementation and initial functional gates. Its retained
+Xorinox namespace query gate is still under investigation. Incremental derived
+statistics, explicit disk quotas and large-scale acceptance remain open.
+Raising the RAM cap alone cannot close W92. Full architecture implementation and
 these scale gates remain open.
 
 ## Required direction

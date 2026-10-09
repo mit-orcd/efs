@@ -116,3 +116,24 @@ were included. Completeness is scoped to that snapshot, not an atomic live-tree
 view. Refresh failures are shown explicitly while retaining the last available
 snapshot. A server timestamp ahead of the client reports unknown freshness
 rather than a misleading zero age. JSON keeps the exact timestamp and identity.
+
+## Local server cache backend
+
+On `devel-find-stats`, publishers use a disk catalog under
+`<storage>/mdraft/query-cache`. Command syntax and permission checks are unchanged;
+the cache is local derived metadata, not a user-visible directory or an additional
+copy of file contents. Only hosts with both metadata groups can publish complete
+catalogs. Adding storage nodes does not automatically add full publishers.
+
+Set `EFS_QUERY_BACKEND=ram` at daemon startup to use the comparison backend, or
+`disk` for the default backend. `EFS_QUERY_CATALOG_MIB` remains a per-candidate
+allocation budget; it is not a process RSS limit.
+`EFS_QUERY_DISK_RESERVE_MIB` defaults to 64 and guards cache writes against low
+filesystem free space; it does not reserve capacity against other writers or
+provide a cache quota.
+
+Check server `query-restore`, `query-refresh` and `query-publish` logs if commands
+fail. Stale/corrupt checkpoints are rebuilt after authority checks. A misplaced
+live directory entry can refuse the entire candidate; raising a memory budget
+does not repair that condition. Do not edit authoritative metadata to clear a
+cache error. See [W92 deployment and remaining gates](../status/query-disk-backend-20261009.md).

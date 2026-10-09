@@ -1,4 +1,5 @@
 #include "efs/query_catalog.h"
+#include "query_disk.h"
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -37,6 +38,7 @@ struct directory_value {
 };
 struct node { struct inode_value *inode; struct directory_value *dir; };
 struct efs_query_catalog {
+    struct efs_query_disk *disk;
     struct partition *part[4096];
     struct edge_fold *fold[4096];
     struct node *nodes;
@@ -115,6 +117,7 @@ static void partition_release(struct partition *p)
 void efs_query_catalog_free(struct efs_query_catalog *c)
 {
     if (!c || __atomic_sub_fetch(&c->refs,1,__ATOMIC_ACQ_REL)) return;
+    if (c->disk) { efs_query_disk_free(c->disk);free(c);return; }
     for (uint32_t i=0;i<4096;i++) {
         partition_release(c->part[i]);
         struct inode_block *b=c->inodes[i];
@@ -518,18 +521,48 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source, const struct efs
     c->stop=NULL;c->stop_ctx=NULL;
     *out=c;return EFS_OK;
 }
+int efs_query_catalog_build_disk(const char *root,struct efs_kv_lsm_snapshot *source,
+    const struct efs_query_catalog *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,
+    struct efs_query_catalog **out)
+{
+    if(out)*out=NULL;
+    if(!out || !source || !root)return EFS_ERR_INVAL;
+    if(max_bytes<sizeof(struct efs_query_catalog))return EFS_ERR_NOMEM;
+    struct efs_query_catalog *c=calloc(1,sizeof(*c));if(!c)return EFS_ERR_NOMEM;
+    c->refs=1;
+    int rc=efs_query_disk_build(root,source,old?old->disk:NULL,max_bytes-sizeof(*c),stop,ctx,&c->disk);
+    if(rc){free(c);return rc;}
+    c->bytes=sizeof(*c)+efs_query_disk_bytes(c->disk);c->rebuilt=efs_query_disk_rebuilt(c->disk);
+    *out=c;return EFS_OK;
+}
+int efs_query_catalog_checkpoint(struct efs_query_catalog *c,const uint64_t watermark[4])
+{
+    return c && c->disk?efs_query_disk_checkpoint(c->disk,watermark):EFS_ERR_INVAL;
+}
+int efs_query_catalog_restore_disk(const char *root,struct efs_kv_lsm_snapshot *source,const uint64_t watermark[4],uint64_t max_bytes,
+    struct efs_query_catalog **out)
+{
+    if(out)*out=NULL;
+    if(!out || !source || !root || !watermark)return EFS_ERR_INVAL;
+    if(max_bytes<sizeof(struct efs_query_catalog))return EFS_ERR_NOMEM;
+    struct efs_query_catalog *c=calloc(1,sizeof(*c));if(!c)return EFS_ERR_NOMEM;
+    c->refs=1;int rc=efs_query_disk_restore(root,watermark,max_bytes-sizeof(*c),&c->disk);
+    if(!rc)rc=efs_query_disk_rebase(c->disk,source);
+    if(rc){efs_query_catalog_free(c);return rc;}c->bytes=sizeof(*c)+efs_query_disk_bytes(c->disk);*out=c;return EFS_OK;
+}
 void efs_query_catalog_retain(struct efs_query_catalog *c)
 {
     if (c) __atomic_add_fetch(&c->refs,1,__ATOMIC_RELAXED);
 }
 uint64_t efs_query_catalog_bytes(const struct efs_query_catalog *c) { return c ? c->bytes : 0; }
-uint32_t efs_query_catalog_refolded(const struct efs_query_catalog *c) { return c ? c->refolded : 0; }
+uint32_t efs_query_catalog_refolded(const struct efs_query_catalog *c) { return c ? (c->disk?efs_query_disk_refolded(c->disk):c->refolded) : 0; }
 uint32_t efs_query_catalog_reused_edges(const struct efs_query_catalog *c) { return c ? c->reused_edges : 0; }
 uint32_t efs_query_catalog_rebuilt(const struct efs_query_catalog *c) { return c ? c->rebuilt : 0; }
 int efs_query_catalog_inode(const struct efs_query_catalog *c, efs_ino_t ino,
                              struct efs_meta_row *row, struct efs_meta_stat *stat)
 {
     if (!c) return EFS_ERR_INVAL;
+    if(c->disk)return efs_query_disk_inode(c->disk,ino,row,stat);
     struct node *n=find_node(c,ino);
     if (!n) return EFS_ERR_NOT_FOUND;
     if (row) *row=n->inode->row;
@@ -539,6 +572,7 @@ int efs_query_catalog_inode(const struct efs_query_catalog *c, efs_ino_t ino,
 int efs_query_catalog_stats(const struct efs_query_catalog *c, efs_ino_t ino, struct efs_query_rollup *out)
 {
     if (!c || !out) return EFS_ERR_INVAL;
+    if(c->disk)return efs_query_disk_stats(c->disk,ino,out);
     struct node *n=find_node(c,ino);
     if (!n) return EFS_ERR_NOT_FOUND;
     if (!S_ISDIR(n->inode->row.mode)) return EFS_ERR_INVAL;
@@ -547,6 +581,7 @@ int efs_query_catalog_stats(const struct efs_query_catalog *c, efs_ino_t ino, st
 int efs_query_catalog_directory_link(const struct efs_query_catalog *c,efs_ino_t ino,struct efs_name_entry *out)
 {
     if (!c || !out) return EFS_ERR_INVAL;
+    if(c->disk)return efs_query_disk_link(c->disk,ino,out);
     struct node *n=find_node(c,ino);
     if (!n || !n->dir || !n->dir->link) return EFS_ERR_NOT_FOUND;
     *out=*n->dir->link;return EFS_OK;
@@ -554,6 +589,7 @@ int efs_query_catalog_directory_link(const struct efs_query_catalog *c,efs_ino_t
 int efs_query_catalog_path(const struct efs_query_catalog *c, efs_ino_t dir, efs_ino_t root, char *out, size_t cap)
 {
     if (!c || !out || !cap) return EFS_ERR_INVAL;
+    if(c->disk)return efs_query_disk_path(c->disk,dir,root,out,cap);
     size_t len=0;out[0]=0;
     for (uint32_t steps=0;dir!=root && steps<=c->count;steps++) {
         struct node *n=find_node(c,dir);
@@ -624,6 +660,11 @@ int efs_query_catalog_find(const struct efs_query_catalog *c, efs_ino_t root, en
                             int (*emit)(void *,const struct efs_name_entry *,const char *), void *user)
 {
     if (!c || !term || !emit || !visit_budget) return EFS_ERR_INVAL;
+    if(c->disk) {
+        uint64_t cursor=0;uint32_t budget=visit_budget>UINT32_MAX?UINT32_MAX:(uint32_t)visit_budget;
+        int rc=efs_query_disk_page(c->disk,root,match,term,0,&cursor,budget,NULL,NULL,emit,user);
+        return rc?rc:cursor==(UINT64_C(4096)<<32)?EFS_OK:EFS_ERR_BUSY;
+    }
     struct node *n=find_node(c,root);
     if (!n) return EFS_ERR_NOT_FOUND;
     if (!S_ISDIR(n->inode->row.mode)) return EFS_ERR_INVAL;
@@ -645,6 +686,7 @@ int efs_query_catalog_page(const struct efs_query_catalog *c,efs_ino_t root,
     int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
 {
     if (!c || !position || !budget || *position>(UINT64_C(4096)<<32)) return EFS_ERR_INVAL;
+    if(c->disk)return efs_query_disk_page(c->disk,root,match,term,immediate,position,budget,stop,stop_ctx,emit,user);
     struct node *n=find_node(c,root);
     if (!n) return EFS_ERR_NOT_FOUND;
     if (!S_ISDIR(n->inode->row.mode)) return EFS_ERR_INVAL;
@@ -711,6 +753,7 @@ int efs_query_catalog_ls_bounded(const struct efs_query_catalog *c, efs_ino_t ro
                           int (*emit)(void *,const struct efs_name_entry *,const char *),void *user)
 {
     if (!c || !emit || !budget) return EFS_ERR_INVAL;
+    if(c->disk)return efs_query_disk_ls(c->disk,root,budget,stop,stop_ctx,emit,user);
     struct node *node=find_node(c,root);
     if (!node) return EFS_ERR_NOT_FOUND;
     if (!S_ISDIR(node->inode->row.mode)) return EFS_ERR_INVAL;

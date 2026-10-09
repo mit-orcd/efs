@@ -1,0 +1,15 @@
+2026-10-09T20:37:16.781Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=405
+2026-10-09T20:37:46.901Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=406
+2026-10-09T20:39:44.753Z query-refresh: rc=-1 cap_mib=256 initial=1 elapsed_ms=112226
+2026-10-09T20:41:13.714Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=88861
+2026-10-09T20:43:33.574Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=408
+2026-10-09T20:44:03.702Z query-refresh: rc=-13 cap_mib=256 initial=1 elapsed_ms=405
+2026-10-09T20:44:31.389Z query-restore: rc=-3 backend=disk
+2026-10-09T20:46:13.709Z query-refresh: rc=-1 cap_mib=256 initial=1 elapsed_ms=102323
+2026-10-09T20:46:13.814Z query-restore: rc=-3 backend=disk
+2026-10-09T20:47:51.587Z query-refresh: rc=-1 cap_mib=256 initial=1 elapsed_ms=97778
+2026-10-09T20:47:51.693Z query-restore: rc=-3 backend=disk
+2026-10-09T20:49:26.071Z query-refresh: rc=-1 cap_mib=256 initial=1 elapsed_ms=94384
+2026-10-09T20:49:26.175Z query-restore: rc=-3 backend=disk
+2026-10-09T20:51:03.215Z query-refresh: rc=-1 cap_mib=256 initial=1 elapsed_ms=97044
+2026-10-09T20:51:03.319Z query-restore: rc=-3 backend=disk

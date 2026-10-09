@@ -1,0 +1,15 @@
+fixture=/home/efs/query-disk-release-live3 ports=24800-24803 mode=direct transport=tcp
+raft-mkfs rc=-15 leader_hint=-1 index=1 salt=15909699409068874023
+raft-mkfs rc=0 leader_hint=1 index=2 salt=4776469298822585738
+initial complete-group catalogs PASS
+raft-create status=0 primary=1 parent=1 name=file-0 ino=4097 mode=0100644 nlink=1
+raft-create status=0 primary=1 parent=1 name=file-1 ino=8193 mode=0100644 nlink=1
+raft-create status=0 primary=1 parent=1 name=file-2 ino=12289 mode=0100644 nlink=1
+raft-create status=0 primary=1 parent=1 name=file-3 ino=16385 mode=0100644 nlink=1
+quiet metadata refresh and partial-host refusal PASS
+v1 RPC stats/find, unchanged publication, redirects and explicit errors PASS
+v2 command JSON stats/find/ls, immutable catalog identity and explicit limits PASS
+v3 type/size predicates, canonical fields and explicit limits PASS
+restart catalog restore/rebuild from persisted metadata PASS
+restart RPC filenames match independent CREATE oracle PASS
+query_publication: PASS (smoke only)

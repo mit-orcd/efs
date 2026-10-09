@@ -1483,6 +1483,14 @@ the recommended first priorities within this set. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
+### Disk-backed query cache progress
+
+[W92 local disk backend](../status/query-disk-backend-20261009.md) implements persistent
+partition catalogs, bounded builder scratch, immutable snapshots and validated
+checkpoint recovery. Initial functional gates pass; normal Xorinox query
+publication refuses a retained wrong-shard directory entry. Incremental derived
+stats, disk quotas and large-scale acceptance remain open.
+
 ### Distributed metadata scaling discussion
 
 [W98 — from fixed placement to distributed metadata capacity](../status/all-node-metadata-queries-20261009.md)
@@ -5653,11 +5661,17 @@ the original record and withdrawn interpretation remain retained.
 
 ### W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
+**Oct 9 disk backend progress:** [implementation checkpoint](../status/query-disk-backend-20261009.md)
+records the persistent partition backend, bounded scratch, immutable generation
+leases and validated cold restore. Functional differential and private live
+gates pass. Derived-stat refresh still performs a full disk pass; disk budgets,
+incremental derived maintenance and the scale gates below remain open.
+
 **Oct 9 user requirement — billions of files:** W92 remains open until the
 server query catalog uses a persistent, partitioned disk-backed index with
 bounded resident memory. Target namespace cardinality is **2^32 files**;
 this is a design/validation target, not a demonstrated EFS capacity. The current
-implementation retains the complete query catalog in RAM. Partition reuse and
+RAM implementation retains the complete query catalog in RAM. Partition reuse and
 bounded result paging reduce work/output but do not bound resident memory as
 the namespace grows. The latest NUC run reaches the unchanged 1024 MiB catalog
 cap near 1.25 million files and leaves stale snapshots. The earlier recovery
@@ -5683,7 +5697,7 @@ partitioned synthetic-index gate exercising at least 2^32 entries, plus staged
 real-filesystem gates within measured space/inode limits. Record synthetic and
 real evidence separately; synthetic index acceptance does not certify end-to-end
 EFS capacity. Measure foreground latency, query latency and freshness under load.
-Implementation and these gates are pending. See
+Full implementation acceptance and these scale gates remain pending. See
 [architecture requirement](../status/virtual-find-stats.md#billions-of-files--disk-backed-bounded-memory-catalog)
 and [five-minute evidence](../status/tiny-file-five-minute-profile-20261009.md).
 

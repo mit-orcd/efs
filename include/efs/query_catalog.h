@@ -20,6 +20,17 @@ int efs_query_catalog_build(struct efs_kv_lsm_snapshot *source,
                              const struct efs_query_catalog *old,
                              uint64_t max_bytes, int (*stop)(void *), void *ctx,
                              struct efs_query_catalog **out);
+/* Persistent local backend. root is a private cache directory on metadata
+ * storage. Same authoritative source/retention contract as the RAM builder;
+ * allocations remain bounded independently of namespace cardinality. */
+int efs_query_catalog_build_disk(const char *root,struct efs_kv_lsm_snapshot *source,
+    const struct efs_query_catalog *old,uint64_t max_bytes,int (*stop)(void *),void *ctx,
+    struct efs_query_catalog **out);
+/* Checkpoint/restore require identical applied indexes and terms for both
+ * metadata groups, supplied only after the host establishes authority. */
+int efs_query_catalog_checkpoint(struct efs_query_catalog *,const uint64_t watermark[4]);
+int efs_query_catalog_restore_disk(const char *,struct efs_kv_lsm_snapshot *,const uint64_t watermark[4],uint64_t,
+    struct efs_query_catalog **);
 void efs_query_catalog_retain(struct efs_query_catalog *catalog);
 /* Resume a name-index scan. stop/emit AGAIN retains the current candidate;
  * BUSY from the scan budget becomes a successful page with a continuation. */
@@ -63,4 +74,6 @@ int efs_query_catalog_ls(const struct efs_query_catalog *catalog, efs_ino_t root
 int efs_query_catalog_ls_bounded(const struct efs_query_catalog *catalog,efs_ino_t root,
                           uint64_t visit_budget,int (*stop)(void *),void *stop_ctx,
                           int (*emit)(void *,const struct efs_name_entry *,const char *),void *user);
+/* Startup-only orphan recovery; hold returned descriptor until worker exit. */
+int efs_query_catalog_disk_recover(const char *root,int *lease);
 #endif
