@@ -13,6 +13,8 @@
 
 /* Exact bounded key set, so retrying an applied entry cannot consume the
  * next batch. Historical LANE_SWEEP retains whole-lane replay semantics. */
+#define EFS_MD_REQ_SWEEP_NEXT 35 /* RPC only: leader selects exact keys; never log */
+#define EFS_MD_CMD_REAP_BATCH 34 /* [ino:8][gen:8][n:1][len:1,key:31]*n */
 #define EFS_MD_CMD_LANE_SWEEP_BATCH 33 /* [ino:8][gen:8][lane:1][n:1][ci:4]*n */
 #define EFS_MD_CMD_CLOSE_CLEANUP 32 /* [ino:8][generation:8], retry deferred close */
 #define EFS_MD_CMD_PUBLICATION_ADMIT 31 /* immutable durable pending intent */

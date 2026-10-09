@@ -1579,6 +1579,29 @@ static int host_apply_coord(void *user, const struct efs_txid *t,
 /* EFS_MD_CMD_LANE_SWEEP on the lane's group: delete the lane's chunk keys
  * (emitting one GC record per chunk on this group's anchor shard), then the
  * lane key. Proposed by the reaper for each active lane of a dead inode. */
+/* An unhosted reaper asks the lane leader to select one immutable batch.
+ * This request is never logged; only the resulting exact-key command is.
+ * Lagging/empty selection cannot erase remaining chunks: apply rechecks. */
+static int host_pack_sweep_next(struct efs_raft_host *h, uint8_t group,
+                                const uint8_t *request, uint32_t len,
+                                uint8_t *cmd, uint32_t *clen)
+{
+    uint32_t indices[EFS_META_SWEEP_BATCH_MAX], n;
+    if (len != 18 || request[0] != EFS_MD_REQ_SWEEP_NEXT ||
+        !rd64be(request+1) || !rd64be(request+9) || request[17] >= EFS_META_LANES ||
+        group != efs_raft_shard_group(efs_kv_lane_shard(rd64be(request+1),request[17])))
+        return EFS_ERR_INVAL;
+    int rc=efs_meta_lane_sweep_select(h->kv,rd64be(request+1),rd64be(request+9),
+                                      request[17],indices,&n);
+    if (rc != EFS_OK) return rc;
+    if (n > EFS_META_SWEEP_BATCH_MAX) return EFS_ERR_PROTO;
+    memcpy(cmd,request,18);
+    cmd[0]=EFS_MD_CMD_LANE_SWEEP_BATCH;cmd[18]=(uint8_t)n;
+    for (uint32_t i=0; i<n; i++) wr32be(cmd+19+4*i,indices[i]);
+    *clen=19+4*n;
+    return EFS_OK;
+}
+
 static int apply_lane_sweep_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                                 uint32_t clen, uint64_t index)
 {
@@ -1622,7 +1645,18 @@ static int apply_reap_done_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (clen < 17)
         return EFS_ERR_PROTO;
     ino = rd64be(cmd + 1);
-    rc = efs_meta_apply_reap_done(h->kv, ino, rd64be(cmd + 9));
+    if (cmd[0] == EFS_MD_CMD_REAP_BATCH) {
+        struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX];
+        if (clen < 18 || cmd[17] > EFS_META_REAP_BATCH_MAX ||
+            clen != 18u + 32u * cmd[17]) return EFS_ERR_PROTO;
+        for (uint32_t i=0; i<cmd[17]; i++) {
+            keys[i].len=cmd[18+32*i];
+            memcpy(keys[i].key,cmd+19+32*i,EFS_META_REAP_KEY_MAX);
+        }
+        rc=efs_meta_apply_reap_batch(h->kv,ino,rd64be(cmd+9),keys,cmd[17]);
+    } else {
+        rc = efs_meta_apply_reap_done(h->kv, ino, rd64be(cmd + 9));
+    }
     if (rc != EFS_OK)
         fprintf(stderr, "raft-host: apply reap-done rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
@@ -2333,7 +2367,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_UTIMENS || cmd[0] == EFS_MD_CMD_TRUNCATE ||
            cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
            cmd[0] == EFS_MD_CMD_LANE_FENCE ||
-           cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
+           cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP)
@@ -2346,7 +2380,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         ret = EFS_OK;
     /* Storage failure must retry this entry on every replica, rather than
      * advance a follower past cleanup it did not durably perform. */
-    if ((cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
+    if ((cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CREATE ||
@@ -2721,7 +2755,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
     }
     if (cmd[0] == EFS_MD_CMD_ORPHAN_REAP)
         return apply_orphan_reap_cmd(h, cmd, clen, index);
-    if (cmd[0] == EFS_MD_CMD_REAP_DONE)
+    if (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH)
         return apply_reap_done_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_GC_ACK)
         return apply_gc_ack_cmd(h, cmd, clen, index);
@@ -3593,7 +3627,7 @@ static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
     switch (cmd[0]) {
     case EFS_MD_CMD_DECIDE: case EFS_MD_CMD_RESOLVE: case EFS_MD_CMD_DROP:
     case EFS_MD_CMD_LANE_SWEEP: case EFS_MD_CMD_LANE_SWEEP_BATCH:
-    case EFS_MD_CMD_REAP_DONE:
+    case EFS_MD_CMD_REAP_DONE: case EFS_MD_CMD_REAP_BATCH:
     case EFS_MD_CMD_GC_ACK: case EFS_MD_CMD_PUBLICATION_RETIRE:
         return 1;
     default: return 0;
@@ -6272,9 +6306,9 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen)
 {
     int rc = host_bg_propose(h, group, cmd, clen, 1);
-    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH)) {
-        uint64_t *counter = (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH) ? &h->s->gc_sweep_errors :
-                            (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_ORPHAN_REAP) ? &h->s->gc_reap_errors :
+    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT))) {
+        uint64_t *counter = (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT) ? &h->s->gc_sweep_errors :
+                            (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_CMD_ORPHAN_REAP) ? &h->s->gc_reap_errors :
                             &h->s->gc_ack_errors;
         __atomic_fetch_add(counter, 1, __ATOMIC_RELAXED);
     }
@@ -6760,7 +6794,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         __atomic_store_n(&h->s->gc_first_seen_us[gi], first ? efs_iostats_now_us() : 0, __ATOMIC_RELAXED);
     }
     for (i = 0; i < c.n && h->gc_running && h->running; i++) {
-        uint8_t cmd[19 + 4 * EFS_META_SWEEP_BATCH_MAX];
+        uint8_t cmd[18 + 32 * EFS_META_REAP_BATCH_MAX];
         int lanes_ok = 1;
         int lrc = 0, drc = 0;
 
@@ -6783,14 +6817,18 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
                 for (uint32_t j=0; j<n; j++) wr32be(cmd+19+4*j,indices[j]);
                 lrc = host_gc_propose(h, efs_raft_shard_group(lshard), cmd, 19+4*n);
             } else {
-                /* Legacy remote selection until a bounded selection RPC is
-                 * available. Do not infer an empty lane from an unhosted KV. */
-                cmd[0] = EFS_MD_CMD_LANE_SWEEP;
+                /* Selection occurs at the remote lane leader; never scan an
+                 * unhosted KV or submit historical whole-lane work. */
+                cmd[0] = EFS_MD_REQ_SWEEP_NEXT;
                 lrc = host_gc_propose(h,efs_raft_shard_group(lshard),cmd,18);
             }
             if (lrc != EFS_OK) {
                 lanes_ok = 0;
-                break; /* retry the whole marker next pass */
+                /* A bounded batch made partial progress. Advance the other
+                 * lanes this pass rather than serializing a large delete
+                 * behind one lane. Keep the marker until every lane is done. */
+                if (lrc == EFS_ERR_BUSY) continue;
+                break; /* storage/authority failure: retry next pass */
             }
         }
         times->sweep += now_us_() - started;
@@ -6807,13 +6845,21 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         times->fence += now_us_() - started;
         if (frc != EFS_OK)
             continue;
-        cmd[0] = EFS_MD_CMD_REAP_DONE;
+        struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX]; uint32_t count;
+        drc=efs_meta_reap_select(h->kv,c.ino[i],c.gen[i],keys,&count);
+        if (drc != EFS_OK) continue;
+        cmd[0] = EFS_MD_CMD_REAP_BATCH;
         wr64be(cmd + 1, c.ino[i]);
         wr64be(cmd + 9, c.gen[i]);
+        cmd[17]=(uint8_t)count;
+        for (uint32_t j=0; j<count; j++) {
+            cmd[18+32*j]=keys[j].len;
+            memcpy(cmd+19+32*j,keys[j].key,EFS_META_REAP_KEY_MAX);
+        }
         started = now_us_();
         drc = host_gc_propose(h,
                               efs_raft_shard_group(efs_kv_inode_shard(c.ino[i])),
-                              cmd, 17);
+                              cmd, 18+32*count);
         times->done += now_us_() - started;
         if (env_on("EFS_GC_DBG"))
             fprintf(stderr, "raft-host: gc reap ino=%llu lanes=%llx sweep ok, reap_done rc=%d\n",
@@ -8389,6 +8435,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     struct efs_raft_host *h = g_host;
     uint8_t group;
     const uint8_t *cmd;
+    uint8_t sweep_cmd[19+4*EFS_META_SWEEP_BATCH_MAX];
     uint32_t clen;
     uint64_t idx = 0, term = 0;
     uint64_t salt = 0;
@@ -8502,6 +8549,11 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
                 out->leader_hint = v.leader;
             return;
         }
+    }
+    if (clen && cmd[0] == EFS_MD_REQ_SWEEP_NEXT) {
+        rc=host_pack_sweep_next(h,group,cmd,clen,sweep_cmd,&clen);
+        if (rc != EFS_OK) { out->rc=rc;return; }
+        cmd=sweep_cmd;
     }
     if (clen >= 2 && cmd[0] == EFS_MD_CMD_SESSION &&
         cmd[1] == EFS_MD_SESS_ESTABLISH) {

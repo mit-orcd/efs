@@ -5874,6 +5874,86 @@ static int rsv_purge_cb(void *user, const uint8_t *key, uint32_t klen,
     return 0;
 }
 
+struct reap_selection {
+    struct efs_meta_reap_key *keys;
+    uint32_t n;
+};
+
+static int reap_select_cb(void *user, const uint8_t *key, uint32_t kl,
+                           const uint8_t *value, uint32_t vl)
+{
+    struct reap_selection *s = user;
+    (void)value; (void)vl;
+    if (kl > EFS_META_REAP_KEY_MAX) return EFS_ERR_PROTO;
+    memset(&s->keys[s->n], 0, sizeof(s->keys[s->n]));
+    s->keys[s->n].len = (uint8_t)kl;
+    memcpy(s->keys[s->n++].key, key, kl);
+    return s->n == EFS_META_REAP_BATCH_MAX ? 1 : 0;
+}
+
+int efs_meta_reap_select(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                          struct efs_meta_reap_key *keys, uint32_t *n)
+{
+    uint8_t prefix[EFS_KV_KEY_MAX]; uint32_t plen;
+    struct reap_selection s = {.keys = keys};
+    if (!kv || !ino || !keys || !n) return EFS_ERR_INVAL;
+    *n = 0;
+    int rc = efs_kv_key_append_rsv_prefix(efs_kv_inode_shard(ino), ino, gen,
+                                         prefix, &plen);
+    if (rc == EFS_OK) rc = efs_kv_scan_prefix(kv,prefix,plen,reap_select_cb,&s);
+    if (rc < 0) return rc;
+    if (s.n < EFS_META_REAP_BATCH_MAX) {
+        rc = efs_kv_key_inode(efs_kv_inode_shard(ino),ino,prefix,&plen);
+        if (rc != EFS_OK) return rc;
+        prefix[2] = EFS_KV_KIND_APPEND_RECEIPT;
+        rc = efs_kv_scan_prefix(kv,prefix,plen,reap_select_cb,&s);
+        if (rc < 0) return rc;
+    }
+    *n = s.n;
+    return EFS_OK;
+}
+
+int efs_meta_apply_reap_batch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               const struct efs_meta_reap_key *keys, uint32_t n)
+{
+    struct efs_kv_item items[EFS_META_REAP_BATCH_MAX];
+    uint8_t prefix[EFS_KV_KEY_MAX]; uint32_t plen;
+    struct efs_meta_row row;
+    if (!kv || !ino || n > EFS_META_REAP_BATCH_MAX || (n && !keys))
+        return EFS_ERR_INVAL;
+    int rc = efs_kv_key_inode(efs_kv_inode_shard(ino),ino,prefix,&plen);
+    if (rc != EFS_OK) return rc;
+    /* Reject the complete malformed set before touching any key. */
+    for (uint32_t i=0; i<n; i++) {
+        const uint8_t *k = keys[i].key;
+        if ((keys[i].len != 27 || k[2] != EFS_KV_KIND_APPEND_RSV || rd64(k+11) != gen) &&
+            (keys[i].len != 31 || k[2] != EFS_KV_KIND_APPEND_RECEIPT))
+            return EFS_ERR_INVAL;
+        if (memcmp(k,prefix,2) || memcmp(k+3,prefix+3,8)) return EFS_ERR_INVAL;
+        for (uint32_t j=0; j<i; j++)
+            if (keys[j].len == keys[i].len && !memcmp(keys[j].key,k,keys[i].len))
+                return EFS_ERR_INVAL;
+        memset(&items[i],0,sizeof(items[i]));
+        items[i].op=EFS_KV_DEL;items[i].key=k;items[i].klen=keys[i].len;
+    }
+    rc = efs_meta_apply_get_inode(kv,ino,&row);
+    if (rc == EFS_OK) {
+        if (row.generation != gen || row.nlink)
+            return efs_meta_apply_reap_done(kv,ino,gen); /* stale marker only */
+        int held = efs_lease_any(kv,ino,gen);
+        if (held < 0) return held;
+        if (held) return EFS_ERR_BUSY;
+    } else if (rc != EFS_ERR_NOT_FOUND) return rc;
+    if (n && (rc=meta_write_batch(kv,items,n)) != EFS_OK) return rc;
+    struct efs_meta_reap_key remaining[EFS_META_REAP_BATCH_MAX]; uint32_t count;
+    rc=efs_meta_reap_select(kv,ino,gen,remaining,&count);
+    if (rc != EFS_OK) return rc;
+    if (count) return EFS_ERR_BUSY;
+    /* No append rows remain: historical finalization performs only empty
+     * prefix scans and fixed cursor/marker/inode cleanup. */
+    return efs_meta_apply_reap_done(kv,ino,gen);
+}
+
 int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
 {
     struct efs_meta_row row;

@@ -5765,6 +5765,51 @@ static void test_create_initial_lease_atomic(void)
   }
 }
 
+static void test_reap_bounded_exact_keys(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();
+    efs_ino_t ino=70001; uint64_t gen=9;
+    uint8_t key[EFS_KV_KEY_MAX], marker[EFS_META_REAP_VAL], value[64]={0};
+    uint32_t kl,vl; struct efs_kv_item item={.op=EFS_KV_PUT};
+    struct efs_meta_reap_key keys[EFS_META_REAP_BATCH_MAX], retry[EFS_META_REAP_BATCH_MAX];
+    uint32_t n=0;
+    CHECK(kv != NULL,"bounded reap KV");
+    efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&kl);
+    efs_meta_pack_reap(marker,gen,0);
+    item.key=key;item.klen=kl;item.val=marker;item.vlen=sizeof(marker);
+    CHECK(efs_kv_batch(kv,&item,1)==EFS_OK,"bounded reap marker");
+    for (unsigned i=0;i<19;i++) {
+        if (i<13) efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,gen,i,key,&kl);
+        else {
+            efs_kv_key_inode(efs_kv_inode_shard(ino),ino,key,&kl);
+            key[2]=EFS_KV_KIND_APPEND_RECEIPT;
+            memset(key+kl,0,20);key[kl]=(uint8_t)i;key[kl+19]=1;kl+=20;
+        }
+        item.key=key;item.klen=kl;item.val=value;item.vlen=1;
+        CHECK(efs_kv_batch(kv,&item,1)==EFS_OK,"bounded reap seed");
+    }
+    CHECK(efs_meta_reap_select(kv,ino,gen,keys,&n)==EFS_OK && n==8,"bounded reap selects eight");
+    memcpy(retry,keys,sizeof(keys));
+    CHECK(efs_kv_mem_fail_next_batch(kv)==EFS_OK,"bounded reap fail atomic write");
+    CHECK(efs_meta_apply_reap_batch(kv,ino,gen,keys,n)==EFS_ERR_IO,"bounded reap failure propagated");
+    vl=sizeof(value);
+    CHECK(efs_kv_get(kv,keys[0].key,keys[0].len,value,&vl)==EFS_OK,"failed reap preserved selected key");
+    CHECK(efs_meta_apply_reap_batch(kv,ino,gen,keys,n)==EFS_ERR_BUSY,"bounded reap partial progress");
+    CHECK(efs_meta_reap_select(kv,ino,gen,keys,&n)==EFS_OK && n==8,"bounded reap next keys");
+    CHECK(efs_meta_apply_reap_batch(kv,ino,gen,retry,8)==EFS_ERR_BUSY,"exact replay cannot consume next batch");
+    vl=sizeof(value);
+    CHECK(efs_kv_get(kv,keys[0].key,keys[0].len,value,&vl)==EFS_OK,"replay preserved next batch");
+    retry[0]=keys[0];retry[0].key[3]^=1;
+    CHECK(efs_meta_apply_reap_batch(kv,ino,gen,retry,1)==EFS_ERR_INVAL,"cross inode key rejected");
+    CHECK(efs_meta_apply_reap_batch(kv,ino,gen,keys,n)==EFS_ERR_BUSY,"second batch retains marker");
+    CHECK(efs_meta_reap_select(kv,ino,gen,keys,&n)==EFS_OK && n==3,"last receipt batch");
+    CHECK(efs_meta_apply_reap_batch(kv,ino,gen,keys,n)==EFS_OK,"last batch finalizes");
+    CHECK(efs_meta_apply_reap_batch(kv,ino,gen,keys,n)==EFS_OK,"last batch replay");
+    efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&kl);vl=sizeof(value);
+    CHECK(efs_kv_get(kv,key,kl,value,&vl)==EFS_ERR_NOT_FOUND,"bounded reap removed marker only at end");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_create_negative_replay();
@@ -5825,6 +5870,7 @@ int main(void)
     test_rename_splitting();
     test_lookup_path();
     test_gc_reap();
+    test_reap_bounded_exact_keys();
     test_gc_fold_live_alias();
     test_content_fence_prepared_writers();
     test_w36_split_source_snapshots();

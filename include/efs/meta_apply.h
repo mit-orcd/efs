@@ -919,6 +919,15 @@ int efs_meta_lane_sweep_select(struct efs_kv *, efs_ino_t, uint64_t, uint8_t,
 int efs_meta_apply_lane_sweep_batch(struct efs_kv *, efs_ino_t, uint64_t,
                                     uint8_t, const uint32_t *, uint32_t);
 
+/* Immutable, bounded append cleanup keys for replay-safe reap progress. */
+#define EFS_META_REAP_BATCH_MAX 8u
+#define EFS_META_REAP_KEY_MAX 31u
+struct efs_meta_reap_key { uint8_t len; uint8_t key[EFS_META_REAP_KEY_MAX]; };
+int efs_meta_reap_select(struct efs_kv *, efs_ino_t, uint64_t,
+                          struct efs_meta_reap_key *, uint32_t *);
+int efs_meta_apply_reap_batch(struct efs_kv *, efs_ino_t, uint64_t,
+                               const struct efs_meta_reap_key *, uint32_t);
+
 struct efs_gc_ack_item {
     efs_ino_t ino;
     uint64_t gen;
