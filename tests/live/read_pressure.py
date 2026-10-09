@@ -3,7 +3,8 @@
 
 python3 tests/live/read_pressure.py prepare /mount --fixture w60-unique
 python3 tests/live/read_pressure.py run /mount --fixture w60-unique
-Only prepare writes data; run checks 2000 tiny reads under sequential pressure.
+Only prepare writes data; run walks a nested tree and verifies 2000 tiny files
+and four 128 MiB files under concurrent sequential pressure.
 Fixtures are retained for A/B reruns; remove the named fixture after testing.
 """
 import argparse
@@ -24,15 +25,19 @@ def main():
         parser.error('fixture must be one directory name using letters, numbers, - or _')
     root = args.mount / args.fixture
     block = bytes(range(256)) * 4096
-    marker = {'efs_w60_fixture': 1, 'files': 2000, 'size_mib': 512}
+    marker = {'efs_w60_fixture': 2, 'files': 2000, 'size_mib': 512, 'large_files': 4}
     if args.mode == 'prepare':
         root.mkdir()  # Never overwrite an existing fixture/user directory.
-        with (root / 'sequential').open('wb', buffering=0) as f:
-            for _ in range(marker['size_mib']):
-                assert f.write(block) == len(block)
-            os.fsync(f.fileno())
+        for group in range(marker['large_files']):
+            directory = root / f'branch-{group}' / 'nested'
+            directory.mkdir(parents=True)
+            with (directory / 'sequential').open('wb', buffering=0) as f:
+                for _ in range(marker['size_mib'] // marker['large_files']):
+                    assert f.write(block) == len(block)
+                os.fsync(f.fileno())
         for i in range(marker['files']):
-            with (root / f'tiny-{i}').open('wb') as f:
+            directory = root / f"branch-{i % marker['large_files']}" / 'nested'
+            with (directory / f'tiny-{i}').open('wb') as f:
                 f.write(b'abc')
         (root / 'fixture.json').write_text(json.dumps(marker))
         os.sync()
@@ -45,7 +50,7 @@ def main():
     def reader():
         try:
             while not stop.is_set():
-                with (root / 'sequential').open('rb', buffering=0) as f:
+                with (root / 'branch-0' / 'nested' / 'sequential').open('rb', buffering=0) as f:
                     while not stop.is_set():
                         data = f.read(131072)
                         if not data:
@@ -63,23 +68,44 @@ def main():
     thread.start()
     failures = []
     started = time.monotonic()
+    visited = 0
+    large_bytes = 0
     try:
         assert ready.wait(30), 'sequential reader did not start'
         time.sleep(.2)
-        for i in range(marker['files']):
-            if time.monotonic() - started > 120:
-                raise TimeoutError('mixed-read gate exceeded 120 seconds')
-            try:
-                with (root / f'tiny-{i}').open('rb', buffering=0) as f:
-                    assert f.read(4) == b'abc', 'tiny data mismatch'
-            except Exception as exc:
-                failures.append((i, str(exc)))
+        for directory, _, names in os.walk(root):
+            for name in sorted(names):
+                if name == 'fixture.json':
+                    continue
+                if time.monotonic() - started > 120:
+                    raise TimeoutError('mixed-read gate exceeded 120 seconds')
+                try:
+                    with (Path(directory) / name).open('rb', buffering=0) as f:
+                        if name.startswith('tiny-'):
+                            assert f.read(4) == b'abc', 'tiny data mismatch'
+                            visited += 1
+                        else:
+                            count = 0
+                            while True:
+                                if time.monotonic() - started > 120:
+                                    raise TimeoutError('mixed-read gate exceeded 120 seconds')
+                                data = f.read(len(block))
+                                if not data:
+                                    break
+                                assert data == block[:len(data)], 'large data mismatch'
+                                count += len(data)
+                            assert count == marker['size_mib'] // marker['large_files'] * len(block)
+                            large_bytes += count
+                except Exception as exc:
+                    failures.append((str(Path(directory) / name), str(exc)))
     finally:
         stop.set()
         thread.join(30)
     result = dict(stats, failures=len(failures), first_failures=failures[:5],
+                  tiny_files_verified=visited, large_bytes_verified=large_bytes,
                   elapsed=time.monotonic() - started, reader_stopped=not thread.is_alive())
     print(json.dumps(result), flush=True)
+    assert visited == marker['files'] and large_bytes == marker['size_mib'] * len(block)
     assert not failures and not stats['sequential_errors'] and not thread.is_alive()
 
 

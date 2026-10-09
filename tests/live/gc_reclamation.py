@@ -1073,8 +1073,9 @@ os.close(fd)
         result=run(['python3',source/'tests/live/read_pressure.py','run',mount,'--fixture','mixed-read-gate'],capture_output=True,text=True,timeout=180)
         (work/'mixed-read.json').write_text(result.stdout)
         print(result.stdout,flush=True)
-        for path in (mount/'mixed-read-gate').iterdir():path.unlink()
-        (mount/'mixed-read-gate').rmdir()
+        for directory, _, names in os.walk(mount/'mixed-read-gate', topdown=False):
+            for name in names:(Path(directory)/name).unlink()
+            Path(directory).rmdir()
         wait(drained,'bulk mixed-read deletions drained before fault fixture',600)
         budgets=re.findall(r'buf-budget hard=(\d+) drain=(\d+) slab=(\d+)',(work/'fuse.log').read_text())
         assert budgets and all(tuple(map(int,b))==(hard_budget,drain_budget,32<<20) for b in budgets),budgets

@@ -48,6 +48,13 @@ NUC live 32 MiB A/B: old behavior failed 2000/2000 reads; fixed behavior failed
 0/2000 with bytes verified. Full NUC POSIX and units passed. The initial fixture
 against older servers is superseded by the aligned-build live run in the
 [W60 checkpoint](../../results/measure/20261006-d25-w60-ten-rounds/SUMMARY.md).
+**Oct 9 AMD follow-up:** the expanded nested-tree gate verifies 2000 tiny files
+and four 128 MiB files while a concurrent sequential reader pressures the
+32 MiB body budget. AMD direct-I/O/TCP has zero demand or sequential failures.
+[Gate evidence](../../results/measure/20261009-w60-amd-tree/README.md).
+This extends coverage on the user-selected AMD cluster; it does not establish
+an Xorinox deployment result.
+
 **Remaining:** full-tree mixed reads on xorinox, including large files, with
 zero demand-read ENOMEM/EIO caused by speculation. No promise of admission
 under exhaustion by demand/dirty owners. Sub-chunk accounting and dedicated
