@@ -2840,6 +2840,39 @@ static void mkop(struct efs_opid *op, uint8_t id, uint64_t seq)
     op->seq = seq;
 }
 
+static void test_truncate_append_cursor(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();
+    struct coord_ctx cc={.kv=kv};
+    struct efs_opid op;struct efs_meta_row before,after;
+    struct efs_meta_truncate t={.size=0,.lane_mask=~0ULL};
+    efs_ino_t ino=0;uint64_t off=0;
+    CHECK(efs_meta_apply_init(kv,T0)==EFS_OK &&
+          efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0644,"append-truncate",&ino)==EFS_OK,
+          "append truncate fixture");
+    mkop(&op,7,1);
+    CHECK(efs_meta_apply_append_reserve(kv,ino,6,&op,coord_fn,&cc,&off)==EFS_OK && off==0,
+          "append truncate reserve");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&before)==EFS_OK,"append truncate before");
+    CHECK(efs_meta_apply_truncate(kv,ino,T0+1,&t)==EFS_ERR_BUSY,
+          "truncate refuses outstanding append ranges");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&after)==EFS_OK &&
+          after.content_epoch==before.content_epoch && after.base_size==before.base_size,
+          "refused truncate leaves epoch and size unchanged");
+    CHECK(efs_meta_apply_append_resolve(kv,ino,off,EFS_META_APPEND_COMPLETED)==EFS_OK,
+          "append completes before truncate retry");
+    uint8_t key[EFS_KV_KEY_MAX],value[24]={0};uint32_t kl=0,vl=sizeof(value);
+    value[7]=64;value[15]=64;
+    CHECK(efs_kv_key_append_cur(efs_kv_inode_shard(ino),ino,before.generation,key,&kl)==EFS_OK &&
+          efs_kv_put(kv,key,kl,value,sizeof(value))==EFS_OK,"closed cursor fixture");
+    CHECK(efs_meta_apply_truncate(kv,ino,T0+2,&t)==EFS_OK,"truncate after completion");
+    CHECK(efs_kv_get(kv,key,kl,value,&vl)==EFS_ERR_NOT_FOUND,"truncate retires closed watermark");
+    mkop(&op,7,2);
+    CHECK(efs_meta_apply_append_reserve(kv,ino,6,&op,coord_fn,&cc,&off)==EFS_OK && off==0,
+          "next append uses truncated EOF without zero gap");
+    efs_kv_mem_free(kv);
+}
+
 static void test_append_reserve(void)
 {
     struct efs_kv *kv = efs_kv_mem_create();
@@ -5583,8 +5616,9 @@ static int test_create_lease_apply(int pending, struct efs_kv *kv,
     return efs_meta_apply_create_file_log_lease(kv,&g_at,1,S_IFREG|0600,
                                       "atomic",0,-1,q,uuid,1,out);
 }
-static void test_pending_create_negative_replay(void)
+static void test_create_negative_replay(void)
 {
+  for (int pending = 0; pending < 2; pending++) {
     struct efs_kv *kv=efs_kv_mem_create();
     CHECK(kv && efs_meta_apply_init(kv,T0)==EFS_OK,"negative CREATE init");
     efs_ino_t existing=0,out=0;struct efs_meta_dentry dent;struct efs_opid_reply rep;
@@ -5595,27 +5629,28 @@ static void test_pending_create_negative_replay(void)
     struct efs_kv_ops ops=*kv->ops;const struct efs_kv_ops *original=kv->ops;
     create_batch_original=ops.batch;ops.batch=create_batch_fault;kv->ops=&ops;
     create_batch_fail=1;create_batch_calls=0;
-    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_IO,"failed negative verdict remains ambiguous");
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&out)==EFS_ERR_IO,"failed negative verdict remains ambiguous");
     CHECK(create_batch_calls==1 && !create_lease_items,"negative verdict has no ownership effect");
     CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==0,"failed negative batch has no replay verdict");
     create_batch_fail=0;
-    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,"negative CREATE recorded");
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,"negative CREATE recorded");
     CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==1 && rep.rc==EFS_ERR_EXIST && !rep.ino,"durable negative verdict");
     CHECK(efs_meta_apply_unlink(kv,1,"atomic",T0+1)==EFS_OK,"remove conflicting name");
     create_batch_calls=0;
-    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,"late CREATE cannot acquire abandoned ownership");
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,"late CREATE cannot acquire abandoned ownership");
     CHECK(!create_batch_calls && efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,"negative replay cannot recreate removed name");
     efs_ino_t replacement=0;
     CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"atomic",&replacement)==EFS_OK,
           "another request reuses negatively replayed name");
-    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&out)==EFS_ERR_EXIST && !out,
           "negative replay retains verdict after name reuse");
     CHECK(efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_OK && dent.ino==replacement,
           "negative replay preserves replacement inode");
     CHECK(efs_meta_apply_unlink(kv,1,"atomic",T0+2)==EFS_OK,"remove replacement");
     q.id.seq=2;q.ack=1;
-    CHECK(test_create_lease_apply(1,kv,&q,uuid,&out)==EFS_OK && out,"new request can create after negative retirement");
+    CHECK(test_create_lease_apply(pending,kv,&q,uuid,&out)==EFS_OK && out,"new request can create after negative retirement");
     kv->ops=original;efs_kv_mem_free(kv);
+  }
 }
 static void test_create_initial_lease_atomic(void)
 {
@@ -5648,6 +5683,14 @@ static void test_create_initial_lease_atomic(void)
         CHECK(efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,
               "replay pressure cannot create unprotected pending ownership");
     }
+    struct efs_opid_req pressure = q;
+    pressure.id.seq = EFS_OPID_BITMAP_BITS + 1;
+    create_batch_fail=0;create_batch_calls=0;
+    CHECK(test_create_lease_apply(pending,kv,&pressure,uuid,&ino)==EFS_ERR_BUSY,
+          "ordinary and pending CREATE refuse missing replay capacity");
+    CHECK(!create_batch_calls && !ino &&
+          efs_meta_apply_lookup(kv,1,"atomic",&dent)==EFS_ERR_NOT_FOUND,
+          "replay pressure has no namespace or lease effects");
     create_batch_calls=0;create_batch_fail=1;
     CHECK(test_create_lease_apply(pending,kv,&q,uuid,&ino)==EFS_ERR_IO,
           "failed combined CREATE reports error");
@@ -5703,7 +5746,7 @@ static void test_create_initial_lease_atomic(void)
 
 int main(void)
 {
-    test_pending_create_negative_replay();
+    test_create_negative_replay();
     test_gc_last_close_before_resolve();
     test_orphan_unlink();
     test_create_initial_lease_atomic();
@@ -5745,6 +5788,7 @@ int main(void)
     test_truncate_range_del();
     test_cross_group_lane();
     test_append_reserve();
+    test_truncate_append_cursor();
     test_link_nlink();
     test_rmdir_rename();
     test_export_salt();

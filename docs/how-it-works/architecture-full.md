@@ -1577,11 +1577,11 @@ separate states. Close only when the item's named acceptance gates are recorded.
 | --- | --- | --- | --- | --- |
 | 0i | **W54** · a fold's GC deletes the live base → read EIO, data loss | correctness | NUC direct/buffered authoritative folds and cold GC/restart pass; real cold IOR/hardscan passes at 4 and 36 ranks, including nine independent NUC FUSE clients; nine physical hosts remain; AMD software-RXE fold/GC gate passes, hardware RDMA remains | [full text](#w54--a-folds-gc-deletes-the-live-base-queue-row-0i) |
 | 0j | **W69** · the client's 50 ms lookup memo returns pre-mutation stats (posix 164/201) | correctness | correctness accepted: real blocked LOOKUP across chmod, immediate stats and full POSIX pass; GNU du samples recorded; unidentified Spark performance gate remains | [full text](#w69) |
-| 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — Oct 8 isolated Xorinox lost-PUT/barrier-refusal/cold-read gates pass; original macOS NFS trigger remains unisolated; [validation and POSIX suite split](../status/known-bugs-validation-20261008.md) | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
+| 0k | **W55** · span committed to raft, fragment PUTs never landed → read EIO, data loss | correctness | open — [follow-up](../status/known-bugs-create-negative-verdict-20261008.md): partial/directory barrier and quorum cold-byte gates pass after resumption; Linux NFS 20-copy cold bytes pass, broad NFS still fails (179/212); macOS plain cp fails attribute copy; cp -X 20/20 warm, fresh-gateway and freshly mounted Mac bytes/inodes pass; original macOS NFS trigger remains unisolated; [validation and POSIX suite split](../status/known-bugs-validation-20261008.md) | [full text](#w55--span-committed-to-raft-fragment-puts-never-landed--read-eio-data-loss-queue-row-0k) |
 | 0l | **W56** · root-level rename leaves a ghost name in the renaming client's local lookup | correctness | fixed in `f8fef814` — exact old directory-name cache eviction across parent/hash tabs; closed: NUC full POSIX/two-client and 64 root-rename reuse repeats pass; xorinox running binary matches cb5e86de containing the fix (Oct 7) | [full text](#w56--root-level-rename-leaves-a-ghost-name-in-the-renaming-clients-local-lookup-queue-row-0l) |
 | mem1 | **W67** · sparse dirty writes and bounded body admission | correctness / resource exhaustion | Closed: NUC live publication failure plus real recovery scratch exhaustion passes at 32+32 and default 256+64 MiB budgets under a 1 GiB/no-swap ceiling; same-mount/cold recovery and physical GC/restart pass | [evidence, fix shape and gates](../status/fuse-memory.md#sparse-dirty-writes-bypass-reclaim-and-cache-admission-has-no-hard-bound) |
 | mem2 | **W68** · reply-buffer worker lifetime | resource lifetime | Closed: NUC direct/buffered real worker retirement, allocation/TLS/growth fault RSS and key-failure gates pass | [evidence, fix shape and gates](../status/fuse-memory.md#readreaddir-reply-buffers-leak-when-fuse-workers-exit) |
-| 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | open — Oct 8 replay/name-reuse regressions and 16-worker unique-create cold gate pass; original retry-layer BUSY trigger remains unisolated; [validation and POSIX suite split](../status/known-bugs-validation-20261008.md) | [full text](#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
+| 0o | **W58** · open(O_EXCL) create answered EEXIST for a name the same client's own create just landed | correctness | open — [ordinary negative CREATE receipt fix](../status/known-bugs-create-negative-verdict-20261008.md) and replay-capacity/ACK refresh fixes pass Linux regressions; actual FUSE lost-reply/BUSY identity and cold wire verdict gates pass; 16-worker exclusive-create gate passes; historical trigger remains unisolated; [validation and POSIX suite split](../status/known-bugs-validation-20261008.md) | [full text](#w58--openo_excl-create-answered-eexist-for-a-name-the-same-clients-own-create-just-landed-queue-row-0o) |
 | 0p | **W59** · write(2) via FUSE fails ENOSPC with 156 GiB free — client cache-admission mapped to ENOSPC; the 8 MiB metadata budget never drains | correctness | Closed: NUC live publication failure plus real recovery scratch exhaustion passes at 32+32 and default 256+64 MiB budgets under a 1 GiB/no-swap ceiling; same-mount/cold recovery and physical GC/restart pass | [full text](#w59--write2-via-fuse-fails-enospc-with-156-gib-free--client-cache-admission-mapped-to-enospc-the-8-mib-metadata-budget-never-drains-queue-row-0p) |
 | 0q | **W60** · sequential prefetch starves tiny demand reads | correctness | fixed in `73ce8aaa`; NUC 32 MiB A/B: baseline 2000/2000 failures, fixed 0/2000 and no read-NOMEM; Xorinox full-tree gate owed | [evidence and remaining gates](../status/fuse-memory.md) |
 | 0r | **W61** · local GC discards failed lane-sweep verdicts | correctness | repaired in `3a1b4a52`; private-store results recorded in GC checkpoint; xorinox rollout/reclamation observed Oct 7 (`cb5e86de`); final drain, NUC service rollout and lost-ledger reconciliation remain open | [full text](#w61) |
@@ -4616,6 +4616,16 @@ results dirs; move this plan's finished rows to project-history.
 
 ### W64 · Durable append reservation replay across leader changes (queue row 0t)
 
+**Oct 9 NUC continuation:** commits `795a17c2`, `e5d95c1d` and `393f5bae`
+repair a required-close apply deadlock, legacy truncate retaining/conflicting
+with append reservations, and starvation between active append writers. Full
+units, captured-store deferred cleanup replay/restart, eight focused peer
+append/truncate races and mount-sync in both TCP I/O modes pass. Final direct and buffered TCP
+POSIX are each 213/0/4 and peers each 64/64; both cold 800-record append/GC
+audits pass. Evidence is recorded in the
+[NUC gate report](../status/nuc-gate-closure-20261009.md). These gates do not
+activate D25 or replace W72 production-session/unknown-outcome acceptance.
+
 **Oct 8 coordinated-authority acceptance:** `593becf3`, `3a2033d8` and
 `dc9fded0` coordinate one authoritative EOF and identical reservation images
 across shard groups, complete lane barriers atomically and prune DONE rows in
@@ -4936,8 +4946,17 @@ W64's cross-group redirect cycle and was removed. It was reapplied only after
 authoritative coordinated append fixed that gate; the rejected patch and
 failure trace remain in the readiness evidence.
 
-**Remaining gates:** supported mount `-o sync`, final buffered/direct × TCP/RXE
-matrix. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
+**Oct 9 UTC NUC acceptance:** mount-wide `-o sync` passes ordinary/append,
+small/large peer-before-close and cold crash verification in direct/TCP and
+buffered/TCP. Initial broad runs hit the 30-second `concurrent_appends`
+budget; clean baseline peer append then exposed a required-close apply deadlock
+and two append/truncate/handoff defects. NUC is reachable again. The repaired
+final direct/TCP run passes POSIX 213/0/4, peer 64/64, sync-write fault recovery,
+append replay/leader death and exact 800-record cold append/GC. Final buffered/TCP also passes POSIX 213/0/4 and peer 64/64 with the same
+recovery and cold append/GC gates. The runner restores service successfully.
+RXE remains unavailable on NUC, so W73 is not closed. See the [NUC gate report](../status/nuc-gate-closure-20261009.md).
+
+**Remaining gates:** RXE buffered/direct acceptance; final TCP cells pass on NUC. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
 crash now pass for partial bodies; W71 retains
 hardware power-loss acceptance. Software RXE on one AMD host is not physical
 multi-host or hardware RDMA proof.

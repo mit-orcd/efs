@@ -1,0 +1,118 @@
+{
+  "cases": [
+    {
+      "seconds": 0.005748903000494465,
+      "bytes": 31,
+      "name": "synchronous-fsync-False-31",
+      "append": false,
+      "flag": "fsync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.13046035097795539,
+      "bytes": 2097152,
+      "name": "synchronous-fsync-False-2097152",
+      "append": false,
+      "flag": "fsync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.014391524979146197,
+      "bytes": 31,
+      "name": "synchronous-fsync-True-31",
+      "append": true,
+      "flag": "fsync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 2.58976915301173,
+      "bytes": 2097152,
+      "name": "synchronous-fsync-True-2097152",
+      "append": true,
+      "flag": "fsync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.004389349021948874,
+      "bytes": 31,
+      "name": "synchronous-sync-False-31",
+      "append": false,
+      "flag": "sync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.06993208097992465,
+      "bytes": 2097152,
+      "name": "synchronous-sync-False-2097152",
+      "append": false,
+      "flag": "sync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.015111560991499573,
+      "bytes": 31,
+      "name": "synchronous-sync-True-31",
+      "append": true,
+      "flag": "sync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.5635235160007142,
+      "bytes": 2097152,
+      "name": "synchronous-sync-True-2097152",
+      "append": true,
+      "flag": "sync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.004350917995907366,
+      "bytes": 31,
+      "name": "synchronous-dsync-False-31",
+      "append": false,
+      "flag": "dsync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.08189488900825381,
+      "bytes": 2097152,
+      "name": "synchronous-dsync-False-2097152",
+      "append": false,
+      "flag": "dsync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.015268004004610702,
+      "bytes": 31,
+      "name": "synchronous-dsync-True-31",
+      "append": true,
+      "flag": "dsync",
+      "verified_before_close": true
+    },
+    {
+      "seconds": 0.5408883600030094,
+      "bytes": 2097152,
+      "name": "synchronous-dsync-True-2097152",
+      "append": true,
+      "flag": "dsync",
+      "verified_before_close": true
+    },
+    {
+      "name": "append-peer-extension-5",
+      "bytes": 917504,
+      "mixed_peer_extension": true,
+      "gap_chunks": 5,
+      "verified_before_close": false
+    },
+    {
+      "name": "append-peer-extension-6",
+      "bytes": 1048576,
+      "mixed_peer_extension": true,
+      "gap_chunks": 6,
+      "verified_before_close": false
+    }
+  ],
+  "cold_crash_verified": true,
+  "explicit_fsync_before_close": true,
+  "synchronous_write_before_close": true,
+  "mount_sync": false
+}

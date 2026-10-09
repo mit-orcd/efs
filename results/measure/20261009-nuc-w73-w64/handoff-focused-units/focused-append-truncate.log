@@ -1,0 +1,73 @@
+Evidence directory: /data1/efs/gc-direct-gxr09c66
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+raft-mkfs rc=0 leader_hint=1 index=2 salt=9072317327431161022
+client serving PASS
+peer mounted PASS
+prepared /data1/efs/mnt/append-truncate-0 (64 testdirs)
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.2s)
+wrote /data1/efs/gc-direct-gxr09c66/append-truncate-0.tsv
+prepared /data1/efs/mnt/append-truncate-1 (64 testdirs)
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.1s)
+wrote /data1/efs/gc-direct-gxr09c66/append-truncate-1.tsv
+prepared /data1/efs/mnt/append-truncate-2 (64 testdirs)
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (5.2s)
+wrote /data1/efs/gc-direct-gxr09c66/append-truncate-2.tsv
+prepared /data1/efs/mnt/append-truncate-3 (64 testdirs)
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (4.7s)
+wrote /data1/efs/gc-direct-gxr09c66/append-truncate-3.tsv
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 985350 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 985320 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+node 1 listening PASS
+node 2 listening PASS
+node 3 listening PASS
+node 4 listening PASS
+client serving PASS
+cold peer mounted PASS
+prepared /data1/efs/mnt/append-truncate-4 (64 testdirs)
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (5.2s)
+wrote /data1/efs/gc-direct-gxr09c66/append-truncate-4.tsv
+prepared /data1/efs/mnt/append-truncate-5 (64 testdirs)
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.1s)
+wrote /data1/efs/gc-direct-gxr09c66/append-truncate-5.tsv
+prepared /data1/efs/mnt/append-truncate-6 (64 testdirs)
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.3s)
+wrote /data1/efs/gc-direct-gxr09c66/append-truncate-6.tsv
+prepared /data1/efs/mnt/append-truncate-7 (64 testdirs)
+pass peer_append_while_truncate      
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (1.1s)
+wrote /data1/efs/gc-direct-gxr09c66/append-truncate-7.tsv
+prepared /data1/efs/mnt/append-handoff (64 testdirs)
+pass peer_concurrent_append          
+============================================================
+POSIX 2-client: 1/1 pass, 0 fail  (4.5s)
+wrote /data1/efs/gc-direct-gxr09c66/append-handoff.tsv
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 987012 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+append/truncate physical deletion drained PASS
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 986993 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+eight peer append/truncate races, concurrent handoff and cold restart PASS

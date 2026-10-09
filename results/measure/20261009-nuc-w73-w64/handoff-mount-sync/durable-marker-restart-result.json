@@ -1,0 +1,142 @@
+{
+  "pass": true,
+  "log_progress": true,
+  "original_applied": 14028,
+  "original_blocked_close": 14029,
+  "resolution_records_through": 14040,
+  "source_fixture": "/data1/efs/close-replay-kyod4cas",
+  "status": [
+    "node 1 root=1 salt=9162115314511486594 groups=2\n  group 0 hosted=1 role=LEADER leader=0 term=61 commit=15703 applied=15703 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "node 2 root=1 salt=9162115314511486594 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=61 commit=15703 applied=15703 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=19 commit=14141 applied=14141 voters=0xe joint=0\n",
+    "node 3 root=1 salt=9162115314511486594 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=61 commit=15703 applied=15703 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=19 commit=14141 applied=14141 voters=0xe joint=0\n",
+    "node 4 root=0 salt=9162115314511486594 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=19 commit=14141 applied=14141 voters=0xe joint=0\n"
+  ],
+  "deferred_retry_entries": [
+    {
+      "group": 2,
+      "index": 14137,
+      "term": 17,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14138,
+      "term": 17,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14140,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14141,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14142,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14143,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14144,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14145,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14146,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14147,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14148,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14149,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14150,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14151,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14152,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14153,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14154,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    },
+    {
+      "group": 2,
+      "index": 14157,
+      "term": 19,
+      "command": "20000000000000158c0000000000000001"
+    }
+  ],
+  "offline_inspections": [
+    {
+      "node": 2,
+      "stdout": "held=0 markers=0 scan_rc=0 append_rc=0 nopen=0 watermark=0 frontier=0\n"
+    },
+    {
+      "node": 3,
+      "stdout": "held=0 markers=0 scan_rc=0 append_rc=0 nopen=0 watermark=0 frontier=0\n"
+    },
+    {
+      "node": 4,
+      "stdout": "held=0 markers=0 scan_rc=0 append_rc=0 nopen=0 watermark=0 frontier=0\n"
+    }
+  ],
+  "binary_sha256": {
+    "efsd": "f634bcd0b370c31ace212c08c7fbddd6a6639fc84a8f674a52e515cf797e95c4",
+    "efs-mgmt": "916686647964b4cc9c0209896dfd62a47336a1e44b532b96367880d07ac6fcff"
+  }
+}

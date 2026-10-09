@@ -1,0 +1,20 @@
+[
+  {
+    "pid": 3111393,
+    "name": "efs-fuse",
+    "uid": 1001,
+    "args": [
+      "./efs-fuse",
+      "192.168.122.111:17432",
+      "fs",
+      "/mnt/efs",
+      "-o",
+      "allow_other"
+    ],
+    "env": {
+      "EFS_TRANSPORT": "tcp"
+    },
+    "commands_opt_in": false,
+    "exe_sha256": "a99246332091ad3324f97a15c96885ece998e011fad499d2b85daebf726e7246"
+  }
+]

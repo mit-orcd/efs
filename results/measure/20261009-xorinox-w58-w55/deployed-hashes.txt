@@ -1,0 +1,9 @@
+cluster: xorinox
+{
+  "source_tree_sha256": "8d3ca2853c6a9cc095f6831bd9120f7201e650d8e4781af34c26b5c42a6c4815",
+  "binary_sha256": {
+    "efsd": "96a53fffd20c116b338fccc61d20cec331a892002baa78f8689d4669c165b4f3",
+    "efs-fuse": "a99246332091ad3324f97a15c96885ece998e011fad499d2b85daebf726e7246",
+    "efs-mgmt": "bc46ab1f93bd87eb7aaccbba8c3712183a1412691e9f1dec5354065e64d1bfa5"
+  }
+}

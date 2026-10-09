@@ -1370,8 +1370,8 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
 
     rc = efs_meta_apply_lookup(kv, parent, name, &dent);
     if (rc == EFS_OK) {
-        if (lease_token) {
-            /* An ambiguous failed CREATE must not become a successful new
+        if (q && opid_hosted(&q->id)) {
+            /* A CREATE answered EEXIST must not become a successful new
              * CREATE when a delayed retry arrives after the name is removed.
              * Publish the negative verdict without namespace/lease effects. */
             memset(&rep, 0, sizeof(rep));
@@ -1519,8 +1519,8 @@ static int create_file_batch(struct efs_kv *kv, const struct efs_meta_attrs *at,
         rc = opid_item(kv, shard, q, &rep, k_opid, v_opid, &it[n]);
         if (rc < 0)
             return rc;
-        if (lease_token && rc != 1)
-            return EFS_ERR_BUSY; /* pending ownership requires a durable verdict */
+        if (opid_hosted(&q->id) && rc != 1)
+            return EFS_ERR_BUSY; /* never create without its replay verdict */
         n += (uint32_t)rc;
     }
 
@@ -6598,6 +6598,8 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     struct efs_meta_row row;
     uint8_t k_ino[EFS_KV_KEY_MAX];
     uint8_t v_ino[INO_VAL];
+    uint8_t k_cur[EFS_KV_KEY_MAX];uint32_t kc=0;
+    struct append_cur cursor;
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
     uint8_t k_tail[EFS_KV_KEY_MAX], v_tail[CHUNK_VAL];
@@ -6624,6 +6626,14 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
         if (t->tail_external && t->tail != NULL)
             return EFS_ERR_INVAL;
     }
+    /* Match coordinated resize: outstanding reservations belong to the
+     * pre-truncate EOF and must finish before shrink can reset that cursor.
+     * Let later completion entries apply; the caller retries BUSY. */
+    rc=load_append_cur(kv,ino,row.generation,&cursor);
+    if(rc!=EFS_OK)return rc;
+    if(cursor.nopen)return EFS_ERR_BUSY;
+    rc=efs_kv_key_append_cur(efs_kv_inode_shard(ino),ino,row.generation,k_cur,&kc);
+    if(rc!=EFS_OK)return rc;
     new_epoch = row.content_epoch + 1;
     row.content_epoch = new_epoch;
     row.base_size = t->size;
@@ -6670,7 +6680,7 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     rc = efs_kv_key_inode(efs_kv_inode_shard(ino), ino, k_ino, &ki);
     if (rc != EFS_OK)
         return rc;
-    if (n >= TRUNC_IT_CAP)
+    if (n + 2 > TRUNC_IT_CAP)
         return EFS_ERR_NOMEM;
     it[n].op = EFS_KV_PUT;
     it[n].key = k_ino;
@@ -6678,6 +6688,9 @@ static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
     it[n].val = v_ino;
     it[n].vlen = INO_VAL;
     n++;
+    /* Closed cursor and new EOF change atomically; otherwise the next
+     * append takes max(old watermark,new EOF) and creates a zero gap. */
+    it[n++]=(struct efs_kv_item){EFS_KV_DEL,k_cur,kc,NULL,0};
     (void)touch_inode;
     return meta_write_batch(kv, it, n);
 }

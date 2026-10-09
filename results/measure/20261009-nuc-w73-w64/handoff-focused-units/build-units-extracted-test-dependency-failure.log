@@ -1,0 +1,477 @@
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_txn.o src/sim/sim_txn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_ns.o src/sim/sim_ns.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_sess.o src/sim/sim_sess.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_dir.o src/sim/sim_dir.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Isrc/sim -c -o src/sim/sim_lock.o src/sim/sim_lock.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/efsd.o src/server/efsd.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/store_containers.o src/server/store_containers.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/handler.o src/server/handler.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/cluster.o src/server/cluster.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/peer_pool.o src/server/peer_pool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/iostats.o src/server/iostats.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/thread.o src/server/thread.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/server/raft_host.o src/server/raft_host.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/append_plan.o src/meta/append_plan.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/publication.o src/common/publication.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/publication_ack.o src/common/publication_ack.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/common.o src/common/common.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/log_ts.o src/common/log_ts.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/version.o src/common/version.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/protocol.o src/common/protocol.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/wire/wire.o src/wire/wire.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/erasure.o src/data/erasure.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/store_mem.o src/data/store_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_loop.o src/data/transport_loop.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/data/transport_conn.o src/data/transport_conn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_mem.o src/kv/kv_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_key.o src/kv/kv_key.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_lsm.o src/kv/kv_lsm.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_compact.o src/kv/kv_compact.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_wal.o src/kv/kv_wal.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_seg.o src/kv/kv_seg.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/kv/kv_snap.o src/kv/kv_snap.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/query_catalog.o src/meta/query_catalog.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/name_index.o src/meta/name_index.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/metadata.o src/meta/metadata.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/meta_apply.o src/meta/meta_apply.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/txn.o src/meta/txn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/session.o src/meta/session.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/put_ticket.o src/meta/put_ticket.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/lock.o src/meta/lock.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_layout.o src/meta/dir_layout.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/meta/dir_spread.o src/meta/dir_spread.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/sim/opid.o src/sim/opid.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft.o src/raft/raft.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_mem.o src/raft/raft_mem.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_disk.o src/raft/raft_disk.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/raft/raft_log.o src/raft/raft_log.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/placement.o src/common/placement.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/checksum.o src/common/checksum.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/network.o src/common/network.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/common/rdma.o src/common/rdma.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3.o deps/blake3/blake3.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_portable.o deps/blake3/blake3_portable.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o deps/blake3/blake3_dispatch.o deps/blake3/blake3_dispatch.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -msse2 -c -o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -msse4.1 -c -o deps/blake3/blake3_sse41.o deps/blake3/blake3_sse41.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx2 -maes -c -o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx2.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -mavx512f -mavx512vl -c -o deps/blake3/blake3_avx512.o deps/blake3/blake3_avx512.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/client.o src/client/client.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/ops.o src/client/ops.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/read.o src/client/read.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/write.o src/client/write.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/bufpool.o src/client/bufpool.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/writer_state.o src/client/writer_state.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/publication_ack_owner.o src/client/publication_ack_owner.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/inode_rpc.o src/client/inode_rpc.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/stage_evict.o src/client/stage_evict.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/node_cache.o src/client/node_cache.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -I/usr/include/fuse3 -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_fuse.o src/client/efs_fuse.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/mgmt/efs_mgmt.o src/mgmt/efs_mgmt.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/client/efs_bench.o src/client/efs_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/bench_local.o src/bench/bench_local.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/blake3_bench.o src/bench/blake3_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/io_bench.o src/bench/io_bench.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/storage_principles.o src/bench/storage_principles.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/principles_index.o src/bench/principles_index.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/storage_churn.o src/bench/storage_churn.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/bench/storage_ranges.o src/bench/storage_ranges.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/store.o src/server/store.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/store_nvme.o src/server/store_nvme.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/store_containers.o src/server/store_containers.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/writer.o src/server/writer.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/iostats.o src/server/iostats.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -DEFS_BENCH_BUILD -ffunction-sections -fdata-sections -c -o src/bench/thread.o src/server/thread.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o src/query/efs_query.o src/query/efs_query.c
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -c -o tests/test_put_ticket.o tests/test_put_ticket.c
+ar rcs libefs.a src/meta/append_plan.o src/common/publication.o src/common/publication_ack.o src/common/common.o src/common/log_ts.o src/common/version.o src/common/protocol.o src/wire/wire.o src/data/erasure.o src/data/store_mem.o src/data/transport_loop.o src/data/transport_conn.o src/kv/kv_mem.o src/kv/kv_key.o src/kv/kv_lsm.o src/kv/kv_compact.o src/kv/kv_wal.o src/kv/kv_seg.o src/kv/kv_snap.o src/meta/query_catalog.o src/meta/name_index.o src/meta/metadata.o src/meta/meta_apply.o src/meta/txn.o src/meta/session.o src/meta/put_ticket.o src/meta/lock.o src/meta/dir_layout.o src/meta/dir_spread.o src/sim/opid.o src/raft/raft.o src/raft/raft_mem.o src/raft/raft_disk.o src/raft/raft_log.o src/common/placement.o src/common/checksum.o src/common/network.o src/common/rdma.o deps/blake3/blake3.o deps/blake3/blake3_portable.o deps/blake3/blake3_dispatch.o deps/blake3/blake3_sse2.o deps/blake3/blake3_sse41.o deps/blake3/blake3_avx2.o deps/blake3/blake3_avx512.o src/client/client.o src/client/ops.o src/client/read.o src/client/write.o src/client/bufpool.o src/client/writer_state.o src/client/publication_ack_owner.o src/client/inode_rpc.o src/client/stage_evict.o src/client/node_cache.o
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-mgmt src/mgmt/efs_mgmt.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efs-query src/query/efs_query.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_containers tests/test_store_containers.c src/bench/writer.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_principles_index_fault tests/test_principles_index_fault.c tests/principles_index_fault.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_principles_index tests/test_principles_index.c src/bench/principles_index.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_query_catalog tests/test_query_catalog.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_name_index tests/test_name_index.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_append_transaction tests/test_append_transaction.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_durability tests/test_store_durability.c src/bench/writer.o src/bench/store_containers.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_append_receipt tests/test_append_receipt.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -o tests/test_put_ticket tests/test_put_ticket.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_gc tests/test_store_gc.c src/bench/writer.o src/bench/store_containers.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -ffunction-sections -fdata-sections -Wl,--gc-sections -o tests/test_store_overwrite tests/test_store_overwrite.c src/bench/writer.o src/bench/store_containers.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv_seg_index tests/test_kv_seg_index.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_mtime_barrier tests/test_mtime_barrier.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_publication_session tests/test_publication_session.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_publication_ack tests/test_publication_ack.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_publication_recovery tests/test_publication_recovery.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_lane_bootstrap_recovery tests/test_lane_bootstrap_recovery.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_erasure tests/test_erasure.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_placement tests/test_placement.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_rdma_xprt tests/test_rdma_xprt.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_wire tests/test_wire.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_data tests/test_data.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv tests/test_kv.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_kv_lsm tests/test_kv_lsm.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_raft_store tests/test_raft_store.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_meta_apply tests/test_meta_apply.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_raft tests/test_raft.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_sim tests/test_sim.c src/sim/sim.o src/sim/sim_raft.o src/sim/sim_ctrl.o src/sim/sim_txn.o src/sim/sim_ns.o src/sim/sim_sess.o src/sim/sim_dir.o src/sim/sim_lock.o src/sim/sim_disk.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_txn tests/test_txn.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_session tests/test_session.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_lock tests/test_lock.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_stage_evict tests/test_stage_evict.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I. -o tests/test_conn_fd tests/test_conn_fd.c libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -o efsd src/server/efsd.o src/server/store.o src/server/store_nvme.o src/server/store_containers.o src/server/handler.o src/server/cluster.o src/server/peer_pool.o src/server/writer.o src/server/iostats.o src/server/thread.o src/server/raft_host.o libefs.a -lpthread -lm -ldl -libverbs
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -I/usr/include/fuse3 -o efs-fuse src/client/efs_fuse.o libefs.a -lpthread -lm -ldl -libverbs -lfuse3 -lpthread
+gcc -O3 -g -fno-omit-frame-pointer -march=native -mtune=native -std=c99 -Wall -Wextra -D_GNU_SOURCE -Wno-stringop-truncation -Wno-format-truncation -DEFS_BUILD_ID='"04e9d616-handoff-de2f8b286694"' -DEFS_VERSION='"append-handoff-test"' -DEFS_GIT_BRANCH='"devel-gate-closure"' -DEFS_BUILD_TIME='"2026-10-09T01:35:12Z"'  -Iinclude -Isrc/common -Ideps/blake3 -Wl,--gc-sections -o efs-bench src/client/efs_bench.o src/bench/bench_local.o src/bench/blake3_bench.o src/bench/io_bench.o src/bench/storage_principles.o src/bench/principles_index.o src/bench/storage_churn.o src/bench/storage_ranges.o src/bench/store.o src/bench/store_nvme.o src/bench/store_containers.o src/bench/writer.o src/bench/iostats.o src/bench/thread.o libefs.a -lpthread -lm -ldl -libverbs
+./tests/test_store_containers
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: buffered/direct, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS
+python3 tests/test_lookup_errno.py
+FUSE LOOKUP: IO/network/quorum errors stay IO, BUSY/memory/access preserved, only actual absence ENOENT PASS
+python3 tests/test_fuse_open_reply.py
+FUSE CREATE/OPEN: rejected replies and failed reply construction release exactly once PASS
+python3 tests/test_lookup_replacement.py
+LOOKUP replacement: missing captured inode retryable locally and forwarded; true absence and IO preserved PASS
+python3 tests/test_w23_samples.py
+....
+----------------------------------------------------------------------
+Ran 4 tests in 0.001s
+
+OK
+python3 tests/test_read_verify.py
+parallel GET: valid zero/nonzero and corrupt zero/nonzero replies PASS
+python3 tests/test_opid_admission.py
+512 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS
+namespace opid saturation: four mutations send nothing, released admission keeps watermark, sequence overflow refused PASS
+python3 tests/test_server_processes.py
+Invalid PID record /tmp/efs-owner-plk9wg0x/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-plk9wg0x/store (if any)
+Invalid PID record /tmp/efs-owner-plk9wg0x/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-plk9wg0x/store (if any)
+Stale daemon identity for PID 928972; process retained
+Stopped efsd for storage /tmp/efs-owner-plk9wg0x/store (if any)
+Stale daemon identity for PID 928973; process retained
+Stopped efsd for storage /tmp/efs-owner-plk9wg0x/store (if any)
+Stale daemon identity for PID 928973; process retained
+Stopped efsd for storage /tmp/efs-owner-plk9wg0x/other (if any)
+Stopping owned efsd PID 928973 (storage /tmp/efs-owner-plk9wg0x/store)
+Stopped efsd for storage /tmp/efs-owner-plk9wg0x/store (if any)
+Stale daemon identity for PID 929011; process retained
+Stale daemon identity for PID 928972; process retained
+Stopping owned perf PID 929011 (perf /tmp/efs-owner-plk9wg0x/efsd.data)
+perf wrapper: unrelated/wrong-output processes retained; owned recorder flushed with SIGINT PASS
+server wrapper: invalid/reused/wrong-storage/stale-start PIDs retained; matching daemon gracefully stopped PASS
+python3 tests/test_mgmt_session_routing.py
+management session routing: advertised leader, exact retries, bounded loop and ambiguous transport PASS
+python3 tests/test_session_admission.py
+session ESTABLISH: authoritative ACTIVE/REGISTER, fencing, routes and failed reads PASS
+python3 tests/test_publication_host.py
+publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS
+python3 tests/test_txn_read_authority.py
+transaction coordinator: failed quorum authority never becomes decision absence PASS
+python3 tests/test_publication_rpc.py
+publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply PASS
+python3 tests/test_bench_cli.py
+benchmark CLI: ownership, parsing and scratch protection PASS
+python3 tests/test_bench_profile.py
+.Generating reports for 5 profiles, up to 2 parallel jobs
+[reports 1/5] 0: OK
+[reports 2/5] 1: OK
+[reports 3/5] 2: OK
+[reports 4/5] 3: OK
+[reports 5/5] 4: OK
+....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /tmp/profile test tmu6tdbh/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: OK
+[reports 2/2] data-direct-w0-qd1: OK
+Results and analysis: /tmp/profile test ok6lpgih/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Reports unavailable: missing: perf.data missing
+Generating reports for 0 profiles, up to 4 parallel jobs
+.......Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: FAIL
+[reports 2/2] data-direct-w0-qd1: FAIL
+Results and analysis: /tmp/profile test wnqlcc2l/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+....
+----------------------------------------------------------------------
+Ran 20 tests in 2.933s
+
+OK
+Results and analysis: /tmp/tmpe6ahgk83/ANALYSIS.md
+./tests/test_principles_index
+indexed principles: 18 crash points, conditional identity, 4800 churn operations, cold bytes/quota/physical GC and corrupt-evidence refusal PASS
+./tests/test_principles_index_fault
+indexed fault gates: four publication barriers, ten short-write/ENOSPC boundaries, sticky failure, read-only recovery, inventory errors and GC-sync failure PASS
+python3 tests/test_storage_principles.py
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 3.484s
+
+OK
+python3 tests/test_bench_ranges.py
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.003s
+
+OK
+python3 tests/test_storage_ranges.py
+......
+----------------------------------------------------------------------
+Ran 6 tests in 4.960s
+
+OK
+python3 tests/test_storage_churn.py
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 67.175s
+
+OK
+python3 tests/test_bench_churn.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.165s
+
+OK
+python3 docs/check-architecture.py
+ok    regen-diff: architecture-full.md + architecture.html are current
+ok    links: every internal link resolves
+ok    invariant-refs: I-references name §4 invariants
+ok    op-matrix-sections: §6 names existing sections
+ok    single-home: normative tables / invariants / formulas defined once
+
+architecture doc gate: all 5 checks passed
+make test-fence-read
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+python3 tests/test_fence_read.py
+fence reads: mixed ages, dead-object skips, refresh failure, view keys and wire validation PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-fence-view
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+./tests/test_fence_view
+fence view: example, history bound, validation, 20000 model operations PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-dirty-ranges
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+dirty ranges: mixed epochs, overlap/split, bounded admission, stale ACK and 50000-step byte model PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-writer-ranges
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+writer ranges: FileID admission, coherent planning, fence clipping and exact ACK PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-wb-recovery
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+writeback recovery: sticky errors, partial resolution, progress and captured epoch PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-wb-runtime
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+python3 tests/test_wb_runtime.py
+publish-stalled ino=42 ci=0 gen=7 epoch=2 spans=1 cycles=8
+publish-stalled ino=42 ci=1 gen=7 epoch=2 spans=1 cycles=8
+publish-contention ino=42 ci=2 cycles=256 gen=263 epoch=2 spans=1
+publish-contention ino=42 ci=2 cycles=512 gen=519 epoch=2 spans=1
+publish-contention ino=42 ci=2 cycles=768 gen=775 epoch=2 spans=1
+D27 runtime: sent snapshots, contention, mutations, sticky descriptions and partial recovery PASS
+python3 tests/test_wb_fault.py
+WITHHOLD: outgoing omission, retained snapshot, runtime disable and production exclusion PASS
+WITHHOLD: outgoing omission, retained snapshot, runtime disable and production exclusion PASS
+python3 tests/test_stale_recovery.py
+report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+STALE recovery: authoritative pull, absence, retained failures, dedupe and prefix ACK PASS
+python3 tests/test_replay_fan_budget.py
+STALE replay fanout: inherited deadline, expired admission, mid-run stop and prior-error retention PASS
+python3 tests/test_pull_deadline.py
+GETCHUNKS fan-out: inherited deadline and caller TLS restoration PASS
+python3 tests/test_pull_group_boundary.py
+GETCHUNKS grouping: final uint32 group, serial/fanout and partial tail PASS
+python3 tests/test_read_ahead_boundary.py
+Read lookahead: final uint32 range, covered extension and failed pull retry PASS
+python3 tests/test_getchunks_budget.py
+GETCHUNKS RPC: whole retry budget, output retention and receive-payload cleanup PASS
+python3 tests/test_metadata_retry_budget.py
+inode-rpc: retry type=47 attempt=0 why=no-hint from=1
+inode-rpc: retry type=47 attempt=0 why=recv rc=1
+inode-rpc: retry type=47 attempt=0 why=send
+inode-rpc: retry type=47 attempt=0 why=recv rc=1 req_len=0 recv_ms=100
+metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention PASS
+python3 tests/test_inode_writer_view_budget.py
+inode writer view: expired admission, bounded BUSY, late authority rejection and reply ownership PASS
+python3 tests/test_readdir_reply_boundary.py
+readdir reply: count/cursor limits, output retention, late admission and failed buffer cleanup PASS
+python3 tests/test_report_frame_boundary.py
+REPORT frame: pointer/count/delta/wire bounds, expired admission and normal framing PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-stop-control
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+stop control: clean drain, refusal, live-job timeout, mutation gate, force and cleanup PASS
+python3 tests/test_client_stop.py
+client stop: preflight refusal, no implicit lazy detach, resume and explicit force PASS
+python3 tests/test_client_ready.py
+client startup: immediate/late readiness, bounded exhaustion and detach PASS
+python3 tests/test_stop_dirty_drain.py
+stop-refused: unresolved writes remain; mount retained
+stop-refused: unresolved writes remain; mount retained
+force-discard REPORT pending=0 inflight=1 cause=explicit-stop-force-discard
+stop dirty drain: partial bodies, bounded pages, duplicate inodes, unlocked I/O, failures and deadline PASS
+stop drain: detached REPORT ownership, unresolved body refusal and deadline restoration PASS
+python3 tests/test_client_processes.py
+Retiring drained efs-fuse PID 940754 for /tmp/efs-process-owner-ajd3bmov/mount
+client processes: detached discovery and ambiguous command refusal PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-lookup-memo
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+python3 tests/test_lookup_memo.py
+lookup memo: mutation callbacks, errors, overlap, stale RPC, TTL and read-only hits PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-fold-observation
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+python3 tests/test_fold_observation.py
+fold observation: peer bytes, tombstones, PUT races, chain-full fallback and failures PASS
+python3 tests/test_load_merge_race.py
+load merge: pending PUT, retained pin and dirty ownership survive late loaders PASS
+python3 tests/test_writer_fence_merge.py
+writer fence merge: pipeline/direct masks, absent CAS, failure retention and full overwrite PASS
+python3 tests/test_writer_view_rpc.py
+writer view RPC: redirects, bounded BUSY, malformed replies and failure retention PASS
+python3 tests/test_lane_writer_view_rpc.py
+lane writer RPC: lane routing, geometry, redirects, bounded BUSY, malformed replies and failure retention PASS
+python3 tests/test_lane_writer_host.py
+lane host: one ReadIndex, no inode group, single-group forwarding and cold absence PASS
+python3 tests/test_lane_bootstrap_rpc.py
+cold bootstrap RPC: inode routing, export, geometry, redirects, bounded BUSY, malformed replies and failure retention PASS
+python3 tests/test_lane_bootstrap_host.py
+cold bootstrap host: configured export geometry, exact FileID, bounded forwarding and failure propagation PASS
+python3 tests/test_writer_admission_rpc.py
+writer admission: warm lane-only path, cold absence only, no fallback on errors and immutable failure output PASS
+python3 tests/test_writer_deadline.py
+writer retry deadline: inherited budget, exact short clamp, expired refusal and bounded unlimited backoff PASS
+python3 tests/test_truncate_admission.py
+truncate admission: failed flush, access error, nested budget and expired refusal PASS
+python3 tests/test_truncate_prefix.py
+truncate prefix: failed/short read and failed publication refuse size mutation PASS
+python3 tests/test_span_selection.py
+span selection: partial overlap folds, disjoint and local unpublished ranges preserved PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-create-errors
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+python3 tests/test_kv_wal_faults.py
+WAL sticky failures and reopen recovery PASS
+python3 tests/test_create_errors.py
+request-local create errors: concurrent BUSY/quota/success and lookup errors PASS
+python3 tests/test_open_lease.py
+open leases: shared opens, failed HOLD, acquire/release serialization PASS
+python3 tests/test_unlink_verdict.py
+simple unlink: rejected apply, term mismatch, overwritten verdict and forwarding PASS
+python3 tests/test_gc_verdict.py
+raft-host: apply lane-sweep rc=-13 index=41 ino=42
+raft-host: apply reap-done rc=-13 index=41 ino=42
+raft-host: apply lane-sweep rc=-1 index=41 ino=42
+raft-host: apply reap-done rc=-1 index=41 ino=42
+raft-host: apply lane-sweep rc=-2 index=41 ino=42
+raft-host: apply reap-done rc=-2 index=41 ino=42
+raft-host: apply lane-sweep rc=-7 index=41 ino=42
+raft-host: apply reap-done rc=-7 index=41 ino=42
+raft-host: apply lane-sweep rc=-15 index=41 ino=42
+raft-host: apply reap-done rc=-15 index=41 ino=42
+raft-host: apply gc-ack rc=-13 index=41 cnt=1
+raft-host: apply gc-ack rc=-1 index=41 cnt=1
+raft-host: apply gc-ack rc=-2 index=41 cnt=1
+raft-host: apply gc-ack rc=-7 index=41 cnt=1
+raft-host: apply gc-ack rc=-15 index=41 cnt=1
+GC apply decoders and durable local/forwarded verdict propagation PASS
+python3 tests/test_put_hint.py
+PUT hints: lost-reply eviction probes and concurrent placement cache PASS
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make test-report-pressure
+make[1]: Entering directory '/data1/efs/gate-closure-build'
+python3 tests/test_report_pressure.py
+report-pressure records=7 inflight=0 bytes=14336 reserved=0 oldest_ms=0 waits=1 timeouts=0
+report-pressure records=7 inflight=7 bytes=14336 reserved=0 oldest_ms=141 waits=2 timeouts=1
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=3 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=4 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=5 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=6 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=7 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=8 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=9 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=10 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=11 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=12 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=13 timeouts=2
+report-pressure records=0 inflight=0 bytes=0 reserved=8 oldest_ms=0 waits=14 timeouts=2
+REPORT pressure: live/inflight accounting, limits, bounded timeout, drain and concurrency PASS
+python3 tests/test_report_retry_budget.py
+REPORT retry budget: short clamp, expiry refusal and normal backoff PASS
+python3 tests/test_write_queue.py
+write-queue pressure jobs=2 queued_bytes=20 inflight_bytes=0 oldest_ms=100 waits=1 timeouts=0
+write queue: timeout/shutdown ownership and accepted-job completion PASS
+python3 tests/test_conn_checkout_budget.py
+efs: conn pool node=1 checkout deadline reached (pool=1 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #1)
+efs: conn pool node=1 checkout deadline reached (pool=1 per node, EFS_CLIENT_CONNS_PER_NODE; timeout #2)
+connection checkout: shared DNS/connect budget, TLS restoration, local resource health, spurious wakeups and cleanup PASS
+python3 tests/test_net_receive_deadline.py
+network receive: slow-drip and idle deadlines, RPC binding, TLS isolation and fd flag preservation PASS
+python3 tests/test_net_send_deadline.py
+network send: partial/full socket deadlines, expired admission, wire framing and fd flags PASS
+python3 tests/test_connect_deadline.py
+connect: parent deadline, EINTR, late success, flag restoration and errno cleanup PASS
+python3 tests/test_resolver_deadline.py
+checkout-local hung DNS elapsed_ms=51 restored_deadline=0 busy=0 peer_failures=0
+resolver: hung NSS deadlines, eight-job cap, late completion ownership, thread failure and hostname connect and checkout-local DNS budget PASS
+python3 tests/test_rdma_reply_budget.py
+RDMA wrapper: shared deadline, late-frame repost, TCP fallback and malformed ownership PASS
+RDMA slots: serial reuse, reserved ownership, full 32-slot pipeline, finite stall and registration refusal PASS
+python3 tests/test_wb_worker_budget.py
+WB worker: overlap/stripe/expired budgets, inherited TLS and exact completion cleanup PASS
+python3 tests/test_wb_drain_budget.py
+WB drains: short deadline, wait errors, mutex release and pending/sticky-error retention PASS
+python3 tests/test_append_flush_budget.py
+append flush: expired/free/contended stripe, post-drain expiry and failed-flush retention PASS
+python3 tests/test_append_reserve_budget.py
+/tmp/efs-append-budget-0ruje4_o/t.c: In function ‘append_reserve_offset’:
+/tmp/efs-append-budget-0ruje4_o/t.c:88:16: error: implicit declaration of function ‘append_publication_wait’ [-Wimplicit-function-declaration]
+   88 |             rc=append_publication_wait(ino,&held);
+      |                ^~~~~~~~~~~~~~~~~~~~~~~
+Traceback (most recent call last):
+  File "/data1/efs/gate-closure-build/tests/test_append_reserve_budget.py", line 83, in <module>
+    subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror',str(p),'-o',str(p.with_suffix(''))],check=True)
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['cc', '-std=gnu11', '-pthread', '-Wall', '-Wextra', '-Werror', '/tmp/efs-append-budget-0ruje4_o/t.c', '-o', '/tmp/efs-append-budget-0ruje4_o/t']' returned non-zero exit status 1.
+make[1]: *** [Makefile:166: test-report-pressure] Error 1
+make[1]: Leaving directory '/data1/efs/gate-closure-build'
+make: *** [Makefile:311: test] Error 2

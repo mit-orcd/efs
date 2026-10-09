@@ -1,0 +1,107 @@
+cluster: xorinox
+2026-10-07T08:48:34.187Z fetching metadata...
+2026-10-07T08:48:34.187Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-07T08:48:34.187Z export id=1 name=fs
+2026-10-07T08:48:34.187Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-07T08:48:34.187Z efs-fuse daemon pid=136947
+2026-10-07T08:48:34.187Z efs-fuse: workers max=10 idle=10
+2026-10-07T08:48:34.191Z fuse serving
+2026-10-07T08:49:22.257Z efs-fuse v0.1.0-pre-alpha-137-gbed7a83e-dirty (branch devel, built 2026-10-07T08:47:09Z on xefsgw), build=bed7a83e1718-dirty: starting export=fs mount=/mnt/efs
+2026-10-07T08:49:22.258Z Discovered 3 cluster nodes from 192.168.122.111:17432
+2026-10-07T08:49:22.258Z   node id=1 192.168.122.111:17432
+2026-10-07T08:49:22.258Z   node id=2 192.168.122.112:17432
+2026-10-07T08:49:22.258Z   node id=3 192.168.122.113:17432
+2026-10-07T08:49:22.258Z fetching metadata...
+2026-10-07T08:49:22.258Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-07T08:49:22.258Z export id=1 name=fs
+2026-10-07T08:49:22.258Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-07T08:49:22.259Z efs-fuse daemon pid=138532
+2026-10-07T08:49:22.259Z efs-fuse: workers max=10 idle=10
+2026-10-07T08:49:22.261Z fuse serving
+2026-10-07T13:53:41.381Z efs-fuse v0.1.0-pre-alpha-145-gddc677ae-dirty (branch devel, built 2026-10-07T13:50:04Z on xefsgw), build=ddc677ae4bf3-dirty: starting export=fs mount=/mnt/efs
+2026-10-07T13:53:41.382Z Discovered 3 cluster nodes from 192.168.122.111:17432
+2026-10-07T13:53:41.382Z   node id=1 192.168.122.111:17432
+2026-10-07T13:53:41.382Z   node id=2 192.168.122.112:17432
+2026-10-07T13:53:41.382Z   node id=3 192.168.122.113:17432
+2026-10-07T13:53:41.382Z fetching metadata...
+2026-10-07T13:53:41.383Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-07T13:53:41.383Z export id=1 name=fs
+2026-10-07T13:53:41.383Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-07T13:53:41.383Z efs-fuse daemon pid=460753
+2026-10-07T13:53:41.385Z efs-fuse: workers max=10 idle=10
+2026-10-07T13:53:41.388Z fuse serving
+2026-10-07T16:33:05.088Z efs-fuse v0.1.0-pre-alpha-151-gcb5e86de (branch devel, built 2026-10-07T16:24:50Z on xefsgw), build=cb5e86dedf26-dirty: starting export=fs mount=/mnt/efs
+2026-10-07T16:33:05.090Z Discovered 3 cluster nodes from 192.168.122.111:17432
+2026-10-07T16:33:05.090Z   node id=1 192.168.122.111:17432
+2026-10-07T16:33:05.090Z   node id=2 192.168.122.112:17432
+2026-10-07T16:33:05.090Z   node id=3 192.168.122.113:17432
+2026-10-07T16:33:05.090Z fetching metadata...
+2026-10-07T16:33:05.090Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-07T16:33:05.090Z export id=1 name=fs
+2026-10-07T16:33:05.090Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-07T16:33:05.090Z efs-fuse daemon pid=568895
+2026-10-07T16:33:05.094Z efs-fuse: workers max=10 idle=10
+2026-10-07T16:33:05.096Z fuse serving
+2026-10-08T05:51:50.536Z efs-fuse v0.1.0-pre-alpha-151-gcb5e86de (branch devel, built 2026-10-07T16:24:50Z on xefsgw), build=cb5e86dedf26-dirty: starting export=fs mount=/mnt/efs
+2026-10-08T05:51:50.537Z Discovered 3 cluster nodes from 192.168.122.111:17432
+2026-10-08T05:51:50.537Z   node id=1 192.168.122.111:17432
+2026-10-08T05:51:50.537Z   node id=2 192.168.122.112:17432
+2026-10-08T05:51:50.537Z   node id=3 192.168.122.113:17432
+2026-10-08T05:51:50.537Z fetching metadata...
+2026-10-08T05:51:50.537Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-08T05:51:50.537Z export id=1 name=fs
+2026-10-08T05:51:50.537Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T05:51:50.537Z efs-fuse daemon pid=1442388
+2026-10-08T05:51:50.539Z efs-fuse: workers max=10 idle=10
+2026-10-08T05:51:50.541Z fuse serving
+2026-10-08T06:19:36.530Z efs-fuse v0.1.0-pre-alpha-151-gcb5e86de (branch devel, built 2026-10-07T16:24:50Z on xefsgw), build=cb5e86dedf26-dirty: starting export=fs mount=/mnt/efs
+2026-10-08T06:19:36.531Z Discovered 3 cluster nodes from 192.168.122.111:17432
+2026-10-08T06:19:36.531Z   node id=1 192.168.122.111:17432
+2026-10-08T06:19:36.531Z   node id=2 192.168.122.112:17432
+2026-10-08T06:19:36.531Z   node id=3 192.168.122.113:17432
+2026-10-08T06:19:36.531Z fetching metadata...
+2026-10-08T06:19:36.531Z meta: raft host mounted export 'fs' (bits=12, no GET_META table)
+2026-10-08T06:19:36.531Z export id=1 name=fs
+2026-10-08T06:19:36.531Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-08T06:19:36.531Z efs-fuse daemon pid=1478776
+2026-10-08T06:19:36.535Z efs-fuse: workers max=10 idle=10
+2026-10-08T06:19:36.537Z fuse serving
+2026-10-09T01:45:56.805Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-09T01:45:56.805Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T01:42:10Z on xefsgw), build=unknown: starting export=default mount=/mnt/efs
+2026-10-09T01:45:56.806Z Discovered 3 cluster nodes from 192.168.122.111:17432
+2026-10-09T01:45:56.806Z   node id=1 192.168.122.111:17432
+2026-10-09T01:45:56.806Z   node id=2 192.168.122.112:17432
+2026-10-09T01:45:56.806Z   node id=3 192.168.122.113:17432
+2026-10-09T01:45:56.806Z fetching metadata...
+2026-10-09T01:45:56.807Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T01:45:56.807Z export id=1 name=default
+2026-10-09T01:45:56.807Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T01:45:56.807Z efs-fuse daemon pid=3107734
+2026-10-09T01:45:56.809Z efs-fuse: workers max=10 idle=10
+2026-10-09T01:45:56.811Z fuse serving
+2026-10-09T01:47:32.014Z efs-fuse: legacy export label 'fs' is ignored; mounting the single export 'default' (id=1)
+2026-10-09T01:47:32.014Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T01:42:10Z on xefsgw), build=unknown: starting export=default mount=/mnt/efs
+2026-10-09T01:47:32.015Z Discovered 3 cluster nodes from 192.168.122.111:17432
+2026-10-09T01:47:32.015Z   node id=1 192.168.122.111:17432
+2026-10-09T01:47:32.015Z   node id=2 192.168.122.112:17432
+2026-10-09T01:47:32.015Z   node id=3 192.168.122.113:17432
+2026-10-09T01:47:32.015Z fetching metadata...
+2026-10-09T01:47:32.015Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T01:47:32.015Z export id=1 name=default
+2026-10-09T01:47:32.015Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T01:47:32.015Z efs-fuse daemon pid=3111393
+2026-10-09T01:47:32.017Z efs-fuse: workers max=10 idle=10
+2026-10-09T01:47:32.020Z fuse serving
+2026-10-09T01:47:41.483Z efs: read hole ino=459150 ci=0 holes=1
+2026-10-09T01:48:01.598Z create f17 failed (err efs_rc=-13)
+2026-10-09T01:48:02.335Z efs: rename_at 449420/a -> 449420/b rc=-12 after 1 tries
+2026-10-09T01:48:27.974Z create  leading  failed (err efs_rc=-13)
+2026-10-09T01:48:28.052Z create inner failed (err efs_rc=-13)
+2026-10-09T01:48:28.730Z create leaf failed (err efs_rc=-13)
+2026-10-09T01:48:37.621Z create f0 failed (err efs_rc=-13)
+node 1 root=1 salt=17993636811421873069 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=1 term=214 commit=357849 applied=357849 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=0 term=214 commit=353354 applied=353354 voters=0x7 joint=0
+node 2 root=1 salt=17993636811421873069 groups=2
+  group 0 hosted=1 role=LEADER leader=1 term=214 commit=357859 applied=357859 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=0 term=214 commit=353364 applied=353364 voters=0x7 joint=0

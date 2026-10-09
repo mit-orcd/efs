@@ -1,0 +1,3075 @@
+{
+  "targets": {
+    "2": 4408,
+    "0": 8219
+  },
+  "parents": {
+    "2": 312,
+    "0": 27
+  },
+  "creation": [
+    {
+      "directory": 312,
+      "file": 4408,
+      "group": 2
+    },
+    {
+      "directory": 27,
+      "file": 8219,
+      "group": 0
+    }
+  ],
+  "before": [
+    {
+      "ms": 0.920175,
+      "exit": 0,
+      "text": "node 1 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=2 term=1 commit=10 applied=10 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 0.8848,
+      "exit": 0,
+      "text": "node 2 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=2 term=1 commit=10 applied=10 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=2 term=1 commit=6 applied=6 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 0.992134,
+      "exit": 0,
+      "text": "node 3 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=LEADER leader=2 term=1 commit=10 applied=10 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=2 term=1 commit=6 applied=6 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 0.774715,
+      "exit": 0,
+      "text": "node 4 root=0 salt=6939530676746669797 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=2 term=1 commit=6 applied=6 voters=0xe joint=0\n"
+    }
+  ],
+  "mutation_attempts": [
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        1,
+        "d-0",
+        "040755"
+      ],
+      "ms": 144.941316,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=1 name=d-0 ino=312 mode=040755 nlink=2\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "target",
+        "0100644"
+      ],
+      "ms": 23.950051,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=target ino=4408 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        1,
+        "d-1",
+        "040755"
+      ],
+      "ms": 20.066682,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=1 name=d-1 ino=27 mode=040755 nlink=2\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "placement-pad",
+        "0100644"
+      ],
+      "ms": 24.06426,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=placement-pad ino=4123 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "target",
+        "0100644"
+      ],
+      "ms": 23.703006,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=target ino=8219 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-0",
+        "0100644"
+      ],
+      "ms": 5.492717,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-0 ino=12315 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-0",
+        "0100644"
+      ],
+      "ms": 29.334766,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-0 ino=8504 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-0"
+      ],
+      "ms": 41.052373,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-0 ino=12315 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-0"
+      ],
+      "ms": 44.005441,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-0 ino=8504 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-1",
+        "0100644"
+      ],
+      "ms": 35.999619,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-1 ino=16411 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-1",
+        "0100644"
+      ],
+      "ms": 48.886194,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-1 ino=12600 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-1"
+      ],
+      "ms": 40.762287,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-1 ino=16411 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-1"
+      ],
+      "ms": 36.037535,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-1 ino=12600 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-2",
+        "0100644"
+      ],
+      "ms": 43.708813,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-2 ino=20507 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-2",
+        "0100644"
+      ],
+      "ms": 32.51067,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-2 ino=16696 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-2"
+      ],
+      "ms": 32.433836,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-2 ino=20507 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-2"
+      ],
+      "ms": 48.710983,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-2 ino=16696 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-3",
+        "0100644"
+      ],
+      "ms": 48.635774,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-3 ino=24603 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-3",
+        "0100644"
+      ],
+      "ms": 36.859168,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-3 ino=20792 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-3"
+      ],
+      "ms": 33.946809,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-3 ino=24603 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-3"
+      ],
+      "ms": 45.452912,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-3 ino=20792 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-4",
+        "0100644"
+      ],
+      "ms": 44.255527,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-4 ino=28699 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-4"
+      ],
+      "ms": 37.223171,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-4 ino=28699 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-4",
+        "0100644"
+      ],
+      "ms": 66.601271,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-4 ino=24888 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-5",
+        "0100644"
+      ],
+      "ms": 37.260421,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-5 ino=32795 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-4"
+      ],
+      "ms": 42.960223,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-4 ino=24888 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-5"
+      ],
+      "ms": 54.057865,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-5 ino=32795 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-6",
+        "0100644"
+      ],
+      "ms": 47.384805,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-6 ino=36891 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-5",
+        "0100644"
+      ],
+      "ms": 70.579641,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-5 ino=28984 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-6"
+      ],
+      "ms": 35.993493,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-6 ino=36891 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-5"
+      ],
+      "ms": 43.356435,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-5 ino=28984 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-7",
+        "0100644"
+      ],
+      "ms": 39.699152,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-7 ino=40987 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-6",
+        "0100644"
+      ],
+      "ms": 35.933201,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-6 ino=33080 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-7"
+      ],
+      "ms": 28.216048,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-7 ino=40987 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-6"
+      ],
+      "ms": 36.549623,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-6 ino=33080 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-8",
+        "0100644"
+      ],
+      "ms": 32.779297,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-8 ino=45083 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-7",
+        "0100644"
+      ],
+      "ms": 40.490659,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-7 ino=37176 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-8"
+      ],
+      "ms": 27.863503,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-8 ino=45083 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-9",
+        "0100644"
+      ],
+      "ms": 36.088202,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-9 ino=49179 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-7"
+      ],
+      "ms": 47.588682,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-7 ino=37176 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-9"
+      ],
+      "ms": 27.787503,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-9 ino=49179 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-8",
+        "0100644"
+      ],
+      "ms": 31.830622,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-8 ino=41272 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-10",
+        "0100644"
+      ],
+      "ms": 16.069437,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-10 ino=53275 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-10"
+      ],
+      "ms": 27.94742,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-10 ino=53275 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-8"
+      ],
+      "ms": 48.103728,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-8 ino=41272 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-11",
+        "0100644"
+      ],
+      "ms": 20.140058,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-11 ino=57371 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-9",
+        "0100644"
+      ],
+      "ms": 48.075145,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-9 ino=45368 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-11"
+      ],
+      "ms": 39.979196,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-11 ino=57371 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-12",
+        "0100644"
+      ],
+      "ms": 40.162656,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-12 ino=61467 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-9"
+      ],
+      "ms": 44.112276,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-9 ino=45368 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-12"
+      ],
+      "ms": 27.819586,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-12 ino=61467 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-10",
+        "0100644"
+      ],
+      "ms": 55.832507,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-10 ino=49464 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-13",
+        "0100644"
+      ],
+      "ms": 32.216126,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-13 ino=65563 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-13"
+      ],
+      "ms": 23.944593,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-13 ino=65563 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-10"
+      ],
+      "ms": 57.245686,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-10 ino=49464 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-14",
+        "0100644"
+      ],
+      "ms": 33.278593,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-14 ino=69659 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-14"
+      ],
+      "ms": 41.648961,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-14 ino=69659 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-11",
+        "0100644"
+      ],
+      "ms": 49.852286,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-11 ino=53560 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-15",
+        "0100644"
+      ],
+      "ms": 35.795867,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-15 ino=73755 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-11"
+      ],
+      "ms": 48.126021,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-11 ino=53560 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-15"
+      ],
+      "ms": 27.808711,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-15 ino=73755 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-12",
+        "0100644"
+      ],
+      "ms": 55.78834,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-12 ino=57656 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-16",
+        "0100644"
+      ],
+      "ms": 56.053134,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-16 ino=77851 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-16"
+      ],
+      "ms": 32.127375,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-16 ino=77851 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-12"
+      ],
+      "ms": 43.835731,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-12 ino=57656 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-13",
+        "0100644"
+      ],
+      "ms": 40.265407,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-13 ino=61752 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-17",
+        "0100644"
+      ],
+      "ms": 44.460362,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-17 ino=81947 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-13"
+      ],
+      "ms": 50.171164,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-13 ino=61752 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-17"
+      ],
+      "ms": 69.426714,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-17 ino=81947 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-14",
+        "0100644"
+      ],
+      "ms": 35.642281,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-14 ino=65848 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-18",
+        "0100644"
+      ],
+      "ms": 23.929009,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-18 ino=86043 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-14"
+      ],
+      "ms": 44.041108,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-14 ino=65848 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-18"
+      ],
+      "ms": 39.947279,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-18 ino=86043 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-19",
+        "0100644"
+      ],
+      "ms": 40.000488,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-19 ino=90139 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-15",
+        "0100644"
+      ],
+      "ms": 47.813601,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-15 ino=69944 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-19"
+      ],
+      "ms": 35.910284,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-19 ino=90139 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-15"
+      ],
+      "ms": 36.151786,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-15 ino=69944 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-16",
+        "0100644"
+      ],
+      "ms": 37.015586,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-16 ino=74040 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-20",
+        "0100644"
+      ],
+      "ms": 45.00795,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-20 ino=94235 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-20"
+      ],
+      "ms": 44.04265,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-20 ino=94235 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-16"
+      ],
+      "ms": 63.72212,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-16 ino=74040 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-21",
+        "0100644"
+      ],
+      "ms": 27.864628,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-21 ino=98331 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-17",
+        "0100644"
+      ],
+      "ms": 64.230667,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-17 ino=78136 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-21"
+      ],
+      "ms": 71.737692,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-21 ino=98331 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-22",
+        "0100644"
+      ],
+      "ms": 32.283668,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-22 ino=102427 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-17"
+      ],
+      "ms": 55.813923,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-17 ino=78136 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-22"
+      ],
+      "ms": 19.158299,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-22 ino=102427 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-18",
+        "0100644"
+      ],
+      "ms": 43.10035,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-18 ino=82232 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-23",
+        "0100644"
+      ],
+      "ms": 63.604536,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-23 ino=106523 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-18"
+      ],
+      "ms": 55.838673,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-18 ino=82232 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-23"
+      ],
+      "ms": 28.816636,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-23 ino=106523 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-19",
+        "0100644"
+      ],
+      "ms": 58.204404,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-19 ino=86328 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-24",
+        "0100644"
+      ],
+      "ms": 50.083163,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-24 ino=110619 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-24"
+      ],
+      "ms": 50.571543,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-24 ino=110619 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-19"
+      ],
+      "ms": 54.489161,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-19 ino=86328 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-25",
+        "0100644"
+      ],
+      "ms": 45.522413,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-25 ino=114715 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-20",
+        "0100644"
+      ],
+      "ms": 53.998282,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-20 ino=90424 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-25"
+      ],
+      "ms": 20.179767,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-25 ino=114715 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-20"
+      ],
+      "ms": 44.012024,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-20 ino=90424 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-26",
+        "0100644"
+      ],
+      "ms": 43.916356,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-26 ino=118811 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-21",
+        "0100644"
+      ],
+      "ms": 31.943498,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-21 ino=94520 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-26"
+      ],
+      "ms": 31.947874,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-26 ino=118811 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-21"
+      ],
+      "ms": 44.340278,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-21 ino=94520 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-27",
+        "0100644"
+      ],
+      "ms": 36.462872,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-27 ino=122907 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-27"
+      ],
+      "ms": 56.619098,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-27 ino=122907 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-22",
+        "0100644"
+      ],
+      "ms": 72.942995,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-22 ino=98616 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-28",
+        "0100644"
+      ],
+      "ms": 27.896961,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-28 ino=127003 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-28"
+      ],
+      "ms": 41.07254,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-28 ino=127003 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-22"
+      ],
+      "ms": 53.398985,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-22 ino=98616 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        27,
+        "load-29",
+        "0100644"
+      ],
+      "ms": 44.993367,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=27 name=load-29 ino=131099 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-23",
+        "0100644"
+      ],
+      "ms": 52.514935,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-23 ino=102712 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        27,
+        "load-29"
+      ],
+      "ms": 23.8918,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=27 name=load-29 ino=131099 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-23"
+      ],
+      "ms": 36.712875,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-23 ino=102712 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-24",
+        "0100644"
+      ],
+      "ms": 29.210723,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-24 ino=106808 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-24"
+      ],
+      "ms": 28.98568,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-24 ino=106808 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-25",
+        "0100644"
+      ],
+      "ms": 12.042067,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-25 ino=110904 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-25"
+      ],
+      "ms": 24.175302,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-25 ino=110904 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-26",
+        "0100644"
+      ],
+      "ms": 45.780082,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-26 ino=115000 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-26"
+      ],
+      "ms": 21.028399,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-26 ino=115000 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-27",
+        "0100644"
+      ],
+      "ms": 22.735623,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-27 ino=119096 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-27"
+      ],
+      "ms": 16.849528,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-27 ino=119096 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-28",
+        "0100644"
+      ],
+      "ms": 28.91897,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-28 ino=123192 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-28"
+      ],
+      "ms": 28.582967,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-28 ino=123192 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-create",
+      "args": [
+        312,
+        "load-29",
+        "0100644"
+      ],
+      "ms": 25.539731,
+      "exit": 0,
+      "text": "raft-create status=0 primary=3 parent=312 name=load-29 ino=127288 mode=0100644 nlink=1\n"
+    },
+    {
+      "node": 1,
+      "operation": "raft-unlink",
+      "args": [
+        312,
+        "load-29"
+      ],
+      "ms": 43.979483,
+      "exit": 0,
+      "text": "raft-unlink status=0 primary=3 parent=312 name=load-29 ino=127288 mode=0100644 nlink=1\n"
+    }
+  ],
+  "cells": {
+    "idle-g0-node1": {
+      "samples": [
+        {
+          "ms": 2.709983,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.526972,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.211928,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.611598,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.7956,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.157677,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.049759,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.911092,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.307428,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.576056,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 2.623774,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 2.821318,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.760881,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.817008,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.15426,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.964675,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.958842,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.202844,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.91255,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.918217,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.715632,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.570597,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.766966,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.856517,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.913601,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.076468,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.751891,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.326929,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.512556,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.897924,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ],
+      "p50_ms": 1.202844,
+      "p95_ms": 2.709983,
+      "p99_ms": 2.821318,
+      "max_ms": 2.821318
+    },
+    "idle-g0-node2": {
+      "samples": [
+        {
+          "ms": 2.87811,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.603682,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.910351,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.190052,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 2.181895,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 2.213854,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.311679,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 2.043977,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.934926,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.381429,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.705474,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.458805,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.215553,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.416805,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.905175,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.699339,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.046343,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 3.157904,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.723507,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.838049,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.10026,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.627182,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 2.143769,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.488014,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 2.214478,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.759298,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.921884,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.884216,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.712006,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.725173,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ],
+      "p50_ms": 1.311679,
+      "p95_ms": 2.87811,
+      "p99_ms": 3.157904,
+      "max_ms": 3.157904
+    },
+    "idle-g2-node1": {
+      "samples": [
+        {
+          "ms": 3.163029,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.336595,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.180927,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.11126,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.347637,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.094885,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.152094,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.060635,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.309303,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 2.958777,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.102968,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.572806,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.855758,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.93655,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.938008,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.226303,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.971259,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.003176,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.444888,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.115635,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.743381,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.966009,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.702965,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.78034,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.366929,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.631056,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 2.013018,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.489638,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.29947,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 2.042727,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        }
+      ],
+      "p50_ms": 1.152094,
+      "p95_ms": 2.958777,
+      "p99_ms": 3.163029,
+      "max_ms": 3.163029
+    },
+    "idle-g2-node2": {
+      "samples": [
+        {
+          "ms": 2.405356,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.182844,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.573723,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.09901,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.861091,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.972426,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.75634,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.724756,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.268262,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.999634,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.792266,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.447263,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.429596,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.106302,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.403138,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.338304,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.161386,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.063426,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 2.290896,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.77759,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.930634,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.572306,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.364721,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.259969,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 2.478272,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.267262,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 2.052602,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.606806,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.139927,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.883133,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        }
+      ],
+      "p50_ms": 1.259969,
+      "p95_ms": 2.405356,
+      "p99_ms": 2.478272,
+      "max_ms": 2.478272
+    },
+    "writes-g0-node1": {
+      "samples": [
+        {
+          "ms": 1.359679,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 22.198826,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 23.972259,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 15.854602,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 12.368404,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 7.847488,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 27.682459,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 33.139384,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 24.41968,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 31.541369,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 29.171474,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 6.966563,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.822466,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.040635,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.664849,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 17.349449,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 26.367864,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 72.79666,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 34.629773,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 22.697706,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 41.784421,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 24.745974,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 34.938984,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 24.884892,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 47.03401,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 32.375627,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 8.507869,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.982801,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.822841,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.772049,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ],
+      "p50_ms": 22.697706,
+      "p95_ms": 47.03401,
+      "p99_ms": 72.79666,
+      "max_ms": 72.79666
+    },
+    "writes-g0-node2": {
+      "samples": [
+        {
+          "ms": 2.099061,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 21.747197,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 35.242779,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 16.511358,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 27.571083,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 8.242033,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 32.86734,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 24.771183,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 23.309003,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 36.401456,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 7.493318,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 0.819174,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.024093,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.054551,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 1.001884,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 30.059522,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 33.034092,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 52.369475,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 33.773098,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 19.868306,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 4.031244,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 12.130402,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 54.445744,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 47.538723,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 48.12677,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 12.284528,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 56.206802,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 16.14248,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 23.873009,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "ms": 8.00874,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ],
+      "p50_ms": 21.747197,
+      "p95_ms": 54.445744,
+      "p99_ms": 56.206802,
+      "max_ms": 56.206802
+    },
+    "writes-g2-node1": {
+      "samples": [
+        {
+          "ms": 1.271678,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.239386,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.857758,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.197719,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.8888,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 29.546976,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 4.175913,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 36.102828,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 7.775945,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 36.794667,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.837924,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.828299,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.898883,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.738548,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 16.730902,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 8.2852,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.799966,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.770715,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.832299,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.932509,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 17.533784,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 23.551672,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 3.727534,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 32.793298,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.177177,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.822341,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.944925,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.896508,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.892258,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.75259,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        }
+      ],
+      "p50_ms": 0.944925,
+      "p95_ms": 36.102828,
+      "p99_ms": 36.794667,
+      "max_ms": 36.794667
+    },
+    "writes-g2-node2": {
+      "samples": [
+        {
+          "ms": 1.472888,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.125177,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 2.032601,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 26.038362,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 43.619146,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.291512,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 48.210563,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 23.631464,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.141468,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 1.259345,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 0.931801,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 17.225907,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 23.46438,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 4.068828,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 45.449621,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 36.969211,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 5.075338,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 39.68511,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 33.599221,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 7.225982,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 26.334239,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 10.755014,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 12.67149,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 19.037423,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 36.191828,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 34.399021,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 12.048193,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 31.333159,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 4.049287,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "ms": 32.118333,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=3 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        }
+      ],
+      "p50_ms": 17.225907,
+      "p95_ms": 45.449621,
+      "p99_ms": 48.210563,
+      "max_ms": 48.210563
+    }
+  },
+  "after": [
+    {
+      "ms": 11.657523,
+      "exit": 0,
+      "text": "node 1 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=2 term=1 commit=83 applied=83 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 4.057953,
+      "exit": 0,
+      "text": "node 2 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=2 term=1 commit=84 applied=84 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=2 term=1 commit=66 applied=66 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 0.68234,
+      "exit": 0,
+      "text": "node 3 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=LEADER leader=2 term=1 commit=84 applied=84 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=2 term=1 commit=66 applied=66 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 0.631297,
+      "exit": 0,
+      "text": "node 4 root=0 salt=6939530676746669797 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=2 term=1 commit=66 applied=66 voters=0xe joint=0\n"
+    }
+  ],
+  "recovery": [
+    {
+      "phase": "group-0-leader-3-stopped",
+      "reads": [
+        {
+          "node": 1,
+          "group": 2,
+          "ms": 5.725594,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 1,
+          "group": 0,
+          "ms": 2.313187,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 2,
+          "group": 2,
+          "ms": 1.67089,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 2,
+          "group": 0,
+          "ms": 1.869475,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 4,
+          "group": 2,
+          "ms": 1.646765,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 4,
+          "group": 0,
+          "ms": 1.736724,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ]
+    },
+    {
+      "phase": "group-0-leader-rejoined",
+      "reads": [
+        {
+          "node": 1,
+          "group": 2,
+          "ms": 1.464097,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 1,
+          "group": 0,
+          "ms": 1.524514,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 2,
+          "group": 2,
+          "ms": 1.186178,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 2,
+          "group": 0,
+          "ms": 1.241928,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 3,
+          "group": 2,
+          "ms": 68.769166,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 3,
+          "group": 0,
+          "ms": 1.031801,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 4,
+          "group": 2,
+          "ms": 0.886592,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 4,
+          "group": 0,
+          "ms": 0.917175,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ]
+    },
+    {
+      "phase": "group-2-leader-2-stopped",
+      "reads": [
+        {
+          "node": 1,
+          "group": 2,
+          "ms": 2.677816,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=4 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 1,
+          "group": 0,
+          "ms": 1.696265,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 3,
+          "group": 2,
+          "ms": 0.966551,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=4 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 3,
+          "group": 0,
+          "ms": 1.790225,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 4,
+          "group": 2,
+          "ms": 1.48218,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=4 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 4,
+          "group": 0,
+          "ms": 1.566764,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ]
+    },
+    {
+      "phase": "group-2-leader-rejoined",
+      "reads": [
+        {
+          "node": 1,
+          "group": 2,
+          "ms": 1.976101,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=4 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 1,
+          "group": 0,
+          "ms": 1.576348,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 2,
+          "group": 2,
+          "ms": 15.367973,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=4 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 2,
+          "group": 0,
+          "ms": 1.7561,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 3,
+          "group": 2,
+          "ms": 1.311178,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=4 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 3,
+          "group": 0,
+          "ms": 1.403887,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 4,
+          "group": 2,
+          "ms": 0.829508,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=4 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 4,
+          "group": 0,
+          "ms": 1.339888,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ]
+    },
+    {
+      "phase": "all-daemons-cold-restarted",
+      "reads": [
+        {
+          "node": 1,
+          "group": 2,
+          "ms": 551.316337,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 1,
+          "group": 0,
+          "ms": 2.841026,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 2,
+          "group": 2,
+          "ms": 2.29273,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 2,
+          "group": 0,
+          "ms": 2.358813,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 3,
+          "group": 2,
+          "ms": 1.957726,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 3,
+          "group": 0,
+          "ms": 2.013351,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        },
+        {
+          "node": 4,
+          "group": 2,
+          "ms": 1.932559,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=2 ino=4408 mode=0100644 nlink=1 size=0 mtime=1791510269\n"
+        },
+        {
+          "node": 4,
+          "group": 0,
+          "ms": 1.453221,
+          "exit": 0,
+          "text": "raft-getattr status=0 primary=1 ino=8219 mode=0100644 nlink=1 size=0 mtime=1791510270\n"
+        }
+      ]
+    }
+  ],
+  "cold_status": [
+    {
+      "ms": 1.215969,
+      "exit": 0,
+      "text": "node 1 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=LEADER leader=0 term=3 commit=86 applied=86 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 1.32722,
+      "exit": 0,
+      "text": "node 2 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=3 commit=86 applied=86 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=4 commit=70 applied=70 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 1.082177,
+      "exit": 0,
+      "text": "node 3 root=1 salt=6939530676746669797 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=3 commit=86 applied=86 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=4 commit=70 applied=70 voters=0xe joint=0\n"
+    },
+    {
+      "ms": 1.168927,
+      "exit": 0,
+      "text": "node 4 root=0 salt=6939530676746669797 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=4 commit=70 applied=70 voters=0xe joint=0\n"
+    }
+  ]
+}

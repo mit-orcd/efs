@@ -175,8 +175,9 @@ static int stale_retryable(uint8_t type)
  * the contiguous ack sent with every request is (lowest in-flight seq)
  * - 1, so a server window advances past seqs it never served. A slot is
  * held from before the first send to after the final return — every
- * BUSY / STALE / NOT_PRIMARY retry inside rpc_send_recv_* reuses the
- * same bytes, which is the whole point. Table full = the op
+ * BUSY / STALE / NOT_PRIMARY retry inside rpc_send_recv_* preserves the
+ * identity and operation payload. CREATE may advance only its contiguous
+ * ACK as older operations finish. Table full = the op
  * receives BUSY before any RPC; no mutation loses its identity. */
 static pthread_mutex_t opid_mu = PTHREAD_MUTEX_INITIALIZER;
 
@@ -289,6 +290,30 @@ static uint32_t opid_suffix(uint8_t *buf, uint32_t slen, const struct efs_opid_r
         return slen;
     efs_opid_req_pack(q, buf + slen);
     return slen + EFS_OPID_WIRE_LEN;
+}
+
+/* The identity is immutable, but its contiguous ACK may advance while a
+ * retry waits behind older operations. Never ACK this operation itself. */
+static void opid_retry_ack(void *packet, uint32_t length)
+{
+    struct efs_opid_req q;
+    uint8_t *suffix=(uint8_t *)packet+length-EFS_OPID_WIRE_LEN;
+    efs_opid_req_unpack(&q,suffix);
+    if (!efs_opid_req_valid(&q)) return;
+    uint64_t low=0;int owned=0;
+    pthread_mutex_lock(&opid_mu);
+    for (unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {
+        uint64_t seq=g_client.opid_inflight[i];
+        if (seq==q.id.seq) owned=1;
+        if (seq && (!low || seq<low)) low=seq;
+    }
+    if (owned && low && low-1>q.ack && low<=q.id.seq &&
+        q.id.session_epoch==g_client.opid_epoch &&
+        !memcmp(q.id.client_uuid,g_client.opid_uuid,EFS_OPID_UUID_LEN)) {
+        q.ack=low-1;
+        efs_opid_req_pack(&q,suffix);
+    }
+    pthread_mutex_unlock(&opid_mu);
 }
 
 /* Phase 2b: the metadata primary is the lowest-id live node. Mutations must
@@ -489,6 +514,39 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
 /* Send to the owner of `shard`. Retry NOT_PRIMARY. */
 static int rpc_writer_retry_pause(unsigned attempt);
 
+#if EFS_FAULTS
+/* Test-only: consume a committed CREATE reply, then hide a replay as BUSY.
+ * The third reply must use exactly the same request bytes and durable inode. */
+static int rpc_fault_create_reply(uint8_t type, const void *req, uint32_t len,
+                                  uint8_t rtype, void *payload, uint32_t plen)
+{
+    static pthread_mutex_t mu = PTHREAD_MUTEX_INITIALIZER;
+    static unsigned stage;
+    static uint8_t original[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN];
+    static efs_ino_t ino;
+    const char *marker = getenv("EFS_FAULT_CREATE_RETRY_FILE");
+    if (!marker || access(marker,F_OK) || type != EFS_MSG_INODE_CREATE ||
+        len != sizeof(original) || rtype != EFS_MSG_INODE_CREATE_REPLY ||
+        plen != sizeof(struct efs_msg_inode_reply)) return 0;
+    const struct efs_msg_inode_create *create = req;
+    struct efs_msg_inode_reply *reply = payload;
+    if (strcmp(create->name,"w58-live-retry") || reply->status != EFS_INODE_RPC_OK)
+        return 0;
+    pthread_mutex_lock(&mu);
+    if (stage >= 3) { pthread_mutex_unlock(&mu); return 0; }
+    if (!stage) { memcpy(original,req,len); ino=reply->inode.ino; }
+    if (memcmp(original,req,len) || ino != reply->inode.ino) abort();
+    struct efs_opid_req q;
+    efs_opid_req_unpack(&q,(const uint8_t *)req+sizeof(*create));
+    fprintf(stderr,"test-create-retry: stage=%u seq=%llu ino=%llu identical=1\n",
+            stage,(unsigned long long)q.id.seq,(unsigned long long)ino);
+    unsigned current=stage++;
+    if (current == 1) reply->status=EFS_INODE_RPC_BUSY;
+    pthread_mutex_unlock(&mu);
+    return current == 0 ? -1 : 0;
+}
+#endif
+
 static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
                                uint32_t req_len, uint8_t expect, void *reply,
                                uint32_t reply_len, uint32_t copy_cap,
@@ -499,7 +557,11 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
     int prof = rpc_prof_enabled();
     int saw_busy = 0;
     unsigned long long t_start = rpc_prof_now_us();
+    uint8_t create_retry[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN];
+    int identified_create=type==EFS_MSG_INODE_CREATE && req_len==sizeof(create_retry);
+    if (identified_create) { memcpy(create_retry,req,req_len);req=create_retry; }
     for (int attempt = 0; attempt < 16; attempt++) {
+        if (identified_create) opid_retry_ack(create_retry,req_len);
         if (efs_client_rpc_past_deadline())
             return EFS_ERR_BUSY;
         efs_node_id_t nid = 0;
@@ -532,6 +594,9 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
         void *payload = NULL;
         uint32_t plen = 0;
         int rc = efs_conn_recv_msg(conn, &rtype, &payload, &plen);
+#if EFS_FAULTS
+        if (!rc) rc=rpc_fault_create_reply(type,req,req_len,rtype,payload,plen);
+#endif
         unsigned long long t3 = prof ? rpc_prof_now_us() : 0;
         if (rc != 0) {
             free(payload);
@@ -1624,7 +1689,11 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
     int saw_busy = 0;
     int prof = rpc_prof_enabled();
     unsigned long long t_start = rpc_prof_now_us();
+    uint8_t create_retry[sizeof(struct efs_msg_inode_create)+EFS_OPID_WIRE_LEN];
+    int identified_create=type==EFS_MSG_INODE_CREATE && req_len==sizeof(create_retry);
+    if (identified_create) { memcpy(create_retry,req,req_len);req=create_retry; }
     for (int attempt = 0; attempt < 16; attempt++) {
+        if (identified_create) opid_retry_ack(create_retry,req_len);
         efs_node_id_t nid = 0;
         struct efs_conn *conn;
         unsigned long long t0;

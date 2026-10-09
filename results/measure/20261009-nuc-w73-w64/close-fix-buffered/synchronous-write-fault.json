@@ -1,0 +1,28 @@
+{
+  "cases": [
+    {
+      "flag": "sync",
+      "bytes": 46,
+      "errors": [
+        {
+          "call": "write",
+          "errno": 5
+        }
+      ],
+      "recovery_fsync_succeeded": true
+    },
+    {
+      "flag": "dsync",
+      "bytes": 46,
+      "errors": [
+        {
+          "call": "write",
+          "errno": 5
+        }
+      ],
+      "recovery_fsync_succeeded": true
+    }
+  ],
+  "cold_crash_verified": true,
+  "actual_callback_failure_traced": true
+}

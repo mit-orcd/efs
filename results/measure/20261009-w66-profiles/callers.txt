@@ -1,0 +1,4041 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 8  of event 'cpu-clock'
+# Event count (approx.): 80808080
+#
+# Children      Self  Symbol                              
+# ........  ........  ....................................
+#
+    50.00%     0.00%  [k] el0t_64_sync
+            |          
+            |--25.00%--__syscall_cancel_arch
+            |          __internal_syscall_cancel
+            |          __syscall_cancel
+            |          |          
+            |          |--12.50%--efs_send_msg_parts
+            |          |          efs_conn_send_msg
+            |          |          server_handle_conn
+            |          |          conn_thread
+            |          |          start_thread
+            |          |          thread_start
+            |          |          
+            |           --12.50%--fsync
+            |                     server_gc_inode
+            |                     host_gc_inode_nodes
+            |                     host_gc_thread
+            |                     start_thread
+            |                     thread_start
+            |          
+             --12.50%--__internal_syscall_cancel
+                       __syscall_cancel
+                       __close
+                       cmd_raft_unlink
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+    50.00%     0.00%  [k] el0t_64_sync_handler
+            |
+            ---el0t_64_sync
+               |          
+               |--25.00%--__syscall_cancel_arch
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          |          
+               |          |--12.50%--efs_send_msg_parts
+               |          |          efs_conn_send_msg
+               |          |          server_handle_conn
+               |          |          conn_thread
+               |          |          start_thread
+               |          |          thread_start
+               |          |          
+               |           --12.50%--fsync
+               |                     server_gc_inode
+               |                     host_gc_inode_nodes
+               |                     host_gc_thread
+               |                     start_thread
+               |                     thread_start
+               |          
+                --12.50%--__internal_syscall_cancel
+                          __syscall_cancel
+                          __close
+                          cmd_raft_unlink
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    50.00%     0.00%  [k] el0_svc
+            |
+            ---el0t_64_sync_handler
+               el0t_64_sync
+               |          
+               |--25.00%--__syscall_cancel_arch
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          |          
+               |          |--12.50%--efs_send_msg_parts
+               |          |          efs_conn_send_msg
+               |          |          server_handle_conn
+               |          |          conn_thread
+               |          |          start_thread
+               |          |          thread_start
+               |          |          
+               |           --12.50%--fsync
+               |                     server_gc_inode
+               |                     host_gc_inode_nodes
+               |                     host_gc_thread
+               |                     start_thread
+               |                     thread_start
+               |          
+                --12.50%--__internal_syscall_cancel
+                          __syscall_cancel
+                          __close
+                          cmd_raft_unlink
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    50.00%     0.00%  [k] do_el0_svc
+            |
+            ---el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               |          
+               |--25.00%--__syscall_cancel_arch
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          |          
+               |          |--12.50%--efs_send_msg_parts
+               |          |          efs_conn_send_msg
+               |          |          server_handle_conn
+               |          |          conn_thread
+               |          |          start_thread
+               |          |          thread_start
+               |          |          
+               |           --12.50%--fsync
+               |                     server_gc_inode
+               |                     host_gc_inode_nodes
+               |                     host_gc_thread
+               |                     start_thread
+               |                     thread_start
+               |          
+                --12.50%--__internal_syscall_cancel
+                          __syscall_cancel
+                          __close
+                          cmd_raft_unlink
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    50.00%     0.00%  [k] el0_svc_common.constprop.0
+            |
+            ---do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               |          
+               |--25.00%--__syscall_cancel_arch
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          |          
+               |          |--12.50%--efs_send_msg_parts
+               |          |          efs_conn_send_msg
+               |          |          server_handle_conn
+               |          |          conn_thread
+               |          |          start_thread
+               |          |          thread_start
+               |          |          
+               |           --12.50%--fsync
+               |                     server_gc_inode
+               |                     host_gc_inode_nodes
+               |                     host_gc_thread
+               |                     start_thread
+               |                     thread_start
+               |          
+                --12.50%--__internal_syscall_cancel
+                          __syscall_cancel
+                          __close
+                          cmd_raft_unlink
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    50.00%     0.00%  [k] invoke_syscall.constprop.0
+            |
+            ---el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               |          
+               |--25.00%--__syscall_cancel_arch
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          |          
+               |          |--12.50%--efs_send_msg_parts
+               |          |          efs_conn_send_msg
+               |          |          server_handle_conn
+               |          |          conn_thread
+               |          |          start_thread
+               |          |          thread_start
+               |          |          
+               |           --12.50%--fsync
+               |                     server_gc_inode
+               |                     host_gc_inode_nodes
+               |                     host_gc_thread
+               |                     start_thread
+               |                     thread_start
+               |          
+                --12.50%--__internal_syscall_cancel
+                          __syscall_cancel
+                          __close
+                          cmd_raft_unlink
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    50.00%     0.00%  [.] thread_start
+    50.00%     0.00%  [.] start_thread
+            |
+            ---thread_start
+
+    37.50%     0.00%  [.] __internal_syscall_cancel
+            |
+            ---__syscall_cancel
+               |          
+               |--12.50%--efs_send_msg_parts
+               |          efs_conn_send_msg
+               |          server_handle_conn
+               |          conn_thread
+               |          start_thread
+               |          thread_start
+               |          
+               |--12.50%--fsync
+               |          server_gc_inode
+               |          host_gc_inode_nodes
+               |          host_gc_thread
+               |          start_thread
+               |          thread_start
+               |          
+                --12.50%--__close
+                          cmd_raft_unlink
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    37.50%     0.00%  [.] __libc_start_main@@GLIBC_2.34
+            |          
+            |--25.00%--_start
+            |          
+             --12.50%--_start
+
+    37.50%     0.00%  [.] __libc_start_call_main
+            |
+            ---__libc_start_main@@GLIBC_2.34
+               |          
+               |--25.00%--_start
+               |          
+                --12.50%--_start
+
+    37.50%     0.00%  [.] _PyEval_EvalFrameDefault
+            |          
+            |--12.50%--0xffffb3e813f4
+            |          _PyObject_MakeTpCall
+            |          0xffffb3f0d53c
+            |          0xffffb3e30724
+            |          PyObject_Vectorcall
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f32464
+            |          0xffffb3e30724
+            |          _PyEval_EvalFrameDefault
+            |          0xffffb3e3a150
+            |          PyObject_CallMethodObjArgs
+            |          PyImport_ImportModuleLevelObject
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f32464
+            |          0xffffb3e30724
+            |          _PyEval_EvalFrameDefault
+            |          0xffffb3e3a150
+            |          PyObject_CallMethodObjArgs
+            |          PyImport_ImportModuleLevelObject
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f32464
+            |          0xffffb3e30724
+            |          _PyEval_EvalFrameDefault
+            |          0xffffb3e3a150
+            |          PyObject_CallMethodObjArgs
+            |          PyImport_ImportModuleLevelObject
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f3f6f8
+            |          0xffffb3f360c8
+            |          0xffffb3f7306c
+            |          0xffffb3f71d80
+            |          0xffffb3f71aec
+            |          Py_RunMain
+            |          Py_BytesMain
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |          
+            |--12.50%--0xffffb3e7febc
+            |          0xffffb3fd91f0
+            |          0xffffb3ef8020
+            |          start_thread
+            |          thread_start
+            |          
+             --12.50%--0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f32464
+                       _PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f32464
+                       0xffffb3e30724
+                       _PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f32464
+                       0xffffb3e30724
+                       _PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f3f6f8
+                       0xffffb3f360c8
+                       0xffffb3f7306c
+                       0xffffb3f71d80
+                       0xffffb3f71aec
+                       Py_RunMain
+                       Py_BytesMain
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+    37.50%     0.00%  [.] __syscall_cancel
+            |          
+            |--12.50%--efs_send_msg_parts
+            |          efs_conn_send_msg
+            |          server_handle_conn
+            |          conn_thread
+            |          start_thread
+            |          thread_start
+            |          
+            |--12.50%--fsync
+            |          server_gc_inode
+            |          host_gc_inode_nodes
+            |          host_gc_thread
+            |          start_thread
+            |          thread_start
+            |          
+             --12.50%--__close
+                       cmd_raft_unlink
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+    25.00%     0.00%  [.] Py_BytesMain
+            |
+            ---__libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    25.00%     0.00%  [.] Py_RunMain
+            |
+            ---Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    25.00%     0.00%  [.] PyEval_EvalCode
+            |
+            ---0xffffb3f32464
+               |          
+               |--12.50%--0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f32464
+               |          0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f32464
+               |          0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f3f6f8
+               |          0xffffb3f360c8
+               |          0xffffb3f7306c
+               |          0xffffb3f71d80
+               |          0xffffb3f71aec
+               |          Py_RunMain
+               |          Py_BytesMain
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--_PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f3f6f8
+                          0xffffb3f360c8
+                          0xffffb3f7306c
+                          0xffffb3f71d80
+                          0xffffb3f71aec
+                          Py_RunMain
+                          Py_BytesMain
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    25.00%     0.00%  [.] PyImport_ImportModuleLevelObject
+            |
+            ---_PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               |          
+               |--12.50%--0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f32464
+               |          0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f3f6f8
+               |          0xffffb3f360c8
+               |          0xffffb3f7306c
+               |          0xffffb3f71d80
+               |          0xffffb3f71aec
+               |          Py_RunMain
+               |          Py_BytesMain
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--_PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f3f6f8
+                          0xffffb3f360c8
+                          0xffffb3f7306c
+                          0xffffb3f71d80
+                          0xffffb3f71aec
+                          Py_RunMain
+                          Py_BytesMain
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    25.00%     0.00%  [.] PyObject_CallMethodObjArgs
+            |
+            ---PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               |          
+               |--12.50%--0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f32464
+               |          0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f3f6f8
+               |          0xffffb3f360c8
+               |          0xffffb3f7306c
+               |          0xffffb3f71d80
+               |          0xffffb3f71aec
+               |          Py_RunMain
+               |          Py_BytesMain
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--_PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f3f6f8
+                          0xffffb3f360c8
+                          0xffffb3f7306c
+                          0xffffb3f71d80
+                          0xffffb3f71aec
+                          Py_RunMain
+                          Py_BytesMain
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    25.00%    12.50%  [.] PyObject_Vectorcall
+            |
+            ---_PyEval_EvalFrameDefault
+               |          
+               |--12.50%--PyEval_EvalCode
+               |          0xffffb3f32464
+               |          0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f32464
+               |          0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f32464
+               |          0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f3f6f8
+               |          0xffffb3f360c8
+               |          0xffffb3f7306c
+               |          0xffffb3f71d80
+               |          0xffffb3f71aec
+               |          Py_RunMain
+               |          Py_BytesMain
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f3f6f8
+                          0xffffb3f360c8
+                          0xffffb3f7306c
+                          0xffffb3f71d80
+                          0xffffb3f71aec
+                          Py_RunMain
+                          Py_BytesMain
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    25.00%     0.00%  [k] __tcp_push_pending_frames
+            |          
+            |--12.50%--tcp_send_fin
+            |          __tcp_close
+            |          tcp_close
+            |          inet_release
+            |          __sock_release
+            |          sock_close
+            |          __fput
+            |          __fput_sync
+            |          __arm64_sys_close
+            |          invoke_syscall.constprop.0
+            |          el0_svc_common.constprop.0
+            |          do_el0_svc
+            |          el0_svc
+            |          el0t_64_sync_handler
+            |          el0t_64_sync
+            |          __internal_syscall_cancel
+            |          __syscall_cancel
+            |          __close
+            |          cmd_raft_unlink
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |          
+             --12.50%--tcp_push
+                       tcp_sendmsg_locked
+                       tcp_sendmsg
+                       inet_sendmsg
+                       __sock_sendmsg
+                       sock_write_iter
+                       do_iter_readv_writev
+                       vfs_writev
+                       do_writev
+                       __arm64_sys_writev
+                       invoke_syscall.constprop.0
+                       el0_svc_common.constprop.0
+                       do_el0_svc
+                       el0_svc
+                       el0t_64_sync_handler
+                       el0t_64_sync
+                       __syscall_cancel_arch
+                       __internal_syscall_cancel
+                       __syscall_cancel
+                       efs_send_msg_parts
+                       efs_conn_send_msg
+                       server_handle_conn
+                       conn_thread
+                       start_thread
+                       thread_start
+
+    25.00%     0.00%  [k] tcp_write_xmit
+            |
+            ---__tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [k] __tcp_transmit_skb
+            |
+            ---tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [k] ip_queue_xmit
+            |
+            ---__tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [k] __ip_queue_xmit
+            |
+            ---ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [k] ip_output
+            |
+            ---__ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [k] ip_finish_output
+            |
+            ---ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [k] __ip_finish_output
+            |
+            ---ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [.] __syscall_cancel_arch
+            |
+            ---__internal_syscall_cancel
+               __syscall_cancel
+               |          
+               |--12.50%--efs_send_msg_parts
+               |          efs_conn_send_msg
+               |          server_handle_conn
+               |          conn_thread
+               |          start_thread
+               |          thread_start
+               |          
+                --12.50%--fsync
+                          server_gc_inode
+                          host_gc_inode_nodes
+                          host_gc_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [.] _start
+    25.00%     0.00%  [k] ip_finish_output2
+            |
+            ---__ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [k] neigh_hh_output
+            |
+            ---ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [k] __dev_queue_xmit
+            |
+            ---neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               |          
+               |--12.50%--tcp_send_fin
+               |          __tcp_close
+               |          tcp_close
+               |          inet_release
+               |          __sock_release
+               |          sock_close
+               |          __fput
+               |          __fput_sync
+               |          __arm64_sys_close
+               |          invoke_syscall.constprop.0
+               |          el0_svc_common.constprop.0
+               |          do_el0_svc
+               |          el0_svc
+               |          el0t_64_sync_handler
+               |          el0t_64_sync
+               |          __internal_syscall_cancel
+               |          __syscall_cancel
+               |          __close
+               |          cmd_raft_unlink
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--tcp_push
+                          tcp_sendmsg_locked
+                          tcp_sendmsg
+                          inet_sendmsg
+                          __sock_sendmsg
+                          sock_write_iter
+                          do_iter_readv_writev
+                          vfs_writev
+                          do_writev
+                          __arm64_sys_writev
+                          invoke_syscall.constprop.0
+                          el0_svc_common.constprop.0
+                          do_el0_svc
+                          el0_svc
+                          el0t_64_sync_handler
+                          el0t_64_sync
+                          __syscall_cancel_arch
+                          __internal_syscall_cancel
+                          __syscall_cancel
+                          efs_send_msg_parts
+                          efs_conn_send_msg
+                          server_handle_conn
+                          conn_thread
+                          start_thread
+                          thread_start
+
+    25.00%     0.00%  [.] 0x0000ffffb3f71aec
+            |
+            ---Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    25.00%     0.00%  [.] 0x0000ffffb3f71d80
+            |
+            ---0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    25.00%     0.00%  [.] 0x0000ffffb3f7306c
+            |
+            ---0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    25.00%     0.00%  [.] 0x0000ffffb3f360c8
+            |
+            ---0xffffb3f7306c
+               0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    25.00%     0.00%  [.] 0x0000ffffb3f3f6f8
+            |
+            ---0xffffb3f360c8
+               0xffffb3f7306c
+               0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    25.00%     0.00%  [.] 0x0000ffffb3f32464
+            |          
+            |--12.50%--0xffffb3e30724
+            |          _PyEval_EvalFrameDefault
+            |          0xffffb3e3a150
+            |          PyObject_CallMethodObjArgs
+            |          PyImport_ImportModuleLevelObject
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f32464
+            |          0xffffb3e30724
+            |          _PyEval_EvalFrameDefault
+            |          0xffffb3e3a150
+            |          PyObject_CallMethodObjArgs
+            |          PyImport_ImportModuleLevelObject
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f32464
+            |          0xffffb3e30724
+            |          _PyEval_EvalFrameDefault
+            |          0xffffb3e3a150
+            |          PyObject_CallMethodObjArgs
+            |          PyImport_ImportModuleLevelObject
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f3f6f8
+            |          0xffffb3f360c8
+            |          0xffffb3f7306c
+            |          0xffffb3f71d80
+            |          0xffffb3f71aec
+            |          Py_RunMain
+            |          Py_BytesMain
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |          
+             --12.50%--_PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f32464
+                       0xffffb3e30724
+                       _PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f32464
+                       0xffffb3e30724
+                       _PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f3f6f8
+                       0xffffb3f360c8
+                       0xffffb3f7306c
+                       0xffffb3f71d80
+                       0xffffb3f71aec
+                       Py_RunMain
+                       Py_BytesMain
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+    25.00%     0.00%  [.] 0x0000ffffb3e30724
+            |          
+            |--12.50%--_PyEval_EvalFrameDefault
+            |          0xffffb3e3a150
+            |          PyObject_CallMethodObjArgs
+            |          PyImport_ImportModuleLevelObject
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f32464
+            |          0xffffb3e30724
+            |          _PyEval_EvalFrameDefault
+            |          0xffffb3e3a150
+            |          PyObject_CallMethodObjArgs
+            |          PyImport_ImportModuleLevelObject
+            |          _PyEval_EvalFrameDefault
+            |          PyEval_EvalCode
+            |          0xffffb3f3f6f8
+            |          0xffffb3f360c8
+            |          0xffffb3f7306c
+            |          0xffffb3f71d80
+            |          0xffffb3f71aec
+            |          Py_RunMain
+            |          Py_BytesMain
+            |          __libc_start_call_main
+            |          __libc_start_main@@GLIBC_2.34
+            |          _start
+            |          
+             --12.50%--PyObject_Vectorcall
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f32464
+                       0xffffb3e30724
+                       _PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f32464
+                       0xffffb3e30724
+                       _PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f32464
+                       0xffffb3e30724
+                       _PyEval_EvalFrameDefault
+                       0xffffb3e3a150
+                       PyObject_CallMethodObjArgs
+                       PyImport_ImportModuleLevelObject
+                       _PyEval_EvalFrameDefault
+                       PyEval_EvalCode
+                       0xffffb3f3f6f8
+                       0xffffb3f360c8
+                       0xffffb3f7306c
+                       0xffffb3f71d80
+                       0xffffb3f71aec
+                       Py_RunMain
+                       Py_BytesMain
+                       __libc_start_call_main
+                       __libc_start_main@@GLIBC_2.34
+                       _start
+
+    25.00%     0.00%  [.] 0x0000ffffb3e3a150
+            |
+            ---PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               |          
+               |--12.50%--0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f32464
+               |          0xffffb3e30724
+               |          _PyEval_EvalFrameDefault
+               |          0xffffb3e3a150
+               |          PyObject_CallMethodObjArgs
+               |          PyImport_ImportModuleLevelObject
+               |          _PyEval_EvalFrameDefault
+               |          PyEval_EvalCode
+               |          0xffffb3f3f6f8
+               |          0xffffb3f360c8
+               |          0xffffb3f7306c
+               |          0xffffb3f71d80
+               |          0xffffb3f71aec
+               |          Py_RunMain
+               |          Py_BytesMain
+               |          __libc_start_call_main
+               |          __libc_start_main@@GLIBC_2.34
+               |          _start
+               |          
+                --12.50%--_PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f32464
+                          0xffffb3e30724
+                          _PyEval_EvalFrameDefault
+                          0xffffb3e3a150
+                          PyObject_CallMethodObjArgs
+                          PyImport_ImportModuleLevelObject
+                          _PyEval_EvalFrameDefault
+                          PyEval_EvalCode
+                          0xffffb3f3f6f8
+                          0xffffb3f360c8
+                          0xffffb3f7306c
+                          0xffffb3f71d80
+                          0xffffb3f71aec
+                          Py_RunMain
+                          Py_BytesMain
+                          __libc_start_call_main
+                          __libc_start_main@@GLIBC_2.34
+                          _start
+
+    12.50%    12.50%  [.] _PyObject_GenericGetAttrWithDict
+            |
+            ---PyObject_GetAttr
+               _PyEval_EvalFrameDefault
+               0xffffb3e7febc
+               0xffffb3fd91f0
+               0xffffb3ef8020
+               start_thread
+               thread_start
+
+    12.50%    12.50%  [k] _raw_spin_unlock_irq
+            |
+            ---blk_mq_submit_bio
+               __submit_bio
+               submit_bio_noacct_nocheck
+               submit_bio_noacct
+               submit_bio
+               0xffffc2f69ed99120
+               xfs_log_force_seq
+               xlog_write
+               xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%    12.50%  [.] 0x00000000000004fc
+            |
+            ---__kernel_clock_gettime
+               clock_gettime@@GLIBC_2.17
+               host_pump
+               start_thread
+               thread_start
+
+    12.50%    12.50%  [.] 0x00000000000cea3c
+            |
+            ---_PyDict_LoadGlobal
+               _PyEval_EvalFrameDefault
+               0xffffb3e813f4
+               _PyObject_MakeTpCall
+               0xffffb3f0d53c
+               0xffffb3e30724
+               PyObject_Vectorcall
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f3f6f8
+               0xffffb3f360c8
+               0xffffb3f7306c
+               0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [.] PyObject_GetAttr
+            |
+            ---_PyEval_EvalFrameDefault
+               0xffffb3e7febc
+               0xffffb3fd91f0
+               0xffffb3ef8020
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] _PyObject_MakeTpCall
+            |
+            ---0xffffb3f0d53c
+               0xffffb3e30724
+               PyObject_Vectorcall
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f3f6f8
+               0xffffb3f360c8
+               0xffffb3f7306c
+               0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [.] _PyDict_LoadGlobal
+            |
+            ---_PyEval_EvalFrameDefault
+               0xffffb3e813f4
+               _PyObject_MakeTpCall
+               0xffffb3f0d53c
+               0xffffb3e30724
+               PyObject_Vectorcall
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f3f6f8
+               0xffffb3f360c8
+               0xffffb3f7306c
+               0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [.] _start
+    12.50%     0.00%  [.] __close
+            |
+            ---cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] __arm64_sys_exit_group
+            |
+            ---invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] __arm64_sys_fsync
+            |
+            ---invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] __arm64_sys_writev
+            |
+            ---invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] __kernel_clock_gettime
+            |
+            ---clock_gettime@@GLIBC_2.17
+               host_pump
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] __local_bh_enable_ip
+            |
+            ---__dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] __mmput
+            |
+            ---mmput
+               exit_mm
+               do_exit
+               do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] __arm64_sys_close
+            |
+            ---invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] __fput_sync
+            |
+            ---__arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] __fput
+            |
+            ---__fput_sync
+               __arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%    12.50%  [k] __memcg_slab_free_hook
+            |
+            ---kmem_cache_free
+               unlink_anon_vmas
+               free_pgtables
+               exit_mmap
+               __mmput
+               mmput
+               exit_mm
+               do_exit
+               do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] __sock_release
+            |
+            ---sock_close
+               __fput
+               __fput_sync
+               __arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] __tcp_close
+            |
+            ---tcp_close
+               inet_release
+               __sock_release
+               sock_close
+               __fput
+               __fput_sync
+               __arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%    12.50%  [k] validate_xmit_skb
+            |
+            ---__dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_send_fin
+               __tcp_close
+               tcp_close
+               inet_release
+               __sock_release
+               sock_close
+               __fput
+               __fput_sync
+               __arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] __submit_bio
+            |
+            ---submit_bio_noacct_nocheck
+               submit_bio_noacct
+               submit_bio
+               0xffffc2f69ed99120
+               xfs_log_force_seq
+               xlog_write
+               xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] blk_mq_submit_bio
+            |
+            ---__submit_bio
+               submit_bio_noacct_nocheck
+               submit_bio_noacct
+               submit_bio
+               0xffffc2f69ed99120
+               xfs_log_force_seq
+               xlog_write
+               xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] conn_thread
+            |
+            ---start_thread
+               thread_start
+
+    12.50%     0.00%  [.] server_handle_conn
+            |
+            ---conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] efs_conn_send_msg
+            |
+            ---server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] efs_send_msg_parts
+            |
+            ---efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] do_writev
+            |
+            ---__arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] vfs_writev
+            |
+            ---do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] do_iter_readv_writev
+            |
+            ---vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] sock_write_iter
+            |
+            ---do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] __sock_sendmsg
+            |
+            ---sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] inet_sendmsg
+            |
+            ---__sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] tcp_sendmsg
+            |
+            ---inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] tcp_sendmsg_locked
+            |
+            ---tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] tcp_push
+            |
+            ---tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] do_softirq
+            |
+            ---__local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] do_softirq_own_stack
+            |
+            ---do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] call_on_irq_stack
+            |
+            ---do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] ____do_softirq
+            |
+            ---call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] __do_softirq
+            |
+            ---____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] __napi_poll
+            |
+            ---net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] __netif_receive_skb
+            |
+            ---process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] __netif_receive_skb_one_core
+            |
+            ---__netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%    12.50%  [k] __wake_up_sync_key
+            |
+            ---tcp_data_ready
+               tcp_rcv_established
+               tcp_v4_do_rcv
+               tcp_v4_rcv
+               ip_protocol_deliver_rcu
+               ip_local_deliver_finish
+               ip_local_deliver
+               ip_rcv_finish
+               ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] clock_gettime@@GLIBC_2.17
+            |
+            ---host_pump
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] cmd_raft_unlink
+            |
+            ---__libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] do_fsync
+            |
+            ---__arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] do_group_exit
+            |
+            ---__arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] do_exit
+            |
+            ---do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] exit_mm
+            |
+            ---do_exit
+               do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] handle_softirqs
+            |
+            ---__do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] mmput
+            |
+            ---exit_mm
+               do_exit
+               do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] exit_mmap
+            |
+            ---__mmput
+               mmput
+               exit_mm
+               do_exit
+               do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] free_pgtables
+            |
+            ---exit_mmap
+               __mmput
+               mmput
+               exit_mm
+               do_exit
+               do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [.] host_gc_thread
+            |
+            ---start_thread
+               thread_start
+
+    12.50%     0.00%  [.] host_gc_inode_nodes
+            |
+            ---host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] fsync
+            |
+            ---server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] host_pump
+            |
+            ---start_thread
+               thread_start
+
+    12.50%     0.00%  [k] inet_release
+            |
+            ---__sock_release
+               sock_close
+               __fput
+               __fput_sync
+               __arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] ip_rcv
+            |
+            ---__netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] ip_rcv_finish
+            |
+            ---ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] ip_local_deliver
+            |
+            ---ip_rcv_finish
+               ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] ip_local_deliver_finish
+            |
+            ---ip_local_deliver
+               ip_rcv_finish
+               ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] ip_protocol_deliver_rcu
+            |
+            ---ip_local_deliver_finish
+               ip_local_deliver
+               ip_rcv_finish
+               ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] unlink_anon_vmas
+            |
+            ---free_pgtables
+               exit_mmap
+               __mmput
+               mmput
+               exit_mm
+               do_exit
+               do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] kmem_cache_free
+            |
+            ---unlink_anon_vmas
+               free_pgtables
+               exit_mmap
+               __mmput
+               mmput
+               exit_mm
+               do_exit
+               do_group_exit
+               __arm64_sys_exit_group
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+
+    12.50%     0.00%  [k] net_rx_action
+            |
+            ---handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] process_backlog
+            |
+            ---__napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] server_gc_inode
+            |
+            ---host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] sock_close
+            |
+            ---__fput
+               __fput_sync
+               __arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] tcp_close
+            |
+            ---inet_release
+               __sock_release
+               sock_close
+               __fput
+               __fput_sync
+               __arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] tcp_v4_rcv
+            |
+            ---ip_protocol_deliver_rcu
+               ip_local_deliver_finish
+               ip_local_deliver
+               ip_rcv_finish
+               ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] tcp_v4_do_rcv
+            |
+            ---tcp_v4_rcv
+               ip_protocol_deliver_rcu
+               ip_local_deliver_finish
+               ip_local_deliver
+               ip_rcv_finish
+               ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] tcp_rcv_established
+            |
+            ---tcp_v4_do_rcv
+               tcp_v4_rcv
+               ip_protocol_deliver_rcu
+               ip_local_deliver_finish
+               ip_local_deliver
+               ip_rcv_finish
+               ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] tcp_data_ready
+            |
+            ---tcp_rcv_established
+               tcp_v4_do_rcv
+               tcp_v4_rcv
+               ip_protocol_deliver_rcu
+               ip_local_deliver_finish
+               ip_local_deliver
+               ip_rcv_finish
+               ip_rcv
+               __netif_receive_skb_one_core
+               __netif_receive_skb
+               process_backlog
+               __napi_poll
+               net_rx_action
+               handle_softirqs
+               __do_softirq
+               ____do_softirq
+               call_on_irq_stack
+               do_softirq_own_stack
+               do_softirq
+               __local_bh_enable_ip
+               __dev_queue_xmit
+               neigh_hh_output
+               ip_finish_output2
+               __ip_finish_output
+               ip_finish_output
+               ip_output
+               __ip_queue_xmit
+               ip_queue_xmit
+               __tcp_transmit_skb
+               tcp_write_xmit
+               __tcp_push_pending_frames
+               tcp_push
+               tcp_sendmsg_locked
+               tcp_sendmsg
+               inet_sendmsg
+               __sock_sendmsg
+               sock_write_iter
+               do_iter_readv_writev
+               vfs_writev
+               do_writev
+               __arm64_sys_writev
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               efs_send_msg_parts
+               efs_conn_send_msg
+               server_handle_conn
+               conn_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] tcp_send_fin
+            |
+            ---__tcp_close
+               tcp_close
+               inet_release
+               __sock_release
+               sock_close
+               __fput
+               __fput_sync
+               __arm64_sys_close
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __internal_syscall_cancel
+               __syscall_cancel
+               __close
+               cmd_raft_unlink
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [k] vfs_fsync_range
+            |
+            ---do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] xfs_file_write_iter
+            |
+            ---vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] 0xffffc2f69ed9aa44
+            |
+            ---xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] xlog_cil_ail_insert
+            |
+            ---0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] xlog_cil_ctx_switch
+            |
+            ---xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] xlog_write
+            |
+            ---xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] xfs_log_force_seq
+            |
+            ---xlog_write
+               xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] 0xffffc2f69ed99120
+            |
+            ---xfs_log_force_seq
+               xlog_write
+               xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] submit_bio
+            |
+            ---0xffffc2f69ed99120
+               xfs_log_force_seq
+               xlog_write
+               xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] submit_bio_noacct
+            |
+            ---submit_bio
+               0xffffc2f69ed99120
+               xfs_log_force_seq
+               xlog_write
+               xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [k] submit_bio_noacct_nocheck
+            |
+            ---submit_bio_noacct
+               submit_bio
+               0xffffc2f69ed99120
+               xfs_log_force_seq
+               xlog_write
+               xlog_cil_ctx_switch
+               xlog_cil_ail_insert
+               0xffffc2f69ed9aa44
+               xfs_file_write_iter
+               vfs_fsync_range
+               do_fsync
+               __arm64_sys_fsync
+               invoke_syscall.constprop.0
+               el0_svc_common.constprop.0
+               do_el0_svc
+               el0_svc
+               el0t_64_sync_handler
+               el0t_64_sync
+               __syscall_cancel_arch
+               __internal_syscall_cancel
+               __syscall_cancel
+               fsync
+               server_gc_inode
+               host_gc_inode_nodes
+               host_gc_thread
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] 0x0000ffff894364fc
+            |
+            ---__kernel_clock_gettime
+               clock_gettime@@GLIBC_2.17
+               host_pump
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] 0x0000ffffb3f0d53c
+            |
+            ---0xffffb3e30724
+               PyObject_Vectorcall
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f3f6f8
+               0xffffb3f360c8
+               0xffffb3f7306c
+               0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [.] 0x0000ffffb3e813f4
+            |
+            ---_PyObject_MakeTpCall
+               0xffffb3f0d53c
+               0xffffb3e30724
+               PyObject_Vectorcall
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f3f6f8
+               0xffffb3f360c8
+               0xffffb3f7306c
+               0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [.] 0x0000ffffb3ddea3c
+            |
+            ---_PyDict_LoadGlobal
+               _PyEval_EvalFrameDefault
+               0xffffb3e813f4
+               _PyObject_MakeTpCall
+               0xffffb3f0d53c
+               0xffffb3e30724
+               PyObject_Vectorcall
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f32464
+               0xffffb3e30724
+               _PyEval_EvalFrameDefault
+               0xffffb3e3a150
+               PyObject_CallMethodObjArgs
+               PyImport_ImportModuleLevelObject
+               _PyEval_EvalFrameDefault
+               PyEval_EvalCode
+               0xffffb3f3f6f8
+               0xffffb3f360c8
+               0xffffb3f7306c
+               0xffffb3f71d80
+               0xffffb3f71aec
+               Py_RunMain
+               Py_BytesMain
+               __libc_start_call_main
+               __libc_start_main@@GLIBC_2.34
+               _start
+
+    12.50%     0.00%  [.] 0x0000ffffb3ef8020
+            |
+            ---start_thread
+               thread_start
+
+    12.50%     0.00%  [.] 0x0000ffffb3fd91f0
+            |
+            ---0xffffb3ef8020
+               start_thread
+               thread_start
+
+    12.50%     0.00%  [.] 0x0000ffffb3e7febc
+            |
+            ---0xffffb3fd91f0
+               0xffffb3ef8020
+               start_thread
+               thread_start
+
+
+
+#
+# (Tip: For memory address profiling, try: perf mem record / perf mem report)
+#

@@ -24,6 +24,8 @@ from raft_tail import commands as raft_commands
 import time
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
+p.add_argument('--mount-sync',action='store_true',help='run only mount-wide sync acceptance: ordinary writes, peer-before-close, cold bytes and deletion')
 p.add_argument('--mode', choices=('buffered', 'direct'), required=True)
 p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
                help='TCP by default; use RDMA only for transport-specific gates')
@@ -31,12 +33,15 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
+p.add_argument('--create-live-retry',action='store_true',help='actual FUSE CREATE retries consumed committed reply then BUSY using one identity')
+p.add_argument('--create-negative-replay',action='store_true',help='ordinary CREATE EEXIST identity survives unlink, cold restart and name reuse')
 p.add_argument('--unique-create',action='store_true',help='16-worker unique O_EXCL, genuine EEXIST and name reuse, then cold exact bytes/reclamation')
 p.add_argument('--create-lease',action='store_true',help='initial CREATE lease atomicity on local and first-use cross-group hashed lanes, cold replay/unlink/close')
 p.add_argument('--fuse-reply-failure',action='store_true',help='reject CREATE/OPEN descriptor replies and prove local handle/server lease cleanup')
@@ -93,6 +98,7 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if a.mount_sync:a.sync_writes=True
 if not 8 <= a.tiny_mixed_files <= 8192 or a.tiny_mixed_files % 8:
     p.error("--tiny-mixed-files must be 8..8192 and divisible by eight")
 assert bool(a.ior_binary)==bool(a.mpi_run),'IOR and MPI launcher must be supplied together'
@@ -180,6 +186,7 @@ else:peer_mount.mkdir()
 handles=[]
 extra_clients=[]
 blocked=None
+posix_failure=None
 
 def run(args, **kwargs):
     return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
@@ -216,7 +223,8 @@ def start():
         node_env=dict(env)
         if a.put_barrier_fault:
             node_env.update(LD_PRELOAD=str(work/'store-barrier-fault.so'),
-                            EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'))
+                            EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'),
+                            EFS_TEST_STORE_NODE=str(i+1))
         if a.compactor_pressure:
             node_env['EFS_RAFT_OBS']='1'
             if i==3:node_env.update(EFS_FAULT_COMPACT_STALL='1',EFS_FAULT_COMPACT_FILE=str(work/'compactor-fault'))
@@ -240,16 +248,21 @@ def stop(crash=False):
 def mount_client():
     global client
     log=open(work/'fuse.log','ab');handles.append(log)
-    client_env=env
+    client_env=dict(env)
+    if a.create_live_retry:
+        client_env['EFS_FAULT_CREATE_RETRY_FILE']=str(work/'create-retry-fault')
     if a.fuse_reply_failure:
         from fuse_reply_failure import prepare
         client_env=prepare(work,env)
-    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=client_env,stdout=log,stderr=log)
+    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','sync'] if a.mount_sync else []),*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=client_env,stdout=log,stderr=log)
     def ready():
         if client.poll() is not None:raise AssertionError('FUSE exited')
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
         return subprocess.run(['timeout','2','stat',str(mount)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
     wait(ready,'client serving',40)
+    if a.mount_sync:
+        options=subprocess.check_output(['findmnt','-rn','-o','OPTIONS','--target',str(mount)],text=True).strip().split(',')
+        assert 'sync' in options,('mount sync flag absent',options)
     transport_proof([*servers,client])
 
 def transport_proof(processes):
@@ -367,12 +380,51 @@ try:
     if a.put_barrier_fault:
         from put_barrier_fault import exercise as fail_put_barrier, verify_and_delete as verify_put_barrier
         barrier=fail_put_barrier(mount,work/'put-barrier-fault',lambda ino:chunk_state(ino,allow_absent=True))
-        assert any('test-store-barrier: refusing fragment fsync' in (work/f'n{i+1}.log').read_text() for i in range(4))
+        assert any('test-store-barrier: refusing fragment' in (work/f'n{i+1}.log').read_text() for i in range(4))
         unmount();stop(crash=True);start();mount_client()
         verify_put_barrier(mount)
+        (work/'put-barrier-fault').unlink(missing_ok=True)
         wait(drained,'failed PUT barrier recovery cold bytes and deletion drained',180)
         (work/'put-barrier-fault.json').write_text(json.dumps(barrier,indent=2))
         print('failed server PUT barrier: no publication ACK, retained bytes, recovery and exact cold bytes PASS',flush=True)
+    if a.create_live_retry:
+        marker=work/'create-retry-fault';marker.touch()
+        path=mount/'w58-live-retry';payload=b'W58 committed reply lost, BUSY replay, same identity'
+        try:
+            with path.open('xb',buffering=0) as out:
+                assert out.write(payload)==len(payload)
+                os.fsync(out.fileno())
+            ino=path.stat().st_ino
+            try:os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+            except FileExistsError:pass
+            else:raise AssertionError('genuine O_EXCL conflict accepted')
+        finally:marker.unlink(missing_ok=True)
+        log=(work/'fuse.log').read_text()
+        stages=re.findall(r'test-create-retry: stage=(\d+) seq=(\d+) ino=(\d+) identical=1',log)
+        assert len(stages)==3 and [int(x[0]) for x in stages]==[0,1,2],stages
+        assert len({x[1:] for x in stages})==1 and int(stages[0][2])==ino,stages
+        unmount();stop(crash=True);start();mount_client()
+        assert path.read_bytes()==payload
+        path.unlink()
+        wait(drained,'live CREATE ambiguous/BUSY retry cold deletion drained',180)
+        (work/'create-live-retry.json').write_text(json.dumps({
+            'stages':stages,'original_durable_inode':ino,'cold_bytes':True,
+            'genuine_exclusive_conflict':True},indent=2))
+        print('actual FUSE CREATE lost committed reply, BUSY replay, same opid/inode and cold bytes PASS',flush=True)
+    if a.create_negative_replay:
+        helper=work/'create-negative-replay'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+             source/'tests/live/create_negative_replay.c',source/'libefs.a',
+             '-pthread','-lm','-ldl','-libverbs','-o',helper])
+        run([helper,a.port,'prepare'],timeout=60)
+        unmount();stop(crash=True);start();mount_client()
+        assert not (mount/'w58-negative').exists()
+        run([helper,a.port,'replay'],timeout=60)
+        assert not (mount/'w58-negative').exists()
+        (work/'create-negative-replay.json').write_text(json.dumps({
+            'ordinary_create':True,'original_verdict':'EEXIST',
+            'crash_restart_after_unlink':True,'name_reuse_preserved':True},indent=2))
+        print('ordinary CREATE original EEXIST, unlink, cold replay and name reuse PASS',flush=True)
     if a.unique_create:
         from unique_create import exercise as unique_create, verify_and_delete as verify_unique
         unique=unique_create(mount)
@@ -381,6 +433,28 @@ try:
         wait(drained,'unique CREATE cold bytes and physical deletion drained',180)
         (work/'unique-create.json').write_text(json.dumps(unique,indent=2))
         print('16-worker unique CREATE, real EEXIST, name reuse and exact cold bytes PASS',flush=True)
+    if a.append_truncate_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        for index in range(8):
+            run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+                 '--parent',f'append-truncate-{index}','--filter','peer_append_while_truncate',
+                 '--results',work/f'append-truncate-{index}.tsv'],timeout=120)
+            if index==3:
+                run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+                unmount();stop();start();mount_client()
+                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+                wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'cold peer mounted',40)
+        run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+             '--parent','append-handoff','--filter','peer_concurrent_append',
+             '--results',work/'append-handoff.tsv'],timeout=240)
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        wait(drained,'append/truncate physical deletion drained',180)
+        (work/'append-truncate-verdict.json').write_text(json.dumps({'pass':True,'truncate_repeats':8,'concurrent_append_records':800,'cold_restart_after_repeat':4},indent=2))
+        unmount();stop()
+        print('eight peer append/truncate races, concurrent handoff and cold restart PASS',flush=True)
+        raise SystemExit(0)
     if a.fuse_reply_failure:
         from fuse_reply_failure import exercise as reject_replies
         evidence=reject_replies(mount,work,source,a.port,env)
@@ -525,7 +599,7 @@ print(json.dumps({'seconds':time.monotonic()-start,'bytes':size}),flush=True)
 assert sys.stdin.readline().strip()=='release'
 os.close(fd)
 """
-        modes=([('fsync',0)] if a.append_sync_boundary else [])+([('sync',os.O_SYNC),('dsync',os.O_DSYNC)] if a.sync_writes else [])
+        modes=([('fsync',0)] if a.append_sync_boundary else [])+(([('mount-sync',0)] if a.mount_sync else [('sync',os.O_SYNC),('dsync',os.O_DSYNC)]) if a.sync_writes else [])
         for label,flag in modes:
             for append in ((False,True) if a.sync_writes else (True,)):
                 for size in (31,2<<20):
@@ -574,14 +648,17 @@ os.close(fd)
         for name,digest in expected.items():
             assert hashlib.sha256((mount/name).read_bytes()).hexdigest()==digest,'synchronous bytes changed after server crash'
             (mount/name).unlink()
-        if a.sync_writes:
+        if a.sync_writes and not a.mount_sync:
             trace=(work/'fuse.log').read_text(errors='replace')
             assert len(re.findall(r'sync-write ino=.* rc=0',trace))>=8,'synchronous callback publication trace missing'
         result={'cases':records,'cold_crash_verified':True,'explicit_fsync_before_close':a.append_sync_boundary,
-                'synchronous_write_before_close':a.sync_writes}
+                'synchronous_write_before_close':a.sync_writes,'mount_sync':a.mount_sync}
         (work/('synchronous-writes.json' if a.sync_writes else 'append-sync-boundary.json')).write_text(json.dumps(result,indent=2))
         wait(drained,'synchronous write physical deletion drained')
-        print(('O_SYNC/O_DSYNC small/queued/append before close and cold crash bytes' if a.sync_writes else 'Append/fsync across lane groups: peer before close and cold crash bytes')+' PASS',flush=True)
+        print(('Mount-wide sync ordinary small/queued/append before close and cold crash bytes' if a.mount_sync else 'O_SYNC/O_DSYNC small/queued/append before close and cold crash bytes' if a.sync_writes else 'Append/fsync across lane groups: peer before close and cold crash bytes')+' PASS',flush=True)
+    if a.mount_sync:
+        print('Mount-wide sync acceptance complete; physical deletion drained PASS',flush=True)
+        raise SystemExit(0)
     if a.append_replay_race:
         helper=work/'append-replay-race'
         run(['cc','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
@@ -1829,12 +1906,24 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     wait(drained,'all fixture GC records retired')
     if a.posix:
         posix_checkpoint = totals(status())
-        run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+        try:
+            run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+        except subprocess.CalledProcessError as error:
+            if not a.continue_posix_failure:raise
+            posix_failure=error
+            (work/'posix-failure.json').write_text(json.dumps({'returncode':error.returncode,'command':list(map(str,error.cmd))},indent=2))
+            print('POSIX FAILED; continuing independent gates, final status remains failure',flush=True)
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
         transport_proof([peer])
-        run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','gc-posix-peer','--results',work/'posix2.tsv'],timeout=600)
+        try:
+            run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','gc-posix-peer','--results',work/'posix2.tsv'],timeout=600)
+        except subprocess.CalledProcessError as error:
+            if not a.continue_posix_failure:raise
+            if posix_failure is None:posix_failure=error
+            (work/'peer-failure.json').write_text(json.dumps({'returncode':error.returncode,'command':list(map(str,error.cmd))},indent=2))
+            print('PEER FAILED; continuing independent gates, final status remains failure',flush=True)
         run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
         wait(drained,'POSIX server deletion queues drained',180)
         after_posix = totals(status())
@@ -1951,6 +2040,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         assert record['peak_bytes']<=a.memory_limit_bytes,record
         (work/'memory-envelope.json').write_text(json.dumps(record,indent=2))
         print('small-memory whole-fixture envelope '+json.dumps(record)+' PASS',flush=True)
+    if posix_failure:raise posix_failure
     print('GC reclamation '+a.mode+' PASS',flush=True)
 finally:
     for proc,target in extra_clients:

@@ -28,6 +28,7 @@ static unsigned g_group_leader[2];
 static unsigned mode,sends,begins,ends,pauses;
 static unsigned char original[2048];static uint32_t original_len;
 static int active;
+static void opid_retry_ack(void *packet,uint32_t length){(void)packet;(void)length;}
 static int opid_begin(struct efs_opid_req *q) {
  assert(!active);active=1;begins++;memset(q,0,sizeof(*q));
  q->id.client_uuid[0]=19;q->id.session_epoch=3;q->id.seq=begins;return 7;
