@@ -18,7 +18,7 @@ source=r'''
 #define CS EFS_DEFAULT_CHUNK_SIZE
 struct efs_client g_client;
 static struct efs_chunk_entry map;
-static int decodes, overlays, decode_error, pulls, pull_error;
+static int decodes, overlays, decode_error, pulls, pull_error, authoritative_absent;
 static uint32_t data_chunk_size(void) { return CS; }
 static uint32_t data_frag_size(void) { return CS/2; }
 int efs_export_get_chunk(struct efs_export *ex, efs_ino_t ino,
@@ -48,6 +48,11 @@ int efs_client_pull_chunks_range(efs_ino_t ino,uint32_t a,uint32_t b) {
     (void)ino;(void)a;(void)b;pulls++; if(pull_error)return pull_error;
     decode_error=0;map.read_view.parts[0].len=50;map.read_view.revision++;
     return EFS_OK;
+}
+int efs_client_pull_chunks_range_absent(efs_ino_t ino,uint32_t a,uint32_t b,uint8_t *absent) {
+    if(pull_error)return pull_error;
+    if(authoritative_absent){pulls++;*absent=1;return EFS_OK;}
+    return efs_client_pull_chunks_range(ino,a,b);
 }
 '''+function('overlay_chunk_deltas_ce')+'\n'+function('fetch_published_once')+'\n'+function('efs_client_fetch_published_chunk_obs')+r'''
 #define RDCACHE_WAYS 2
@@ -98,6 +103,18 @@ int main(void) {
     assert(pulls==1&&obs.read_view.parts[0].len==50);
     decode_error=EFS_ERR_NOT_FOUND;pull_error=EFS_ERR_BUSY;
     assert(efs_client_fetch_published_chunk_obs(1,0,buf,CS,&obs,&have)==EFS_ERR_BUSY);
+    /* A truncate can remove the row while the local staging table retains
+     * its old span. Authoritative absence must not refetch that stale span. */
+    pull_error=0;authoritative_absent=1;decode_error=EFS_ERR_NOT_FOUND;
+    memset(buf,0xa5,CS);have=1;int prior_decodes=decodes;
+    assert(!efs_client_fetch_published_chunk_obs(1,0,buf,CS,&obs,&have));
+    assert(!have && !obs.ndelta && !obs.generation && decodes==prior_decodes+1);
+    for(uint32_t i=0;i<CS;i++)assert(!buf[i]);
+    assert(map.ndelta==2); /* fetched hole must not erase retained staging */
+    pull_error=EFS_ERR_BUSY;memset(buf,0xa5,CS);
+    assert(efs_client_fetch_published_chunk_obs(1,0,buf,CS,&obs,&have)==EFS_ERR_BUSY);
+    assert(buf[0]==0xa5); /* failed authority is never zero-filled */
+    authoritative_absent=0;
     struct efs_chunk_rec rec={0},decoded;
     rec.chunk_generation=map.generation;rec.delta_base_n=map.ndelta;
     rec.publish_flags=EFS_CHUNK_REC_F_CAPTURED_EPOCH;rec.publish_epoch=1;

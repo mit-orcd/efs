@@ -154,3 +154,15 @@ and physical reclaim pass; core POSIX212/212, peer63/64 due to append/truncate
 EIO. This full candidate is not accepted yet. Failed fixture gc-direct-igaguvk4
 retained; installed978caaf7 restored, pressure off. A deterministic regression
 now reproduces read retry losing authoritative absence after peer truncate.
+
+## Peer truncate authoritative read absence
+
+The preceding peer EIO is fixed: published-image retry uses the successful
+GETCHUNKS absence bitmap instead of fetching the obsolete mapping deliberately
+retained in the local staging table. A confirmed hole clears the publication
+observation; authority failure still fails, and staging ownership is preserved.
+Deterministic regression reproduces the original failure. AMD full regression,
+eight append/truncate races plus cold restart/concurrent append pass. Combined
+session cleanup/GC/core POSIX212/212/peer64/64 passes. This supersedes the first
+candidate's failed peer gate above; no production activation follows.
+Evidence: results/measure/20261009-truncate-read-absence.
