@@ -362,6 +362,7 @@ struct efs_raft_host {
     pthread_t query_tid;
     int query_running,query_started,query_error,query_enabled;
     uint64_t query_deadline_ms;
+    uint32_t query_cancel_checks; /* Owned by the query publisher thread. */
     struct efs_server_query_view query_view;
     pthread_t gc_tid;    /* background GC reaper (spec L7) */
     int gc_running;
@@ -7382,8 +7383,10 @@ static void query_page_sweep(int force)
 static int host_query_cancel(void *ctx)
 {
     struct efs_raft_host *h=ctx;
-    return !__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE) ||
-           query_mono_ms()>h->query_deadline_ms;
+    if (!__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE)) return 1;
+    /* Shutdown stays immediate; deadline reads are at most 256 callbacks apart. */
+    if (h->query_cancel_checks++ & 255u) return 0;
+    return query_mono_ms()>h->query_deadline_ms;
 }
 /* h->mu held: a pin is atomic with complete local apply dispatch. Import
  * batches can run outside that mutex, so their blockers must also be tested. */
@@ -7494,12 +7497,14 @@ static void *host_query_thread(void *ctx)
         struct efs_server_query_view view;
         uint64_t revisions[4096];
         h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
+        h->query_cancel_checks=0;
         rc=host_query_source(h,&source,&view,revisions);
         struct efs_query_catalog *candidate=NULL;
         if (!rc && !host_query_cancel(h))
             rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
         else if (!rc) rc=EFS_ERR_BUSY;
         efs_kv_lsm_snapshot_release(source);
+        h->query_cancel_checks=0; /* Always enforce the deadline before publication. */
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
         pthread_rwlock_wrlock(&h->query_lock);
         h->query_error=rc;failed=rc!=EFS_OK;
