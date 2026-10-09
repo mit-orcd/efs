@@ -326,6 +326,10 @@ int main(void)
         CHECK(efs_query_catalog_inode(c,indexed[i],NULL,NULL)==EFS_ERR_NOT_FOUND,"old image excludes new inode");
     }
     CHECK(newer && efs_query_catalog_inode(newer,UINT64_MAX,NULL,NULL)==EFS_ERR_NOT_FOUND,"absent inode lookup");
+    CHECK(newer && efs_query_catalog_inode(newer,0,NULL,NULL)==EFS_ERR_NOT_FOUND,
+          "lookup below first retained key");
+    CHECK(newer && efs_query_catalog_inode(newer,indexed[0]+(UINT64_C(1)<<40),NULL,NULL)==EFS_ERR_NOT_FOUND,
+          "lookup above last key in a populated partition");
     struct efs_query_catalog *shared=NULL;
     CHECK(!capture(kv,newer,&shared) && !efs_query_catalog_refolded(shared),
           "unchanged decoded inode blocks reused without refolding");
