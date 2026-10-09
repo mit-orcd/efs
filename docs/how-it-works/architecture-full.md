@@ -1487,9 +1487,10 @@ recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
 [W92 local disk backend](../status/query-disk-backend-20261009.md) implements persistent
 partition catalogs, bounded builder scratch, immutable snapshots and validated
-checkpoint recovery. Initial functional gates pass; normal Xorinox query
-publication refuses a retained wrong-shard directory entry. Incremental derived
-stats, disk quotas and large-scale acceptance remain open.
+checkpoint recovery. Functional gates and clean Xorinox mutation queries pass after the authorized
+wipe; the earlier wrong-shard artifact remains historical evidence. Per-generation
+logical disk budgeting is implemented. Incremental derived stats, aggregate cache
+quotas and large-scale acceptance remain open.
 
 ### Distributed metadata scaling discussion
 
@@ -5667,8 +5668,10 @@ the original record and withdrawn interpretation remain retained.
 **Oct 9 disk backend progress:** [implementation checkpoint](../status/query-disk-backend-20261009.md)
 records the persistent partition backend, bounded scratch, immutable generation
 leases and validated cold restore. Functional differential and private live
-gates pass. Derived-stat refresh still performs a full disk pass; disk budgets,
-incremental derived maintenance and the scale gates below remain open.
+gates pass, including clean Xorinox mutation queries after an explicitly authorized
+wipe. Per-generation logical disk budgeting is implemented in `47e7b886`.
+Derived-stat refresh still performs a full disk pass; aggregate cache-space
+budgets, incremental derived maintenance and the scale gates below remain open.
 
 **Oct 9 user requirement — billions of files:** W92 remains open until the
 server query catalog uses a persistent, partitioned disk-backed index with
