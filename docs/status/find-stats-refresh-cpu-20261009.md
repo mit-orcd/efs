@@ -1,5 +1,54 @@
 # W92 NUC node 2 CPU — October 8, 2026 New York
 
+## Follow-up: partition-local stat reuse, 093295be288b
+
+October 9 UTC: profiled node 2 for 30 seconds at 199 Hz under the active
+eight-worker tiny-files workload. Baseline build `abcd9b7b1b6f` recorded 5,597
+samples, zero lost. Global inode hash probes for unchanged stat reuse dominated
+builder instructions: the indexed load accounted for 46.97% and its probe
+branch 14.01% of local annotation periods.
+
+Commit `093295be288b` records each partition's inode-vector range. Identical
+retained partitions have identical sorted keys, allowing direct partition-local
+ordinal reuse. Lane dependencies are still validated; changed inputs use
+authoritative getattr. Count/inode checks fail closed. The additional 16 KiB
+range array is accounted. Differential tests insert/remove an inode in an
+earlier partition to catch global offset shifts; lane-only mutation gates pass.
+
+Deployed all five binaries after graceful generator, mount and server drain;
+existing data preserved, direct I/O/TCP and client/server commands enabled.
+Deployment exit zero. Restarted into `tiny-ordinal-093295be`, eight workers,
+depth eight, 1,000 files/folder, bounded 20,000-file target. At 29.1 seconds:
+4,397 files, 151 files/s. This is not a controlled throughput comparison.
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| 30-second perf samples | 5,597 | 6,222 |
+| Query thread inclusive process cycles | 79.69% | 65.68% |
+| Builder inclusive process cycles | 79.05% | 64.50% |
+| Builder self process cycles | 50.69% | 26.56% |
+| Median of 60 nearby warm publications | 445.5 ms | 376 ms |
+| Warm build range | 416–493 ms | 301–727 ms |
+| Namespace files | 1,076,952–1,080,705 | 1,091,252–1,095,546 |
+
+Median refresh improved 15.6%. Live writes, namespace growth and varying host
+load limit this comparison; cycle shares are not absolute CPU measurements.
+Remaining software work includes global inode unpacking/allocation, page
+faults, index construction and dependency checks. No hardware ceiling claimed.
+Catalog accounting was about 1.03 GB against the unchanged 1 GiB cap; continued
+growth needs monitoring.
+
+Validation: differential catalog unit PASS; full native `make -j8 test` exit
+zero; private publication/RPC, two-mount command options, bounded display and
+export, pinned generation and permissions PASS; POSIX 212/212, peer 64/64;
+restart reconstruction and live capped find/stats PASS. The page fixture gate
+now waits for all 215 files to reach the background snapshot. An intermediate
+private run was invalidated when deployment moved its build directory before
+the restart stage; the complete suite was rerun from the stable installed path.
+
+[Raw profiles, annotations, timings, screen capture, validation and deployment
+evidence](../../results/measure/20261009-catalog-ordinal/).
+
 User observed node-id 2 at 100% CPU and requested strace investigation.
 Installed build: devel `ab050595c3b8`, direct I/O/TCP, `.efs` enabled.
 Node 2 PID 1488325; the existing tiny-file generator remains active. No code,

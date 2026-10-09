@@ -1,0 +1,2 @@
+[ perf record: Woken up 1 times to write data ]
+[ perf record: Captured and wrote 0.704 MB /data1/efs/catalog-hotpath-next/perf.data (5597 samples) ]
