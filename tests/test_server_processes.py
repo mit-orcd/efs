@@ -13,7 +13,9 @@ spec=importlib.util.spec_from_file_location('processes',helper)
 module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 with tempfile.TemporaryDirectory(prefix='efs-owner-') as work:
     directory=Path(work);storage=directory/'store';storage.mkdir();(storage/'log').mkdir()
-    source=directory/'process.c';source.write_text('#include <unistd.h>\nint main(void){for(;;)pause();}\n')
+    # nohup can give this Python runner an ignored SIGINT disposition. The
+    # fake perf must model a recorder that handles SIGINT, not inherit ignore.
+    source=directory/'process.c';source.write_text('#include <unistd.h>\n#include <signal.h>\nint main(void){signal(SIGINT,SIG_DFL);signal(SIGTERM,SIG_DFL);for(;;)pause();}\n')
     binary=directory/'efsd'
     subprocess.run(['cc',str(source),'-o',str(binary)],check=True)
     unrelated=subprocess.Popen(['sleep','120'])

@@ -24,6 +24,8 @@ from raft_tail import commands as raft_commands
 import time
 
 p = argparse.ArgumentParser(description=__doc__)
+p.add_argument('--append-truncate-only',action='store_true',help='run eight peer append/truncate races, a concurrent append handoff check, cold-remount repeats and physical cleanup only')
+p.add_argument('--mount-sync',action='store_true',help='run only mount-wide sync acceptance: ordinary writes, peer-before-close, cold bytes and deletion')
 p.add_argument('--mode', choices=('buffered', 'direct'), required=True)
 p.add_argument('--transport', choices=('tcp', 'rdma'), default='tcp',
                help='TCP by default; use RDMA only for transport-specific gates')
@@ -31,6 +33,7 @@ p.add_argument('--root', action='append', default=[])
 p.add_argument('--mount', type=Path, help='existing empty, unmounted path allowed by host FUSE policy')
 p.add_argument('--peer-mount', type=Path, help='existing empty, unmounted second policy-allowed mount')
 p.add_argument('--posix', action='store_true')
+p.add_argument('--continue-posix-failure','--continue-regression-failure',dest='continue_posix_failure',action='store_true',help='retain POSIX/peer failure, run independent later gates, then exit unsuccessfully')
 p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer overlap with 512 tiny CREATE/close operations, cold exact bytes and physical deletion')
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
@@ -95,6 +98,7 @@ p.add_argument('--idle-seconds',type=int,default=0,help='measure live-table idle
 p.add_argument('--full-node',action='store_true',help='one node quota exhausted while three fragment targets remain writable')
 p.add_argument('--port', type=int, default=20190)
 a = p.parse_args()
+if a.mount_sync:a.sync_writes=True
 if not 8 <= a.tiny_mixed_files <= 8192 or a.tiny_mixed_files % 8:
     p.error("--tiny-mixed-files must be 8..8192 and divisible by eight")
 assert bool(a.ior_binary)==bool(a.mpi_run),'IOR and MPI launcher must be supplied together'
@@ -182,6 +186,7 @@ else:peer_mount.mkdir()
 handles=[]
 extra_clients=[]
 blocked=None
+posix_failure=None
 
 def run(args, **kwargs):
     return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
@@ -249,12 +254,15 @@ def mount_client():
     if a.fuse_reply_failure:
         from fuse_reply_failure import prepare
         client_env=prepare(work,env)
-    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=client_env,stdout=log,stderr=log)
+    client=subprocess.Popen([str(a.client_binary or source/'efs-fuse'),f'127.0.0.1:{a.port}',a.mount_label,str(mount),'-f',*(['-o','sync'] if a.mount_sync else []),*(['-o','max_threads=16,max_idle_threads=1'] if a.workers else [])],env=client_env,stdout=log,stderr=log)
     def ready():
         if client.poll() is not None:raise AssertionError('FUSE exited')
         if subprocess.run(['mountpoint','-q',str(mount)]).returncode:return False
         return subprocess.run(['timeout','2','stat',str(mount)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode==0
     wait(ready,'client serving',40)
+    if a.mount_sync:
+        options=subprocess.check_output(['findmnt','-rn','-o','OPTIONS','--target',str(mount)],text=True).strip().split(',')
+        assert 'sync' in options,('mount sync flag absent',options)
     transport_proof([*servers,client])
 
 def transport_proof(processes):
@@ -425,6 +433,28 @@ try:
         wait(drained,'unique CREATE cold bytes and physical deletion drained',180)
         (work/'unique-create.json').write_text(json.dumps(unique,indent=2))
         print('16-worker unique CREATE, real EEXIST, name reuse and exact cold bytes PASS',flush=True)
+    if a.append_truncate_only:
+        peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
+        peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+        wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
+        for index in range(8):
+            run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+                 '--parent',f'append-truncate-{index}','--filter','peer_append_while_truncate',
+                 '--results',work/f'append-truncate-{index}.tsv'],timeout=120)
+            if index==3:
+                run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+                unmount();stop();start();mount_client()
+                peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
+                wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'cold peer mounted',40)
+        run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,
+             '--parent','append-handoff','--filter','peer_concurrent_append',
+             '--results',work/'append-handoff.tsv'],timeout=240)
+        run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
+        wait(drained,'append/truncate physical deletion drained',180)
+        (work/'append-truncate-verdict.json').write_text(json.dumps({'pass':True,'truncate_repeats':8,'concurrent_append_records':800,'cold_restart_after_repeat':4},indent=2))
+        unmount();stop()
+        print('eight peer append/truncate races, concurrent handoff and cold restart PASS',flush=True)
+        raise SystemExit(0)
     if a.fuse_reply_failure:
         from fuse_reply_failure import exercise as reject_replies
         evidence=reject_replies(mount,work,source,a.port,env)
@@ -569,7 +599,7 @@ print(json.dumps({'seconds':time.monotonic()-start,'bytes':size}),flush=True)
 assert sys.stdin.readline().strip()=='release'
 os.close(fd)
 """
-        modes=([('fsync',0)] if a.append_sync_boundary else [])+([('sync',os.O_SYNC),('dsync',os.O_DSYNC)] if a.sync_writes else [])
+        modes=([('fsync',0)] if a.append_sync_boundary else [])+(([('mount-sync',0)] if a.mount_sync else [('sync',os.O_SYNC),('dsync',os.O_DSYNC)]) if a.sync_writes else [])
         for label,flag in modes:
             for append in ((False,True) if a.sync_writes else (True,)):
                 for size in (31,2<<20):
@@ -618,14 +648,17 @@ os.close(fd)
         for name,digest in expected.items():
             assert hashlib.sha256((mount/name).read_bytes()).hexdigest()==digest,'synchronous bytes changed after server crash'
             (mount/name).unlink()
-        if a.sync_writes:
+        if a.sync_writes and not a.mount_sync:
             trace=(work/'fuse.log').read_text(errors='replace')
             assert len(re.findall(r'sync-write ino=.* rc=0',trace))>=8,'synchronous callback publication trace missing'
         result={'cases':records,'cold_crash_verified':True,'explicit_fsync_before_close':a.append_sync_boundary,
-                'synchronous_write_before_close':a.sync_writes}
+                'synchronous_write_before_close':a.sync_writes,'mount_sync':a.mount_sync}
         (work/('synchronous-writes.json' if a.sync_writes else 'append-sync-boundary.json')).write_text(json.dumps(result,indent=2))
         wait(drained,'synchronous write physical deletion drained')
-        print(('O_SYNC/O_DSYNC small/queued/append before close and cold crash bytes' if a.sync_writes else 'Append/fsync across lane groups: peer before close and cold crash bytes')+' PASS',flush=True)
+        print(('Mount-wide sync ordinary small/queued/append before close and cold crash bytes' if a.mount_sync else 'O_SYNC/O_DSYNC small/queued/append before close and cold crash bytes' if a.sync_writes else 'Append/fsync across lane groups: peer before close and cold crash bytes')+' PASS',flush=True)
+    if a.mount_sync:
+        print('Mount-wide sync acceptance complete; physical deletion drained PASS',flush=True)
+        raise SystemExit(0)
     if a.append_replay_race:
         helper=work/'append-replay-race'
         run(['cc','-D_GNU_SOURCE','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
@@ -1873,12 +1906,24 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
     wait(drained,'all fixture GC records retired')
     if a.posix:
         posix_checkpoint = totals(status())
-        run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+        try:
+            run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+        except subprocess.CalledProcessError as error:
+            if not a.continue_posix_failure:raise
+            posix_failure=error
+            (work/'posix-failure.json').write_text(json.dumps({'returncode':error.returncode,'command':list(map(str,error.cmd))},indent=2))
+            print('POSIX FAILED; continuing independent gates, final status remains failure',flush=True)
         peer_log=open(work/'peer-fuse.log','ab');handles.append(peer_log)
         peer=subprocess.Popen([str(source/'efs-fuse'),f'127.0.0.1:{a.port}','default',str(peer_mount),'-f'],env=env,stdout=peer_log,stderr=peer_log)
         wait(lambda:subprocess.run(['mountpoint','-q',str(peer_mount)]).returncode==0,'peer mounted',40)
         transport_proof([peer])
-        run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','gc-posix-peer','--results',work/'posix2.tsv'],timeout=600)
+        try:
+            run(['python3',source/'tests/posix/posix_2client.py','--local',mount,peer_mount,'--parent','gc-posix-peer','--results',work/'posix2.tsv'],timeout=600)
+        except subprocess.CalledProcessError as error:
+            if not a.continue_posix_failure:raise
+            if posix_failure is None:posix_failure=error
+            (work/'peer-failure.json').write_text(json.dumps({'returncode':error.returncode,'command':list(map(str,error.cmd))},indent=2))
+            print('PEER FAILED; continuing independent gates, final status remains failure',flush=True)
         run([source/'scripts/client.sh','stop',peer_mount]);peer.wait(timeout=15);peer=None
         wait(drained,'POSIX server deletion queues drained',180)
         after_posix = totals(status())
@@ -1995,6 +2040,7 @@ int main(int argc,char**argv){assert(argc==2);port=atoi(argv[1]);
         assert record['peak_bytes']<=a.memory_limit_bytes,record
         (work/'memory-envelope.json').write_text(json.dumps(record,indent=2))
         print('small-memory whole-fixture envelope '+json.dumps(record)+' PASS',flush=True)
+    if posix_failure:raise posix_failure
     print('GC reclamation '+a.mode+' PASS',flush=True)
 finally:
     for proc,target in extra_clients:

@@ -19,6 +19,10 @@ hardware durability proven by a process crash. Record exact remaining blockers.
 Primary ownership: live gate harnesses and package-specific evidence/status.
 Coordinate implementation fixes in shared client/server paths with their owner.
 
+NUC execution and missing mount-sync test coverage are recorded in the
+[October 9 UTC gate report](nuc-gate-closure-20261009.md). The original branch
+production tip under test was `3e1d4c6e`; do not infer a newer devel rollout.
+
 ## devel-known-bugs
 
 Own W58 CREATE retry identity/verdict correctness and W55 missing-fragment

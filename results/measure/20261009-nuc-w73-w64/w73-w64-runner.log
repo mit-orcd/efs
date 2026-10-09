@@ -1,0 +1,49 @@
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 4080550 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 4080587 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+START direct TCP 2026-10-09T00:13:45Z
+pass dir_many_files                  
+pass truncate_big_ftruncate_honest   
+pass truncate_big_o_trunc_honest     
+pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 212/217 pass, 1 fail, 4 skip, 0 notrun  (107.4s)
+wrote /data1/efs/gc-direct-poosjhkm/posix.tsv
+Traceback (most recent call last):
+  File "/data1/efs/gate-closure-build/tests/live/gc_reclamation.py", line 1806, in <module>
+    run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+  File "/data1/efs/gate-closure-build/tests/live/gc_reclamation.py", line 183, in run
+    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/data1/efs/gate-closure-build/tests/posix/posix_suite.py', '/data1/efs/mnt', '--jobs', '4', '--timeout-s', '30', '--results', '/data1/efs/gc-direct-poosjhkm/posix.tsv']' returned non-zero exit status 1.
+START buffered TCP 2026-10-09T00:18:06Z
+FAIL concurrent_appends               timeout after 30s
+pass truncate_big_ftruncate_honest   
+pass truncate_big_o_trunc_honest     
+pass dir_mkdir_umask                 
+pass attr_umask_respected            
+pass perm_dir_no_x_search            
+pass err_chdir_into_file             
+pass chdir_dotdot_after_mkdir        
+============================================================
+POSIX suite: 212/217 pass, 1 fail, 4 skip, 0 notrun  (72.9s)
+wrote /data1/efs/gc-buffered-k4flf2ma/posix.tsv
+Traceback (most recent call last):
+  File "/data1/efs/gate-closure-build/tests/live/gc_reclamation.py", line 1806, in <module>
+    run(['python3',source/'tests/posix/posix_suite.py',mount,'--jobs','4','--timeout-s','30','--results',work/'posix.tsv'],timeout=600)
+  File "/data1/efs/gate-closure-build/tests/live/gc_reclamation.py", line 183, in run
+    return subprocess.run([str(x) for x in args], check=True, timeout=kwargs.pop("timeout",60), env=env, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['python3', '/data1/efs/gate-closure-build/tests/posix/posix_suite.py', '/data1/efs/mnt', '--jobs', '4', '--timeout-s', '30', '--results', '/data1/efs/gc-buffered-k4flf2ma/posix.tsv']' returned non-zero exit status 1.
+RESTORE installed service; gate runner exit=1
