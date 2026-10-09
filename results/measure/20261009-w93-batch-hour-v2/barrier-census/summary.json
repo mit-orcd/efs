@@ -1,0 +1,41 @@
+{
+  "successful_sync_calls": {
+    "n1:raft:fdatasync": 16744,
+    "n2:raft:fdatasync": 21941,
+    "n1:kv:fdatasync": 16674,
+    "n1:marker:fdatasync": 2577,
+    "n2:kv:fdatasync": 21758,
+    "n2:marker:fdatasync": 5223,
+    "n3:raft:fdatasync": 3363,
+    "n3:kv:fdatasync": 1115,
+    "n3:marker:fdatasync": 1391,
+    "n4:raft:fdatasync": 5345,
+    "n4:kv:fdatasync": 3383,
+    "n4:marker:fdatasync": 2141,
+    "n2:kv:fsync": 1,
+    "n3:kv:fsync": 1,
+    "n1:kv:fsync": 1
+  },
+  "total_sync_ms": {
+    "n1:raft:fdatasync": 2093.617999995331,
+    "n2:raft:fdatasync": 2901.760999990074,
+    "n1:kv:fdatasync": 2058.2909998265677,
+    "n1:marker:fdatasync": 396.93199988323613,
+    "n2:kv:fdatasync": 2957.8169999585953,
+    "n2:marker:fdatasync": 651.4090000127908,
+    "n3:raft:fdatasync": 12552.644999963377,
+    "n3:kv:fdatasync": 7331.5090000323835,
+    "n3:marker:fdatasync": 3096.2849999377795,
+    "n4:raft:fdatasync": 13337.032999919757,
+    "n4:kv:fdatasync": 10538.704000089638,
+    "n4:marker:fdatasync": 4844.904999998107,
+    "n2:kv:fsync": 0.20199999926262535,
+    "n3:kv:fsync": 5.224000000453088,
+    "n1:kv:fsync": 1.1979999981122091
+  },
+  "errors": {},
+  "unmatched_exits": 0,
+  "unmatched_enters": 4,
+  "duration_seconds": 30,
+  "note": "Actual syscall counts; retained background work included. Tracing adds overhead; no per-file exact transaction attribution."
+}

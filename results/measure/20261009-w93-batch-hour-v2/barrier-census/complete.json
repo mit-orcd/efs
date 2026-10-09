@@ -1,0 +1,7 @@
+{
+  "raw_perf_path": "/data1/efs/w93-batch-hour-v2-20261009/barrier-census/perf.data",
+  "raw_perf_bytes": 63929970,
+  "raw_perf_sha256": "253190855b914a6c353680fae81978834a91eac084b7cd8cea68c6d52c197295",
+  "utc": "2026-10-09T21:58:07Z",
+  "loader_drained": true
+}

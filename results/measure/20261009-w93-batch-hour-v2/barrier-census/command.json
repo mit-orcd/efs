@@ -1,0 +1,1 @@
+["perf", "record", "-m", "4M", "-o", "/data1/efs/w93-batch-hour-v2-20261009/barrier-census/perf.data", "-e", "syscalls:sys_enter_fdatasync", "-e", "syscalls:sys_exit_fdatasync", "-e", "syscalls:sys_enter_fsync", "-e", "syscalls:sys_exit_fsync", "-p", "2525411,2526910,2528657,2530560", "--", "sleep", "30"]

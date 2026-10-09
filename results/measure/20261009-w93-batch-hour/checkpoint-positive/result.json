@@ -1,0 +1,23 @@
+{
+  "fault_node": 2,
+  "before": {
+    "0": 4,
+    "2": 3
+  },
+  "after_failure": {
+    "0": 4,
+    "2": 3
+  },
+  "after_shutdown": {
+    "0": 4,
+    "2": 3
+  },
+  "acknowledged_inode": 8193,
+  "leader_cut": {
+    "0": 5,
+    "2": 3
+  },
+  "cold_lookup": "rc=0 ino=8193",
+  "unsynced_kv_loss_modeled": true,
+  "build": "efsd 0bd7b5be (branch devel-persistence-pressure, built 2026-10-09T21:15:27Z on nuc)"
+}

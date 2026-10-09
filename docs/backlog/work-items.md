@@ -3674,6 +3674,25 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 further persistence-efficiency work:** Experimental no-op cohort
+continuation and bounded noncommitting-prefix group scheduling are implemented
+on `devel-persistence-pressure`, opt-in via `EFS_RAFT_BATCH_NOOP=1` and
+`EFS_RAFT_GROUP_DRAIN=1` (default off). Fresh read/control/commit/apply boundaries
+preserve order. Full Linux/core/async and NUC POSIX 212/212, peer 64/64 pass.
+Review also fixes a correctness prerequisite: pump and shutdown cannot advance
+applied markers after failed KV WAL release. A private injected-EIO/cold-replay
+gate passes on the fix and fails on the old binary (saved index 4 → 5 after EIO).
+Four 240-second same-binary exploratory trials complete: baseline/no-op/both/
+group-only means 73.69/93.92/75.01/75.50 files/s. Few eligible continuations,
+different background GC and sequential placement/state prevent attributing a
+repeatable gain. Both experiments remain default off. All leader-cut catch-up,
+256 exact cold-payload checks and applicable live sync/append/shutdown/WAL-tail/
+GC fault gates pass; no physical power-loss or hardware-ceiling claim.
+Measured serial KV/marker tail remains; safe bounded checkpoint overlap is
+designed but unimplemented. About four foreground metadata commands per tiny
+file confirm W94's guarded CREATE/lease adoption as an outstanding reduction.
+[Detailed scope, recovery contract and evidence](../status/w93-persistence-efficiency-20261009.md).
+
 **Oct 9 .efs-disabled control:** rate still declines 118.4 → 81.7 → 42.4
 files/s. n3 drops 112,982 inbox frames; all measured tail mismatches are
 behind the local log. Exact active-batch endings are behind-tail or empty

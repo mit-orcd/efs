@@ -1,0 +1,130 @@
+2026-10-09T21:18:04.976Z storage-engine=files direct_io=on
+2026-10-09T21:18:04.976Z Loaded 3 persisted cluster node(s) from /data1/efs/efs-checkpoint-fault-skg8dhc8/n0/meta/cluster_nodes.bin
+2026-10-09T21:18:04.976Z   persisted node 1: 127.0.0.1:22430
+2026-10-09T21:18:04.976Z   persisted node 2: 127.0.0.1:22431
+2026-10-09T21:18:04.976Z   persisted node 3: 127.0.0.1:22432
+2026-10-09T21:18:04.976Z Trying to rejoin via persisted peer 127.0.0.1:22431 (node 2)...
+2026-10-09T21:18:04.976Z Cannot connect to peer 127.0.0.1:22431
+2026-10-09T21:18:04.976Z Failed to rejoin via 127.0.0.1:22431
+2026-10-09T21:18:04.976Z Trying to rejoin via persisted peer 127.0.0.1:22432 (node 3)...
+2026-10-09T21:18:04.976Z Cannot connect to peer 127.0.0.1:22432
+2026-10-09T21:18:04.976Z Failed to rejoin via 127.0.0.1:22432
+2026-10-09T21:18:04.976Z Could not rejoin any of the 2 persisted peer(s)
+2026-10-09T21:18:04.976Z Could not rejoin cluster from persisted peers; starting as standalone and retrying in background
+2026-10-09T21:18:04.976Z heartbeat: enabled (2000 ms interval)
+2026-10-09T21:18:04.977Z raft-host: .efs server queries disabled; no catalog worker or query tracking
+2026-10-09T21:18:04.977Z kv-obs: mt_bytes=773 l0_bytes=0 l0=0 l1=0
+2026-10-09T21:18:04.977Z raft-host: up raft_id=0 n=3 boot=10109542846048285 salt=7150956146325861654 g0=hosted g2=hosted
+2026-10-09T21:18:04.977Z efsd c2ab465b (branch devel-persistence-pressure, built 2026-10-09T21:09:30Z on nuc), build=c2ab465b-batch: node 1 listening on 127.0.0.1:22430, storage=/data1/efs/efs-checkpoint-fault-skg8dhc8/n0 (1 paths, stripe=none), used=0, quota=0, direct_io=on, writers=4 shared
+2026-10-09T21:18:06.105Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.111Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.116Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.121Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.126Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.131Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.136Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.141Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.141Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.141Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.147Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.152Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.157Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.157Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.162Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.167Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.172Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.177Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.182Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.187Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.193Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.193Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.193Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.198Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.203Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.208Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.208Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.213Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.218Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.223Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.228Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.233Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.239Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.244Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.244Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.244Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.249Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.254Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.259Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.259Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.264Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.269Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.274Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.280Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.285Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.290Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.295Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.295Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.300Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.305Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.310Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.315Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.315Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.320Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.325Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.331Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.336Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.341Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.346Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.346Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.346Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.351Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.356Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.361Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.366Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.366Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.371Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.376Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.381Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.387Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.392Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.397Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.397Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.397Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.402Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.407Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.412Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.417Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.417Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.422Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.427Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.433Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.438Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.443Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.448Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.448Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.448Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.453Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.458Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.463Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.468Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.473Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.479Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.484Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.489Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.494Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.499Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.504Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.504Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.504Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.509Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.515Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.520Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.525Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.530Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.535Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.540Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.545Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.550Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.555Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.560Z raft-host: kv wal fsync failed at pump release
+2026-10-09T21:18:06.566Z raft-host: kv wal fsync failed at pump release

@@ -1,0 +1,421 @@
+[
+  {
+    "tag": "baseline",
+    "mean_files_s": 73.68749953989801,
+    "completed_files": 17954,
+    "file_latency_mean_ms": 106.50898379191266,
+    "nodes": [
+      {
+        "node": 1,
+        "commands": {
+          "CREATE": 9307,
+          "PUBLISH": 9292,
+          "PREPARE": 110,
+          "DECIDE": 23,
+          "RESOLVE": 43,
+          "SESSION": 18584,
+          "REAP_DONE": 59,
+          "GC_ACK": 131,
+          "LANE_SWEEP_BATCH": 4096
+        },
+        "append_commands_per_completed_file": 2.3195388214325496,
+        "syncs": 41274,
+        "noop_continuations": 0,
+        "group_boundaries": 0,
+        "phase_seconds": {
+          "pump_drain_us": 1.549584,
+          "kv_release_us": 4.04647,
+          "applied_persist_us": 1.39237
+        },
+        "raft_entries_per_sync": 1.0089887095992636,
+        "sync_mean_ms": 0.11097899403983137,
+        "inbox_mean_ms": 0.0395925472101872
+      },
+      {
+        "node": 2,
+        "commands": {
+          "CREATE": 17958,
+          "PUBLISH": 17905,
+          "PREPARE": 258,
+          "DECIDE": 43,
+          "RESOLVE": 86,
+          "SESSION": 35810,
+          "LANE_SWEEP": 3706,
+          "REAP_DONE": 73,
+          "GC_ACK": 186,
+          "LANE_SWEEP_BATCH": 4146
+        },
+        "append_commands_per_completed_file": 4.465355909546619,
+        "syncs": 68209,
+        "noop_continuations": 0,
+        "group_boundaries": 4445,
+        "phase_seconds": {
+          "pump_drain_us": 9.666736,
+          "kv_release_us": 7.998912,
+          "applied_persist_us": 3.198986
+        },
+        "raft_entries_per_sync": 1.1753727513964434,
+        "sync_mean_ms": 0.12111782902549517,
+        "inbox_mean_ms": 0.07692296583968027
+      },
+      {
+        "node": 3,
+        "commands": {
+          "CREATE": 17876,
+          "PUBLISH": 17822,
+          "PREPARE": 258,
+          "DECIDE": 43,
+          "RESOLVE": 86,
+          "SESSION": 35649,
+          "LANE_SWEEP": 3646,
+          "REAP_DONE": 73,
+          "GC_ACK": 184,
+          "LANE_SWEEP_BATCH": 4084
+        },
+        "append_commands_per_completed_file": 4.440291856967806,
+        "syncs": 23542,
+        "noop_continuations": 0,
+        "group_boundaries": 23199,
+        "phase_seconds": {
+          "pump_drain_us": 124.769392,
+          "kv_release_us": 58.72181,
+          "applied_persist_us": 38.573476
+        },
+        "raft_entries_per_sync": 3.386330813015037,
+        "sync_mean_ms": 5.031211876645995,
+        "inbox_mean_ms": 29.833071999612386
+      },
+      {
+        "node": 4,
+        "commands": {
+          "RAFT_NOOP": 1,
+          "CREATE": 8560,
+          "PUBLISH": 8520,
+          "PREPARE": 148,
+          "DECIDE": 20,
+          "RESOLVE": 43,
+          "SESSION": 17043,
+          "LANE_SWEEP": 3746,
+          "REAP_DONE": 14,
+          "GC_ACK": 63,
+          "LANE_SWEEP_BATCH": 586
+        },
+        "append_commands_per_completed_file": 2.1579592291411385,
+        "syncs": 27888,
+        "noop_continuations": 0,
+        "group_boundaries": 0,
+        "phase_seconds": {
+          "pump_drain_us": 120.00173,
+          "kv_release_us": 67.193941,
+          "applied_persist_us": 46.406099
+        },
+        "raft_entries_per_sync": 1.389271371199082,
+        "sync_mean_ms": 4.150964500860585,
+        "inbox_mean_ms": 10.97061535691386
+      }
+    ]
+  },
+  {
+    "tag": "noop",
+    "mean_files_s": 93.9208325875238,
+    "completed_files": 22770,
+    "file_latency_mean_ms": 84.0797299077734,
+    "nodes": [
+      {
+        "node": 1,
+        "commands": {
+          "CREATE": 14449,
+          "PUBLISH": 14409,
+          "PREPARE": 188,
+          "DECIDE": 25,
+          "RESOLVE": 56,
+          "SESSION": 28818
+        },
+        "append_commands_per_completed_file": 2.5447957839262187,
+        "syncs": 57106,
+        "noop_continuations": 0,
+        "group_boundaries": 0,
+        "phase_seconds": {
+          "pump_drain_us": 2.02118,
+          "kv_release_us": 5.996001,
+          "applied_persist_us": 1.460202
+        },
+        "raft_entries_per_sync": 1.0146919763247295,
+        "sync_mean_ms": 0.10839754141421216,
+        "inbox_mean_ms": 0.03299293071677862
+      },
+      {
+        "node": 2,
+        "commands": {
+          "CREATE": 22673,
+          "PUBLISH": 22619,
+          "PREPARE": 336,
+          "DECIDE": 56,
+          "RESOLVE": 112,
+          "SESSION": 45238
+        },
+        "append_commands_per_completed_file": 3.997979797979798,
+        "syncs": 79708,
+        "noop_continuations": 1080,
+        "group_boundaries": 5922,
+        "phase_seconds": {
+          "pump_drain_us": 11.938801,
+          "kv_release_us": 10.123027,
+          "applied_persist_us": 2.981732
+        },
+        "raft_entries_per_sync": 1.1420936417925427,
+        "sync_mean_ms": 0.11963037587193255,
+        "inbox_mean_ms": 0.08469482582443102
+      },
+      {
+        "node": 3,
+        "commands": {
+          "CREATE": 22712,
+          "PUBLISH": 22653,
+          "PREPARE": 336,
+          "DECIDE": 56,
+          "RESOLVE": 112,
+          "SESSION": 45310
+        },
+        "append_commands_per_completed_file": 4.004347826086956,
+        "syncs": 20191,
+        "noop_continuations": 28,
+        "group_boundaries": 22796,
+        "phase_seconds": {
+          "pump_drain_us": 122.881815,
+          "kv_release_us": 63.107911,
+          "applied_persist_us": 36.694878
+        },
+        "raft_entries_per_sync": 4.5158238819275915,
+        "sync_mean_ms": 5.798205487593481,
+        "inbox_mean_ms": 34.56004893960796
+      },
+      {
+        "node": 4,
+        "commands": {
+          "RAFT_NOOP": 1,
+          "CREATE": 8224,
+          "PUBLISH": 8210,
+          "PREPARE": 148,
+          "DECIDE": 31,
+          "RESOLVE": 56,
+          "SESSION": 16418
+        },
+        "append_commands_per_completed_file": 1.4531400966183574,
+        "syncs": 23272,
+        "noop_continuations": 80,
+        "group_boundaries": 0,
+        "phase_seconds": {
+          "pump_drain_us": 106.595604,
+          "kv_release_us": 76.087514,
+          "applied_persist_us": 50.51131
+        },
+        "raft_entries_per_sync": 1.4217944310759711,
+        "sync_mean_ms": 4.455313595737367,
+        "inbox_mean_ms": 10.141429566779177
+      }
+    ]
+  },
+  {
+    "tag": "both",
+    "mean_files_s": 75.01250678576609,
+    "completed_files": 18285,
+    "file_latency_mean_ms": 104.619116543615,
+    "nodes": [
+      {
+        "node": 1,
+        "commands": {
+          "CREATE": 9276,
+          "PUBLISH": 9261,
+          "PREPARE": 96,
+          "DECIDE": 23,
+          "RESOLVE": 38,
+          "SESSION": 18522
+        },
+        "append_commands_per_completed_file": 2.035329505058791,
+        "syncs": 36951,
+        "noop_continuations": 0,
+        "group_boundaries": 0,
+        "phase_seconds": {
+          "pump_drain_us": 2.012243,
+          "kv_release_us": 7.385742,
+          "applied_persist_us": 3.912764
+        },
+        "raft_entries_per_sync": 1.0071716597656355,
+        "sync_mean_ms": 0.1959498254445076,
+        "inbox_mean_ms": 0.15779838514482186
+      },
+      {
+        "node": 2,
+        "commands": {
+          "CREATE": 18299,
+          "PUBLISH": 18243,
+          "PREPARE": 228,
+          "DECIDE": 38,
+          "RESOLVE": 76,
+          "SESSION": 36485
+        },
+        "append_commands_per_completed_file": 4.012523926715887,
+        "syncs": 61103,
+        "noop_continuations": 502,
+        "group_boundaries": 5621,
+        "phase_seconds": {
+          "pump_drain_us": 12.580849,
+          "kv_release_us": 10.560986,
+          "applied_persist_us": 5.728928
+        },
+        "raft_entries_per_sync": 1.200743007708296,
+        "sync_mean_ms": 0.1961360489664992,
+        "inbox_mean_ms": 0.3961195539895561
+      },
+      {
+        "node": 3,
+        "commands": {
+          "CREATE": 18210,
+          "PUBLISH": 18153,
+          "PREPARE": 228,
+          "DECIDE": 38,
+          "RESOLVE": 76,
+          "SESSION": 36309
+        },
+        "append_commands_per_completed_file": 3.993109105824446,
+        "syncs": 21382,
+        "noop_continuations": 32,
+        "group_boundaries": 21634,
+        "phase_seconds": {
+          "pump_drain_us": 115.832605,
+          "kv_release_us": 62.26475,
+          "applied_persist_us": 38.298075
+        },
+        "raft_entries_per_sync": 3.4147413712468433,
+        "sync_mean_ms": 5.1803398653072685,
+        "inbox_mean_ms": 28.138903857225102
+      },
+      {
+        "node": 4,
+        "commands": {
+          "RAFT_NOOP": 1,
+          "CREATE": 8912,
+          "PUBLISH": 8870,
+          "PREPARE": 132,
+          "DECIDE": 15,
+          "RESOLVE": 38,
+          "SESSION": 17743
+        },
+        "append_commands_per_completed_file": 1.953021602406344,
+        "syncs": 24616,
+        "noop_continuations": 31,
+        "group_boundaries": 0,
+        "phase_seconds": {
+          "pump_drain_us": 106.369367,
+          "kv_release_us": 72.52099,
+          "applied_persist_us": 47.094219
+        },
+        "raft_entries_per_sync": 1.450723106922327,
+        "sync_mean_ms": 4.1948940120247,
+        "inbox_mean_ms": 9.897105097256077
+      }
+    ]
+  },
+  {
+    "tag": "group",
+    "mean_files_s": 75.49583021430762,
+    "completed_files": 18371,
+    "file_latency_mean_ms": 104.12465821131131,
+    "nodes": [
+      {
+        "node": 1,
+        "commands": {
+          "CREATE": 8759,
+          "PUBLISH": 8748,
+          "PREPARE": 136,
+          "DECIDE": 27,
+          "RESOLVE": 50,
+          "SESSION": 17497
+        },
+        "append_commands_per_completed_file": 1.9169887322410322,
+        "syncs": 35210,
+        "noop_continuations": 0,
+        "group_boundaries": 0,
+        "phase_seconds": {
+          "pump_drain_us": 1.301718,
+          "kv_release_us": 3.559245,
+          "applied_persist_us": 1.027595
+        },
+        "raft_entries_per_sync": 1.0001988071570576,
+        "sync_mean_ms": 0.10131008236296506,
+        "inbox_mean_ms": 0.02459286972396858
+      },
+      {
+        "node": 2,
+        "commands": {
+          "CREATE": 18307,
+          "PUBLISH": 18259,
+          "PREPARE": 306,
+          "DECIDE": 51,
+          "RESOLVE": 102,
+          "SESSION": 36522
+        },
+        "append_commands_per_completed_file": 4.003429317946764,
+        "syncs": 61116,
+        "noop_continuations": 0,
+        "group_boundaries": 5153,
+        "phase_seconds": {
+          "pump_drain_us": 8.743573,
+          "kv_release_us": 7.933697,
+          "applied_persist_us": 2.948875
+        },
+        "raft_entries_per_sync": 1.2034000916290333,
+        "sync_mean_ms": 0.12114515020616533,
+        "inbox_mean_ms": 0.0741542688886312
+      },
+      {
+        "node": 3,
+        "commands": {
+          "CREATE": 18390,
+          "PUBLISH": 18345,
+          "PREPARE": 306,
+          "DECIDE": 51,
+          "RESOLVE": 102,
+          "SESSION": 36691
+        },
+        "append_commands_per_completed_file": 4.021827880899243,
+        "syncs": 21276,
+        "noop_continuations": 0,
+        "group_boundaries": 21710,
+        "phase_seconds": {
+          "pump_drain_us": 117.387562,
+          "kv_release_us": 65.264483,
+          "applied_persist_us": 40.332882
+        },
+        "raft_entries_per_sync": 3.4726922353825906,
+        "sync_mean_ms": 5.275963338973491,
+        "inbox_mean_ms": 25.811577114276748
+      },
+      {
+        "node": 4,
+        "commands": {
+          "RAFT_NOOP": 1,
+          "CREATE": 9551,
+          "PUBLISH": 9513,
+          "PREPARE": 168,
+          "DECIDE": 23,
+          "RESOLVE": 51,
+          "SESSION": 19031
+        },
+        "append_commands_per_completed_file": 2.0868760546513525,
+        "syncs": 26694,
+        "noop_continuations": 0,
+        "group_boundaries": 0,
+        "phase_seconds": {
+          "pump_drain_us": 114.062181,
+          "kv_release_us": 76.182349,
+          "applied_persist_us": 48.353811
+        },
+        "raft_entries_per_sync": 1.4362028920356635,
+        "sync_mean_ms": 4.148653742414026,
+        "inbox_mean_ms": 9.838068269239471
+      }
+    ]
+  }
+]

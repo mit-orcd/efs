@@ -1,0 +1,65 @@
+{
+  "servers": [
+    {
+      "pid": 2525411,
+      "cmd": "/data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 187.5G --direct-io ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_COMMANDS": "0",
+        "EFS_DIRECT_IO": "1",
+        "EFS_TRANSPORT": "tcp"
+      }
+    },
+    {
+      "pid": 2526910,
+      "cmd": "/data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_COMMANDS": "0",
+        "EFS_DIRECT_IO": "1",
+        "EFS_TRANSPORT": "tcp"
+      }
+    },
+    {
+      "pid": 2528657,
+      "cmd": "/data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data2/efs/n3 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_COMMANDS": "0",
+        "EFS_DIRECT_IO": "1",
+        "EFS_TRANSPORT": "tcp"
+      }
+    },
+    {
+      "pid": 2530560,
+      "cmd": "/data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data2/efs/n4 --quota 187.5G --direct-io --join 127.0.0.1:17432 ",
+      "flags": {
+        "EFS_RAFT_FLOW": "1",
+        "EFS_RAFT_BATCH_NOOP": "0",
+        "EFS_RAFT_GROUP_DRAIN": "0",
+        "EFS_BATCH_OBS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_COMMANDS": "0",
+        "EFS_DIRECT_IO": "1",
+        "EFS_TRANSPORT": "tcp"
+      }
+    }
+  ],
+  "version": "efsd 39be3b38 (branch devel-persistence-pressure, built 2026-10-09T21:23:13Z on nuc)\n",
+  "sha256": "19dd9f4603bc85cfa66708941bacd3a3d9ed7748f7e742a216086b21d5d62d2f",
+  "utc": "2026-10-09T21:57:26Z",
+  "space": "Filesystem           Size  Used Avail Use% Mounted on\n/dev/sda             745G  247G  499G  34% /data1\n/dev/sda             745G  247G  499G  34% /data1\n/dev/mapper/rl-home  843G  216G  628G  26% /home\n/dev/mapper/rl-home  843G  216G  628G  26% /home\n",
+  "inodes": "Filesystem             Inodes   IUsed     IFree IUse% Mounted on\n/dev/sda            390706048 9766980 380939068    3% /data1\n/dev/sda            390706048 9766980 380939068    3% /data1\n/dev/mapper/rl-home 442169344 8732749 433436595    2% /home\n/dev/mapper/rl-home 442169344 8732749 433436595    2% /home\n"
+}
