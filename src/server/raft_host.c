@@ -3687,7 +3687,10 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
 {
     uint64_t charge = host_pressure_charge(n,1);
     if (!cmd || !n) return charge;
-    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE)
+    /* Legacy append resolution loads the entire reservation set and may
+     * delete it in one batch. Its 38-byte request has no finite work bound. */
+    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
+        cmd[0] == EFS_MD_CMD_APPEND_RES)
         return UINT64_MAX;
     if (cmd[0]==EFS_MD_CMD_SESSION && n>=2) {
         if (cmd[1]==EFS_MD_SESS_LEASE_DROP) return UINT64_MAX;

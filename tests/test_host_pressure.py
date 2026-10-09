@@ -117,6 +117,8 @@ int main(void) {
  assert(host_pressure_command_charge(&legacy,18)==UINT64_MAX);
  legacy=EFS_MD_CMD_REAP_DONE;
  assert(host_pressure_command_charge(&legacy,17)==UINT64_MAX);
+ legacy=EFS_MD_CMD_APPEND_RES;
+ assert(host_pressure_command_charge(&legacy,38)==UINT64_MAX);
  e.cmd=&legacy;
  assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
  e.cmd=&recovery;
@@ -132,6 +134,8 @@ int main(void) {
  assert(host_pressure_admit(&h.g[0],NULL,0,EFS_RAFT_ADMIT_LEAD)==EFS_ERR_IO);
  assert(!host_pressure_recovery(&recovery,(256u<<10)+1));
  h.pressure_enabled=0;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
+ e.cmd=&legacy;e.clen=38;
  assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
  return 0;
 }

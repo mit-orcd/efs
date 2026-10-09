@@ -177,3 +177,21 @@ transactions; this is a retained replay-path fix. Metadata batch fault injection
 checks reservation identity and visibility barrier survive failure. AMD full
 regression and direct/TCP combined session/GC/core212/212/peer64/64 gate pass.
 Evidence: results/measure/20261009-append-resolve-replay.
+
+## Legacy append admission expansion
+
+APPEND_RES is now explicitly unbounded in staged pending-work charging: its
+38-byte wire frame can load and delete all reservations. Enabled admission
+refuses new legacy work; committed replay is unchanged and disabled policy
+preserves admission. The new regression failed before the fix, passes afterward.
+AMD full regression and private direct/TCP pressure-enabled session/GC/core
+POSIX212/212/peer64/64 pass. Evidence:
+results/measure/20261009-append-admission-audit.
+
+Remaining close-path blocker is concrete: LEASE_CLOSE, close-bearing LEASE_EDGE
+and CLOSE_CLEANUP invoke host_lease_close_effects, which calls whole-file lock
+cleanup and append drain. Bounded successor commands must retain the durable
+marker until all phases and frontier obligations finish. Refusing every normal
+close is not a safe activation solution. Session append cleanup, receipt
+retirement, production coordinator and remaining command/queue accounting remain
+open; no pressure/D25/session activation or broad memory/CPU bound is claimed.
