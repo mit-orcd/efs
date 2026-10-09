@@ -43,6 +43,7 @@ static unsigned rpc_leader_of(unsigned g){(void)g;return 1;}
 static void efs_conn_set_recv_timeout(struct efs_conn*c,int n){(void)c;(void)n;}
 int efs_conn_send_msg(struct efs_conn*c,uint8_t t,const void*p,uint32_t n){(void)c;(void)t;(void)p;(void)n;return fail_send;}
 int efs_conn_recv_msg(struct efs_conn*c,uint8_t*t,void**p,uint32_t*n){(void)c;calls++;struct efs_msg_inode_reply*r=calloc(1,sizeof(*r));assert(r);r->status=reply_status;*p=r;*n=sizeof(*r);*t=bad_type?0:EFS_MSG_INODE_GETATTR_REPLY;if(expire_recv)now=deadline;return fail_recv;}
+static void opid_retry_ack(void *packet,uint32_t length){(void)packet;(void)length;}
 '''+fn('static int rpc_writer_retry_pause(' ,True)+fn('static int rpc_send_recv_shard(')+fn('static int rpc_send_recv_dual(',True)+r'''
 static void reset(void){calls=sleeps=freed=drops=releases=0;reply_status=EFS_INODE_RPC_OK;fail_recv=fail_send=bad_type=expire_recv=0;now=1000;deadline=0;}
 static int run(int dual,struct efs_msg_inode_reply*r){return dual?rpc_send_recv_dual(EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),100):rpc_send_recv_shard(0,EFS_MSG_INODE_GETATTR,NULL,0,EFS_MSG_INODE_GETATTR_REPLY,r,sizeof(*r),0,NULL);}
