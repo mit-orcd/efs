@@ -13,6 +13,8 @@ struct recv_replies {
 struct efs_raft {
     int id;
     struct recv_replies *recv_replies; /* stack-owned, only inside recv_batch */
+    efs_raft_admit_fn admit;
+    uint64_t pressure_retry_tick[EFS_RAFT_MAX_PEERS];
     int storage_failed; /* failed deferred persistence requires restart */
     int role;
     int leader;
@@ -735,6 +737,15 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     rc = last_log(r, &last_i, &last_t);
     if (rc != EFS_OK)
         return rc;
+    if (r->ticks < r->pressure_retry_tick[to]) {
+        if (data_only) return EFS_OK;
+        /* Index zero is a universal empty prefix: this heartbeat cannot
+         * claim the refused tail or recurse through a conflict rejection.
+         * It resets election time but advances no replication/apply index. */
+        m.vote_granted = 1;
+        m.leader_commit = r->commit_index;
+        return send_msg(r, &m);
+    }
     ni = r->next_index[to];
     if (ni == 0)
         ni = 1;
@@ -1029,6 +1040,12 @@ static int become_leader(struct efs_raft *r)
     uint32_t mask;
     int rc;
 
+    if (r->admit && r->admit(r->app, NULL, 0, EFS_RAFT_ADMIT_LEAD) != EFS_OK) {
+        r->role = EFS_RAFT_FOLLOWER;
+        r->leader = -1;
+        reset_election(r);
+        return EFS_OK;
+    }
     r->role = EFS_RAFT_LEADER;
     r->leader = r->id;
     r->read_in_flight = 0;
@@ -1045,6 +1062,7 @@ static int become_leader(struct efs_raft *r)
         r->next_index[i] = last_i + 1;
         r->match_index[i] = (i == r->id) ? last_i : 0;
     }
+    memset(r->pressure_retry_tick, 0, sizeof(r->pressure_retry_tick));
     memset(r->ae_inflight, 0, sizeof(r->ae_inflight));
     memset(r->ae_inflight_commit, 0, sizeof(r->ae_inflight_commit));
     memset(r->ae_inflight_end, 0, sizeof(r->ae_inflight_end));
@@ -1073,7 +1091,8 @@ static int start_election(struct efs_raft *r)
     uint64_t last_i = 0, last_t = 0;
     int i, rc;
 
-    if (!is_voter(r, r->id) || !r->allow_campaign) {
+    if (!is_voter(r, r->id) || !r->allow_campaign ||
+        (r->admit && r->admit(r->app, NULL, 0, EFS_RAFT_ADMIT_LEAD) != EFS_OK)) {
         reset_election(r);
         return EFS_OK;
     }
@@ -1216,6 +1235,29 @@ static int on_ae_req(struct efs_raft *r, const struct efs_raft_msg *in)
         m.match_index = last_i;
         return send_msg(r, &m);
     }
+    if (in->nentries && r->admit && !r->recv_replies) {
+        uint32_t first = 0;
+        for (; first < in->nentries; first++) {
+            uint64_t et = 0;
+            if (log_term(r, in->prev_index+1+first, &et) != EFS_OK ||
+                et != in->entries[first].term) break;
+        }
+        if (first < in->nentries &&
+            r->admit(r->app, in->entries+first, in->nentries-first,
+                     EFS_RAFT_ADMIT_RECV) != EFS_OK) {
+            /* Do not persist or acknowledge this suffix. Still learn/apply
+             * the committed prefix already matched by this request. */
+            uint64_t cap = in->prev_index+first;
+            if (in->leader_commit > r->commit_index && cap > r->commit_index) {
+                r->commit_index = in->leader_commit < cap ? in->leader_commit : cap;
+            }
+            (void)apply_committed(r);
+            m.success = 0;
+            m.last_log_term = EFS_RAFT_AE_PRESSURE;
+            m.match_index = last_i;
+            return send_msg(r, &m);
+        }
+    }
     if (in->nentries) {
         uint64_t idx = in->prev_index + 1;
         uint32_t i;
@@ -1312,6 +1354,14 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
         return EFS_OK;
     if (in->from < 0 || in->from >= EFS_RAFT_MAX_PEERS)
         return EFS_OK;
+    if (!in->success && in->last_log_term == EFS_RAFT_AE_PRESSURE) {
+        /* A pressure rejection grants neither replication nor read authority.
+         * Keep the proven next index. Heartbeats continue during bounded
+         * backoff; retry entries after two heartbeat intervals. */
+        r->ae_inflight[in->from] = 0;
+        r->pressure_retry_tick[in->from] = r->ticks + 2*r->heartbeat_ticks;
+        return EFS_OK;
+    }
     /* A commit probe echoes vote_granted. Clearing inflight here would
      * forget an entry batch that is still unanswered. */
     if (!in->vote_granted)
@@ -1644,6 +1694,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
             r->app_new = r->log_new = n;
         }
     }
+    r->admit = cfg->admit;
     r->allow_campaign = 1;
     r->last_applied = r->snap_idx;
     r->commit_index = r->snap_idx;
@@ -1737,6 +1788,8 @@ static int recv_can_batch(struct efs_raft *r, const struct efs_raft_msg *m,
         if (is_cfg_cmd(m->entries[i].cmd, m->entries[i].clen)) return 0;
         *bytes += m->entries[i].clen;
     }
+    if (r->admit && r->admit(r->app, m->entries, m->nentries,
+                             EFS_RAFT_ADMIT_RECV) != EFS_OK) return 0;
     return *bytes <= EFS_RAFT_AE_BYTES;
 }
 
@@ -1823,6 +1876,11 @@ int efs_raft_propose(struct efs_raft *r, const uint8_t *cmd, uint32_t clen,
         return EFS_ERR_NOT_PRIMARY;
     if (is_cfg_cmd(cmd, clen))
         return EFS_ERR_INVAL;
+    if (r->admit) {
+        struct efs_raft_entry entry = {r->current_term, clen, cmd};
+        int admission = r->admit(r->app, &entry, 1, EFS_RAFT_ADMIT_LOCAL);
+        if (admission != EFS_OK) return admission;
+    }
     rc = append_local(r, r->current_term, cmd, clen, &ix);
     if (rc != EFS_OK)
         return rc;
@@ -1869,6 +1927,11 @@ int efs_raft_propose_local(struct efs_raft *r, const uint8_t *cmd,
         return EFS_ERR_INVAL;
     if (solo(r))
         return EFS_ERR_INVAL;
+    if (r->admit) {
+        struct efs_raft_entry entry = {r->current_term, clen, cmd};
+        int admission = r->admit(r->app, &entry, 1, EFS_RAFT_ADMIT_LOCAL);
+        if (admission != EFS_OK) return admission;
+    }
     efs_raft_arm_durable(r);
     return append_local(r, r->current_term, cmd, clen, index_out);
 }
@@ -2177,4 +2240,19 @@ int efs_raft_read_covers(const struct efs_raft *r, uint64_t want)
 uint64_t efs_raft_read_round(const struct efs_raft *r)
 {
     return r ? r->read_round : 0;
+}
+
+int efs_raft_backlog(struct efs_raft *r, uint64_t *count, uint64_t *bytes,
+                      uint64_t *log_bytes)
+{
+    uint64_t last = 0, term = 0;
+    int rc;
+    if (!r || !count || !bytes || !log_bytes) return EFS_ERR_INVAL;
+    rc = last_log(r, &last, &term);
+    if (rc != EFS_OK) return rc;
+    *count = last > r->last_applied ? last-r->last_applied : 0;
+    if (!r->store->log_bytes_after) return EFS_ERR_INVAL;
+    *bytes = r->store->log_bytes_after(r->store_ctx, r->last_applied);
+    *log_bytes = r->store->log_new_bytes ? r->store->log_new_bytes(r->store_ctx) : *bytes;
+    return EFS_OK;
 }

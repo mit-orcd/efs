@@ -1071,6 +1071,10 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
             continue;
         }
         int rc=rpc_status_to_efs(reply.rpc.status);if(rc!=EFS_OK)return rc;
+        if ((reply.receipt_index && (!reply.receipt_term ||
+             reply.receipt_group!=efs_raft_shard_group(shard))) ||
+            (!reply.receipt_index && (reply.receipt_term || reply.receipt_group)))
+            return EFS_ERR_PROTO;
         if(memcmp(digest,reply.digest,sizeof(digest)) ||
            (reply.state!=EFS_PUBLICATION_COMMITTED && reply.state!=EFS_PUBLICATION_REJECTED && reply.state!=EFS_PUBLICATION_RETIRED && reply.state!=EFS_PUBLICATION_PENDING) ||
            (reply.state==EFS_PUBLICATION_RETIRED && reply.verdict!=EFS_META_PUBLICATION_RETIRED) ||

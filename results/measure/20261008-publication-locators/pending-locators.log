@@ -1,0 +1,9 @@
+raft-session status=0 rc=0 primary=1 op=create ssh=425 shard=425 epoch=0 state=0 touched=0 index=4
+raft-session status=0 rc=0 primary=1 op=register ssh=425 shard=1 epoch=0 state=0 touched=0 index=5
+raft-session status=0 rc=0 primary=1 op=establish ssh=425 shard=1 epoch=0 state=0 touched=0 index=6
+pending intent locator group=0 index=7 term=1
+pending intent survives lost admission ACK; early retirement refused PASS
+pending intent locator group=0 index=7 term=1
+terminal rejection locator group=0 index=12 term=2
+cold pending query, altered retry refusal, final rejection and replay floor PASS
+publication pending: direct/TCP lost ACK, four-daemon crash and cold recovery PASS

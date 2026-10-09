@@ -1,0 +1,7 @@
+{
+  "transport": "tcp",
+  "mode": "direct",
+  "uid": 1001,
+  "base": 25403,
+  "cap_bytes": 1073741824
+}

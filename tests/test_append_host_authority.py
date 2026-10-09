@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='efs-append-host-') as d:
  subprocess.run(['cc','-std=gnu11','-pthread','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(p.with_suffix(''))],check=True)
  subprocess.run([str(p.with_suffix(''))],check=True,timeout=20)
 # A term change cannot fall through to generic forwarding without the offset.
-a=s.index('static int host_propose(struct');b=s.index('rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);',a)
+a=s.index('static int host_propose_impl(struct');b=s.index('rc = host_remote_cmd(h, group, cmd, clen, &rep, lid);',a)
 assert 'cmd[0] == EFS_MD_CMD_APPEND_RSV' in s[a:b]
 a=s.index('static void host_append_owner(');b=s.index('host_append_replay_get(',a)
 assert 'if (!host_append_primary(h, ig, out))' in s[a:b]

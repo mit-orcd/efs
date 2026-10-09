@@ -722,11 +722,37 @@ static void test_recv_batch_crash(int before_apply)
     rmtree(g_dir);
 }
 
+static void test_backlog_byte_accounting(void)
+{
+    struct efs_raft_disk *d;
+    struct efs_raft_store *s;
+    rmtree(g_dir);
+    d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);CHECK(d!=NULL,"backlog disk opens");
+    if(!d)return;
+    s=efs_raft_disk_group(d,0);
+    CHECK(st_append(s,1,1,"a")==EFS_OK && st_append(s,2,1,"bbb")==EFS_OK &&
+          st_append(s,3,1,"cc")==EFS_OK,"mixed-size accepted log");
+    CHECK(s->log_bytes_after(s,0)==6 && s->log_bytes_after(s,1)==5 &&
+          s->log_bytes_after(s,2)==2 && s->log_bytes_after(s,3)==0,"exact byte prefixes");
+    CHECK(st_append(s,2,2,"longer")==EFS_OK && s->log_bytes_after(s,1)==8,
+          "replacement maintains following prefix sums");
+    CHECK(s->truncate_from(s,3)==EFS_OK && s->log_bytes_after(s,0)==7,"truncation releases suffix bytes");
+    efs_raft_disk_close(d);
+    d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);CHECK(d!=NULL,"backlog disk reopens");
+    if(!d)return;
+    s=efs_raft_disk_group(d,0);
+    CHECK(s->log_bytes_after(s,0)==7 && s->log_bytes_after(s,1)==6,"replay rebuilds exact byte ownership");
+    CHECK(s->save_snap(s,2,2)==EFS_OK && s->log_bytes_after(s,2)==0,"snapshot excludes applied retained bytes");
+    CHECK(st_append(s,3,3,"tail")==EFS_OK && s->log_bytes_after(s,2)==4,"post-snapshot tail charged");
+    efs_raft_disk_close(d);rmtree(g_dir);
+}
+
 int main(void)
 {
     snprintf(g_dir, sizeof(g_dir), "/tmp/efs-raftstore-test-%d", (int)getpid());
     rmtree(g_dir);
 
+    test_backlog_byte_accounting();
     test_recv_batch_crash(0);
     test_recv_batch_crash(1);
     test_matches_mem();

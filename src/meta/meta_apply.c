@@ -3907,13 +3907,40 @@ static int publication_floor(struct efs_kv *kv, const struct efs_meta_pub *p, ui
     if(len!=sizeof(value) || rd32(value)!=1 || !rd64(value+4))return EFS_ERR_PROTO;
     *floor=rd64(value+4); return EFS_OK;
 }
+#define PUBLICATION_RECEIPT_V1 (8u+EFS_HASH_SIZE)
+#define PUBLICATION_RECEIPT_V2 (PUBLICATION_RECEIPT_V1+24u)
+static int publication_locator_valid(const struct efs_publication_locator *p)
+{
+    return p->index ? (p->term && (p->group==0 || p->group==2)) : (!p->term && !p->group);
+}
+
+static int publication_receipt_valid(const uint8_t *v,uint32_t n)
+{
+    if (n<PUBLICATION_RECEIPT_V1 || rd32(v+4)<1 || rd32(v+4)>4) return 0;
+    if (n==PUBLICATION_RECEIPT_V1) return rd32(v)==1;
+    return n==PUBLICATION_RECEIPT_V2 && rd32(v)==2 &&
+           (rd32(v+PUBLICATION_RECEIPT_V1)==0 || rd32(v+PUBLICATION_RECEIPT_V1)==2) &&
+           !rd32(v+PUBLICATION_RECEIPT_V1+4) &&
+           rd64(v+PUBLICATION_RECEIPT_V1+8) && rd64(v+PUBLICATION_RECEIPT_V1+16);
+}
+static uint32_t publication_receipt_pack(uint8_t *v,const struct efs_meta_pub *p,
+                                        uint32_t state,const uint8_t *digest)
+{
+    be32(v,p->receipt_locator.index?2:1);be32(v+4,state);
+    memcpy(v+8,digest,EFS_HASH_SIZE);
+    if (!p->receipt_locator.index) return PUBLICATION_RECEIPT_V1;
+    be32(v+PUBLICATION_RECEIPT_V1,p->receipt_locator.group);
+    be32(v+PUBLICATION_RECEIPT_V1+4,0);
+    be64(v+PUBLICATION_RECEIPT_V1+8,p->receipt_locator.index);
+    be64(v+PUBLICATION_RECEIPT_V1+16,p->receipt_locator.term);
+    return PUBLICATION_RECEIPT_V2;
+}
 struct publication_scan { unsigned count; uint64_t first; int rc; };
 static int publication_scan_cb(void *ctx,const uint8_t *key,uint32_t klen,
                                const uint8_t *value,uint32_t vlen)
 {
     struct publication_scan *s=ctx;
-    if(klen!=51 || !rd64(key+43) || vlen!=8+EFS_HASH_SIZE ||
-       rd32(value)!=1 || rd32(value+4)<1 || rd32(value+4)>4) {
+    if(klen!=51 || !rd64(key+43) || !publication_receipt_valid(value,vlen)) {
         s->rc=EFS_ERR_PROTO; return 1;
     }
     if(!s->count)s->first=rd64(key+43);
@@ -3943,8 +3970,8 @@ static int publication_session_accept(struct efs_kv *kv,
  * and submit it unchanged until a terminal result exists. */
 int efs_meta_apply_publication_admit(struct efs_kv *kv,const struct efs_meta_pub *p)
 {
-    uint8_t digest[EFS_HASH_SIZE],key[51],value[8+EFS_HASH_SIZE];int verdict;
-    if(!kv || !p || !p->durable_result)return EFS_ERR_INVAL;
+    uint8_t digest[EFS_HASH_SIZE],key[51],value[PUBLICATION_RECEIPT_V2];int verdict;
+    if(!kv || !p || !p->durable_result || !publication_locator_valid(&p->receipt_locator))return EFS_ERR_INVAL;
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
     rc=publication_session_accept(kv,p);if(rc!=EFS_OK)return rc;
     rc=efs_meta_publication_result(kv,p,&verdict);
@@ -3952,9 +3979,8 @@ int efs_meta_apply_publication_admit(struct efs_kv *kv,const struct efs_meta_pub
     if(rc!=EFS_ERR_NOT_FOUND)return rc;
     struct publication_scan scan;rc=publication_scan(kv,p,&scan);if(rc!=EFS_OK)return rc;
     if(scan.count>=EFS_META_PUBLICATION_MAX_RECEIPTS)return EFS_ERR_BUSY;
-    publication_key(p,key);be32(value,1);be32(value+4,4);
-    memcpy(value+8,digest,sizeof(digest));
-    struct efs_kv_item item={EFS_KV_PUT,key,sizeof(key),value,sizeof(value)};
+    publication_key(p,key);uint32_t value_len=publication_receipt_pack(value,p,4,digest);
+    struct efs_kv_item item={EFS_KV_PUT,key,sizeof(key),value,value_len};
     return meta_write_batch(kv,&item,1);
 }
 
@@ -3977,19 +4003,30 @@ int efs_meta_apply_publication_retire(struct efs_kv *kv,const struct efs_meta_pu
         {EFS_KV_PUT,fk,43,value,sizeof(value)}};
     return meta_write_batch(kv,items,2);
 }
-int efs_meta_publication_result(struct efs_kv *kv, const struct efs_meta_pub *p, int *verdict)
+int efs_meta_publication_receipt(struct efs_kv *kv, const struct efs_meta_pub *p, int *verdict,
+                                  struct efs_publication_locator *locator)
 {
+    if(locator)memset(locator,0,sizeof(*locator));
     if(!kv || !p || !verdict)return EFS_ERR_INVAL;
-    uint8_t digest[EFS_HASH_SIZE],key[51],v[8+EFS_HASH_SIZE];uint32_t len=sizeof(v);
+    uint8_t digest[EFS_HASH_SIZE],key[51],v[PUBLICATION_RECEIPT_V2];uint32_t len=sizeof(v);
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
     uint64_t floor;rc=publication_floor(kv,p,&floor);if(rc!=EFS_OK)return rc;
     if(p->publication_id.seq<=floor) { *verdict=EFS_META_PUBLICATION_RETIRED; return EFS_OK; }
     publication_key(p,key);rc=efs_kv_get(kv,key,sizeof(key),v,&len);if(rc!=EFS_OK)return rc;
-    if(len!=sizeof(v)||rd32(v)!=1||rd32(v+4)<1||rd32(v+4)>4 ||
+    if(!publication_receipt_valid(v,len) ||
        memcmp(v+8,digest,sizeof(digest)))return EFS_ERR_PROTO;
+    if(locator && len==PUBLICATION_RECEIPT_V2) {
+        locator->group=rd32(v+PUBLICATION_RECEIPT_V1);
+        locator->index=rd64(v+PUBLICATION_RECEIPT_V1+8);
+        locator->term=rd64(v+PUBLICATION_RECEIPT_V1+16);
+    }
     *verdict=rd32(v+4)==1?EFS_OK:rd32(v+4)==2?EFS_ERR_STALE:
         rd32(v+4)==3?EFS_ERR_INVAL:EFS_META_PUBLICATION_PENDING;
     return EFS_OK;
+}
+int efs_meta_publication_result(struct efs_kv *kv,const struct efs_meta_pub *p,int *verdict)
+{
+    return efs_meta_publication_receipt(kv,p,verdict,NULL);
 }
 static int publish_inner(struct efs_kv *kv, const struct efs_meta_pub *p,
                          const struct efs_kv_item *receipt)
@@ -4378,7 +4415,8 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
 {
     if (p && p->ticketed && (!p->durable_result || !p->fresh_object)) return EFS_ERR_INVAL;
     if(!p || !p->durable_result) return publish_inner(kv,p,NULL);
-    uint8_t digest[EFS_HASH_SIZE],key[51],value[8+EFS_HASH_SIZE];int verdict;
+    if(!publication_locator_valid(&p->receipt_locator))return EFS_ERR_INVAL;
+    uint8_t digest[EFS_HASH_SIZE],key[51],value[PUBLICATION_RECEIPT_V2];int verdict;
     int rc=efs_publication_digest(p,digest);if(rc!=EFS_OK)return rc;
     rc=publication_session_accept(kv,p);if(rc!=EFS_OK)return rc;
     rc=efs_meta_publication_result(kv,p,&verdict);
@@ -4388,8 +4426,8 @@ int efs_meta_apply_publish(struct efs_kv *kv, const struct efs_meta_pub *p)
     struct publication_scan scan;rc=publication_scan(kv,p,&scan);if(rc!=EFS_OK)return rc;
     if(!pending && scan.count>=EFS_META_PUBLICATION_MAX_RECEIPTS)return EFS_ERR_BUSY;
     publication_key(p,key);
-    be32(value,1);be32(value+4,1);memcpy(value+8,digest,sizeof(digest));
-    struct efs_kv_item receipt={EFS_KV_PUT,key,sizeof(key),value,sizeof(value)};
+    uint32_t value_len=publication_receipt_pack(value,p,1,digest);
+    struct efs_kv_item receipt={EFS_KV_PUT,key,sizeof(key),value,value_len};
     rc=publish_inner(kv,p,&receipt);
     if(rc!=EFS_OK && rc!=EFS_ERR_STALE && rc!=EFS_ERR_INVAL)return rc;
     /* A mutation included the receipt atomically. A replay/no-op or terminal
@@ -8229,7 +8267,7 @@ static int check_cb(void *user, const uint8_t *key, uint32_t klen,
             efs_kv_lane_shard(rd64(key + 3), ci % EFS_META_LANES) !=
                 (((uint32_t)key[0] << 8) | key[1]) ||
             !rd32(key + 39) || !rd64(key + 43) ||
-            vlen != 8 + EFS_HASH_SIZE || rd32(val) != 1 || rd32(val + 4) < 1 || rd32(val + 4) > 4) {
+            !publication_receipt_valid(val,vlen)) {
             c->rc = EFS_ERR_PROTO;
             return 1;
         }

@@ -118,6 +118,8 @@ struct efs_raft_store {
     /* Optional. Bytes of log commands with index > snap_idx. The host
      * snapshots when this reaches EFS_RAFT_SNAP_BYTES. */
     uint64_t (*log_new_bytes)(void *ctx);
+    /* Command bytes after an index, excluding retained applied history. */
+    uint64_t (*log_bytes_after)(void *ctx, uint64_t index);
 };
 
 /* Snapshot once the log has grown by this many command bytes, and keep
@@ -145,6 +147,17 @@ typedef int (*efs_raft_snap_chunk_fn)(void *app, uint64_t incl,
                                       uint64_t incl_term, uint64_t offset,
                                       const uint8_t *data, uint32_t len,
                                       int done);
+
+/* Admission runs under the caller's Raft serialization, before persistence.
+ * It cannot reject already committed apply. BUSY accepts nothing new.
+ * RECV may refuse new suffixes; duplicates and empty commit/read probes retain
+ * normal log-matching semantics. LEAD inhibits campaigning at low capacity. */
+#define EFS_RAFT_ADMIT_LOCAL 0
+#define EFS_RAFT_ADMIT_RECV  1
+#define EFS_RAFT_ADMIT_LEAD  2
+#define EFS_RAFT_AE_PRESSURE UINT64_MAX /* AE_REP last_log_term; never success */
+typedef int (*efs_raft_admit_fn)(void *app, const struct efs_raft_entry *entries,
+                                uint32_t n, int source);
 
 struct efs_raft_cfg {
     int id; /* 0 .. EFS_RAFT_MAX_PEERS-1; may be outside voters (learner) */
@@ -176,6 +189,7 @@ struct efs_raft_cfg {
     /* User bytes per chunk. 0 → EFS_RAFT_SNAP_CHUNK. Chunk 0 also
      * carries the 8-byte config prefix inside the same 4 MiB cap. */
     uint32_t snap_chunk_bytes;
+    efs_raft_admit_fn admit; /* optional; NULL preserves the legacy policy */
 };
 
 struct efs_raft;
@@ -230,6 +244,9 @@ uint64_t efs_raft_log_floor(const struct efs_raft *r);
 /* 1 when the store reports log_new_bytes. */
 int efs_raft_tracks_log_bytes(const struct efs_raft *r);
 uint64_t efs_raft_log_new_bytes(const struct efs_raft *r);
+/* All calls require the same serialization as propose/recv. */
+int efs_raft_backlog(struct efs_raft *r, uint64_t *count, uint64_t *bytes,
+                      uint64_t *log_bytes);
 int efs_raft_leader(const struct efs_raft *r); /* -1 if unknown */
 
 /* Committed voting set (C_old). During joint this is still C_old. */

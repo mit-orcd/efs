@@ -1,0 +1,97 @@
+{
+  "source_commit": "10cbfaf8da91e870cd5daee76f49b3a41167e1a3",
+  "branch": "devel-compaction-pressure",
+  "processes": [
+    {
+      "pid": 19880,
+      "uid": 1001,
+      "command": "/data1/efs/src/efsd --node-id 1 --addr 127.0.0.1 --port 17432 --storage /data1/efs/n1 --quota 37.5G --direct-io ",
+      "policy": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_ADMISSION_PRESSURE": "0"
+      }
+    },
+    {
+      "pid": 20044,
+      "uid": 1001,
+      "command": "/data1/efs/src/efsd --node-id 2 --addr 127.0.0.1 --port 17433 --storage /data1/efs/n2 --quota 37.5G --direct-io --join 127.0.0.1:17432 ",
+      "policy": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_ADMISSION_PRESSURE": "0"
+      }
+    },
+    {
+      "pid": 20101,
+      "uid": 1001,
+      "command": "/data1/efs/src/efsd --node-id 3 --addr 127.0.0.1 --port 17434 --storage /data1/efs/n3 --quota 37.5G --direct-io --join 127.0.0.1:17432 ",
+      "policy": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_ADMISSION_PRESSURE": "0"
+      }
+    },
+    {
+      "pid": 20246,
+      "uid": 1001,
+      "command": "/data1/efs/src/efsd --node-id 4 --addr 127.0.0.1 --port 17435 --storage /data1/efs/n4 --quota 37.5G --direct-io --join 127.0.0.1:17432 ",
+      "policy": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_ADMISSION_PRESSURE": "0"
+      }
+    },
+    {
+      "pid": 20431,
+      "uid": 1001,
+      "command": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt2 ",
+      "policy": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_ADMISSION_PRESSURE": "0"
+      }
+    },
+    {
+      "pid": 25494,
+      "uid": 1001,
+      "command": "./efs-fuse 127.0.0.1:17432 fs /data1/efs/mnt ",
+      "policy": {
+        "EFS_TRANSPORT": "tcp",
+        "EFS_COMMANDS": "0",
+        "EFS_COMMANDS_SERVER": "0",
+        "EFS_ADMISSION_PRESSURE": "0"
+      }
+    }
+  ],
+  "mounts": [
+    {
+      "path": "/data1/efs/mnt",
+      "serving": true
+    },
+    {
+      "path": "/data1/efs/mnt2",
+      "serving": true
+    }
+  ],
+  "binary_sha256": {
+    "efsd": "bddd6aabbb0cb7a7ad23d1aee6098080895f92b9ee8d1d34f371af19da2821a1",
+    "efs-fuse": "b64c2107247424bb7def593804388f9783545315933a0721cd006800b3b22c76",
+    "efs-mgmt": "82867a40a08357f1fb3fd04e276490c7e63c6f0cd4c7ce804d29b2ecb330ffa1",
+    "efs-query": "1059d4c2e607c0cd56bfea0c82ec832913bf94f1bf784e42fcf9f7fb1673d307",
+    "efs-bench": "18b92b22004fd287e2a2fff03ee84691723bf2304679fa42ae89a9e660153408"
+  },
+  "version": "efsd v0.2.1-pre-alpha-139-g10cbfaf8 (branch devel-compaction-pressure, built 2026-10-09T01:15:32Z on amd-395)",
+  "raft_status": [
+    "node 1 root=1 salt=14322745943821988706 groups=2\n  group 0 hosted=1 role=LEADER leader=0 term=124 commit=223151 applied=223151 voters=0x7 joint=0\n  group 2 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0xe joint=0\n",
+    "node 2 root=1 salt=14322745943821988706 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=124 commit=223151 applied=223151 voters=0x7 joint=0\n  group 2 hosted=1 role=LEADER leader=1 term=111 commit=256964 applied=256964 voters=0xe joint=0\n",
+    "node 3 root=1 salt=14322745943821988706 groups=2\n  group 0 hosted=1 role=FOLLOWER leader=0 term=124 commit=223151 applied=223151 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=111 commit=256964 applied=256964 voters=0xe joint=0\n",
+    "node 4 root=0 salt=14322745943821988706 groups=2\n  group 0 hosted=0 role=- leader=-1 term=0 commit=0 applied=0 voters=0x7 joint=0\n  group 2 hosted=1 role=FOLLOWER leader=1 term=111 commit=256964 applied=256964 voters=0xe joint=0\n"
+  ],
+  "all_hosted_commit_applied_equal": true
+}
