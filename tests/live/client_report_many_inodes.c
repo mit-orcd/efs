@@ -36,6 +36,21 @@ int main(int argc,char **argv)
         inodes[i].ino=ino;inodes[i].size=((uint64_t)ci+1)*EFS_MIN_CHUNK_SIZE;
     }
     assert(fgetc(input)== '\n' || feof(input));fclose(input);
+    /* Exercise a committed valid prefix followed by a permanent invalid rec.
+     * Whole-batch success would discard the second body's dirty ownership. */
+    struct efs_chunk_rec prefix[2] = { recs[0], recs[1] };
+    prefix[1].nodes[0] = 0;
+    assert(efs_client_rpc_report_dirty_raft(1,prefix,2,inodes,2,1)==EFS_ERR_INVAL);
+    struct efs_chunk_rec accepted;
+    uint32_t accepted_count = 1;
+    uint64_t accepted_fileid = 0;
+    assert(!efs_client_rpc_getchunks_fileid(1,recs[0].ino,recs[0].file_generation,
+        recs[0].chunk_index,&accepted,&accepted_count,&accepted_fileid));
+    assert(accepted_count==1 && accepted_fileid==recs[0].file_generation &&
+        accepted.chunk_generation==recs[0].chunk_generation &&
+        !memcmp(accepted.nodes,recs[0].nodes,sizeof(accepted.nodes)) &&
+        !memcmp(accepted.checksums,recs[0].checksums,sizeof(accepted.checksums)));
+    fprintf(stderr,"REPORT valid prefix plus invalid tail refuses whole-batch success PASS\n");
     assert(!efs_client_rpc_report_dirty_raft(1,recs,40,inodes,40,1));
     for(unsigned i=0;i<40;i++)printf("ino=%llu ci=%u byte=%u\n",(unsigned long long)recs[i].ino,recs[i].chunk_index,i+1);
     for(unsigned j=0;j<3;j++) { free(frags[j]); }

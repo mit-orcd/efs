@@ -32,3 +32,15 @@ Installed service restored afterward: four identical978caaf7 daemons healthy,
 both original mounts serving, original stores retained and reservation released.
 The candidate is committed here, not installed over the restored service.
 This does not close aggregate partial-publication replay outcomes or activate D25.
+
+Final focused fixture gc-direct-txewwmg0 adds a valid publication prefix followed
+by an invalid zero-node tail: the two-record REPORT returns INVAL, then the full
+valid40-record retry passes exact cold bytes and physical reclamation. Retained
+session/revocation, member-offline/rejoin and GC/restart gates pass; runner exit0
+restores installed service. This proves failure is not hidden as whole-batch OK;
+it does not provide durable per-record result reconciliation.
+
+The final helper additionally queries the first mapping immediately after INVAL
+and before retry, checking FileID, object generation, all fragment nodes and
+checksums. This establishes that the prefix committed, rather than merely
+assuming a partial effect from the reply. The strengthened rerun exits0.
