@@ -195,3 +195,20 @@ marker until all phases and frontier obligations finish. Refusing every normal
 close is not a safe activation solution. Session append cleanup, receipt
 retirement, production coordinator and remaining command/queue accounting remain
 open; no pressure/D25/session activation or broad memory/CPU bound is claimed.
+
+## Final writeback gates / checkpoint
+
+Final candidate through c2712632 passes AMD direct/TCP W64/W73 gates: twelve
+ordinary/append 31-byte/2-MiB fsync/O_SYNC/O_DSYNC cases verified before close
+and cold crash; two mixed peer-extension lane-boundary cases; 32 identical
+concurrent append requests with lost reply, changed-payload refusal, retirement,
+next sequence, cold replay and leader death. Actual offline O_SYNC/O_DSYNC
+callback EIO retains exact bytes for later fsync and cold recovery. Both fixtures
+pass full physical GC/restart/quota/late-PUT gates. Source/binary SHA identities
+and JSON evidence: results/measure/20261009-writeback-final-gates.
+
+Installed978caaf7 restored and independently verified: four direct/TCP daemons,
+pressure off, both mounts serving. All logical code changes committed on
+devel-w66; no push/merge/tag or production activation. Next dependency remains
+bounded last-close/append cleanup, then receipt retirement and session lifecycle
+integration; D27/D25/W66 readiness remains open.
