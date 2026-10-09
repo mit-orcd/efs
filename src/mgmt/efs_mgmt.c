@@ -1186,13 +1186,19 @@ static void sess_pack_hdr(uint8_t *payload, uint8_t group, uint8_t sub,
  * successful reply, and the durable epoch floor preserves replay safety. */
 static int sess_cleanup_bounded(const char *host, uint16_t port,
                                 const uint8_t uuid[EFS_OPID_UUID_LEN],
-                                uint32_t old_epoch, uint32_t shard,
+                                uint32_t old_epoch, uint32_t shard, int appends,
                                 struct efs_msg_raft_mkfs_reply *reply)
 {
     uint8_t payload[27] = {0};
-    sess_pack_hdr(payload, efs_raft_shard_group(shard), EFS_MD_SESS_LEASE_LOCK_NEXT, uuid);
-    wr32be_mgmt(payload + 19, old_epoch);
-    wr32be_mgmt(payload + 23, shard);
+    uint32_t length=sizeof(payload);
+    if(appends) {
+        payload[0]=efs_raft_shard_group(shard);payload[1]=EFS_MD_REQ_SESSION_APPEND_NEXT;
+        memcpy(payload+2,uuid,16);wr32be_mgmt(payload+18,old_epoch);
+        wr32be_mgmt(payload+22,shard);length=26;
+    } else {
+        sess_pack_hdr(payload, efs_raft_shard_group(shard), EFS_MD_SESS_LEASE_LOCK_NEXT, uuid);
+        wr32be_mgmt(payload + 19, old_epoch);wr32be_mgmt(payload + 23, shard);
+    }
     /* An invocation has a finite work budget; unfinished ownership remains
      * durable and must not be reported as a completed cleanup. */
     struct timespec start, now;
@@ -1200,7 +1206,7 @@ static int sess_cleanup_bounded(const char *host, uint16_t port,
     for (unsigned batch = 0; batch < 4096; batch++) {
         if (clock_gettime(CLOCK_MONOTONIC, &now)) return EFS_ERR_IO;
         if (now.tv_sec - start.tv_sec >= 30) return EFS_ERR_BUSY;
-        int rc = sess_rpc(host, port, payload, sizeof(payload), reply);
+        int rc = sess_rpc(host, port, payload, length, reply);
         if (rc != EFS_OK) return rc;
         if (reply->salt == 1) return EFS_OK;
         if (reply->salt != 0) return EFS_ERR_PROTO;
@@ -1362,7 +1368,7 @@ static int cmd_raft_session(int argc, char **argv)
 
     if (argc < 3) {
         fprintf(stderr,
-                "Usage:\n  efs-mgmt raft-session <node:port> <create|register|establish|get|fence|cleanup-leases> "
+                "Usage:\n  efs-mgmt raft-session <node:port> <create|register|establish|get|fence|cleanup-leases|cleanup-appends> "
                 "<uuid-hex> [epoch|shard] [shard]\n");
         return 1;
     }
@@ -1377,7 +1383,7 @@ static int cmd_raft_session(int argc, char **argv)
     }
     if (strcmp(argv[1], "fence") == 0)
         return cmd_raft_session_fence(host, port, uuid);
-    if (!strcmp(op, "cleanup-leases")) {
+    if (!strcmp(op, "cleanup-leases") || !strcmp(op, "cleanup-appends")) {
         char *end_epoch = NULL, *end_shard = NULL;
         if (argc != 5) {
             fprintf(stderr, "raft-session cleanup-leases: old epoch and shard required\n");
@@ -1390,8 +1396,8 @@ static int cmd_raft_session(int argc, char **argv)
         struct efs_msg_raft_mkfs_reply reply;
         memset(&reply, 0, sizeof(reply)); reply.leader_hint = -1;
         int rc = sess_cleanup_bounded(host, port, uuid, (uint32_t)old,
-                                      (uint32_t)target, &reply);
-        printf("raft-session op=cleanup-leases epoch=%lu shard=%lu rc=%d\n", old, target, rc);
+                                      (uint32_t)target, !strcmp(op,"cleanup-appends"), &reply);
+        printf("raft-session op=%s epoch=%lu shard=%lu rc=%d\n", op, old, target, rc);
         return rc == EFS_OK ? 0 : 1;
     }
     ssh = efs_kv_session_shard(uuid);

@@ -6487,6 +6487,8 @@ static int orphan_scan_cb(void *user, const uint8_t *key, uint32_t kl,
 }
 static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
     const uint8_t identity[EFS_CLOSE_STEP_VALUE]);
+static int host_session_append_step(struct efs_raft_host *,const uint8_t *,uint32_t,
+                                     uint8_t,int *,uint64_t *);
 struct close_step_scan {
     efs_ino_t ino[8];uint8_t identity[8][EFS_CLOSE_STEP_VALUE],skip[11],last[11];
     uint32_t n,skip_len;int rc;
@@ -8719,6 +8721,18 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             return;
         }
     }
+    if(clen && cmd[0]==EFS_MD_REQ_SESSION_APPEND_NEXT) {
+        if(clen!=25 || !rd32be(cmd+17) || rd32be(cmd+21)>=EFS_SESSION_BITS ||
+           group!=efs_raft_shard_group(rd32be(cmd+21))) {
+            out->rc=EFS_ERR_INVAL;return;
+        }
+        uint8_t groups[2];host_need_both(groups);
+        if(!host_hosts(h,groups[0]) || !host_hosts(h,groups[1])) {
+            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=host_pick_peer(h,groups,2,-1);return;
+        }
+        out->rc=host_session_append_step(h,cmd,clen,group,&hint,&out->salt);
+        out->leader_hint=hint;return;
+    }
     if(clen && cmd[0]==EFS_MD_REQ_CLOSE_APPEND_NEXT) {
         if(clen!=45 || !rd64be(cmd+1) ||
            group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1)))) {
@@ -10241,6 +10255,27 @@ static int host_append_authority(struct efs_raft_host *h,int *hint)
         if(rc!=EFS_OK)return rc;
     }
     return EFS_OK;
+}
+static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
+    uint32_t clen,uint8_t group,int *hint,uint64_t *empty)
+{
+    if(clen!=25)return EFS_ERR_INVAL;
+    uint8_t owner[HOST_SESS_REG_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_LOCK_NEXT};
+    memcpy(owner+2,cmd+1,24);
+    int rc=host_session_cleanup_admit(h,owner,sizeof(owner),group,hint);
+    if(rc==EFS_OK)rc=host_append_authority(h,hint);
+    if(rc!=EFS_OK)return rc;
+    efs_ino_t ino;uint64_t generation,offset;unsigned found=0;
+    rc=efs_meta_append_session_next(h->kv,rd32be(cmd+21),cmd+1,rd32be(cmd+17),
+                                    &ino,&generation,&offset,&found);
+    if(rc!=EFS_OK)return rc;
+    *empty=!found;
+    if(!found)return EFS_OK;
+    struct host_resize_ctx ctx={h,hint};struct efs_txid tx;fill_txid(h,&tx);
+    rc=efs_meta_finish_append_fenced(h->kv,ino,generation,offset,cmd+1,
+                                    rd32be(cmd+17),&tx,&host_append_ops,&ctx);
+    /* A dead inode still owes REAP_BATCH; absence is never empty-phase proof. */
+    return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
 }
 static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
     const uint8_t identity[EFS_CLOSE_STEP_VALUE])

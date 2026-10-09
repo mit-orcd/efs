@@ -185,6 +185,33 @@ int efs_meta_finish_append(struct efs_kv *kv,efs_ino_t ino,uint64_t offset,
     finish_free(&c);return rc;
 }
 
+int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t generation,
+    uint64_t offset,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
+    const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx)
+{
+    if(!kv || !ino || !generation || !uuid || !epoch || !t || !ops ||
+       !ops->prepare || !ops->decide || !ops->resolve)return EFS_ERR_INVAL;
+    int rc=efs_session_cleanup_floor(kv,efs_kv_inode_shard(ino),uuid,epoch);
+    if(rc!=EFS_OK)return rc;
+    struct finish_capture c={.base=kv};
+    const struct efs_kv_ops capture_ops={.get=finish_get,.scan_prefix=finish_scan,.scan_from=finish_scan_from};
+    struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
+    struct efs_meta_row row;
+    rc=efs_meta_apply_get_inode(&capture,ino,&row);
+    if(rc==EFS_OK && row.generation!=generation)rc=EFS_ERR_STALE;
+    uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl=0,vl=sizeof(value);
+    if(rc==EFS_OK)rc=efs_kv_key_append_rsv(efs_kv_inode_shard(ino),ino,generation,offset,key,&kl);
+    if(rc==EFS_OK)rc=efs_kv_get(&capture,key,kl,value,&vl);
+    if(rc==EFS_OK && (vl!=sizeof(value) || value[44]>1))rc=EFS_ERR_PROTO;
+    if(rc==EFS_OK && (memcmp(value+16,uuid,16) ||
+       ((uint32_t)value[32]<<24 | (uint32_t)value[33]<<16 |
+        (uint32_t)value[34]<<8 | value[35])!=epoch))rc=EFS_ERR_STALE;
+    if(rc==EFS_OK)rc=efs_meta_collect_append_completion(&capture,ino,offset,
+                                      EFS_META_APPEND_FENCED_HOLE,finish_batch,&c);
+    if(rc==EFS_OK && c.mutations)rc=finish_execute(&c,t,ops,ctx);
+    finish_free(&c);return rc;
+}
+
 /* Eight deletes plus inode/cursor guards fit the resolver's fixed 48-item
  * per-participant atomic batch (each EXCL consumes up to three items). */
 #define APPEND_PRUNE_PAGE 8

@@ -13,6 +13,7 @@
 
 /* Exact bounded key set, so retrying an applied entry cannot consume the
  * next batch. Historical LANE_SWEEP retains whole-lane replay semantics. */
+#define EFS_MD_REQ_SESSION_APPEND_NEXT 38 /* RPC only: [uuid:16][epoch:4][shard:4] */
 #define EFS_MD_REQ_CLOSE_APPEND_NEXT 37 /* RPC only: [ino:8][identity:36] */
 #define EFS_MD_CMD_CLOSE_STEP 36 /* [ino:8][identity:36][phase:1], 46 bytes */
 #define EFS_MD_REQ_SWEEP_NEXT 35 /* RPC only: leader selects exact keys; never log */

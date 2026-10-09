@@ -571,7 +571,7 @@ int efs_lease_any(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
 
 /* Exact-key cleanup never selects again during replay. The local rejection
  * floor cannot decrease, so an old owner cannot recreate a deleted key. */
-static int cleanup_floor(struct efs_kv *kv, uint32_t shard,
+int efs_session_cleanup_floor(struct efs_kv *kv, uint32_t shard,
                          const uint8_t *uuid, uint32_t epoch)
 {
     struct efs_sess_local local;
@@ -632,7 +632,7 @@ int efs_session_cleanup_select(struct efs_kv *kv,uint32_t shard,
 {
     if (!keys || !n) return EFS_ERR_INVAL;
     *n=0;
-    int rc=cleanup_floor(kv,shard,uuid,epoch);
+    int rc=efs_session_cleanup_floor(kv,shard,uuid,epoch);
     if (rc!=EFS_OK) return rc;
     struct cleanup_scan scan={.shard=shard,.epoch=epoch,.uuid=uuid,.keys=keys};
     uint8_t prefix[EFS_KV_KEY_MAX];uint32_t len;
@@ -655,7 +655,7 @@ int efs_session_cleanup_apply(struct efs_kv *kv,uint32_t shard,
     const struct efs_session_cleanup_key *keys,uint32_t n)
 {
     if (!keys || !n || n>EFS_SESSION_CLEANUP_MAX) return EFS_ERR_INVAL;
-    int rc=cleanup_floor(kv,shard,uuid,epoch);
+    int rc=efs_session_cleanup_floor(kv,shard,uuid,epoch);
     if (rc!=EFS_OK) return rc;
     /* Validate ALL keys before any effects, including duplicate/foreign keys. */
     for (uint32_t i=0;i<n;i++) {

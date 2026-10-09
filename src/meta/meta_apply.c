@@ -7902,6 +7902,47 @@ int efs_meta_apply_append_open(struct efs_kv *kv,efs_ino_t ino,uint64_t *offs,
     *n=page.n;return EFS_OK;
 }
 
+struct session_append_scan {
+    uint32_t shard,epoch;
+    const uint8_t *uuid;
+    efs_ino_t ino;
+    uint64_t generation,offset;
+    unsigned found;
+    int rc;
+};
+static int session_append_row(void *user,const uint8_t *key,uint32_t kl,
+                               const uint8_t *val,uint32_t vl)
+{
+    struct session_append_scan *s=user;struct append_rsv r;
+    if(kl!=27 || vl!=APPEND_RSV_VAL ||
+       unpack_append_rsv(val,vl,&r)!=EFS_OK || !r.len ||
+       r.off>UINT64_MAX-r.len || r.state>APPEND_DONE ||
+       r.off!=rd64(key+19) || !rd64(key+3) || !rd64(key+11) ||
+       efs_kv_inode_shard(rd64(key+3))!=s->shard) {
+        s->rc=EFS_ERR_PROTO;return 1;
+    }
+    if(r.state!=APPEND_OPEN || r.epoch!=s->epoch || memcmp(r.uuid,s->uuid,16))return 0;
+    s->ino=rd64(key+3);s->generation=rd64(key+11);s->offset=r.off;s->found=1;
+    return 1;
+}
+int efs_meta_append_session_next(struct efs_kv *kv,uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
+    efs_ino_t *ino,uint64_t *generation,uint64_t *offset,unsigned *found)
+{
+    if(!ino || !generation || !offset || !found)return EFS_ERR_INVAL;
+    *found=0;
+    int rc=efs_session_cleanup_floor(kv,shard,uuid,epoch);
+    if(rc!=EFS_OK)return rc;
+    struct session_append_scan scan={.shard=shard,.epoch=epoch,.uuid=uuid};
+    uint8_t prefix[EFS_KV_KEY_MAX];uint32_t n;
+    rc=efs_kv_key_append_rsv_shard_prefix(shard,prefix,&n);
+    if(rc==EFS_OK)rc=efs_kv_scan_prefix(kv,prefix,n,session_append_row,&scan);
+    if(rc!=EFS_OK && rc!=1)return rc;
+    if(scan.rc!=EFS_OK)return scan.rc;
+    if(scan.found) {*ino=scan.ino;*generation=scan.generation;*offset=scan.offset;}
+    *found=scan.found;return EFS_OK;
+}
+
 #define DROP_RSV_MAX 32
 
 struct drop_rsv_acc {

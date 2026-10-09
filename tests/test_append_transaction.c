@@ -312,5 +312,49 @@ static void close_completion(void)
  assert(efs_kv_get(kv,key,kl,first,&vl)==EFS_ERR_NOT_FOUND);
  free(plan);efs_kv_mem_free(kv);
 }
+static void fenced_completion(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+ struct efs_opid_req q=identity(1,0);struct efs_txid t={{121}};
+ for(unsigned i=0;i<3;i++) {
+  q.id.seq=i+1;q.ack=i;
+  assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_OK);
+  t.bytes[1]=i+1;assert(efs_meta_execute_append(plan,&t,&ops,kv)==EFS_OK);
+ }
+ uint32_t shard=efs_kv_inode_shard(ino);efs_ino_t selected=0;uint64_t generation=0,off=0;unsigned found=99;
+ assert(efs_meta_append_session_next(kv,shard,q.id.client_uuid,1,&selected,&generation,&off,&found)==EFS_ERR_BUSY && !found);
+ assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
+ assert(efs_meta_append_session_next(kv,shard,q.id.client_uuid,1,&selected,&generation,&off,&found)==EFS_OK && found && selected==ino && generation==gen && off==200);
+ t.bytes[1]=10;
+ assert(efs_meta_finish_append_fenced(kv,ino,gen+1,off,q.id.client_uuid,1,&t,&ops,kv)==EFS_ERR_STALE);
+ uint8_t inode_key[EFS_KV_KEY_MAX],inode_value[EFS_META_INO_BYTES];uint32_t il,iv=sizeof(inode_value);
+ assert(efs_kv_key_inode(shard,ino,inode_key,&il)==EFS_OK && efs_kv_get(kv,inode_key,il,inode_value,&iv)==EFS_OK);
+ struct efs_txid held={{122}};struct efs_txn_parts held_parts={.n=1,.shard={shard}};
+ assert(efs_txn_prepare_excl_value(kv,&held,&held_parts,inode_key,il,inode_value,iv,EFS_TXN_PUT,inode_value,iv)==EFS_OK);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,off,q.id.client_uuid,1,&t,&ops,kv)==EFS_ERR_BUSY);
+ assert(efs_txn_resolve(kv,&held,shard,EFS_TXN_ABORT)==EFS_OK);
+ t.bytes[1]=12; /* each attempted transaction keeps a distinct identity */
+ uint8_t key[EFS_KV_KEY_MAX],value[48];uint32_t kl,vl=sizeof(value);
+ assert(efs_kv_key_append_rsv(shard,ino,gen,208,key,&kl)==EFS_OK);
+ assert(efs_kv_get(kv,key,kl,value,&vl)==EFS_OK);value[16]=43;
+ assert(efs_kv_put(kv,key,kl,value,vl)==EFS_OK); /* independent surviving owner */
+ uint8_t other[16]={43};assert(efs_session_fence_local(kv,shard,other,2)==EFS_OK);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,200,other,1,&t,&ops,kv)==EFS_ERR_STALE);
+ const struct efs_meta_append_ops lost={prepare,lost_decision,resolve};
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,200,q.id.client_uuid,1,&t,&lost,kv)==EFS_ERR_IO);
+ assert(resolve(kv,&t,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
+ assert(efs_meta_finish_append_fenced(kv,ino,gen,200,q.id.client_uuid,1,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_append_session_next(kv,shard,q.id.client_uuid,1,&selected,&generation,&off,&found)==EFS_OK && found && off==216);
+ t.bytes[1]=11;assert(efs_meta_finish_append_fenced(kv,ino,gen,off,q.id.client_uuid,1,&t,&ops,kv)==EFS_OK);
+ assert(efs_meta_append_session_next(kv,shard,q.id.client_uuid,1,&selected,&generation,&off,&found)==EFS_OK && !found);
+ uint32_t open;uint64_t watermark,frontier;
+ assert(efs_meta_apply_append_state(kv,ino,&watermark,&frontier,&open)==EFS_OK && open==1 && watermark==224 && frontier==208);
+ /* Corrupt evidence cannot become false empty-phase proof. */
+ assert(efs_kv_put(kv,key,kl,value,2)==EFS_OK);
+ assert(efs_meta_append_session_next(kv,shard,q.id.client_uuid,1,&selected,&generation,&off,&found)==EFS_ERR_PROTO && !found);
+ assert(efs_kv_put(kv,key,kl,value,vl)==EFS_OK);
+ free(plan);efs_kv_mem_free(kv);
+}
 int main(void)
-{unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

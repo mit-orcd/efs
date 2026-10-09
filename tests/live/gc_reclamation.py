@@ -39,6 +39,7 @@ p.add_argument('--tiny-mixed',action='store_true',help='bounded large-writer ove
 p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-load cold-read/reclamation gate; implies --tiny-mixed')
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
+p.add_argument('--session-append',action='store_true',help='bounded revoked-session append holes, cold half-completion and exact epoch resume')
 p.add_argument('--session-cleanup',action='store_true',help='staged bounded lease/lock cleanup, global barrier, exact replay and cold physical reclaim')
 p.add_argument('--deferred-close',action='store_true',help='staged identified close, 64 cross-group OPEN appends, crash/resume, exact holes and bounded retirement')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
@@ -591,6 +592,38 @@ try:
         wait(lambda:not files(ino),'durably fenced physical fragments reclaimed',180)
         (work/'guarded-leases.json').write_text(json.dumps(records,indent=2))
         print('guarded lease reorder/lost-reply/read-only probe/cold replay/final-close reclaim PASS',flush=True)
+    if a.session_append:
+        helper=work/'session-append';inspector=work/'session-append-inspect'
+        for output,cfile in ((helper,'session_append.c'),(inspector,'close_step.c')):
+            run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live'/cfile,source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',output])
+        path=mount/'session-append';body=bytes(range(256))*4096
+        with path.open('wb') as out:out.write(body);out.flush();os.fsync(out.fileno())
+        ino=path.stat().st_ino;shard=ino & 4095;uuid=os.urandom(16).hex()
+        records=[]
+        for operation,extra in [('create',['1']),('register',[str(shard),'1']),('establish',[str(shard),'1'])]:
+            records.append(run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,*extra],capture_output=True,text=True).stdout)
+        reserved=run([inspector,'reserve',str(a.port),str(ino),uuid,'64','131072'],capture_output=True,text=True,timeout=180).stdout
+        records.append(run([helper,'fence-half',str(a.port),uuid,str(ino)],capture_output=True,text=True,timeout=180).stdout)
+        unmount();stop(crash=True)
+        before=[run([inspector,'inspect',root/'mdraft/kv',str(ino)],capture_output=True,text=True).stdout for root in roots]
+        assert any('open=32 ' in text for text in before),before
+        start(prefer_single_host=True);mount_client()
+        routing=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
+        assert re.search(r'group 0 hosted=1 role=LEADER',routing) and re.search(r'group 2 hosted=0',routing),routing
+        for replay in range(2):
+            result=run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}','cleanup-appends',uuid,'1',str(shard)],capture_output=True,text=True,timeout=180)
+            assert 'rc=0' in result.stdout,result.stdout
+            records.append(result.stdout)
+        expected=len(body)+64*131072
+        assert path.stat().st_size==expected and path.read_bytes()==body+bytes(expected-len(body)), 'revoked append cleanup corrupts original bytes/holes'
+        unmount();stop()
+        after=[run([inspector,'inspect',root/'mdraft/kv',str(ino)],capture_output=True,text=True).stdout for root in roots]
+        assert all('open=0 ' in text for text in after),after
+        start();mount_client()
+        assert path.stat().st_size==expected and path.read_bytes()==body+bytes(expected-len(body))
+        path.unlink();wait(lambda:not files(ino),'revoked append physical reclaim',180)
+        (work/'session-append.json').write_text(json.dumps({'ino':ino,'reserved':reserved,'records':records,'before':before,'after':after,'routing':routing,'expected_bytes':expected},indent=2))
+        print('bounded revoked-session append: 32+32 cold transactions, exact retry, original bytes/holes, physical reclaim PASS',flush=True)
     if a.deferred_close:
         helper=work/'deferred-lease';inspector=work/'close-step'
         for output,cfile in ((helper,'lease_edges.c'),(inspector,'close_step.c')):

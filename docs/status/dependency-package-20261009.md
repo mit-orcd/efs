@@ -273,3 +273,21 @@ source fails the added relevant assertions.
 The helper remains staged; global authority routing, bounded session append and
 PUT-ticket cleanup, production ambiguous lease identity retention, and broader
 receipt/session lifecycle integration remain open. No activation is claimed.
+
+## Bounded revoked-session append phase
+
+RPC-only SESSION_APPEND_NEXT and `raft-session ... cleanup-appends UUID OLD_EPOCH
+SHARD` now select/resolve one exact old-session OPEN reservation per transaction.
+Global completed barrier, local reject floor, fresh two-group views and exact
+UUID/epoch/generation/inode/cursor/lane images protect ownership. Missing dead
+inode returns BUSY; malformed evidence returns PROTO, never false completion.
+AMD64 reservations: resolve32, crash, offline32 OPEN, inode-only leader redirects,
+resume32, exact retry, original1MiB +8MiB holes cold verified, physical reclaim.
+Full Linux, prepared/lost-decision unit, core212/212, peer64/64 and cold GC pass;
+installed service restored.
+[Evidence](../../results/measure/20261009-session-append-cleanup/README.md).
+The OPEN reservation phase is implemented/gated. DONE/append receipt retirement,
+PUT tickets, production identity/retry retention and legacy lease mutation
+ownership guards still block full coordinator replacement/activation. Streaming
+scan CPU/time bounds remain a follow-up; fixed memory does not imply fixed scan
+latency.

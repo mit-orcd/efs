@@ -1015,6 +1015,15 @@ int efs_meta_apply_append_foreign(struct efs_kv *kv, efs_ino_t ino,
 /* OPEN reservations only. *n is capacity in, count out (capped). */
 int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
                                uint64_t *lens, uint32_t *n);
+/* Select one exact old-session OPEN reservation; requires durable local floor.
+ * Caller must prove global revocation and hold fresh authoritative views.
+ * Fixed memory, streaming scan; not a whole-shard CPU deadline guarantee. */
+int efs_meta_append_session_next(struct efs_kv *, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+    efs_ino_t *ino, uint64_t *generation, uint64_t *offset, unsigned *found);
+int efs_meta_finish_append_fenced(struct efs_kv *, efs_ino_t, uint64_t generation,
+    uint64_t offset, const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+    const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx);
 /* Resolve OPEN reservations of (uuid, epoch) on this shard as FENCED_HOLE
  * (I23 / §7.3). Called from LEASE_DROP after the revocation barrier. */
 int efs_meta_apply_append_drop_session(struct efs_kv *kv, uint32_t shard,

@@ -14,7 +14,7 @@ c=r'''
 #include <string.h>
 #include <time.h>
 #include <stdio.h>
-static unsigned calls, mode;
+static unsigned calls, mode, append_mode;
 static int tick;
 static int fake_clock(clockid_t id,struct timespec *t)
 {assert(id==CLOCK_MONOTONIC);t->tv_sec=tick;t->tv_nsec=0;return 0;}
@@ -26,10 +26,15 @@ static void sess_pack_hdr(uint8_t *p,uint8_t g,uint8_t sub,const uint8_t *uuid)
 static int sess_rpc(const char *host,uint16_t port,const uint8_t *p,uint32_t n,
                     struct efs_msg_raft_mkfs_reply *r)
 {
- assert(!strcmp(host,"owned") && port==123 && n==27);
+ assert(!strcmp(host,"owned") && port==123 && n==(append_mode?26:27));
+ if(append_mode) {
+   assert(p[0]==2 && p[1]==EFS_MD_REQ_SESSION_APPEND_NEXT && p[18]==0 && p[21]==1 && p[22]==0 && p[25]==7);
+   for(unsigned i=2;i<18;i++)assert(p[i]==42);
+ } else {
  assert(p[0]==2 && p[1]==EFS_MD_CMD_SESSION && p[2]==EFS_MD_SESS_LEASE_LOCK_NEXT);
  assert(p[19]==0 && p[22]==1 && p[23]==0 && p[26]==7);
  for(unsigned i=3;i<19;i++)assert(p[i]==42);
+ }
  calls++;
  if(mode==1)return EFS_ERR_IO; /* ambiguous submission: do not reselect */
  if(mode==2)return EFS_ERR_BUSY; /* active or incomplete global barrier */
@@ -40,13 +45,15 @@ static int sess_rpc(const char *host,uint16_t port,const uint8_t *p,uint32_t n,
 '''+f+r'''
 int main(void) {
  uint8_t uuid[16];memset(uuid,42,16);struct efs_msg_raft_mkfs_reply r;
- assert(sess_cleanup_bounded("owned",123,uuid,1,7,&r)==EFS_OK && calls==4);
+ assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
  for(mode=1;mode<=3;mode++) {
-   calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,&r)==
+   calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==
       (mode==1?EFS_ERR_IO:mode==2?EFS_ERR_BUSY:EFS_ERR_PROTO) && calls==1);
  }
- mode=4;calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,&r)==EFS_ERR_BUSY && calls==4096);
- mode=5;calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,&r)==EFS_ERR_BUSY && calls==1);
+ mode=4;calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==4096);
+ mode=5;calls=0;assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_ERR_BUSY && calls==1);
+ append_mode=1;mode=0;calls=0;tick=0;
+ assert(sess_cleanup_bounded("owned",123,uuid,1,7,append_mode,&r)==EFS_OK && calls==4);
  puts("session CLI: bounded batches, explicit empty proof, ambiguity stops, deadline and work budget PASS");
 }
 '''

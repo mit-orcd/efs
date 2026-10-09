@@ -27,6 +27,9 @@ struct efs_session_cleanup_key {
     uint8_t len;
     uint8_t key[EFS_SESSION_CLEANUP_KEY_MAX];
 };
+/* Local apply proof only; coordinator must separately prove global revocation. */
+int efs_session_cleanup_floor(struct efs_kv *kv, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 int efs_session_cleanup_select(struct efs_kv *kv, uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
     struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX], uint32_t *n);
