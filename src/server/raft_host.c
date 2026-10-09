@@ -5473,6 +5473,20 @@ static int persist_applied(struct efs_raft_host *h, int gi, uint64_t idx,
     return EFS_OK;
 }
 
+/* A successful KV barrier is the prerequisite, not just an ordering hint.
+ * A failed release leaves in-memory applied ahead of durable KV; never save
+ * that index, including on shutdown. Persist failures retain the old marker. */
+static int host_save_applied(struct efs_raft_host *h, const uint64_t *idx,
+                              uint64_t now, int force, int kv_rc)
+{
+    if (kv_rc != EFS_OK) return kv_rc;
+    for (int i=0; i<HOST_NGROUPS; i++) {
+        int rc=persist_applied(h,i,idx[i],now,force);
+        if (rc != EFS_OK) return rc;
+    }
+    return EFS_OK;
+}
+
 static int load_applied(struct efs_raft_host *h, int gi, uint64_t *idx)
 {
     char path[EFS_MAX_PATH];
@@ -5841,7 +5855,8 @@ static void *host_pump(void *arg)
         if (obs)
             c0 = now_us_();
         if (batch_obs) phase_us = efs_batch_obs_now_us();
-        if (efs_kv_lsm_sync_release(h->kv) != EFS_OK)
+        int kv_rc = efs_kv_lsm_sync_release(h->kv);
+        if (kv_rc != EFS_OK)
             fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
         if (batch_obs) {
             BO_HIST(BH_KV_RELEASE_US, efs_batch_obs_now_us() - phase_us);
@@ -5852,8 +5867,8 @@ static void *host_pump(void *arg)
 
             /* pnow is wall time for applied-index persistence; diagnostics
              * use monotonic time, matching cohort/hold measurements. */
-            for (i = 0; i < HOST_NGROUPS; i++)
-                (void)persist_applied(h, i, applied_now[i], pnow, 0);
+            if (host_save_applied(h,applied_now,pnow,0,kv_rc) != EFS_OK)
+                fprintf(stderr,"raft-host: applied checkpoint not advanced after persistence failure\n");
         }
         if (h->flow_enabled && done_n) host_inbox_retire(h,done_n,done_bytes);
         if (batch_obs) {
@@ -5889,9 +5904,9 @@ static void *host_pump(void *arg)
             idx[i] = h->g[i].hosted && h->g[i].r
                          ? efs_raft_applied(h->g[i].r) : 0;
         pthread_mutex_unlock(&h->mu);
-        (void)efs_kv_lsm_sync_release(h->kv);
-        for (i = 0; i < HOST_NGROUPS; i++)
-            (void)persist_applied(h, i, idx[i], now_us_(), 1);
+        int kv_rc = efs_kv_lsm_sync_release(h->kv);
+        if (host_save_applied(h,idx,now_us_(),1,kv_rc) != EFS_OK)
+            fprintf(stderr,"raft-host: shutdown applied checkpoint not advanced after persistence failure\n");
     }
     return NULL;
 }
