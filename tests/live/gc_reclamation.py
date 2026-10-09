@@ -595,6 +595,22 @@ try:
         edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048
         with edge_path.open('wb') as out:out.write(edge_body);out.flush();os.fsync(out.fileno())
         edge_ino=edge_path.stat().st_ino;edge_uuid=(os.urandom(8)+bytes(8)).hex();edge_results=[]
+        many=work/'client-report-many-inodes';many_dir=mount/'report-many-inodes';many_dir.mkdir()
+        many_paths=[many_dir/str(i) for i in range(40)]
+        for path in many_paths:path.touch()
+        many_input=work/'report-many-inodes.txt';many_inos=[path.stat().st_ino for path in many_paths]
+        many_input.write_text(''.join(str(ino)+'\n' for ino in many_inos))
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_report_many_inodes.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',many])
+        many_result=run([many,str(a.port),many_input],capture_output=True,text=True,timeout=180).stdout
+        many_rows=re.findall(r'ino=(\d+) ci=(\d+) byte=(\d+)',many_result);assert len(many_rows)==40,many_result
+        (work/'report-many-inodes-wire.txt').write_text(many_result)
+        unmount();stop(crash=True);start();mount_client()
+        for path,ino,row in zip(many_paths,many_inos,many_rows):
+            captured,ci,byte=map(int,row);assert captured==ino and path.stat().st_ino==ino
+            data=path.read_bytes();assert data==bytes(ci*(128<<10))+bytes([byte])*(128<<10),('many-inode REPORT cold bytes',path,row)
+            path.unlink()
+        many_dir.rmdir();wait(lambda:all(not files(ino) for ino in many_inos),'40-inode fresh cross-group REPORT cold bytes and physical reclaim',180)
+
         report=work/'client-report-session';report_saved=work/'report-session-packet.bin'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_report_session.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',report])
         report_result=run([report,str(a.port),str(edge_ino),source/'efs-mgmt',report_saved],capture_output=True,text=True,timeout=180).stdout

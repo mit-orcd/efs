@@ -11,6 +11,7 @@
 
 #include <dirent.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -269,6 +270,60 @@ static void test_hold_covers_batch(void)
     covered = efs_raft_disk_covered_index(d, EFS_RAFT_GROUP_SHARD, synced);
     CHECK(covered == 4, "second fsync covers the new record");
     efs_raft_disk_close(d);
+    rmtree(g_dir);
+}
+
+/* A REPORT releases its own shared hold, but must wait for another owner
+ * before advertising either group's deferred log bytes. */
+struct release_wait_test {
+    struct efs_raft_disk *disk;
+    int done, rc;
+};
+static void *release_wait_thread(void *arg)
+{
+    struct release_wait_test *t = arg;
+    t->rc = efs_raft_disk_sync_release_wait(t->disk);
+    __atomic_store_n(&t->done, 1, __ATOMIC_RELEASE);
+    return NULL;
+}
+static void test_nested_hold_wait(void)
+{
+    struct efs_raft_disk *d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+    CHECK(d != NULL, "nested hold disk opens");
+    if (!d) return;
+    struct efs_raft_store *s = efs_raft_disk_group(d, EFS_RAFT_GROUP_SHARD);
+    CHECK(efs_raft_disk_sync_hold(d) == EFS_OK, "REPORT hold");
+    CHECK(efs_raft_disk_sync_hold(d) == EFS_OK, "concurrent hold");
+    CHECK(st_append(s, 1, 1, "shared") == EFS_OK, "deferred REPORT append");
+    struct release_wait_test t = { .disk = d };
+    pthread_t thread;
+    int created = pthread_create(&thread, NULL, release_wait_thread, &t);
+    CHECK(!created, "start REPORT release waiter");
+    if (!created) {
+        unsigned spin;
+        for (spin = 0; spin < 1000 && efs_raft_disk_sync_depth(d) != 1; spin++)
+            usleep(1000);
+        CHECK(efs_raft_disk_sync_depth(d) == 1, "waiter drops only its hold");
+        CHECK(!__atomic_load_n(&t.done, __ATOMIC_ACQUIRE), "REPORT cannot finish before shared sync");
+        CHECK(efs_raft_disk_covered_index(d, EFS_RAFT_GROUP_SHARD,
+              efs_raft_disk_synced_bytes(d)) == 0, "deferred suffix remains uncovered");
+        CHECK(efs_raft_disk_sync_release(d) == EFS_OK, "other owner synchronizes shared log");
+        pthread_join(thread, NULL);
+        CHECK(t.rc == EFS_OK && t.done, "REPORT waiter completes after sync");
+        CHECK(efs_raft_disk_covered_index(d, EFS_RAFT_GROUP_SHARD,
+              efs_raft_disk_synced_bytes(d)) == 1, "released suffix covered");
+    } else {
+        (void)efs_raft_disk_sync_release(d);
+        (void)efs_raft_disk_sync_release(d);
+    }
+    efs_raft_disk_close(d);
+    d = efs_raft_disk_open(g_dir, EFS_RAFT_DISK_SYNC);
+    CHECK(d != NULL, "cold reopen shared sync");
+    if (d) {
+        s = efs_raft_disk_group(d, EFS_RAFT_GROUP_SHARD);
+        CHECK(st_check(s, 1, 1, "shared"), "shared synchronized bytes survive cold reopen");
+        efs_raft_disk_close(d);
+    }
     rmtree(g_dir);
 }
 
@@ -774,6 +829,7 @@ int main(void)
     test_recv_batch_crash(1);
     test_matches_mem();
     test_hold_covers_batch();
+    test_nested_hold_wait();
     test_reopen();
     test_truncate_persists();
     test_torn_tail();

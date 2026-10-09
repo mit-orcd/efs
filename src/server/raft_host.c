@@ -3783,6 +3783,18 @@ static void host_durable_synced(struct efs_raft_host *h)
     }
 }
 
+/* h->mu held. An outer REPORT/cohort hold may still own this append.
+ * Never advertise its index as durable until the shared log covers it. */
+static int host_mark_durable_covered(struct efs_raft_host *h, uint8_t group,
+                                      struct efs_raft *r, uint64_t index)
+{
+    if (!h->disk) return efs_raft_durable(r, index);
+    uint64_t synced = efs_raft_disk_synced_bytes(h->disk);
+    uint64_t covered = efs_raft_disk_covered_index(h->disk, group, synced);
+    if (covered < index) return EFS_OK; /* Pump/release will mark it later. */
+    return efs_raft_durable(r, covered);
+}
+
 /* Saturate observations: overflow must close admission, never create capacity. */
 static uint64_t host_pressure_add(uint64_t a, uint64_t b)
 {
@@ -4030,7 +4042,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                 if (!r || efs_raft_role(r) != EFS_RAFT_LEADER)
                     rc = EFS_ERR_NOT_PRIMARY;
                 else
-                    rc = efs_raft_durable(r, myidx);
+                    rc = host_mark_durable_covered(h, group, r, myidx);
                 if (rc == EFS_OK && term && r)
                     *term = efs_raft_term(r);
                 host_publish_group(h, group);
@@ -4045,7 +4057,7 @@ static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                 *term = efs_raft_term(r);
             /* No hold: append fsynced before propose returned. */
             if (rc == EFS_OK && idx)
-                rc = efs_raft_durable(r, *idx);
+                rc = host_mark_durable_covered(h, group, r, *idx);
             host_publish_group(h, group);
             pthread_mutex_unlock(&h->mu);
             propose_q_sub();
@@ -6591,7 +6603,7 @@ static int host_bg_propose(struct efs_raft_host *h, uint8_t group,
         if (rc == EFS_OK)
             term = efs_raft_term(r);
         if (rc == EFS_OK)
-            rc = efs_raft_durable(r, idx);
+            rc = host_mark_durable_covered(h, group, r, idx);
         pthread_mutex_unlock(&h->mu);
         if (rc != EFS_OK)
             return rc;
@@ -14099,7 +14111,7 @@ static uint64_t host_pub_candidate_gen(const struct efs_chunk_rec *rec,
  * inode row from the report's one get_inode; NULL falls back to a get. */
 static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *rec,
                          uint64_t new_size, int *hint, int skip_ri,
-                         struct efs_meta_row *cached, const struct efs_opid *session,
+                         struct efs_meta_row *cached, const struct efs_opid *session, int activate,
                          uint8_t *cmd, uint32_t *clen, uint8_t *lg_out)
 {
     struct efs_meta_pub p;
@@ -14166,6 +14178,9 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
     if (epoch_rc != EFS_OK)
         return epoch_rc;
     if (lg != ig && (row.active_lanes & (1ULL << lane)) == 0) {
+        /* Waiting for activation while owning the REPORT's log hold would
+         * wait for our own unreleased fsync. Preflight or retry outside it. */
+        if (!activate) return EFS_ERR_BUSY;
         /* First use of a cross-group lane: register it in the inode row's
          * active_lanes bitmap on the INODE group first (that bitmap is
          * stat()'s collect set), then publish lane-local below. A crash
@@ -14401,6 +14416,19 @@ static int host_pub_batch_push(struct efs_raft_host *h, struct host_pub_batch *b
     b->group = group;
     memcpy(b->buf + (b->session ? HOST_REPORT_PREFIX_LEN : 0u) + b->len, cmd, clen);
     b->len += clen;
+    return EFS_OK;
+}
+
+/* Close only our hold, then wait for the captured shared log boundary.
+ * A nested hold or failed fsync is never permission to expose REPORT entries. */
+static int host_report_release(struct efs_raft_host *h, int held)
+{
+    int rc = held ? efs_raft_disk_sync_release_wait(h->disk) : EFS_OK;
+    if (rc != EFS_OK) return rc;
+    pthread_mutex_lock(&h->mu);
+    host_durable_synced(h);
+    pthread_mutex_unlock(&h->mu);
+    host_pump_kick(h);
     return EFS_OK;
 }
 
@@ -14659,12 +14687,26 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             if (rc == EFS_OK)
                 rc = host_propose_wait(h, ig, acmd, alen, &hint);
         }
+        /* The row cache is bounded at32 inodes. Prepare every uncached
+         * record's activation before taking the REPORT log hold as well. */
+        for (i = 0; i < count && rc == EFS_OK; i++) {
+            for (k = 0; k < nic; k++) if (ic[k].have && ic[k].ino == recs[i].ino) break;
+            if (k < nic) continue;
+            uint8_t pre_cmd[HOST_PUBLISH_LEN], pre_group;
+            uint32_t pre_len;
+            rc = host_pub_pack(h, &recs[i], 0, &hint, 1, NULL, session, 1,
+                               pre_cmd, &pre_len, &pre_group);
+            if (rc == EFS_ERR_STALE) { had_stale = 1; rc = EFS_OK; }
+        }
         if (rc != EFS_OK) {
             fail_phase = "act";
             fail_rc = rc;
         }
-        if (h->disk && efs_raft_disk_sync_hold(h->disk) == EFS_OK)
-            held = 1;
+        if (h->disk && rc == EFS_OK) {
+            rc = efs_raft_disk_sync_hold(h->disk);
+            held = rc == EFS_OK;
+            if (rc != EFS_OK) { fail_phase = "log-hold"; fail_rc = rc; }
+        }
         for (i = 0; i < count && rc == EFS_OK; i++) {
             struct efs_meta_row *cached = NULL;
 
@@ -14686,7 +14728,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                 }
             }
             t0 = now_us_();
-            rc = host_pub_pack(h, &recs[i], sz, &hint, 1, cached, session, cmd, &clen,
+            rc = host_pub_pack(h, &recs[i], sz, &hint, 1, cached, session, 0, cmd, &clen,
                                &lg);
             t_pack += now_us_() - t0;
             if (raft_dbg_on())
@@ -14694,19 +14736,14 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                         "raft-host: report pub ino=%llu ci=%u sz=%llu rc=%d clen=%u\n",
                         (unsigned long long)recs[i].ino, recs[i].chunk_index,
                         (unsigned long long)sz, rc, clen);
-            /* INVAL is a permanent property of the rec (bad mode, zero node) —
-             * it can never succeed, so skip it and keep publishing the rest of
-             * the batch. One poison rec must not stall every rec behind it
-             * (the client re-reports the skipped ino, so a misdiagnosed cause
-             * resurfaces instead of being lost). Transient errors (NOT_PRIMARY,
-             * NO_QUORUM, NET, BUSY) fail the batch for a client retry. */
+            /* Whole-batch OK releases all client dirty bodies. A permanent
+             * malformed record therefore cannot be silently skipped. */
             if (rc == EFS_ERR_INVAL) {
-                fprintf(stderr,
-                        "raft-host: report pub ino=%llu ci=%u INVAL, skipping rec\n",
+                fprintf(stderr, "raft-host: invalid REPORT rec ino=%llu ci=%u; retaining batch\n",
                         (unsigned long long)recs[i].ino, recs[i].chunk_index);
                 n_inval++;
-                rc = EFS_OK;
-                continue;
+                fail_phase = "pack-invalid"; fail_rc = rc;
+                break;
             }
             /* STALE is different again: a losing CAS on ONE rec must not
              * abort the whole batch. The prefix-before-the-first-STALE
@@ -14778,24 +14815,15 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
             if (rc == EFS_OK)
                 rc = frc;
         }
-        if (held)
-            (void)efs_raft_disk_sync_release(h->disk);
-        /* The hold suppressed the per-entry fsync, and the durable ceiling
-         * kept those entries out of AppendEntries. They are on disk now. */
-        pthread_mutex_lock(&h->mu);
-        for (bi = 0; bi < HOST_NGROUPS; bi++) {
-            struct efs_raft *rr;
-
-            if (!bat[bi].last_idx)
-                continue;
-            rr = group_raft(h, bat[bi].group);
-            if (rr && efs_raft_role(rr) == EFS_RAFT_LEADER)
-                (void)efs_raft_durable(rr, bat[bi].last_idx);
+        int sync_rc = host_report_release(h, held);
+        if (sync_rc != EFS_OK) {
+            rc = sync_rc;
+            fail_phase = "log-sync"; fail_rc = rc;
         }
-        pthread_mutex_unlock(&h->mu);
-        host_pump_kick(h);
         for (bi = 0; bi < HOST_NGROUPS; bi++) {
-            int wrc = host_pub_batch_wait(h, &bat[bi], &hint);
+            int wrc = EFS_OK;
+            if (sync_rc == EFS_OK) wrc = host_pub_batch_wait(h, &bat[bi], &hint);
+            else host_pub_batch_reset(&bat[bi]);
 
             if (rc == EFS_OK && wrc != EFS_OK) {
                 fail_phase = "wait";

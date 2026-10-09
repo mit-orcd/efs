@@ -736,3 +736,30 @@ pass. Complete code regressions pass; warning-free Linux build; docs5/5.
 The initial fault hook targeted fsync; the KV WAL uses fdatasync. That no-fault
 timeout restored service, and the corrected actual fault run passed. Hardware
 power-loss and distributed RDMA remain unclaimed. Installed AMD service restored.
+
+## REPORT shared-log coverage and overflow lanes — implemented/gated
+
+REPORT waits for actual log sync coverage and propagates failed hold/sync;
+background proposals cannot advertise uncovered indices. Invalid records return
+INVAL, retaining client ownership. All uncached lanes beyond the32-inode row
+cache activate before the REPORT hold, preventing self-wait on the shared log.
+
+AMD direct/TCP uploads40 fresh cross-group files in one REPORT and checks exact
+cold sparse bytes and physical reclamation. Core212/212, peer64/64, append800,
+retained identity/revocation and GC/restart gates pass. Full code regressions and
+warning-free Linux build pass; actual nested-hold/cold-reopen regression passes.
+[Evidence and corrected earlier retry claim](../../results/measure/20261009-report-log-coverage/README.md).
+
+Earlier live mapping-retry evidence used an invalid sparse base and the old
+server skipped it asOK. This checkpoint supersedes that claim with an actual
+live span retry and explicit invalid-record refusal; the session-fence evidence
+is unaffected. Production per-publication outcome/reconciliation, retention of
+other ambiguous namespace requests, ticketed PUT/storage fences and captured
+membership/all-member retirement remain open. D25 stays staged.
+
+Final direct/TCP sync fixtures pass O_SYNC/O_DSYNC and mount-wide sync ordinary
+small/queued/append peer-before-close and exact cold-crash byte checks, physical
+deletion, explicit append/fsync boundaries and800-record append audit. These
+refresh W73's direct/TCP acceptance on the REPORT candidate; they do not replace
+the final multi-mode package gate. AMD restored to its installed978caaf7 service,
+all four nodes healthy, both mounts serving, reservation released.

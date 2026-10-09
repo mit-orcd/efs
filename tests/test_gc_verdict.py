@@ -31,6 +31,7 @@ static int efs_raft_leader(struct efs_raft*r){(void)r;return 2;}
 static int efs_raft_propose(struct efs_raft*r,const uint8_t*c,uint32_t n,uint64_t*i){(void)r;(void)c;(void)n;*i=41;return 0;}
 static uint64_t efs_raft_term(struct efs_raft*r){(void)r;return 7;}
 static int efs_raft_durable(struct efs_raft*r,uint64_t i){(void)r;assert(i==41);return durable;}
+static int host_mark_durable_covered(struct efs_raft_host*h,uint8_t g,struct efs_raft*r,uint64_t i){(void)h;(void)g;return efs_raft_durable(r,i);}
 static void host_pump_kick(struct efs_raft_host*h){(void)h;}
 static int host_wait_settled(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)i;(void)t;(void)p;assert(0);return 0;}
 static int host_wait_verdict(struct efs_raft_host*h,uint8_t g,uint64_t i,uint64_t t,int*p){(void)h;(void)g;(void)p;assert(i==41&&t==7);waits++;return verdict;}
