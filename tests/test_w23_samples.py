@@ -31,4 +31,23 @@ class Samples(unittest.TestCase):
         output = samples.peaks(io.StringIO('\t'.join(samples.HEADER)+'\n'+'\n'.join('\t'.join(r) for r in rows)+'\n'))
         self.assertIn('apply_sleep_lines=88',output[0])
 
+    def cap_stream(self, mutate=None):
+        rows = [samples.row(ts, str(node), f'11 {1<<30} 128 4', '55', '0', '77', '0', '1', 'FOLLOWER,')
+                for ts in ('00:00:01', '00:00:06') for node in (1, 2, 3)]
+        if mutate:
+            mutate(rows)
+        return io.StringIO('\t'.join(samples.HEADER)+'\n'+'\n'.join('\t'.join(r) for r in rows)+'\n')
+
+    def test_cap_proof_requires_real_follower_and_complete_observations(self):
+        self.assertIn('bounds remain separate', samples.cap_proof(self.cap_stream()))
+        for mutate in (lambda rows: rows.pop(),
+                       lambda rows: rows[0].__setitem__(6, 'NA'),
+                       lambda rows: rows[0].__setitem__(6, '0'),
+                       lambda rows: rows.append(rows[0]),
+                       lambda rows: [r.__setitem__(3, str((1<<30)-1)) for r in rows],
+                       lambda rows: [r.__setitem__(11, 'LEADER,') for r in rows],
+                       lambda rows: rows[0].__setitem__(11, '?')):
+            with self.assertRaises(ValueError):
+                samples.cap_proof(self.cap_stream(mutate))
+
 if __name__ == '__main__': unittest.main()

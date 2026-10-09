@@ -1,0 +1,28 @@
+cluster: mac
+== efs1
+USER         PID COMMAND
+efs        18743 /tmp/efs/efsd --node-id 1 --addr 192.168.2.11 --port 17432 --storage /data1 --quota 15G --direct-io
+node 1 root=1 salt=15933793549099970756 groups=2
+  group 0 hosted=1 role=LEADER leader=0 term=58 commit=31968 applied=31968 voters=0x7 joint=0
+  group 2 hosted=1 role=LEADER leader=0 term=61 commit=28017 applied=28017 voters=0x7 joint=0
+dc8cb6970c6920d1810e536a8a7bf2dd4539834c82fd59074b14c49405f56120  /tmp/efs/efsd
+EFS_COMMANDS_SERVER=0
+EFS_COMMANDS=0
+== efs2
+USER         PID COMMAND
+efs         8635 /tmp/efs/efsd --node-id 2 --addr 192.168.2.12 --port 17432 --storage /data1 --quota 15G --direct-io --join 192.168.2.11:17432
+node 2 root=1 salt=15933793549099970756 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=58 commit=31968 applied=31968 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=0 term=61 commit=28017 applied=28017 voters=0x7 joint=0
+dc8cb6970c6920d1810e536a8a7bf2dd4539834c82fd59074b14c49405f56120  /tmp/efs/efsd
+EFS_COMMANDS_SERVER=0
+EFS_COMMANDS=0
+== efs3
+USER         PID COMMAND
+efs         8468 /tmp/efs/efsd --node-id 3 --addr 192.168.2.13 --port 17432 --storage /data1 --quota 15G --direct-io --join 192.168.2.11:17432
+node 3 root=1 salt=15933793549099970756 groups=2
+  group 0 hosted=1 role=FOLLOWER leader=0 term=58 commit=31968 applied=31968 voters=0x7 joint=0
+  group 2 hosted=1 role=FOLLOWER leader=0 term=61 commit=28017 applied=28017 voters=0x7 joint=0
+dc8cb6970c6920d1810e536a8a7bf2dd4539834c82fd59074b14c49405f56120  /tmp/efs/efsd
+EFS_COMMANDS_SERVER=0
+EFS_COMMANDS=0
