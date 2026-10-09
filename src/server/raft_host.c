@@ -7417,10 +7417,9 @@ static int host_query_capable(struct efs_raft_host *h)
     return clean;
 }
 static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot **source,
-                              struct efs_server_query_view *view,uint64_t *revisions)
+                              struct efs_server_query_view *view,uint64_t *revisions,uint64_t *import_generation)
 {
     *source=NULL;memset(view,0,sizeof(*view));
-    uint64_t import_generation[HOST_NGROUPS];
     pthread_mutex_lock(&h->mu);
     int rc=host_query_capable(h) ? EFS_OK : EFS_ERR_NOT_PRIMARY;
     if (!rc) {
@@ -7463,12 +7462,35 @@ static int host_query_source(struct efs_raft_host *h,struct efs_kv_lsm_snapshot 
     if (rc) { efs_kv_lsm_snapshot_release(*source);*source=NULL; }
     return rc;
 }
+/* Disk builders stream bounded scratch independently of foreground RPC
+ * deadlines. Cancellation still observes shutdown at every record. A fresh
+ * authority/import check is required again before publishing the result. */
+static int host_query_disk_cancel(void *ctx)
+{
+    struct efs_raft_host *h=ctx;
+    return !__atomic_load_n(&h->query_running,__ATOMIC_ACQUIRE);
+}
 static void *host_query_thread(void *ctx)
 {
     struct efs_raft_host *h=ctx;
     uint64_t published[4096]={0},current[4096],first_dirty=0,last_attempt=0;
     int failed=0,last_error=0;uint64_t last_error_log=0;
     uint64_t catalog_bytes=HOST_QUERY_BYTES;
+    const char *backend=getenv("EFS_QUERY_BACKEND");
+    int disk_backend=!backend || strcmp(backend,"ram");
+    if(backend && strcmp(backend,"disk") && strcmp(backend,"ram"))
+        fprintf(stderr,"query-config: invalid EFS_QUERY_BACKEND; using disk\n");
+    char query_root[sizeof(h->mdraft)+32];
+    snprintf(query_root,sizeof(query_root),"%s/query-cache",h->mdraft);
+    int disk_lease=-1;
+    if(disk_backend) {
+        int recovery=efs_query_catalog_disk_recover(query_root,&disk_lease);
+        if(recovery) {
+            fprintf(stderr,"query-recovery: rc=%d; disk publisher unavailable\n",recovery);
+            pthread_rwlock_wrlock(&h->query_lock);h->query_error=recovery;
+            pthread_rwlock_unlock(&h->query_lock);return NULL;
+        }
+    }
     const char *budget=getenv("EFS_QUERY_CATALOG_MIB");
     if (budget && *budget) {
         char *end=NULL;errno=0;
@@ -7508,16 +7530,36 @@ static void *host_query_thread(void *ctx)
         if (failed && last_attempt && now-last_attempt<HOST_QUERY_T_MS) continue;
         last_attempt=now;
         struct efs_kv_lsm_snapshot *source=NULL;
-        struct efs_server_query_view view;
-        uint64_t revisions[4096];
+        struct efs_server_query_view view={0};
+        uint64_t revisions[4096],import_generation[HOST_NGROUPS];
         h->query_deadline_ms=now+HOST_QUERY_BUILD_MS;
         h->query_cancel_checks=0;
-        rc=host_query_source(h,&source,&view,revisions);
+        rc=host_query_source(h,&source,&view,revisions,import_generation);
         struct efs_query_catalog *candidate=NULL;
-        if (!rc && !host_query_cancel(h))
-            rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
-        else if (!rc) rc=EFS_ERR_BUSY;
+        uint64_t watermark[4]={view.applied[0],view.applied[1],view.terms[0],view.terms[1]};
+        if(!rc && !host_query_cancel(h)) {
+            if(disk_backend) {
+                int restored=EFS_ERR_NOT_FOUND;
+                if(initial)restored=efs_query_catalog_restore_disk(query_root,source,watermark,catalog_bytes,&candidate);
+                if(initial)fprintf(stderr,"query-restore: rc=%d backend=disk\n",restored);
+                if(restored)rc=efs_query_catalog_build_disk(query_root,source,h->query_view.catalog,
+                    catalog_bytes,host_query_disk_cancel,h,&candidate);
+                if(!rc) {
+                    pthread_mutex_lock(&h->mu);
+                    if(!host_query_capable(h))rc=EFS_ERR_NOT_PRIMARY;
+                    pthread_mutex_lock(&h->snap_mu);
+                    for(int i=0;i<HOST_NGROUPS && !rc;i++)
+                        if(import_generation[i]!=h->g[i].import_gen)rc=EFS_ERR_BUSY;
+                    pthread_mutex_unlock(&h->snap_mu);
+                    pthread_mutex_unlock(&h->mu);
+                }
+                if(!rc)rc=efs_query_catalog_checkpoint(candidate,watermark);
+                /* The long disk build does not extend any request budget. */
+                h->query_deadline_ms=query_mono_ms()+HOST_QUERY_BUILD_MS;
+            } else rc=efs_query_catalog_build(source,h->query_view.catalog,catalog_bytes,host_query_cancel,h,&candidate);
+        } else if(!rc)rc=EFS_ERR_BUSY;
         efs_kv_lsm_snapshot_release(source);
+        if(rc && candidate){efs_query_catalog_free(candidate);candidate=NULL;}
         h->query_cancel_checks=0; /* Always enforce the deadline before publication. */
         if (!rc && host_query_cancel(h)) { efs_query_catalog_free(candidate);candidate=NULL;rc=EFS_ERR_BUSY; }
         pthread_rwlock_wrlock(&h->query_lock);
@@ -7551,6 +7593,7 @@ static void *host_query_thread(void *ctx)
         }
         pthread_rwlock_unlock(&h->query_lock);
     }
+    if(disk_lease>=0)close(disk_lease);
     return NULL;
 }
 /* Internal borrowed-view API. The consumer is bounded and may not retain the
