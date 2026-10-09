@@ -7,6 +7,16 @@ running-cluster capacity measurement or topology change was made for this item.
 [Status queue](README.md#1a-the-work-queue) ·
 [Architecture §7.1](../how-it-works/architecture.md#71-sharded-raft-and-linearizable-reads)
 
+## D36 protection obligation — Oct 9
+
+The user requires four-node maximum two-loss protection for authoritative
+metadata; larger clusters add scale rather than raising the failure target.
+Current three-voter groups cannot meet that requirement. W66 must select and
+prove its metadata persistence/commit/recovery mechanism as well as routing.
+Safe refusal without quorum cannot substitute for preserving committed metadata.
+See [binding D36](node-count-protection-20261009.md). No topology change is made
+or advertised by this note.
+
 ## Current implementation and intended behavior
 
 The architecture specifies 4096 logical shards, independent Raft groups,

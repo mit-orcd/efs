@@ -1,5 +1,12 @@
 # Development — modularity as an architectural constraint
 
+**Accepted deployment contract (D36, Oct 9):** three nodes are the minimum;
+four nodes provide the maximum two-node-loss safety target; additional nodes
+scale volume and performance across all dimensions. Today's fixed 2+1 data and
+three-voter metadata groups do not implement that four-node guarantee. See
+[binding requirement and implementation gates](../status/node-count-protection-20261009.md); preserve the requirement
+rather than deriving the design from current code.
+
 [Architecture](architecture.md) · [Status](../status/README.md) ·
 [Verification](verification.md) · [Parked ideas](../backlog/ideas.md)
 

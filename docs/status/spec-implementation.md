@@ -10,6 +10,11 @@ rows retain their explicitly dated review scope; this is not a new full-code
 or hardware power-loss audit. See [release evidence](v020-amd-release.md) and
 [the current queue](README.md).
 
+**D36 node-count correction (Oct 9):** three nodes minimum, four nodes maximum
+two-loss safety, larger clusters for scale. Fixed 2+1 and current metadata
+quorums do not meet that contract. [Decision and gates](node-count-protection-20261009.md)
+govern W74/W66; the former f=3 ladder is superseded.
+
 The specification states the accepted design. This table records inspected
 public-path limitations initially at HEAD `ddc677ae`, reconciled through the
 final round against `b3a11877` and its subsequent GC documentation checkpoint;

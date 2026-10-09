@@ -63,8 +63,11 @@ roadmap](../backlog/ideas.md) is the *increment plan* for the current
 implementation; this is the *specification*. When a design question comes
 up, the answer is decided here first, then reflected in the roadmap.
 
-**Status: ratified Sep 1 2026; revised Sep 1 2026 after external protocol
-review (nine rounds — see [design history](../archive/design-history.md)).** The
+**Status: ratified Sep 1 2026; node-count/protection contract superseded by
+the user on Oct 9, 2026 (D36).** Earlier review history remains in
+[design history](../archive/design-history.md). The current §2 requirement takes
+precedence over that history; the four-node metadata protocol remains an
+explicit implementation/design gap, not a reason to weaken the requirement. The
 metadata layer described here replaces the current whole-table snapshot +
 2PC design. The data path is unchanged in mechanism (client-direct RDMA,
 k+f EC) but its commit semantics are specified precisely (§7.3). The bar
@@ -116,7 +119,7 @@ A high-performance parallel POSIX file system.
 | Objects (files + dirs) | ≥ 2³² (4.29 billion) **live** |
 | Cluster size | 3 nodes (smallest) to 64 nodes |
 | Reference size | 2³² objects on 4 nodes |
-| Failure tolerance | **configurable f = 1…3** simultaneous node losses (§2); no data loss at the configured f; requires N ≥ max(2f+1, k+f) |
+| Failure tolerance | **3 nodes minimum; 4 nodes maximum safety (any 2 node losses); >4 nodes scale** (§2, D36); four-node metadata protection not yet implemented |
 | Consistency | immediate cross-client visibility (no TTL caches) |
 | Data path | client-direct, RDMA, k+f EC (k=2 default) |
 | **Scaling bar** | throughput scales with the **protection-adjusted** aggregate hardware ceiling (§9); no software serialization point may become the limiter before a physical resource does |
@@ -195,52 +198,49 @@ are excluded from the claim rather than silently failing it.
   clients, capability-based data authorization becomes a requirement, not an
   option.
 
-**The rule.** The cluster is configured with a failure target **f** — the
-maximum number of simultaneous permanent node losses it must survive
-**without data loss** — capped at **f = 3** and bounded by cluster size.
-(The cap is deliberate: metadata quorum size and EC storage overhead both
-grow with f, and f=3 already covers the realistic correlated-failure
-envelope for a single rack/cluster.) The two planes scale differently with
-f: a `k+f` EC stripe survives any f data losses and needs N ≥ k+f distinct
-failure domains; a Raft group stays authoritative through f permanent
-losses only if the survivors still form a quorum, which needs
-**N ≥ 2f+1**. So the configured-f guarantee is one line:
+**Accepted node-count contract (D36, Oct 9, 2026).** Three nodes are the
+bare minimum to run EFS. Four nodes increase safety to the maximum protection
+level: the system must preserve acknowledged data and authoritative metadata
+through any two permanent node losses. More than four nodes increase scale —
+data volume and performance across data, metadata and query dimensions —
+without increasing the maximum protection target beyond two node losses.
+The two-loss target is the supported failure envelope, not an assumption that
+more than two nodes can never fail in the physical world.
 
-```text
-N ≥ max(2f+1, k+f)        RF = 2f+1 voting replicas per shard
-```
+| Cluster size | Required protection | Default data profile | Purpose |
+|---|---|---|---|
+| 3 nodes | Any one node loss | 2+1 | Bare minimum deployment |
+| 4 nodes | Any two node losses, including authoritative metadata preservation | 2+2 | Maximum safety level |
+| >4 nodes | Same maximum two-node-loss protection | 2+2 | Scale volume and performance across all dimensions |
 
-Lose any f nodes: a metadata majority survives, ≥k data fragments survive,
-and the system remains authoritative **automatically** — no quorum override,
-no disaster mode, no distinction between "bits survive" and "we can prove
-which bits were committed."
+This is the **accepted requirement, not today's deployment guarantee**. Current
+data code remains fixed 2+1. Default metadata groups still use three voters
+(nodes 1/2/3 and 2/3/4 for N>3). They do not satisfy the four-node contract.
+W74 owns protection profiles/repair; W66 owns metadata topology and consensus.
+See [D36 and acceptance gaps](../status/node-count-protection-20261009.md).
 
-| N nodes | max f | metadata RF | data EC | guarantee |
-|---|---|---|---|---|
-| 3 | 1 | 3 | 2+1 | lose 1: no loss, stays authoritative |
-| 4 | 1 | 3 | 2+1 | lose 1: no loss, stays authoritative |
-| 5 | 2 | 5 | 2+2 | lose 2: no loss, stays authoritative |
-| 6 | 2 | 5 | 2+2 | lose 2: no loss, stays authoritative |
-| ≥ 7 | 3 | 7 | 2+3 (or wider k, e.g. 4+3 = 1.75×) | lose 3: no loss, stays authoritative |
+**Metadata mechanism remains unresolved at four nodes.** Ordinary majority
+Raft requires RF ≥ 2f+1 to remain authoritative after any f replica losses;
+that mechanism alone therefore requires five voters for f=2. It is not a
+minimum-cluster-size rule overriding D36. Do not claim four-node safety from
+2+2 data coding, add an implicit fifth node/witness, override lost quorum, or
+merge survivor logs by highest term. A metadata persistence/commit/recovery
+protocol with proof of acknowledged-state preservation after every allowed
+failure combination must be selected and gated. Until then the gap stays open
+and four-node/two-loss support must not be advertised as implemented.
 
-**f=3 needs 7 nodes, not 5 or 6.** On 5 nodes the best metadata
-configuration is RF=5, Q=3, and 3 ≯ 3 — the 3 dead nodes could be exactly
-the quorum that acknowledged the most recent writes. The config validator
-rejects any configuration that violates N ≥ max(2f+1, k+f).
+Read/write availability after loss is a separate protocol obligation. Safe
+refusal is required when authority cannot be established; it must never be
+substituted for preserving committed metadata. The former f=3/seven-node
+ladder and four-node/f=1 design are superseded by D36, not alternative defaults.
 
-**There is no N = 2f mode.** After a permanent majority loss, no local rule
-over surviving logs can reconstruct the committed prefix — commitment
-information died with the majority, and splicing survivor logs can
-manufacture a command sequence no leader ever authorized. Permanent majority
-loss is disaster territory (an operator procedure over surviving state), not
-an efs operating mode. (Full argument:
-[failure-tolerance.md](failure-tolerance.md).)
-
-**Changing f or k is an online control-plane operation** with an explicit
+**Changing protection profiles requires an online control-plane operation** with an explicit
 `effective_f` → `target_f` transition state: add shard replicas (joint
 consensus, §7.8), re-stripe every protected data generation to the new k+f
 width as **new immutable generations under the new coding profile** (§7.3),
-verify, and only then commit the new guarantee. Derivation and transition
+verify, and only then commit the new guarantee. The former Raft
+replica-transition recipe needs review against D36; no four-node metadata
+protocol is selected here. Derivation and transition
 detail: [failure-tolerance.md](failure-tolerance.md).
 
 ## 3. Consistency contract
@@ -349,15 +349,13 @@ feature needs snapshot readdir, that is an MVCC read (rejected for now —
 [design.md](design-rationale.md)) introduced deliberately, not an accident of the
 scan.
 
-**CAP-accurate availability.** At the configured failure target f (§2,
-which requires N ≥ 2f+1): any f nodes may be permanently lost with **no
-data loss**, and every shard retains a quorum after the losses, so
-operations remain available to clients that can reach it — no operator
-action, ever. A minority partition never serves authoritative writes or
-stale authoritative reads. Brief unavailability during leader election is
-expected. "Survive f nodes" means safety always, plus continued operation
-whenever a quorum survives — not literally zero interruption for every
-client.
+**CAP-accurate availability.** D36's preservation requirement (§2) must not
+be confused with unrestricted availability. A partition without proven authority
+must refuse mutations and authoritative reads. Current Raft requires a majority;
+brief election unavailability is expected. The four-node/two-loss metadata
+protocol and its read/write recovery behavior remain unresolved. Preserve
+acknowledged state; do not promise automatic quorum survival where the current
+mechanism cannot provide it.
 
 ## 4. Invariants
 
@@ -408,7 +406,8 @@ I6/I7.
   *loudly*, never by answering "no".
 - **I10 · metadata durability.** An acknowledged committed metadata op
   survives any f simultaneous permanent node losses, where f is the
-  configured failure target (§2; quorum Q > f by construction).
+  required failure target (§2, D36). The four-node mechanism must establish
+  this property explicitly; current three-voter Raft does not prove it.
 - **I16 · request idempotency.** Replaying a mutation with the same operation
   ID cannot apply its logical effect more than once and returns a response
   compatible with the original completed operation.
@@ -506,8 +505,9 @@ I6/I7.
 **Three planes, not two.**
 
 - **Data plane** — chunk PUT/GET, k+f EC (§2, §7.3), client-direct over RDMA.
-- **Metadata plane** — virtual shards, one Raft group per shard at
-  RF = 2f+1 (§2, §7.1), ordered applied KV on NVMe.
+- **Metadata plane** — virtual shards with replication selected to satisfy §2,
+  ordered applied KV on NVMe. The per-shard Raft baseline is described in §7.1;
+  D36 requires resolving its four-node protection gap.
 - **Control plane** — cluster membership, desired placement, shard
   reconfiguration, node incarnation, drain/rebuild. Its own Raft group
   (§7.8), and *not* an implicit authority for operations it does not itself
@@ -549,7 +549,7 @@ node hosts many.
 
 | State | Authority | Key | Replication |
 |---|---|---|---|
-| inode row | `inode_shard(ino) = ino & 0xFFF` | `(ino)` | shard Raft group (RF = 2f+1) |
+| inode row | `inode_shard(ino) = ino & 0xFFF` | `(ino)` | shard metadata authority (§2; current Raft baseline) |
 | dentry, LOCAL layout | parent's shard | `(parent_ino, name)` → `(ino, gen, type)` | shard Raft |
 | dentry, HASHED layout | the directory's 64-shard permutation, `dir_lane = hash(name) % 64` (§7.4) | `(parent_ino, name)` → `(ino, gen, type)` | shard Raft |
 | chunk map | lane shard (§7.3 permutation) | `(FileID, lane, chunk_index)` | shard Raft |
@@ -565,7 +565,7 @@ node hosts many.
 | append reservations, `reservation_watermark` | `inode_shard(ino)` | `(FileID)` | shard Raft |
 | append reservation receipts / retirement floor | `inode_shard(ino)` | `(ino, client_uuid, session_epoch)` | same batch as reservation; client contiguous ACK retires results |
 | transaction decision | `participant[hash(txid) % participant_count]` | `(txid)` | shard Raft |
-| membership / desired placement | control-plane group | — | control Raft (RF = 2f+1) |
+| membership / desired placement | control-plane group | — | control metadata authority (§2; current Raft baseline) |
 | file data | k+f distinct failure domains by placement | `(FileID, chunk_index, candidate_generation, fragment_index, coding_profile_id)` | k+f EC fragments |
 
 **Applied state: a logical ordered KV per shard.** Each replica applies its
@@ -651,7 +651,10 @@ full specification.
 
 ### 7.1 Sharded Raft and linearizable reads
 
-Each shard is an independent Raft group at **RF = 2f+1** (§2), replicas on
+The baseline design uses independent per-shard Raft groups (current runtime
+still maps shards to two fixed groups). Majority Raft alone does not satisfy
+four-node D36; the metadata protocol must be revised/proved accordingly.
+In this baseline, replicas are on
 distinct failure domains. Each group elects its own leader; leaders spread
 across nodes, so metadata write throughput scales with node count — there is
 no single metadata primary. Every mutation is a log entry `(term, index)`,
@@ -1182,7 +1185,8 @@ syscall-splitting one, not silently absorbed into "efs scales".
 
 ### 7.8 Control plane, membership, and reconfiguration
 
-The control plane is its own Raft group (RF = 2f+1): cluster membership,
+The baseline design gives the control plane its own Raft group (also subject to
+the unresolved D36 protection gap): cluster membership,
 desired shard→node placement, node incarnation, drain/rebuild. **Desired
 placement ≠ authoritative configuration** — each shard's own group
 transitions its actual membership through an overlapping-quorum
@@ -1398,8 +1402,7 @@ this document is the invariant they are measured against.
 
 - **Shard** — an interleaved bucket of the inode space (`ino & 0xFFF`); the
   unit of replication and leadership.
-- **Raft group** — the RF replicas + log for one shard (RF = 2f+1 at the
-  configured failure target).
+- **Raft group** — the RF replicas + log for one shard (current majority mechanism; four-node D36 protocol unresolved).
 - **Leader** — the single writer for a shard in a given term.
 - **Term** — a monotonically increasing leadership epoch; used for fencing.
 - **Committed** — present on a majority of the group's current authoritative
@@ -1458,6 +1461,14 @@ this document is the invariant they are measured against.
 ## Appendix 1 — Status — the task right now and the work queue
 
 *Source: `status/README.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: operational plan.**
+
+### Governing node-count contract — D36
+
+[User-ratified D36](../status/node-count-protection-20261009.md): three nodes minimum,
+four nodes maximum two-loss safety, additional nodes for capacity and performance
+across all dimensions. This supersedes the earlier protection ladder. Current
+fixed 2+1 and three-voter metadata groups do not satisfy the four-node target;
+W74/W66 must close the gap. Never infer the accepted design from current code.
 
 ### Accepted design follow-up
 
@@ -1931,7 +1942,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-##### Decisions — taken and pending (register D1–D35)
+##### Decisions — taken and pending (register D1–D36)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -1941,6 +1952,17 @@ assigned. D15/D16 (closed Oct 2) and the Sep 28/29 ordering tables are
 in project-history.md "START-HERE closed items". **D28, D29 and D30 were
 accepted Oct 8, 2026.** Their current contracts and remaining gates are below;
 former ASK descriptions are historical.
+
+### D36 — node-count protection contract (accepted Oct 9)
+
+Three nodes are the minimum deployment; four provide maximum two-node-loss
+protection for acknowledged data and authoritative metadata; additional nodes
+increase volume and performance across all dimensions. Default data profiles
+are 2+1 at three nodes and 2+2 from four onward. This supersedes the older
+four-node/f=1 and f=3 ladder. The four-node metadata mechanism remains unresolved,
+not permission to weaken the requirement. See [binding contract and gates](../status/node-count-protection-20261009.md)
+and [architecture §2](#architecture). W74/W66 implementation
+and acceptance remain open.
 
 ### Earlier decisions — compact register
 
@@ -4774,7 +4796,14 @@ signals (63–215 ms); handlers still drain before teardown.
 
 ### W66 · Metadata leadership distribution and routing (queue row meta-scale)
 
-**Class:** scalability enhancement. **Status:** open; indexed Oct 7, 2026.
+**Class:** scalability enhancement / metadata protection protocol. **Status:** open; indexed Oct 7, 2026.
+
+**D36 (Oct 9):** topology work must satisfy the user-required four-node,
+any-two-loss preservation of acknowledged authoritative metadata. Current Raft
+majority placement does not meet it. Select and prove the metadata protocol;
+never substitute a five-node minimum for the accepted requirement. Larger
+clusters must scale metadata service while retaining the same protection target.
+See [binding decision](../status/node-count-protection-20261009.md).
 
 **Evidence/current state:** Two fixed parity Raft groups and dual-group routing remain implemented; logical shard count is not independent leadership capacity.
 
@@ -5066,7 +5095,11 @@ hardware power-loss proof.
 ### W74 · Configurable protection profiles, debt and automatic repair remain absent (queue row spec4)
 
 **Class:** protection/recovery feature gap. **Status:** accepted design, absent
-public control-plane/data-plane integration; no new design decision here.
+public control-plane/data-plane integration. **D36 (Oct 9) supersedes the
+former protection ladder:** three nodes minimum/2+1, four nodes maximum
+two-loss safety/2+2, more nodes for scale with the same protection target.
+Authoritative metadata must meet the same loss envelope; coordinate its
+unresolved four-node protocol with W66. See [binding decision](../status/node-count-protection-20261009.md).
 
 **Evidence:** `EFS_NUM_FRAGMENTS` is 3 and `erasure.h` specifies fixed 2+1.
 `efs_publication_from_rec` stamps K2F1; `meta_apply.c:evidence_ok` rejects other
@@ -5075,7 +5108,8 @@ that reconstructs missing live fragments, effective_f/target_f transition or
 profile-cutover controller was found. Namespace/metadata recovery and reading
 from two survivors are not data repair. W42 separately records the two-ACK
 legacy PUT success/protection-debt concern; staged evidence validation is not
-a repair implementation. Five or seven nodes alone do not activate f=2/f=3.
+a repair implementation. Four or more nodes alone do not activate the required
+2+2 protection or solve the metadata protocol gap.
 
 **Change/gate:** implement the accepted profile/debt/repair control plane in
 stages; advertise only supported and validated guarantees. Demonstrate missing
@@ -5085,8 +5119,8 @@ profile cutover while writers remain active. Retain actual configured RF/EC
 and permanent-loss evidence. Coordinate with W66 metadata topology.
 
 **Forbidden:** counting returning/empty nodes as restored fragments, calling
-GC or metadata snapshot recovery repair, or advertising the spec's f=2/f=3
-matrix as current production capability.
+GC or metadata snapshot recovery repair, advertising D36 as implemented, or
+replacing the accepted four-node target with a five-node minimum/f=3 ladder.
 
 <a id="w75"></a>
 
@@ -6401,9 +6435,14 @@ derivation is correct, not that it was copied.
   according to its assumptions (election restriction, log matching, commit
   rules, safe reconfiguration). Leader completeness (I2) is Raft's theorem,
   not majority intersection alone.
+**D36 overrides the earlier node-count ladder.** Three nodes are minimum; four
+provide the maximum two-loss safety target; larger clusters add scale. Majority
+Raft alone cannot meet the four-node requirement. Its replacement/composition
+proof remains open; never weaken the target to match current implementation.
+
 - **Quorum durability** (I10/I11): a majority-acknowledged write survives any
-  failure that leaves a majority. With RF = 2f+1 that is exactly the
-  configured f nodes, provided the durable-ACK and storage assumptions are
+  failure that leaves a majority. With RF = 2f+1 that tolerates f losses within the
+  Raft failure envelope, provided the durable-ACK and storage assumptions are
   actually satisfied. The production fragment barrier remains [W71](#w71);
   Raft quorum math alone does not certify those writes.
 - **EFS-specific composition is *not* covered by Raft's proof.** RPC dedup,
@@ -6593,15 +6632,17 @@ consult those gates before claiming this contract is implemented.
 [Architecture](#architecture) · [Design rationale](#appendix-6--design-rationale) ·
 [Data protocol](#appendix-9--protocol--data-plane)
 
-The normative rule lives in
-[§2 of the spec](#architecture): **N ≥ max(2f+1, k+f), RF = 2f+1**.
-This document derives it, explains why there is no weaker mode, and
-specifies how f and k change online.
+The normative node-count contract lives in [§2 of the spec](#architecture),
+accepted as D36 on Oct 9: three nodes minimum, four nodes maximum two-loss
+protection, larger clusters for scale. This supersedes the previous f=3 ladder.
+The mathematics below explain a limitation of majority Raft; they must not be
+used to silently replace the accepted four-node requirement with five nodes.
+The required four-node metadata protocol is unresolved and not implemented.
 
 ### The derivation
 
 The two planes scale differently with the configured failure target f
-(max simultaneous *permanent* node losses with no data loss, capped at 3):
+(maximum two simultaneous permanent node losses under D36):
 
 - **Data (EC):** a `k+f` stripe survives any f losses (any k of k+f
   fragments reconstruct). Needs **N ≥ k+f** distinct failure domains.
@@ -6615,12 +6656,12 @@ The two planes scale differently with the configured failure target f
   failure domains, gives Q = f+1 and survival of any f replica losses with
   both properties.
 
-**f=3 needs 7 nodes, not 5 or 6.** On 5 nodes the best metadata
-configuration is RF=5, Q=3, and 3 ≯ 3 — the 3 dead nodes could be exactly
-the quorum that acknowledged the most recent writes. The config validator
-rejects any configuration that violates N ≥ max(2f+1, k+f).
+For f=2, ordinary majority Raft needs five voting failure domains for continued
+authority. D36 requires preservation with four nodes, so selecting a different
+metadata protocol and its safe recovery behavior is mandatory before claiming
+compliance. No extra node or witness is implicitly authorized.
 
-### Why there is no N = 2f mode
+### Why survivor-log merge does not implement the four-node requirement
 
 At N = 2f exactly (e.g. 4 nodes wanting f=2), f permanent losses leave a
 minority of survivors. Every committed entry still has ≥1 surviving copy
@@ -6657,13 +6698,11 @@ a synthesized state-machine history no leader authorized.
 Raft is deliberately majority-based; the paper provides availability only
 while a majority remains, and production systems (e.g. etcd) treat
 permanent quorum loss as disaster recovery, not ordinary log
-reconciliation. EFS therefore does not offer the mode: permanent majority
-loss is **disaster territory** (an operator procedure over surviving state),
-not an efs operating mode. If a 4-node/f=2-style disaster-survivability
-guarantee is ever genuinely needed, it is designed as a separate protocol
-with its own proof — not bolted onto Raft by prose.
+reconciliation. This rules out the former survivor-log-merge recipe, not D36.
+Four-node/two-loss preservation is now required and needs a separately proved
+metadata protocol. Current Raft cannot advertise that guarantee.
 
-### Changing f or k online
+### Profile migration obligations (metadata recipe needs D36 review)
 
 The cluster carries `effective_f` (the guarantee currently in force) and,
 during a change, `target_f`. Raising f:
@@ -6751,8 +6790,9 @@ every chunk it re-encoded would corrupt every incremental-backup and
 `make`-style workflow on the system while reporting success. The same rule
 applies to repair/rebuild. Both are placement changes, not reformats. EC stripe
 width k is independently configurable (wider k on larger clusters trades
-encode CPU for storage efficiency, e.g. 4+3 = 1.75× overhead instead of
-2+3 = 2.5×); the binding constraint is always N ≥ max(2f+1, k+f).
+encode CPU for storage efficiency. The default remains 2+2 above four nodes;
+a wider profile is not an accepted default. Data placement needs k+f distinct
+domains; the metadata mechanism must independently meet D36.
 
 ### Degraded operation
 
@@ -7034,12 +7074,13 @@ This is where "scales with raw hardware" is won or lost. The mechanism
 (client-direct RDMA, EC) is unchanged from the current implementation; what
 this protocol adds is a precise commit and concurrency protocol.
 
-**Erasure coding is k+f, matched to the failure target.** The stripe is k
-data + f parity fragments on k+f distinct nodes, where f is the configured
-failure target ([§2 of the spec](#architecture)): 2+1 at f=1, 2+2 at
-f=2, 2+3 at f=3 (storage overhead 1.5×/2×/2.5×). k=2 is the minimal-width
-default; larger clusters may widen k (e.g. 4+3 = 1.75×) to trade encode CPU
-for capacity. Any k fragments reconstruct the chunk, so reads survive any f
+**Default coding follows D36's node-count contract.** Three nodes use 2+1;
+four and larger clusters default to 2+2. The maximum protection target is two
+node losses. Larger clusters add scale, not an automatic f=3 profile. Fragments
+must occupy distinct node failure domains. Current production code is fixed
+2+1; 2+2 and its repair/cutover gates remain W74 implementation work. Data coding
+alone does not establish the required metadata preservation (§2 of the spec).
+Any k fragments reconstruct the chunk, so reads survive any f
 losses by construction. Writes place all k+f fragments; while nodes are
 down, a write that cannot place its full stripe either blocks on repair or
 commits a degraded stripe that is explicitly queued for re-striping — never
@@ -9171,6 +9212,16 @@ or distributed storage protocol.
 
 *Source: `how-it-works/developing.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: normative protocol.**
 
+**Accepted deployment contract (D36, Oct 9):** three nodes are the minimum;
+four nodes provide the maximum two-node-loss safety target; additional nodes
+scale volume and performance across all dimensions. Today's fixed 2+1 data and
+three-voter metadata groups do not implement that four-node guarantee. See
+[binding requirement and implementation gates](../status/node-count-protection-20261009.md); preserve the requirement
+rather than deriving the design from current code.
+
+[Architecture](#architecture) · [Status](#appendix-1--status--the-task-right-now-and-the-work-queue) ·
+[Verification](#appendix-14--verification--simulator--codesignal-cycle) · [Parked ideas](../backlog/ideas.md)
+
 > Looking for something to do rather than a principle to follow?
 > [The status page](#appendix-1--status--the-task-right-now-and-the-work-queue) turns this page's bar into a task list: the
 > current task, which pages govern a given change, and what "done" means.
@@ -9689,6 +9740,17 @@ measurement. Corrected historical samples are retained without replacing origina
 ## Appendix 15 — Design history (review rounds)
 
 *Source: `archive/design-history.md` (headers demoted, nav stripped, links rebased to `docs/how-it-works/`).* **Authority: historical evidence.**
+
+> **Historical, superseded in node-count policy by D36 (Oct 9, 2026).** The
+> user reaffirmed three-node minimum, four-node maximum two-loss safety and
+> larger clusters for scale. Round 6's unsafe-merge finding remains valid, but
+> its revised protection ladder no longer governs the accepted requirement.
+> See [current architecture §2](#architecture) and
+> [D36](../status/node-count-protection-20261009.md).
+
+## Design history
+
+[Architecture](#architecture)
 
 The normative specification is [architecture.md](#architecture). It
 states rules without narrating their discovery. This note records how it got

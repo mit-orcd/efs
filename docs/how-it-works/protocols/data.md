@@ -13,12 +13,13 @@ This is where "scales with raw hardware" is won or lost. The mechanism
 (client-direct RDMA, EC) is unchanged from the current implementation; what
 this protocol adds is a precise commit and concurrency protocol.
 
-**Erasure coding is k+f, matched to the failure target.** The stripe is k
-data + f parity fragments on k+f distinct nodes, where f is the configured
-failure target ([§2 of the spec](../architecture.md)): 2+1 at f=1, 2+2 at
-f=2, 2+3 at f=3 (storage overhead 1.5×/2×/2.5×). k=2 is the minimal-width
-default; larger clusters may widen k (e.g. 4+3 = 1.75×) to trade encode CPU
-for capacity. Any k fragments reconstruct the chunk, so reads survive any f
+**Default coding follows D36's node-count contract.** Three nodes use 2+1;
+four and larger clusters default to 2+2. The maximum protection target is two
+node losses. Larger clusters add scale, not an automatic f=3 profile. Fragments
+must occupy distinct node failure domains. Current production code is fixed
+2+1; 2+2 and its repair/cutover gates remain W74 implementation work. Data coding
+alone does not establish the required metadata preservation (§2 of the spec).
+Any k fragments reconstruct the chunk, so reads survive any f
 losses by construction. Writes place all k+f fragments; while nodes are
 down, a write that cannot place its full stripe either blocks on repair or
 commits a degraded stripe that is explicitly queued for re-striping — never

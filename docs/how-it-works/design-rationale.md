@@ -50,9 +50,14 @@ derivation is correct, not that it was copied.
   according to its assumptions (election restriction, log matching, commit
   rules, safe reconfiguration). Leader completeness (I2) is Raft's theorem,
   not majority intersection alone.
+**D36 overrides the earlier node-count ladder.** Three nodes are minimum; four
+provide the maximum two-loss safety target; larger clusters add scale. Majority
+Raft alone cannot meet the four-node requirement. Its replacement/composition
+proof remains open; never weaken the target to match current implementation.
+
 - **Quorum durability** (I10/I11): a majority-acknowledged write survives any
-  failure that leaves a majority. With RF = 2f+1 that is exactly the
-  configured f nodes, provided the durable-ACK and storage assumptions are
+  failure that leaves a majority. With RF = 2f+1 that tolerates f losses within the
+  Raft failure envelope, provided the durable-ACK and storage assumptions are
   actually satisfied. The production fragment barrier remains [W71](../backlog/work-items.md#w71);
   Raft quorum math alone does not certify those writes.
 - **EFS-specific composition is *not* covered by Raft's proof.** RPC dedup,
