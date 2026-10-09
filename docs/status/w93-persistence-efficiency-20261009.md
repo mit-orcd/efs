@@ -127,6 +127,16 @@ are near baseline, and there is no dedicated live regrouped-frame counter yet.
 Neither experiment has repeatable performance acceptance; both stay default
 off. Rate decay remains and these results do not establish a hardware ceiling.
 
+Next W93 measurement should classify the remaining behind-tail frames into
+fully duplicated requests, verified overlapping prefixes with a new suffix,
+conflicting terms, fresh-read contexts and arrivals without an active cohort.
+The present continuation only admits the fully duplicated/no-new-byte case;
+it does not admit an overlapping prefix followed by new entries. Large
+behind-tail counters therefore do not measure the amount this fix can combine.
+Only after that classification should eligibility be extended to a verified
+overlap/new-suffix case, retaining conflict/truncation, byte/count/admission,
+read freshness and durable ACK gates. No such extension is implemented here.
+
 Frozen-build private TCP/direct recovery suite also passes with both experiments
 enabled: O_SYNC/O_DSYNC and append/fsync visibility before close plus cold crash
 bytes; offline synchronous callback failure retains exact bytes for later fsync;
