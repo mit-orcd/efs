@@ -684,3 +684,19 @@ reclamation/restart and cold namespace/ticket/lease gates pass. Code unchanged
 from the passing full regression run except these live helper assertions.
 Installed AMD service restored; docs5/5. Remaining package is explicitly listed
 above, and D25 / ticketed data-plane activation remains staged.
+
+## REPORT mapping session boundary — implemented/gated
+
+Production REPORT now uses the same full mount UUID/epoch as CREATE/OPEN.
+First-touch touched inode/lane shards register before publication; each new
+Raft REPORT envelope checks every lane's local floor before mapping effects.
+Delta metadata keeps its original bytes. Forwarding now repacks variable-size
+records and preserves flags; malformed/extra suffix bytes are rejected.
+Actual AMD direct/TCP discarded-reply mapping replay, revoked epoch/first-touch
+and cold restart pass. [Evidence](../../results/measure/20261009-report-session/README.md).
+
+This closes the missing mapping-session boundary, not the whole package:
+activation/append-completion effects still need their own serialized guard,
+partial batch results still need per-publication reconciliation, and production
+PUT tickets/storage fences/all-member retirement remain open. Broader fixture
+and regression completion will be recorded at the next checkpoint. D25 staged.

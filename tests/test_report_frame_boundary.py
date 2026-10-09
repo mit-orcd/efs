@@ -9,11 +9,12 @@ code=r'''
 #include <stdlib.h>
 #include <string.h>
 static unsigned allocations,rpcs;static int expired;
+static int efs_client_publication_id(uint64_t seq,struct efs_opid *id){memset(id,0,sizeof(*id));id->client_uuid[0]=9;id->session_epoch=4;id->seq=seq;return EFS_OK;}
 int efs_client_rpc_past_deadline(void){return expired;}
 static void *test_malloc(size_t n){allocations++;assert(n<10000);return malloc(n);}
 #define malloc test_malloc
 static int rpc_status_to_efs(uint8_t s){return s==EFS_INODE_RPC_OK?EFS_OK:EFS_ERR_IO;}
-static int rpc_send_recv_dual(uint8_t type,const void*p,uint32_t n,uint8_t expect,void*out,uint32_t olen,int ms){assert(type==EFS_MSG_REPORT_CHUNKS&&expect==EFS_MSG_REPORT_CHUNKS_REPLY&&olen==sizeof(struct efs_msg_inode_reply)&&ms>0);const struct efs_msg_report_chunks*h=p;rpcs++;assert(n==sizeof(*h)+(size_t)h->count*offsetof(struct efs_chunk_rec,deltas)+(size_t)h->ino_count*sizeof(struct efs_ino_size_rec));((struct efs_msg_inode_reply*)out)->status=EFS_INODE_RPC_OK;return EFS_OK;}
+static int rpc_send_recv_dual(uint8_t type,const void*p,uint32_t n,uint8_t expect,void*out,uint32_t olen,int ms){assert(type==EFS_MSG_REPORT_CHUNKS&&expect==EFS_MSG_REPORT_CHUNKS_REPLY&&olen==sizeof(struct efs_msg_inode_reply)&&ms>0);const struct efs_msg_report_chunks*h=p;rpcs++;assert(n==sizeof(*h)+(size_t)h->count*offsetof(struct efs_chunk_rec,deltas)+(size_t)h->ino_count*sizeof(struct efs_ino_size_rec)+EFS_REPORT_SESSION_LEN);assert(h->sync==(EFS_REPORT_F_SYNC|EFS_REPORT_F_SESSION));struct efs_opid id;assert(efs_report_session_unpack(&id,(const uint8_t*)p+n-EFS_REPORT_SESSION_LEN)&&id.client_uuid[0]==9&&id.session_epoch==4);((struct efs_msg_inode_reply*)out)->status=EFS_INODE_RPC_OK;return EFS_OK;}
 '''+s[a:b]+r'''
 int main(void){struct efs_chunk_rec rec={0};struct efs_ino_size_rec ino={0};
  assert(efs_client_rpc_report_dirty_raft(1,NULL,1,&ino,1,1)==EFS_ERR_INVAL&&!allocations);

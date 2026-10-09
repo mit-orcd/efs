@@ -584,6 +584,11 @@ try:
         edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048
         with edge_path.open('wb') as out:out.write(edge_body);out.flush();os.fsync(out.fileno())
         edge_ino=edge_path.stat().st_ino;edge_uuid=(os.urandom(8)+bytes(8)).hex();edge_results=[]
+        report=work/'client-report-session';report_saved=work/'report-session-packet.bin'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_report_session.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',report])
+        report_result=run([report,str(a.port),str(edge_ino),source/'efs-mgmt',report_saved],capture_output=True,text=True,timeout=180).stdout
+        (work/'report-session-wire.txt').write_text(report_result)
+
         namespace=work/'client-namespace-session';ns_path=mount/'namespace-session-fence';ns_path.mkdir()
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_namespace_session.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',namespace])
         ns_ino=ns_path.stat().st_ino;ns_saved=work/'namespace-session-packets.bin'
@@ -607,6 +612,9 @@ try:
             edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)
         unmount();stop(crash=True);start();mount_client()
         ns_result+=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt','cold',ns_saved],capture_output=True,text=True,timeout=90).stdout
+        report_result+=run([report,str(a.port),str(edge_ino),source/'efs-mgmt','cold',report_saved],capture_output=True,text=True,timeout=90).stdout
+        (work/'report-session-wire.txt').write_text(report_result)
+
         (work/'namespace-session-wire.txt').write_text(ns_result)
         (ns_path/'a').unlink();(ns_path/'still-empty').rmdir();ns_path.rmdir();ns_untouched.rmdir()
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)

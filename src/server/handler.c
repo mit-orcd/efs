@@ -917,6 +917,8 @@ send_reply:
             memset(&r, 0, sizeof(r));
             r.status = EFS_INODE_RPC_ERROR;
             int bad = 0;
+            struct efs_opid session, *identity = NULL;
+            uint32_t flags = 0;
             uint32_t count = 0;
             uint32_t ino_count = 0;
             struct efs_chunk_rec *recs = NULL;
@@ -925,10 +927,20 @@ send_reply:
                 struct efs_msg_report_chunks *req = payload;
                 const uint8_t *raw = (const uint8_t *)payload + sizeof(*req);
                 size_t avail = payload_len - sizeof(*req);
+                flags = req->sync;
+                if (flags & ~(EFS_REPORT_F_SYNC | EFS_REPORT_F_SESSION)) bad = 1;
+                if (flags & EFS_REPORT_F_SESSION) {
+                    if (avail < EFS_REPORT_SESSION_LEN) bad = 1;
+                    else {
+                        avail -= EFS_REPORT_SESSION_LEN;
+                        if (!efs_report_session_unpack(&session, raw + avail)) bad = 1;
+                        else identity = &session;
+                    }
+                }
                 size_t used = 0;
                 ino_count = req->ino_count;
                 count = req->count;
-                if (count > avail / offsetof(struct efs_chunk_rec, deltas))
+                if (bad || count > avail / offsetof(struct efs_chunk_rec, deltas))
                     bad = 1;
                 else if (count > 0)
                     recs = calloc(count, sizeof(*recs));
@@ -940,6 +952,8 @@ send_reply:
                 else if (ino_count >
                          (avail - used) / sizeof(struct efs_ino_size_rec))
                     bad = 1;
+                else if (avail - used != (size_t)ino_count * sizeof(*irecs))
+                    bad = 1;
                 else if (ino_count)
                     irecs = (const struct efs_ino_size_rec *)(raw + used);
             } else {
@@ -949,7 +963,7 @@ send_reply:
                 if (bad)
                     r.status = EFS_INODE_RPC_INVAL;
                 else
-                    server_raft_host_report(recs, count, irecs, ino_count, &r);
+                    server_raft_host_report(recs, count, irecs, ino_count, flags, identity, &r);
             }
             efs_conn_send_msg(conn, EFS_MSG_REPORT_CHUNKS_REPLY, &r,
                               sizeof(r));

@@ -15,6 +15,9 @@
  * next batch. Historical LANE_SWEEP retains whole-lane replay semantics. */
 /* W86: [tag:1][immutable ticket:216]. STATUS is ReadIndex-only; ADMIT
  * is serialized apply. Reply salt is ticket state, never permission to PUT. */
+/* REPORT envelope: [tag][uuid:16][epoch:4][legacy PUBLISH:202]*N.
+ * Fences every mapping at serialized apply without reusing delta fields. */
+#define EFS_MD_CMD_REPORT_PUBLISH 41
 #define EFS_MD_CMD_PUT_TICKET_ADMIT 39
 #define EFS_MD_REQ_PUT_TICKET_STATUS 40
 #define EFS_MD_REQ_SESSION_APPEND_NEXT 38 /* RPC only: [uuid:16][epoch:4][shard:4] */

@@ -112,6 +112,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
  * 72 KiB RDMA recv made the 9-client dd wall worse (more proposals).
  * Report fsyncs are amortized by efs_raft_disk_sync_hold around the
  * pack/push loop. */
+#define HOST_REPORT_PREFIX_LEN (1u + EFS_REPORT_SESSION_LEN)
 #define HOST_PUB_BATCH_N   2048u
 #define HOST_PUB_F_LANE_LOCAL 1
 #define HOST_PUB_F_FRESH_OBJECT 2
@@ -2197,6 +2198,47 @@ static int apply_one_publish(struct efs_raft_host *h, const uint8_t *cmd,
     return rc;
 }
 
+/* Validate the entire envelope before applying any record. Every publication
+ * checks its lane floor at apply, including exact replay/no-op mappings. */
+static int apply_report_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
+                                    uint32_t clen, uint8_t group)
+{
+    if (clen <= HOST_REPORT_PREFIX_LEN ||
+        (clen - HOST_REPORT_PREFIX_LEN) % HOST_PUBLISH_LEN)
+        return EFS_ERR_PROTO;
+    struct efs_opid session;
+    if (!efs_report_session_unpack(&session, cmd + 1)) return EFS_ERR_INVAL;
+    for (uint32_t off = HOST_REPORT_PREFIX_LEN; off < clen; off += HOST_PUBLISH_LEN) {
+        if (cmd[off] != EFS_MD_CMD_PUBLISH) return EFS_ERR_PROTO;
+        uint32_t shard = efs_kv_lane_shard(rd64be(cmd + off + 1),
+                            rd32be(cmd + off + 9) % EFS_META_LANES);
+        if (efs_raft_shard_group(shard) != group) return EFS_ERR_INVAL;
+        int rc = efs_session_accept(h->kv, shard, session.client_uuid, session.session_epoch);
+        if (rc != EFS_OK) return rc;
+    }
+    int result = EFS_OK;
+    int held = clen - HOST_REPORT_PREFIX_LEN >= 2u * HOST_PUBLISH_LEN;
+    if (held) {
+        int rc = efs_kv_lsm_sync_hold(h->kv);
+        if (rc != EFS_OK) return rc;
+    }
+    for (uint32_t off = HOST_REPORT_PREFIX_LEN; off < clen; off += HOST_PUBLISH_LEN) {
+        struct efs_meta_pub p;
+        unpack_publication(cmd + off, &p, 0, 0, group);
+        int rc = efs_meta_apply_publish(h->kv, &p);
+        /* Only a deleted inode is an historical publication no-op. Missing
+         * participant floors were already rejected, rather than swallowed. */
+        if (rc == EFS_ERR_NOT_FOUND) rc = EFS_OK;
+        if (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM) { result = rc; break; }
+        if (result == EFS_OK && rc != EFS_OK) result = rc;
+    }
+    if (held) {
+        int rc = efs_kv_lsm_sync_release(h->kv);
+        if (rc != EFS_OK) return rc;
+    }
+    return result;
+}
+
 static int apply_publish_cmd(struct efs_raft_host *h, const uint8_t *cmd,
                              uint32_t clen, uint64_t index, uint64_t term, uint8_t group)
 {
@@ -2419,6 +2461,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
            cmd[0] == EFS_MD_CMD_APPEND_RES ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
+           cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
            cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
            cmd[0] == EFS_MD_CMD_LOCK ||
@@ -2449,6 +2492,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES || cmd[0] == EFS_MD_CMD_PUT_TICKET_ADMIT ||
+         cmd[0] == EFS_MD_CMD_REPORT_PUBLISH ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN) ||
          (cmd[0] == EFS_MD_CMD_LOCK && clen >= HOST_LOCK_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
@@ -2787,6 +2831,8 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
             return EFS_ERR_INVAL;
         return efs_put_ticket_admit(h->kv,&ticket);
     }
+    if (cmd[0] == EFS_MD_CMD_REPORT_PUBLISH)
+        return apply_report_publish_cmd(h, cmd, clen, group);
     if (cmd[0] == EFS_MD_CMD_PUBLISH)
         return apply_publish_cmd(h, cmd, clen, index, term, group);
     if (cmd[0] == EFS_MD_CMD_SETATTR)
@@ -4608,7 +4654,7 @@ static void host_fwd_getchunks(struct efs_raft_host *h, efs_export_id_t export_i
 static void host_fwd_report(struct efs_raft_host *h,
                             const struct efs_chunk_rec *recs, uint32_t count,
                             const struct efs_ino_size_rec *irecs,
-                            uint32_t ino_count,
+                            uint32_t ino_count, uint32_t flags, const struct efs_opid *session,
                             struct efs_msg_inode_reply *out,
                             const uint8_t *groups, int ng)
 {
@@ -4617,21 +4663,48 @@ static void host_fwd_report(struct efs_raft_host *h,
     size_t blen;
     int tries, rid, skip = -1;
 
-    blen = sizeof(*hdr) + (size_t)count * sizeof(*recs) +
-           (size_t)ino_count * sizeof(*irecs);
-    buf = malloc(blen);
     memset(out, 0, sizeof(*out));
-    out->status = EFS_INODE_RPC_NOT_PRIMARY;
-    if (!buf)
+    out->status = EFS_INODE_RPC_INVAL;
+    const size_t limit = EFS_MSG_MAX_LEN - 1u;
+    blen = sizeof(*hdr) + (session ? EFS_REPORT_SESSION_LEN : 0u);
+    if ((count && !recs) || (ino_count && !irecs) ||
+        ino_count > (limit - blen) / sizeof(*irecs))
         return;
+    blen += (size_t)ino_count * sizeof(*irecs);
+    if (count > (limit - blen) / offsetof(struct efs_chunk_rec, deltas))
+        return;
+    for (uint32_t i = 0; i < count; i++) {
+        if (recs[i].delta_base_n > EFS_CHUNK_DELTA_MAX)
+            return;
+        size_t bytes = efs_chunk_rec_wire_size(&recs[i]);
+        if (bytes > limit - blen)
+            return;
+        blen += bytes;
+    }
+    buf = malloc(blen);
+    if (!buf) {
+        out->status = EFS_INODE_RPC_ERROR;
+        return;
+    }
     hdr = (struct efs_msg_report_chunks *)buf;
     memset(hdr, 0, sizeof(*hdr));
     hdr->count = count;
     hdr->ino_count = ino_count;
-    memcpy(buf + sizeof(*hdr), recs, (size_t)count * sizeof(*recs));
-    if (ino_count && irecs)
-        memcpy(buf + sizeof(*hdr) + (size_t)count * sizeof(*recs), irecs,
-               (size_t)ino_count * sizeof(*irecs));
+    hdr->sync = flags;
+    uint8_t *p = buf + sizeof(*hdr);
+    for (uint32_t i = 0; i < count; i++) {
+        size_t n = efs_chunk_rec_pack(p, blen - (size_t)(p - buf), &recs[i]);
+        if (!n) {
+            free(buf);
+            return;
+        }
+        p += n;
+    }
+    if (ino_count)
+        memcpy(p, irecs, (size_t)ino_count * sizeof(*irecs));
+    p += (size_t)ino_count * sizeof(*irecs);
+    if (session) efs_report_session_pack(p, session);
+    out->status = EFS_INODE_RPC_NOT_PRIMARY;
     for (tries = 0; tries < h->n; tries++) {
         rid = host_pick_peer(h, groups, ng, skip);
         if (rid < 0)
@@ -14191,6 +14264,7 @@ static int host_pub_pack(struct efs_raft_host *h, const struct efs_chunk_rec *re
  * `overflow` (alloc failure) makes the wait answer STALE, never OK. */
 struct host_pub_batch {
     uint8_t group;
+    const struct efs_opid *session;
     uint32_t len;
     uint8_t *buf;
     uint64_t last_idx;
@@ -14228,7 +14302,12 @@ static int host_pub_batch_propose(struct efs_raft_host *h, struct host_pub_batch
     if (h->kv && efs_kv_lsm_l0_hot(h->kv))
         return EFS_ERR_BUSY;
     b->t0 = now_us_();
-    rc = host_propose(h, b->group, b->buf, b->len, &idx, &term, hint);
+    uint32_t prefix = b->session ? HOST_REPORT_PREFIX_LEN : 0u;
+    if (prefix) {
+        b->buf[0] = EFS_MD_CMD_REPORT_PUBLISH;
+        efs_report_session_pack(b->buf + 1, b->session);
+    }
+    rc = host_propose(h, b->group, b->buf, b->len + prefix, &idx, &term, hint);
     b->len = 0;
     if (rc != EFS_OK)
         return rc;
@@ -14266,7 +14345,7 @@ static int host_pub_batch_push(struct efs_raft_host *h, struct host_pub_batch *b
     if (clen == 0)
         return EFS_OK;
     if (!b->buf) {
-        b->buf = malloc((size_t)HOST_PUBLISH_LEN * HOST_PUB_BATCH_N);
+        b->buf = malloc(HOST_REPORT_PREFIX_LEN + (size_t)HOST_PUBLISH_LEN * HOST_PUB_BATCH_N);
         if (!b->buf)
             return EFS_ERR_NOMEM;
         b->len = 0;
@@ -14281,7 +14360,7 @@ static int host_pub_batch_push(struct efs_raft_host *h, struct host_pub_batch *b
             return rc;
     }
     b->group = group;
-    memcpy(b->buf + b->len, cmd, clen);
+    memcpy(b->buf + (b->session ? HOST_REPORT_PREFIX_LEN : 0u) + b->len, cmd, clen);
     b->len += clen;
     return EFS_OK;
 }
@@ -14364,7 +14443,8 @@ static int host_pub_batch_wait(struct efs_raft_host *h, struct host_pub_batch *b
 
 void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
                              const struct efs_ino_size_rec *irecs,
-                             uint32_t ino_count, struct efs_msg_inode_reply *out)
+                             uint32_t ino_count, uint32_t flags, const struct efs_opid *session,
+                             struct efs_msg_inode_reply *out)
 {
     struct efs_raft_host *h = g_host;
     uint32_t i, j;
@@ -14375,6 +14455,12 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running) {
+        out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if ((flags & ~(EFS_REPORT_F_SYNC | EFS_REPORT_F_SESSION)) ||
+        (!!session != !!(flags & EFS_REPORT_F_SESSION)) ||
+        (session && !efs_report_session_valid(session))) {
         out->status = EFS_INODE_RPC_INVAL;
         return;
     }
@@ -14416,7 +14502,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
     }
     for (i = 0; i < (uint32_t)nn; i++) {
         if (!host_hosts(h, need[i])) {
-            host_fwd_report(h, recs, count, irecs, ino_count, out,
+            host_fwd_report(h, recs, count, irecs, ino_count, flags, session, out,
                             need, nn);
             return;
         }
@@ -14426,6 +14512,28 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
      * end_fsync (16k chunks) as EFS_ERR_NET. */
     for (i = 0; i < (uint32_t)nn && rc == EFS_OK; i++)
         rc = host_read_index(h, need[i], &hint);
+    /* Register first-touch participants before lane activation or publication.
+     * Existing floors are checked under the group ReadIndex above; no quorum
+     * round per chunk. Missing local state is never authority to resurrect. */
+    if (session && rc == EFS_OK) {
+        uint8_t seen[EFS_SESSION_BITS / 8] = {0};
+        struct efs_opid_req q = {.id = *session};
+        q.id.seq = 1; q.ack = 0;
+        for (i = 0; i < count && rc == EFS_OK; i++) {
+            uint32_t shards[2] = {efs_kv_inode_shard(recs[i].ino),
+                efs_kv_lane_shard(recs[i].ino, recs[i].chunk_index % EFS_META_LANES)};
+            for (unsigned k = 0; k < 2 && rc == EFS_OK; k++) {
+                uint32_t shard = shards[k];
+                if (shard >= EFS_SESSION_BITS) { rc = EFS_ERR_INVAL; break; }
+                if (seen[shard / 8] & (1u << (shard % 8))) continue;
+                seen[shard / 8] |= (uint8_t)(1u << (shard % 8));
+                rc = efs_session_accept(h->kv, shard, session->client_uuid,
+                                        session->session_epoch);
+                if (rc == EFS_ERR_BUSY || rc == EFS_ERR_NOT_FOUND)
+                    rc = host_namespace_session_admit(h, shard, &q, &hint);
+            }
+        }
+    }
     {
         efs_ino_t uino[32];
         uint64_t usz[32];
@@ -14450,6 +14558,7 @@ void server_raft_host_report(const struct efs_chunk_rec *recs, uint32_t count,
         int fail_rc = 0;
 
         memset(bat, 0, sizeof(bat));
+        for (unsigned n = 0; n < HOST_NGROUPS; n++) bat[n].session = session;
         memset(ic, 0, sizeof(ic));
         /* One get_inode per ino, then one ACTIVATE_LANE mask per ino
          * (was up to 64 propose_wait rounds on a new file). */
