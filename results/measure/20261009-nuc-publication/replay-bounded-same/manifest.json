@@ -1,0 +1,13 @@
+{
+  "mode": "direct",
+  "transport": "tcp",
+  "cross_group": false,
+  "source": "/data1/efs/agent4-publication-20261008/src",
+  "probe_source_sha256": "0afc9591aaf3612453a6cc5be9418f9276059359a49d3176fd70b3c0ac969cd3",
+  "binary_sha256": {
+    "efsd": "3170b2105efc70e748ec8f0e229a3f685d2d820c1a9d9e7b90edecc002dff618",
+    "efs-fuse": "9977cff4d20ff02db2826138fcc70ce06b3053b4f5470554c065dc401ef85688",
+    "efs-mgmt": "bd3e02114df74823e0e31de34f337efb90c71d1f02f55c6c6c4fc6250410de24",
+    "libefs.a": "6a3b2cf70d7b264f9fc98edbb0d6c1bcbd6e3c49c6fc3195451d13ae804db166"
+  }
+}

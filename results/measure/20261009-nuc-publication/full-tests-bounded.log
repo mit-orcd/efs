@@ -1,0 +1,293 @@
+./tests/test_store_containers
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: retained old extent after punch/sync failure
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+storage-engine: incompatible, busy or corrupt root; refusing startup
+containers: buffered/direct, multi-root, quota, same-range concurrency, conditional/inode GC, restart, crash boundaries and corruption PASS
+python3 tests/test_lookup_errno.py
+FUSE LOOKUP: IO/network/quorum errors stay IO, BUSY/memory/access preserved, only actual absence ENOENT PASS
+python3 tests/test_fuse_open_reply.py
+FUSE CREATE/OPEN: rejected replies and failed reply construction release exactly once PASS
+python3 tests/test_lookup_replacement.py
+LOOKUP replacement: missing captured inode retryable locally and forwarded; true absence and IO preserved PASS
+python3 tests/test_w23_samples.py
+.....
+----------------------------------------------------------------------
+Ran 5 tests in 0.001s
+
+OK
+python3 tests/test_read_verify.py
+parallel GET: valid zero/nonzero and corrupt zero/nonzero replies PASS
+python3 tests/test_opid_admission.py
+512 simultaneous production identity owners: unique slots/sequences, saturation refuses four mutations, released admission recovers PASS
+namespace opid saturation: four mutations send nothing, released admission keeps watermark, sequence overflow refused PASS
+python3 tests/test_server_processes.py
+Invalid PID record /tmp/efs-owner-0k17k01s/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-0k17k01s/store (if any)
+Invalid PID record /tmp/efs-owner-0k17k01s/store/log/efsd.pid; no process signaled
+Stopped efsd for storage /tmp/efs-owner-0k17k01s/store (if any)
+Stale daemon identity for PID 1243591; process retained
+Stopped efsd for storage /tmp/efs-owner-0k17k01s/store (if any)
+Stale daemon identity for PID 1243592; process retained
+Stopped efsd for storage /tmp/efs-owner-0k17k01s/store (if any)
+Stale daemon identity for PID 1243592; process retained
+Stopped efsd for storage /tmp/efs-owner-0k17k01s/other (if any)
+Stopping owned efsd PID 1243592 (storage /tmp/efs-owner-0k17k01s/store)
+Stopped efsd for storage /tmp/efs-owner-0k17k01s/store (if any)
+Stale daemon identity for PID 1243852; process retained
+Stale daemon identity for PID 1243591; process retained
+Stopping owned perf PID 1243852 (perf /tmp/efs-owner-0k17k01s/efsd.data)
+perf wrapper: unrelated/wrong-output processes retained; owned recorder flushed with SIGINT PASS
+server wrapper: invalid/reused/wrong-storage/stale-start PIDs retained; matching daemon gracefully stopped PASS
+python3 tests/test_mgmt_session_routing.py
+management session routing: advertised leader, exact retries, bounded loop and ambiguous transport PASS
+python3 tests/test_session_admission.py
+session ESTABLISH: authoritative ACTIVE/REGISTER, fencing, routes and failed reads PASS
+python3 tests/test_publication_host.py
+publication host: lane-only authority, apply-ring loss, terminal recovery and unknown PASS
+python3 tests/test_txn_read_authority.py
+transaction coordinator: failed quorum authority never becomes decision absence PASS
+python3 tests/test_publication_rpc.py
+publication RPC: exact identity, lane routing, redirects, bounded retries, unknown and lost reply PASS
+python3 tests/test_publication_session_rpc.py
+publication session RPC: ordered admission, redirects, bounded retries, ambiguity, fences and deadline PASS
+python3 tests/test_bench_cli.py
+benchmark CLI: ownership, parsing and scratch protection PASS
+python3 tests/test_bench_profile.py
+.Generating reports for 5 profiles, up to 2 parallel jobs
+[reports 1/5] 0: OK
+[reports 2/5] 1: OK
+[reports 3/5] 2: OK
+[reports 4/5] 3: OK
+[reports 5/5] 4: OK
+....Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: FAIL
+[reports 2/2] data-buffered-w0-qd1: FAIL
+Results and analysis: /tmp/profile test wt9686fk/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-buffered-w0-qd1: OK
+[reports 2/2] data-direct-w0-qd1: OK
+Results and analysis: /tmp/profile test mxzqf0bm/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+..Reports unavailable: missing: perf.data missing
+Generating reports for 0 profiles, up to 4 parallel jobs
+.......Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+[1/2] data-buffered-w0-qd1
+[2/2] data-direct-w0-qd1
+Generating reports for 2 profiles, up to 4 parallel jobs
+[reports 1/2] data-direct-w0-qd1: FAIL
+[reports 2/2] data-buffered-w0-qd1: FAIL
+Results and analysis: /tmp/profile test fstcooz4/output/ANALYSIS.md
+Storage coverage: one location; supply --storage-root twice for multi-location comparisons
+....
+----------------------------------------------------------------------
+Ran 20 tests in 2.988s
+
+OK
+Results and analysis: /tmp/tmp9dokvdkx/ANALYSIS.md
+./tests/test_principles_index
+indexed principles: 18 crash points, conditional identity, 4800 churn operations, cold bytes/quota/physical GC and corrupt-evidence refusal PASS
+./tests/test_principles_index_fault
+indexed fault gates: four publication barriers, ten short-write/ENOSPC boundaries, sticky failure, read-only recovery, inventory errors and GC-sync failure PASS
+python3 tests/test_storage_principles.py
+.............
+----------------------------------------------------------------------
+Ran 13 tests in 3.253s
+
+OK
+python3 tests/test_bench_ranges.py
+...
+----------------------------------------------------------------------
+Ran 3 tests in 0.003s
+
+OK
+python3 tests/test_storage_ranges.py
+......
+----------------------------------------------------------------------
+Ran 6 tests in 4.927s
+
+OK
+python3 tests/test_storage_churn.py
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 66.159s
+
+OK
+python3 tests/test_bench_churn.py
+........
+----------------------------------------------------------------------
+Ran 8 tests in 0.163s
+
+OK
+python3 docs/check-architecture.py
+ok    regen-diff: architecture-full.md + architecture.html are current
+ok    links: every internal link resolves
+ok    invariant-refs: I-references name §4 invariants
+ok    op-matrix-sections: §6 names existing sections
+ok    single-home: normative tables / invariants / formulas defined once
+
+architecture doc gate: all 5 checks passed
+make test-fence-read
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+python3 tests/test_fence_read.py
+fence reads: mixed ages, dead-object skips, refresh failure, view keys and wire validation PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-fence-view
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+./tests/test_fence_view
+fence view: example, history bound, validation, 20000 model operations PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-dirty-ranges
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+dirty ranges: mixed epochs, overlap/split, bounded admission, stale ACK and 50000-step byte model PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-writer-ranges
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+writer ranges: FileID admission, coherent planning, fence clipping and exact ACK PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-wb-recovery
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+writeback recovery: sticky errors, partial resolution, progress and captured epoch PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-wb-runtime
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+python3 tests/test_wb_runtime.py
+publish-stalled ino=42 ci=0 gen=7 epoch=2 spans=1 cycles=8
+publish-stalled ino=42 ci=1 gen=7 epoch=2 spans=1 cycles=8
+publish-contention ino=42 ci=2 cycles=256 gen=263 epoch=2 spans=1
+publish-contention ino=42 ci=2 cycles=512 gen=519 epoch=2 spans=1
+publish-contention ino=42 ci=2 cycles=768 gen=775 epoch=2 spans=1
+D27 runtime: sent snapshots, contention, mutations, sticky descriptions and partial recovery PASS
+python3 tests/test_wb_fault.py
+WITHHOLD: outgoing omission, retained snapshot, runtime disable and production exclusion PASS
+WITHHOLD: outgoing omission, retained snapshot, runtime disable and production exclusion PASS
+python3 tests/test_stale_recovery.py
+report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+report-stale: chunks=2 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=0
+STALE recovery: authoritative pull, absence, retained failures, dedupe and prefix ACK PASS
+python3 tests/test_replay_fan_budget.py
+STALE replay fanout: inherited deadline, expired admission, mid-run stop and prior-error retention PASS
+python3 tests/test_pull_deadline.py
+GETCHUNKS fan-out: inherited deadline and caller TLS restoration PASS
+python3 tests/test_pull_group_boundary.py
+GETCHUNKS grouping: final uint32 group, serial/fanout and partial tail PASS
+python3 tests/test_read_ahead_boundary.py
+Read lookahead: final uint32 range, covered extension and failed pull retry PASS
+python3 tests/test_getchunks_budget.py
+GETCHUNKS RPC: whole retry budget, output retention and receive-payload cleanup PASS
+python3 tests/test_metadata_retry_budget.py
+inode-rpc: retry type=47 attempt=0 why=no-hint from=1
+inode-rpc: retry type=47 attempt=0 why=recv rc=1
+inode-rpc: retry type=47 attempt=0 why=send
+inode-rpc: retry type=47 attempt=0 why=recv rc=1 req_len=0 recv_ms=100
+metadata retries: shard/dual budgets, STALE/BUSY/hints, failed payload cleanup and late-output retention PASS
+python3 tests/test_inode_writer_view_budget.py
+inode writer view: expired admission, bounded BUSY, late authority rejection and reply ownership PASS
+python3 tests/test_readdir_reply_boundary.py
+readdir reply: count/cursor limits, output retention, late admission and failed buffer cleanup PASS
+python3 tests/test_report_frame_boundary.py
+REPORT frame: pointer/count/delta/wire bounds, expired admission and normal framing PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-stop-control
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+stop control: clean drain, refusal, live-job timeout, mutation gate, force and cleanup PASS
+python3 tests/test_client_stop.py
+client stop: preflight refusal, no implicit lazy detach, resume and explicit force PASS
+python3 tests/test_client_ready.py
+client startup: immediate/late readiness, bounded exhaustion and detach PASS
+python3 tests/test_stop_dirty_drain.py
+stop-refused: unresolved writes remain; mount retained
+stop-refused: unresolved writes remain; mount retained
+force-discard REPORT pending=0 inflight=1 cause=explicit-stop-force-discard
+stop dirty drain: partial bodies, bounded pages, duplicate inodes, unlocked I/O, failures and deadline PASS
+stop drain: detached REPORT ownership, unresolved body refusal and deadline restoration PASS
+python3 tests/test_client_processes.py
+Retiring drained efs-fuse PID 1257254 for /tmp/efs-process-owner-ps__csrr/mount
+client processes: detached discovery and ambiguous command refusal PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-lookup-memo
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+python3 tests/test_lookup_memo.py
+lookup memo: mutation callbacks, errors, overlap, stale RPC, TTL and read-only hits PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-fold-observation
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+python3 tests/test_fold_observation.py
+fold observation: peer bytes, tombstones, PUT races, chain-full fallback and failures PASS
+python3 tests/test_load_merge_race.py
+load merge: pending PUT, retained pin and dirty ownership survive late loaders PASS
+python3 tests/test_writer_fence_merge.py
+writer fence merge: pipeline/direct masks, absent CAS, failure retention and full overwrite PASS
+python3 tests/test_writer_view_rpc.py
+writer view RPC: redirects, bounded BUSY, malformed replies and failure retention PASS
+python3 tests/test_lane_writer_view_rpc.py
+lane writer RPC: lane routing, geometry, redirects, bounded BUSY, malformed replies and failure retention PASS
+python3 tests/test_lane_writer_host.py
+lane host: one ReadIndex, no inode group, single-group forwarding and cold absence PASS
+python3 tests/test_lane_bootstrap_rpc.py
+cold bootstrap RPC: inode routing, export, geometry, redirects, bounded BUSY, malformed replies and failure retention PASS
+python3 tests/test_lane_bootstrap_host.py
+cold bootstrap host: configured export geometry, exact FileID, bounded forwarding and failure propagation PASS
+python3 tests/test_writer_admission_rpc.py
+writer admission: warm lane-only path, cold absence only, no fallback on errors and immutable failure output PASS
+python3 tests/test_writer_deadline.py
+writer retry deadline: inherited budget, exact short clamp, expired refusal and bounded unlimited backoff PASS
+python3 tests/test_truncate_admission.py
+truncate admission: failed flush, access error, nested budget and expired refusal PASS
+python3 tests/test_truncate_prefix.py
+truncate prefix: failed/short read and failed publication refuse size mutation PASS
+python3 tests/test_span_selection.py
+span selection: partial overlap folds, disjoint and local unpublished ranges preserved PASS
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make test-create-errors
+make[1]: Entering directory '/data1/efs/agent4-publication-20261008/src'
+python3 tests/test_kv_wal_faults.py
+WAL sticky failures and reopen recovery PASS
+python3 tests/test_create_errors.py
+request-local create errors: concurrent BUSY/quota/success and lookup errors PASS
+python3 tests/test_create_retry_identity.py
+inode-rpc: retry type=45 attempt=0 why=send
+inode-rpc: retry type=45 attempt=0 why=send
+inode-rpc: retry type=45 attempt=0 why=recv rc=-1
+inode-rpc: retry type=45 attempt=0 why=recv rc=-1
+CREATE retry identity: send/recv loss, BUSY, leader redirect, real EEXIST and exhausted BUSY for files/directories PASS
+python3 tests/test_create_retry_ack.py
+CREATE retry ACK: full durable cache, pinned old operation, same identity, no self-ACK and replay recovery PASS
+python3 tests/test_open_lease.py
+open leases: shared opens, failed HOLD, acquire/release serialization PASS
+python3 tests/test_unlink_verdict.py
+simple unlink: rejected apply, term mismatch, overwritten verdict and forwarding PASS
+python3 tests/test_gc_verdict.py
+/usr/bin/ld: /tmp/ccG9xpyr.o: in function `apply_lane_sweep_cmd':
+test.c:(.text+0x4fb): undefined reference to `efs_meta_apply_lane_sweep_batch'
+collect2: error: ld returned 1 exit status
+Traceback (most recent call last):
+  File "/data1/efs/agent4-publication-20261008/src/tests/test_gc_verdict.py", line 82, in <module>
+    subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),str(path),'-o',str(path.with_suffix(''))],check=True)
+  File "/usr/lib64/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['cc', '-std=gnu11', '-Wall', '-Wextra', '-Werror', '-pthread', '-I/data1/efs/agent4-publication-20261008/src/include', '/tmp/efs-gc-verdict-wy43s1ou/test.c', '-o', '/tmp/efs-gc-verdict-wy43s1ou/test']' returned non-zero exit status 1.
+make[1]: *** [Makefile:189: test-create-errors] Error 1
+make[1]: Leaving directory '/data1/efs/agent4-publication-20261008/src'
+make: *** [Makefile:315: test] Error 2

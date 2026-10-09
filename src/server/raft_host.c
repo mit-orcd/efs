@@ -1588,7 +1588,15 @@ static int apply_lane_sweep_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     if (clen < 18)
         return EFS_ERR_PROTO;
     ino = rd64be(cmd + 1);
-    rc = efs_meta_apply_lane_sweep(h->kv, ino, rd64be(cmd + 9), cmd[17]);
+    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH) {
+        uint32_t indices[EFS_META_SWEEP_BATCH_MAX];
+        if (clen < 19 || cmd[18] > EFS_META_SWEEP_BATCH_MAX ||
+            clen != 19u + 4u * cmd[18]) return EFS_ERR_PROTO;
+        for (uint32_t i=0; i<cmd[18]; i++) indices[i]=rd32be(cmd+19+4*i);
+        rc=efs_meta_apply_lane_sweep_batch(h->kv,ino,rd64be(cmd+9),cmd[17],indices,cmd[18]);
+    } else {
+        rc = efs_meta_apply_lane_sweep(h->kv, ino, rd64be(cmd + 9), cmd[17]);
+    }
     if (rc != EFS_OK)
         fprintf(stderr, "raft-host: apply lane-sweep rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
@@ -2326,6 +2334,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
            cmd[0] == EFS_MD_CMD_LANE_FENCE ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
+           cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
            cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP)
               ? EFS_OK
@@ -2338,6 +2347,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     /* Storage failure must retry this entry on every replica, rather than
      * advance a follower past cleanup it did not durably perform. */
     if ((cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
+           cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CREATE ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN)) &&
@@ -2693,7 +2703,7 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_session_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_LOCK)
         return apply_lock_cmd(h, cmd, clen, index);
-    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP)
+    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH)
         return apply_lane_sweep_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP) {
         if(clen!=17)return EFS_ERR_PROTO;
@@ -3582,7 +3592,8 @@ static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
     if (!cmd || !n || n > (256u<<10)) return 0;
     switch (cmd[0]) {
     case EFS_MD_CMD_DECIDE: case EFS_MD_CMD_RESOLVE: case EFS_MD_CMD_DROP:
-    case EFS_MD_CMD_LANE_SWEEP: case EFS_MD_CMD_REAP_DONE:
+    case EFS_MD_CMD_LANE_SWEEP: case EFS_MD_CMD_LANE_SWEEP_BATCH:
+    case EFS_MD_CMD_REAP_DONE:
     case EFS_MD_CMD_GC_ACK: case EFS_MD_CMD_PUBLICATION_RETIRE:
         return 1;
     default: return 0;
@@ -6261,8 +6272,8 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen)
 {
     int rc = host_bg_propose(h, group, cmd, clen, 1);
-    if (rc != EFS_OK) {
-        uint64_t *counter = cmd[0] == EFS_MD_CMD_LANE_SWEEP ? &h->s->gc_sweep_errors :
+    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH)) {
+        uint64_t *counter = (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH) ? &h->s->gc_sweep_errors :
                             (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_ORPHAN_REAP) ? &h->s->gc_reap_errors :
                             &h->s->gc_ack_errors;
         __atomic_fetch_add(counter, 1, __ATOMIC_RELAXED);
@@ -6749,7 +6760,7 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
         __atomic_store_n(&h->s->gc_first_seen_us[gi], first ? efs_iostats_now_us() : 0, __ATOMIC_RELAXED);
     }
     for (i = 0; i < c.n && h->gc_running && h->running; i++) {
-        uint8_t cmd[18];
+        uint8_t cmd[19 + 4 * EFS_META_SWEEP_BATCH_MAX];
         int lanes_ok = 1;
         int lrc = 0, drc = 0;
 
@@ -6760,11 +6771,23 @@ static void host_gc_reap_pass(struct efs_raft_host *h, uint8_t group,
             if (!(c.lanes[i] & (1ull << lane)))
                 continue;
             lshard = efs_kv_lane_shard(c.ino[i], (uint8_t)lane);
-            cmd[0] = EFS_MD_CMD_LANE_SWEEP;
             wr64be(cmd + 1, c.ino[i]);
             wr64be(cmd + 9, c.gen[i]);
             cmd[17] = (uint8_t)lane;
-            lrc = host_gc_propose(h, efs_raft_shard_group(lshard), cmd, 18);
+            if (host_hosts(h,efs_raft_shard_group(lshard))) {
+                uint32_t indices[EFS_META_SWEEP_BATCH_MAX], n;
+                lrc=efs_meta_lane_sweep_select(h->kv,c.ino[i],c.gen[i],(uint8_t)lane,indices,&n);
+                if (lrc != EFS_OK) { lanes_ok=0; break; }
+                cmd[0] = EFS_MD_CMD_LANE_SWEEP_BATCH;
+                cmd[18] = (uint8_t)n;
+                for (uint32_t j=0; j<n; j++) wr32be(cmd+19+4*j,indices[j]);
+                lrc = host_gc_propose(h, efs_raft_shard_group(lshard), cmd, 19+4*n);
+            } else {
+                /* Legacy remote selection until a bounded selection RPC is
+                 * available. Do not infer an empty lane from an unhosted KV. */
+                cmd[0] = EFS_MD_CMD_LANE_SWEEP;
+                lrc = host_gc_propose(h,efs_raft_shard_group(lshard),cmd,18);
+            }
             if (lrc != EFS_OK) {
                 lanes_ok = 0;
                 break; /* retry the whole marker next pass */

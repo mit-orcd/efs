@@ -5026,13 +5026,34 @@ static void test_gc_delta_batch_boundary(void)
         if (!truncate) CHECK(efs_meta_apply_unlink(kv, EFS_ROOT_INO, "gc-many", T0+20) == EFS_OK, "W62 unlink");
         CHECK(efs_kv_mem_fail_next_batch(kv) == EFS_OK, "W62 fail batch");
         struct efs_meta_truncate t = {.size=0, .lane_mask=~0ULL};
+        uint32_t selected[EFS_META_SWEEP_BATCH_MAX], count = 0;
+        if (!truncate)
+            CHECK(efs_meta_lane_sweep_select(kv,ino,row.generation,0,selected,&count)==EFS_OK && count==8,
+                  "bounded sweep selects eight exact keys");
         int rc = truncate ? efs_meta_apply_truncate(kv, ino, T0+21, &t) :
-                            efs_meta_apply_lane_sweep(kv, ino, row.generation, 0);
+            efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,selected,count);
         CHECK(rc == EFS_ERR_IO, "W62 failed cleanup visible");
         CHECK(chunk_present(kv, ino, row.generation, 0), "W62 failure retains reference");
-        rc = truncate ? efs_meta_apply_truncate(kv, ino, T0+21, &t) :
-                        efs_meta_apply_lane_sweep(kv, ino, row.generation, 0);
-        CHECK(rc == EFS_OK, "W62 retry cleanup");
+        if (truncate) {
+            CHECK(efs_meta_apply_truncate(kv,ino,T0+21,&t)==EFS_OK,"W62 retry cleanup");
+        } else {
+            CHECK(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,selected,count)==EFS_ERR_BUSY,
+                  "one bounded batch retains remaining work");
+            CHECK(!chunk_present(kv,ino,row.generation,7*EFS_META_LANES) &&
+                  chunk_present(kv,ino,row.generation,8*EFS_META_LANES),"exact batch boundary");
+            CHECK(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,selected,count)==EFS_ERR_BUSY,
+                  "replaying exact batch cannot consume next batch");
+            CHECK(chunk_present(kv,ino,row.generation,8*EFS_META_LANES),"replay preserves next batch");
+            uint32_t bad[2]={selected[1],selected[0]};
+            CHECK(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,bad,2)==EFS_ERR_INVAL,
+                  "reject unsorted key set before writes");
+            CHECK(efs_meta_lane_sweep_select(kv,ino,row.generation,0,selected,&count)==EFS_OK && count==5,
+                  "next proposal selects remaining keys");
+            CHECK(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,selected,count)==EFS_OK,
+                  "last bounded batch drains lane");
+            CHECK(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,selected,count)==EFS_OK,
+                  "last batch replay is idempotent");
+        }
         probe.ino = ino;
         for (unsigned anchor = 1; anchor <= 2; anchor++) {
             CHECK(efs_kv_key_gc_prefix(anchor, prefix, &plen) == EFS_OK, "W62 prefix");

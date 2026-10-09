@@ -11,6 +11,9 @@
  * remaining SIM_CMD_* values converge onto this header when the
  * coordinator side is lifted out of src/sim (production adoption P2). */
 
+/* Exact bounded key set, so retrying an applied entry cannot consume the
+ * next batch. Historical LANE_SWEEP retains whole-lane replay semantics. */
+#define EFS_MD_CMD_LANE_SWEEP_BATCH 33 /* [ino:8][gen:8][lane:1][n:1][ci:4]*n */
 #define EFS_MD_CMD_CLOSE_CLEANUP 32 /* [ino:8][generation:8], retry deferred close */
 #define EFS_MD_CMD_PUBLICATION_ADMIT 31 /* immutable durable pending intent */
 #define EFS_MD_CMD_ORPHAN_REAP 30 /* [ino:8][generation:8], recheck leases/intents */

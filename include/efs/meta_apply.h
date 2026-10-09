@@ -911,6 +911,14 @@ int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
  * marker. Idempotent: a missing marker is a no-op OK. */
 int efs_meta_apply_reap_done(struct efs_kv *kv, efs_ino_t ino, uint64_t gen);
 
+/* Select at most eight exact keys. Selection may use a lagging view: apply
+ * rechecks each key, and BUSY preserves the lane until a later proposal. */
+#define EFS_META_SWEEP_BATCH_MAX 8u
+int efs_meta_lane_sweep_select(struct efs_kv *, efs_ino_t, uint64_t, uint8_t,
+                               uint32_t *, uint32_t *);
+int efs_meta_apply_lane_sweep_batch(struct efs_kv *, efs_ino_t, uint64_t,
+                                    uint8_t, const uint32_t *, uint32_t);
+
 struct efs_gc_ack_item {
     efs_ino_t ino;
     uint64_t gen;

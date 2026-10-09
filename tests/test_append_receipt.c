@@ -49,8 +49,54 @@ static efs_ino_t create(struct efs_kv *kv)
     assert(efs_meta_apply_create_file(kv,&at,EFS_ROOT_INO,S_IFREG|0644,"append",&ino)==EFS_OK);
     return ino;
 }
+static void cold_bounded_sweep(void)
+{
+    char dir[]="/tmp/efs-sweep-batch-XXXXXX"; assert(mkdtemp(dir));
+    struct efs_kv *kv=efs_kv_lsm_open(dir,NULL); assert(kv);
+    efs_ino_t ino=create(kv); struct efs_meta_row row;
+    assert(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK);
+    for (unsigned i=0;i<13;i++) {
+        struct efs_meta_pub p={0}; p.ino=ino; p.chunk_index=i*EFS_META_LANES;
+        p.new_size=(uint64_t)(p.chunk_index+1)*EFS_MIN_CHUNK_SIZE;
+        p.candidate_gen=100+i; p.content_epoch=row.content_epoch;
+        p.coding_profile_id=EFS_META_PROFILE_K2F1; p.now=2;
+        for(unsigned f=0;f<EFS_NUM_FRAGMENTS;f++) p.ch.nodes[f]=f+1;
+        assert(efs_meta_apply_publish(kv,&p)==EFS_OK);
+    }
+    assert(efs_meta_apply_unlink(kv,EFS_ROOT_INO,"append",3)==EFS_OK);
+    efs_kv_lsm_close(kv);
+    uint32_t indices[EFS_META_SWEEP_BATCH_MAX];
+    for(unsigned i=0;i<EFS_META_SWEEP_BATCH_MAX;i++) indices[i]=i*EFS_META_LANES;
+    pid_t child=fork(); assert(child>=0);
+    if(!child) {
+        kv=efs_kv_lsm_open(dir,NULL); assert(kv);
+        assert(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,indices,8)==EFS_ERR_BUSY);
+        _exit(0); /* durable WAL, no graceful KV close */
+    }
+    int status; assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
+    kv=efs_kv_lsm_open(dir,NULL); assert(kv);
+    /* The inode is unlinked: inspect the explicit FileID key, since ordinary
+     * get_chunk correctly refuses to resolve a deleted inode. */
+    uint8_t key[EFS_KV_KEY_MAX], value[2048]; uint32_t kl, vl=sizeof(value);
+    assert(efs_kv_key_chunk(efs_kv_lane_shard(ino,0),ino,row.generation,0,
+                            8*EFS_META_LANES,key,&kl)==EFS_OK);
+    assert(efs_kv_get(kv,key,kl,value,&vl)==EFS_OK);
+    assert(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,indices,8)==EFS_ERR_BUSY);
+    vl=sizeof(value); assert(efs_kv_get(kv,key,kl,value,&vl)==EFS_OK);
+    uint32_t n;
+    assert(efs_meta_lane_sweep_select(kv,ino,row.generation,0,indices,&n)==EFS_OK && n==5);
+    assert(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,indices,n)==EFS_OK);
+    assert(efs_meta_apply_lane_sweep_batch(kv,ino,row.generation,0,indices,n)==EFS_OK);
+    efs_kv_lsm_close(kv);
+    DIR *d=opendir(dir); assert(d); struct dirent *e;
+    while((e=readdir(d))) {if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+    closedir(d); assert(!rmdir(dir));
+    puts("bounded sweep: exact-key retry after ungraceful KV recovery PASS");
+}
+
 int main(void)
 {
+    cold_bounded_sweep();
     struct efs_kv *kv=efs_kv_mem_create();assert(kv);efs_ino_t ino=create(kv);
     struct efs_opid_req q=identity(1,0);uint64_t off=999;
     assert(efs_kv_mem_fail_next_batch(kv)==EFS_OK);

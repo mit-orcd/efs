@@ -38,6 +38,7 @@ static int host_remote_cmd(struct efs_raft_host*h,uint8_t g,const uint8_t*c,uint
 static uint64_t rd64be(const uint8_t*p){uint64_t x=0;for(int i=0;i<8;i++)x=(x<<8)|p[i];return x;}
 static uint32_t rd32be(const uint8_t*p){return (uint32_t)rd64be((const uint8_t[]){0,0,0,0,p[0],p[1],p[2],p[3]});}
 int efs_meta_apply_lane_sweep(struct efs_kv*k,efs_ino_t i,uint64_t g,uint8_t l){(void)k;assert(i==42&&g==7&&l==3);return verdict;}
+int efs_meta_apply_lane_sweep_batch(struct efs_kv*k,efs_ino_t i,uint64_t g,uint8_t l,const uint32_t*c,uint32_t n){(void)k;assert(i==42&&g==7&&l==3&&n==1&&c[0]==3);return verdict;}
 int efs_meta_apply_orphan_reclaim(struct efs_kv*k,efs_ino_t i,uint64_t g){(void)k;assert(i==42&&g==7);return verdict;}
 int efs_meta_apply_reap_done(struct efs_kv*k,efs_ino_t i,uint64_t g){(void)k;assert(i==42&&g==7);return verdict;}
 int efs_meta_apply_gc_ack(struct efs_kv*k,const struct efs_gc_ack_item*p,uint32_t n){(void)k;assert(n==1&&p->ino==42&&p->gen==7&&p->lane==3&&p->ci==8&&p->frag==2);return verdict;}
@@ -57,8 +58,15 @@ int main(void){
  uint8_t ack[25]={EFS_MD_CMD_GC_ACK,0,1};ack[10]=42;ack[18]=7;ack[19]=3;ack[23]=8;ack[24]=2;
  for(unsigned i=0;i<sizeof(values)/sizeof(values[0]);i++){verdict=values[i];assert(apply_gc_ack_cmd(&h,ack,sizeof(ack),41)==verdict);}
  assert(apply_gc_ack_cmd(&h,ack,24,41)==EFS_ERR_PROTO);
- for(unsigned op=0;op<4;op++){
-  uint8_t codes[]={EFS_MD_CMD_LANE_SWEEP,EFS_MD_CMD_REAP_DONE,EFS_MD_CMD_GC_ACK,EFS_MD_CMD_ORPHAN_REAP};
+ cmd[0]=EFS_MD_CMD_LANE_SWEEP_BATCH;cmd[18]=1;cmd[22]=3;
+ verdict=EFS_ERR_BUSY;
+ assert(apply_lane_sweep_cmd(&h,cmd,23,41)==EFS_ERR_BUSY);
+ assert(apply_lane_sweep_cmd(&h,cmd,22,41)==EFS_ERR_PROTO);
+ cmd[18]=9;assert(apply_lane_sweep_cmd(&h,cmd,23,41)==EFS_ERR_PROTO);cmd[18]=1;
+ uint64_t errors=s.gc_sweep_errors;
+ assert(host_gc_propose(&h,0,cmd,23)==EFS_ERR_BUSY && s.gc_sweep_errors==errors);
+ for(unsigned op=0;op<5;op++){
+  uint8_t codes[]={EFS_MD_CMD_LANE_SWEEP,EFS_MD_CMD_REAP_DONE,EFS_MD_CMD_GC_ACK,EFS_MD_CMD_ORPHAN_REAP,EFS_MD_CMD_LANE_SWEEP_BATCH};
   assert(core_result(codes[op],EFS_ERR_BUSY,53)==EFS_OK);
   assert(core_result(codes[op],EFS_ERR_IO,53)==EFS_ERR_IO);
   assert(core_result(codes[op],EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);

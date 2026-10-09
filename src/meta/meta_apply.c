@@ -5766,6 +5766,83 @@ int efs_meta_apply_lane_sweep(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     return rc;
 }
 
+struct sweep_selection {
+    uint32_t *indices, n;
+};
+
+static int sweep_select_cb(void *user, const uint8_t *key, uint32_t klen,
+                            const uint8_t *val, uint32_t vlen)
+{
+    struct sweep_selection *s = user;
+    (void)val; (void)vlen;
+    if (klen != 24) return EFS_ERR_PROTO;
+    s->indices[s->n++] = rd32(key + 20);
+    return s->n == EFS_META_SWEEP_BATCH_MAX ? 1 : 0;
+}
+
+int efs_meta_lane_sweep_select(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                               uint8_t lane, uint32_t *indices, uint32_t *n)
+{
+    uint8_t pref[EFS_KV_KEY_MAX]; uint32_t plen;
+    struct sweep_selection s = {.indices = indices};
+    if (!kv || !ino || lane >= EFS_META_LANES || !indices || !n)
+        return EFS_ERR_INVAL;
+    *n = 0;
+    int rc = efs_kv_key_chunk(efs_kv_lane_shard(ino, lane), ino, gen, lane,
+                              0, pref, &plen);
+    if (rc != EFS_OK) return rc;
+    rc = efs_kv_scan_prefix(kv, pref, 20, sweep_select_cb, &s);
+    if (rc < 0) return rc;
+    *n = s.n;
+    return EFS_OK;
+}
+
+/* Unlike a scan-and-delete step, the immutable command names exactly the
+ * keys it may remove. A storage/apply-marker retry therefore cannot advance
+ * into another batch. All source deletes and GC references commit together. */
+int efs_meta_apply_lane_sweep_batch(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+                                    uint8_t lane, const uint32_t *indices,
+                                    uint32_t n)
+{
+    struct efs_kv_item it[SWEEP_CHUNKS * 2];
+    uint8_t keys[SWEEP_CHUNKS * 2][EFS_KV_KEY_MAX];
+    uint8_t gc_vals[SWEEP_CHUNKS * 2][EFS_META_GC_VAL];
+    struct sweep_scan ss = {.ino=ino, .gen=gen, .it=it, .keys=keys,
+        .gc_vals=gc_vals, .cap=SWEEP_CHUNKS * 2};
+    uint8_t key[EFS_KV_KEY_MAX]; uint32_t kl;
+    if (!kv || !ino || lane >= EFS_META_LANES || n > EFS_META_SWEEP_BATCH_MAX ||
+        (n && !indices)) return EFS_ERR_INVAL;
+    for (uint32_t i=0; i<n; i++) {
+        if (indices[i] % EFS_META_LANES != lane || (i && indices[i] <= indices[i-1]))
+            return EFS_ERR_INVAL;
+    }
+    for (uint32_t i=0; i<n; i++) {
+        /* Same capacity as the canonical chunk/history decoder. */
+        uint8_t value[CHUNK_VAL_MAX]; uint32_t vl=sizeof(value);
+        int rc = efs_kv_key_chunk(efs_kv_lane_shard(ino,lane), ino, gen, lane,
+                                  indices[i], key, &kl);
+        if (rc != EFS_OK) return rc;
+        rc = efs_kv_get(kv,key,kl,value,&vl);
+        if (rc == EFS_ERR_NOT_FOUND) continue;
+        if (rc != EFS_OK) return rc;
+        (void)sweep_cb(&ss,key,kl,value,vl);
+        if (ss.rc != EFS_OK) return ss.rc;
+        if (ss.full) return EFS_ERR_NOMEM; /* no partial writes */
+    }
+    if (ss.n) {
+        int rc=meta_write_batch(kv,it,ss.n);
+        if (rc != EFS_OK) return rc;
+    }
+    uint32_t remaining[EFS_META_SWEEP_BATCH_MAX], count;
+    int rc=efs_meta_lane_sweep_select(kv,ino,gen,lane,remaining,&count);
+    if (rc != EFS_OK) return rc;
+    if (count) return EFS_ERR_BUSY;
+    rc=efs_kv_key_lane(efs_kv_lane_shard(ino,lane),ino,gen,lane,key,&kl);
+    if (rc != EFS_OK) return rc;
+    rc=meta_write_del(kv,key,kl);
+    return rc == EFS_ERR_NOT_FOUND ? EFS_OK : rc;
+}
+
 struct rsv_purge {
     struct efs_kv_item *it;
     uint8_t (*keys)[EFS_KV_KEY_MAX];
