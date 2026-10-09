@@ -37,6 +37,7 @@ p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny file
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
+p.add_argument('--create-negative-replay',action='store_true',help='ordinary CREATE EEXIST identity survives unlink, cold restart and name reuse')
 p.add_argument('--unique-create',action='store_true',help='16-worker unique O_EXCL, genuine EEXIST and name reuse, then cold exact bytes/reclamation')
 p.add_argument('--create-lease',action='store_true',help='initial CREATE lease atomicity on local and first-use cross-group hashed lanes, cold replay/unlink/close')
 p.add_argument('--fuse-reply-failure',action='store_true',help='reject CREATE/OPEN descriptor replies and prove local handle/server lease cleanup')
@@ -216,7 +217,8 @@ def start():
         node_env=dict(env)
         if a.put_barrier_fault:
             node_env.update(LD_PRELOAD=str(work/'store-barrier-fault.so'),
-                            EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'))
+                            EFS_TEST_STORE_BARRIER_FILE=str(work/'put-barrier-fault'),
+                            EFS_TEST_STORE_NODE=str(i+1))
         if a.compactor_pressure:
             node_env['EFS_RAFT_OBS']='1'
             if i==3:node_env.update(EFS_FAULT_COMPACT_STALL='1',EFS_FAULT_COMPACT_FILE=str(work/'compactor-fault'))
@@ -367,12 +369,27 @@ try:
     if a.put_barrier_fault:
         from put_barrier_fault import exercise as fail_put_barrier, verify_and_delete as verify_put_barrier
         barrier=fail_put_barrier(mount,work/'put-barrier-fault',lambda ino:chunk_state(ino,allow_absent=True))
-        assert any('test-store-barrier: refusing fragment fsync' in (work/f'n{i+1}.log').read_text() for i in range(4))
+        assert any('test-store-barrier: refusing fragment' in (work/f'n{i+1}.log').read_text() for i in range(4))
         unmount();stop(crash=True);start();mount_client()
         verify_put_barrier(mount)
+        (work/'put-barrier-fault').unlink(missing_ok=True)
         wait(drained,'failed PUT barrier recovery cold bytes and deletion drained',180)
         (work/'put-barrier-fault.json').write_text(json.dumps(barrier,indent=2))
         print('failed server PUT barrier: no publication ACK, retained bytes, recovery and exact cold bytes PASS',flush=True)
+    if a.create_negative_replay:
+        helper=work/'create-negative-replay'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
+             source/'tests/live/create_negative_replay.c',source/'libefs.a',
+             '-pthread','-lm','-ldl','-libverbs','-o',helper])
+        run([helper,a.port,'prepare'],timeout=60)
+        unmount();stop(crash=True);start();mount_client()
+        assert not (mount/'w58-negative').exists()
+        run([helper,a.port,'replay'],timeout=60)
+        assert not (mount/'w58-negative').exists()
+        (work/'create-negative-replay.json').write_text(json.dumps({
+            'ordinary_create':True,'original_verdict':'EEXIST',
+            'crash_restart_after_unlink':True,'name_reuse_preserved':True},indent=2))
+        print('ordinary CREATE original EEXIST, unlink, cold replay and name reuse PASS',flush=True)
     if a.unique_create:
         from unique_create import exercise as unique_create, verify_and_delete as verify_unique
         unique=unique_create(mount)
