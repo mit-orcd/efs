@@ -5633,7 +5633,9 @@ static void *host_pump(void *arg)
         {
             uint64_t pnow = now_us_();
 
-            efs_batch_obs_dump(pnow);
+            /* pnow is wall time for applied-index persistence; diagnostics
+             * use monotonic time, matching cohort/hold measurements. */
+            if (BO_ON()) efs_batch_obs_dump(efs_batch_obs_now_us());
             for (i = 0; i < HOST_NGROUPS; i++)
                 (void)persist_applied(h, i, applied_now[i], pnow, 0);
         }
