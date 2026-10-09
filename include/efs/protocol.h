@@ -676,6 +676,8 @@ struct efs_msg_heal_status_reply {
  * still sends HOLD−1; skipping that leaks refs and last-link unlink
  * never deletes. */
 #define EFS_CREATE_F_HOLD (1u << 0)
+/* Opt-in pending adoption, requires exact op-id and established shard session. */
+#define EFS_CREATE_F_PENDING (1u << 1)
 
 struct efs_msg_inode_create {
     efs_export_id_t export_id;

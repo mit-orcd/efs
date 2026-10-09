@@ -302,6 +302,7 @@ test: all
 	python3 tests/test_lease_edge_rpc.py
 	python3 tests/test_lease_request.py
 	python3 tests/test_mount_identity_rpc.py
+	python3 tests/test_pending_create_command.py
 	python3 tests/test_lock_apply_verdict.py
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py

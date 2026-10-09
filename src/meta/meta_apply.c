@@ -1609,9 +1609,9 @@ int efs_meta_apply_create_file_log_lease(struct efs_kv *kv,
                              ino ? layout : -1, uuid, epoch, 0, out);
 }
 
-/* Staged pending ownership: identity and token come from the same durable
- * CREATE request. No server wire path calls this until runtime sessions and
- * guarded HOLD adoption are integrated. Replay never reacquires ownership. */
+/* Pending ownership: identity and token come from the same durable CREATE
+ * request. The opt-in daemon form requires an established shard session;
+ * FUSE adoption remains staged. Replay never reacquires ownership. */
 int efs_meta_apply_create_file_log_pending(struct efs_kv *kv,
                                          const struct efs_meta_attrs *at,
                                          efs_ino_t parent, uint32_t mode,

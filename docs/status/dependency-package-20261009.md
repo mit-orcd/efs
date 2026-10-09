@@ -470,3 +470,24 @@ versioned identity bridge; retained sequenced requests are not yet integrated
 into FUSE. Identity alignment alone does not enforce global revocation on every
 namespace/REPORT mutation. Production PUT tickets still need transport, durable
 storage fences, deletion on all members and retirement. Full package open.
+
+## Opt-in daemon pending CREATE wire and cold adoption
+
+CREATE_F_PENDING now requires exact identity and established/global active
+session authority. The replicated pending flag preserves full UUID/epoch and
+atomically stores pending adoption token with namespace/inode/replay verdict.
+Cached replay is gated and never reinstalls the pending owner. Historical CREATE
+lease interpretation stays epoch1. Malformed new frames fail before effects.
+First-use cross-group hashed lane pending CREATE returns BUSY before namespace
+transaction until its participant bridge exists; FUSE does not enable this flag.
+
+AMD direct/TCP epoch7 CREATE, same-inode retry, crash/cold pending replay,
+exact adoption/CLOSE and proven stale re-adoption pass. Core212/212, peer64/64,
+full code regressions, guarded replay/append800 and physical GC/restart pass.
+Both installed mounts restored; local docs5/5; final daemon build warning-free.
+[Evidence](../../results/measure/20261009-pending-create-wire/README.md).
+
+Next: pending CREATE participant for first cross-group lane, retained FUSE CREATE
+result/adoption/compensating release and sequenced OPEN/CLOSE. Production PUT
+transport/storage fencing/collection is still open. This is an opt-in daemon
+prerequisite, not complete production session integration or D25 activation.

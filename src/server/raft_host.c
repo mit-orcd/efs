@@ -536,6 +536,7 @@ static uint32_t rd32be(const uint8_t *p)
  * uuid+epoch slot after the name stays what it was — for CREATE it is the
  * lease holder's identity, not the requester's. */
 #define HOST_CREATE_F_OPID 0x01
+#define HOST_CREATE_F_PENDING 0x02
 #define HOST_OPID_TRAILER (EFS_OPID_UUID_LEN + 4u + 8u + 8u)
 
 static uint32_t pack_opid_trailer(uint8_t *p, const struct efs_opid_req *q)
@@ -1183,7 +1184,10 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int rc;
 
     if (clen < HOST_CREATE_NAME_OFF)
-        return EFS_OK;
+        return clen>=2 && (cmd[1]&HOST_CREATE_F_PENDING) ? EFS_ERR_PROTO : EFS_OK;
+    int pending=!!(cmd[1]&HOST_CREATE_F_PENDING);
+    if (pending && ((cmd[1]&~(HOST_CREATE_F_OPID|HOST_CREATE_F_PENDING)) ||
+                    !(cmd[1]&HOST_CREATE_F_OPID))) return EFS_ERR_PROTO;
     parent = rd64be(cmd + 2);
     mode = rd32be(cmd + 10);
     memset(&at, 0, sizeof(at));
@@ -1192,7 +1196,8 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     at.now = rd64be(cmd + 22);
     nl = cmd[30];
     if ((uint32_t)HOST_CREATE_NAME_OFF + nl + EFS_OPID_UUID_LEN + 4 > clen)
-        return EFS_OK;
+        return pending ? EFS_ERR_PROTO : EFS_OK;
+    if (pending && !nl) return EFS_ERR_PROTO;
     memset(name, 0, sizeof(name));
     memcpy(name, cmd + HOST_CREATE_NAME_OFF, nl);
     {
@@ -1212,6 +1217,8 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             want = rd64be(cmd + tail);
             lay = cmd[tail + 8];
         }
+        if (pending && (!qp || !want || body!=tail+9 || S_ISDIR(mode)))
+            return EFS_ERR_PROTO;
         if (S_ISDIR(mode)) {
             if (qp || want)
                 rc = efs_meta_apply_mkdir_log_op(h->kv, &at, parent, mode, name,
@@ -1222,7 +1229,15 @@ static int apply_create_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             const uint8_t *uuid = cmd + HOST_CREATE_NAME_OFF + nl;
             int nonzero = 0;
             for (int i = 0; i < EFS_OPID_UUID_LEN; i++) nonzero |= uuid[i];
-            rc = efs_meta_apply_create_file_log_lease(h->kv, &at, parent, mode,
+            if (pending) {
+                uint32_t epoch=rd32be(uuid+EFS_OPID_UUID_LEN);
+                if (!nonzero || !epoch || !qp || epoch!=qp->id.session_epoch ||
+                    memcmp(uuid,qp->id.client_uuid,EFS_OPID_UUID_LEN))
+                    return EFS_ERR_PROTO;
+                rc=efs_meta_apply_create_file_log_pending(h->kv,&at,parent,mode,
+                    name,want,lay,qp,uuid,epoch,&ino);
+            } else
+                rc = efs_meta_apply_create_file_log_lease(h->kv, &at, parent, mode,
                                                       name, want, lay, qp,
                                                       nonzero ? uuid : NULL,
                                                       1, &ino);
@@ -4604,13 +4619,15 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
                            uint32_t mode, const char *name,
                            const struct efs_meta_attrs *at, uint64_t hold_owner,
                            efs_ino_t child_ino, uint8_t layout,
-                           const struct efs_opid_req *q)
+                           const struct efs_opid_req *q, int pending)
 {
     size_t nl = strlen(name);
     uint32_t n;
     uint8_t *p;
     int with_op = q && efs_opid_req_valid(q);
 
+    if (pending && (!with_op || !q->id.session_epoch || q->ack>=q->id.seq ||
+                    S_ISDIR(mode) || hold_owner)) return EFS_ERR_INVAL;
     if (nl == 0 || nl >= EFS_MAX_NAME)
         return EFS_ERR_NAMETOOLONG;
     n = HOST_CREATE_NAME_OFF + (uint32_t)nl + EFS_OPID_UUID_LEN + 4;
@@ -4621,7 +4638,7 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     if (n > HOST_CMD_MAX)
         return EFS_ERR_INVAL;
     out[0] = EFS_MD_CMD_CREATE;
-    out[1] = with_op ? HOST_CREATE_F_OPID : 0;
+    out[1] = (with_op ? HOST_CREATE_F_OPID : 0) | (pending ? HOST_CREATE_F_PENDING : 0);
     wr64be(out + 2, parent);
     wr32be(out + 10, mode);
     wr32be(out + 14, at->uid);
@@ -4631,7 +4648,10 @@ static int pack_create_cmd(uint8_t *out, uint32_t *len, efs_ino_t parent,
     memcpy(out + HOST_CREATE_NAME_OFF, name, nl);
     p = out + HOST_CREATE_NAME_OFF + nl;
     memset(p, 0, EFS_OPID_UUID_LEN + 4);
-    if (hold_owner && !S_ISDIR(mode))
+    if (pending) {
+        memcpy(p,q->id.client_uuid,EFS_OPID_UUID_LEN);
+        wr32be(p+EFS_OPID_UUID_LEN,q->id.session_epoch);
+    } else if (hold_owner && !S_ISDIR(mode))
         host_hold_uuid(hold_owner, p);
     p += EFS_OPID_UUID_LEN + 4;
     if (child_ino) {
@@ -9820,11 +9840,19 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     int rc;
     int hashed = 0;
     uint64_t hold = (flags & EFS_CREATE_F_HOLD) ? owner : 0;
+    int pending = !!(flags & EFS_CREATE_F_PENDING);
 
     memset(out, 0, sizeof(*out));
     out->status = EFS_INODE_RPC_ERROR;
     if (!h || !h->running || !name || parent == 0) {
         out->status = EFS_INODE_RPC_INVAL;
+        return;
+    }
+    if ((flags & ~(EFS_CREATE_F_HOLD|EFS_CREATE_F_PENDING)) ||
+        (pending && ((flags&EFS_CREATE_F_HOLD) || !q ||
+                     !efs_opid_req_valid(q) || !q->id.session_epoch ||
+                     q->ack>=q->id.seq || S_ISDIR(mode)))) {
+        out->status=EFS_INODE_RPC_INVAL;
         return;
     }
     if ((mode & S_IFMT) == 0)
@@ -9836,7 +9864,7 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     at.uid = uid;
     at.gid = gid;
     at.now = now_ns();
-    rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold, 0, 0, q);
+    rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold, 0, 0, q, pending);
     if (rc != EFS_OK) {
         set_inode_rc(out, rc, -1);
         return;
@@ -9876,6 +9904,13 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         }
     }
     if (rc == EFS_OK) {
+        if (pending) {
+            int registered=0;
+            efs_ino_t route=dsh?dsh:4096;
+            rc=host_append_session_admit(h,route,q,&hint,&registered);
+            if (rc==EFS_OK && !registered) rc=EFS_ERR_BUSY;
+            if (rc!=EFS_OK) {set_inode_rc(out,rc,hint);return;}
+        }
         struct efs_opid_reply rep;
         int hit = host_opid_replay(h, dsh, q, &rep);
 
@@ -9903,7 +9938,10 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         (prow.used_shards & (1ull << efs_kv_dir_lane(name))) == 0 &&
         pg != dg) {
         hashed = 1;
-        rc = host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh, q,
+        /* Pending lease and first-use parent lane must be one transaction.
+         * Until its participant format exists, refuse before any effects. */
+        rc = pending ? EFS_ERR_BUSY :
+            host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh, q,
                                     hold, &hint);
     } else if (rc == EFS_OK) {
         efs_ino_t next = 0;
@@ -9911,7 +9949,7 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         rc = efs_meta_apply_peek_alloc(h->kv, dsh, &next);
         if (rc == EFS_OK)
             rc = pack_create_cmd(cmd, &clen, parent, mode, name, &at, hold,
-                                 next, prow.layout, q);
+                                 next, prow.layout, q, pending);
         if (rc == EFS_OK)
             rc = host_propose(h, dg, cmd, clen, &idx, &term, &hint);
         if (rc == EFS_OK)
@@ -11167,7 +11205,7 @@ void server_raft_host_mkdir(efs_ino_t parent, const char *name, uint32_t mode,
                 rc = EFS_ERR_PROTO;
             else
                 rc = pack_create_cmd(mkcmd, &mklen, parent, mode, name, &at2, 0,
-                                     next, prow.layout, q);
+                                     next, prow.layout, q, 0);
         }
         if (rc == EFS_OK)
             rc = host_propose_wait(h, efs_raft_shard_group(psh), mkcmd, mklen,

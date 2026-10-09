@@ -1,0 +1,2 @@
+pending_uuid=65fda42002e6f3fbee7c40d95dd0bddb ino=8130
+pending CREATE epoch7: same inode on retry, exact adoption/CLOSE and replay cannot reacquire pending ownership PASS ino=8130
