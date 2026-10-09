@@ -78,3 +78,69 @@ No implementation fix or improved throughput is claimed. The active generator
 and `.efs` service were left running. Raw perf data/reports, thread counters,
 strace summary, refresh excerpts and cluster status are retained in
 [measurement evidence](../../results/measure/20261009-node2-query-cpu/).
+
+## Requested 30-second callgraph follow-up
+
+A fresh 30-second `perf record -F 199 -g -p 1488325 -- sleep 30` capture on
+unchanged installed build `ab050595c3b8` records **6,838 samples, zero lost**.
+The generator remains active; no simultaneous strace attachment was used.
+Raw recording and full/self/inclusive/thread reports are retained under
+`results/measure/20261009-node2-query-cpu/profile-30s/`.
+
+| Function | Self cycles | Inclusive cycles |
+| --- | --- | --- |
+| `host_query_thread` | 0.00% | 86.82% |
+| `efs_query_catalog_build` | 3.97% | 86.56% |
+| `efs_meta_apply_getattr` | 6.04% | 49.55% |
+| `efs_txn_read_ex` | 2.39% | 40.37% |
+| `cache_get` | 19.68% | 22.51% |
+| `add_edge` | 13.81% | 15.73% |
+| libc key comparisons (`memcmp`) | 13.01% | 14.60% |
+| libc memory clearing (`memset`) | 4.33% | 4.45% |
+
+Inclusive rows overlap; they must not be added together. Percentages describe
+sampled CPU cycles, not elapsed-time or syscall-wait shares. Thread 1488961
+accounts for 88.85% of cycles in this capture.
+
+The dominant call chain is:
+
+```text
+host_query_thread
+  efs_query_catalog_build
+    efs_meta_apply_getattr       # folded stat for every catalog inode
+      efs_txn_read_ex
+        cache_get               # binary search + compare + copy
+      efs_txn_reduce_read_ex
+        efs_txn_read_ex
+          cache_get
+```
+
+The second major chain is full name-index iteration into `add_edge`, looking
+up parent/child nodes, resolving local/hashed layout precedence, then accumulating
+immediate counts, bytes and timestamps. Node reconstruction adds allocation,
+clearing and page-fault cost (`add_node` 7.35% inclusive; page-fault entry 6.27%
+inclusive, overlapping allocations). This confirms the earlier attribution
+with a longer recording rather than establishing a new storage limit.
+
+Nearby publication logs continue to show about 1.4–1.6-second builds with only
+8–10 partition rebuilds. The last captured publication has 1,022,266 files,
+4,355 directories and 951,042,964 accounted catalog bytes (about 907 MiB).
+The unchanged 1 GiB cap remains a separate approaching constraint.
+
+### Optimization priorities supported by this trace
+
+1. Avoid folding stats for unchanged inodes. Cache folded results with all
+   relevant dependencies, including cross-shard lanes/reductions and transaction
+   decisions; an inode-shard revision alone is insufficient for correctness.
+2. Reuse immutable namespace relationships and update affected directory/
+   ancestor rollups instead of reconstructing every edge for a small mutation
+   batch. Preserve layout precedence, rename/hardlink handling and exact totals.
+3. After reducing whole-catalog work, investigate repeated cached lane reads:
+   `efs_txn_reduce_read_ex` reads a materialized lane that getattr reads again.
+   Sharing a decoded read within a verified immutable cut may remove redundant
+   binary searches/copies, but must retain pending-transaction reduction and
+   authoritative stat semantics. Do not replace folded size with base_size.
+4. Limit refresh work/frequency with truthful lag reporting as a scheduling
+   measure, rather than treating it as an algorithmic or hardware-ceiling fix.
+
+No production optimization is implemented or benchmarked by this profile.

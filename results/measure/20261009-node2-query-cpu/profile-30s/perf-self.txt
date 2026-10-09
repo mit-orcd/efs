@@ -1,0 +1,148 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 6K of event 'cycles:P'
+# Event count (approx.): 75656779702
+#
+# Overhead  Command  Shared Object      Symbol                                             
+# ........  .......  .................  ...................................................
+#
+    19.68%  efsd     efsd               [.] cache_get
+            |          
+            |--17.84%--cache_get
+            |          |          
+            |           --17.54%--efs_txn_read_ex
+            |                     |          
+            |                     |--13.69%--efs_meta_apply_getattr
+            |                     |          efs_query_catalog_build
+            |                     |          host_query_thread
+            |                     |          start_thread
+            |                     |          
+            |                      --3.85%--efs_txn_reduce_read_ex
+            |                                efs_meta_apply_getattr
+            |                                efs_query_catalog_build
+            |                                host_query_thread
+            |                                start_thread
+            |          
+             --1.45%--memcmp@plt
+                       efs_txn_read_ex
+                       |          
+                        --1.22%--efs_meta_apply_getattr
+                                  efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+    13.81%  efsd     efsd               [.] add_edge
+            |
+            ---add_edge
+               efs_name_index_query_visits
+               efs_name_index_query
+               efs_query_catalog_build
+               host_query_thread
+               start_thread
+
+    13.01%  efsd     libc.so.6          [.] __memcmp_evex_movbe
+            |          
+            |--10.77%--__memcmp_evex_movbe
+            |          |          
+            |           --10.62%--efs_txn_read_ex
+            |                     |          
+            |                     |--7.85%--efs_meta_apply_getattr
+            |                     |          efs_query_catalog_build
+            |                     |          host_query_thread
+            |                     |          start_thread
+            |                     |          
+            |                      --2.78%--efs_txn_reduce_read_ex
+            |                                efs_meta_apply_getattr
+            |                                efs_query_catalog_build
+            |                                host_query_thread
+            |                                start_thread
+            |          
+             --2.24%--cache_get
+                       efs_txn_read_ex
+                       |          
+                        --1.80%--efs_meta_apply_getattr
+                                  efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     6.04%  efsd     efsd               [.] efs_meta_apply_getattr
+            |          
+             --5.44%--efs_meta_apply_getattr
+                       |          
+                        --5.43%--efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     4.33%  efsd     libc.so.6          [.] __memset_evex_unaligned_erms
+            |          
+             --4.28%--__memset_evex_unaligned_erms
+                       |          
+                        --4.23%--efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     3.97%  efsd     efsd               [.] efs_query_catalog_build
+            |          
+             --3.87%--efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     2.95%  efsd     libc.so.6          [.] __memmove_evex_unaligned_erms
+            |          
+             --2.48%--__memmove_evex_unaligned_erms
+                       |          
+                        --1.81%--efs_txn_read_ex
+                                  |          
+                                   --1.45%--efs_meta_apply_getattr
+                                             efs_query_catalog_build
+                                             host_query_thread
+                                             start_thread
+
+     2.39%  efsd     efsd               [.] efs_txn_read_ex
+            |          
+             --1.99%--efs_txn_read_ex
+                       |          
+                        --1.51%--efs_meta_apply_getattr
+                                  efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     1.91%  efsd     efsd               [.] add_node
+            |          
+             --1.14%--asm_exc_page_fault
+                       add_node
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     1.80%  efsd     [vdso]             [.] 0x00000000000008d5
+            |
+            ---0x7fd207e1d8d8
+               clock_gettime@@GLIBC_2.17
+
+     1.71%  efsd     efsd               [.] unpack_inode
+            |          
+             --1.65%--unpack_inode
+                       efs_query_catalog_build
+                       host_query_thread
+                       start_thread
+
+     1.52%  efsd     efsd               [.] memcmp@plt
+            |          
+             --1.50%--__memcmp_evex_movbe
+                       efs_txn_read_ex
+                       |          
+                        --1.24%--efs_meta_apply_getattr
+                                  efs_query_catalog_build
+                                  host_query_thread
+                                  start_thread
+
+     1.18%  efsd     efsd               [.] efs_kv_key_intent
+
+
+#
+# (Tip: For latency profiling, try: perf record/report --latency)
+#
