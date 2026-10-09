@@ -876,21 +876,33 @@ static int create_request_rpc(struct efs_client_create_request *r,int probe)
     return rc;
 }
 
+static int create_request_revocation(struct efs_client_create_request *r,int rc)
+{
+    if(!r->complete && (rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND)) {
+        int revoked=0;
+        if(efs_client_rpc_identity_revoked(&r->wire.q.id,&revoked)==EFS_OK && revoked) {
+            r->revoked=1;r->complete=1;r->result=EFS_ERR_STALE;
+            opid_end(r->slot);r->slot=-1;return EFS_ERR_STALE;
+        }
+    }
+    return rc;
+}
+
 int efs_client_create_resume(struct efs_client_create_request *r,int probe_only)
 {
     if(!r || !r->active || probe_only<0 || probe_only>1)return EFS_ERR_INVAL;
     if(r->complete)return r->result;
     int rc=create_request_rpc(r,1);
-    if(r->complete || probe_only || rc!=EFS_ERR_BUSY)return rc;
+    if(r->complete || probe_only || rc!=EFS_ERR_BUSY)return create_request_revocation(r,rc);
     if(!r->wire.routed)return EFS_ERR_PROTO;
     if(!r->admitted) {
         rc=efs_client_rpc_publication_session(r->wire.shard,&r->wire.q.id);
-        if(rc!=EFS_OK)return rc;
+        if(rc!=EFS_OK)return create_request_revocation(r,rc);
         r->admitted=1;
     }
     opid_refresh_ack(&r->wire.q);
     r->attempted=1;
-    return create_request_rpc(r,0);
+    return create_request_revocation(r,create_request_rpc(r,0));
 }
 
 int efs_client_create_reset(struct efs_client_create_request *r)
@@ -1112,6 +1124,8 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
     uint8_t body[EFS_MD_SESS_LEASE_EDGE_LEN+1];
     if(known)*known=0;
     if (bytes>sizeof(body)-1) return EFS_ERR_INVAL;
+    if(probe==2 && (!known || bytes!=22 || command[0]!=EFS_MD_CMD_SESSION ||
+                    command[1]!=0))return EFS_ERR_INVAL;
     body[0]=efs_raft_shard_group(shard);memcpy(body+1,command,bytes);
     efs_node_id_t target=0;
     for (unsigned attempt=0;attempt<8;attempt++) {
@@ -1132,7 +1146,8 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
         }
         struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,sizeof(reply));free(payload);
         if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
-        if(known) {
+        if(probe==2 && reply.rc==EFS_OK){*known=reply.salt;return EFS_OK;}
+        if(known && probe!=2) {
             if(reply.salt>1 || (reply.salt &&
                (reply.rc==EFS_ERR_NOT_PRIMARY || reply.rc==EFS_ERR_NO_QUORUM)))
                 return EFS_ERR_PROTO;
@@ -1148,6 +1163,25 @@ static int session_command_reply(uint32_t shard,const uint8_t *command,uint32_t 
         if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
     }
     return EFS_ERR_BUSY;
+}
+
+int efs_client_rpc_identity_revoked(const struct efs_opid *id,int *revoked)
+{
+    if(!revoked)return EFS_ERR_INVAL;
+    *revoked=0;
+    if(!id || !id->session_epoch)return EFS_ERR_INVAL;
+    unsigned nonzero=0;for(unsigned i=0;i<EFS_OPID_UUID_LEN;i++)nonzero|=id->client_uuid[i];
+    if(!nonzero)return EFS_ERR_INVAL;
+    uint8_t query[22]={EFS_MD_CMD_SESSION,0};
+    memcpy(query+2,id->client_uuid,EFS_OPID_UUID_LEN);
+    uint64_t view=0;
+    int rc=session_command_reply(efs_kv_session_shard(id->client_uuid),query,sizeof(query),&view,2);
+    if(rc!=EFS_OK)return rc;
+    uint32_t epoch=(uint32_t)view;unsigned state=(unsigned)((view>>32)&255u);
+    if((view>>41) || !epoch || (state!=EFS_SESSION_ACTIVE && state!=EFS_SESSION_FENCING))
+        return EFS_ERR_PROTO;
+    *revoked=state==EFS_SESSION_ACTIVE && epoch>id->session_epoch;
+    return EFS_OK;
 }
 
 static int publication_session_command(uint32_t shard,const uint8_t *command,uint32_t bytes)
@@ -1234,6 +1268,13 @@ static int lease_request_result(struct efs_client_lease_request *r,int rc,
         opid_end(r->slot);
         r->slot=-1;
     }
+    if(!r->complete && (rc==EFS_ERR_STALE || rc==EFS_ERR_NOT_FOUND)) {
+        int revoked=0;
+        if(efs_client_rpc_identity_revoked(&r->q.id,&revoked)==EFS_OK && revoked) {
+            r->revoked=1;r->complete=1;r->result=EFS_ERR_STALE;
+            opid_end(r->slot);r->slot=-1;return EFS_ERR_STALE;
+        }
+    }
     return rc;
 }
 
@@ -1253,7 +1294,7 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
     }
     if (!r->admitted) {
         rc=efs_client_rpc_publication_session(efs_kv_inode_shard(r->ino),&r->q.id);
-        if (rc!=EFS_OK) return rc;
+        if (rc!=EFS_OK) return lease_request_result(r,rc,0);
         r->admitted=1;
     }
     opid_refresh_ack(&r->q);

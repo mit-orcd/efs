@@ -244,6 +244,9 @@ int efs_client_publication_id(uint64_t sequence, struct efs_opid *);
 int efs_client_rpc_lease_edge(efs_ino_t,uint64_t,const struct efs_opid_req *,
     unsigned flags,uint64_t pending_token,int probe,uint64_t *known);
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *);
+/* ReadIndex of global owner: ACTIVE newer epoch proves completed revocation.
+ * Missing owner/fencing state/transport failure never proves revocation. */
+int efs_client_rpc_identity_revoked(const struct efs_opid *,int *);
 /* Caller serializes this object and must retain it while active. A completed
  * object returns its stored verdict without retransmission; reset cannot drop
  * ambiguous ownership. The shared ACK slot bounds concurrent retained edges. */
@@ -252,7 +255,7 @@ struct efs_client_lease_request {
     efs_ino_t ino;
     uint64_t generation, pending_token;
     unsigned flags;
-    int slot, active, admitted, attempted, complete, result;
+    int slot, active, admitted, attempted, complete, result, revoked;
 };
 /* Retained namespace identity and immutable pending-CREATE body. Discovery
  * and result probes do not admit sessions or mutate namespace state. */
@@ -260,7 +263,7 @@ struct efs_client_create_request {
     struct efs_msg_create_retained wire;
     struct efs_inode inode;
     uint64_t generation;
-    int slot,active,attempted,admitted,complete,result;
+    int slot,active,attempted,admitted,complete,result,revoked;
 };
 int efs_client_create_begin(struct efs_client_create_request *,efs_ino_t,
                              const char *,uint32_t,uid_t,gid_t);

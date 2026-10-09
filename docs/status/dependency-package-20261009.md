@@ -562,3 +562,26 @@ Still open: explicit terminal identity recovery after proven global revocation,
 namespace/REPORT-wide fencing and production PUT-ticket admission, transport,
 durable storage fences, all-member collection and retirement. D25 remains staged;
 this substantial FUSE bridge does not close the entire package.
+
+## Terminal retained identity recovery — implemented/gated
+
+The client now queries the global session owner under ReadIndex after an unknown
+STALE/NOT_FOUND result. Only ACTIVE at a strictly newer epoch proves completed
+revocation; FENCING, missing rows, transport errors and malformed states preserve
+the unresolved identity. This terminal proof releases the old shared ACK slot
+without changing UUID/epoch or inventing a replacement mutation. FUSE abandoned
+CREATE, adoption and CLOSE cleanup recognize it separately from stored results.
+
+AMD direct/TCP actual helper verifies current/future/missing epoch cases and
+terminal retained OPEN recovery after a durable fence. Core212/212, peer64/64,
+CREATE/adoption/cold replay, append800 and server deletion/GC counters pass.
+[Evidence](../../results/measure/20261009-revoked-client-identities/README.md).
+
+Remaining package: namespace/REPORT-wide fencing and production PUT-ticket
+admission, transport, durable storage fences, all-member collection/retirement.
+D25 remains staged. This closes the explicit terminal-recovery dependency above,
+not the complete production package.
+
+Final checkpoint: all code regression recipes pass after correcting the extracted
+append admission test header/window expectation; docs5/5. Both AMD mounts verified
+restored and reservation released. Build warning-free.

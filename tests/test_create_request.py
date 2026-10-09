@@ -23,6 +23,10 @@ static int rpc_status_to_efs(uint8_t status) {
  if(status==EFS_INODE_RPC_EXIST)return EFS_ERR_EXIST;
  return EFS_ERR_BUSY;
 }
+static int revoke_proof,revoke_rc;
+int efs_client_rpc_identity_revoked(const struct efs_opid *id,int *out) {
+ assert(id->session_epoch);*out=revoke_proof;return revoke_rc;
+}
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *id) {
  assert(shard==121 && !memcmp(id,&identity,sizeof(identity)));admits++;return admit_rc;
 }
@@ -62,6 +66,12 @@ int main(void) {
  assert(efs_client_create_resume(&r,0)==EFS_ERR_PROTO&&!r.complete&&r.wire.shard==121);
  bad_route=0;stored=1;negative=1;
  assert(efs_client_create_resume(&r,1)==EFS_ERR_EXIST&&r.complete&&!r.inode.ino&&r.slot==-1);
+ assert(!efs_client_create_reset(&r));
+ stored=0;negative=0;admit_rc=EFS_ERR_STALE;
+ assert(!efs_client_create_begin(&r,4097,"new",S_IFREG|0600,11,12));identity=r.wire.q.id;
+ revoke_rc=EFS_ERR_NOT_FOUND;assert(efs_client_create_resume(&r,0)==EFS_ERR_STALE&&!r.complete);
+ revoke_rc=0;revoke_proof=1;
+ assert(efs_client_create_resume(&r,0)==EFS_ERR_STALE&&r.complete&&r.revoked&&r.slot==-1&&!r.attempted);
  assert(!efs_client_create_reset(&r));
  puts("retained CREATE: immutable body/identity, pure probe, admission ambiguity, cancellation barrier, exact proof and pinned routing PASS");
 }

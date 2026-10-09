@@ -20,6 +20,10 @@ static void opid_seed_locked(void) {if(!g_client.opid_next){g_client.opid_uuid[0
 static int admits,calls,probe_rc,submit_rc,admit_rc;
 static uint64_t probe_known,submit_known;
 static struct efs_opid_req expected;
+static int revoke_proof,revoke_rc;
+int efs_client_rpc_identity_revoked(const struct efs_opid *id,int *out) {
+ assert(id->session_epoch);*out=revoke_proof;return revoke_rc;
+}
 int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *id) {
  assert(shard==1&&id->client_uuid[0]==17&&id->session_epoch==4);admits++;return admit_rc;
 }
@@ -60,6 +64,14 @@ int main(void) {
  probe_known=0;probe_rc=EFS_ERR_BUSY;submit_known=1;submit_rc=EFS_OK;
  assert(!efs_client_lease_resume(&r,0)&&r.complete&&r.q.ack==r.q.id.seq-1);
  assert(!efs_client_lease_reset(&r));probe_known=1;probe_rc=EFS_ERR_STALE;
+ assert(!efs_client_lease_begin(&r,4097,99,EFS_LEASE_EDGE_CLOSE,0));expected=r.q;
+ probe_known=0;probe_rc=EFS_ERR_STALE;
+ revoke_rc=EFS_ERR_NOT_FOUND;revoke_proof=0;
+ assert(efs_client_lease_resume(&r,1)==EFS_ERR_STALE&&!r.complete);
+ assert(efs_client_lease_reset(&r)==EFS_ERR_BUSY);
+ revoke_rc=0;assert(efs_client_lease_resume(&r,1)==EFS_ERR_STALE&&!r.complete);
+ revoke_proof=1;assert(efs_client_lease_resume(&r,1)==EFS_ERR_STALE&&r.complete&&r.revoked&&r.slot==-1);
+ assert(!efs_client_lease_reset(&r));revoke_proof=0;probe_known=1;probe_rc=EFS_ERR_STALE;
  struct efs_client_lease_request all[EFS_OPID_INFLIGHT]={0};
  for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++)assert(!efs_client_lease_begin(&all[i],4097,99,EFS_LEASE_EDGE_CLOSE,0));
  assert(efs_client_lease_begin(&r,4097,99,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_BUSY&&!r.active);

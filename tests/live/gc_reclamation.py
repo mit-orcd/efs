@@ -581,7 +581,7 @@ try:
         edge_ino=edge_path.stat().st_ino;edge_uuid=(os.urandom(8)+bytes(8)).hex();edge_results=[]
         retained=work/'client-retained-lease'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained])
-        edge_results.append(run([retained,str(a.port),str(edge_ino)],capture_output=True,text=True,timeout=90).stdout)
+        edge_results.append(run([retained,str(a.port),str(edge_ino),source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
 
         for stage in ('open','close'):
             edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)

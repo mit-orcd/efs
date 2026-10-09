@@ -22,7 +22,7 @@ source=r'''
 #include "client_internal.h"
 #include "efs/session.h"
 struct efs_client g_client;
-static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold;
+static int open_rc,close_rc,adopt_rc,opens,closes,adopts,server_hold,revocation;
 int efs_client_rpc_getchunks_fileid(efs_export_id_t ex,efs_ino_t ino,uint64_t gen,uint32_t start,struct efs_chunk_rec *recs,uint32_t *count,uint64_t *out) {
  (void)ex;(void)gen;(void)start;(void)recs;(void)count;assert(ino==42);*out=99;return EFS_OK;
 }
@@ -40,6 +40,7 @@ int efs_client_lease_resume(struct efs_client_lease_request *r,int probe) {
  else if(r->flags==EFS_LEASE_EDGE_CLEAR_PENDING){adopts++;rc=adopt_rc;}
  else {closes++;rc=close_rc;if(!rc)server_hold=0;}
  r->attempted=1;
+ if(revocation && rc==EFS_ERR_STALE){r->revoked=1;r->complete=1;r->result=rc;server_hold=0;}
  if(!rc){r->complete=1;r->result=rc;}return rc;
 }
 int efs_client_lease_reset(struct efs_client_lease_request *r) {
@@ -98,6 +99,13 @@ int main(void) {
  assert(efs_open_release_pending(42)==EFS_ERR_NET&&closes==old_closes&&server_hold);
  assert(efs_open_acquire(42)==EFS_ERR_NET&&closes==old_closes);
  adopt_rc=0;assert(!efs_open_release_pending(42)&&!g_open_refs&&!server_hold&&adopts>=2);
+ assert(!efs_open_acquire(42));assert(efs_close_note(42,&leased));
+ close_rc=EFS_ERR_STALE;assert(efs_open_release_pending(42)==EFS_ERR_STALE && g_open_refs);
+ revocation=1;assert(!efs_open_release_pending(42) && !g_open_refs && !server_hold);
+ close_rc=0;revocation=0;assert(!efs_open_acquire(42));
+ adopt_rc=EFS_ERR_NET;assert(efs_open_adopt(42,99,3,&handed_off)==EFS_ERR_NET);
+ assert(efs_close_note(42,&leased));adopt_rc=EFS_ERR_STALE;close_rc=EFS_ERR_STALE;revocation=1;
+ assert(!efs_open_release_pending(42) && !g_open_refs && !server_hold);
  puts("FUSE ambiguous OPEN/CLOSE: retained ownership, reopen barrier and clean-stop retry PASS");
 }
 '''

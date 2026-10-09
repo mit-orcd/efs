@@ -13,6 +13,7 @@ code=r'''
 #include <assert.h>
 #include <pthread.h>
 #include <string.h>
+#include <unistd.h>
 #define EFS_OPID_INFLIGHT 512
 #define N 8
 #define M 100000
@@ -41,10 +42,10 @@ int main(void) {
  assert(a>=0 && b>=0 && last.ack==first.id.seq-1);
  efs_client_append_end(b);struct efs_opid_req next; b=efs_client_append_begin(&next);
  assert(next.ack==first.id.seq-1);efs_client_append_end(a);efs_client_append_end(b);
- int slots[EFS_OPID_INFLIGHT];
- for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++)assert((slots[i]=efs_client_append_begin(&next))>=0);
+ int slots[EFS_OPID_REPLY_CACHE];
+ for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++)assert((slots[i]=efs_client_append_begin(&next))>=0);
  assert(efs_client_append_begin(&next)<0 && !next.id.seq);
- for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++)efs_client_append_end(slots[i]);
+ for(unsigned i=0;i<EFS_OPID_REPLY_CACHE;i++)efs_client_append_end(slots[i]);
  g_client.opid_next=UINT64_MAX;assert(efs_client_append_begin(&next)<0 && !next.id.seq);
  return 0;
 }

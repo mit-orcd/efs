@@ -1998,7 +1998,7 @@ static int efs_open_release_pending(efs_ino_t ino)
      * before creating its compensating CLOSE; never replace unknown identity. */
     if (owner->adoption.active) {
         int adoption_rc=efs_client_lease_resume(&owner->adoption,0);
-        if(adoption_rc!=EFS_OK || !owner->adoption.complete)
+        if((adoption_rc!=EFS_OK && !owner->adoption.revoked) || !owner->adoption.complete)
             return adoption_rc==EFS_OK?EFS_ERR_BUSY:adoption_rc;
         (void)efs_client_lease_reset(&owner->adoption);
     }
@@ -2010,7 +2010,8 @@ static int efs_open_release_pending(efs_ino_t ino)
         if (rc == EFS_OK) {
             (void)efs_client_lease_reset(request);
         } else {
-            /* A stored negative OPEN proves this request acquired nothing. */
+            /* A stored negative OPEN acquired nothing; completed global
+             * revocation proves any old ownership is no longer active. */
             (void)efs_client_lease_reset(request);
             owner->leased = 0;
         }
@@ -2022,7 +2023,7 @@ static int efs_open_release_pending(efs_ino_t ino)
     }
     if (request->active) {
         rc = efs_client_lease_resume(request, 0);
-        if (rc != EFS_OK || !request->complete)
+        if ((rc != EFS_OK && !request->revoked) || !request->complete)
             return rc == EFS_OK ? EFS_ERR_BUSY : rc;
         (void)efs_client_lease_reset(request);
     }
@@ -2193,7 +2194,7 @@ static int efs_pending_create_drain(void)
                     request->generation,EFS_LEASE_EDGE_CLEAR_PENDING,request->wire.q.id.seq);
             if(rc==EFS_OK)rc=efs_client_lease_resume(&entry->cleanup,0);
             pthread_mutex_unlock(stripe);
-            if(rc!=EFS_OK || !entry->cleanup.complete)goto pending;
+            if((rc!=EFS_OK && !entry->cleanup.revoked) || !entry->cleanup.complete)goto pending;
             (void)efs_client_lease_reset(&entry->cleanup);
         }
         (void)efs_client_create_reset(request);
