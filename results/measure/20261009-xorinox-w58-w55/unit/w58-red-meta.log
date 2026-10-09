@@ -1,0 +1,9 @@
+FAIL tests/test_meta_apply.c:5599: failed negative verdict remains ambiguous
+FAIL tests/test_meta_apply.c:5600: negative verdict has no ownership effect
+FAIL tests/test_meta_apply.c:5604: durable negative verdict
+FAIL tests/test_meta_apply.c:5607: late CREATE cannot acquire abandoned ownership
+FAIL tests/test_meta_apply.c:5608: negative replay cannot recreate removed name
+FAIL tests/test_meta_apply.c:5610: another request reuses negatively replayed name
+FAIL tests/test_meta_apply.c:5612: negative replay retains verdict after name reuse
+FAIL tests/test_meta_apply.c:5614: negative replay preserves replacement inode
+test_meta_apply: 8 failure(s)

@@ -1,0 +1,22 @@
+cluster: xorinox
+xefsgw already running
+xefsgw up at 192.168.122.114
+shipping binaries from xefs1
+remount requested: stopping efs-fuse on xefsgw
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 3107734 for /mnt/efs
+Unmounted /mnt/efs
+mounting efs on xefsgw (seed 192.168.122.111:17432)
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+/mnt/efs      	<world>
+gateway ready at 192.168.122.114 (from the Mac: ./mount-mac.sh)
+cluster: xorinox
+xefs1: hosts + ssh config updated
+xefs2: hosts + ssh config updated
+xefs3: hosts + ssh config updated
+xefsgw: hosts + ssh config updated
+xefsct1: hosts + ssh config updated
+xefsct2: hosts + ssh config updated
+mac: ~/.ssh/config updated (ssh xefs1 xefs2 xefs3 xefsgw xefsct1 xefsct2)

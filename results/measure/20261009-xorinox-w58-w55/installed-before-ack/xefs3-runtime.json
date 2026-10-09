@@ -1,0 +1,29 @@
+[
+  {
+    "pid": 4081738,
+    "name": "efsd",
+    "uid": 1001,
+    "args": [
+      "/tmp/efs/efsd",
+      "--node-id",
+      "3",
+      "--addr",
+      "192.168.122.113",
+      "--port",
+      "17432",
+      "--storage",
+      "/data1",
+      "--quota",
+      "100G",
+      "--direct-io",
+      "--join",
+      "192.168.122.111:17432"
+    ],
+    "env": {
+      "EFS_TRANSPORT": "tcp",
+      "EFS_MD_RAFT_N": "3"
+    },
+    "commands_opt_in": false,
+    "exe_sha256": "96a53fffd20c116b338fccc61d20cec331a892002baa78f8689d4669c165b4f3"
+  }
+]
