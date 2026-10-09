@@ -1,0 +1,39 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cpu-clock'
+# Event count (approx.): 1032000000
+#
+# Overhead  Command   Symbol                                     
+# ........  ........  ...........................................
+#
+     3.68%  python3   [.] _PyEval_EvalFrameDefault
+     3.20%  efsd      [k] __wake_up_sync_key
+     2.23%  efs-mgmt  [.] do_lookup_x
+     1.94%  efs-mgmt  [.] _dl_lookup_symbol_x
+     1.65%  efsd      [k] _raw_spin_unlock_irqrestore
+     1.55%  efsd      [k] try_to_wake_up
+     1.45%  efsd      [k] __schedule
+     1.26%  efs-mgmt  [.] strcmp
+     1.26%  efsd      [k] el0_svc
+     0.97%  efsd      [.] __syscall_cancel_arch
+     0.87%  efs-mgmt  [k] __pi_clear_page
+     0.87%  efsd      [k] __arch_copy_from_user
+     0.78%  python3   [k] wake_up_new_task
+     0.68%  efs-mgmt  [k] __wake_up_sync_key
+     0.68%  efs-mgmt  [k] zap_present_ptes
+     0.68%  efsd      [k] handle_softirqs
+     0.68%  efsd      [.] host_pump
+     0.58%  efs-mgmt  [k] handle_softirqs
+     0.58%  efsd      [.] __memcpy_generic
+     0.58%  efsd      [k] eventfd_write
+     0.58%  efsd      [k] fpsimd_load_state
+     0.58%  efsd      [k] invoke_syscall.constprop.0
+     0.58%  python3   [.] _PyEval_FrameClearAndPop
+
+
+#
+# (Tip: To not accumulate CPU time of children symbols add --no-children)
+#
