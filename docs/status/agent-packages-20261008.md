@@ -21,6 +21,10 @@ Coordinate implementation fixes in shared client/server paths with their owner.
 NUC execution and missing mount-sync test coverage are recorded in the
 [October 9 UTC gate report](nuc-gate-closure-20261009.md). The original branch
 production tip under test was `3e1d4c6e`; do not infer a newer devel rollout.
+The NUC continuation fixes close/apply deadlock, truncate cursor state and
+append handoff through `393f5bae`. Both final TCP I/O modes pass 213/0/4 POSIX,
+64/64 peer, recovery/replay and exact cold append/GC gates. That committed
+source is deployed and verified on NUC; RXE and W72 remain separate open gates.
 
 ## devel-known-bugs
 

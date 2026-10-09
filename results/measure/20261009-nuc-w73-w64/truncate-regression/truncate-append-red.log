@@ -1,0 +1,5 @@
+FAIL tests/test_meta_apply.c:2857: truncate refuses outstanding append ranges
+FAIL tests/test_meta_apply.c:2859: refused truncate leaves epoch and size unchanged
+FAIL tests/test_meta_apply.c:2869: truncate retires closed watermark
+FAIL tests/test_meta_apply.c:2871: next append uses truncated EOF without zero gap
+test_meta_apply: 4 failure(s)

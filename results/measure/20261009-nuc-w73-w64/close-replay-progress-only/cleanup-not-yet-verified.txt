@@ -1,0 +1,1 @@
+First replay was stopped immediately after log progress. Offline inspection still found one deferred marker and 288 OPEN reservations on all group-2 replicas. This is NOT complete cleanup acceptance; rerun with recovery dwell and offline checks.

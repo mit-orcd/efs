@@ -1,0 +1,14 @@
+{
+  "returncode": 1,
+  "command": [
+    "python3",
+    "/data1/efs/gate-closure-build/tests/posix/posix_2client.py",
+    "--local",
+    "/data1/efs/mnt",
+    "/data1/efs/mnt2",
+    "--parent",
+    "gc-posix-peer",
+    "--results",
+    "/data1/efs/gc-buffered-iae7gxq8/posix2.tsv"
+  ]
+}
