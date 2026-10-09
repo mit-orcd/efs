@@ -1,0 +1,12 @@
+a4a3f7e6eabf9ffbe9ac753b546acbb8e767fda9a94a36a9a1556c6d555952c1  /home/admin/w92-tiny-profile/baseline.data
+5593e18f312c878df45f9b0879a7cff6b0f55b15eccc9deafdcc4db94c0c4dc6  /home/admin/w92-tiny-profile/after.data
+b0b534aa11c84ffe7d440a83dcb14ba7977c61fabf2871f6b28a76c1c06261da  /tmp/efs/efsd
+USER         PID   RSS COMMAND
+efs      2341162 48992 /tmp/efs/efsd --node-id 3 --addr 192.168.122.113 --port 17432 --storage /data1 --quota 100G --direct-io --join 192.168.122.111:17432
+2026-10-09T23:31:06.108Z query-publish: generation=125 g0=88372 g2=176416 rebuilt=10 refolded=25988 edge_reused=0 bytes=2086408 pin_ms=3 build_ms=1270 root_rc=0 files=25166 dirs=821 logical=6165870
+2026-10-09T23:31:07.526Z query-publish: generation=126 g0=88932 g2=178135 rebuilt=11 refolded=26123 edge_reused=0 bytes=2086408 pin_ms=3 build_ms=1266 root_rc=0 files=25295 dirs=827 logical=6202087
+2026-10-09T23:31:08.612Z query-publish: generation=127 g0=89112 g2=180006 rebuilt=4 refolded=26240 edge_reused=0 bytes=2086408 pin_ms=3 build_ms=940 root_rc=0 files=25412 dirs=827 logical=6231118
+2026-10-09T23:31:11.665Z query-publish: generation=128 g0=89160 g2=180281 rebuilt=1 refolded=26253 edge_reused=0 bytes=2086408 pin_ms=3 build_ms=913 root_rc=0 files=25425 dirs=827 logical=6234928
+2026-10-09T23:34:41.794Z efsd 6e841662 (branch devel-find-stats, built 2026-10-09T23:32:41Z on xefs3), build=6e841662: node 3 listening on 192.168.122.113:17432, storage=/data1 (1 paths, stripe=none), used=1667235840, quota=107374182400, direct_io=on, writers=1 shared
+2026-10-09T23:34:41.951Z query-restore: rc=-14 backend=disk
+2026-10-09T23:34:44.609Z query-publish: generation=1 g0=91073 g2=182770 rebuilt=4096 refolded=26253 edge_reused=0 bytes=2086408 pin_ms=4 build_ms=2663 root_rc=0 files=25425 dirs=827 logical=6234928

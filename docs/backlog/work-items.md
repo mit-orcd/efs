@@ -3618,6 +3618,13 @@ wipe. Per-generation logical disk budgeting is implemented in `47e7b886`.
 Derived-stat refresh still performs a full disk pass; aggregate cache-space
 budgets, incremental derived maintenance and the scale gates below remain open.
 
+**Oct 9 tiny-file profiling:** fixed read windows and immutable-file persistence
+reuse deployed as `6e841662`; identical 25425-file metadata copies show median
+unchanged refresh 1.977 → 0.955 seconds. Unit preads fall 50.2%. Live creation
+225 → 85 files/s remains a confounded follow-up, not a cache-only verdict.
+See [indexed checkpoint](../status/query-cache-tiny-profile-20261009.md).
+Full incremental stats and aggregate disk control remain open.
+
 **Oct 9 user requirement — billions of files:** W92 remains open until the
 server query catalog uses a persistent, partitioned disk-backed index with
 bounded resident memory. Target namespace cardinality is **2^32 files**;

@@ -44,6 +44,9 @@ checkpoint recovery. Functional gates and clean Xorinox mutation queries pass af
 wipe; the earlier wrong-shard artifact remains historical evidence. Per-generation
 logical disk budgeting is implemented. Incremental derived stats, aggregate cache
 quotas and large-scale acceptance remain open.
+[W92 tiny-file profiling](query-cache-tiny-profile-20261009.md) records deployed
+bounded read windows and immutable-file persistence reuse: controlled unchanged
+refresh is 2.07× faster; the mixed live creation-rate drop remains unisolated.
 
 ## Distributed metadata scaling discussion
 

@@ -129,3 +129,11 @@ are candidates; unequal group write load and absent per-round ack timelines
 prevent causal isolation. See the same follow-up for read-round freshness,
 pre-sleep log semantics, evidence and the next measurement gate. No runtime
 change was made and W66 remains open.
+
+## Tiny-file measurement follow-up — Oct 9
+
+[W92 cache profiling](query-cache-tiny-profile-20261009.md) improved controlled
+cache refreshes, but live file creation fell 225 → 85 files/s after advancing
+other devel code and retaining a larger namespace. This does not identify a
+W66 defect. Repeat with controlled revision, namespace/placement and foreground
+profiles before assigning cause; preserve read authority and persistence.

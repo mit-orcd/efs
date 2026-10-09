@@ -1,0 +1,2 @@
+{"exit_code": 0, "wall_seconds": 10.147930489998544, "user_seconds": 1.534065, "system_seconds": 4.726083, "cumulative_child_maxrss_kib": 14048, "stderr": ""}
+{"exit_code": 0, "wall_seconds": 6.341078182973433, "user_seconds": 0.49965400000000004, "system_seconds": 1.8096389999999998, "cumulative_child_maxrss_kib": 14456, "stderr": ""}

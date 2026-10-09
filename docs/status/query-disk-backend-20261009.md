@@ -1,6 +1,8 @@
 # W92 — local disk-backed query catalog
 
-Implementation checkpoint, Oct 9, 2026, `devel-find-stats`, code commits `9eb3dd51` and `47e7b886`. W92 remains open;
+Foundation checkpoint, Oct 9, 2026, `devel-find-stats`, code commits `9eb3dd51`
+and `47e7b886`. Latest deployed cache optimizations: `6e841662`; see
+[tiny-file profiling and controlled comparison](query-cache-tiny-profile-20261009.md). W92 remains open;
 this is functional backend progress, not acceptance of 2^32-file capacity.
 
 ## Implementation
