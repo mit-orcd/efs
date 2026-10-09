@@ -5595,6 +5595,49 @@ the original record and withdrawn interpretation remain retained.
 
 ### W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
+**Oct 9 user requirement — billions of files:** W92 remains open until the
+server query catalog uses a persistent, partitioned disk-backed index with
+bounded resident memory. Target namespace cardinality is **2^32 files**;
+this is a design/validation target, not a demonstrated EFS capacity. The current
+implementation retains the complete query catalog in RAM. Partition reuse and
+bounded result paging reduce work/output but do not bound resident memory as
+the namespace grows. The latest NUC run reaches the unchanged 1024 MiB catalog
+cap near 1.25 million files and leaves stale snapshots. The earlier recovery
+below applied to a smaller namespace and does not resolve this scale issue.
+Raising the cap is not acceptance of the requested architecture.
+
+**Required implementation:** persist shard/partition indexes; use bounded caches,
+builders, queues and query/export buffers; incrementally apply metadata changes
+with durable watermarks and bounded catch-up/recovery; maintain incremental
+per-partition statistics. Preserve permission checks, immutable per-open output,
+truthful age/completeness/error reporting and retained-snapshot lifetime without
+pinning a complete namespace in RAM. Indexed lookup, bounded display and full
+streaming export must not require a full in-memory catalog or rebuild on command
+access. Define supported predicates and access plans honestly: substring searches
+may require bounded disk scans rather than claiming every predicate is an index seek.
+
+**Scale gates before closure:** document per-node/shard memory and disk budgets,
+64-bit count/offset arithmetic and every protocol/storage cardinality limit;
+prove bounded RSS/queues/build scratch at increasing cardinality, cold caches,
+concurrent mutations and exports; test restart, disable/re-enable catch-up,
+publisher loss and interrupted recovery against an independent oracle. Add a
+partitioned synthetic-index gate exercising at least 2^32 entries, plus staged
+real-filesystem gates within measured space/inode limits. Record synthetic and
+real evidence separately; synthetic index acceptance does not certify end-to-end
+EFS capacity. Measure foreground latency, query latency and freshness under load.
+Implementation and these gates are pending. See
+[architecture requirement](../status/virtual-find-stats.md#billions-of-files--disk-backed-bounded-memory-catalog)
+and [five-minute evidence](../status/tiny-file-five-minute-profile-20261009.md).
+
+Oct 9 CPU/memory follow-up: deployed `a62cbd5f6ca2` on NUC. Immutable decoded
+inode/stat blocks are retained per partition with lane dependency invalidation;
+mutable rollups are allocated only for directories. Publication recovers beyond
+the former 1 GiB cap failure without raising the cap. Differential/lifetime,
+full native, POSIX 212/212, peer 64/64 and restart/command/export gates pass;
+loaded pinned export returns 1,187,139 unique paths. Global lookup-index and
+pointer-vector work remain. See [measured results](../status/find-stats-refresh-cpu-20261009.md).
+This performance result does not close unrelated scale/fault/NFS acceptance.
+
 Activated Oct 8, 2026 by user. Branch `devel-find-stats`, baseline `e86b85ac`.
 Current user scope replaces synthetic `.find`/`.stats` with `.efs/find` and
 `.efs/stats`; W91 supplies Python commands and versioned query paths. Real
@@ -5683,6 +5726,41 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 <a id="w93"></a>
 
 ### W93 · Broader durable Raft group commit for tiny-file metadata
+
+**Oct 9 internal measurement:** opt-in counters on NUC capture actual durable
+cohorts, hold/waiter/proposer depths and host/follower boundaries. n3 inbox
+averages 29.7 messages, but 81.9% of host segments end on group switches and
+eligible cross-request batches contain one request. Ineligibility ends 70.3%
+of n3's eligible batches; empty/tail-mismatched requests dominate rejection
+checks. n3 logs at least ten inbox-full frame drops at workload startup (total
+unknown). Investigate receiver pressure and retry/overlapping traffic, with
+boundary-specific reject and behind/ahead classification, before larger caps.
+No yield-cap, byte-budget or admission failures are observed. Preserve ACK/read
+ordering and cold/fault gates for any policy A/B; this measurement is not a fix
+or a hardware-ceiling proof. Instrumentation is disabled after the run.
+[Evidence and follow-up scope](../status/batch-internals-profile-20261009.md).
+
+**Oct 9 tracepoint rerun:** newly enabled kernel access allows tracing the running
+NUC daemons without restart. Continuous five-minute capture (1.7 million events,
+zero loss reported) yields n3/n4 1.60/1.47 entries per sync, median one,
+78%/69% single-entry syncs and mean 7.8/7.4 ms. Rare n3 cohorts reach 92 entries;
+the shorter prior traces missed some burst batching. Background GC/reap is
+about 14.5% of n2/n3 WAL traffic. This confirms persistence cost without proving
+a hardware ceiling; internal hold/queue/eligibility instrumentation and controlled
+policy A/B remain the next gate. The earlier generator stop claim is corrected:
+inherited ignored SIGINT prevented stopping; the same bounded loader was reused.
+[Tracepoint evidence and limitations](../status/durability-tracepoints-profile-20261009.md).
+
+**Oct 9 production measurement:** unchanged NUC build `800122c5e86d` was traced
+in three windows per daemon during a five-minute eight-worker tiny-file run.
+n3/n4 average 1.34/1.39 entries per WAL sync, with 76%/73% single-entry barriers
+and mean sync elapsed 7.3/8.0 ms. Existing batching reduces WAL calls modestly;
+larger limits are not shown to help. Next measure internal durable-watermark
+cohorts, hold/waiter depth and follower flush reasons before a controlled policy
+A/B with idle/mixed p99 and durability fault gates. This is observational,
+syscall-boundary evidence with ptrace overhead, not hardware-ceiling proof or
+new end-to-end batching acceptance. See
+[measurement and limitations](../status/durability-batching-profile-20261009.md).
 
 **Implementation update (Oct 8):** Bounded follower durability batching, durable ACK ordering, storage-failure fencing and committed-prefix protection are implemented. Fault/full Linux/live AMD direct/TCP gates pass. Six balanced 4,096-file same-code mixed-load fixtures pass cold verification and physical reclamation, with overlapping close tails; separate pump/barrier diagnostics are retained.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).

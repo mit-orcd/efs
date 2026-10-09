@@ -3674,6 +3674,19 @@ find/stats checkpoint; never treat the private fixture as deployed acceptance.
 
 ## W93 · Broader durable Raft group commit for tiny-file metadata
 
+**Oct 9 internal measurement:** opt-in counters on NUC capture actual durable
+cohorts, hold/waiter/proposer depths and host/follower boundaries. n3 inbox
+averages 29.7 messages, but 81.9% of host segments end on group switches and
+eligible cross-request batches contain one request. Ineligibility ends 70.3%
+of n3's eligible batches; empty/tail-mismatched requests dominate rejection
+checks. n3 logs at least ten inbox-full frame drops at workload startup (total
+unknown). Investigate receiver pressure and retry/overlapping traffic, with
+boundary-specific reject and behind/ahead classification, before larger caps.
+No yield-cap, byte-budget or admission failures are observed. Preserve ACK/read
+ordering and cold/fault gates for any policy A/B; this measurement is not a fix
+or a hardware-ceiling proof. Instrumentation is disabled after the run.
+[Evidence and follow-up scope](../status/batch-internals-profile-20261009.md).
+
 **Oct 9 tracepoint rerun:** newly enabled kernel access allows tracing the running
 NUC daemons without restart. Continuous five-minute capture (1.7 million events,
 zero loss reported) yields n3/n4 1.60/1.47 entries per sync, median one,
