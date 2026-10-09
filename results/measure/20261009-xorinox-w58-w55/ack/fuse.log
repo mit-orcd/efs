@@ -1,0 +1,178 @@
+2026-10-09T01:52:06.645Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T01:36:52Z on xefs1), build=unknown: starting export=default mount=/data1/efs-known-bugs/ack-mnt
+2026-10-09T01:52:06.645Z Discovered 4 cluster nodes from 127.0.0.1:28440
+2026-10-09T01:52:06.645Z   node id=1 127.0.0.1:28440
+2026-10-09T01:52:06.645Z   node id=2 127.0.0.1:28441
+2026-10-09T01:52:06.645Z   node id=3 127.0.0.1:28442
+2026-10-09T01:52:06.645Z   node id=4 127.0.0.1:28443
+2026-10-09T01:52:06.645Z fetching metadata...
+2026-10-09T01:52:06.645Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T01:52:06.645Z export id=1 name=default
+2026-10-09T01:52:06.645Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T01:52:06.648Z efs-fuse: workers max=10 idle=10
+2026-10-09T01:52:06.650Z fuse serving
+2026-10-09T01:52:06.902Z test-create-retry: stage=0 seq=1 ino=4097 identical=1
+2026-10-09T01:52:06.902Z inode-rpc: retry type=45 attempt=0 why=recv rc=-1
+2026-10-09T01:52:06.953Z test-create-retry: stage=1 seq=1 ino=4097 identical=1
+2026-10-09T01:52:07.054Z test-create-retry: stage=2 seq=1 ino=4097 identical=1
+2026-10-09T01:52:11.288Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T01:36:52Z on xefs1), build=unknown: starting export=default mount=/data1/efs-known-bugs/ack-mnt
+2026-10-09T01:52:11.289Z Discovered 4 cluster nodes from 127.0.0.1:28440
+2026-10-09T01:52:11.289Z   node id=1 127.0.0.1:28440
+2026-10-09T01:52:11.289Z   node id=2 127.0.0.1:28441
+2026-10-09T01:52:11.289Z   node id=3 127.0.0.1:28442
+2026-10-09T01:52:11.289Z   node id=4 127.0.0.1:28443
+2026-10-09T01:52:11.289Z fetching metadata...
+2026-10-09T01:52:11.289Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T01:52:11.289Z export id=1 name=default
+2026-10-09T01:52:11.289Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T01:52:11.293Z efs-fuse: workers max=10 idle=10
+2026-10-09T01:52:11.297Z fuse serving
+2026-10-09T01:52:11.940Z inode-rpc: retry type=47 attempt=0 why=no-hint from=2
+2026-10-09T01:52:12.394Z inode-rpc: retry type=47 attempt=0 why=no-hint from=2
+2026-10-09T01:52:14.152Z inode-rpc: retry type=47 attempt=0 why=no-hint from=2
+2026-10-09T01:52:18.430Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T01:36:52Z on xefs1), build=unknown: starting export=default mount=/data1/efs-known-bugs/ack-mnt
+2026-10-09T01:52:18.430Z Discovered 4 cluster nodes from 127.0.0.1:28440
+2026-10-09T01:52:18.430Z   node id=1 127.0.0.1:28440
+2026-10-09T01:52:18.430Z   node id=2 127.0.0.1:28441
+2026-10-09T01:52:18.430Z   node id=3 127.0.0.1:28442
+2026-10-09T01:52:18.430Z   node id=4 127.0.0.1:28443
+2026-10-09T01:52:18.430Z fetching metadata...
+2026-10-09T01:52:18.430Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T01:52:18.430Z export id=1 name=default
+2026-10-09T01:52:18.430Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T01:52:18.433Z efs-fuse: workers max=10 idle=10
+2026-10-09T01:52:18.435Z fuse serving
+2026-10-09T01:52:27.109Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T01:36:52Z on xefs1), build=unknown: starting export=default mount=/data1/efs-known-bugs/ack-mnt
+2026-10-09T01:52:27.110Z Discovered 4 cluster nodes from 127.0.0.1:28440
+2026-10-09T01:52:27.110Z   node id=1 127.0.0.1:28440
+2026-10-09T01:52:27.110Z   node id=2 127.0.0.1:28441
+2026-10-09T01:52:27.110Z   node id=3 127.0.0.1:28442
+2026-10-09T01:52:27.110Z   node id=4 127.0.0.1:28443
+2026-10-09T01:52:27.110Z fetching metadata...
+2026-10-09T01:52:27.110Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T01:52:27.110Z export id=1 name=default
+2026-10-09T01:52:27.110Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T01:52:27.113Z efs-fuse: workers max=10 idle=10
+2026-10-09T01:52:27.116Z fuse serving
+2026-10-09T01:52:33.573Z inode-rpc: slow-ok type=51 attempts=7 saw_busy=1 status=0 us=5358891
+2026-10-09T01:52:59.636Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:52:59.648Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:52:59.660Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:52:59.674Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-09T01:52:59.686Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-09T01:52:59.699Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-09T01:52:59.711Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:52:59.723Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:52:59.733Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-09T01:52:59.740Z efs: report rec ino=16385 ci=0 rejected unowned staging observation nodes=1,2,3 (putid miss, n=1)
+2026-10-09T01:53:28.903Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T01:36:52Z on xefs1), build=unknown: starting export=default mount=/data1/efs-known-bugs/ack-mnt
+2026-10-09T01:53:28.903Z Discovered 4 cluster nodes from 127.0.0.1:28440
+2026-10-09T01:53:28.903Z   node id=1 127.0.0.1:28440
+2026-10-09T01:53:28.903Z   node id=2 127.0.0.1:28441
+2026-10-09T01:53:28.903Z   node id=3 127.0.0.1:28442
+2026-10-09T01:53:28.903Z   node id=4 127.0.0.1:28443
+2026-10-09T01:53:28.903Z fetching metadata...
+2026-10-09T01:53:28.903Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T01:53:28.903Z export id=1 name=default
+2026-10-09T01:53:28.903Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T01:53:28.906Z efs-fuse: workers max=10 idle=10
+2026-10-09T01:53:28.909Z fuse serving
+2026-10-09T01:53:45.413Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T01:36:52Z on xefs1), build=unknown: starting export=default mount=/data1/efs-known-bugs/ack-mnt
+2026-10-09T01:53:45.414Z Discovered 4 cluster nodes from 127.0.0.1:28440
+2026-10-09T01:53:45.414Z   node id=1 127.0.0.1:28440
+2026-10-09T01:53:45.414Z   node id=2 127.0.0.1:28441
+2026-10-09T01:53:45.414Z   node id=3 127.0.0.1:28442
+2026-10-09T01:53:45.414Z   node id=4 127.0.0.1:28443
+2026-10-09T01:53:45.414Z fetching metadata...
+2026-10-09T01:53:45.414Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T01:53:45.414Z export id=1 name=default
+2026-10-09T01:53:45.414Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T01:53:45.418Z efs-fuse: workers max=10 idle=10
+2026-10-09T01:53:45.421Z fuse serving
+2026-10-09T01:53:48.313Z efs: read hole ino=6233 ci=1 holes=1
+2026-10-09T01:53:49.093Z efs: rename_at 1928/a -> 1928/b rc=-12 after 1 tries
+2026-10-09T01:53:54.408Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-09T01:53:54.414Z efs: report rec ino=5208 ci=0 rejected unowned staging observation nodes=2,3,4 (putid miss, n=1)
+2026-10-09T01:54:01.375Z efs: read hole ino=6869 ci=2 holes=3
+2026-10-09T01:54:01.969Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=1047869
+2026-10-09T01:54:02.636Z efs: read hole ino=6662 ci=1 holes=12
+2026-10-09T01:54:03.998Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:04.005Z efs: report rec ino=6830 ci=0 rejected unowned staging observation nodes=2,3,4 (putid miss, n=2)
+2026-10-09T01:54:04.931Z efs: read hole ino=7091 ci=0 holes=13
+2026-10-09T01:54:06.153Z efs: read hole ino=4178 ci=0 holes=14
+2026-10-09T01:54:08.997Z dcache-pressure live=264110080 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=75032 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T01:54:09.013Z dcache-pressure live=263585792 reserved=0 backing=268435456 limit=335544320 request=5242880 metadata=3984 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T01:54:12.162Z fsync-split ino=13492 flush_ms=1073 report_ms=0 rc=0
+2026-10-09T01:54:13.162Z dcache-pressure live=263847936 reserved=0 backing=301989888 limit=335544320 request=5242880 metadata=27888 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T01:54:13.196Z dcache-pressure live=263716864 reserved=0 backing=301989888 limit=335544320 request=5242880 metadata=64408 metadata_reserved=0 metadata_limit=8388608 metadata_request=10240 failed=body
+2026-10-09T01:54:16.093Z fsync-split ino=5756 flush_ms=924 report_ms=0 rc=0
+2026-10-09T01:54:24.442Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=11
+2026-10-09T01:54:24.451Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=4
+2026-10-09T01:54:24.462Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=5
+2026-10-09T01:54:24.476Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=4
+2026-10-09T01:54:24.491Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=4
+2026-10-09T01:54:24.507Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:24.525Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=4
+2026-10-09T01:54:24.544Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:24.563Z fsync-split ino=9163 flush_ms=147 report_ms=0 rc=0
+2026-10-09T01:54:24.676Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=5
+2026-10-09T01:54:24.687Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=6
+2026-10-09T01:54:24.702Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=3 replay_ms=6
+2026-10-09T01:54:24.718Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=5 replay_ms=3
+2026-10-09T01:54:24.740Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=6
+2026-10-09T01:54:25.509Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=3
+2026-10-09T01:54:25.516Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:25.525Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:25.535Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:25.550Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=3
+2026-10-09T01:54:25.565Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-09T01:54:25.583Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=5
+2026-10-09T01:54:25.602Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:25.622Z fsync-split ino=9163 flush_ms=124 report_ms=0 rc=0
+2026-10-09T01:54:25.655Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=8
+2026-10-09T01:54:25.661Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:25.669Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:25.678Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-09T01:54:25.690Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:25.791Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:25.796Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:25.804Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:25.815Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:26.270Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:26.278Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:26.285Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:26.296Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=3
+2026-10-09T01:54:26.307Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:26.321Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:26.337Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:27.010Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=3 replay_ms=4
+2026-10-09T01:54:27.022Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=5
+2026-10-09T01:54:27.036Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=6
+2026-10-09T01:54:27.048Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=3
+2026-10-09T01:54:27.060Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:27.078Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=5
+2026-10-09T01:54:27.095Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:27.114Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:27.131Z fsync-split ino=9163 flush_ms=146 report_ms=0 rc=0
+2026-10-09T01:54:27.170Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=9
+2026-10-09T01:54:27.181Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-09T01:54:27.188Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-09T01:54:27.198Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:27.209Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:27.222Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:27.329Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:27.335Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:27.549Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:27.555Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:27.564Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=2 replay_ms=3
+2026-10-09T01:54:27.573Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:27.586Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=3
+2026-10-09T01:54:28.075Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:28.081Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:28.090Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=3
+2026-10-09T01:54:28.099Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-09T01:54:28.110Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=2
+2026-10-09T01:54:28.125Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=0 replay_ms=4
+2026-10-09T01:54:28.140Z report-stale: chunks=1 runs=1 committed=0 replayed=1 pull_ms=1 replay_ms=2
+2026-10-09T01:54:37.636Z inode-rpc: slow-ok type=67 attempts=1 saw_busy=0 status=0 us=3243983
+2026-10-09T01:54:46.641Z efs: read hole ino=5694 ci=0 holes=15
+2026-10-09T01:54:46.826Z efs: rename_at 1941/a -> 1941/b rc=-3 after 1 tries

@@ -1,0 +1,9 @@
+FAIL tests/test_meta_apply.c:5656: ordinary and pending CREATE refuse missing replay capacity
+FAIL tests/test_meta_apply.c:5658: replay pressure has no namespace or lease effects
+FAIL tests/test_meta_apply.c:5664: lease shares the sole atomic namespace batch
+FAIL tests/test_meta_apply.c:5665: no name after failed combined batch
+FAIL tests/test_meta_apply.c:5668: combined create succeeds after retry
+FAIL tests/test_meta_apply.c:5670: created inode already protected by atomic lease
+FAIL tests/test_meta_apply.c:5685: CREATE replay returns original inode after unlink
+FAIL tests/test_meta_apply.c:5692: successful CREATE replay cannot become EEXIST or return replacement
+test_meta_apply: 8 failure(s)

@@ -1,0 +1,2 @@
+cluster: xorinox
+/mnt/efs      	<world>(sync,wdelay,hide,no_subtree_check,fsid=0,anonuid=0,anongid=0,sec=sys,rw,insecure,no_root_squash,all_squash)
