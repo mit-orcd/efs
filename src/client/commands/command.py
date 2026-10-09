@@ -395,7 +395,7 @@ def main(argv=None, script_path=None):
         parser.add_argument("-l", "--long", action="store_true", help="Permissions, uid:gid, size, modification date and path")
         parser.add_argument("--human-readable", action="store_true", help="Format long-list sizes as KiB, MiB, GiB")
         parser.add_argument("--sort", choices=("name", "mtime", "size"), default=None,
-                            help="Name ascending (default), newest first, or largest first")
+                            help="Sort selected results: name ascending (default), newest first, or largest first")
         parser.add_argument("-r", "--reverse", action="store_true", help="Reverse the selected sort order")
         parser.add_argument("--time-style", choices=("iso", "relative", "full"),
                             help="Long-list dates: UTC iso (default), relative age, or full UTC nanoseconds")
@@ -466,6 +466,9 @@ def main(argv=None, script_path=None):
                 else:
                     remaining = args.limit - len(entries)
                     entries.extend(result["entries"][:remaining]);paths.extend(chunk[:remaining])
+                    if len(chunk) > remaining:
+                        result["page"]["more"] = result["page"]["more_confirmed"] = True
+                        result["truncated"] = True
                     if len(entries) == args.limit:
                         break
             if output:

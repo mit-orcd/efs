@@ -211,6 +211,23 @@ class Commands(unittest.TestCase):
         self.assertEqual(records[-1], dict(complete=True, exported=135))
         self.assertEqual(p.stdout, b"")
 
+    def test_display_cap_across_short_scan_pages(self):
+        import contextlib
+        import io
+        from unittest.mock import patch
+        first = envelope("ls", [str(i).encode() for i in range(50)])
+        last = envelope("ls", [str(i).encode() for i in range(50, 110)])
+        def pages(*args):
+            yield first, commands.validate_result(first, "ls")
+            yield last, commands.validate_result(last, "ls")
+        output, status = io.StringIO(), io.StringIO()
+        with patch.object(commands, "result_pages", pages), contextlib.redirect_stdout(output), contextlib.redirect_stderr(status):
+            self.assertEqual(commands.main(["--json"], str(self.directory / "ls")), 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual(len(result["entries"]), 100)
+        self.assertTrue(result["truncated"] and result["page"]["more_confirmed"])
+        self.assertIn("more results exist", status.getvalue())
+
     def test_export_failure_preserves_destination_and_cleans_temporary(self):
         first = envelope("ls", [b"first"])
         first["page"].update(cursor="1", more=True)
