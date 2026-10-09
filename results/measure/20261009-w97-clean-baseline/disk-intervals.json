@@ -1,0 +1,68 @@
+[
+  {
+    "window": [
+      0,
+      100
+    ],
+    "devices": {
+      "sda": {
+        "writes": 203241,
+        "write_ms_per_op": 0.15845720105687336,
+        "io_busy_percent": 15.206994318514843,
+        "flush_ops": 0,
+        "flush_ms_per_op": null
+      },
+      "nvme0n1": {
+        "writes": 208331,
+        "write_ms_per_op": 2.042816479544571,
+        "io_busy_percent": 88.64396688172748,
+        "flush_ops": 84886,
+        "flush_ms_per_op": 1.7880804844143912
+      }
+    }
+  },
+  {
+    "window": [
+      100,
+      200
+    ],
+    "devices": {
+      "sda": {
+        "writes": 124509,
+        "write_ms_per_op": 0.18973728806752926,
+        "io_busy_percent": 10.216003617180405,
+        "flush_ops": 0,
+        "flush_ms_per_op": null
+      },
+      "nvme0n1": {
+        "writes": 103123,
+        "write_ms_per_op": 4.132744392618523,
+        "io_busy_percent": 89.24803160005058,
+        "flush_ops": 40484,
+        "flush_ms_per_op": 3.98196818496196
+      }
+    }
+  },
+  {
+    "window": [
+      200,
+      300
+    ],
+    "devices": {
+      "sda": {
+        "writes": 91772,
+        "write_ms_per_op": 0.17794098417818072,
+        "io_busy_percent": 7.869997756735835,
+        "flush_ops": 0,
+        "flush_ms_per_op": null
+      },
+      "nvme0n1": {
+        "writes": 99188,
+        "write_ms_per_op": 4.502964068234061,
+        "io_busy_percent": 90.98197406649805,
+        "flush_ops": 39475,
+        "flush_ms_per_op": 3.8073464217859403
+      }
+    }
+  }
+]

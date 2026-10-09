@@ -18,12 +18,19 @@ static const char *cn[BO_COUNTER_N] = {
     "eligible", "reject_store", "reject_role", "reject_type", "reject_route", "reject_term",
     "reject_empty", "reject_entries", "reject_log", "reject_tail", "reject_config", "reject_admit", "reject_bytes",
     "follow_end", "follow_ineligible", "follow_bytes", "follow_error",
-    "host_end", "host_group", "host_count", "host_bytes", "inbox_empty", "spin_cap", "tail_behind", "tail_ahead", "tail_term", "inbox_drop"
+    "host_end", "host_group", "host_count", "host_bytes", "inbox_empty", "spin_cap", "tail_behind", "tail_ahead", "tail_term", "inbox_drop",
+    "ae_initial", "ae_extend", "ae_timeout", "ae_other",
+    "reply_partial", "reply_covered", "drop_data", "drop_empty",
+    "drop_other", "accept_data", "accept_empty",
+    "wire_sent", "flow_busy", "flow_admitted", "flow_legacy",
+    "flow_wait", "flow_control", "flow_probe", "flow_enqueue_retry", "flow_prebuild_retry"
 };
 static const char *hn[BH_HIST_N] = {
     "wal_entries", "wal_bytes", "sync_us", "sync_wait_us", "sync_waiters",
     "hold_us", "hold_depth", "proposers", "inbox", "host_messages",
-    "follow_messages", "follow_entries", "follow_assembly_us", "follow_total_us", "spins"
+    "follow_messages", "follow_entries", "follow_assembly_us", "follow_total_us", "spins",
+    "inbox_age_us", "pump_lock_us", "pump_drain_us",
+    "kv_release_us", "applied_persist_us"
 };
 static void init_once(void)
 {

@@ -81,6 +81,7 @@ struct efs_raft {
     struct efs_raft_store *store;
     void *store_ctx;
     efs_raft_send_fn send;
+    efs_raft_send_ready_fn send_ready;
     void *net;
     efs_raft_apply_fn apply;
     void *app;
@@ -819,6 +820,15 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
                 return send_commit_probe(r, to);
             return EFS_OK;
         }
+        /* A pressured host already owns a pending frame for this group.
+         * Do not allocate/unpack another one just to refuse it in send().
+         * A fresh read still needs its context delivered as an empty probe. */
+        if (r->send_ready && !r->send_ready(r->net,to,r->group)) {
+            /* An AE_REP's data-only follow-up must not generate another
+             * probe: probe ACK -> blocked data -> probe would self-feed. */
+            if (!data_only && r->read_in_flight==1) return send_commit_probe(r,to);
+            return EFS_OK;
+        }
         /* W19: the log read lands in the wire buffer. host_send writes
          * the 80-byte header and queues this pointer. No second copy. */
         {
@@ -894,6 +904,12 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
     }
     rc = send_msg(r, &m);
     if (rc == EFS_OK) {
+        if (m.nentries && BO_ON()) {
+            enum efs_batch_counter why = !r->ae_inflight[to] ? BO_AE_INITIAL :
+                r->ticks - r->ae_inflight_tick[to] >= (uint64_t)r->heartbeat_ticks ? BO_AE_TIMEOUT :
+                r->ae_inflight[to] == ni && ni + m.nentries - 1 > r->ae_inflight_end[to] ? BO_AE_EXTEND : BO_AE_OTHER;
+            BO_COUNT(why);
+        }
         ae_inflight_set(r, to, m.nentries ? ni : 0,
                         m.nentries ? ni + m.nentries - 1 : m.prev_index);
         /* Entries were left behind this window: it hit the entry or
@@ -1366,8 +1382,11 @@ static int on_ae_rep(struct efs_raft *r, const struct efs_raft_msg *in)
     }
     /* A commit probe echoes vote_granted. Clearing inflight here would
      * forget an entry batch that is still unanswered. */
-    if (!in->vote_granted)
+    if (!in->vote_granted) {
+        if (in->success && r->ae_inflight[in->from])
+            BO_COUNT(in->match_index < r->ae_inflight_end[in->from] ? BO_REPLY_PARTIAL : BO_REPLY_COVERED);
         r->ae_inflight[in->from] = 0;
+    }
     if (in->success) {
         uint64_t prev_commit = r->commit_index;
         if (in->match_index > r->match_index[in->from])
@@ -1674,6 +1693,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->store = cfg->store;
     r->store_ctx = cfg->store_ctx ? cfg->store_ctx : cfg->store;
     r->send = cfg->send;
+    r->send_ready = cfg->send_ready;
     r->net = cfg->net;
     r->apply = cfg->apply;
     r->app = cfg->app;

@@ -337,6 +337,8 @@ test: all
 	./tests/test_kv
 	./tests/test_admission
 	python3 tests/test_host_pressure.py
+	python3 tests/test_host_outbox.py
+	python3 tests/test_host_flow.py
 	./tests/test_kv_lsm
 	./tests/test_query_catalog
 	./tests/test_name_index

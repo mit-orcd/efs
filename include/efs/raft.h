@@ -135,6 +135,9 @@ struct efs_raft_store {
 #define EFS_RAFT_SNAP_BYTES (512ull << 20)
 
 typedef int (*efs_raft_send_fn)(void *net, const struct efs_raft_msg *msg);
+/* Optional bounded host queue hint, no I/O. Zero defers building an entry
+ * frame; it changes no log/progress state and cannot grant read authority. */
+typedef int (*efs_raft_send_ready_fn)(void *net, int peer, uint8_t group);
 typedef int (*efs_raft_apply_fn)(void *app, uint64_t index, uint64_t term,
                                  const uint8_t *cmd, uint32_t clen);
 /* Snapshot of applied index `incl`. open returns a handle and the user
@@ -186,6 +189,7 @@ struct efs_raft_cfg {
     struct efs_raft_store *store;
     void *store_ctx;
     efs_raft_send_fn send;
+    efs_raft_send_ready_fn send_ready;
     void *net;
     efs_raft_apply_fn apply;
     void *app;

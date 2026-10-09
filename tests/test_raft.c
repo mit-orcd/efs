@@ -31,6 +31,7 @@ struct net {
     int snap_restart_watch;
     uint64_t snap_restart_off;
     int snap_restart_seen;
+    int flow_zero_probe, flow_refuse_data; /* transport pressure fixture */
     int hold_ae_replies; /* deliver append bytes but delay their acknowledgements */
     int cap_rep;          /* record AE_REP match_index */
     int cap_n;
@@ -234,6 +235,14 @@ static int send_now(void *net, const struct efs_raft_msg *msg)
         return EFS_OK;
     if (msg->to < 0 || msg->to >= n->n || !n->r[msg->to])
         return EFS_ERR_INVAL;
+    if (n->flow_refuse_data && msg->type==EFS_RAFT_MSG_AE_REQ && msg->nentries)
+        return EFS_OK; /* transport refusal cannot earn an AE_REP */
+    if (n->flow_zero_probe && msg->type==EFS_RAFT_MSG_AE_REQ && !msg->nentries) {
+        struct efs_raft_msg probe=*msg;
+        probe.prev_index=probe.prev_term=probe.last_log_term=probe.match_index=0;
+        probe.vote_granted=1;
+        return efs_raft_recv(n->r[probe.to],&probe);
+    }
     /* Synchronous delivery: the sender's entry buffers stay valid for the
      * whole recv and recv copies each entry into the log store, so no
      * detach copy is needed (this also covers batched multi-entry AEs). */
@@ -507,6 +516,43 @@ static void test_readindex_outstanding_batch(void)
     for (i=0;i<3;i++) {
         CHECK(n.batches[i]==batches[i],"fresh read does not resend outstanding entries");
         efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);
+    }
+}
+
+static int pressure_send_ready(void *net, int peer, uint8_t group)
+{ (void)peer;(void)group;return !((struct net *)net)->flow_refuse_data; }
+
+static void test_transport_pressure_zero_probe(void)
+{
+    for (int group=0;group<=2;group+=2) {
+        struct net n={.n=3};struct efs_raft_store *st[3];struct app app[3]={{0}};
+        struct efs_raft_cfg cfg={0};uint8_t cmd='F';uint64_t idx=0;
+        cfg.n=3;cfg.group=(uint8_t)group;cfg.send=send_now;cfg.net=&n;
+        cfg.send_ready=pressure_send_ready;
+        cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
+        for(int i=0;i<3;i++) {
+            st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
+            cfg.app=&app[i];cfg.election_ticks=4+i*4;n.r[i]=efs_raft_new(&cfg);
+        }
+        CHECK(elect(&n,20)==1,"elect transport-pressure fixture");
+        int lid=leader_id(&n);uint64_t committed=efs_raft_commit(n.r[lid]);
+        n.flow_refuse_data=n.flow_zero_probe=1;
+        efs_raft_arm_durable(n.r[lid]);
+        CHECK(efs_raft_propose_local(n.r[lid],&cmd,1,&idx)==EFS_OK,"pressure append local");
+        CHECK(efs_raft_submit(n.r[lid],idx)==EFS_OK,"pressure submit local");
+        CHECK(efs_raft_durable(n.r[lid],idx)==EFS_OK,"pressure local durable");
+        int builds=0;for(int i=0;i<3;i++)builds+=n.batches[i];
+        CHECK(efs_raft_flush(n.r[lid])==EFS_OK,"transport refuses data");
+        int after=0;for(int i=0;i<3;i++)after+=n.batches[i];
+        CHECK(builds==after,"unavailable host queue defers entry frame construction");
+        CHECK(efs_raft_commit(n.r[lid])==committed && idx>committed,"transport handling cannot commit refused tail");
+        CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK,"pressure fresh read starts");
+        CHECK(efs_raft_read_ready(n.r[lid]),"zero-prefix current-term fresh probes establish read quorum");
+        CHECK(efs_raft_commit(n.r[lid])==committed,"fresh probe quorum does not replicate refused data");
+        n.flow_refuse_data=n.flow_zero_probe=0;
+        for(int t=0;t<5;t++)for(int i=0;i<3;i++)efs_raft_tick(n.r[i]);
+        CHECK(efs_raft_commit(n.r[lid])>=idx,"Raft retries refused tail after pressure clears");
+        for(int i=0;i<3;i++){CHECK(efs_raft_applied(n.r[i])>=idx,"both groups catch up refused work");efs_raft_free(n.r[i]);efs_raft_mem_free(st[i]);}
     }
 }
 
@@ -1744,6 +1790,7 @@ int main(void)
     test_step_down_no_campaign();
     test_replicate_and_readindex();
     test_readindex_outstanding_batch();
+    test_transport_pressure_zero_probe();
     test_i3_i4_and_restart();
     test_snapshot();
     test_grow_3_to_5();

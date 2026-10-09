@@ -5953,6 +5953,50 @@ or present the Raft improvement as measured KV acceptance.
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Implemented experimental candidate (Oct 9):** Commits 9728d07b,
+eb110217 and ec5b53b3 on `devel-persistence-pressure` implement opt-in
+`EFS_RAFT_FLOW=1` receiver feedback, pacing and construction deferral. Linux
+actual-host async regressions and Raft/store/wire tests pass. The initial
+9728d07b live build passes POSIX 212/212 and peer 64/64; its five-minute
+100-second rates are 134.2 → 75.9 → 80.2 files/s, with 8,233 n3 refused
+frames and 52.95 ms mean queue residence. This is an unmatched smoke run,
+not sustained acceptance. Corrected-build repeated comparisons and applicable
+fault gates remain open; W97 is not resolved.
+
+**Design:** Return versioned transport
+admission status instead of hiding inbox BUSY; apply bounded per-peer sender
+backoff with gradual recovery; reserve bounded receiver/sender progress for
+Raft replies, elections and liveness/read probes. Include detached pump work
+in pressure accounting, so clearing the shared inbox cannot falsely report
+recovery. Keep durable consensus ACKs authoritative. Preserve legacy empty
+reply handling and test TCP/RDMA channel ordering. First trial: 5–50 ms retry
+backoff, with queue/byte bounds and watermarks explicitly tested. No durability
+or partial-reply tracking change belongs in this candidate.
+[Detailed proposal, compatibility, limits and acceptance gates](../status/w97-solution-investigation-20261009.md#proposed-fix-bounded-receiver-pressure-feedback).
+Fewer drops alone does not close W97: require repeated sustained throughput
+and tail improvement, bounded catch-up, async host regressions, full POSIX/peer
+and applicable W64/W73 gates. If persistence remains dominant, investigate W93
+batching separately.
+
+**Further reproduction (Oct 9):** Diagnostic build 2cca7cfc-pressure measures
+113.4 → 50.6 → 55.8 files/s and 94,175 refused n3 replication frames. Queue
+residence grows 153 → 360 → 468 ms; serial drain/KV release/applied persistence
+occupy about 98.6% of n3's measured interval. Host mutex acquisition is negligible.
+Receiver BUSY is ignored by the network handler, which still sends its normal
+transport reply; investigate bounded pressure feedback with real async queues.
+These drops are frames, not lost files or durability tickets. Exact per-frame
+retry/recovery and a sustained fix remain unproven.
+
+**Oct 9 solution trials:** Cross-group priority coalescing could overwrite an
+independent group's queued ACK/heartbeat. Fix a770290a isolates same-type
+replacement by group; actual-helper regression, Raft/store, 212/212 core
+POSIX, 64/64 peer and 128 sampled cold payload checks pass. A partial-reply
+tracking candidate was rejected and reverted after an append timeout and
+worse late throughput. Group isolation measures 139.6 → 43.7 → 70.1 files/s,
+versus baseline 112.2 → 60.5 → 48.4; n3 drops increase to 129,365. The defect
+is fixed, but pressure and inconsistent sustained performance remain open.
+[Trials, exact evidence and remaining solution gates](../status/w97-solution-investigation-20261009.md).
+
 **Class/status:** Performance investigation; open. Sustained tiny-file
 throughput declines alongside persistence latency and replication pressure.
 The causal mechanism and a validated production fix remain open.
