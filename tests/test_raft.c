@@ -519,12 +519,16 @@ static void test_readindex_outstanding_batch(void)
     }
 }
 
+static int pressure_send_ready(void *net, int peer, uint8_t group)
+{ (void)peer;(void)group;return !((struct net *)net)->flow_refuse_data; }
+
 static void test_transport_pressure_zero_probe(void)
 {
     for (int group=0;group<=2;group+=2) {
         struct net n={.n=3};struct efs_raft_store *st[3];struct app app[3]={{0}};
         struct efs_raft_cfg cfg={0};uint8_t cmd='F';uint64_t idx=0;
         cfg.n=3;cfg.group=(uint8_t)group;cfg.send=send_now;cfg.net=&n;
+        cfg.send_ready=pressure_send_ready;
         cfg.apply=apply_cmd;cfg.heartbeat_ticks=1;
         for(int i=0;i<3;i++) {
             st[i]=efs_raft_mem_create();cfg.id=i;cfg.store=st[i];cfg.store_ctx=st[i];
@@ -537,7 +541,10 @@ static void test_transport_pressure_zero_probe(void)
         CHECK(efs_raft_propose_local(n.r[lid],&cmd,1,&idx)==EFS_OK,"pressure append local");
         CHECK(efs_raft_submit(n.r[lid],idx)==EFS_OK,"pressure submit local");
         CHECK(efs_raft_durable(n.r[lid],idx)==EFS_OK,"pressure local durable");
+        int builds=0;for(int i=0;i<3;i++)builds+=n.batches[i];
         CHECK(efs_raft_flush(n.r[lid])==EFS_OK,"transport refuses data");
+        int after=0;for(int i=0;i<3;i++)after+=n.batches[i];
+        CHECK(builds==after,"unavailable host queue defers entry frame construction");
         CHECK(efs_raft_commit(n.r[lid])==committed && idx>committed,"transport handling cannot commit refused tail");
         CHECK(efs_raft_read_begin(n.r[lid])==EFS_OK,"pressure fresh read starts");
         CHECK(efs_raft_read_ready(n.r[lid]),"zero-prefix current-term fresh probes establish read quorum");

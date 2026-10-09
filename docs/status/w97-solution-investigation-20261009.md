@@ -369,3 +369,16 @@ A Raft regression proves fresh zero-prefix probes can establish read authority
 without committing refused data, then ordinary retry catches both groups up.
 Existing Raft/store/wire and group-isolated outbox tests pass. Live gates and
 repeated sustained comparisons remain required before promotion.
+
+### Follow-up before repeated trials: refuse construction before serialization
+
+The first live candidate exposes frequent `flow_enqueue_retry` counts: already
+queued per-group work causes the host to refuse redundant frames only after
+Raft has allocated and serialized them. Add an optional no-I/O `send_ready`
+callback to defer entry-frame construction when that pressured group already
+has a queued entry. It does not mark a window sent or change durability/progress;
+ordinary retry remains timer/proposal driven. New reads still send an empty
+context probe, while ACK-driven data-only follow-ups must not emit a new probe
+(otherwise probe ACKs self-feed). The strengthened core/actual-host tests and
+local AddressSanitizer Raft test pass. This optimization is not present in the
+initial 9728d07b-flow five-minute measurement and requires its own exact build.

@@ -1076,6 +1076,18 @@ static void host_wire_taken(const struct efs_raft_msg *msg)
         ((struct efs_raft_msg *)msg)->wire = NULL;
 }
 
+static int host_send_ready(void *net, int peer, uint8_t group)
+{
+    struct efs_raft_host *h=net;
+    int ready=1,gi=efs_raft_flow_group(group);
+    if (!h->flow_enabled || gi<0) return 1;
+    pthread_mutex_lock(&h->outbox_mu);
+    if (h->tx[peer].flow.active && h->tx[peer].pending_entries[gi]) ready=0;
+    pthread_mutex_unlock(&h->outbox_mu);
+    if (!ready) BO_COUNT(BO_FLOW_PREBUILD_RETRY);
+    return ready;
+}
+
 static int host_send(void *net, const struct efs_raft_msg *msg)
 {
     struct efs_raft_host *h = net;
@@ -5958,6 +5970,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.store = st;
     cfg.store_ctx = st;
     cfg.send = host_send;
+    cfg.send_ready = h->flow_enabled ? host_send_ready : NULL;
     cfg.net = h;
     cfg.apply = host_apply;
     cfg.admit = h->pressure_enabled ? host_pressure_admit : NULL;

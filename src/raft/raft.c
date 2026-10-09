@@ -81,6 +81,7 @@ struct efs_raft {
     struct efs_raft_store *store;
     void *store_ctx;
     efs_raft_send_fn send;
+    efs_raft_send_ready_fn send_ready;
     void *net;
     efs_raft_apply_fn apply;
     void *app;
@@ -817,6 +818,15 @@ static int send_ae(struct efs_raft *r, int to, int data_only)
             if (!data_only && (r->commit_index > r->ae_inflight_commit[to] ||
                                r->read_in_flight == 1))
                 return send_commit_probe(r, to);
+            return EFS_OK;
+        }
+        /* A pressured host already owns a pending frame for this group.
+         * Do not allocate/unpack another one just to refuse it in send().
+         * A fresh read still needs its context delivered as an empty probe. */
+        if (r->send_ready && !r->send_ready(r->net,to,r->group)) {
+            /* An AE_REP's data-only follow-up must not generate another
+             * probe: probe ACK -> blocked data -> probe would self-feed. */
+            if (!data_only && r->read_in_flight==1) return send_commit_probe(r,to);
             return EFS_OK;
         }
         /* W19: the log read lands in the wire buffer. host_send writes
@@ -1683,6 +1693,7 @@ struct efs_raft *efs_raft_new(const struct efs_raft_cfg *cfg)
     r->store = cfg->store;
     r->store_ctx = cfg->store_ctx ? cfg->store_ctx : cfg->store;
     r->send = cfg->send;
+    r->send_ready = cfg->send_ready;
     r->net = cfg->net;
     r->apply = cfg->apply;
     r->app = cfg->app;

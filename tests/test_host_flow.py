@@ -99,7 +99,7 @@ int efs_conn_recv_msg(struct efs_conn*c,uint8_t*type,void**buf,uint32_t*len)
  *type=EFS_MSG_RAFT_REPLY;*len=r.legacy?0:8;*buf=*len?malloc(8):NULL;
  if(*len)memcpy(*buf,r.data,8);c->last_recv_chan=r.channel;__atomic_add_fetch(&receives,1,__ATOMIC_RELAXED);return 0;
 }
-'''+function('host_sender_depth')+'\n'+function('host_sender_take')+'\n'+function('host_sender_pick')+'\n'+function('host_sender_wait')+'\n'+function('host_sender')+r'''
+'''+function('host_send_ready')+'\n'+function('host_sender_depth')+'\n'+function('host_sender_take')+'\n'+function('host_sender_pick')+'\n'+function('host_sender_wait')+'\n'+function('host_sender')+r'''
 static void wr32(uint8_t*p,unsigned x){p[0]=x>>24;p[1]=x>>16;p[2]=x>>8;p[3]=x;}
 static uint8_t *frame(unsigned type,unsigned group,unsigned data,uint32_t*len)
 {
@@ -123,7 +123,7 @@ static void retire(struct efs_raft_host*h)
 {
  unsigned n=h->inbox_n;uint64_t bytes=h->inbox_bytes;
  for(unsigned i=0;i<n;i++)free(h->inbox[i].buf);
- h->inbox_n=0;h->inbox_bytes=0;host_inbox_retire(h,n,bytes);
+ h->inbox_n=0;h->inbox_bytes=0;if(h->flow_enabled)host_inbox_retire(h,n,bytes);
 }
 static void queue(struct host_outbox*tx,unsigned type,unsigned group,unsigned data)
 {
@@ -173,6 +173,9 @@ static void admission(void)
  p[1]=2;assert(server_raft_host_inbox(p,len,&f)==EFS_OK);
  p[1]=1;assert(server_raft_host_inbox(p,len,&f)==EFS_ERR_PROTO);
  p[1]=0;wr32(p+76,1);assert(server_raft_host_inbox(p,len,&f)==EFS_ERR_PROTO);
+ retire(h);free(p);
+ h->flow_enabled=0;p=frame(3,0,1,&len);
+ assert(server_raft_host_inbox(p,len,&f)==EFS_OK&&f.status==3&&!h->inbox_work_n);
  retire(h);free(p);free(h);
 }
 static void selection(void)
@@ -180,6 +183,7 @@ static void selection(void)
  struct efs_raft_host*h=host();struct host_outbox*tx=&h->tx[1];
  tx->flow=(struct efs_raft_flow_sender){.active=1,.window=1,.delay_ms=50,.deadline_us=100000};
  queue(tx,3,0,1);queue(tx,3,2,1);queue(tx,4,0,0);queue(tx,2,2,0);
+ assert(!host_send_ready(h,1,0)&&!host_send_ready(h,1,2));
  uint8_t*b[8];uint32_t n[8];int count=host_sender_pick(tx,b,n,8,100);
  assert(count==4&&tx->nent==2);assert(b[0][0]==4&&b[1][0]==2);
  for(int i=0;i<count;i++)free(b[i]);
@@ -188,6 +192,7 @@ static void selection(void)
  tx->probe_header[0][35]=8;count=host_sender_pick(tx,b,n,8,5100);
  assert(count==1&&efs_raft_flow_rd64(b[0]+28)==8);free(b[0]);
  count=host_sender_pick(tx,b,n,1,100000);assert(count==1&&n[0]>80);free(b[0]);
+ assert(host_send_ready(h,1,0)&&!host_send_ready(h,1,2));
  for(int i=0;i<tx->nent;i++)free(tx->ent[i].buf);free(h);
 }
 #ifdef __linux__
@@ -254,7 +259,13 @@ int main(void){codec();admission();selection();
 #ifdef __linux__
  asynchronous();
 #endif
- puts("host flow: codec, bounded admission/detached work, control/read escape, async mixed-channel BUSY drain, recovery, legacy/malformed/lost replies and shutdown PASS");return 0;}
+ puts("host flow: codec, bounded admission/detached work, control/read escape PASS");
+#ifdef __linux__
+ puts("Linux async sender: mixed-channel BUSY drain, recovery, legacy/malformed/lost replies and shutdown PASS");
+#else
+ puts("Linux async sender: not run on this platform");
+#endif
+ return 0;}
 '''
 with tempfile.TemporaryDirectory(prefix='efs-host-flow-') as d:
     p=Path(d)/'test.c';p.write_text(code);binary=p.with_suffix('')
