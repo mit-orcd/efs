@@ -235,6 +235,40 @@ int efs_meta_finish_append(struct efs_kv *kv,efs_ino_t ino,uint64_t offset,
     finish_free(&c);return rc;
 }
 
+int efs_meta_finish_append_owned(struct efs_kv *kv, efs_ino_t ino, uint64_t offset,
+    int outcome, const struct efs_opid *id, const struct efs_txid *tx,
+    const struct efs_meta_append_ops *ops, void *ctx)
+{
+    struct efs_opid_req q = {0};
+    if (id) q.id = *id;
+    q.id.seq = 1; /* Session ownership guard, not a new operation receipt. */
+    if (!kv || !ino || !id || !id->session_epoch || !efs_opid_req_valid(&q) ||
+        !tx || !ops || !ops->prepare || !ops->decide || !ops->resolve)
+        return EFS_ERR_INVAL;
+    uint32_t shard = efs_kv_inode_shard(ino);
+    int rc = efs_session_accept(kv, shard, id->client_uuid, id->session_epoch);
+    if (rc != EFS_OK) return rc;
+    struct append_owner_context c = {.ops=ops, .ctx=ctx, .first=1};
+    rc = efs_kv_key_sess_local(shard, id->client_uuid, c.owner.key, &c.owner.klen);
+    c.owner.expected_len = EFS_SESS_LOCAL_VAL;
+    if (rc == EFS_OK)
+        rc = efs_kv_get(kv, c.owner.key, c.owner.klen, c.owner.expected, &c.owner.expected_len);
+    if (rc != EFS_OK) return rc;
+    if (c.owner.expected_len != EFS_SESS_LOCAL_VAL) return EFS_ERR_PROTO;
+    uint32_t established=0, floor=0;
+    for (unsigned i=0; i<4; i++) {
+        established = established << 8 | c.owner.expected[i];
+        floor = floor << 8 | c.owner.expected[4+i];
+    }
+    if (floor > id->session_epoch) return EFS_ERR_STALE;
+    if (established != id->session_epoch) return EFS_ERR_BUSY;
+    c.owner.op = EFS_TXN_PUT; c.owner.new_len = EFS_SESS_LOCAL_VAL;
+    memcpy(c.owner.value, c.owner.expected, EFS_SESS_LOCAL_VAL);
+    const struct efs_meta_append_ops owned_ops = {
+        append_owner_prepare, append_owner_decide, append_owner_resolve};
+    return efs_meta_finish_append(kv, ino, offset, outcome, tx, &owned_ops, &c);
+}
+
 int efs_meta_finish_append_fenced(struct efs_kv *kv,efs_ino_t ino,uint64_t generation,
     uint64_t offset,const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
     const struct efs_txid *t,const struct efs_meta_append_ops *ops,void *ctx)

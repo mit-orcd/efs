@@ -87,7 +87,8 @@
  * LANE_FENCE runs on the LANE's group and carries one lane's share of a
  * truncate (epoch fence + range delete). Both idempotent. */
 #define EFS_MD_CMD_ACTIVATE_LANE 19 /* [ino:8][lane:1]  (10 B)
-                                     * or [ino:8][mask:8] (17 B) */
+                                     * or [ino:8][mask:8] (17 B); REPORT
+                                     * appends UUID/epoch (20 B) to either form */
 #define EFS_MD_CMD_LANE_FENCE    20 /* [ino:8][gen:8][lane:1][epoch:8][size:8]
                                      * [tail_ci:4][has_tail:1] */
 /* Data-plane GC (spec L7). LANE_SWEEP runs on the LANE's group: deletes the

@@ -260,6 +260,7 @@ test-wb-runtime:
 	python3 tests/test_report_frame_boundary.py
 	python3 tests/test_report_forward.py
 	python3 tests/test_report_session_apply.py
+	python3 tests/test_report_activation.py
 
 test-wb-recovery:
 	@set -e; wb_test=$$(mktemp /tmp/efs-test-wb-recovery.XXXXXX); \

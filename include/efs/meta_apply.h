@@ -166,6 +166,12 @@ int efs_meta_finish_append(struct efs_kv *kv, efs_ino_t ino, uint64_t offset,
                             int outcome, const struct efs_txid *t,
                             const struct efs_meta_append_ops *ops, void *ctx);
 
+/* REPORT completion: freeze the reporting mount's established local session
+ * row before any inode/cursor/lane images, in the same transaction. */
+int efs_meta_finish_append_owned(struct efs_kv *, efs_ino_t, uint64_t offset,
+    int outcome, const struct efs_opid *, const struct efs_txid *,
+    const struct efs_meta_append_ops *, void *ctx);
+
 /* Internal recording adapter: reads only, emits bounded replacement images
  * to a collector. Materialized KV mutation requires coordinated PREPARE. */
 int efs_meta_collect_append_completion(struct efs_kv *kv, efs_ino_t ino,
