@@ -1,5 +1,19 @@
 # W92 NUC node 2 CPU — October 8, 2026 New York
 
+## Retained partition lookup keys: 800122c5e86d
+
+Removed per-generation global inode hash construction. Immutable partition
+blocks retain sorted 64-bit keys; lookup uses shard routing, binary search and
+the current catalog's local ordinal range. Keys are strictly validated and
+fully accounted. Differential/boundary/lifetime, command/export/permission,
+POSIX 212/212, peer 64/64 and restart gates pass. Deployed gracefully with data,
+direct I/O/TCP, .efs and 1 GiB cap preserved. Nearby warm median 57 ms versus
+prior block build 147 ms; n2 builder cycle share 28.30% versus 44.59%. Live
+window differences limit attribution. Loaded export returns 1,224,379 unique
+paths in 22.09 seconds; no precise prior export-time baseline. Remaining work
+includes pointer-vector scans, directory rollups and changed-block folding.
+See [full evidence](../../results/measure/20261009-catalog-index/README.md).
+
 ## Compact immutable inode blocks: a62cbd5f6ca2
 
 Deployed reference-counted partition-local decoded inode/stat blocks with
