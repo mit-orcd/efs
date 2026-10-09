@@ -130,6 +130,18 @@ void efs_buf_unreserve(void)
     }
     pthread_mutex_unlock(&g_bp_mu);
 }
+/* Keep a pressure publication small enough to finish inside a write's
+ * existing deadline. Waiting for the hard bound queues hundreds of MiB
+ * before the first caller has to drain them. Read bodies are trimmed first. */
+int efs_buf_should_drain(void)
+{
+    pthread_once(&g_bp_once, buf_init);
+    pthread_mutex_lock(&g_bp_mu);
+    int drain = g_live >= g_hard / 8;
+    pthread_mutex_unlock(&g_bp_mu);
+    return drain;
+}
+
 void efs_buf_drain_enter(void) { t_drain++; }
 void efs_buf_drain_leave(void) { if (t_drain) t_drain--; }
 void efs_buf_budget_stats(uint64_t *live, uint64_t *reserved,

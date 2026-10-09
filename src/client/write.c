@@ -5565,17 +5565,10 @@ static int dcache_flush_keep(efs_ino_t ino, uint32_t ci, uint8_t *copy,
      * legacy drop_body path below still restores ownership on PUT failure. */
     if (!drop_body && e && e->ino == ino && e->ci == ci)
         dcache_install_image(e, copy, len, seq);
-    /* The PUT landed and dcache_put_now put the chunk in the dirty set,
-     * which keeps the row staged until the REPORT. A clean slot (body
-     * kept as cache, or the body-less node that names the object) no
-     * longer needs the row pin: with it, every file this client wrote
-     * stayed unevictable and "has unpublished" for as long as the slot
-     * lived (Oct 1 2026). A write that re-dirtied the entry mid-PUT
-     * re-pinned it (dcache_set_dirty + dcache_pin_add); leave that. */
-    if (e && e->ino == ino && e->ci == ci && !e->dirty)
-        dcache_pin_release(e);
-    /* Retained bytes remain charged to the hard allocator bound. A
-     * matching REPORT acknowledgment releases full-overwrite bodies. */
+    /* PUT is not publication: retain the row pin while the immutable
+     * object still needs REPORT. Otherwise an evictor can remove its
+     * recovery metadata after the dirty snapshot detaches its marks.
+     * dcache_note_committed releases the pin after the matching ACK. */
     pthread_mutex_unlock(mu);
     return 0;
 }

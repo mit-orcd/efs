@@ -469,25 +469,27 @@ def peer_dir_mtime_bump_visible():
     """A creates an entry in the shared dir; B must see the directory's
     mtime AND ctime advance (§7.4 — for a spread dir the bump lives in the
     dentry shard's dir lane and is reduced at stat)."""
-    before = {}
-
     def b_before(d):
+        # Remote steps run in separate processes. Keep the baseline in the
+        # fixture, creating its name before sampling the directory times.
+        baseline = os.path.join(d, "before-times")
+        wr(baseline, b"")
         st = os.stat(d)
-        before["m"] = st.st_mtime_ns
-        before["c"] = st.st_ctime_ns
+        wr(baseline, ("%d %d" % (st.st_mtime_ns, st.st_ctime_ns)).encode())
         time.sleep(0.06)   # outside the 50 ms lookup-memo window (0j)
 
     def a(d):
         wr(os.path.join(d, "f"), b"x")
 
     def b_after(d):
+        mtime, ctime = map(int, rd(os.path.join(d, "before-times")).split())
         st = os.stat(d)
-        if st.st_mtime_ns <= before["m"]:
+        if st.st_mtime_ns <= mtime:
             raise Fail("B: dir mtime did not advance after A's create "
-                       "(%d -> %d)" % (before["m"], st.st_mtime_ns))
-        if st.st_ctime_ns <= before["c"]:
+                       "(%d -> %d)" % (mtime, st.st_mtime_ns))
+        if st.st_ctime_ns <= ctime:
             raise Fail("B: dir ctime did not advance after A's create "
-                       "(%d -> %d)" % (before["c"], st.st_ctime_ns))
+                       "(%d -> %d)" % (ctime, st.st_ctime_ns))
 
     return [("b", b_before), ("a", a), ("b", b_after)]
 

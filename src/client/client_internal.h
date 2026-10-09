@@ -21,6 +21,7 @@ void efs_buf_free(void *p, uint32_t len);
 int efs_buf_reserve(uint64_t bytes);
 int efs_buf_reserve_request(uint64_t bytes, uint64_t metadata);
 void efs_buf_unreserve(void);
+int efs_buf_should_drain(void);
 void efs_buf_drain_enter(void);
 void efs_buf_drain_leave(void);
 void efs_buf_budget_stats(uint64_t *live, uint64_t *reserved,

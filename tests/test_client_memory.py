@@ -145,6 +145,17 @@ int main(void) {
     assert(!fuse_write_admit(1));
     efs_buf_unreserve();
     assert(!g_live && !dirty_bytes && !g_reserved && !g_meta_reserved);
+    /* Drain before exhaustion: this request still fits the hard bound,
+     * but retaining the entire backlog would outlive a bounded live PUT. */
+    for(uint32_t ci=0;ci<128;ci++) {
+        uint8_t *body=efs_buf_alloc(EFS_CHUNK_SIZE);assert(body);
+        assert(!dcache_store_owned(1,ci,body,EFS_CHUNK_SIZE,&in));
+    }
+    int before_drains=drains;
+    assert(efs_buf_should_drain());
+    assert(!fuse_write_admit(1));
+    assert(drains>before_drains && !g_live && !dirty_bytes);
+    efs_buf_unreserve();
     /* Same generation, newer snapshot: older REPORT must retain all ranges. */
     uint8_t *p=efs_buf_alloc(EFS_CHUNK_SIZE); assert(p); p[0]=43;
     assert(!dcache_store_owned(1,0,p,EFS_CHUNK_SIZE,&in));
@@ -167,7 +178,7 @@ int main(void) {
     assert(!dcache_store_owned(1,0,p,EFS_CHUNK_SIZE,&full));
     e=entry(0);e->dirty=0;e->on_dirty=0;e->object_gen=12;e->object_seq=20;
     assert(!dcache_flush_keep(1,0,p,EFS_CHUNK_SIZE,1,20,0));
-    assert(e->data==p&&e->data[0]==77&&dcache_keep_on_drop(e));
+    assert(e->data==p&&e->data[0]==77&&e->pin_held&&dcache_keep_on_drop(e));
     e->stalled=1;
     dcache_drop_locked(1,0,0);assert(e->data==p); /* even explicit cache drop */
     e->stalled=0;

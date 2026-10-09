@@ -3340,8 +3340,13 @@ static int fuse_write_admit(size_t size)
         return -EFBIG;
     bytes = chunks * 4 * unit;
     admission = efs_buf_reserve_request(bytes, chunks * EFS_DCACHE_ENTRY_BUDGET);
-    if (admission == 0)
+    int early_drain = admission == 0;
+    if (admission == 0 && !efs_buf_should_drain())
         return 0;
+    if (admission == 0) {
+        efs_buf_unreserve();
+        admission = EFS_ERR_BUSY;
+    }
     if (admission != EFS_ERR_BUSY)
         return -ENOMEM;
     uint64_t live, reserved, backing, limit, meta, meta_reserved, meta_limit;
@@ -3355,13 +3360,18 @@ static int fuse_write_admit(size_t size)
             (unsigned long long)meta, (unsigned long long)meta_reserved,
             (unsigned long long)meta_limit,
             (unsigned long long)(chunks * EFS_DCACHE_ENTRY_BUDGET),
+            early_drain ? "high-water" :
             meta + meta_reserved + chunks * EFS_DCACHE_ENTRY_BUDGET > meta_limit
                 ? "metadata" : "body");
     efs_rdcache_trim();
     efs_dcache_trim_metadata();
     admission = efs_buf_reserve_request(bytes, chunks * EFS_DCACHE_ENTRY_BUDGET);
-    if (admission == 0)
-        return 0;
+    if (admission == 0) {
+        if (!efs_buf_should_drain() || !efs_dcache_pressure_ino(0))
+            return 0;
+        efs_buf_unreserve();
+        admission = EFS_ERR_BUSY;
+    }
     if (admission != EFS_ERR_BUSY)
         return -ENOMEM;
     /* Finite drain work, no cache/append mutex held here.
