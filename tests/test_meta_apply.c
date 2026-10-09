@@ -2917,6 +2917,13 @@ static void test_append_reserve(void)
     p.now = T0 + 2;
     p.ch = ch;
     CHECK(efs_meta_apply_publish(kv, &p) == EFS_ERR_BUSY, "past watermark");
+    CHECK(efs_kv_mem_fail_next_batch(kv) == EFS_OK, "fail append completion batch");
+    CHECK(efs_meta_apply_append_resolve(kv, ino, off, EFS_META_APPEND_COMPLETED) ==
+              EFS_ERR_IO, "failed completion remains retryable");
+    CHECK(efs_meta_apply_getattr(kv, ino, coord_fn, &cc, &st) == EFS_OK &&
+              st.size == 0, "failed completion retains frontier barrier");
+    CHECK(efs_meta_apply_append_reserve(kv, ino, 64, &op, coord_fn, &cc, &off2) ==
+              EFS_OK && off2 == off, "failed completion retains reservation identity");
     CHECK(efs_meta_apply_append_resolve(kv, ino, off, EFS_META_APPEND_COMPLETED) ==
               EFS_OK,
           "complete");

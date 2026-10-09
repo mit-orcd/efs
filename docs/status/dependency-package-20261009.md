@@ -166,3 +166,14 @@ eight append/truncate races plus cold restart/concurrent append pass. Combined
 session cleanup/GC/core POSIX212/212/peer64/64 passes. This supersedes the first
 candidate's failed peer gate above; no production activation follows.
 Evidence: results/measure/20261009-truncate-read-absence.
+
+## Retained append-resolution replay
+
+APPEND_RES no longer converts failed KV apply into success. IO/NOMEM hold the
+replicated log index for retry; deterministic business verdicts advance while
+retaining their result, and malformed short input returns PROTO. Missing-row
+idempotence is preserved. Current production append completion uses coordinated
+transactions; this is a retained replay-path fix. Metadata batch fault injection
+checks reservation identity and visibility barrier survive failure. AMD full
+regression and direct/TCP combined session/GC/core212/212/peer64/64 gate pass.
+Evidence: results/measure/20261009-append-resolve-replay.

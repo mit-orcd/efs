@@ -10,7 +10,7 @@ def function(name):
     return text[m.start():text.index('\n}', m.end())+2]
 append_len=re.search(r'^#define HOST_APPEND_RSV_LEN (\d+)',text,re.M).group(1)
 apply=text[text.index('static int host_apply(void *app'):];apply=apply[apply.index('    ret = (cmd[0]'):apply.index('    if (a0) {')]
-source = '#define HOST_APPEND_RSV_LEN '+append_len+'\n'+r'''
+source = '#define HOST_APPEND_RSV_LEN '+append_len+'\n#define HOST_APPEND_RES_LEN 38\n#define APPLY_LOG(...) ((void)0)\n'+r'''
 #include "efs/common.h"
 #include "efs/meta_apply.h"
 #include "efs/protocol.h"
@@ -47,12 +47,24 @@ int efs_meta_apply_orphan_reclaim(struct efs_kv*k,efs_ino_t i,uint64_t g){(void)
 int efs_meta_apply_reap_done(struct efs_kv*k,efs_ino_t i,uint64_t g){(void)k;assert(i==42&&g==7);return verdict;}
 int efs_meta_apply_reap_batch(struct efs_kv*k,efs_ino_t i,uint64_t g,const struct efs_meta_reap_key*p,uint32_t n){(void)k;assert(i==42&&g==7&&n==1&&p[0].len==27&&p[0].key[0]==9);return verdict;}
 int efs_meta_apply_gc_ack(struct efs_kv*k,const struct efs_gc_ack_item*p,uint32_t n){(void)k;assert(n==1&&p->ino==42&&p->gen==7&&p->lane==3&&p->ci==8&&p->frag==2);return verdict;}
-''' + '\n'.join(function(n) for n in ('host_pack_sweep_next','apply_lane_sweep_cmd','apply_reap_done_cmd','apply_orphan_reap_cmd','apply_gc_ack_cmd','host_bg_propose','host_gc_propose')) + '\nstatic int core_result(uint8_t opcode,int rc,uint32_t clen){uint8_t cmd[64]={opcode};if(opcode==EFS_MD_CMD_SESSION)cmd[1]=EFS_MD_SESS_LEASE_LOCK_BATCH;assert(clen<=sizeof(cmd));int ret;\n'+apply+'\nreturn ret;}\n' + r'''
+int efs_meta_apply_append_resolve(struct efs_kv*k,efs_ino_t i,uint64_t o,int v){(void)k;assert(i==42&&o==7&&v==1);return verdict;}
+''' + '\n'.join(function(n) for n in ('apply_append_res_cmd','host_pack_sweep_next','apply_lane_sweep_cmd','apply_reap_done_cmd','apply_orphan_reap_cmd','apply_gc_ack_cmd','host_bg_propose','host_gc_propose')) + '\nstatic int core_result(uint8_t opcode,int rc,uint32_t clen){uint8_t cmd[64]={opcode};if(opcode==EFS_MD_CMD_SESSION)cmd[1]=EFS_MD_SESS_LEASE_LOCK_BATCH;assert(clen<=sizeof(cmd));int ret;\n'+apply+'\nreturn ret;}\n' + r'''
 int main(void){
  assert(core_result(EFS_MD_CMD_SESSION,EFS_ERR_BUSY,3)==EFS_OK);
  assert(core_result(EFS_MD_CMD_SESSION,EFS_ERR_IO,3)==EFS_ERR_IO);
  assert(core_result(EFS_MD_CMD_SESSION,EFS_ERR_NOMEM,3)==EFS_ERR_NOMEM);
  struct server s={0};struct efs_raft_host h={.mu=PTHREAD_MUTEX_INITIALIZER,.s=&s,.r={1}};
+ uint8_t resolved[38]={EFS_MD_CMD_APPEND_RES};resolved[8]=42;resolved[16]=7;resolved[17]=1;
+ int resolve_values[]={EFS_OK,EFS_ERR_BUSY,EFS_ERR_IO,EFS_ERR_NOMEM,EFS_ERR_PROTO};
+ for(unsigned i=0;i<sizeof(resolve_values)/sizeof(resolve_values[0]);i++){
+  verdict=resolve_values[i];assert(apply_append_res_cmd(&h,resolved,38,41)==verdict);
+ }
+ verdict=EFS_ERR_NOT_FOUND;assert(apply_append_res_cmd(&h,resolved,38,41)==EFS_OK);
+ assert(apply_append_res_cmd(&h,resolved,37,41)==EFS_ERR_PROTO);
+ assert(core_result(EFS_MD_CMD_APPEND_RES,EFS_ERR_BUSY,38)==EFS_OK);
+ assert(core_result(EFS_MD_CMD_APPEND_RES,EFS_ERR_PROTO,37)==EFS_OK);
+ assert(core_result(EFS_MD_CMD_APPEND_RES,EFS_ERR_IO,38)==EFS_ERR_IO);
+ assert(core_result(EFS_MD_CMD_APPEND_RES,EFS_ERR_NOMEM,38)==EFS_ERR_NOMEM);
  uint8_t cmd[25]={EFS_MD_CMD_LANE_SWEEP};cmd[8]=42;cmd[16]=7;cmd[17]=3;
  int values[]={EFS_OK,EFS_ERR_BUSY,EFS_ERR_IO,EFS_ERR_NOMEM,EFS_ERR_PROTO,EFS_ERR_NOT_PRIMARY};
  for(unsigned i=0;i<sizeof(values)/sizeof(values[0]);i++){

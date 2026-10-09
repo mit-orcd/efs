@@ -1745,17 +1745,19 @@ static int apply_append_res_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     int outcome, rc;
 
     if (clen < HOST_APPEND_RES_LEN)
-        return EFS_OK;
+        return EFS_ERR_PROTO;
     ino = rd64be(cmd + 1);
     off = rd64be(cmd + 9);
     outcome = (int)cmd[17];
     rc = efs_meta_apply_append_resolve(h->kv, ino, off, outcome);
     if (rc == EFS_ERR_NOT_FOUND)
         rc = EFS_OK;
+    /* A durable command is unfinished when its atomic KV batch fails.
+     * Preserve the verdict so host_apply retries IO/NOMEM at this index. */
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: apply append-res rc=%d index=%llu ino=%llu\n",
                 rc, (unsigned long long)index, (unsigned long long)ino);
-        return EFS_OK;
+        return rc;
     }
     APPLY_LOG("raft-host: applied append-res index=%llu ino=%llu off=%llu\n",
             (unsigned long long)index, (unsigned long long)ino,
@@ -2389,6 +2391,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     ret = (cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
            cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
            cmd[0] == EFS_MD_CMD_RMDIR || cmd[0] == EFS_MD_CMD_APPEND_RSV ||
+           cmd[0] == EFS_MD_CMD_APPEND_RES ||
            cmd[0] == EFS_MD_CMD_CREATE || cmd[0] == EFS_MD_CMD_PUBLISH ||
            cmd[0] == EFS_MD_CMD_PUBLICATION || cmd[0] == EFS_MD_CMD_PUBLICATION_RETIRE || cmd[0] == EFS_MD_CMD_PUBLICATION_ADMIT ||
            cmd[0] == EFS_MD_CMD_XATTR || cmd[0] == EFS_MD_CMD_SALT ||
@@ -2414,6 +2417,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CREATE ||
+         cmd[0] == EFS_MD_CMD_APPEND_RES ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
         ret = rc;
