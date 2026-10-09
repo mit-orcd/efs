@@ -68,6 +68,9 @@ static struct efs_raft_msg *msg_copy_deep(const struct efs_raft_msg *src)
 
 struct app {
     int n;
+    unsigned pressure_mask;
+    struct efs_raft *owner;
+    uint64_t pending_limit;
     uint8_t last;
     uint64_t snap_at;
     int wide; /* 40-byte snapshot so a small chunk size spans ≥ 3 chunks */
@@ -1613,8 +1616,75 @@ static void test_recv_batch(void)
     }
 }
 
+static int pressure_admit(void *app, const struct efs_raft_entry *e,
+                           uint32_t n, int source)
+{
+    struct app *a=app;
+    uint64_t count,bytes,logs;
+    (void)e;
+    if (a->pressure_mask & (1u<<source)) return EFS_ERR_BUSY;
+    if (source==EFS_RAFT_ADMIT_LOCAL && a->pending_limit) {
+        if (efs_raft_backlog(a->owner,&count,&bytes,&logs) != EFS_OK) return EFS_ERR_IO;
+        if (count+n>a->pending_limit) return EFS_ERR_BUSY;
+    }
+    return EFS_OK;
+}
+
+static void test_pressure_quorum_and_owned_backlog(void)
+{
+    struct net net={.n=3};
+    struct app app[3]={{0}};
+    struct efs_raft_store *store[3];
+    struct efs_raft_cfg cfg={0};
+    int leader,follower;
+    uint8_t cmd=42;
+    uint64_t index=0,count=0,bytes=0,logs=0,last=0,term=0;
+    cfg.n=3;cfg.send=send_now;cfg.net=&net;cfg.apply=apply_cmd;cfg.admit=pressure_admit;
+    for (int i=0;i<3;i++) {
+        store[i]=efs_raft_mem_create();cfg.id=i;cfg.store=store[i];cfg.store_ctx=store[i];
+        cfg.app=&app[i];cfg.election_ticks=4+i*4;cfg.heartbeat_ticks=2;
+        net.r[i]=efs_raft_new(&cfg);app[i].owner=net.r[i];
+    }
+    CHECK(elect(&net,40)==1,"pressure cluster elects");
+    leader=leader_id(&net);follower=(leader+1)%3;
+    CHECK(leader>=0,"pressure cluster leader");
+    app[follower].pressure_mask=(1u<<EFS_RAFT_ADMIT_RECV)|(1u<<EFS_RAFT_ADMIT_LEAD);
+    CHECK(store[follower]->last(store[follower],&last,&term)==EFS_OK,"paused follower tail");
+    int batches=net.batches[follower];
+    for (int i=0;i<100;i++) CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_OK,
+                                 "healthy quorum progresses with pressure follower");
+    CHECK(efs_raft_applied(net.r[leader])==index,"healthy quorum applies all acknowledged work");
+    CHECK(efs_raft_applied(net.r[follower])<=last,"pressure accepts no new suffix");
+    CHECK(net.batches[follower]-batches<=2,"pressure backoff avoids per-proposal data storm");
+    CHECK(elect(&net,80)==1 && leader_id(&net)==leader,"pressure follower does not disrupt healthy quorum");
+    app[follower].pressure_mask=0;
+    CHECK(elect(&net,40)==1,"released follower recovers");
+    CHECK(efs_raft_applied(net.r[follower])==efs_raft_commit(net.r[leader]),"released follower converges");
+    CHECK(app[follower].last==cmd,"recovery preserves command bytes");
+    app[leader].pressure_mask=1u<<EFS_RAFT_ADMIT_LOCAL;
+    CHECK(store[leader]->last(store[leader],&last,&term)==EFS_OK,"leader tail before refusal");
+    CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_ERR_BUSY,"pre-proposal refusal is explicit");
+    uint64_t after;
+    CHECK(store[leader]->last(store[leader],&after,&term)==EFS_OK && after==last,"refusal appended nothing");
+    app[leader].pressure_mask=0;app[leader].pending_limit=3;
+    for (int i=0;i<3;i++) if(i!=leader) net.drop[i]=1;
+    for (int i=0;i<3;i++) CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_OK,"accepted outstanding work");
+    CHECK(efs_raft_backlog(net.r[leader],&count,&bytes,&logs)==EFS_OK && count==3 && bytes==3,
+          "accepted log owns exact pending bytes independently of RPC lifetime");
+    CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_ERR_BUSY,"unapplied work consumes capacity");
+    for (int i=0;i<3;i++) net.drop[i]=0;
+    CHECK(elect(&net,40)==1,"quorum returns");
+    CHECK(efs_raft_backlog(net.r[leader],&count,&bytes,&logs)==EFS_OK && !count && !bytes,
+          "actual apply releases accepted capacity");
+    app[leader].pressure_mask=1u<<EFS_RAFT_ADMIT_LEAD;
+    CHECK(efs_raft_step_down(net.r[leader])==EFS_OK,"pressured leader relinquishes role");
+    CHECK(elect(&net,80)==1 && leader_id(&net)!=leader,"healthy capacity wins leadership");
+    for(int i=0;i<3;i++){efs_raft_free(net.r[i]);efs_raft_mem_free(store[i]);}
+}
+
 int main(void)
 {
+    test_pressure_quorum_and_owned_backlog();
     test_follower_apply_retry();
     test_recv_batch();
     test_election_i1();

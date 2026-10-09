@@ -1,6 +1,7 @@
 #include "server_internal.h"
 #include "efs/checksum.h"
 #include "efs/raft.h"
+#include "efs/admission.h"
 #include "efs/raft_disk.h"
 #include "efs/kv.h"
 #include "efs/kv_lsm.h"
@@ -50,6 +51,16 @@
  * bounce RPCs keep the long budget. */
 #define HOST_SEND_IO_MS    250
 #define HOST_INBOX_MAX     256
+#define HOST_INBOX_BYTES   (32ull << 20)
+#define HOST_OUTBOX_BYTES  (16ull << 20)
+#define HOST_FRAME_MAX     (EFS_WIRE_RAFT_MAX_CMD + EFS_WIRE_RAFT_HDR_LEN + 12u)
+#define HOST_PRESSURE_PENDING_BYTES (256ull << 20)
+#define HOST_PRESSURE_PENDING_RESERVE (32ull << 20)
+#define HOST_PRESSURE_COUNT 2048u
+#define HOST_PRESSURE_RECOVERY_COUNT 256u
+#define HOST_PRESSURE_LOG_BYTES (1ull << 30)
+#define HOST_PRESSURE_LOG_RESERVE (256ull << 20)
+#define HOST_PRESSURE_MT_BYTES (64ull << 20)
 /* Per-peer outbound queue cap. A full queue used to drop the newest
  * message and still return success, so ae_inflight was set for an
  * AppendEntries that was never queued and the follower stopped
@@ -162,6 +173,7 @@ struct host_outbox {
      * heartbeat. Depth is npri + nent, capped at HOST_OUTBOX_MAX. */
     int npri;
     int nent;
+    uint64_t queued_bytes, queued_bytes_hi;
     struct host_outbox_item pri[HOST_OUTBOX_MAX];
     struct host_outbox_item ent[HOST_OUTBOX_MAX];
     /* EFS_RAFT_OBS counters (guarded by outbox_mu; stats are diagnostic
@@ -377,6 +389,10 @@ struct efs_raft_host {
     pthread_mutex_t inbox_mu;
     struct host_inbox_item inbox[HOST_INBOX_MAX];
     int inbox_n;
+    uint64_t inbox_bytes, inbox_bytes_hi;
+    int pressure_enabled;
+    struct efs_admission proposal_queue;
+    uint64_t pressure_rejected, pressure_recv_rejected;
     /* Event-driven pump: pump_efd wakes the pump (inbox/propose/stop) between
      * its 5 ms timer ticks. It is an eventfd, NOT a condvar on h->mu, on
      * purpose: h->mu serializes ALL raft core work (tick/propose/recv, incl.
@@ -724,6 +740,7 @@ static void *host_sender(void *arg)
                 free(tx->ent[i].buf);
             tx->npri = 0;
             tx->nent = 0;
+            tx->queued_bytes = 0;
             pthread_mutex_unlock(&h->outbox_mu);
             if (tx->conn) {
                 efs_conn_destroy(tx->conn);
@@ -752,6 +769,7 @@ static void *host_sender(void *arg)
             tx->nent--;
             n++;
         }
+        for (i=0; i<n; i++) tx->queued_bytes -= lens[i];
         pthread_mutex_unlock(&h->outbox_mu);
 
         if (obs)
@@ -914,6 +932,11 @@ static int outbox_pri_replace(struct host_outbox *tx,
     for (i = 0; i < tx->npri; i++) {
         if (!pred(tx->pri[i].buf, tx->pri[i].len))
             continue;
+        if (len > HOST_OUTBOX_BYTES - (tx->queued_bytes-tx->pri[i].len))
+            return 0;
+        tx->queued_bytes -= tx->pri[i].len;
+        tx->queued_bytes += len;
+        if (tx->queued_bytes > tx->queued_bytes_hi) tx->queued_bytes_hi = tx->queued_bytes;
         free(tx->pri[i].buf);
         tx->pri[i].buf = buf;
         tx->pri[i].len = len;
@@ -1031,7 +1054,9 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         host_wire_taken(msg);
         return EFS_OK;
     }
-    if (tx->npri + tx->nent >= HOST_OUTBOX_MAX) {
+    if (tx->npri + tx->nent >= HOST_OUTBOX_MAX ||
+        (outbox_entry_lane(heap,len) && tx->queued_bytes > HOST_OUTBOX_BYTES-65536) ||
+        len > HOST_OUTBOX_BYTES-(outbox_entry_lane(heap,len) ? 65536 : 0)-tx->queued_bytes) {
         /* A vote takes a heartbeat's slot rather than being dropped.
          * Anything else (an entry AE behind a full lane) is retried
          * by the caller; that is not a drop. */
@@ -1064,14 +1089,22 @@ static int host_send(void *net, const struct efs_raft_msg *msg)
         slot->buf = heap;
         slot->len = len;
         (*np)++;
+        tx->queued_bytes += len;
+        if (tx->queued_bytes > tx->queued_bytes_hi) tx->queued_bytes_hi = tx->queued_bytes;
         tx->st_enq++;
         if ((uint32_t)(tx->npri + tx->nent) > tx->st_hi)
             tx->st_hi = (uint32_t)(tx->npri + tx->nent);
         if (!tx->started) {
             if (efsd_pthread_create(&tx->tid, host_sender, tx) == 0)
                 tx->started = 1;
-            else
-                (*np)--; /* no sender: drop rather than queue forever */
+            else {
+                (*np)--;
+                tx->queued_bytes -= len;
+                pthread_mutex_unlock(&h->outbox_mu);
+                host_wire_taken(msg);
+                free(heap);
+                return EFS_ERR_AGAIN;
+            }
         }
     }
     pthread_cond_signal(&tx->cv);
@@ -2195,6 +2228,13 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     if (raft_obs_on())
         a0 = now_us_();
     h->apply_extra = 0;
+#if EFS_FAULTS
+    if (cmd[0]==0xfe && clen>=10 && getenv("EFS_FAULT_PRESSURE_SEED")) {
+        uint8_t key[12]={0x0f,0xff,0xfe,0};
+        memcpy(key+4,cmd+1,8);
+        rc=efs_kv_put(h->kv,key,sizeof(key),cmd+9,clen-9);
+    } else
+#endif
     rc = host_apply_dispatch(h, index, cmd, clen);
     /* A successful CREATE/APPEND means this replica's KV has the row.
      * Re-enable campaign so one hollow apply cannot leave the group with
@@ -3477,13 +3517,66 @@ static void host_durable_synced(struct efs_raft_host *h)
     }
 }
 
+static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
+{
+    if (!cmd || !n || n > (256u<<10)) return 0;
+    switch (cmd[0]) {
+    case EFS_MD_CMD_DECIDE: case EFS_MD_CMD_RESOLVE: case EFS_MD_CMD_DROP:
+    case EFS_MD_CMD_LANE_SWEEP: case EFS_MD_CMD_REAP_DONE:
+    case EFS_MD_CMD_GC_ACK: case EFS_MD_CMD_PUBLICATION_RETIRE:
+        return 1;
+    default: return 0;
+    }
+}
+
+static int host_pressure_admit(void *app, const struct efs_raft_entry *entries,
+                               uint32_t n, int source)
+{
+    struct host_group *g = app;
+    struct efs_raft_host *h = g->host;
+    struct efs_kv_lsm_pressure p;
+    uint64_t count=0, bytes=0, logs=0, incoming=0;
+    int recovery = n != 0;
+    if (!h->pressure_enabled) return EFS_OK;
+    if (efs_kv_lsm_pressure(h->kv,&p) != EFS_OK || p.io_failed) return EFS_ERR_IO;
+    for (uint32_t i=0; i<n; i++) {
+        incoming += entries[i].clen;
+        if (!host_pressure_recovery(entries[i].cmd,entries[i].clen)) recovery=0;
+    }
+    for (int i=0; i<HOST_NGROUPS; i++) {
+        uint64_t c,b,l;
+        if (!h->g[i].r) continue;
+        if (efs_raft_backlog(h->g[i].r,&c,&b,&l) != EFS_OK) return EFS_ERR_IO;
+        count+=c; bytes+=b; logs+=l;
+    }
+    /* Includes retained log bodies plus a conservative state-machine expansion
+     * charge and per-entry metadata. A caller leaving cannot release this:
+     * only actual apply/truncation/snapshot advances the durable owner. */
+    uint64_t charge=bytes*16+count*4096, need=incoming*16+(uint64_t)n*4096;
+    uint64_t cap=HOST_PRESSURE_PENDING_BYTES-(recovery ? 0 : HOST_PRESSURE_PENDING_RESERVE);
+    uint64_t logcap=HOST_PRESSURE_LOG_BYTES-(recovery ? 0 : HOST_PRESSURE_LOG_RESERVE);
+    uint64_t ncap=HOST_PRESSURE_COUNT-(recovery ? 0 : HOST_PRESSURE_RECOVERY_COUNT);
+    int hot = source==EFS_RAFT_ADMIT_RECV ?
+              (p.shape.l0_bytes>=p.l0_hard_bytes || p.shape.mt_bytes>=HOST_PRESSURE_MT_BYTES/2) :
+              (p.shape.l0_bytes>=p.l0_soft_bytes || p.shape.mt_bytes>=HOST_PRESSURE_MT_BYTES/2);
+    int busy = (!recovery && hot) || p.shape.mt_bytes>=HOST_PRESSURE_MT_BYTES ||
+               count>ncap || n>ncap-count || charge>cap || need>cap-charge ||
+               logs>logcap || incoming>logcap-logs;
+    if (busy) {
+        if (source==EFS_RAFT_ADMIT_RECV) h->pressure_recv_rejected++;
+        else h->pressure_rejected++;
+        return EFS_ERR_BUSY;
+    }
+    return EFS_OK;
+}
+
 /* Propose one command. *idx / *term identify the log entry: a waiter must
  * match BOTH against the apply ring (host_apply_rc_locked) — the same index
  * carries a different entry after a leader change. term is 0 when the
  * command was forwarded: the leader matched (idx, term) itself before it
  * replied and its reply rc is the verdict; the local wait on rep.index is
  * only read-your-writes (a committed index is unique). */
-static int host_propose(struct efs_raft_host *h, uint8_t group,
+static int host_propose_impl(struct efs_raft_host *h, uint8_t group,
                         const uint8_t *cmd, uint32_t clen, uint64_t *idx,
                         uint64_t *term, int *leader_hint)
 {
@@ -3744,14 +3837,28 @@ static int host_wait_settled(struct efs_raft_host *h, uint8_t group,
     return rc;
 }
 
-static int host_propose_wait_idx(struct efs_raft_host *h, uint8_t group,
+static int host_propose(struct efs_raft_host *h, uint8_t group,
+                        const uint8_t *cmd, uint32_t clen, uint64_t *idx,
+                        uint64_t *term, int *leader_hint)
+{
+    if (!h->pressure_enabled) return host_propose_impl(h,group,cmd,clen,idx,term,leader_hint);
+    struct efs_admission_ticket ticket={0};
+    int rc = efs_admission_try(&h->proposal_queue,(uint64_t)clen+4096,
+                               host_pressure_recovery(cmd,clen),&ticket);
+    if (rc != EFS_OK) return rc;
+    rc=host_propose_impl(h,group,cmd,clen,idx,term,leader_hint);
+    (void)efs_admission_release(&ticket);
+    return rc;
+}
+
+static int host_propose_wait_idx_impl(struct efs_raft_host *h, uint8_t group,
                                  const uint8_t *cmd, uint32_t clen, int *hint,
                                  uint64_t *idx_out)
 {
     uint64_t idx = 0, term = 0;
     int rc;
 
-    rc = host_propose(h, group, cmd, clen, &idx, &term, hint);
+    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint);
     if (rc != EFS_OK)
         return rc;
     if (idx_out)
@@ -3766,20 +3873,36 @@ static int host_propose_wait_idx(struct efs_raft_host *h, uint8_t group,
     return host_wait_verdict(h, group, idx, term, hint);
 }
 
+/* Hold the execution charge while awaiting a verdict; this is separate from
+ * durable log ownership, which outlives an RPC timeout or cancelled waiter. */
+static int host_propose_wait_idx(struct efs_raft_host *h, uint8_t group,
+                                 const uint8_t *cmd, uint32_t clen, int *hint,
+                                 uint64_t *idx_out)
+{
+    struct efs_admission_ticket ticket={0};
+    if (!h->pressure_enabled) return host_propose_wait_idx_impl(h,group,cmd,clen,hint,idx_out);
+    int rc=efs_admission_try(&h->proposal_queue,(uint64_t)clen+4096,
+                             host_pressure_recovery(cmd,clen),&ticket);
+    if (rc != EFS_OK) return rc;
+    rc=host_propose_wait_idx_impl(h,group,cmd,clen,hint,idx_out);
+    (void)efs_admission_release(&ticket);
+    return rc;
+}
+
 static int host_propose_wait(struct efs_raft_host *h, uint8_t group,
                              const uint8_t *cmd, uint32_t clen, int *hint)
 {
     return host_propose_wait_idx(h, group, cmd, clen, hint, NULL);
 }
 
-static int host_propose_wait_ex(struct efs_raft_host *h, uint8_t group,
+static int host_propose_wait_ex_impl(struct efs_raft_host *h, uint8_t group,
                                 const uint8_t *cmd, uint32_t clen, int *hint,
                                 uint64_t *extra_out)
 {
     uint64_t idx = 0, term = 0;
     int rc, erc;
 
-    rc = host_propose(h, group, cmd, clen, &idx, &term, hint);
+    rc = host_propose_impl(h, group, cmd, clen, &idx, &term, hint);
     if (rc != EFS_OK)
         return rc;
     rc = host_wait_applied(h, group, idx, hint);
@@ -3791,6 +3914,20 @@ static int host_propose_wait_ex(struct efs_raft_host *h, uint8_t group,
     pthread_mutex_unlock(&h->mu);
     if (rc == EFS_OK && extra_out)
         rc = erc;
+    return rc;
+}
+
+static int host_propose_wait_ex(struct efs_raft_host *h, uint8_t group,
+                                const uint8_t *cmd, uint32_t clen, int *hint,
+                                uint64_t *extra_out)
+{
+    struct efs_admission_ticket ticket={0};
+    if (!h->pressure_enabled) return host_propose_wait_ex_impl(h,group,cmd,clen,hint,extra_out);
+    int rc=efs_admission_try(&h->proposal_queue,(uint64_t)clen+4096,
+                             host_pressure_recovery(cmd,clen),&ticket);
+    if (rc != EFS_OK) return rc;
+    rc=host_propose_wait_ex_impl(h,group,cmd,clen,hint,extra_out);
+    (void)efs_admission_release(&ticket);
     return rc;
 }
 
@@ -4957,6 +5094,7 @@ static void drain_inbox(struct efs_raft_host *h)
     n = h->inbox_n;
     memcpy(local, h->inbox, (size_t)n * sizeof(local[0]));
     h->inbox_n = 0;
+    h->inbox_bytes = 0;
     pthread_mutex_unlock(&h->inbox_mu);
 
     /* Bounded, contiguous groups only: no message reordering or extra wait.
@@ -5131,6 +5269,25 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
     }
     if (!force && now_ms - h->obs_last_dump_ms < 5000)
         return;
+    if (h->pressure_enabled) {
+        uint64_t count=0,bytes=0,logs=0,queued=0,qhi=0,inbox=0,ihi=0;
+        for(int k=0;k<HOST_NGROUPS;k++) if(h->g[k].r) {
+            uint64_t c,b,l;
+            if(efs_raft_backlog(h->g[k].r,&c,&b,&l)==EFS_OK){count+=c;bytes+=b;logs+=l;}
+        }
+        pthread_mutex_lock(&h->outbox_mu);
+        for(int k=0;k<EFS_RAFT_MAX_PEERS;k++){queued+=h->tx[k].queued_bytes;qhi+=h->tx[k].queued_bytes_hi;}
+        pthread_mutex_unlock(&h->outbox_mu);
+        pthread_mutex_lock(&h->inbox_mu);inbox=h->inbox_bytes;ihi=h->inbox_bytes_hi;pthread_mutex_unlock(&h->inbox_mu);
+        pthread_mutex_lock(&h->proposal_queue.mu);
+        uint64_t pc=h->proposal_queue.count,pb=h->proposal_queue.bytes;
+        pthread_mutex_unlock(&h->proposal_queue.mu);
+        fprintf(stderr,"pressure-obs: pending_n=%llu pending_bytes=%llu log_bytes=%llu proposal_n=%llu proposal_bytes=%llu outbox_bytes=%llu outbox_hi=%llu inbox_bytes=%llu inbox_hi=%llu rejected=%llu recv_rejected=%llu\n",
+            (unsigned long long)count,(unsigned long long)bytes,(unsigned long long)logs,
+            (unsigned long long)pc,(unsigned long long)pb,(unsigned long long)queued,(unsigned long long)qhi,
+            (unsigned long long)inbox,(unsigned long long)ihi,
+            (unsigned long long)h->pressure_rejected,(unsigned long long)h->pressure_recv_rejected);
+    }
     for (i = 0; i < EFS_RAFT_MAX_PEERS; i++) {
         struct host_outbox *tx = &h->tx[i];
         if (!tx->st_enq && !tx->st_drop)
@@ -5270,6 +5427,15 @@ static void *host_pump(void *arg)
         if (obs) {
             t_wait = now_us_() - c0;
             c0 = now_us_();
+        }
+        if (h->pressure_enabled) {
+            for (i=0; i<HOST_NGROUPS; i++) {
+                struct host_group *g=&h->g[i];
+                if (g->r && !g->kv_incomplete &&
+                    host_pressure_admit(g,NULL,0,EFS_RAFT_ADMIT_LEAD) != EFS_OK &&
+                    efs_raft_role(g->r)==EFS_RAFT_LEADER)
+                    (void)efs_raft_step_down(g->r);
+            }
         }
         /* One AppendEntries for everything appended since the last
          * send. Proposers only raise the send ceiling; doing the send
@@ -5571,6 +5737,7 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
     cfg.send = host_send;
     cfg.net = h;
     cfg.apply = host_apply;
+    cfg.admit = h->pressure_enabled ? host_pressure_admit : NULL;
     cfg.app = &h->g[gi]; /* per-group: host_apply records into g->arc_* */
     cfg.snap_open = host_snap_open;
     cfg.snap_read = host_snap_read;
@@ -7610,6 +7777,8 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_INVAL;
     }
     int query_enabled=!commands || !strcmp(commands,"1");
+    const char *pressure=getenv("EFS_ADMISSION_PRESSURE");
+    if (pressure && strcmp(pressure,"0") && strcmp(pressure,"1")) return EFS_ERR_INVAL;
     ns = getenv("EFS_MD_RAFT_N");
     if (ns && ns[0]) {
         n = atoi(ns);
@@ -7627,6 +7796,9 @@ int server_raft_host_start(struct efsd_server *s)
     h = calloc(1, sizeof(*h));
     if (!h)
         return EFS_ERR_NOMEM;
+    struct efs_admission_limits limits={8ull<<20,1ull<<20,64,8};
+    if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
+    h->pressure_enabled=pressure && !strcmp(pressure,"1");
     h->s = s;
     h->query_enabled=query_enabled;
     h->raft_id = (int)s->id - 1;
@@ -7676,6 +7848,7 @@ int server_raft_host_start(struct efsd_server *s)
     snprintf(h->mdraft, sizeof(h->mdraft), "%s", dir);
     if (mkdir(dir, 0755) != 0 && errno != EEXIST) {
         fprintf(stderr, "raft-host: mkdir %s: %s\n", dir, strerror(errno));
+        efs_admission_destroy(&h->proposal_queue);
         free(h);
         return EFS_ERR_IO;
     }
@@ -7683,6 +7856,7 @@ int server_raft_host_start(struct efsd_server *s)
     rc = host_boot_bump(dir, &h->boot_id);
     if (rc != EFS_OK) {
         fprintf(stderr, "raft-host: boot persist %s failed\n", dir);
+        efs_admission_destroy(&h->proposal_queue);
         free(h);
         return rc;
     }
@@ -7696,6 +7870,7 @@ int server_raft_host_start(struct efsd_server *s)
         h->kv = efs_kv_lsm_open(kvdir, &kcfg);
         if (!h->kv) {
             fprintf(stderr, "raft-host: kv_lsm_open %s failed\n", kvdir);
+            efs_admission_destroy(&h->proposal_queue);
             free(h);
             return EFS_ERR_IO;
         }
@@ -7703,6 +7878,7 @@ int server_raft_host_start(struct efsd_server *s)
         if (!h->disk) {
             fprintf(stderr, "raft-host: raft_disk_open %s failed\n", logdir);
             efs_kv_lsm_close(h->kv);
+            efs_admission_destroy(&h->proposal_queue);
             free(h);
             return EFS_ERR_IO;
         }
@@ -7716,6 +7892,7 @@ int server_raft_host_start(struct efsd_server *s)
         efs_raft_free(h->g[1].r);
         efs_raft_disk_close(h->disk);
         efs_kv_lsm_close(h->kv);
+        efs_admission_destroy(&h->proposal_queue);
         free(h);
         return rc;
     }
@@ -7732,6 +7909,7 @@ int server_raft_host_start(struct efsd_server *s)
         efs_raft_free(h->g[1].r);
         efs_raft_disk_close(h->disk);
         efs_kv_lsm_close(h->kv);
+        efs_admission_destroy(&h->proposal_queue);
         free(h);
         return EFS_ERR_IO;
     }
@@ -7888,6 +8066,7 @@ void server_raft_host_stop(void)
     if (h->pump_efd >= 0)
         close(h->pump_efd);
     g_host = NULL;
+    efs_admission_destroy(&h->proposal_queue);
     free(h);
 }
 
@@ -7900,12 +8079,9 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
         return EFS_ERR_INVAL;
     if (!payload || plen < EFS_WIRE_RAFT_HDR_LEN)
         return EFS_ERR_PROTO;
-    copy = malloc(plen);
-    if (!copy)
-        return EFS_ERR_NOMEM;
-    memcpy(copy, payload, plen);
+    if (plen > HOST_FRAME_MAX) return EFS_ERR_INVAL;
     pthread_mutex_lock(&h->inbox_mu);
-    if (h->inbox_n >= HOST_INBOX_MAX) {
+    if (h->inbox_n >= HOST_INBOX_MAX || plen > HOST_INBOX_BYTES-h->inbox_bytes) {
         uint64_t n;
 
         pthread_mutex_unlock(&h->inbox_mu);
@@ -7914,15 +8090,19 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
             fprintf(stderr,
                     "raft-host: inbox full, dropped frame type=%u group=%u "
                     "from=%d len=%u (drop #%llu)\n",
-                    (unsigned)copy[0], (unsigned)copy[1],
-                    (int)(int32_t)(((uint32_t)copy[4] << 24) |
-                                   ((uint32_t)copy[5] << 16) |
-                                   ((uint32_t)copy[6] << 8) |
-                                   (uint32_t)copy[7]),
+                    (unsigned)payload[0], (unsigned)payload[1],
+                    (int)(int32_t)(((uint32_t)payload[4] << 24) |
+                                   ((uint32_t)payload[5] << 16) |
+                                   ((uint32_t)payload[6] << 8) |
+                                   (uint32_t)payload[7]),
                     plen, (unsigned long long)n);
-        free(copy);
         return EFS_ERR_BUSY;
     }
+    copy = malloc(plen);
+    if (!copy) { pthread_mutex_unlock(&h->inbox_mu); return EFS_ERR_NOMEM; }
+    memcpy(copy, payload, plen);
+    h->inbox_bytes += plen;
+    if (h->inbox_bytes > h->inbox_bytes_hi) h->inbox_bytes_hi = h->inbox_bytes;
     h->inbox[h->inbox_n].buf = copy;
     h->inbox[h->inbox_n].len = plen;
     h->inbox_n++;

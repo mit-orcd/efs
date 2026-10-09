@@ -48,6 +48,8 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
                         uint64_t term, uint8_t *cmd, uint32_t clen)
 {
     uint32_t off = (uint32_t)(index - (g->log_base + 1));
+    uint64_t old = off < g->n ? g->log[off].clen : 0;
+    uint64_t origin = g->n ? g->log[0].prefix_bytes - g->log[0].clen : 0;
 
     if (off < g->n) {
         g->bytes_all -= g->log[off].clen;
@@ -65,6 +67,11 @@ void raft_group_install(struct raft_disk_group *g, uint64_t index,
     g->log[off].end_off = 0;
     g->log[off].clen = clen;
     g->log[off].cmd = cmd;
+    g->log[off].prefix_bytes = (off ? g->log[off-1].prefix_bytes : origin) + clen;
+    for (uint32_t j=off+1; j<g->n; j++) {
+        if (clen >= old) g->log[j].prefix_bytes += clen-old;
+        else g->log[j].prefix_bytes -= old-clen;
+    }
 }
 
 /* True when index is the next slot or an existing one; a gap is invalid. */
@@ -491,6 +498,21 @@ static uint64_t disk_log_floor(void *ctx)
     return floor;
 }
 
+static uint64_t disk_log_bytes_after(void *ctx, uint64_t index)
+{
+    struct raft_disk_group *g = group_of(ctx);
+    uint64_t n = 0;
+    pthread_mutex_lock(&g->d->mu);
+    if (g->n && index < g->log_base + g->n) {
+        uint64_t base = g->log[0].prefix_bytes - g->log[0].clen;
+        if (index > g->log_base)
+            base = g->log[index-g->log_base-1].prefix_bytes;
+        n = g->log[g->n-1].prefix_bytes - base;
+    }
+    pthread_mutex_unlock(&g->d->mu);
+    return n;
+}
+
 static uint64_t disk_log_new_bytes(void *ctx)
 {
     struct raft_disk_group *g = group_of(ctx);
@@ -520,6 +542,7 @@ static const struct efs_raft_store disk_ops = {
     .batch_end = disk_batch_end,
     .log_floor = disk_log_floor,
     .log_new_bytes = disk_log_new_bytes,
+    .log_bytes_after = disk_log_bytes_after,
 };
 
 /* --- open / close ---------------------------------------------------- */

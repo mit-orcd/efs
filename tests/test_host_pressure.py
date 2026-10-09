@@ -1,0 +1,81 @@
+#!/usr/bin/env python3
+"""Compile the real host admission policy against controlled observations."""
+from pathlib import Path
+import os
+import re
+import subprocess
+import tempfile
+root=Path(__file__).resolve().parents[1]
+source=(root/'src/server/raft_host.c').read_text()
+start=source.index('static int host_pressure_recovery(')
+end=source.index('/* Propose one command.',start)
+policy=source[start:end]
+limits='\n'.join(re.findall(r'^#define HOST_PRESSURE_.*$',source,re.M))
+code=r'''
+#include "efs/raft.h"
+#include "efs/kv_lsm.h"
+#include "efs/meta_cmd.h"
+#include <assert.h>
+#include <string.h>
+#define HOST_NGROUPS 2
+struct efs_raft_host;
+struct host_group { struct efs_raft_host *host; struct efs_raft *r; };
+struct efs_raft_host { int pressure_enabled; struct efs_kv *kv;
+ struct host_group g[2]; uint64_t pressure_rejected,pressure_recv_rejected; };
+static struct efs_kv_lsm_pressure observation;
+static uint64_t pending_n,pending_bytes,log_bytes;
+int efs_kv_lsm_pressure(struct efs_kv *kv,struct efs_kv_lsm_pressure *p)
+{(void)kv;*p=observation;return EFS_OK;}
+int efs_raft_backlog(struct efs_raft *r,uint64_t *n,uint64_t *b,uint64_t *l)
+{(void)r;*n=pending_n;*b=pending_bytes;*l=log_bytes;return EFS_OK;}
+'''+limits+'\n'+policy+r'''
+int main(void) {
+ struct efs_raft_host h={.pressure_enabled=1};
+ h.g[0].host=&h;h.g[0].r=(struct efs_raft*)&h;
+ uint8_t ordinary=0xfe,recovery=EFS_MD_CMD_RESOLVE;
+ struct efs_raft_entry e={.cmd=&ordinary,.clen=1};
+ observation.l0_soft_bytes=768ull<<20;observation.l0_hard_bytes=1ull<<30;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
+ observation.shape.l0_bytes=768ull<<20;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ assert(host_pressure_admit(&h.g[0],NULL,0,EFS_RAFT_ADMIT_LEAD)==EFS_ERR_BUSY);
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_RECV)==EFS_OK);
+ observation.shape.l0_bytes=1ull<<30;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_RECV)==EFS_ERR_BUSY);
+ e.cmd=&recovery;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
+ observation.shape.mt_bytes=64ull<<20;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ observation.shape.mt_bytes=0;observation.shape.l0_bytes=0;
+ pending_n=HOST_PRESSURE_COUNT-HOST_PRESSURE_RECOVERY_COUNT;
+ e.cmd=&ordinary;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ e.cmd=&recovery;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
+ pending_n=HOST_PRESSURE_COUNT;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ assert(pending_n==HOST_PRESSURE_COUNT); /* refusal cannot free owned work */
+ pending_n=0;log_bytes=HOST_PRESSURE_LOG_BYTES-HOST_PRESSURE_LOG_RESERVE;
+ e.cmd=&ordinary;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ e.cmd=&recovery;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
+ log_bytes=HOST_PRESSURE_LOG_BYTES;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ log_bytes=0;pending_bytes=HOST_PRESSURE_PENDING_BYTES/16;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ pending_bytes=0;observation.io_failed=1;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_IO);
+ assert(host_pressure_admit(&h.g[0],NULL,0,EFS_RAFT_ADMIT_LEAD)==EFS_ERR_IO);
+ assert(!host_pressure_recovery(&recovery,(256u<<10)+1));
+ h.pressure_enabled=0;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
+ return 0;
+}
+'''
+with tempfile.TemporaryDirectory(prefix='efs-pressure-policy-') as directory:
+    c=Path(directory)/'test.c';binary=Path(directory)/'test';c.write_text(code)
+    subprocess.run([os.environ.get('CC','cc'),'-std=c11','-D_GNU_SOURCE','-Wall','-Wextra','-Werror',
+                    '-I'+str(root/'include'),str(c),'-o',str(binary)],check=True)
+    subprocess.run([str(binary)],check=True)
+print('host pressure: soft/hard, receive pacing, leader eligibility, recovery reserves, retained ownership and persistence poison PASS')

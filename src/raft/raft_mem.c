@@ -206,6 +206,15 @@ static int mem_load_snap(void *ctx, uint64_t *last_index, uint64_t *last_term)
     return EFS_OK;
 }
 
+static uint64_t mem_log_bytes_after(void *ctx, uint64_t index)
+{
+    struct raft_mem_box *m = box_of(ctx);
+    uint64_t n = 0;
+    for (uint32_t i=0; i<m->n; i++)
+        if (m->snap_idx+1+i > index) n += m->log[i].clen;
+    return n;
+}
+
 static int mem_save_cfg(void *ctx, uint32_t cfg_old, uint32_t cfg_new)
 {
     struct raft_mem_box *m = box_of(ctx);
@@ -253,6 +262,7 @@ static const struct efs_raft_store mem_ops = {
     .load_snap = mem_load_snap,
     .save_cfg = mem_save_cfg,
     .load_cfg = mem_load_cfg,
+    .log_bytes_after = mem_log_bytes_after,
     .destroy = mem_destroy,
 };
 
