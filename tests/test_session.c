@@ -832,13 +832,13 @@ static void test_pending_create_session_fence(void)
     CHECK(efs_lease_drop_session(kv,1,uuid,1)==EFS_OK&&!efs_lease_any(kv,ino,1),"revoked pending ownership removed");
     /* Model a crash after persisting the floor but before old-window deletion. */
     CHECK(efs_kv_put(kv,replay_key,replay_len,replay_value,replay_bytes)==EFS_OK,"retained old replay row behind durable floor");
-    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==1&&rep.rc==EFS_OK,"old successful receipt still exists");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_STALE,"durable floor supersedes retained successful receipt");
     efs_ino_t late=0;
     CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"admission",0,-1,&q,uuid,1,&late)==EFS_ERR_STALE&&!late,"fenced replay cannot grant adoption");
     q.id.seq=2;q.ack=1;
     CHECK(efs_meta_apply_create_file_log_pending(kv,&g_at,1,S_IFREG|0600,"late",0,-1,&q,uuid,1,&late)==EFS_ERR_STALE&&!late,"delayed pending CREATE cannot cross local fence");
     CHECK(efs_meta_apply_lookup(kv,1,"late",&dent)==EFS_ERR_NOT_FOUND,"fenced CREATE leaves no name");
-    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==0,"fenced CREATE records no new verdict");
+    CHECK(efs_meta_apply_opid_probe(kv,1,&q.id,&rep)==EFS_ERR_STALE,"fenced CREATE has no readable new verdict");
     CHECK(!efs_lease_any(kv,ino,1),"late retry cannot resurrect removed pending ownership");
     efs_kv_mem_free(kv);
 }

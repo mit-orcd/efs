@@ -183,6 +183,8 @@ int efs_txn_drop(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard);
  * applies to itself ("PREPARE is no-wait, conflict → BUSY"). */
 /* Only an EXCL intent blocks ordinary applied writes; namespace REDUCEs
  * intentionally commute with them. Does not consult a remote coordinator. */
+/* BUSY while any shared predicate guard protects this key. */
+int efs_txn_key_guarded(struct efs_kv *,const uint8_t *,uint32_t);
 int efs_txn_key_exclusive(struct efs_kv *kv, const uint8_t *key, uint32_t klen);
 
 int efs_txn_key_busy(struct efs_kv *kv, const uint8_t *key, uint32_t klen);

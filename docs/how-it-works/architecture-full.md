@@ -1550,8 +1550,9 @@ from their dated runs, not a live cluster inventory.
   still draining and xefs3 had one reap error. The Oct 7 follow-up rolls the NUC service through full direct-I/O gates;
   final incident drain and authority-safe lost-ledger reconciliation remain open.
 - **W86/D31 — durable PUT tickets:** narrow abandoned-upload policy is recorded
-  in that checkpoint; metadata state machine is committed in `b3a11877` and staged for integration. Production sessions,
-  versioned PUT/publication and all-member revocation/deletion are not active.
+  in that checkpoint; metadata state machine and replicated admission/status transport are implemented
+  (`b3a11877`, `0aaf7d32`) and AMD direct/TCP gated, including cold replay. Production data-plane
+  PUT fencing and all-member revocation/deletion are not active.
 - **W43/D25 — writer integration:** lane-local authority, typed publication,
   ordered ACK and session gates are staged. Public logical truncate is still
   disabled. Follow [the handoff](#appendix-2--in-flight--the-current-handoff-block) for the remaining activation gates.
@@ -1651,7 +1652,7 @@ positions do not assign an execution order or override the active handoff.
 | review ID | finding | classification | review state | evidence / gate |
 | --- | --- | --- | --- | --- |
 | spec1 | **W71** · fragment PUT lacks a production persistence barrier | durability correctness | implemented barrier — file and pathname fsync before production PUT ACK; fault/live gates pass, hardware power-loss gate owed | [evidence and gate](#w71) |
-| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace/REPORT-wide fencing and production PUT integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
+| spec2 | **W72** · production mount session lifecycle / I23 integration | fencing integration | partial — full mount UUID/epoch shared by append/HOLD/FLOCK; retained FUSE CREATE/adoption and sequenced OPEN/CLOSE plus proven-revocation recovery pass AMD direct/TCP; namespace shard admission and fenced replay/effect checks are AMD gated; REPORT-wide fencing and production data-plane PUT integration remain open | [evidence and gate](#w72) · [Oct9 mounted-client gates](../status/dependency-package-20261009.md#terminal-retained-identity-recovery--implementedgated) |
 | spec3 | **W73** · synchronous application-write publication | integration | implemented — explicit O_SYNC/O_DSYNC publication passes AMD direct/TCP small/queued/append, peer-before-close and cold crash gates; mount-sync and final mode matrix owed | [evidence and gate](#w73) |
 | spec4 | **W74** · protection profiles, debt and automatic repair | recovery feature gap | fixed 2+1; no automatic repair/profile cutover; accepted design exceeds current capability | [evidence and gate](#w74) |
 | spec5 | **W75** · fragment integrity trust / missing checksum fallback | integrity correctness | missing/corrupt evidence fails closed; captured metadata digest and PUT validation gates pass on NUC; identity-bound format remains open | [evidence and gate](#w75) |
@@ -1665,7 +1666,7 @@ positions do not assign an execution order or override the active handoff.
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
 | proto3 | **W84** · bounded namespace transactions | namespace completeness | Closed for accepted D32 144-participant envelope: distinct EOVERFLOW, prompt atomic refusal diagnostics, mixed boundaries, full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD normal/fault POSIX/GC gates pass; larger-operation protocol deferred | [closure and limits](../status/w84-closure-20261009.md) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
-| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine committed `b3a11877`, staged for integration; production admission, sessions and all-member collection not active | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
+| gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine plus replicated admission/authoritative status transport implemented (`0aaf7d32`), AMD cold replay/body collision/revocation gates pass; production data-plane fences and all-member collection remain staged | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
 | replay-span | **W88** · folded span retry resurrects after bounded history eviction | publication/retry correctness | isolated metadata reproduction; actual host/FUSE byte gate owed | [evidence and gate](#w88) |
 | measure-fields | **W89** · W23 TSV field packing shifts derived metrics | verification correctness | TSV schema/reduction repaired; NUC regressions pass; new pressure run and valid bound remain owed | [evidence and gate](#w89) |

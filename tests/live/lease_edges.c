@@ -149,8 +149,41 @@ static void legacy_guard(unsigned port,efs_ino_t ino)
  legacy_hold(port,ino,UINT64_C(1910000001),0,EFS_INODE_RPC_OK);
  puts("legacy wire OPEN returns BUSY behind prepared close; later RESOLVE and retry acquire/release PASS");
 }
+/* Two same-session receipt transactions share an epoch predicate without
+ * serializing unrelated operations. The wire fence must await both outcomes. */
+static void namespace_guard(unsigned port)
+{
+ uint8_t uuid[16]={71},tx[2][16]={{72},{73}};be(uuid+8,(uint64_t)getpid(),8);
+ unsigned shard=7;uint8_t owner=efs_raft_shard_group(efs_kv_session_shard(uuid));
+ uint8_t lane=efs_raft_shard_group(shard),session[27]={owner,EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+ memcpy(session+3,uuid,16);be(session+19,1,4);be(session+23,shard,4);
+ owner_rpc(port,session,23,EFS_OK);
+ session[2]=EFS_MD_SESS_REGISTER;owner_rpc(port,session,sizeof(session),EFS_OK);
+ session[0]=lane;session[2]=EFS_MD_SESS_ESTABLISH;owner_rpc(port,session,sizeof(session),EFS_OK);
+ uint8_t key[EFS_KV_KEY_MAX];uint32_t kl=0;assert(!efs_kv_key_opid(shard,uuid,1,key,&kl));
+ struct efs_opid_req q={.id={.session_epoch=1}};memcpy(q.id.client_uuid,uuid,16);
+ struct efs_opid_reply reply={.rc=EFS_OK,.ino=123};uint8_t prepare[256]={lane,EFS_MD_CMD_PREPARE,EFS_TXN_REDUCE_OPID};
+ prepare[19]=1;be(prepare+20,shard,4);be(prepare+24,kl,2);memcpy(prepare+26,key,kl);
+ for(unsigned i=0;i<2;i++){memcpy(prepare+3,tx[i],16);q.id.seq=i+1;efs_txn_encode_opid(prepare+26+kl,&q,&reply);
+  owner_rpc(port,prepare,26+kl+EFS_TXN_REDUCE_OPID_WIRE,EFS_OK);}
+ session[0]=owner;session[2]=EFS_MD_SESS_BEGIN;owner_rpc(port,session,23,EFS_OK);
+ session[0]=lane;session[2]=EFS_MD_SESS_FENCE_LOC;be(session+19,2,4);
+ owner_rpc(port,session,sizeof(session),EFS_ERR_BUSY);
+ uint8_t resolve[23]={lane,EFS_MD_CMD_RESOLVE};be(resolve+18,shard,4);
+ for(unsigned i=0;i<2;i++){memcpy(resolve+2,tx[i],16);resolve[22]=i?EFS_TXN_ABORT:EFS_TXN_COMMIT;
+  owner_rpc(port,resolve,sizeof(resolve),EFS_OK);
+  owner_rpc(port,session,sizeof(session),i?EFS_OK:EFS_ERR_BUSY);}
+ /* Retrying either durable decision cannot restore the old epoch. */
+ for(unsigned i=0;i<2;i++){memcpy(resolve+2,tx[i],16);resolve[22]=i?EFS_TXN_ABORT:EFS_TXN_COMMIT;owner_rpc(port,resolve,sizeof(resolve),EFS_OK);}
+ tx[0][0]=74;memcpy(prepare+3,tx[0],16);q.id.seq=3;efs_txn_encode_opid(prepare+26+kl,&q,&reply);
+ owner_rpc(port,prepare,26+kl+EFS_TXN_REDUCE_OPID_WIRE,EFS_ERR_STALE);
+ session[0]=owner;session[2]=EFS_MD_SESS_ACK;be(session+19,0,4);owner_rpc(port,session,sizeof(session),EFS_OK);
+ session[2]=EFS_MD_SESS_FINISH;owner_rpc(port,session,23,EFS_OK);
+ puts("namespace wire shared guards: two concurrent receipt PREPAREs block fence through commit/abort; delayed resolve/prepare preserve floor PASS");
+}
 int main(int argc,char **argv)
 {
+ if(argc==3&&!strcmp(argv[1],"--namespace-fence")){namespace_guard(atoi(argv[2]));return 0;}
  if(argc==4&&!strcmp(argv[1],"--legacy-guard")){legacy_guard(atoi(argv[2]),strtoull(argv[3],NULL,10));return 0;}
  if(argc==5&&!strcmp(argv[1],"--owner-fence")){owner_fence(atoi(argv[2]),argv[3],atoi(argv[4]));return 0;}
  if(argc==3){

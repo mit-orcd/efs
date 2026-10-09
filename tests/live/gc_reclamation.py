@@ -579,6 +579,11 @@ try:
         edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048
         with edge_path.open('wb') as out:out.write(edge_body);out.flush();os.fsync(out.fileno())
         edge_ino=edge_path.stat().st_ino;edge_uuid=(os.urandom(8)+bytes(8)).hex();edge_results=[]
+        namespace=work/'client-namespace-session';ns_path=mount/'namespace-session-fence';ns_path.mkdir()
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_namespace_session.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',namespace])
+        ns_ino=ns_path.stat().st_ino;ns_saved=work/'namespace-session-packets.bin'
+        ns_result=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt',ns_saved],capture_output=True,text=True,timeout=180).stdout
+        (work/'namespace-session-wire.txt').write_text(ns_result)
         retained=work/'client-retained-lease'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained])
         edge_results.append(run([retained,str(a.port),str(edge_ino),source/'efs-mgmt'],capture_output=True,text=True,timeout=90).stdout)
@@ -595,6 +600,9 @@ try:
         for stage in ('open','close'):
             edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)
         unmount();stop(crash=True);start();mount_client()
+        ns_result+=run([namespace,str(a.port),str(ns_ino),source/'efs-mgmt','cold',ns_saved],capture_output=True,text=True,timeout=90).stdout
+        (work/'namespace-session-wire.txt').write_text(ns_result)
+        (ns_path/'a').unlink();(ns_path/'still-empty').rmdir();ns_path.rmdir()
         edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,'replay'],capture_output=True,text=True,timeout=90).stdout)
         ticket_results.append(run([tickets,str(a.port),str(edge_ino),source/'efs-mgmt','cold',ticket_saved],capture_output=True,text=True,timeout=90).stdout)
         (work/'put-ticket-wire.txt').write_text(''.join(ticket_results))
@@ -607,6 +615,9 @@ try:
         print('actual client sequenced lease OPEN/CLOSE/probe/exact cold replay PASS',flush=True)
         helper=work/'lease-edges'
         run(['cc','-Wall','-Wextra','-I'+str(source/'include'),source/'tests/live/lease_edges.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])
+        namespace_guard=run([helper,'--namespace-fence',str(a.port)],capture_output=True,text=True,timeout=45).stdout
+        assert 'two concurrent receipt PREPAREs' in namespace_guard,namespace_guard
+        (work/'namespace-guard-wire.txt').write_text(namespace_guard)
         guard_path=mount/'legacy-close-guard';guard_path.write_bytes(b'guard')
         guard_ino=guard_path.stat().st_ino
         guarded_wire=run([helper,'--legacy-guard',str(a.port),str(guard_ino)],capture_output=True,text=True,timeout=45).stdout

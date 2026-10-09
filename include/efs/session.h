@@ -96,6 +96,11 @@ int efs_session_accept_legacy(struct efs_kv *, uint32_t shard,
  * neither coordinates that drain nor activates production pending CREATE. */
 struct efs_txid;
 struct efs_txn_parts;
+/* Namespace replay/effect transactions use a shared local-session guard.
+ * Serialized apply validates epoch before the guard; local epoch writes block
+ * on all such guards. Legacy logs with no local row remain replayable. */
+int efs_session_prepare_namespace(struct efs_kv *,uint32_t,const struct efs_opid *,
+    const struct efs_txid *,const struct efs_txn_parts *);
 int efs_session_prepare_owner(struct efs_kv *kv, uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
     const struct efs_txid *txid, const struct efs_txn_parts *parts);

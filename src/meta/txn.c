@@ -3,6 +3,7 @@
 #include "efs/dir_spread.h"
 #include "efs/dir_layout.h"
 #include "efs/meta_apply.h"
+#include "efs/session.h"
 #include <string.h>
 
 /* Full histories plus a 144-participant EXCL envelope, with fixed bounds.
@@ -182,7 +183,7 @@ static int guards_conflict(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
     if (rc != EFS_OK)
         return rc;
     memset(&h, 0, sizeof(h));
-    h.self = *t;
+    if(t)h.self = *t;else h.any=1;
     rc = efs_kv_scan_prefix(kv, pref, pl, guard_cb, &h);
     if (rc != EFS_OK)
         return rc;
@@ -239,6 +240,12 @@ int efs_txn_dseq_observe(struct efs_kv *kv, const uint8_t *key, uint32_t klen,
         return EFS_ERR_PROTO;
     *seq = rd64(buf);
     return EFS_OK;
+}
+
+int efs_txn_key_guarded(struct efs_kv *kv,const uint8_t *key,uint32_t bytes)
+{
+    if(!kv || !key || bytes<3)return EFS_ERR_INVAL;
+    return guards_conflict(kv,key,bytes,NULL);
 }
 
 int efs_txn_key_exclusive(struct efs_kv *kv, const uint8_t *key, uint32_t klen)
@@ -757,9 +764,13 @@ int efs_txn_prepare_opid(struct efs_kv *kv, const struct efs_txid *t,
 
     /* Exactly the window key (shard, kind, uuid, epoch): a truncated key
      * would PREPARE a record decode_opid can never fold at RESOLVE. */
-    if (!q || !reply || key_kind(key, klen) != EFS_KV_KIND_OPID ||
-        klen != 3 + EFS_OPID_UUID_LEN + 4)
+    if (!q || !reply || !key || key_kind(key, klen) != EFS_KV_KIND_OPID ||
+        klen != 3 + EFS_OPID_UUID_LEN + 4 || !efs_opid_req_valid(q) ||
+        q->ack>=q->id.seq || memcmp(key+3,q->id.client_uuid,EFS_OPID_UUID_LEN) ||
+        rd32(key+19)!=q->id.session_epoch || !kv || !t || !parts_ok(p))
         return EFS_ERR_INVAL;
+    int rc=efs_session_prepare_namespace(kv,key_shard(key),&q->id,t,p);
+    if(rc!=EFS_OK)return rc;
     efs_txn_encode_opid(pay, q, reply);
     return prepare_reduce_rec(kv, t, p, key, klen, pay, sizeof(pay));
 }

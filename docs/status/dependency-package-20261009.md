@@ -606,3 +606,29 @@ open; D25 stays staged.
 Ticket transport checkpoint: AMD core212/212, peer64/64, append800,
 physical GC/restart and cold-ticket replay pass. All code regressions and docs5/5
 pass; installed service restored and reservation released.
+
+## Namespace session admission and guarded revocation — implemented
+
+Normal identified namespace mutations register their served receipt shard before
+effects. Existing participants use ReadIndex and their durable local epoch floor.
+Both replayed replies and single-log effects reject fenced epochs; transaction
+receipt PREPAREs hold shared guards through resolution. Local epoch writes refuse
+all such guards, allowing unrelated operations from one mount concurrently while
+preventing completed revocation from racing their unresolved decisions. Historical
+unregistered logs and unidentified management operations retain legacy behavior.
+
+[Evidence](../../results/measure/20261009-namespace-session-fences/README.md) records
+unit, unclean WAL recovery, actual namespace wire and AMD direct/TCP POSIX/GC
+checks. The added cold namespace fixture initially removed its own parent/source
+too early; failed logs are retained and cleanup was moved after cold assertions.
+
+Remaining: REPORT-wide identity/fencing, retention of other ambiguous namespace
+requests, production ticketed PUT validation, durable storage fences, all-member
+collection/retirement and final activation gates. D25 remains staged.
+
+Namespace final checkpoint: concurrent raw receipt PREPAREs block the actual wire
+fence until both COMMIT/ABORT resolve; delayed RESOLVE/PREPARE cannot restore the
+old epoch. All seven saved mutation receipts are STALE after cold daemon restart.
+AMD core212/212, peer64/64, append800 and physical GC/restart pass. Code regression
+recipes pass, including the new cold WAL guard test; docs5/5; warning-free build.
+Installed AMD service and both mounts restored, reservation released.
