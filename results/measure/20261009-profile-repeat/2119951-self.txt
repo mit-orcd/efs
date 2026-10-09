@@ -1,0 +1,43 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 1K of event 'cycles:P'
+# Event count (approx.): 21025686404
+#
+# Overhead  Command  Shared Object      Symbol                                     
+# ........  .......  .................  ...........................................
+#
+    22.25%  efsd     efsd               [.] efs_query_catalog_build
+     5.74%  efsd     efsd               [.] add_node
+     2.73%  efsd     libc.so.6          [.] __memmove_evex_unaligned_erms
+     2.18%  efsd     efsd               [.] unpack_inode
+     1.59%  efsd     libc.so.6          [.] __memcmp_evex_movbe
+     1.58%  efsd     [kernel.kallsyms]  [k] sync_regs
+     1.48%  efsd     [kernel.kallsyms]  [k] charge_memcg
+     1.28%  efsd     [kernel.kallsyms]  [k] try_charge_memcg
+     0.90%  efsd     [kernel.kallsyms]  [k] clear_page_erms
+     0.82%  efsd     [kernel.kallsyms]  [k] native_irq_return_iret
+     0.75%  efsd     efsd               [.] blake3_hash_many_avx512
+     0.75%  efsd     [kernel.kallsyms]  [k] _raw_spin_lock
+     0.73%  efsd     efsd               [.] kv_mtab_pos
+     0.71%  efsd     [kernel.kallsyms]  [k] __mod_memcg_lruvec_state
+     0.66%  efsd     [kernel.kallsyms]  [k] _copy_to_iter
+     0.66%  efsd     [kernel.kallsyms]  [k] __count_memcg_events
+     0.65%  efsd     [kernel.kallsyms]  [k] zap_present_ptes.constprop.0
+     0.64%  efsd     [kernel.kallsyms]  [k] __rcu_read_lock
+     0.63%  efsd     [nf_tables]        [k] nft_do_chain
+     0.62%  efsd     [kernel.kallsyms]  [k] clear_bhb_loop
+     0.60%  efsd     [kernel.kallsyms]  [k] mas_walk
+     0.59%  efsd     [kernel.kallsyms]  [k] __lruvec_stat_mod_folio
+     0.59%  efsd     [kernel.kallsyms]  [k] __list_del_entry_valid_or_report
+     0.57%  efsd     efsd               [.] cache_get
+     0.54%  efsd     [kernel.kallsyms]  [k] up_read
+     0.53%  efsd     libc.so.6          [.] __memset_evex_unaligned_erms
+     0.52%  efsd     efsd               [.] lookup
+
+
+#
+# (Tip: Profiling branch (mis)predictions with: perf record -b / perf report)
+#
