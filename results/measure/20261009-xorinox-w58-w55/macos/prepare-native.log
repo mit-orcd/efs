@@ -1,0 +1,7 @@
+cp: results/measure/20261009-xorinox-w58-w55/macos/ledger-native.source: could not copy extended attributes to /private/tmp/efsmac-x/w55-macos-cp-20261009-native/copy-00: Operation not permitted
+Traceback (most recent call last):
+  File "/Users/mike/Documents/Codex/2026-10-07/do-x20/work/devel-known-bugs/tests/live/nfs_copy_gate.py", line 30, in <module>
+    subprocess.run(['cp', str(source), str(path)], check=True)
+  File "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/lib/python3.9/subprocess.py", line 528, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['cp', 'results/measure/20261009-xorinox-w58-w55/macos/ledger-native.source', '/private/tmp/efsmac-x/w55-macos-cp-20261009-native/copy-00']' returned non-zero exit status 1.

@@ -1,0 +1,91 @@
+{
+  "platform": "darwin",
+  "directory": "/private/tmp/efsmac-x/w55-macos-data-20261009",
+  "bytes_per_file": 2922,
+  "copy_command": "cp -X",
+  "sha256": "2b8d2d650aa96830ab374612725bf43da1db62dcc83851b41ed0eb1517c2ea4a",
+  "boundary": "successful cp/close; no added fsync",
+  "files": [
+    {
+      "name": "copy-00",
+      "ino": 1264412
+    },
+    {
+      "name": "copy-01",
+      "ino": 1268508
+    },
+    {
+      "name": "copy-02",
+      "ino": 1272604
+    },
+    {
+      "name": "copy-03",
+      "ino": 1276700
+    },
+    {
+      "name": "copy-04",
+      "ino": 1280796
+    },
+    {
+      "name": "copy-05",
+      "ino": 1284892
+    },
+    {
+      "name": "copy-06",
+      "ino": 1288988
+    },
+    {
+      "name": "copy-07",
+      "ino": 1293084
+    },
+    {
+      "name": "copy-08",
+      "ino": 1297180
+    },
+    {
+      "name": "copy-09",
+      "ino": 1301276
+    },
+    {
+      "name": "copy-10",
+      "ino": 1305372
+    },
+    {
+      "name": "copy-11",
+      "ino": 1309468
+    },
+    {
+      "name": "copy-12",
+      "ino": 1313564
+    },
+    {
+      "name": "copy-13",
+      "ino": 1317660
+    },
+    {
+      "name": "copy-14",
+      "ino": 1321756
+    },
+    {
+      "name": "copy-15",
+      "ino": 1325852
+    },
+    {
+      "name": "copy-16",
+      "ino": 1329948
+    },
+    {
+      "name": "copy-17",
+      "ino": 1334044
+    },
+    {
+      "name": "copy-18",
+      "ino": 1338140
+    },
+    {
+      "name": "copy-19",
+      "ino": 1342236
+    }
+  ],
+  "warm_verified": 20
+}
