@@ -2065,7 +2065,7 @@ static int efs_open_drain_pending(void)
 /* Every returned regular descriptor, including CREATE, owns a server lease.
  * The edge stripe prevents a second open returning before proven OPEN,
  * and prevents a delayed last-close release deleting a new lease. */
-static int efs_open_acquire(efs_ino_t ino)
+static int efs_open_acquire_fileid(efs_ino_t ino, uint64_t create_generation)
 {
     pthread_mutex_t *edge = open_edge_mu(ino);
     pthread_mutex_lock(edge);
@@ -2077,11 +2077,13 @@ static int efs_open_acquire(efs_ino_t ino)
     int first = efs_open_note(ino);
     rc = first < 0 ? first : EFS_OK;
     if (first > 0) {
-        uint64_t generation = 0;
+        uint64_t generation = create_generation;
         uint32_t count = 1;
-        /* GETCHUNKS supplies authoritative FileID; cached attrs contain no
-         * generation and must not invent one across truncate/recovery. */
-        rc = efs_client_rpc_getchunks_fileid(g_client.export_id, ino, 0, 0,
+        /* A completed retained CREATE supplies authoritative FileID. Other
+         * opens fetch it; cached attrs must not invent a generation. The
+         * guarded OPEN validates that FileID across truncate/recovery. */
+        if (!generation)
+            rc = efs_client_rpc_getchunks_fileid(g_client.export_id, ino, 0, 0,
                                                NULL, &count, &generation);
         if (rc == EFS_OK && !generation) rc = EFS_ERR_PROTO;
         struct efs_open_ref *owner = NULL;
@@ -2106,6 +2108,11 @@ static int efs_open_acquire(efs_ino_t ino)
     }
     pthread_mutex_unlock(edge);
     return rc;
+}
+
+static int efs_open_acquire(efs_ino_t ino)
+{
+    return efs_open_acquire_fileid(ino, 0);
 }
 
 /* CLEAR_PENDING shares the inode stripe with OPEN/CLOSE. A descriptor is
@@ -3970,7 +3977,8 @@ static int efs_fuse_create_at(fuse_ino_t parent_ino, const char *name,
             return frc;
         }
         fuse_fi_direct_io(fi);
-        int hrc=efs_open_acquire(ino);
+        int hrc=efs_open_acquire_fileid(ino, pending_create ?
+            pending_create->request.generation : 0);
         if(hrc!=EFS_OK) {
             efs_file_close(fi);
             if(pending_create)efs_pending_create_queue(pending_create);
