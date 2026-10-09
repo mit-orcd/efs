@@ -5913,7 +5913,17 @@ or present the Raft improvement as measured KV acceptance.
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
-**Proposed next fix (Oct 9; not implemented):** Return versioned transport
+**Implemented experimental candidate (Oct 9):** Commits 9728d07b,
+eb110217 and ec5b53b3 on `devel-persistence-pressure` implement opt-in
+`EFS_RAFT_FLOW=1` receiver feedback, pacing and construction deferral. Linux
+actual-host async regressions and Raft/store/wire tests pass. The initial
+9728d07b live build passes POSIX 212/212 and peer 64/64; its five-minute
+100-second rates are 134.2 → 75.9 → 80.2 files/s, with 8,233 n3 refused
+frames and 52.95 ms mean queue residence. This is an unmatched smoke run,
+not sustained acceptance. Corrected-build repeated comparisons and applicable
+fault gates remain open; W97 is not resolved.
+
+**Design:** Return versioned transport
 admission status instead of hiding inbox BUSY; apply bounded per-peer sender
 backoff with gradual recovery; reserve bounded receiver/sender progress for
 Raft replies, elections and liveness/read probes. Include detached pump work

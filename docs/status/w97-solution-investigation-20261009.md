@@ -389,3 +389,21 @@ elapsed time. The probe limiter now guards backward timestamps and reads its
 clock under the admission mutex. Boundary tests cover backward, 5 ms read and
 50 ms heartbeat cases. The first long controller was stopped and any loader
 cooperatively drained; its interrupted baseline is not acceptance evidence.
+
+### Corrected candidate verification (ec5b53b3-flow)
+
+The isolated NUC build passes `tests/test_host_flow.py` (Linux asynchronous
+sender enabled), `tests/test_host_outbox.py`, `test_raft`, `test_raft_store`
+and `test_wire`. The deployed candidate is opt-in and preserves durable
+consensus ACK semantics. The interrupted first long baseline is excluded.
+Fresh output roots under `tiny-w97-flow-repeat-v2-*` preserve prior data;
+three alternating fifteen-minute feature-off/on pairs use the same binaries,
+eight workers, seed and payload distribution. Acceptance remains pending.
+
+Live corrected-build results: POSIX **212/212**, zero failures/skips (55.8 s);
+two-client **64/64**, zero failures (30.9 s). Exact deployed identity and
+raw functional logs are retained in
+`results/measure/20261009-w97-flow-repeats-v2/`. Sustained comparisons are
+running remotely under a single-controller flock. Additional applicable
+W64/W73 fault gates, cold payload verification, fixed-work and observer-off
+controls remain acceptance work; do not close W97 based on these smoke gates.
