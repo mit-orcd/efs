@@ -4058,6 +4058,10 @@ writers. Support separate disks, cache+metadata sharing, data+metadata sharing
 and all-shared layouts, including multiple data targets per node. Track actual
 shared capacity domains, bytes/inodes/quotas and concurrent consumption.
 
+Authoritative metadata must never be discarded to recover from storage pressure.
+Current four-node defaults do not guarantee survival of any two node losses;
+see the policy note for the data/metadata distinction and required failure audit.
+
 Node and cluster read-only admission must preserve accepted durable work,
 recovery and cleanup, and reflect writable placement and metadata quorum.
 Numeric thresholds, hysteresis and cache-only escalation remain to be selected;

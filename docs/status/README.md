@@ -49,7 +49,8 @@ dated grouped count below.
 [W99 — proactive capacity protection](storage-pressure-read-only-20261009.md)
 records the user's requirement for every disk writer and shared/separate data,
 metadata and cache storage. Read-only admission must precede exhaustion and
-reflect placement/quorum availability. Thresholds and escalation details remain
+reflect placement/quorum availability and preserve authoritative metadata. The
+note explicitly corrects the assumed any-two-of-four guarantee. Thresholds and escalation details remain
 open; this new item is outside the dated grouped count below.
 
 ## 1. The task right now
