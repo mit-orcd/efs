@@ -24,7 +24,11 @@ static const char *cn[BO_COUNTER_N] = {
     "reply_partial", "reply_covered", "drop_data", "drop_empty",
     "drop_other", "accept_data", "accept_empty",
     "wire_sent", "flow_busy", "flow_admitted", "flow_legacy",
-    "flow_wait", "flow_control", "flow_probe", "flow_enqueue_retry", "flow_prebuild_retry", "batch_noop"
+    "flow_wait", "flow_control", "flow_probe", "flow_enqueue_retry", "flow_prebuild_retry", "batch_noop",
+    "overlap_duplicate", "overlap_suffix", "overlap_conflict", "overlap_log",
+    "overlap_config", "overlap_idle", "suffix_active", "suffix_read",
+    "suffix_ready", "end_duplicate", "end_suffix", "end_conflict",
+    "end_log", "end_config"
 };
 static const char *hn[BH_HIST_N] = {
     "wal_entries", "wal_bytes", "sync_us", "sync_wait_us", "sync_waiters",

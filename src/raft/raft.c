@@ -1857,6 +1857,47 @@ static int recv_batch_noop(struct efs_raft *r, const struct efs_raft_msg *m)
     return 1;
 }
 
+/* Read-only shape of a behind-tail request. Only diagnostics call this until
+ * overlap eligibility has its own gates. Index arithmetic and every overlapping
+ * term must be proved; a new suffix is distinct from a conflicting prefix. */
+static enum efs_batch_counter recv_overlap_shape(struct efs_raft *r,
+                                                const struct efs_raft_msg *m)
+{
+    uint64_t tail, term, pt;
+    if (m->nentries > EFS_RAFT_AE_MAX ||
+        m->nentries > UINT64_MAX - m->prev_index ||
+        last_log(r,&tail,&term) != EFS_OK || m->prev_index >= tail ||
+        log_term(r,m->prev_index,&pt) != EFS_OK)
+        return BO_OVERLAP_LOG;
+    if (pt != m->prev_term) return BO_OVERLAP_CONFLICT;
+    for (uint32_t i=0; i<m->nentries; i++) {
+        if (is_cfg_cmd(m->entries[i].cmd,m->entries[i].clen))
+            return BO_OVERLAP_CFG;
+        if (i < tail-m->prev_index) {
+            if (log_term(r,m->prev_index+1+i,&pt) != EFS_OK)
+                return BO_OVERLAP_LOG;
+            if (pt != m->entries[i].term) return BO_OVERLAP_CONFLICT;
+        }
+    }
+    return m->nentries > tail-m->prev_index ? BO_OVERLAP_SUFFIX : BO_OVERLAP_DUP;
+}
+
+static void recv_overlap_observe(struct efs_raft *r,const struct efs_raft_msg *m)
+{
+    enum efs_batch_counter shape=recv_overlap_shape(r,m);
+    BO_COUNT(shape);
+    if (!r->recv_replies) BO_COUNT(BO_OVERLAP_IDLE);
+    else BO_COUNT(BO_END_DUP + (shape-BO_OVERLAP_DUP));
+    if (shape==BO_OVERLAP_SUFFIX) {
+        if (r->recv_replies) BO_COUNT(BO_SUFFIX_ACTIVE);
+        if (m->last_log_index) BO_COUNT(BO_SUFFIX_READ);
+        if (r->recv_replies && !m->last_log_index &&
+            m->from>=0 && m->from<EFS_RAFT_MAX_PEERS &&
+            (m->boot_id ? m->boot_id : 1) >= r->peer_boot[m->from])
+            BO_COUNT(BO_SUFFIX_READY);
+    }
+}
+
 static int recv_batch_finish(struct efs_raft *r, int prior)
 {
     struct recv_replies *q = r->recv_replies;
@@ -1917,6 +1958,8 @@ int efs_raft_recv_batch(struct efs_raft *r, const struct efs_raft_msg *msgs,
         bytes = 0;
         reject = BO_ELIGIBLE;
         eligible = noop || recv_can_batch(r, &msgs[i], &bytes, &reject);
+        if (!eligible && reject==BO_TAIL_BEHIND && BO_ON())
+            recv_overlap_observe(r,&msgs[i]);
         if (r->recv_replies && (!eligible || total + bytes > EFS_RAFT_AE_BYTES)) {
             BO_COUNT(!eligible ? BO_FOLLOW_INELIGIBLE : BO_FOLLOW_BYTES);
             if (!eligible && BO_ON()) efs_batch_obs_reject(reject);
