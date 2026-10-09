@@ -407,3 +407,21 @@ raw functional logs are retained in
 running remotely under a single-controller flock. Additional applicable
 W64/W73 fault gates, cold payload verification, fixed-work and observer-off
 controls remain acceptance work; do not close W97 based on these smoke gates.
+
+### Completed repeated comparison (2026-10-09 20:45 UTC)
+
+All six fifteen-minute trials completed and all sampled leader cuts caught up.
+Off/on rates by pair: 65.81/64.53, 55.48/63.04, 55.97/68.99 files/s.
+The three-run averages are 59.09 off and 65.52 on (+10.9%), with substantial
+run variation; this does not prove a hardware ceiling or close the fault gates.
+The controller left flow enabled and batch diagnostics disabled. All raw
+results are retained in `results/measure/20261009-w97-flow-repeats-v2/`.
+
+The enabled runs show n3 68k–75k host group-switch boundaries. Active follower
+cohorts end mostly on behind-tail requests (2,790–3,664 n3; 7,842–7,920 n4),
+then empty requests (1,063–1,137 n3; 1,144–1,375 n4). n4 has no group-switch
+boundaries; group scheduling alone cannot explain or repair its small cohorts.
+KV release consumes 239–246 s on n3 / 282–286 s on n4, and applied-marker
+persistence 150–159 s / 199–200 s, in each 900 s run. These phase sums identify
+separate persistence costs; they are not additive to overlapping per-sync
+observations. Serial tail optimization needs an explicit recovery contract.

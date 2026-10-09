@@ -5,3 +5,64 @@ Unmounted /data1/efs/mnt
 Unmounting /data1/efs/mnt2
 Retiring drained efs-fuse PID 1555825 for /data1/efs/mnt2
 Unmounted /data1/efs/mnt2
+cluster ready: flow=0 observations=1
+/data1/efs/w97-flow-repeats-v2-20261009/b1
+DONE b1 [  {    "start": 7.543399988207966e-05,    "end": 100.00006472099994,    "files_per_second": 142.63001527995345  },  {    "start": 100.00006472099994,    "end": 200.00009331800175,    "files_per_second": 59.99998284180383  },  {    "start": 200.00009331800175,    "end": 300.0001495230026,    "files_per_second": 36.17997966504211  },  {    "start": 300.0001495230026,    "end": 400.00007489400014,    "files_per_second": 23.79001775425294  },  {    "start": 400.00007489400014,    "end": 500.000082706003,    "files_per_second": 33.82999735719963  },  {    "start": 500.000082706003,    "end": 600.0001015890011,    "files_per_second": 89.18998315825716  },  {    "start": 600.0001015890011,    "end": 700.0001095160005,    "files_per_second": 60.239995224775946  },  {    "start": 700.0001095160005,    "end": 800.0000648400019,    "files_per_second": 59.14002642139741  },  {    "start": 800.0000648400019,    "end": 900.000064150001,    "files_per_second": 87.28000060223278  }]
+START c1 flow 1
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1574379 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 1574416 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+/data1/efs/w97-flow-repeats-v2-20261009/c1
+DONE c1 [  {    "start": 7.480899876100011e-05,    "end": 100.00009412299914,    "files_per_second": 130.74997474694936  },  {    "start": 100.00009412299914,    "end": 200.00007948599887,    "files_per_second": 68.33001000146375  },  {    "start": 200.00007948599887,    "end": 300.00010921500143,    "files_per_second": 40.94998782597707  },  {    "start": 300.00010921500143,    "end": 400.0000683370017,    "files_per_second": 36.560014945002806  },  {    "start": 400.0000683370017,    "end": 500.0001108329998,    "files_per_second": 50.019978743510805  },  {    "start": 500.0001108329998,    "end": 600.0000896240017,    "files_per_second": 67.00001421003172  },  {    "start": 600.0000896240017,    "end": 700.0000865410002,    "files_per_second": 62.4300019247179  },  {    "start": 700.0000865410002,    "end": 800.0001031720021,    "files_per_second": 66.42998895202726  },  {    "start": 800.0001031720021,    "end": 900.0000884910005,    "files_per_second": 58.29000855755711  }]
+START c2 flow 1
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1668121 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 1668159 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+/data1/efs/w97-flow-repeats-v2-20261009/c2
+DONE c2 [  {    "start": 7.437099702656269e-05,    "end": 100.00007536999692,    "files_per_second": 132.00999868122025  },  {    "start": 100.00007536999692,    "end": 200.00006424299863,    "files_per_second": 63.3700070511796  },  {    "start": 200.00006424299863,    "end": 300.0000638679994,    "files_per_second": 64.890000243337  },  {    "start": 300.0000638679994,    "end": 400.00006331799887,    "files_per_second": 61.79000033984534  },  {    "start": 400.00006331799887,    "end": 500.00007365299825,    "files_per_second": 34.699996413755585  },  {    "start": 500.00007365299825,    "end": 600.0000655739968,    "files_per_second": 56.81000458968108  },  {    "start": 600.0000655739968,    "end": 700.0000643929998,    "files_per_second": 38.45000045409338  },  {    "start": 700.0000643929998,    "end": 800.0000646359986,    "files_per_second": 56.90999986170939  },  {    "start": 800.0000646359986,    "end": 900.0000822089969,    "files_per_second": 58.42998973209888  }]
+START b2 flow 0
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1761780 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 1761814 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=0 observations=1
+/data1/efs/w97-flow-repeats-v2-20261009/b2
+DONE b2 [  {    "start": 7.682599971303716e-05,    "end": 100.0000640290018,    "files_per_second": 139.16001780830456  },  {    "start": 100.0000640290018,    "end": 200.00006660800136,    "files_per_second": 38.25999901327479  },  {    "start": 200.00006660800136,    "end": 300.00007306000043,    "files_per_second": 60.60999608944362  },  {    "start": 300.00007306000043,    "end": 400.0000739450006,    "files_per_second": 51.739999542100904  },  {    "start": 400.0000739450006,    "end": 500.00006685300104,    "files_per_second": 38.16000270630723  },  {    "start": 500.00006685300104,    "end": 600.0000627689988,    "files_per_second": 34.70000141714885  },  {    "start": 600.0000627689988,    "end": 700.0000744040008,    "files_per_second": 52.919993842757656  },  {    "start": 700.0000744040008,    "end": 800.0000750379986,    "files_per_second": 47.70999969751963  },  {    "start": 800.0000750379986,    "end": 900.0000635700017,    "files_per_second": 36.060004135360174  }]
+START b3 flow 0
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1855836 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 1855873 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=0 observations=1
+/data1/efs/w97-flow-repeats-v2-20261009/b3
+DONE b3 [  {    "start": 7.496699981857091e-05,    "end": 100.0000882280001,    "files_per_second": 126.55998321688027  },  {    "start": 100.0000882280001,    "end": 200.00010132600073,    "files_per_second": 46.80999386882671  },  {    "start": 200.00010132600073,    "end": 300.0000878739993,    "files_per_second": 37.140004996074005  },  {    "start": 300.0000878739993,    "end": 400.00009187400065,    "files_per_second": 49.71999801119941  },  {    "start": 400.00009187400065,    "end": 500.0001014940026,    "files_per_second": 68.3599934237673  },  {    "start": 500.0001014940026,    "end": 600.0001015230009,    "files_per_second": 36.849999989314114  },  {    "start": 600.0001015230009,    "end": 700.0000681460006,    "files_per_second": 51.39001715244621  },  {    "start": 700.0000681460006,    "end": 800.0000712479996,    "files_per_second": 49.52999846357993  },  {    "start": 800.0000712479996,    "end": 900.000093953,    "files_per_second": 37.38999151060226  }]
+START c3 flow 1
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 1949690 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 1949733 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=1
+/data1/efs/w97-flow-repeats-v2-20261009/c3
+DONE c3 [  {    "start": 7.565899795736186e-05,    "end": 100.00006831599967,    "files_per_second": 132.03000969496136  },  {    "start": 100.00006831599967,    "end": 200.00011326299864,    "files_per_second": 60.379972861014224  },  {    "start": 200.00011326299864,    "end": 300.0000905019988,    "files_per_second": 39.780009054327806  },  {    "start": 300.0000905019988,    "end": 400.00010850000035,    "files_per_second": 38.069993148162034  },  {    "start": 400.00010850000035,    "end": 500.0001018330004,    "files_per_second": 54.12000360818063  },  {    "start": 500.0001018330004,    "end": 600.0000932619987,    "files_per_second": 70.02000600141588  },  {    "start": 600.0000932619987,    "end": 700.0000883280009,    "files_per_second": 67.6100033358761  },  {    "start": 700.0000883280009,    "end": 800.0000629099995,    "files_per_second": 70.96001803661832  },  {    "start": 800.0000629099995,    "end": 900.0001060260001,    "files_per_second": 87.96996207087062  }]
+Unmounting /data1/efs/mnt
+Retiring drained efs-fuse PID 2044667 for /data1/efs/mnt
+Unmounted /data1/efs/mnt
+Unmounting /data1/efs/mnt2
+Retiring drained efs-fuse PID 2044714 for /data1/efs/mnt2
+Unmounted /data1/efs/mnt2
+cluster ready: flow=1 observations=0
+six sustained comparisons complete
