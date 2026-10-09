@@ -20,6 +20,11 @@ Usage:
 
 Exit code: 0 if every selected test passes, 1 otherwise.
 
+--timeout-s sets a minimum wall-clock budget for every case. Longer per-case
+budgets are preserved. This lets slow durable VM disks run the same assertions
+without silently keeping a shorter decorator budget. Record the chosen budget
+when comparing results; increasing it does not satisfy the original latency gate.
+
 Default core excludes optional mmap and .efs command checks. Use --suite extras
 (or posix_extras.py) to run those separately; --suite all includes both.
 
@@ -5087,7 +5092,7 @@ def main(argv=None):
     def items_for(rows):
         out = []
         for name, fn, tdir in rows:
-            timeout = getattr(fn, "_posix_timeout", test_timeout)
+            timeout = max(test_timeout, getattr(fn, "_posix_timeout", test_timeout))
             out.append((name, timeout, tdir))
         return out
 

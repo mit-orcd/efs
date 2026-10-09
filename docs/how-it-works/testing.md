@@ -51,6 +51,14 @@ python3 tests/posix/posix_persist.py /mount/one --phase prepare --results /tmp/p
 python3 tests/posix/posix_persist.py /mount/one --phase verify --results /tmp/persist-verify.tsv
 ```
 
+`--timeout-s` is a minimum wall-clock budget per POSIX case; longer explicit
+case budgets remain in effect. For Mac virtual disks with slow durable flushes,
+use `--timeout-s 300` to validate the same operations and assertions. Use
+`--timeout-s 300` for each persistence phase as well. Record this choice with the
+results, and retain failures at the original deadlines separately: a pass with
+more time proves correctness within that budget, not the original latency target.
+The filesystem's admission and RPC deadlines are not increased by this option.
+
 Do not run verify before a real remount, discard failed writes to obtain a
 pass, or let the remount silently change an RDMA test into TCP. Retain the
 binary/source identity, daemon I/O flags, actual transport and full verdicts.
