@@ -47,6 +47,15 @@ routing and migration; W92 remains the local disk backend. W98 owns the scaling
 discussion and distributed query design. This item is outside the dated grouped
 count below.
 
+## Storage pressure policy
+
+[W99 — proactive capacity protection](storage-pressure-read-only-20261009.md)
+records the user's requirement for every disk writer and shared/separate data,
+metadata and cache storage. Read-only admission must precede exhaustion and
+reflect placement/quorum availability and preserve authoritative metadata. The
+note explicitly corrects the assumed any-two-of-four guarantee. Thresholds and escalation details remain
+open; this new item is outside the dated grouped count below.
+
 ## 1. The task right now
 
 [AMD W73/W64 RXE completion](amd-rxe-gate-closure-20261009.md): integrated
