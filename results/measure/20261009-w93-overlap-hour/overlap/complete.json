@@ -1,0 +1,7 @@
+{
+  "duration_seconds": 900,
+  "tag": "overlap",
+  "overlap": 1,
+  "root": "/data1/efs/mnt/tiny-w93-overlap-balanced-overlap-20261009",
+  "drained": true
+}
