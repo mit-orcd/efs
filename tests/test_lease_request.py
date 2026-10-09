@@ -6,7 +6,7 @@ root=Path(__file__).resolve().parents[1];s=(root/'src/client/inode_rpc.c').read_
 a=s.index('static int opid_begin(');b=s.index('/* A reservation identity',a)
 c=s.index('int efs_client_lease_begin(');d=s.index('int efs_client_rpc_put_ticket(',c)
 e=s.index('static void opid_refresh_ack(');f=s.index('static void opid_retry_ack(',e)
-h=s.index('static int append_session_admit(efs_ino_t ino,const struct efs_opid_req *q)\n{');j=s.index('\n}',h)+2
+h=s.index('static int session_shard_admit(uint32_t shard,const struct efs_opid_req *q)\n{');j=s.index('\n}',h)+2
 code=r'''
 #include "client_internal.h"
 #include "efs/session.h"
