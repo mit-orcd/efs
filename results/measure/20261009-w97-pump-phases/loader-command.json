@@ -1,0 +1,1 @@
+["python3", "/data1/efs/w97-replication-loader.py", "--max-depth", "8", "--max-files-per-folder", "1000", "--max-files", "2000000", "--workers", "8", "/data1/efs/mnt/tiny-w97-pump-phases-20261009"]

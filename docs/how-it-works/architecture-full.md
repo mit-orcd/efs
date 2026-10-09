@@ -5913,6 +5913,15 @@ or present the Raft improvement as measured KV acceptance.
 
 ### W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Further reproduction (Oct 9):** Diagnostic build 2cca7cfc-pressure measures
+113.4 → 50.6 → 55.8 files/s and 94,175 refused n3 replication frames. Queue
+residence grows 153 → 360 → 468 ms; serial drain/KV release/applied persistence
+occupy about 98.6% of n3's measured interval. Host mutex acquisition is negligible.
+Receiver BUSY is ignored by the network handler, which still sends its normal
+transport reply; investigate bounded pressure feedback with real async queues.
+These drops are frames, not lost files or durability tickets. Exact per-frame
+retry/recovery and a sustained fix remain unproven.
+
 **Oct 9 solution trials:** Cross-group priority coalescing could overwrite an
 independent group's queued ACK/heartbeat. Fix a770290a isolates same-type
 replacement by group; actual-helper regression, Raft/store, 212/212 core

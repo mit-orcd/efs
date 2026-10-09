@@ -2,8 +2,9 @@
 
 Branch: **devel-persistence-pressure**, created from da653c33. NUC resumed
 successfully. Existing data retained; TCP/direct I/O and virtual commands
-disabled throughout. Final installed source **a770290a**, HELLO build
-**a770290a-pressure**; diagnostics are disabled after measurement.
+disabled throughout. The group-isolation trial installed source **a770290a**, HELLO build
+**a770290a-pressure**. The subsequent pump-phase trial uses **2cca7cfc**,
+build **2cca7cfc-pressure**, with the same replication policy.
 
 ## Implemented fix: independent Raft groups keep their priority messages
 
@@ -118,3 +119,53 @@ for that evidence.
 [Clean baseline](../../results/measure/20261009-w97-clean-baseline/README.md),
 [rejected candidate](../../results/measure/20261009-w97-partial-reply/README.md),
 [group-isolation evidence](../../results/measure/20261009-w97-group-isolation/README.md).
+
+## Further reproduction: queue residence and pump persistence phases
+
+Diagnostic source **2cca7cfc** adds bounded opt-in histograms without changing
+replication admission or durability. Raft/store pass with observation off/on,
+and the production outbox-helper regression passes. Another clean five-minute
+run reproduces **113.40 → 50.55 → 55.80 files/s**; n3 refuses **94,175 frames**:
+**34,276 data requests and 59,899 empty requests**. n4 refuses none. These are
+replication frames, **not lost files or durability tickets**. Raft retransmits;
+the counters do not identify the exact retry/recovery of every refused frame.
+
+n3 queue residence rises **153 → 360 → 468 ms mean**, measured before each
+frame is decoded; this includes waiting behind earlier frames in the current
+drain. Histogram p95 upper bounds are **524 ms / 1.049 s / 1.049 s**. Its host
+mutex acquisition averages about **0.15 microseconds** overall, so waiting for
+that mutex is not the observed pump bottleneck.
+
+Across approximately 301.5 s of n3 observation, pump drain consumes **233.75 s**,
+KV WAL release **38.87 s**, and applied-index persistence **24.77 s**. These
+serial pump phases total **297.39 s**, about **98.6%** of the observation
+interval. Drain includes decode, Raft processing/persistence and metadata apply;
+it is not a pure disk timer. Raft sync sections total **226.89 s**, with means
+**3.187 / 6.976 / 7.135 ms**. Sync counters can include other threads; their
+similarity to drain time supports persistence attribution but is not an exact
+partition of drain time. Metadata durability outside the drain also matters.
+
+n4 has no drops but spends **132.24 s draining**, **96.91 s releasing the KV
+WAL**, and **64.35 s persisting applied indexes**, across about 295.6 s. Thus
+a full inbox is not required to observe substantial durability cost.
+
+Code inspection identifies a pressure-feedback gap: `handler.c` discards
+`server_raft_host_inbox`'s return code and sends the ordinary empty transport
+RAFT_REPLY even when admission returns BUSY. This acknowledges transport
+handling, **not consensus or durable acceptance**. The sender continues without
+an inbox-pressure signal. Meanwhile, new proposals may extend and resend an
+unacknowledged non-full batch, and commit/read probes add empty requests. This
+is a concrete flow-control candidate, not proof that changing it alone resolves
+W97. Any fix must preserve retries, read context, group isolation, elections
+and mixed-version transport behavior; increasing queue capacity is not a remedy
+for the measured serial persistence time.
+
+[Raw phase evidence and method](../../results/measure/20261009-w97-pump-phases/README.md).
+Sequential growing-tree conditions and uncalibrated observer overhead still
+prevent a hardware-ceiling claim or matched performance comparison.
+
+Phase-build validation: **212/212 core POSIX in 70.8 s**, then a clean restart
+with diagnostics disabled and **32 sampled cold payloads matching both mounts**.
+All six process environments confirm diagnostics/commands off, TCP/direct I/O.
+The loader exited cooperatively. Peer/fault suites were not repeated for this
+observation-only change; no new flow-control policy has been deployed.
