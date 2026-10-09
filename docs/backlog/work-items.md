@@ -3860,6 +3860,12 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Investigation checkpoint:** Branch devel-persistence-pressure identifies
+extending small-entry windows, older reply tracking and shared inbox overflow
+as candidate amplification paths. NUC is unreachable; no policy fix or live
+candidate result is claimed.
+[Code findings and solution gates](../status/w97-solution-investigation-20261009.md).
+
 **Class/status:** Performance investigation; open. Sustained tiny-file
 throughput declines alongside persistence latency and replication pressure.
 The causal mechanism and a validated production fix remain open.
