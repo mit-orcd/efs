@@ -1,5 +1,9 @@
 # D30/W23/W89 — Mac pressure foundations, Oct 8, 2026
 
+Later integration: [AMD admission, real-cap follower and cold FUSE gates](compaction-pressure-amd-20261008.md).
+This file preserves the earlier Mac checkpoint; its unimplemented integration
+items describe that checkpoint, not the later branch implementation.
+
 Branch `devel-compaction-pressure`, base `532660e3`. Package remains open.
 This checkpoint implements engine observation and a reservation primitive;
 production Raft admission and follower pacing are not activated.

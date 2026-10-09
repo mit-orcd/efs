@@ -1,0 +1,13 @@
+2026-10-09T00:29:14.821Z efs-fuse: legacy export label 'pressure-oracle' is ignored; mounting the single export 'default' (id=1)
+2026-10-09T00:29:14.821Z efs-fuse (no git metadata, branch unknown, built 2026-10-09T00:18:38Z on amd-395), build=unknown: starting export=default mount=/data1/efs/mnt2
+2026-10-09T00:29:14.821Z Discovered 3 cluster nodes from 127.0.0.1:25405
+2026-10-09T00:29:14.821Z   node id=1 127.0.0.1:25403
+2026-10-09T00:29:14.821Z   node id=2 127.0.0.1:25404
+2026-10-09T00:29:14.821Z   node id=3 127.0.0.1:25405
+2026-10-09T00:29:14.821Z fetching metadata...
+2026-10-09T00:29:14.821Z meta: raft host mounted export 'default' (bits=12, no GET_META table)
+2026-10-09T00:29:14.821Z export id=1 name=default
+2026-10-09T00:29:14.821Z meta ready staged_rows=1 staged_chunks=0 staged_bytes=91936 root_get=0 mode=40755
+2026-10-09T00:29:14.822Z efs-fuse daemon pid=2504706
+2026-10-09T00:29:14.825Z efs-fuse: workers max=10 idle=10
+2026-10-09T00:29:14.826Z fuse serving
