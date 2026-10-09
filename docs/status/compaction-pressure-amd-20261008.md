@@ -142,3 +142,34 @@ only after restoration and evidence capture.
    not a universal process-memory bound.
 3. Review deployment limits against the target cluster's memory/storage budget.
    No indefinite write-throughput claim is made while a replica remains stalled.
+
+## Installed AMD deployment after host return
+
+At the user's explicit request, deployed commit `10cbfaf8da91` from this worktree
+using `~/git/devops/nuc-efs/deploy.sh` with `EFS_CLUSTER=amd`. AMD was already
+stopped and unmounted after returning; no forced stop or discard was used.
+Existing stores and format marker were preserved. Previous binaries, client
+scripts, devops scripts and a bundle of the previous installed source HEAD were
+saved under `/data1/efs/deploy-backups/pressure-10cbfaf8`.
+
+The installed build identifies branch `devel-compaction-pressure`, commit
+`10cbfaf8`, build time `2026-10-09T01:15:32Z`. Four daemons and two clients run
+as Linux `efs` (UID 1001), direct I/O/TCP, with explicit `EFS_COMMANDS=0`,
+`EFS_COMMANDS_SERVER=0`, `EFS_ADMISSION_PRESSURE=0`. The opt-in pressure gate is
+unchanged; installing this build does not resolve the activation obligations above.
+
+Installed acceptance passed:
+
+- Single-client POSIX: 213 passed, zero failed, four skipped (unsupported mmap
+  plus three intentionally disabled `.efs` command tests).
+- Peer-client POSIX: 64/64 passed.
+- Persistence: 26/26 prepare and 26/26 exact verify after clean client remount.
+- Final health: both mounts serving, all six processes owned by `efs`, matching
+  installed branch identity, both groups converged at commit=applied on all
+  three hosted replicas.
+
+[Deployment logs, TSVs and final health](../../results/measure/20261008-amd-compaction-deploy/health.json)
+are retained alongside `results.json`, build/start logs and per-suite output.
+The advisory reservation was released after health verification. The deployed
+cluster remains running; this documentation-only follow-up commit does not
+require rebuilding its binaries.
