@@ -10,10 +10,11 @@ p.add_argument('--server',type=Path,required=True)
 p.add_argument('--work',type=Path,required=True)
 p.add_argument('--samples',type=int,default=100)
 p.add_argument('--port',type=int,default=27440)
+p.add_argument('--recovery',action='store_true',help='after timing, stop each group leader and cold restart all owned daemons')
 a=p.parse_args();assert 10<=a.samples<=1000
 a.work.mkdir(parents=True,exist_ok=False)
 env=dict(os.environ,EFS_MD_RAFT_N='4',EFS_TRANSPORT='tcp',EFS_COMMANDS='0',EFS_COMMANDS_SERVER='0',EFS_READ_PROF='1',EFS_RAFT_OBS='1')
-procs=[];logs=[];mutation_attempts=[]
+procs=[];logs=[];mutation_attempts=[];stopped=set();commands=[]
 for port in range(a.port,a.port+4):
  with socket.socket() as s:
   s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)
@@ -25,7 +26,7 @@ def call(node,op,*args):
 def wait(fn,seconds=30):
  end=time.monotonic()+seconds
  while time.monotonic()<end:
-  assert all(p.poll() is None for p in procs),'owned daemon died'
+  assert all(proc.poll() is None for n,proc in enumerate(procs) if n not in stopped),'owned daemon died'
   result=fn()
   if result:return result
   time.sleep(.05)
@@ -46,6 +47,7 @@ try:
   root=a.work/f'n{node+1}';root.mkdir();log=(a.work/f'n{node+1}.log').open('w');logs.append(log)
   args=[str(a.server),'--node-id',str(node+1),'--addr','127.0.0.1','--port',str(a.port+node),'--storage',str(root),'--quota','1G','--writers','0','--no-direct-io']
   if node:args+=['--join',f'127.0.0.1:{a.port}']
+  commands.append(args)
   procs.append(subprocess.Popen(args,env=env,stdout=log,stderr=log))
   wait(lambda:'listening' in (a.work/f'n{node+1}.log').read_text())
  wait(lambda:any(call(n,'raft-mkfs')['exit']==0 for n in range(4)))
@@ -77,6 +79,45 @@ try:
     rows['cells'][key]={'samples':samples,'p50_ms':values[math.ceil(len(values)*.5)-1],'p95_ms':values[math.ceil(len(values)*.95)-1],'p99_ms':values[math.ceil(len(values)*.99)-1],'max_ms':max(values)}
    for job in writers:job.result()
  rows['after']=snapshot()
+ if a.recovery:
+  rows['recovery']=[]
+  def verify(label):
+   samples=[]
+   for node in range(4):
+    if node in stopped:continue
+    for group,file in targets.items():
+     def probe():
+      result=call(node,'raft-getattr',file)
+      return result if ok(result) else None
+     row=wait(probe)
+     assert ino(row)==file,(label,node,group,row)
+     samples.append({'node':node+1,'group':group,**row})
+   rows['recovery'].append({'phase':label,'reads':samples})
+  def restart(node):
+   procs[node]=subprocess.Popen(commands[node],env=env,stdout=logs[node],stderr=logs[node])
+   stopped.remove(node)
+   def listening():
+    try:
+     with socket.create_connection(('127.0.0.1',a.port+node),timeout=.2):return True
+    except OSError:return False
+   wait(listening)
+  for group in (0,2):
+   def leader():
+    for node in range(4):
+     if re.search(rf'group {group} hosted=1 role=LEADER ',call(node,'raft-status')['text']):return node+1
+    return None
+   node=wait(leader)-1
+   procs[node].terminate();procs[node].wait(timeout=30);stopped.add(node)
+   verify(f'group-{group}-leader-{node+1}-stopped')
+   restart(node)
+   verify(f'group-{group}-leader-rejoined')
+  for node,proc in enumerate(procs):
+   proc.terminate()
+  for node,proc in enumerate(procs):
+   proc.wait(timeout=30);stopped.add(node)
+  for node in range(4):restart(node)
+  verify('all-daemons-cold-restarted')
+  rows['cold_status']=snapshot()
  (a.work/'results.json').write_text(json.dumps(rows,indent=2)+'\n')
  print(json.dumps({k:{m:v[m] for m in ('p50_ms','p95_ms','p99_ms','max_ms')} for k,v in rows['cells'].items()},indent=2),flush=True)
 finally:

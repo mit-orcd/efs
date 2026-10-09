@@ -9,3 +9,8 @@ The initial b1 start hit TIME_WAIT; no measured samples were used from it.
 Full make test and stale-leader freshness passed. POSIX failed: 145 pass, 7 fail,
 60 not run out of 212. Peer/final recovery not reached. Logs and fixture manifest
 preserve that failure. No general latency improvement or live acceptance claimed.
+
+Follow-up: baseline matching-build-ID POSIX also fails (144/212 pass, 8 fail,
+60 not run); see efs-w66-baseline-posix.log and gc-buffered-9rvu14z1. Candidate
+read-recovery-c1 passes metadata reads after each group leader stops/rejoins
+and all-daemon clean cold restart. No FUSE byte or power-loss claim.
