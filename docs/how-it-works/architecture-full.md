@@ -1483,13 +1483,15 @@ the recommended first priorities within this set. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
-### All-node metadata query discussion
+### Distributed metadata scaling discussion
 
-[W98 — serve metadata queries through all nodes](../status/all-node-metadata-queries-20261009.md)
-is an open architecture discussion: compare forwarding, federation and derived
-index replication for larger clusters. W92 remains the local disk backend; W66
-retains consensus/routing ownership. This newly registered item is outside the
-dated grouped count below.
+[W98 — from fixed placement to distributed metadata capacity](../status/all-node-metadata-queries-20261009.md)
+records the move to locality-aware sharding and bounded replication: additional
+nodes contribute ordinary POSIX metadata and distributed query capacity without
+cluster-wide coordination for routine updates. W66 owns authoritative placement,
+routing and migration; W92 remains the local disk backend. W98 owns the scaling
+discussion and distributed query design. This item is outside the dated grouped
+count below.
 
 ### 1. The task right now
 
@@ -6144,44 +6146,94 @@ acceptance. Required body flushes and integrity verification remain present.
 
 <a id="w98"></a>
 
-### W98 · Serve metadata queries through all cluster nodes
+### W98 · Move from fixed metadata placement to locality-aware distribution
 
 **Class/state:** architecture discussion / scaling enhancement; open, registered
-Oct 9, 2026. No placement or query-routing change is accepted by this note.
+Oct 9, 2026. This records the requested direction and implementation gates;
+it does not activate a new placement or consensus policy.
 
-**Request:** discuss how every node can serve `.efs/find`, `.efs/stats` and
-related metadata queries as the cluster grows, including an eight-node cluster.
-Serving a query need not mean storing the entire authoritative metadata set on
-every node; compare routing/federation with replicated derived indexes before
-choosing a design.
+**Goal:** adding nodes must contribute ordinary POSIX metadata capacity and
+query capacity, alongside data storage. Cover lookup/stat, create/unlink,
+permissions/timestamps, readdir, rename, chunk mappings, append, leases and
+locks, as well as `.efs/find`, `.efs/stats` and related queries. Any-node query
+entry points alone do not establish scaling of execution or storage capacity.
 
-**Current baseline:** `group_voters()` in `src/server/raft_host.c` places both
-metadata groups on all nodes for clusters of up to three nodes. With more than
-three nodes, the default voters are nodes 1/2/3 for group 0 and nodes 2/3/4 for
-group 2. Nodes 2 and 3 overlap; the current full-catalog publisher requires both
-groups locally. Nodes 5–8 do not automatically acquire metadata replicas. Data
-fragment placement is a separate concern. Losing either overlapping node alone
-leaves both default metadata quorums and one complete publisher; losing both
-nodes 2 and 3 loses both default quorums. Configured placement may differ.
+**Current baseline:** 4096 logical KV shards map by parity to two fixed Raft
+groups, 0 and 2. `group_voters()` places both groups on every node for clusters
+of up to three nodes. With four nodes, group 0 uses nodes 1/2/3 and group 2
+uses nodes 2/3/4. Only nodes 2 and 3 host both groups and can publish the current
+complete local query catalog. Node 4 contributes group-2 metadata authority
+and data storage, but cannot independently publish a complete catalog. Cluster
+membership currently has a four-node limit (`EFS_MAX_NODES`); an eight-node
+layout is a target, not an existing supported configuration. Extending the
+current voter rule unchanged would give nodes 5–8 no metadata groups.
 
-**Discussion:** evaluate (1) any-node entry points forwarding to eligible
-publishers, (2) partition-local indexes with federated execution, and (3)
-additional derived-index replicas independent of metadata voters. Compare
-mutation traffic, disk/RAM bounds, query fanout, hot spots, recovery cost and
-placement/failure domains. Specify complete snapshot cuts across groups, fresh
-permission checks, lag/age reporting, partial-result refusal, stable pagination
-and publisher-failure behavior. Avoid equating a local partial index with a
-complete namespace answer.
+**Target concept:** locality-aware metadata sharding with bounded replication,
+using partitioned consensus (Multi-Raft). Map logical shards to a configurable
+set of metadata groups through a versioned routing/placement map. Distribute
+replicas and leaders across nodes and failure domains. Adding nodes places or
+moves selected groups and their indexes so those nodes perform useful metadata
+and query work. Keep replication independent of cluster size: ordinarily three
+voters per group, subject to the selected durability policy. An ordinary update
+commits through its owning group's quorum, not through every cluster node.
 
-**Acceptance before implementation:** record the selected design and topology
-for 1/3/4/8 nodes, then define correctness, bounded-resource, failover and scaling
-gates. Tests must distinguish query-service availability from the availability
-of authoritative metadata quorums.
+**Locality and coordination:** place related namespace records together where
+practical, including directory entries and inode authority, so common operations
+use few groups. Locality is a placement objective, not a promise that every create
+or lookup is single-group. Cross-group rename and other multi-authority mutations
+use the existing transaction principles, with only the affected participants;
+specify and measure their fanout. Directory partitioning and file lanes address
+hotspots when size/load warrants splitting ownership. Avoid independently hashing
+all related records in a way that makes routine operations require many groups.
+More groups improve parallelism for independent work; they do not automatically
+remove contention on one directory, inode, append cursor or lock owner.
 
-**Relation:** W92 owns the local disk-backed query cache; this discussion must
-not expand or block that backend implementation. W66 owns metadata consensus,
-leadership and routing work; coordinate any proposed placement/routing changes
-with that owner. This item does not authorize changing voter sets or consensus.
+**Transition:** first measure present ownership, leaders, latency and participant
+counts. Remove the four-node and fixed-two-group assumptions under W66, introducing
+versioned discovery/routing and a compatible migration protocol. Move existing
+state with an explicit ownership handoff that preserves committed data, FileID,
+receipts, leases, locks, transaction decisions and recovery/GC ownership; changing
+the shard hash alone is unsafe. Expand groups and rebalance leaders in measured
+stages. Share reactors, connections and WAL batching rather than allocating an
+independent thread/connection/fsync stream per logical shard. Bound migration,
+catch-up, snapshot and query work so they cannot starve authoritative operations.
+
+**Distributed queries:** W98 builds on those authoritative partitions. Maintain
+partition-local derived indexes, execute bounded queries at eligible replicas,
+and combine results at the receiving node. Route subtree queries only to the
+partitions required for that subtree when the ownership map permits; whole-tree
+queries can require all partitions. Forwarding to today's complete publishers is
+a transition option, not the scaling endpoint. Additional derived-index replicas
+may offload reads without changing voter sets. Compare their mutation/recovery
+cost against federation before selecting a query-replica policy.
+
+**Consistency and availability:** define a transaction-consistent snapshot cut
+across participants; independently picking each group's latest index is not a
+sufficient specification. Preserve fresh authorization, directory spreading and
+cross-group rename semantics, report index age/lag, and refuse incomplete results
+as successful complete answers. Pagination must pin a generation: publisher loss
+must either resume that exact retained cut elsewhere or explicitly expire the
+cursor and require restart, never silently substitute a newer catalog. Distinguish
+query-service availability from authoritative quorum availability; specify whether
+any stale-query mode is permitted rather than inferring it from a cached index.
+
+**Acceptance before implementation:** record topology and ownership for 1/3/4/8
+nodes and expansion beyond eight. Define numerical gates from the baseline for
+supported namespace size, ordinary metadata throughput, query throughput and
+p95/p99 latency, including create/stat/readdir/rename/append and mixed query loads.
+Measure replica count and participant-group fanout per operation: adding nodes
+must not make ordinary updates contact a growing fraction of the cluster. Include
+hot-directory/shared-file cases, partition movement, leader/publisher loss,
+quorum loss, permission changes between pages and transaction recovery. Account
+for network traffic, RSS, queues, retained catalogs/cursors, index storage and
+recovery cost; define resource caps and overload behavior. Endpoint reachability
+or an idle-node count is not evidence of capacity scaling.
+
+**Relation:** W66 owns membership, authoritative metadata consensus, placement,
+routing, transactions and migration. W98 records the end-to-end scaling goal and
+owns distributed query design and its integration with that foundation. W92 owns
+the local disk-backed query cache and should continue independently. Implementation
+requires the design/compatibility review above; this note does not change voters.
 
 **Discussion handoff:** [status note](../status/all-node-metadata-queries-20261009.md).
 
