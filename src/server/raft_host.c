@@ -8504,10 +8504,11 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen,
             efs_raft_flow_rd32(payload+8)!=(unsigned)h->raft_id) return EFS_ERR_PROTO;
         gi=efs_raft_flow_group(payload[1]); from=(int)efs_raft_flow_rd32(payload+4);
         control=efs_raft_flow_critical(payload,plen);
-        now=efs_batch_obs_now_us(); read=efs_raft_flow_rd64(payload+28);
+        read=efs_raft_flow_rd64(payload+28);
     }
     pthread_mutex_lock(&h->inbox_mu);
     if (h->flow_enabled) {
+        now=efs_batch_obs_now_us(); /* admission clock, after any mutex wait */
         if (efs_raft_flow_empty(payload,plen) &&
             efs_raft_flow_probe_due(h->inbox_probe_sent[gi][from],
                 h->inbox_probe_read[gi][from],now,read)) { control=1; probe=1; }

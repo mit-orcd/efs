@@ -110,7 +110,7 @@ static inline void efs_raft_flow_probe(uint8_t out[80], const uint8_t in[80])
 static inline int efs_raft_flow_probe_due(uint64_t sent, uint64_t old_read,
                                          uint64_t now, uint64_t read)
 {
-    return !sent || now-sent>=EFS_RAFT_FLOW_PROBE_US ||
-           (read && read!=old_read && now-sent>=EFS_RAFT_FLOW_READ_US);
+    return !sent || (now>=sent && (now-sent>=EFS_RAFT_FLOW_PROBE_US ||
+           (read && read!=old_read && now-sent>=EFS_RAFT_FLOW_READ_US)));
 }
 #endif

@@ -382,3 +382,10 @@ context probe, while ACK-driven data-only follow-ups must not emit a new probe
 (otherwise probe ACKs self-feed). The strengthened core/actual-host tests and
 local AddressSanitizer Raft test pass. This optimization is not present in the
 initial 9728d07b-flow five-minute measurement and requires its own exact build.
+
+A pre-trial review found that taking a timestamp before the inbox mutex could
+compare an older timestamp to a newer probe admission and underflow unsigned
+elapsed time. The probe limiter now guards backward timestamps and reads its
+clock under the admission mutex. Boundary tests cover backward, 5 ms read and
+50 ms heartbeat cases. The first long controller was stopped and any loader
+cooperatively drained; its interrupted baseline is not acceptance evidence.

@@ -137,6 +137,11 @@ static void queue(struct host_outbox*tx,unsigned type,unsigned group,unsigned da
 }
 static void codec(void)
 {
+ assert(!efs_raft_flow_probe_due(10000,1,9999,2));
+ assert(!efs_raft_flow_probe_due(10000,1,14999,2));
+ assert(efs_raft_flow_probe_due(10000,1,15000,2));
+ assert(!efs_raft_flow_probe_due(10000,1,59999,1));
+ assert(efs_raft_flow_probe_due(10000,1,60000,1));
  uint8_t wire[8];struct efs_raft_flow_reply r={1,1,500},d;efs_raft_flow_encode(wire,&r);
  assert(!efs_raft_flow_decode(wire,8,&d)&&d.status==1&&d.retry_ms==500);
  assert(efs_raft_flow_decode(NULL,0,&d)==1);
