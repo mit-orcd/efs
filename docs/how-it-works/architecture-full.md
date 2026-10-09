@@ -4936,8 +4936,14 @@ W64's cross-group redirect cycle and was removed. It was reapplied only after
 authoritative coordinated append fixed that gate; the rejected patch and
 failure trace remain in the readiness evidence.
 
-**Remaining gates:** supported mount `-o sync`, final buffered/direct × TCP/RXE
-matrix. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
+**Oct 9 UTC NUC acceptance:** mount-wide `-o sync` passes ordinary/append,
+small/large peer-before-close and cold crash verification in direct/TCP and
+buffered/TCP. Initial broad runs hit the 30-second `concurrent_appends`
+budget; clean direct POSIX passes, but peer append returns EIO/BUSY. Final
+coverage/service verification is blocked by NUC becoming unreachable; W73 is
+not closed. See the [NUC gate report](../status/nuc-gate-closure-20261009.md).
+
+**Remaining gates:** final buffered/direct × TCP/RXE matrix. Live O_SYNC/O_DSYNC EIO retention, fsync recovery and subsequent cold
 crash now pass for partial bodies; W71 retains
 hardware power-loss acceptance. Software RXE on one AMD host is not physical
 multi-host or hardware RDMA proof.
