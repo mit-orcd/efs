@@ -3542,6 +3542,40 @@ the original record and withdrawn interpretation remain retained.
 
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
+**Oct 9 user requirement — billions of files:** W92 remains open until the
+server query catalog uses a persistent, partitioned disk-backed index with
+bounded resident memory. Target namespace cardinality is **2^32 files**;
+this is a design/validation target, not a demonstrated EFS capacity. The current
+implementation retains the complete query catalog in RAM. Partition reuse and
+bounded result paging reduce work/output but do not bound resident memory as
+the namespace grows. The latest NUC run reaches the unchanged 1024 MiB catalog
+cap near 1.25 million files and leaves stale snapshots. The earlier recovery
+below applied to a smaller namespace and does not resolve this scale issue.
+Raising the cap is not acceptance of the requested architecture.
+
+**Required implementation:** persist shard/partition indexes; use bounded caches,
+builders, queues and query/export buffers; incrementally apply metadata changes
+with durable watermarks and bounded catch-up/recovery; maintain incremental
+per-partition statistics. Preserve permission checks, immutable per-open output,
+truthful age/completeness/error reporting and retained-snapshot lifetime without
+pinning a complete namespace in RAM. Indexed lookup, bounded display and full
+streaming export must not require a full in-memory catalog or rebuild on command
+access. Define supported predicates and access plans honestly: substring searches
+may require bounded disk scans rather than claiming every predicate is an index seek.
+
+**Scale gates before closure:** document per-node/shard memory and disk budgets,
+64-bit count/offset arithmetic and every protocol/storage cardinality limit;
+prove bounded RSS/queues/build scratch at increasing cardinality, cold caches,
+concurrent mutations and exports; test restart, disable/re-enable catch-up,
+publisher loss and interrupted recovery against an independent oracle. Add a
+partitioned synthetic-index gate exercising at least 2^32 entries, plus staged
+real-filesystem gates within measured space/inode limits. Record synthetic and
+real evidence separately; synthetic index acceptance does not certify end-to-end
+EFS capacity. Measure foreground latency, query latency and freshness under load.
+Implementation and these gates are pending. See
+[architecture requirement](../status/virtual-find-stats.md#billions-of-files--disk-backed-bounded-memory-catalog)
+and [five-minute evidence](../status/tiny-file-five-minute-profile-20261009.md).
+
 Oct 9 CPU/memory follow-up: deployed `a62cbd5f6ca2` on NUC. Immutable decoded
 inode/stat blocks are retained per partition with lane dependency invalidation;
 mutable rollups are allocated only for directories. Publication recovers beyond
