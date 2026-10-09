@@ -15,6 +15,9 @@ code=r'''
 #include "efs/raft.h"
 #include "efs/kv_lsm.h"
 #include "efs/meta_cmd.h"
+#include "efs/meta_apply.h"
+#include "efs/txn.h"
+#include "efs/kv_key.h"
 #include <assert.h>
 #include <string.h>
 #define HOST_NGROUPS 2
@@ -84,6 +87,21 @@ int main(void) {
  assert(host_pressure_admit(&h.g[0],NULL,0,EFS_RAFT_ADMIT_LEAD)==EFS_ERR_BUSY);
  pending_n=0;
  uint8_t sweep=EFS_MD_CMD_LANE_SWEEP_BATCH,legacy=EFS_MD_CMD_LANE_SWEEP;
+ uint8_t tags[]={EFS_MD_CMD_TRUNCATE,EFS_MD_CMD_LANE_FENCE,EFS_MD_CMD_RESOLVE,EFS_MD_CMD_DROP};
+ uint32_t limits[]={EFS_META_TRUNCATE_ITEMS,EFS_META_LANE_FENCE_ITEMS,EFS_TXN_RESOLVE_ITEMS,EFS_TXN_DROP_ITEMS};
+ uint32_t keys[]={2,2,1,1},values[]={EFS_META_GC_VAL,EFS_META_GC_VAL,EFS_TXN_RECORD_MAX,0};
+ h.g[1].r=NULL;
+ for (unsigned i=0;i<4;i++) {
+   uint64_t work=host_pressure_rows_charge(limits[i],keys[i],values[i]);
+   assert(host_pressure_command_charge(&tags[i],22)==work);
+   e.cmd=&tags[i];e.clen=22;
+   uint64_t cap=HOST_PRESSURE_PENDING_BYTES-(host_pressure_recovery(e.cmd,e.clen)?0:HOST_PRESSURE_PENDING_RESERVE);
+   forced_work=cap-work;
+   assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
+   forced_work++;
+   assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ }
+ forced_work=0;e.clen=1;
  assert(host_pressure_command_charge(&sweep,51)==(64u<<10));
  h.g[1].r=NULL;
  forced_work=HOST_PRESSURE_PENDING_BYTES-(64u<<10);

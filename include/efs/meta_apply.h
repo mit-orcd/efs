@@ -15,6 +15,9 @@
  * A live dentry whose inode row cannot be resolved is I9 (EFS_ERR_IO). */
 
 #define EFS_META_LANES 64
+/* Shared with admission accounting; changing apply capacity changes its charge. */
+#define EFS_META_LANE_FENCE_ITEMS (1u + 32u + 32u)
+#define EFS_META_TRUNCATE_ITEMS (EFS_META_LANES + 1u + EFS_META_LANES * 32u * 2u + 3u)
 #define EFS_META_INO_BYTES   128
 #define EFS_META_DENT_BYTES  20
 #define EFS_META_ALLOC_BYTES 8

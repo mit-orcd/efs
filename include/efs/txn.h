@@ -20,6 +20,9 @@
  * The one-byte wire count remains unchanged; older binaries must not
  * participate in transactions exceeding their 64-participant capacity. */
 #define EFS_TXN_MAX_PART 144
+/* Apply accumulator capacities, shared with admission accounting. */
+#define EFS_TXN_DROP_ITEMS 32u
+#define EFS_TXN_RESOLVE_ITEMS 48u
 #define EFS_TXN_NAMESPACE_MAX_PART EFS_TXN_MAX_PART
 #define EFS_TXN_PARTS_BYTES (1u + 4u * EFS_TXN_MAX_PART)
 #define EFS_TXN_VALUE_MAX (8u + 16u * EFS_FENCE_HISTORY_MAX)

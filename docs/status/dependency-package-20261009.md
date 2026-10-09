@@ -100,3 +100,30 @@ physical deletion counters, offline member/rejoin, cold inventory/quota zero and
 late PUT fencing. Installed 978caaf7 service restored with pressure off. The
 last observation-only adjustment was rebuilt and focused-tested after the live
 run. No pressure-cap stress or universal bound is claimed by this checkpoint.
+
+## Fixed-capacity apply expansion audit
+
+TRUNCATE (4,164 items), LANE_FENCE (65), transaction RESOLVE (48), and DROP
+(32) now have capacity-derived minimum admission charges. Apply arrays and
+bounds share constants with admission, avoiding independent magic numbers.
+The staged allowance includes item descriptors, one/two key arrays and maximum
+values, with four row images and fixed slack for batch/LSM copies. Large wire
+payloads retain the greater wire-derived charge. This fixes demonstrable small
+request undercharging; four row images is not an allocator/RSS proof.
+
+Exact-capacity acceptance/refusal cases cover all four tags, including recovery
+reserve treatment for RESOLVE/DROP. AMD full Linux build/regression passes with
+no build warnings. Architecture checks pass 5/5.
+
+The audit also confirms another activation blocker: session LEASE_DROP calls
+lease, lock and append cleanup loops; session RECLAIM calls lease cleanup. A
+single entry can write arbitrarily many batches. Those need leader-selected
+exact bounded keys and replay-safe completion, preserving durable revocation
+and append frontier semantics. Do not convert them to partial success or
+silently shorten their historical replay. Other tags still need auditing;
+D30 and production session integration remain open.
+
+AMD private direct/TCP pressure-enabled core/peer POSIX and GC gate passes,
+including physical delete counters, offline member rejoin, cold inventory/quota
+zero and late PUT fences. Installed 978caaf7 restored, both mounts serving,
+pressure off. Evidence: results/measure/20261009-apply-expansion-audit.

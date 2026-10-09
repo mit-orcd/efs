@@ -5550,10 +5550,10 @@ int efs_meta_apply_lane_fence(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     /* One lane fence PUT + up to 32 chunk DELs, each with a GC record.
      * gc_queue indexes by the global item number, so all arrays share the
      * same bound. */
-    struct efs_kv_item it[1 + 32 + 32];
-    uint8_t del_keys[1 + 32 + 32][EFS_KV_KEY_MAX];
-    uint8_t gc_keys[1 + 32 + 32][EFS_KV_KEY_MAX];
-    uint8_t gc_vals[1 + 32 + 32][EFS_META_GC_VAL];
+    struct efs_kv_item it[EFS_META_LANE_FENCE_ITEMS];
+    uint8_t del_keys[EFS_META_LANE_FENCE_ITEMS][EFS_KV_KEY_MAX];
+    uint8_t gc_keys[EFS_META_LANE_FENCE_ITEMS][EFS_KV_KEY_MAX];
+    uint8_t gc_vals[EFS_META_LANE_FENCE_ITEMS][EFS_META_GC_VAL];
     uint8_t k_ln[EFS_META_LANES][EFS_KV_KEY_MAX];
     uint8_t v_ln[EFS_META_LANES][LANE_VAL];
     uint8_t key[EFS_KV_KEY_MAX], old[LANE_VAL];
@@ -6743,7 +6743,7 @@ static int truncate_publish_tail(struct efs_kv *kv, struct efs_meta_row *row,
  * carry the same bound and are indexed by the global item number (see
  * trunc_del_cb). Whole-record reservations include every live delta; an
  * oversized legacy truncate fails atomically rather than orphaning spans. */
-#define TRUNC_IT_CAP (EFS_META_LANES + 1 + EFS_META_LANES * 32 * 2 + 3)
+#define TRUNC_IT_CAP EFS_META_TRUNCATE_ITEMS
 
 static int truncate_apply(struct efs_kv *kv, efs_ino_t ino, uint64_t now,
                           const struct efs_meta_truncate *t,

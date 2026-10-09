@@ -3639,15 +3639,40 @@ static uint64_t host_pressure_charge(uint64_t bytes, uint64_t count)
  * overhead). Historical whole-lane/reap commands have no finite wire-size
  * bound: block new work until they apply; never reject their committed apply.
  * Other commands retain the staged estimate and still require an audit. */
+/* Account for apply accumulators plus copied keys/values and LSM batch work.
+ * Four row images is a staged allowance, not a proof of all allocator/RSS
+ * overhead. Shared item limits keep capacity changes visible to admission. */
+static uint64_t host_pressure_rows_charge(uint32_t items, uint32_t keys,
+                                          uint32_t value_bytes)
+{
+    return 4096 + 4ull*items*(sizeof(struct efs_kv_item) +
+                             (uint64_t)keys*EFS_KV_KEY_MAX + value_bytes);
+}
+
 static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
 {
     uint64_t charge = host_pressure_charge(n,1);
     if (!cmd || !n) return charge;
     if (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE)
         return UINT64_MAX;
-    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH && charge < (64u<<10))
-        return 64u<<10;
-    return charge;
+    uint64_t work = 0;
+    switch (cmd[0]) {
+    case EFS_MD_CMD_LANE_SWEEP_BATCH: work=64u<<10; break;
+    case EFS_MD_CMD_TRUNCATE:
+        work=host_pressure_rows_charge(EFS_META_TRUNCATE_ITEMS,2,EFS_META_GC_VAL);
+        break;
+    case EFS_MD_CMD_LANE_FENCE:
+        work=host_pressure_rows_charge(EFS_META_LANE_FENCE_ITEMS,2,EFS_META_GC_VAL);
+        break;
+    case EFS_MD_CMD_RESOLVE:
+        work=host_pressure_rows_charge(EFS_TXN_RESOLVE_ITEMS,1,EFS_TXN_RECORD_MAX);
+        break;
+    case EFS_MD_CMD_DROP:
+        work=host_pressure_rows_charge(EFS_TXN_DROP_ITEMS,1,0);
+        break;
+    default: break;
+    }
+    return charge > work ? charge : work;
 }
 
 static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)

@@ -848,15 +848,15 @@ int efs_txn_apply_prepare(struct efs_kv *kv, int kind, const struct efs_txid *t,
 struct drop_acc {
     struct efs_txid t;
     uint32_t shard;
-    struct efs_kv_item it[32];
-    uint8_t keys[32][KEY_MAX];
+    struct efs_kv_item it[EFS_TXN_DROP_ITEMS];
+    uint8_t keys[EFS_TXN_DROP_ITEMS][KEY_MAX];
     uint32_t n;
     int rc;
 };
 
 static int drop_add(struct drop_acc *a, const uint8_t *key, uint32_t klen)
 {
-    if (a->n >= 32) {
+    if (a->n >= EFS_TXN_DROP_ITEMS) {
         a->rc = EFS_ERR_NOMEM;
         return 1;
     }
@@ -1217,16 +1217,16 @@ struct res_acc {
     struct efs_txid t;
     uint32_t shard;
     int decision;
-    struct efs_kv_item it[48];
-    uint8_t keys[48][KEY_MAX];
-    uint8_t vals[48][VAL_MAX];
+    struct efs_kv_item it[EFS_TXN_RESOLVE_ITEMS];
+    uint8_t keys[EFS_TXN_RESOLVE_ITEMS][KEY_MAX];
+    uint8_t vals[EFS_TXN_RESOLVE_ITEMS][VAL_MAX];
     uint32_t n;
     int rc;
 };
 
 static int res_add_del(struct res_acc *a, const uint8_t *key, uint32_t klen)
 {
-    if (a->n >= 48) {
+    if (a->n >= EFS_TXN_RESOLVE_ITEMS) {
         a->rc = EFS_ERR_NOMEM;
         return 1;
     }
@@ -1241,7 +1241,7 @@ static int res_add_del(struct res_acc *a, const uint8_t *key, uint32_t klen)
 static int res_add_put(struct res_acc *a, const uint8_t *key, uint32_t klen,
                        const uint8_t *val, uint32_t vlen)
 {
-    if (a->n >= 48 || vlen > VAL_MAX) {
+    if (a->n >= EFS_TXN_RESOLVE_ITEMS || vlen > VAL_MAX) {
         a->rc = EFS_ERR_NOMEM;
         return 1;
     }
