@@ -212,3 +212,16 @@ pressure off, both mounts serving. All logical code changes committed on
 devel-w66; no push/merge/tag or production activation. Next dependency remains
 bounded last-close/append cleanup, then receipt retirement and session lifecycle
 integration; D27/D25/W66 readiness remains open.
+
+## Atomic capped final-close locks
+
+The grant invariant is 32 rows per domain, 64 per file. Final-close locks now
+validate the envelope before effects and delete one atomic fixed-capacity batch;
+prepared ownership returns BUSY without partial deletion. Host BUSY persists a
+close obligation so later RESOLVE can apply; storage failures retain log retry.
+Old source fails six new regression assertions; fixed tests, full Linux suite,
+actual host-function deferral, AMD direct/TCP session/guarded lease/append/GC,
+core212/212 and peer64/64 pass. Installed service restored.
+[Evidence](../../results/measure/20261009-atomic-close-locks/README.md).
+The remaining unbounded last-close expansion is append drain; this portion does
+not activate pressure admission, D25 or production sessions.

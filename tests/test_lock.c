@@ -4,6 +4,7 @@
 #include "efs/kv.h"
 #include "efs/kv_key.h"
 #include "efs/common.h"
+#include "efs/txn.h"
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -124,10 +125,58 @@ static void test_cap_and_drop(void)
     efs_kv_mem_free(kv);
 }
 
+static int close_fail;
+static int (*close_batch)(void *,const struct efs_kv_item *,uint32_t);
+static int close_batch_fault(void *ctx,const struct efs_kv_item *items,uint32_t count)
+{
+    return close_fail?EFS_ERR_IO:close_batch(ctx,items,count);
+}
+static void test_atomic_final_close(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();efs_ino_t ino=0;
+    struct efs_meta_row row;struct efs_lock_req r;
+    CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"atomic close init");
+    CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"close",&ino)==EFS_OK,"atomic close inode");
+    CHECK(efs_meta_apply_get_inode(kv,ino,&row)==EFS_OK,"atomic close row");
+    for(unsigned domain=0;domain<2;domain++)for(unsigned i=0;i<EFS_LOCK_CAP;i++) {
+        fill_req(&r,ino,row.generation,domain,EFS_LOCK_EX,2*i,2*i+1,EFS_LOCK_PROC,1,1);
+        CHECK(efs_lock_grant(kv,&r)==EFS_OK,"fill both capped domains");
+    }
+    uint8_t key[EFS_KV_KEY_MAX],one=EFS_LOCK_EX;uint32_t len;
+    CHECK(efs_kv_key_lock(efs_kv_inode_shard(ino),ino,row.generation,r.domain,r.start,r.end,
+          r.owner.kind,r.owner.id,r.owner.uuid,r.owner.epoch,key,&len)==EFS_OK,"last lock key");
+    struct efs_txid tx={{81}};
+    struct efs_txn_parts parts={.n=1};parts.shard[0]=efs_kv_inode_shard(ino);
+    CHECK(efs_txn_prepare_excl_value(kv,&tx,&parts,key,len,&one,1,EFS_TXN_PUT,&one,1)==EFS_OK,"prepare last lock");
+    CHECK(efs_lock_drop_file(kv,ino,row.generation)==EFS_ERR_BUSY,"prepared last lock blocks whole close");
+    CHECK(efs_lock_count(kv,ino,row.generation)==64,"BUSY preserves all locks");
+    CHECK(efs_txn_resolve(kv,&tx,parts.shard[0],EFS_TXN_ABORT)==EFS_OK,"resolve last lock");
+    const struct efs_kv_ops *saved=kv->ops;struct efs_kv_ops ops=*saved;
+    close_batch=ops.batch;ops.batch=close_batch_fault;kv->ops=&ops;close_fail=1;
+    CHECK(efs_lock_drop_file(kv,ino,row.generation)==EFS_ERR_IO,"atomic close IO failure");
+    CHECK(efs_lock_count(kv,ino,row.generation)==64,"IO preserves all locks");
+    close_fail=0;
+    CHECK(efs_lock_drop_file(kv,ino,row.generation)==EFS_OK,"retry atomic final close");
+    CHECK(efs_lock_count(kv,ino,row.generation)==0,"both domains empty");
+    CHECK(efs_lock_drop_file(kv,ino,row.generation)==EFS_OK,"final close replay empty");
+    kv->ops=saved;
+    /* Corrupt/imported over-cap rows must not cause unbounded deletion or a
+     * partial effect before the envelope violation is detected. */
+    for(unsigned i=0;i<=EFS_LOCK_CAP;i++) {
+        CHECK(efs_kv_key_lock(parts.shard[0],ino,row.generation,0,2*i,2*i+1,
+              EFS_LOCK_PROC,1,r.owner.uuid,1,key,&len)==EFS_OK &&
+              efs_kv_put(kv,key,len,&one,1)==EFS_OK,"seed over-cap import");
+    }
+    CHECK(efs_lock_drop_file(kv,ino,row.generation)==EFS_ERR_PROTO,"over-cap refuses atomically");
+    CHECK(efs_lock_count(kv,ino,row.generation)==33,"over-cap preserves rows");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
     test_conflict_and_domains();
     test_cap_and_drop();
+    test_atomic_final_close();
     if (failures) {
         fprintf(stderr, "test_lock: %d failure(s)\n", failures);
         return 1;

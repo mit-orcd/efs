@@ -1835,6 +1835,7 @@ static int host_lease_close_effects(struct efs_raft_host *h,efs_ino_t ino,uint64
     if(!held) {
         /* The kernel sends no implicit flock UNLOCK on final close. */
         rc=efs_lock_drop_file(h->kv,ino,gen);
+        if(rc==EFS_ERR_BUSY)goto defer;
         if(rc!=EFS_OK && rc!=EFS_ERR_NOT_FOUND)return rc;
         uint8_t inode_key[EFS_KV_KEY_MAX];uint32_t inode_kl=0;
         rc=efs_kv_key_inode(efs_kv_inode_shard(ino),ino,inode_key,&inode_kl);

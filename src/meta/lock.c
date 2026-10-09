@@ -1,6 +1,7 @@
 #include "efs/lock.h"
 #include "efs/kv_key.h"
 #include "efs/meta_apply.h"
+#include "efs/txn.h"
 #include <string.h>
 
 #define DROP_MAX 32
@@ -351,41 +352,43 @@ static int drop_all_cb(void *user, const uint8_t *key, uint32_t klen,
 /* Every lock record for one (ino, gen), any owner, both domains. The kernel
  * never relays a flock UNLOCK on close, so the last-close lease edge is the
  * only release signal for close-to-release semantics (§7.6). */
+struct close_lock_scan {
+    uint8_t keys[2*EFS_LOCK_CAP][EFS_KV_KEY_MAX];
+    uint32_t count, domain[2];
+    int rc;
+};
+static int close_lock_cb(void *user,const uint8_t *key,uint32_t len,
+                           const uint8_t *value,uint32_t length)
+{
+    struct close_lock_scan *scan=user;
+    struct efs_lock_req record;
+    if(len!=LOCK_KLEN || parse_key(key,len,&record)!=EFS_OK ||
+       record.domain>EFS_LOCK_FLOCK || length!=1 ||
+       (value[0]!=EFS_LOCK_SH && value[0]!=EFS_LOCK_EX) ||
+       scan->domain[record.domain]>=EFS_LOCK_CAP) {
+        scan->rc=EFS_ERR_PROTO;return 1;
+    }
+    scan->domain[record.domain]++;
+    memcpy(scan->keys[scan->count++],key,len);
+    return 0;
+}
 int efs_lock_drop_file(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
 {
-    uint8_t pref[EFS_KV_KEY_MAX];
-    uint32_t plen = 0;
-    int rc;
-
-    if (!kv || ino == 0)
-        return EFS_ERR_INVAL;
-    rc = efs_kv_key_lock_file_prefix(efs_kv_inode_shard(ino), ino, gen, pref,
-                                     &plen);
-    if (rc != EFS_OK)
-        return rc;
-    for (;;) {
-        struct drop_acc acc;
-        struct efs_kv_item it[DROP_MAX];
-        int i;
-
-        memset(&acc, 0, sizeof(acc));
-        rc = efs_kv_scan_prefix(kv, pref, plen, drop_all_cb, &acc);
-        if (rc != EFS_OK && rc != 1)
-            return rc;
-        if (acc.n == 0)
-            return EFS_OK;
-        memset(it, 0, sizeof(it));
-        for (i = 0; i < acc.n; i++) {
-            it[i].op = EFS_KV_DEL;
-            it[i].key = acc.keys[i];
-            it[i].klen = acc.klen[i];
-        }
-        rc = efs_kv_batch(kv, it, (uint32_t)acc.n);
-        if (rc != EFS_OK)
-            return rc;
-        if (!acc.full)
-            return EFS_OK;
+    uint8_t prefix[EFS_KV_KEY_MAX];uint32_t length=0;
+    if(!kv || !ino)return EFS_ERR_INVAL;
+    int rc=efs_kv_key_lock_file_prefix(efs_kv_inode_shard(ino),ino,gen,prefix,&length);
+    if(rc!=EFS_OK)return rc;
+    struct close_lock_scan scan={0};
+    rc=efs_kv_scan_prefix(kv,prefix,length,close_lock_cb,&scan);
+    if(scan.rc!=EFS_OK)return scan.rc;
+    if(rc!=EFS_OK)return rc;
+    struct efs_kv_item items[2*EFS_LOCK_CAP];
+    for(uint32_t i=0;i<scan.count;i++) {
+        rc=efs_txn_key_exclusive(kv,scan.keys[i],LOCK_KLEN);
+        if(rc!=EFS_OK)return rc;
+        items[i]=(struct efs_kv_item){EFS_KV_DEL,scan.keys[i],LOCK_KLEN,NULL,0};
     }
+    return scan.count?efs_kv_batch(kv,items,scan.count):EFS_OK;
 }
 
 static int drop_cb(void *user, const uint8_t *key, uint32_t klen,

@@ -1,0 +1,1 @@
+close effects: prepared lock/append BUSY persists obligation, IO retains it, resolution drains PASS
