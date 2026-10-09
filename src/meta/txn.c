@@ -1509,8 +1509,9 @@ int efs_txn_resolve(struct efs_kv *kv, const struct efs_txid *t, uint32_t shard,
             continue;
         if (efs_kv_key_unwrap(a.keys[i], a.it[i].klen, orig, &olen) != EFS_OK)
             continue;
-        if (efs_txn_ver_get(kv, orig, olen, &ver) != EFS_OK)
-            ver = 0;
+        rc = efs_txn_ver_get(kv, orig, olen, &ver);
+        if (rc != EFS_OK)
+            return rc; /* preserve intents/guards until an authoritative read */
         be64(a.vals[i], ver + 1);
         a.it[i].vlen = 8;
     }

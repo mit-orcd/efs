@@ -2875,10 +2875,11 @@ accepted durability contract or fixing only FUSE flag handling.
 
 ## W72 · Production mount session lifecycle is not connected to I23 (queue row spec2)
 
-**Class:** fencing integration. **Status:** open; metadata/coordinator and
-staged publication gates exist, full production integration absent.
+**Class:** fencing integration. **Status:** partial; full mount identity, retained
+FUSE CREATE/adoption/OPEN/CLOSE and namespace shard admission are implemented and
+AMD gated. REPORT-wide fencing and production ticketed PUTs remain open.
 
-**Evidence:** `inode_rpc.c:opid_seed_locked` creates a local random UUID at
+**Original evidence (before the Oct 9 integration):** `inode_rpc.c:opid_seed_locked` creates a local random UUID at
 fixed epoch 1. HOLD sends only its base request; FLOCK sends its range but
 no session suffix. The server's `host_sess_gate` accepts an absent suffix via
 the legacy stand-in path. Append has a fixed-epoch owner suffix, which does
@@ -2892,11 +2893,11 @@ for staged I23 admission and remaining abandoned-stream cleanup.
 OPEN/DONE/receipt cleanup now have AMD direct/TCP cold gates. Known local
 rejection floors reject legacy HOLD and FLOCK grants; rejected lock apply
 verdicts are audible and storage failures retain replay. Actual client deferred
-lease OPEN/CLOSE/probe transport has exact cold replay proof, but FUSE does not
-retain/use those identities yet. See the
+lease OPEN/CLOSE/probe transport has exact cold replay proof, and FUSE now retains these identities through unknown replies and cleanup.
+Only authoritative completed global revocation permits terminal abandonment. See the
 [dependency checkpoint](../status/dependency-package-20261009.md).
 
-The identity unification gate is concrete: `efs_client_append_begin` copies
+**Original identity mismatch (fixed by the Oct 9 full-UUID bridge):** `efs_client_append_begin` copies
 `flock_token` into UUID bytes in native order, whereas `host_hold_uuid` encodes
 legacy HOLD/FLOCK owners in big-endian order. On the tested little-endian hosts,
 these are different UUIDs. Fencing an explicitly registered append identity
@@ -2906,7 +2907,14 @@ CREATE lease adoption, HOLD/FLOCK, append and publication; the OFD/process lock
 owner remains a separate identifier. Do not silently reinterpret historical rows
 or claim that the narrow legacy floor gate proves full mount fencing.
 
-**Change/gate:** establish real mount sessions, register every touched authority
+**Oct 9 namespace follow-up:** CREATE/mkdir/link/rename/unlink/rmdir now admit
+the served receipt shard before effects and check local floors before cached
+replies or single-log mutations. Shared transaction guards block revocation until
+all prepared receipt work resolves. AMD wire, cold WAL, core212/212, peer64/64,
+append800 and physical GC/restart pass. REPORT identity and retention of other
+ambiguous namespace requests remain open. See the dependency checkpoint above.
+
+**Change/gate:** complete registration of every touched authority
 and connect the relevant production requests to that authority. Exercise a
 partitioned old client, coordinator restart and leader changes; old mutations
 must be rejected after the completed barrier, and lease/lock/append cleanup
@@ -3518,9 +3526,9 @@ first-send optimization still respects D7 and retries never falsely assert NEW.
 
 ## W86 · Durable PUT tickets — staged ownership and revocation integration
 
-**Class/state:** feature / safe reclamation; metadata implementation committed in `b3a11877`, staged for production integration. The [GC checkpoint](../status/gc-implementation-20261007.md#approved-unpublished-body-policy) records user approval of the narrow abandoned-upload policy; [D31](../status/decisions.md#d31--recorded-abandoned-upload-policy) indexes that record. This review creates no new approval and does not resolve D28's broader salvage question.
+**Class/state:** feature / safe reclamation; metadata implementation plus fixed-endian replicated admission/authoritative status transport committed (`b3a11877`, `0aaf7d32`), staged for production data-plane integration. The [GC checkpoint](../status/gc-implementation-20261007.md#approved-unpublished-body-policy) records user approval of the narrow abandoned-upload policy; [D31](../status/decisions.md#d31--recorded-abandoned-upload-policy) indexes that record. This review creates no new approval and does not resolve D28's broader salvage question.
 
-**Evidence:** `include/efs/put_ticket.h`, `src/meta/put_ticket.c`, metadata publication hooks and `tests/test_put_ticket.c` exist. Admission is bounded at 128 tickets per lane-shard/session; PUBLISHED joins the mapping batch; reclamation requires authoritative global and shard revocation state, and retirement preserves a sequence floor. The helper explicitly requires colocated authoritative session/shard views. Production host encoding and mount/session/data-plane coordination do not yet carry the complete lifecycle. Source inspection is not a rerun of the checkpoint's restart tests.
+**Evidence:** `include/efs/put_ticket.h`, `src/meta/put_ticket.c`, metadata publication hooks and `tests/test_put_ticket.c` exist. Admission is bounded at 128 tickets per lane-shard/session; PUBLISHED joins the mapping batch; reclamation requires authoritative global and shard revocation state, and retirement preserves a sequence floor. The helper explicitly requires colocated authoritative session/shard views. Host/client admission and pure status transport now have AMD exact/discarded reply, collision, completed revocation and cold restart gates. Production mount/data-plane coordination still does not carry the complete lifecycle. [Transport evidence](../../results/measure/20261009-put-ticket-transport/README.md).
 
 **Next/gate:** connect W72 mount sessions, versioned admission before every PUT, immutable object/digest validation, shard-local rejection floors, authoritative completed global revocation, durable storage fences, stable membership identities for captured member masks and all-configured-member deletion ACKs. Retain the ledger when any member is offline. Exercise lost admission/publication/deletion replies, coordinator/lane leader change, restart, late PUT and body revival; no live mapping can be collected. Gate integration with W43, W71 and W82 before activation.
 
@@ -3810,12 +3818,12 @@ existing preallocation experiment closes this item.
 
 ## W94 · Atomic CREATE and open-lease acquisition
 
-**Implementation update (Oct 8):** Atomic server CREATE/lease and rejected-reply cleanup pass full Linux/live gates. Staged one-key pending ownership, atomic pending CREATE, replay-pressure/retirement refusal and cold ownership edges are tested; production adoption and guarded HOLD/runtime-session integration remain open.
+**Historical implementation update (Oct 8):** Atomic server CREATE/lease and rejected-reply cleanup pass full Linux/live gates. Staged one-key pending ownership, atomic pending CREATE, replay-pressure/retirement refusal and cold ownership edges are tested; production adoption and guarded HOLD/runtime-session integration remain open.
 [Current evidence and remaining gates](../status/w93-w96-implementation-20261008.md).
 
-**Class/status:** Client/server metadata performance; partial implementation. Atomic server CREATE/lease persistence and rejected-descriptor cleanup are tested. Client piggyback adoption remains disabled until guarded ownership, ambiguous lease edges and runtime-session fencing are proved safe.
+**Class/status:** Client/server metadata performance; partial implementation. Atomic server ownership, retained client adoption/lease edges and rejected-descriptor cleanup are AMD tested. Full session/data-plane integration and the measured performance acceptance gate remain open.
 
-**Evidence:** `efs_fuse_create_at` passes flags 0 to CREATE, then
+**Original evidence (before the Oct 9 client integration):** `efs_fuse_create_at` passes flags 0 to CREATE, then
 `efs_open_acquire` sends a separate HOLD for the first local open. The protocol
 and server already recognize `EFS_CREATE_F_HOLD`. Round 7 generator `openat`
 averaged 90.6 ms; that number includes the entire open path and does not
@@ -3823,7 +3831,9 @@ attribute all latency to HOLD. The client profile contains
 `efs_client_rpc_hold`. Historical Aug 24 piggybacking is not evidence that the
 current open-description lifecycle safely supports it.
 
-**Remaining action:** Implement guarded pending-CREATE adoption and sequenced HOLD/CLOSE identity with bounded retirement through W72 runtime session fencing. Then measure the eliminated HOLD round and deterministically gate lost replies, late OPEN/CLOSE, adoption/last-close/unlink interleavings and local failures. Server atomicity, CREATE reply reuse and rejected-reply cleanup are prerequisites already implemented; merely enabling the flag is unsafe.
+**Oct 9 update:** Retained FUSE CREATE/adoption, sequenced OPEN/CLOSE, reply rejection cleanup and authoritative terminal revocation recovery are implemented; AMD direct/TCP cold replay, exact lease edges and POSIX/GC gates pass. [Current checkpoint](../status/dependency-package-20261009.md).
+
+**Remaining action:** Complete REPORT/data-plane session integration and measure the eliminated HOLD round; retain the specific adoption/last-close/unlink and throughput gates below. Server atomicity, CREATE reply reuse and rejected-reply cleanup are prerequisites already implemented; merely enabling the flag is unsafe.
 
 **Governing contracts/related work:** W72 session/fencing, W58/W76 namespace retry identity and W69 coherence. CREATE reply reuse is merged (`e6926d85`); it removes a redundant read but does not implement safe lease adoption. Preserve synchronous close semantics.
 

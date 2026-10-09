@@ -2491,6 +2491,14 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         memcpy(key+4,cmd+1,8);
         rc=efs_kv_put(h->kv,key,sizeof(key),cmd+9,clen-9);
     } else
+    if ((cmd[0]==EFS_MD_CMD_PREPARE || cmd[0]==EFS_MD_CMD_DECIDE ||
+         cmd[0]==EFS_MD_CMD_RESOLVE || cmd[0]==EFS_MD_CMD_DROP) &&
+        getenv("EFS_FAULT_TXN_APPLY_FILE") &&
+        access(getenv("EFS_FAULT_TXN_APPLY_FILE"),F_OK)==0) {
+        fprintf(stderr,"txn-fault: refused persistence index=%llu tag=%u group=%u\n",
+                (unsigned long long)index,cmd[0],g->group);
+        rc=EFS_ERR_IO;
+    } else
 #endif
     rc = host_apply_dispatch(h, index, term, g->group, cmd, clen);
     /* A successful CREATE/APPEND means this replica's KV has the row.
@@ -2514,7 +2522,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     g->arc_term[index & HOST_APPLY_RC_MASK] = term;
     g->arc_rc[index & HOST_APPLY_RC_MASK] = rc;
     g->arc_extra[index & HOST_APPLY_RC_MASK] = h->apply_extra;
-    /* Txn apply never stalls the log: a conflict verdict rides the ring to
+    /* Txn business conflicts never stall the log: their verdict rides the ring to
      * the proposer, it is not a raft-core error. Other cmds keep their
      * historic return (halt-on-error for the few that can fail).
      * APPEND_RSV is the same: BUSY/INVAL must not halt the log.
@@ -2555,7 +2563,9 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
         ret = EFS_OK;
     /* Storage failure must retry this entry on every replica, rather than
      * advance a follower past cleanup it did not durably perform. */
-    if ((cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
+    if ((cmd[0] == EFS_MD_CMD_PREPARE || cmd[0] == EFS_MD_CMD_DECIDE ||
+         cmd[0] == EFS_MD_CMD_RESOLVE || cmd[0] == EFS_MD_CMD_DROP ||
+         cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
          cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
@@ -3625,6 +3635,20 @@ static int host_remote_read_index(struct efs_raft_host *h, uint8_t group,
  * after every cycle), never on h->mu — the pump must keep its heartbeat
  * cadence under 100+ concurrent handlers. Not the leader: forward
  * (blocking peer RPC, no host lock held). */
+/* An authoritative remote read succeeded, but this follower cannot apply
+ * its index in time. Route the caller to that leader instead of repeatedly
+ * timing out the same stale local view. This is a hint, never read permission. */
+static int host_follower_read_result(int rc,int self,int peers,int remote_hint,
+                                     int *leader_hint)
+{
+    if(rc==EFS_ERR_BUSY && remote_hint>=0 && remote_hint<peers &&
+       remote_hint!=self) {
+        if(leader_hint)*leader_hint=remote_hint;
+        return EFS_ERR_NOT_PRIMARY;
+    }
+    return rc;
+}
+
 static int host_read_index(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint)
 {
@@ -3661,8 +3685,10 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
             p1 = prof ? now_us_() : 0;
             if (prof)
                 read_prof_add(&g_read_prof.ri_remote, p1 - p0);
-            if (rc == EFS_OK)
+            if (rc == EFS_OK) {
                 rc = host_wait_applied(h, group, ridx, leader_hint);
+                rc = host_follower_read_result(rc,h->raft_id,h->n,rhint,leader_hint);
+            }
             if (prof)
                 read_prof_add(&g_read_prof.ri_remote_wait, now_us_() - p1);
             if (rc != EFS_OK)

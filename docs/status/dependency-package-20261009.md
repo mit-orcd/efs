@@ -632,3 +632,55 @@ old epoch. All seven saved mutation receipts are STALE after cold daemon restart
 AMD core212/212, peer64/64, append800 and physical GC/restart pass. Code regression
 recipes pass, including the new cold WAL guard test; docs5/5; warning-free build.
 Installed AMD service and both mounts restored, reservation released.
+
+## Transaction persistence failures — implemented/gated
+
+The namespace review exposed two durability defects: transaction IO/NOMEM apply
+verdicts advanced Raft's applied index, and failed version reads during RESOLVE
+became version0. The fixes retain the pending index and return before the atomic
+resolution batch, keeping data, versions and epoch guards unchanged. Business
+conflicts remain nonblocking verdicts. [Evidence](../../results/measure/20261009-transaction-durability/README.md).
+
+Native AMD fault tests, Raft retry tests and full code regressions pass. Actual
+fault follower3 holds15–17 pending entries, then catches up after fault release;
+cold linked bytes/nlink2 pass. Normal direct/TCP POSIX212/212 and peer64/64,
+namespace/lease/ticket cold gates, append800 and physical GC/restart pass.
+
+Open availability finding: stalling the client seed's transaction apply caused
+LINK EIO. The nonseed follower gate isolates durability and does not close that
+routing problem. REPORT-wide identities/fencing, other ambiguous namespace
+request retention, production ticketed PUTs, durable storage fences and
+all-member collection/retirement remain open; D25 stays staged.
+
+## Follower catch-up timeout routing — implemented/gated
+
+The seed-routing EIO above is fixed narrowly: after successful authoritative
+remote ReadIndex, a follower that times out applying that index redirects to the
+validated remote leader. It never permits reading stale local state. Unknown,
+self/out-of-range hints and transport/storage failures preserve their errors.
+[Evidence](../../results/measure/20261009-follower-catchup-redirect/README.md).
+
+Actual AMD fault seed1 holds15–18 pending entries while LINK/rename succeed via
+leader routing; release catches up, cold exact bytes/nlink2 pass. The broader
+W66 leadership/placement and failure-matrix work remains open. This supersedes
+only the observed seed catch-up EIO finding above.
+
+Final routing checkpoint: AMD direct/TCP fault-seed live fixture core212/212,
+peer64/64, exact cold linked bytes and physical GC/restart pass; all code
+regressions pass, warning-free normal/fault builds, docs5/5. Installed service
+and both mounts restored, reservation released. Hour's commits retain staged
+activation: no push/merge/tag or production ticketed PUT/GC/D25 activation.
+
+## Revoked namespace first-touch boundary — gated
+
+An actual client helper now attempts old-epoch CREATE on a distinct untouched
+namespace shard after completed global revocation. It is STALE and the name
+remains absent, despite no existing local rejection floor for that helper on the
+new shard. Existing cached receipts also remain STALE after cold restart.
+The final proof is recorded alongside the namespace-session evidence.
+
+Final first-touch fixture: AMD core212/212, peer64/64, append800, physical
+reclamation/restart and cold namespace/ticket/lease gates pass. Code unchanged
+from the passing full regression run except these live helper assertions.
+Installed AMD service restored; docs5/5. Remaining package is explicitly listed
+above, and D25 / ticketed data-plane activation remains staged.
