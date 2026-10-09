@@ -35,11 +35,43 @@ static void dent_put(struct efs_kv *kv,uint32_t sh,efs_ino_t parent,const char *
     CHECK(!efs_meta_pack_dentry(&d,v,sizeof(v)),"pack dentry");
     CHECK(!efs_kv_put(kv,k,kl,v,sizeof(v)),"write dentry");
 }
+struct compare_catalogs { const struct efs_query_catalog *incremental,*full; };
+static int compare_inode(void *ctx,const uint8_t *key,uint32_t kl,const uint8_t *v,uint32_t vl)
+{
+    (void)key;(void)kl;struct compare_catalogs *pair=ctx;struct efs_meta_row row,a,b;
+    struct efs_meta_stat sa,sb;struct efs_query_rollup ra,rb;
+    CHECK(!efs_meta_unpack_inode(v,vl,&row),"oracle unpack inode");
+    CHECK(!efs_query_catalog_inode(pair->incremental,row.ino,&a,&sa),"incremental inode");
+    CHECK(!efs_query_catalog_inode(pair->full,row.ino,&b,&sb),"full inode");
+    CHECK(!memcmp(&a,&b,sizeof(a)) && !memcmp(&sa,&sb,sizeof(sa)),"incremental folded metadata equals full rebuild");
+    if (S_ISDIR(row.mode)) {
+        CHECK(!efs_query_catalog_stats(pair->incremental,row.ino,&ra) &&
+              !efs_query_catalog_stats(pair->full,row.ino,&rb) && !memcmp(&ra,&rb,sizeof(ra)),
+              "incremental directory rollups equal independent full rebuild");
+        struct efs_name_entry ea,eb;
+        int ar=efs_query_catalog_directory_link(pair->incremental,row.ino,&ea);
+        int br=efs_query_catalog_directory_link(pair->full,row.ino,&eb);
+        CHECK(ar==br && (ar || !memcmp(&ea,&eb,sizeof(ea))),"incremental directory binding equals full rebuild");
+    }
+    return 0;
+}
 static int capture(struct efs_kv *kv,const struct efs_query_catalog *old,struct efs_query_catalog **out)
 {
     struct efs_kv_lsm_snapshot *s=NULL;
     int rc=efs_kv_lsm_snapshot_pin(kv,8<<20,&s);
     if (!rc) rc=efs_query_catalog_build(s,old,32<<20,NULL,NULL,out);
+    if (!rc && old) {
+        struct efs_query_catalog *full=NULL;
+        CHECK(!efs_query_catalog_build(s,NULL,32<<20,NULL,NULL,&full),"full rebuild oracle");
+        if (full) {
+            struct compare_catalogs pair={*out,full};
+            for (uint32_t shard=0;shard<4096;shard++) {
+                uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_INODE};
+                CHECK(!efs_kv_lsm_snapshot_scan(s,prefix,3,NULL,0,compare_inode,&pair),"oracle inode scan");
+            }
+            efs_query_catalog_free(full);
+        }
+    }
     efs_kv_lsm_snapshot_release(s);return rc;
 }
 struct found { int n; char path[32][1024]; int fail; };
@@ -110,7 +142,24 @@ int main(void)
     f=(struct found){.fail=1};
     CHECK(efs_query_catalog_find(c,a,EFS_NAME_EXACT,"report.dat",10,collect,&f)==EFS_ERR_ACCES,"emitter denial preserved");
     CHECK(!capture(kv,c,&newer) && efs_query_catalog_rebuilt(newer)==0,"unchanged partitions reused");
+    CHECK(newer && !efs_query_catalog_refolded(newer) && efs_query_catalog_reused_edges(newer)==4096,
+          "unchanged folded stats and every edge contribution reused");
     efs_query_catalog_free(newer);newer=NULL;
+    /* A lane-only change must invalidate a stat cached on another inode shard. */
+    CHECK(efs_kv_lane_shard(file,1)!=efs_kv_inode_shard(file),"cross-shard dependency fixture");
+    be64(lane,12288);be64(lane+8,225);be64(lane+24,2);
+    CHECK(!efs_kv_key_lane(efs_kv_lane_shard(file,1),file,1,1,key,&kl),"changed lane key");
+    CHECK(!efs_kv_put(kv,key,kl,lane,sizeof(lane)),"lane-only update");
+    CHECK(!capture(kv,c,&newer),"incremental lane-only refresh");
+    struct efs_meta_stat changed;
+    CHECK(newer && !efs_query_catalog_inode(newer,file,NULL,&changed) && changed.size==12288,
+          "cross-shard lane invalidates cached folded EOF");
+    CHECK(newer && efs_query_catalog_refolded(newer)>0 && efs_query_catalog_reused_edges(newer)<4096,
+          "lane invalidates dependent edge aggregates");
+    efs_query_catalog_free(newer);newer=NULL;
+    /* Restore original EOF so subsequent legacy oracle assertions stay useful. */
+    be64(lane,8192);be64(lane+8,200);be64(lane+24,3);
+    CHECK(!efs_kv_put(kv,key,kl,lane,sizeof(lane)),"restore lane EOF");
     CHECK(!efs_meta_apply_rename(kv,a,"b",EFS_ROOT_INO,"moved",230),"move subtree");
     CHECK(!efs_meta_apply_unlink(kv,a,"alias.dat",240),"unlink alias");
     dent_put(kv,efs_kv_inode_shard(a),a,"deleted-one",0);

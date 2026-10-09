@@ -7495,9 +7495,9 @@ static void *host_query_thread(void *ctx)
             h->query_view=view;
             struct efs_query_rollup root={0};
             int root_rc=efs_query_catalog_stats(candidate,EFS_ROOT_INO,&root);
-            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
+            fprintf(stderr,"query-publish: generation=%llu g0=%llu g2=%llu rebuilt=%u refolded=%u edge_reused=%u bytes=%llu pin_ms=%llu build_ms=%llu root_rc=%d files=%llu dirs=%llu logical=%llu\n",
                 (unsigned long long)view.generation,(unsigned long long)view.applied[0],
-                (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),
+                (unsigned long long)view.applied[1],efs_query_catalog_rebuilt(candidate),efs_query_catalog_refolded(candidate),efs_query_catalog_reused_edges(candidate),
                 (unsigned long long)efs_query_catalog_bytes(candidate),(unsigned long long)view.pin_ms,
                 (unsigned long long)view.build_ms,root_rc,(unsigned long long)root.tree_files,
                 (unsigned long long)root.tree_dirs,(unsigned long long)root.tree_bytes);
