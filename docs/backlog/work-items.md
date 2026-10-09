@@ -3860,6 +3860,21 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
+**Proposed next fix (Oct 9; not implemented):** Return versioned transport
+admission status instead of hiding inbox BUSY; apply bounded per-peer sender
+backoff with gradual recovery; reserve bounded receiver/sender progress for
+Raft replies, elections and liveness/read probes. Include detached pump work
+in pressure accounting, so clearing the shared inbox cannot falsely report
+recovery. Keep durable consensus ACKs authoritative. Preserve legacy empty
+reply handling and test TCP/RDMA channel ordering. First trial: 5–50 ms retry
+backoff, with queue/byte bounds and watermarks explicitly tested. No durability
+or partial-reply tracking change belongs in this candidate.
+[Detailed proposal, compatibility, limits and acceptance gates](../status/w97-solution-investigation-20261009.md#proposed-fix-bounded-receiver-pressure-feedback).
+Fewer drops alone does not close W97: require repeated sustained throughput
+and tail improvement, bounded catch-up, async host regressions, full POSIX/peer
+and applicable W64/W73 gates. If persistence remains dominant, investigate W93
+batching separately.
+
 **Further reproduction (Oct 9):** Diagnostic build 2cca7cfc-pressure measures
 113.4 → 50.6 → 55.8 files/s and 94,175 refused n3 replication frames. Queue
 residence grows 153 → 360 → 468 ms; serial drain/KV release/applied persistence

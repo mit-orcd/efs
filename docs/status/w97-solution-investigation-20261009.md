@@ -169,3 +169,151 @@ with diagnostics disabled and **32 sampled cold payloads matching both mounts**.
 All six process environments confirm diagnostics/commands off, TCP/direct I/O.
 The loader exited cooperatively. Peer/fault suites were not repeated for this
 observation-only change; no new flow-control policy has been deployed.
+
+## Proposed fix: bounded receiver-pressure feedback
+
+**Status: proposal only, October 9.** No flow-control implementation or
+performance improvement is claimed here. Implement and test this as the next
+W97 candidate, independently of changes to durability batching. The target is
+to stop feeding a saturated follower redundant work while keeping replication,
+reads and elections live. Persistence still consumes real time; this candidate
+may reduce drops without materially improving file creation, which would leave
+W97 open.
+
+### 1. Report actual transport admission
+
+Change the EFS_MSG_RAFT handler to preserve the result of
+`server_raft_host_inbox`. Extend the existing EFS_MSG_RAFT_REPLY with a small,
+fixed, versioned admission-status payload: admitted, retryable pressure, or
+non-retryable protocol/host error. Include a bounded retry hint and an overload
+flag that can accompany successful admission. Use explicit encoding and exact
+length/version checks; do not serialize a native errno or an uninitialized C
+struct. Define this payload in the protocol documentation with its codec tests
+when implementing it.
+
+An admitted frame has only been copied into the receiver's bounded queue. This
+reply must never update Raft match_index, next_index, commit_index, applied
+index or read acknowledgements. A BUSY frame was not queued and cannot earn
+any of those acknowledgements. The real AE_REP remains authoritative and must
+retain all existing durable-log, term, prefix and read-context checks.
+
+Keep one transport reply per received frame, including a refused frame. The
+sender must drain every outstanding reply in its bounded pipeline before
+waiting or disconnecting. TCP and RDMA/TCP mixed-channel batches can return
+replies in different channel order: a peer-wide overload flag avoids inventing
+per-group admission credits from that order. If per-frame attribution is added,
+track requests separately per channel; never attach replies to a single global
+FIFO without proving ordering.
+
+The current sender checks the message type and ignores its payload, so a new
+receiver can report status to that baseline without changing its Raft meaning.
+A new sender must accept the old empty reply as legacy transport handling,
+with admission **unknown**, rather than as proof of admission or recovery from
+pressure. Expose legacy mode in diagnostics. Test both version combinations;
+existing HELLO build restrictions still apply. Reject malformed new status
+payloads using the existing bounded connection-failure/retry path. A legacy
+peer may continue dropping frames; do not claim cluster-wide backpressure
+until all relevant peers support the status.
+
+### 2. Pace requests to the affected destination
+
+Maintain fixed-size pressure state in each peer sender, guarded by its existing
+outbox mutex: pressure deadline, retry delay and last admission feedback.
+Start an experiment with a **5 ms** delay on BUSY, exponential growth capped at
+**50 ms**, and bounded jitter inside that cap. These are trial parameters,
+not established optimal values. Use monotonic timed waits; release the mutex
+while waiting and wake promptly for shutdown or eligible control traffic.
+Never sleep under the host mutex or make a handler wait for Raft processing.
+
+During pressure, reduce the ordinary request pipeline to one frame at each
+retry opportunity; pace data AE, snapshot chunks and ordinary commit probes.
+A newer proposal must not bypass that destination's pressure deadline merely
+by extending an outstanding batch. Keep normal behavior for healthy peers.
+After several successful low-pressure admissions, increase the pipeline
+conservatively back toward the existing maximum of eight; an empty legacy
+reply or a consensus ACK alone must not clear receiver pressure.
+
+Retain existing bounded outbox ownership and FIFO within each lane. BUSY must
+not create an unbounded second retry queue. Unsent frames remain within the
+existing bounds; an already transmitted, refused frame is retried by the
+existing Raft mechanism. Do not clear or advance Raft progress from this host
+feedback, and do not reintroduce the rejected partial-reply tracking change.
+Measure retry coverage explicitly: sender pacing must not suppress all retry
+opportunities or leave a quiet follower permanently behind.
+
+### 3. Preserve a bounded path for cluster progress
+
+A blanket sleep of the entire peer lane could delay votes and replies and cause
+a new outage. Keep Raft replies and election messages eligible during request
+backoff. Heartbeats and fresh ReadIndex probes need a bounded escape path per
+peer/group, with a timer-driven retry even when no writes arrive. Preserve read
+context and prefix validation; receiving a pressure signal cannot satisfy a
+read. Exercise simultaneous pressure in both directions and both hosted groups.
+
+At the receiver, reserve capacity **inside** the existing 256-frame / 32 MiB
+shared-inbox limits for replies, election traffic and bounded liveness probes.
+An initial experiment may reserve 32 slots and 64 KiB, subject to the actual
+maximum control-frame size. Ordinary empty commit probes must consume ordinary
+request capacity: otherwise the measured majority of empty traffic defeats the
+reserve. A full reserve still returns pressure; it never grows. Classify and
+validate a frame before granting reserve access. Reserve eligibility must be
+precisely represented in the protocol/core contract; do not infer every empty
+AE is essential liveness traffic. This classification is an implementation
+prerequisite, not permission to reorder or discard Raft messages.
+
+Report pressure before hard overflow using high/low watermarks. Account for
+accepted work both in the shared inbox and in the pump's detached local batch;
+`drain_inbox` clearing the shared array does not mean the follower finished its
+work. Keep accounting fixed-size, include bytes, and retire each frame once on
+all decode/error/shutdown paths. Trial ordinary-work high/low marks of 64/32
+frames and 8/4 MiB give hysteresis below current hard bounds; validate these
+against observed processing latency and control progress before adopting them.
+Receiver admission stays FIFO for accepted frames in this first candidate.
+A reserve enables admission, but does not itself shorten an existing long drain;
+if liveness still fails, reject the candidate and investigate bounded drain
+scheduling separately rather than silently changing message ordering.
+
+### Acceptance and decision
+
+Add deterministic tests around the actual asynchronous host sender/receiver
+paths, not only a synchronous Raft fixture. Force a slow pump and hard-full
+inbox; verify admission status, reply draining, bounded memory, retry progress,
+shutdown wakeup and eventual convergence after pressure clears. Cover both
+Raft groups, pressure in both directions, fresh reads, votes, leader/term/boot
+changes, lost replies, conflict repair, snapshots, malformed status and legacy
+replies. Exercise mixed TCP/RDMA reply channels in the harness; retain live RXE
+coverage as a separate gate before claiming transport-wide acceptance. Preserve
+the existing cross-group ACK/heartbeat overwrite regression.
+
+Record **physical** sends and transport admitted/BUSY outcomes separately from
+core enqueue callbacks and consensus ACKs. Include request/control class,
+peer/group where correlation is valid, throttled time, queue residence/depth,
+retransmitted bytes, leader changes, replication lag, durable entries per sync,
+phase timings, file-operation p50/p95/p99, device counters and RSS. Establish
+that dropped/refused traffic eventually catches up; an aggregate drop counter
+cannot establish that by itself.
+
+Run at least three alternating baseline/candidate repetitions on NUC, with
+builds finished before timing, fixed seeds and balanced fresh path prefixes.
+Use both fixed work and runs of at least 15 minutes to cover the decline; retain
+per-100-second rates and final completion/drain times. Preserve existing data,
+monitor space, and report changing namespace/cache/device state as a remaining
+confounder. Repeat an observation-disabled control to assess diagnostic cost.
+The candidate must improve sustained completion and operation tails beyond
+run-to-run spread, with bounded lag and no new idle/mixed-load or election/read
+regression. Fewer drops alone is insufficient; higher startup throughput is
+insufficient. Reject or revise the candidate if it merely moves backlog into
+sender queues or starves a slow follower.
+
+Before promotion: Raft/store fault and recovery suites, full POSIX and peer
+suites including concurrent append, cold payload verification and applicable
+W64/W73 durability gates. Keep the current deployable build as rollback.
+
+If feedback controls pressure but persistence time still limits throughput,
+continue with **W93** durable batching as a separately measured change. The
+current contiguous receiver batches are split by interleaved groups and stale
+or empty requests. Any per-group scheduling or duplicate handling must prove
+term/configuration/read/ACK ordering with the real async host before a live
+trial. Investigate the KV release and applied-index barriers separately as
+well; do not lengthen checkpoint intervals, skip syncs, or relax durability in
+this W97 feedback candidate. No hardware ceiling is established.
