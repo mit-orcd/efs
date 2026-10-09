@@ -217,3 +217,43 @@ local config permissions, after export readiness, and did not undo restoration.
 
 Evidence: `results/measure/20261009-xorinox-w58-w55/macos/`. W55 remains open;
 the attribute-copy failure and original NFS incident are not closed by `cp -X`.
+
+## macOS NFS publication stress
+
+The user authorized continued W55 investigation after fresh-mount verification.
+A new reusable gate runs eight writers with 20 iterations of fresh copy, same-name
+overwrite, truncate/rewrite and unlink/name reuse. All **640/640 operations pass**,
+with no added fsync and exact bytes after each success. Payloads vary over 2922,
+4095, 4097 and 131073 bytes with per-worker/iteration markers.
+
+Both the gateway and independent xefsct1 FUSE client verify all **184 final files**
+by exact hash, length and inode identity. Authoritative GETCHUNKS plus all three
+files-store inventories verify at least two exact fragment indices at the named
+nodes for all **331 live nonzero generations**. The peer had not read these new
+files. No storage daemon restart or new production change occurred in this round.
+
+Source review confirms the historical nonzero staging fallback was rejected in
+`3a1b4a52`, then shared between initial/STALE builders in `5d26932e`. Existing
+real-code ownership and PUT-quorum tests pass again on xefs1. These protections
+and passing workloads are relevant evidence, not a proven historical causal
+diagnosis. The new audit rejects a failed/incomplete workload ledger.
+
+[Stress, byte oracle and physical evidence](../../results/measure/20261009-xorinox-w55-stress/README.md).
+The broader macOS NFSv4.0 POSIX suite completes **166 pass / 46 fail / 0 skip**
+(212 tests; 240.1 seconds testing, 277.5 seconds with cleanup). Four setup EIOs name the test directory before its
+test body, and privileged gateway checks
+find the first two such directories absent. They do not establish missing file
+fragments. Linux-only libc/touch/fdatasync assumptions and all_squash permission
+expectations also prevent a clean broad gate. W55 remains open.
+
+The broader gate also records an extra directory entry (`level_3`) in
+`names_crazy_dirs`, flock ownership and open-unlinked nlink failures. These
+remain evidence-backed blockers rather than a diagnosis of the original W55
+missing-object incident. No routing/consensus or agent-4 ownership code was
+changed. Both 300 MiB truncate-honesty tests pass.
+
+Post-suite peer verification again passes all 184 byte oracles and 331 live
+generations. Successful stress data was removed and the suite root is absent
+after normal cleanup. Existing services/mounts and older retained diagnosis
+directories were preserved. This round adds test helpers/evidence only, with
+no production patch, push, container work or D25 activation.

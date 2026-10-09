@@ -1,0 +1,13 @@
+cluster: xorinox
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/basic_pread_pwrite': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/dir_rename_over_existing': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/basic_pread_pwrite': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/dir_rename_over_existing': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/basic_pread_pwrite': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/dir_rename_over_existing': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/basic_pread_pwrite': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/dir_rename_over_existing': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/basic_pread_pwrite': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/dir_rename_over_existing': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/basic_pread_pwrite': No such file or directory
+ls: cannot access '/mnt/efs/posix-Mikes-MacBook-Pro-skkn0s77/dir_rename_over_existing': No such file or directory

@@ -1947,6 +1947,15 @@ cold IOR-hard verification and hardscan. No cluster rollout performed here.
 
 ## W55 · span committed to raft, fragment PUTs never landed → read EIO, data loss (queue row 0k)
 
+**Oct 9 validation follow-up:** macOS NFSv4.0 data-only copies pass fresh
+gateway/Mac mount verification. Eight writers pass 640 copy/overwrite/truncate/
+name-reuse operations; independent gateway and peer clients verify 184 final
+files, and all 331 live nonzero base/span generations have two exact fragment
+indices on their named nodes. Plain cp still fails source provenance attribute
+copying. This adds original-protocol coverage without proving the historical
+missing-object cause or storage power-loss durability. W55 remains open; see
+[current evidence and blockers](../status/known-bugs-create-negative-verdict-20261008.md).
+
 **W55 · a span is committed to raft naming generations/node sets whose fragment objects do not exist on any node — nothing was ever PUT, nothing was reaped — and every subsequent read of the chunk fails with `EFS_ERR_DECODE` (-9) → EIO (Oct 5 2026, xorinox test cluster: 3-node libvirt, 2+1, gateway nfsd re-export mounted by a macOS client). Data loss with no repair; same user-visible signature as W54 but a different mechanism — W54's reaper deletes objects that exist, here the objects never exist.**
 
 **Follow-up steps.** (a) **trace the span write path stage → PUT fragments → report span:** a committed span whose PUTs never ran must be impossible; find where the PUT leg is skipped or its failure swallowed while the REPORT still lands (start at the `putid miss` fallback — "identity from staging table" — in the client report path, cf. W27); (b) add two log lines first, then repro: the span REPORT (putid/gen + node set) and per-fragment PUT completion/failure keyed by that gen — one repro then shows which leg vanishes; (c) repro loop on the test cluster: `cp <file> /mnt/nfs-export/` from the Mac, then `efs-mgmt raft-getchunks <seed> <ino>` + `find /data1 -path '*<ino>*'` on each node — span-without-objects = hit, objects present + read back = clean; (d) decide the relation to W27 (REPORT identity / `putid miss`) — possibly one root; (e) gate: the repro loop clean 20/20 plus a posix suite run on the nfsd re-export mount
