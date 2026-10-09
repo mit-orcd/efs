@@ -968,6 +968,68 @@ static int rpc_writer_retry_pause(unsigned attempt)
     return efs_client_rpc_past_deadline() ? EFS_ERR_BUSY : EFS_OK;
 }
 
+/* Raw session replies carry an EFS rc, not an inode status byte. Keep this
+ * separate from rpc_send_recv_shard so a Raft rc cannot be misinterpreted. */
+static int publication_session_command(uint32_t shard,const uint8_t *command,uint32_t bytes)
+{
+    uint8_t body[27];
+    if (bytes>sizeof(body)-1) return EFS_ERR_INVAL;
+    body[0]=efs_raft_shard_group(shard);memcpy(body+1,command,bytes);
+    efs_node_id_t target=0;
+    for (unsigned attempt=0;attempt<8;attempt++) {
+        if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        efs_node_id_t nid=target;
+        struct efs_conn *conn=target?efs_client_conn_get(target):rpc_owner_conn_shard(shard,&nid);
+        if (!conn) return EFS_ERR_NET;
+        if (efs_conn_send_msg(conn,EFS_MSG_RAFT_MKFS,body,bytes+1)) {
+            efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        uint8_t type=0;uint32_t len=0;void *payload=NULL;
+        if (efs_conn_recv_msg(conn,&type,&payload,&len)) {
+            free(payload);efs_client_conn_drop(nid,conn);return EFS_ERR_NET;
+        }
+        efs_client_conn_release(nid,conn);
+        if (type!=EFS_MSG_RAFT_MKFS_REPLY || len!=sizeof(struct efs_msg_raft_mkfs_reply)) {
+            free(payload);return EFS_ERR_PROTO;
+        }
+        struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,payload,sizeof(reply));free(payload);
+        if (efs_client_rpc_past_deadline()) return EFS_ERR_BUSY;
+        if (reply.rc==EFS_ERR_NOT_PRIMARY) {
+            if (reply.leader_hint < -1 || reply.leader_hint >= EFS_MAX_NODES) return EFS_ERR_PROTO;
+            target=reply.leader_hint>=0 && (efs_node_id_t)(reply.leader_hint+1)!=nid ?
+                (efs_node_id_t)(reply.leader_hint+1):0;
+        } else if (reply.rc!=EFS_ERR_BUSY && reply.rc!=EFS_ERR_NO_QUORUM) return reply.rc;
+        if (rpc_writer_retry_pause(attempt)!=EFS_OK) return EFS_ERR_BUSY;
+    }
+    return EFS_ERR_BUSY;
+}
+
+/* Call before byte admission. CREATE does not reset an existing session;
+ * REGISTER and host-side ESTABLISH check its authoritative epoch/fence.
+ * Retry the same UUID/epoch after an ambiguous reply, never mint a replacement
+ * identity to bypass a fence. Queries and retirement do not call this helper. */
+int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *identity)
+{
+    if (!identity || shard>=4096 || !identity->session_epoch) return EFS_ERR_INVAL;
+    unsigned nonzero=0;
+    for (unsigned i=0;i<EFS_OPID_UUID_LEN;i++) nonzero|=identity->client_uuid[i];
+    if (!nonzero) return EFS_ERR_INVAL;
+    uint8_t command[26]={EFS_MD_CMD_SESSION,EFS_MD_SESS_CREATE};
+    memcpy(command+2,identity->client_uuid,EFS_OPID_UUID_LEN);
+    for (unsigned i=0;i<4;i++) {
+        command[18+i]=(uint8_t)(identity->session_epoch>>(24-8*i));
+        command[22+i]=(uint8_t)(shard>>(24-8*i));
+    }
+    uint32_t owner=efs_kv_session_shard(identity->client_uuid);
+    int rc=publication_session_command(owner,command,22);
+    if (rc!=EFS_OK) return rc;
+    command[1]=EFS_MD_SESS_REGISTER;
+    rc=publication_session_command(owner,command,sizeof(command));
+    if (rc!=EFS_OK) return rc;
+    command[1]=EFS_MD_SESS_ESTABLISH;
+    return publication_session_command(shard,command,sizeof(command));
+}
+
 int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,
                                struct efs_msg_publication_reply *out)
 {

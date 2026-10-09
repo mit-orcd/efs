@@ -1,5 +1,6 @@
 /* Private stores only. Durable admission with a lost reply, then cold recovery.
  * No fragment PUTs: an impossible FileID gives an exact terminal rejection. */
+#include "client_internal.h"
 #include "efs/publication.h"
 #include "efs/network.h"
 #include "efs/kv_key.h"
@@ -12,23 +13,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 static unsigned base;
-static const char *mgmt;
 static void be32(uint8_t *p,uint32_t v){for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(v>>(24-8*i));}
 static void be64(uint8_t *p,uint64_t v){for(unsigned i=0;i<8;i++)p[i]=(uint8_t)(v>>(56-8*i));}
 static int connect_node(unsigned node)
 {
     int fd=efs_connect_tcp("127.0.0.1",(uint16_t)(base+node));assert(fd>=0);
     assert(!efs_set_recv_timeout(fd,15000));assert(!efs_set_send_timeout(fd,15000));return fd;
-}
-static void session(const char *op,const char *uuid,const char *arg,const char *epoch)
-{
-    char address[64];snprintf(address,sizeof(address),"127.0.0.1:%u",base);
-    pid_t child=fork();assert(child>=0);
-    if(!child){if(epoch)execl(mgmt,mgmt,"raft-session",address,op,uuid,arg,epoch,(char *)NULL);
-        else execl(mgmt,mgmt,"raft-session",address,op,uuid,arg,(char *)NULL);
-        _exit(127);
-    }
-    int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
 }
 static struct efs_msg_publication_reply request(const struct efs_msg_publication *req,int mode)
 {
@@ -51,7 +41,12 @@ static struct efs_msg_publication_reply request(const struct efs_msg_publication
 }
 int main(int argc,char **argv)
 {
-    assert(argc==6);base=(unsigned)atoi(argv[1]);mgmt=argv[2];
+    assert(argc==6);base=(unsigned)atoi(argv[1]);
+    g_client.node_count=4;g_client.export_id=1;
+    for(unsigned i=0;i<4;i++) {
+        g_client.nodes[i].id=i+1;strcpy(g_client.nodes[i].addr,"127.0.0.1");g_client.nodes[i].port=(uint16_t)(base+i);
+    }
+    efs_client_conn_init();
     const char *phase=argv[3],*file=argv[4];
     struct efs_msg_publication req={0};
     if(!strcmp(phase,"prepare")) {
@@ -61,11 +56,11 @@ int main(int argc,char **argv)
         req.id.session_epoch=1;req.id.seq=1;
         FILE *random=fopen("/dev/urandom","rb");assert(random);
         assert(fread(req.id.client_uuid,1,16,random)==16);fclose(random);
-        char uuid[33],shard_arg[16];
-        for(unsigned i=0;i<16;i++)snprintf(uuid+2*i,3,"%02x",req.id.client_uuid[i]);
         unsigned shard=efs_kv_lane_shard(req.rec.ino,0);
-        snprintf(shard_arg,sizeof(shard_arg),"%u",shard);
-        session("create",uuid,"1",NULL);session("register",uuid,shard_arg,"1");session("establish",uuid,shard_arg,"1");
+        assert(efs_client_rpc_publication_session(shard,&req.id)==EFS_OK);
+        /* Same identity is idempotent; never substitute a fresh session on retry. */
+        assert(efs_client_rpc_publication_session(shard,&req.id)==EFS_OK);
+        puts("real production client session CREATE/REGISTER/ESTABLISH and exact retry PASS");
         for(unsigned i=0;i<EFS_NUM_FRAGMENTS;i++)req.rec.nodes[i]=i+1;
         FILE *saved=fopen(file,"wb");assert(saved);assert(fwrite(&req,1,sizeof(req),saved)==sizeof(req));assert(!fclose(saved));
         /* Raw replicated admission isolates the crash between the endpoint's
@@ -105,6 +100,13 @@ int main(int argc,char **argv)
             out=request(&req,2);assert(out.state==EFS_PUBLICATION_RETIRED);
             out=request(&req,0);assert(out.state==EFS_PUBLICATION_RETIRED);
             puts("committed/unapplied mapping survives four-daemon crash, exact locator and replay floor PASS");
+            char address[64],uuid[33];snprintf(address,sizeof(address),"127.0.0.1:%u",base);
+            for(unsigned i=0;i<16;i++)snprintf(uuid+2*i,3,"%02x",req.id.client_uuid[i]);
+            pid_t child=fork();assert(child>=0);
+            if(!child){execl(argv[2],argv[2],"raft-session",address,"fence",uuid,(char *)NULL);_exit(127);}
+            int status;assert(waitpid(child,&status,0)==child && WIFEXITED(status) && !WEXITSTATUS(status));
+            assert(efs_client_rpc_publication_session(efs_kv_lane_shard(req.rec.ino,0),&req.id)==EFS_ERR_STALE);
+            puts("production session retry cannot resurrect fenced epoch after restart PASS");
             return 0;
         }
         assert(out.rpc.status==EFS_INODE_RPC_OK && out.state==EFS_PUBLICATION_PENDING);

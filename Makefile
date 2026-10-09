@@ -291,6 +291,7 @@ test: all
 	python3 tests/test_publication_host.py
 	python3 tests/test_txn_read_authority.py
 	python3 tests/test_publication_rpc.py
+	python3 tests/test_publication_session_rpc.py
 	python3 tests/test_bench_cli.py
 	python3 tests/test_bench_profile.py
 	./tests/test_principles_index

@@ -232,6 +232,8 @@ int efs_client_rpc_lane_bootstrap(efs_export_id_t export_id, efs_ino_t ino,
                                    uint64_t generation, uint32_t ci, uint32_t chunk_size,
                                    struct efs_msg_lane_writer_view_reply *out);
 int efs_client_publication_id(uint64_t sequence, struct efs_opid *);
+/* Explicit pre-write session admission; never call to reinterpret old bytes. */
+int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *);
 int efs_client_rpc_publication(const struct efs_msg_publication *, int query_only, /* 0 submit, 1 status, 2 exact retirement */
                                struct efs_msg_publication_reply *);
 int efs_client_rpc_lane_writer_view(efs_ino_t ino, uint64_t generation,

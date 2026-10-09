@@ -31,7 +31,7 @@ for base in range(25000,25200,4):
 else:raise RuntimeError('no free fixture ports')
 probe=work/'probe'
 subprocess.run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),
-                str(source/'tests/live/publication_pending.c'),str(source/'libefs.a'),
+                '-I'+str(source/'src/client'),str(source/'tests/live/publication_pending.c'),str(source/'libefs.a'),
                 '-lpthread','-lm','-ldl','-libverbs','-o',str(probe)],check=True)
 procs=[];logs=[]
 def wait(fn):
