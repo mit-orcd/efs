@@ -55,7 +55,6 @@ static struct dcache_ent *dcache_find_meta(uint32_t s,efs_ino_t ino,uint32_t ci)
 static uint64_t dcache_seq_next(struct dcache_ent *e) { return ++e->snap_seq; }
 static void dcache_set_dirty(struct dcache_ent *e,uint32_t s) { (void)s;e->dirty=1; }
 static void dcache_pin_add(struct dcache_ent *e) { e->pin_held=1; }
-static void dcache_pin_release(struct dcache_ent *e) { e->pin_held=0; }
 static void dcache_note_dirty_bytes(int64_t bytes) { (void)bytes; }
 static int dcache_trace_on(void) { return 0; }
 void *efs_buf_alloc(uint32_t n) { return malloc(n); }
