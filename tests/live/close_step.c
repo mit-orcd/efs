@@ -10,10 +10,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-static unsigned markers,reservations;
+static unsigned markers,reservations,receipts;
 static int count(void *ctx,const uint8_t *key,uint32_t len,const uint8_t *value,uint32_t vl)
 {
- (void)ctx;(void)value;(void)vl;
+ (void)value;(void)vl;
+ efs_ino_t ino=*(efs_ino_t *)ctx,target=0;
+ if(len>=11)for(unsigned i=3;i<11;i++)target=target<<8|key[i];
+ receipts+=len==31 && key[2]==EFS_KV_KIND_APPEND_RECEIPT && target==ino;
  if(len>=3){markers+=key[2]==EFS_KV_KIND_CLOSE_STEP;reservations+=key[2]==EFS_KV_KIND_APPEND_RSV;}
  return 0;
 }
@@ -22,10 +25,10 @@ int main(int argc,char **argv)
  if(argc==4 && !strcmp(argv[1],"inspect")) {
   struct efs_kv *kv=efs_kv_lsm_open(argv[2],NULL);assert(kv);
   efs_ino_t ino=strtoull(argv[3],NULL,10);unsigned open=0;uint64_t wm=0,frontier=0;
-  assert(efs_kv_scan_from(kv,NULL,0,NULL,0,count,NULL)==EFS_OK);
+  assert(efs_kv_scan_from(kv,NULL,0,NULL,0,count,&ino)==EFS_OK);
   int rc=efs_meta_apply_append_state(kv,ino,&wm,&frontier,&open);
-  printf("markers=%u reservations=%u append_rc=%d open=%u watermark=%llu frontier=%llu locks=%d\n",
-   markers,reservations,rc,open,(unsigned long long)wm,(unsigned long long)frontier,efs_lock_count(kv,ino,1));
+  printf("markers=%u reservations=%u append_rc=%d open=%u watermark=%llu frontier=%llu locks=%d receipts=%u\n",
+   markers,reservations,rc,open,(unsigned long long)wm,(unsigned long long)frontier,efs_lock_count(kv,ino,1),receipts);
   efs_kv_lsm_close(kv);return 0;
  }
  int late=argc==6 && !strcmp(argv[1],"late");

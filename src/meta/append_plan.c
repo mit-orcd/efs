@@ -370,3 +370,85 @@ int efs_meta_prune_append_close(struct efs_kv *kv,efs_ino_t ino,
     if(rc==EFS_OK)*removed=count;
     finish_free(&c);return rc;
 }
+
+struct receipt_selection {
+    uint32_t shard,epoch;const uint8_t *uuid;
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_OPID_VAL_MAX];
+    uint32_t kl,vl;int rc;
+};
+static int receipt_row(void *user,const uint8_t *key,uint32_t kl,
+    const uint8_t *value,uint32_t vl)
+{
+    struct receipt_selection *s=user;struct efs_opid_window window;
+    if(kl!=31 || vl>sizeof(s->value) || !vl) {s->rc=EFS_ERR_PROTO;return 1;}
+    if(memcmp(key+11,s->uuid,16))return 0;
+    uint32_t epoch=0;for(unsigned i=27;i<31;i++)epoch=epoch<<8|key[i];
+    if(epoch!=s->epoch)return 0;
+    if(efs_opid_window_unpack(&window,value,vl)!=EFS_OK ||
+       !window.inited || window.session_epoch!=s->epoch ||
+       memcmp(window.client_uuid,s->uuid,16)) {s->rc=EFS_ERR_PROTO;return 1;}
+    efs_ino_t ino=0;for(unsigned i=3;i<11;i++)ino=ino<<8|key[i];
+    if(!ino || efs_kv_inode_shard(ino)!=s->shard){s->rc=EFS_ERR_PROTO;return 1;}
+    memcpy(s->key,key,kl);memcpy(s->value,value,vl);s->kl=kl;s->vl=vl;return 1;
+}
+static int retired_reservation_row(void *user,const uint8_t *key,uint32_t kl,
+    const uint8_t *value,uint32_t vl)
+{
+    struct receipt_selection *s=user;
+    if(kl!=27 || vl!=48 || value[44]>1){s->rc=EFS_ERR_PROTO;return 1;}
+    if(memcmp(value+16,s->uuid,16))return 0;
+    uint32_t epoch=0;for(unsigned i=32;i<36;i++)epoch=epoch<<8|value[i];
+    if(epoch!=s->epoch)return 0;
+    if(!value[44]){s->rc=EFS_ERR_BUSY;return 1;}
+    efs_ino_t ino=0;uint64_t gen=0,offset=0,stored=0,length=0;
+    for(unsigned i=0;i<8;i++) {
+        ino=ino<<8|key[3+i];gen=gen<<8|key[11+i];offset=offset<<8|key[19+i];
+        stored=stored<<8|value[i];length=length<<8|value[8+i];
+    }
+    if(!ino || !gen || !length || stored!=offset || offset>UINT64_MAX-length ||
+       efs_kv_inode_shard(ino)!=s->shard){s->rc=EFS_ERR_PROTO;return 1;}
+    memcpy(s->key,key,kl);s->kl=kl;return 1;
+}
+int efs_meta_retire_append_session(struct efs_kv *kv,uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch,
+    const struct efs_txid *tx,const struct efs_meta_append_ops *ops,void *ctx,
+    unsigned *progress)
+{
+    if(!kv || !uuid || !tx || !ops || !ops->prepare || !ops->decide ||
+       !ops->resolve || !progress)return EFS_ERR_INVAL;
+    *progress=0;
+    int rc=efs_session_cleanup_floor(kv,shard,uuid,epoch);
+    if(rc!=EFS_OK)return rc;
+    struct receipt_selection selected={.shard=shard,.epoch=epoch,.uuid=uuid};
+    uint8_t prefix[3]={(uint8_t)(shard>>8),(uint8_t)shard,EFS_KV_KIND_APPEND_RECEIPT};
+    rc=efs_kv_scan_prefix(kv,prefix,sizeof(prefix),receipt_row,&selected);
+    if(rc!=EFS_OK && rc!=1)return rc;
+    if(selected.rc!=EFS_OK)return selected.rc;
+    if(!selected.kl) {
+        prefix[2]=EFS_KV_KIND_APPEND_RSV;
+        rc=efs_kv_scan_prefix(kv,prefix,sizeof(prefix),retired_reservation_row,&selected);
+        if(rc!=EFS_OK && rc!=1)return rc;
+        if(selected.rc!=EFS_OK)return selected.rc;
+        if(!selected.kl)return EFS_OK;
+    }
+    efs_ino_t ino=0;for(unsigned i=3;i<11;i++)ino=ino<<8|selected.key[i];
+    /* Both cursor and inode are captured before deciding that OPEN dependencies
+     * are gone. An incoming foreign append must win the same inode guard. */
+    struct finish_capture c={.base=kv};
+    const struct efs_kv_ops capture_ops={.get=finish_get};
+    struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
+    uint32_t open=0;
+    rc=efs_meta_apply_append_state(&capture,ino,NULL,NULL,&open);
+    if(rc==EFS_OK && open)rc=EFS_ERR_BUSY;
+    unsigned removed=0;
+    if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&removed);
+    if(rc==EFS_OK && !removed && selected.kl==27)rc=EFS_ERR_BUSY;
+    if(rc==EFS_OK && !removed) {
+        uint32_t slot;
+        rc=finish_record(&c,selected.key,selected.kl,selected.value,selected.vl,&slot);
+        if(rc==EFS_OK) {c.images[slot].op=EFS_TXN_DEL;c.images[slot].new_len=0;}
+    }
+    if(rc==EFS_OK)rc=finish_execute(&c,tx,ops,ctx);
+    if(rc==EFS_OK)*progress=removed?removed:1;
+    finish_free(&c);return rc;
+}

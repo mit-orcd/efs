@@ -7238,6 +7238,11 @@ static int append_reserve_inner(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
 
     if (!kv || !op || !coord || !off_out || ino == 0 || len == 0)
         return EFS_ERR_INVAL;
+    /* Receipt retirement never restores permission for a revoked identity,
+     * including legacy seq0 requests that have no append receipt. */
+    rc=efs_session_accept_legacy(kv,efs_kv_inode_shard(ino),op->client_uuid,
+                                 op->session_epoch);
+    if(rc!=EFS_OK)return rc;
     /* APPEND's window (sim; production APPEND carries seq 0) lives on the
      * session shard, not a dentry shard. */
     if (durable) {
@@ -7391,6 +7396,9 @@ int efs_meta_capture_append(struct efs_kv *kv, efs_ino_t ino, uint64_t len,
     if (!kv || !ino || !len || !q || !coord || !out)
         return EFS_ERR_INVAL;
     memset(out, 0, sizeof(*out));
+    rc=efs_session_accept_legacy(kv,efs_kv_inode_shard(ino),q->id.client_uuid,
+                                 q->id.session_epoch);
+    if(rc!=EFS_OK)return rc;
     rc = efs_meta_append_result(kv, ino, len, q, &out->offset);
     if (rc != EFS_ERR_NOT_FOUND) return rc;
     rc = inode_read_tx(kv, ino, coord, ctx, &pending, &row);

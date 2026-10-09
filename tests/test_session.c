@@ -1066,8 +1066,28 @@ static void test_legacy_lease_prepared(void)
  CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK,"legacy close after resolution");
  efs_kv_mem_free(kv);
 }
+static void test_legacy_rejection_floor(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16]={173};efs_ino_t ino=0;
+ CHECK(kv!=NULL,"legacy floor KV");if(!kv)return;
+ CHECK(efs_meta_apply_init(kv,1)==EFS_OK,"legacy floor root");
+ CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"legacy-floor",&ino)==EFS_OK,"legacy floor file");
+ uint32_t shard=efs_kv_inode_shard(ino);
+ CHECK(efs_session_accept_legacy(kv,shard,uuid,1)==EFS_OK,"legacy absent compatibility");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_OK,"legacy absent OPEN");
+ CHECK(efs_lease_close(kv,ino,1,uuid,1)==EFS_OK,"legacy old close");
+ CHECK(efs_session_fence_local(kv,shard,uuid,2)==EFS_OK,"legacy durable reject floor");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_STALE && efs_lease_any(kv,ino,1)==0,"legacy old OPEN cannot resurrect revoked ownership");
+ CHECK(efs_lease_open(kv,ino,1,uuid,2)==EFS_ERR_BUSY,"legacy new epoch needs establishment");
+ uint8_t key[EFS_KV_KEY_MAX],bad=0;uint32_t kl;
+ CHECK(efs_kv_key_sess_local(shard,uuid,key,&kl)==EFS_OK,"legacy floor key");
+ CHECK(efs_kv_put(kv,key,kl,&bad,1)==EFS_OK,"legacy malformed floor");
+ CHECK(efs_lease_open(kv,ino,1,uuid,1)==EFS_ERR_PROTO && efs_lease_any(kv,ino,1)==0,"legacy malformed authority fails closed");
+ efs_kv_mem_free(kv);
+}
 int main(void)
 {
+    test_legacy_rejection_floor();
     test_legacy_lease_prepared();
     test_guarded_retire_cold();
     test_deferred_close_identity();

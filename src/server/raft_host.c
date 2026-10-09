@@ -10300,9 +10300,15 @@ static int host_session_append_step(struct efs_raft_host *h,const uint8_t *cmd,
     rc=efs_meta_append_session_next(h->kv,rd32be(cmd+21),cmd+1,rd32be(cmd+17),
                                     &ino,&generation,&offset,&found);
     if(rc!=EFS_OK)return rc;
-    *empty=!found;
-    if(!found)return EFS_OK;
+    *empty=0;
     struct host_resize_ctx ctx={h,hint};struct efs_txid tx;fill_txid(h,&tx);
+    if(!found) {
+        unsigned progress=0;
+        rc=efs_meta_retire_append_session(h->kv,rd32be(cmd+21),cmd+1,
+            rd32be(cmd+17),&tx,&host_append_ops,&ctx,&progress);
+        if(rc==EFS_OK)*empty=!progress;
+        return rc==EFS_ERR_NOT_FOUND?EFS_ERR_BUSY:rc;
+    }
     rc=efs_meta_finish_append_fenced(h->kv,ino,generation,offset,cmd+1,
                                     rd32be(cmd+17),&tx,&host_append_ops,&ctx);
     /* A dead inode still owes REAP_BATCH; absence is never empty-phase proof. */

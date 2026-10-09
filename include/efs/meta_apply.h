@@ -1027,6 +1027,13 @@ int efs_meta_apply_append_open(struct efs_kv *kv, efs_ino_t ino, uint64_t *offs,
 int efs_meta_append_session_next(struct efs_kv *, uint32_t shard,
     const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
     efs_ino_t *ino, uint64_t *generation, uint64_t *offset, unsigned *found);
+/* Bounded revoked append result retirement: at most eight DONE rows or one
+ * exact receipt. Global revocation/fresh views are caller obligations. Local
+ * rejection floor is retained. Foreign OPEN work defers, never gets discarded. */
+int efs_meta_retire_append_session(struct efs_kv *, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
+    const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx,
+    unsigned *progress);
 int efs_meta_finish_append_fenced(struct efs_kv *, efs_ino_t, uint64_t generation,
     uint64_t offset, const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
     const struct efs_txid *, const struct efs_meta_append_ops *, void *ctx);

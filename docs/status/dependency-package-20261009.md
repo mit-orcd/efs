@@ -326,3 +326,24 @@ Fresh sequence65 after durable revocation is STALE before/after cold restart;
 Installed service restored. DONE/receipt retirement, production sequenced lease
 identity/release retry and PUT lifecycle still block full package closure.
 [Evidence](../../results/measure/20261009-registered-append-revocation/README.md).
+
+## Revoked append receipt retirement — implemented and gated
+
+The bounded append coordinator now retires at most eight DONE rows or one exact
+receipt per transaction after OPEN completion. It retains inode/cursor guards,
+refuses foreign OPEN work and prepared ownership, preserves other owners/newer
+receipts, and includes historical DONE reservations without append receipts.
+Missing receipt alone is never empty proof. The local rejection floor survives;
+legacy lease OPEN and both append admission paths now honor known local session
+floors, with absent-local compatibility only. Final Linux/cold lost-COMMIT and
+partial-resolution/prepared-intent/foreign-newer/malformed regressions pass.
+
+AMD direct/TCP pressure-enabled core212/peer64, deferred/session/GC/restart gates
+pass:64 reservations,32 fenced then crash,32 resumed, eight-row retirement, exact
+empty retry, offline zero reservations/receipts on all four stores, preserved
+original1MiB+8MiB holes and fresh sequence65 STALE. Installed service restored.
+[Evidence](../../results/measure/20261009-revoked-append-retirement/README.md).
+This closes the revoked append OPEN/DONE/receipt cleanup phase. It does not close
+production sequenced lease identity/ambiguous release retention, mount-wide
+session integration or PUT-ticket data-plane lifecycle. Legacy mounted final
+close still uses its historical drain; pressure/D25 activation stays blocked.

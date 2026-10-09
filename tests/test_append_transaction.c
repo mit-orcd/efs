@@ -369,9 +369,12 @@ static int owner_prepare(void *kv,const struct efs_txid *t,const struct efs_txn_
  }
  return rc;
 }
-static void session_owned_append(void)
+static void session_owned_append(int cold)
 {
- struct efs_kv *kv=efs_kv_mem_create();efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ char dir[]="/tmp/efs-owned-append-XXXXXX";
+ if(cold)assert(mkdtemp(dir));
+ struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
+ efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
  struct efs_opid_req q=identity(1,0);uint32_t shard=efs_kv_inode_shard(ino);
  assert(efs_session_create(kv,q.id.client_uuid,1)==EFS_OK &&
         efs_session_register(kv,q.id.client_uuid,1,shard)==EFS_OK &&
@@ -380,15 +383,109 @@ static void session_owned_append(void)
  assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,p)==EFS_OK);
  struct efs_txid tx={{199}};const struct efs_meta_append_ops lost={owner_prepare,lost_decision,resolve};
  assert(efs_meta_execute_append_owned(kv,p,&q,&tx,&lost,kv)==EFS_ERR_IO);
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
  assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_ERR_BUSY);
+ if(cold){
+  assert(efs_txn_resolve(kv,&tx,efs_kv_lane_shard(ino,1),EFS_TXN_COMMIT)==EFS_OK);
+  efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);
+  assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_ERR_BUSY);
+ }
  assert(resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
  assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
- q.id.seq=2;q.ack=1;
- assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,p)==EFS_OK);
- tx.bytes[1]=2;
+ q.id.seq=2;q.ack=1;tx.bytes[1]=2;
  assert(efs_meta_execute_append_owned(kv,p,&q,&tx,&ops,kv)==EFS_ERR_STALE);
+ assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,p)==EFS_ERR_STALE);
  uint32_t open;assert(efs_meta_apply_append_state(kv,ino,NULL,NULL,&open)==EFS_OK && open==1);
- free(p);efs_kv_mem_free(kv);
+ free(p);
+ if(cold){
+  efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(dir));
+ }else efs_kv_mem_free(kv);
+}
+static void retired_append_receipts(int cold)
+{
+ char dir[]="/tmp/efs-retired-append-XXXXXX";if(cold)assert(mkdtemp(dir));
+ struct efs_kv *kv=cold?efs_kv_lsm_open(dir,NULL):efs_kv_mem_create();assert(kv);
+ efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+ struct efs_opid_req q=identity(1,0);struct efs_txid tx={{211}};
+ for(unsigned i=1;i<=20;i++) {
+  q.id.seq=i;q.ack=i-1;
+  assert(efs_meta_capture_append(kv,ino,8,&q,decision,kv,plan)==EFS_OK);
+  tx.bytes[1]=i;assert(efs_meta_execute_append(plan,&tx,&ops,kv)==EFS_OK);
+ }
+ unsigned progress=99;uint32_t shard=efs_kv_inode_shard(ino);
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_BUSY && !progress);
+ assert(efs_session_fence_local(kv,shard,q.id.client_uuid,2)==EFS_OK);
+ /* Any OPEN reservation defers retirement; neither result nor frontier is lost. */
+ tx.bytes[1]=30;
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_BUSY && !progress);
+ for(unsigned i=20;i;i--) {
+  tx.bytes[1]=40+i;
+  assert(efs_meta_finish_append(kv,ino,200+(i-1)*8,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
+ }
+ uint8_t key[EFS_KV_KEY_MAX],value[EFS_OPID_VAL_MAX];uint32_t kl,vl=sizeof(value);
+ assert(efs_kv_key_inode(shard,ino,key,&kl)==EFS_OK);key[2]=EFS_KV_KIND_APPEND_RECEIPT;
+ memcpy(key+kl,q.id.client_uuid,16);kl+=16;key[kl++]=0;key[kl++]=0;key[kl++]=0;key[kl++]=1;
+ assert(efs_kv_get(kv,key,kl,value,&vl)==EFS_OK);
+ uint8_t foreign[EFS_KV_KEY_MAX];memcpy(foreign,key,kl);foreign[11]=43;
+ struct efs_opid_window window;assert(efs_opid_window_unpack(&window,value,vl)==EFS_OK);
+ window.client_uuid[0]=43;uint8_t foreign_value[EFS_OPID_VAL_MAX];uint32_t foreign_len=sizeof(foreign_value);
+ assert(efs_opid_window_pack(&window,foreign_value,&foreign_len)==EFS_OK);
+ assert(efs_kv_put(kv,foreign,kl,foreign_value,foreign_len)==EFS_OK);
+ uint8_t newer[EFS_KV_KEY_MAX],newer_value[EFS_OPID_VAL_MAX];uint32_t newer_len=sizeof(newer_value);
+ memcpy(newer,key,kl);newer[kl-1]=2;window.client_uuid[0]=42;window.session_epoch=2;
+ assert(efs_opid_window_pack(&window,newer_value,&newer_len)==EFS_OK && efs_kv_put(kv,newer,kl,newer_value,newer_len)==EFS_OK);
+ /* Corrupt matching evidence is not empty proof. */
+ assert(efs_kv_put(kv,key,kl,value,2)==EFS_OK);tx.bytes[1]=70;
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_PROTO && !progress);
+ assert(efs_kv_put(kv,key,kl,value,vl)==EFS_OK);
+ const struct efs_meta_append_ops lost={prepare,lost_decision,resolve};tx.bytes[1]=71;
+ assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&lost,kv,&progress)==EFS_ERR_IO && !progress);
+ if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+ assert(resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT)==EFS_OK);
+ unsigned total=8,pages=1;
+ do {
+  tx.bytes[1]=71+pages++;
+  if(total==20) {
+   struct efs_txid held={{214}};struct efs_txn_parts part={.n=1,.shard={shard}};
+   assert(efs_txn_prepare_excl_value(kv,&held,&part,key,kl,value,vl,EFS_TXN_PUT,value,vl)==EFS_OK);
+   assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_ERR_BUSY && !progress);
+   assert(efs_txn_resolve(kv,&held,shard,EFS_TXN_ABORT)==EFS_OK);
+   tx.bytes[2]=1;
+   assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&lost,kv,&progress)==EFS_ERR_IO && !progress);
+   if(cold){efs_kv_lsm_close(kv);kv=efs_kv_lsm_open(dir,NULL);assert(kv);}
+   assert(resolve(kv,&tx,&last_parts,EFS_TXN_COMMIT)==EFS_OK);progress=1;
+  }else assert(efs_meta_retire_append_session(kv,shard,q.id.client_uuid,1,&tx,&ops,kv,&progress)==EFS_OK && progress<=8);
+  total+=progress;
+ }while(progress);
+ assert(total==21 && pages==5); /* 20 DONE rows plus one receipt, then empty */
+ vl=sizeof(value);assert(efs_kv_get(kv,key,kl,value,&vl)==EFS_ERR_NOT_FOUND);
+ vl=sizeof(value);assert(efs_kv_get(kv,foreign,kl,value,&vl)==EFS_OK && vl==foreign_len && !memcmp(value,foreign_value,vl));
+ vl=sizeof(value);assert(efs_kv_get(kv,newer,kl,value,&vl)==EFS_OK && vl==newer_len && !memcmp(value,newer_value,vl));
+ assert(efs_session_accept(kv,shard,q.id.client_uuid,1)==EFS_ERR_STALE);
+ uint64_t rejected=999;
+ assert(efs_meta_apply_append_reserve(kv,ino,8,&q.id,decision,kv,&rejected)==EFS_ERR_STALE && rejected==999);
+ assert(efs_lease_open(kv,ino,gen,q.id.client_uuid,1)==EFS_ERR_STALE);
+ /* Historical seq0 reservations have no append receipt but must not be
+  * mistaken for an empty cleanup phase. */
+ struct efs_opid legacy=q.id;legacy.client_uuid[0]=45;legacy.seq=0;uint64_t off=0;
+ assert(efs_meta_apply_append_reserve(kv,ino,8,&legacy,decision,kv,&off)==EFS_OK);
+ tx.bytes[1]=90;
+ assert(efs_meta_finish_append(kv,ino,off,EFS_META_APPEND_COMPLETED,&tx,&ops,kv)==EFS_OK);
+ assert(efs_session_fence_local(kv,shard,legacy.client_uuid,2)==EFS_OK);
+ tx.bytes[1]=91;
+ assert(efs_meta_retire_append_session(kv,shard,legacy.client_uuid,1,&tx,&ops,kv,&progress)==EFS_OK && progress==1);
+ assert(efs_meta_apply_append_reserve(kv,ino,8,&legacy,decision,kv,&off)==EFS_ERR_STALE);
+ tx.bytes[1]=92;
+ assert(efs_meta_retire_append_session(kv,shard,legacy.client_uuid,1,&tx,&ops,kv,&progress)==EFS_OK && !progress);
+ free(plan);
+ if(cold){
+  efs_kv_lsm_close(kv);DIR *d=opendir(dir);assert(d);struct dirent *e;
+  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
+  closedir(d);assert(!rmdir(dir));
+ }else efs_kv_mem_free(kv);
 }
 int main(void)
-{session_owned_append();fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{retired_append_receipts(0);retired_append_receipts(1);session_owned_append(0);session_owned_append(1);fenced_completion();unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

@@ -396,6 +396,18 @@ int efs_session_accept(struct efs_kv *kv, uint32_t shard,
     return EFS_OK;
 }
 
+int efs_session_accept_legacy(struct efs_kv *kv,uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch)
+{
+    if(!kv || !uuid || shard>=EFS_SESSION_BITS)return EFS_ERR_INVAL;
+    struct efs_sess_local local;
+    int rc=load_local(kv,shard,uuid,&local);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if(rc!=EFS_OK)return rc;
+    if(epoch<local.reject_below)return EFS_ERR_STALE;
+    return local.established==epoch?EFS_OK:EFS_ERR_BUSY;
+}
+
 int efs_session_prepare_owner(struct efs_kv *kv, uint32_t shard,
                               const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch,
                               const struct efs_txid *txid, const struct efs_txn_parts *parts)
@@ -503,6 +515,8 @@ int efs_lease_open(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
     if (row.generation != gen)
         return EFS_ERR_STALE;
     shard = efs_kv_inode_shard(ino);
+    rc=efs_session_accept_legacy(kv,shard,uuid,epoch);
+    if(rc!=EFS_OK)return rc;
     rc=lease_open_guard(kv,ino);
     if(rc!=EFS_OK)return rc;
     rc = efs_kv_key_lease(shard, ino, gen, uuid, epoch, key, &klen);
@@ -590,7 +604,7 @@ int efs_lease_any(struct efs_kv *kv, efs_ino_t ino, uint64_t gen)
 /* Exact-key cleanup never selects again during replay. The local rejection
  * floor cannot decrease, so an old owner cannot recreate a deleted key. */
 int efs_session_cleanup_floor(struct efs_kv *kv, uint32_t shard,
-                         const uint8_t *uuid, uint32_t epoch)
+                         const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch)
 {
     struct efs_sess_local local;
     if (!kv || !uuid || !epoch || shard >= EFS_SESSION_BITS)

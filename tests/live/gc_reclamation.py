@@ -635,7 +635,7 @@ try:
         assert path.stat().st_size==expected and path.read_bytes()==body+bytes(expected-len(body)), 'revoked append cleanup corrupts original bytes/holes'
         unmount();stop()
         after=[run([inspector,'inspect',root/'mdraft/kv',str(ino)],capture_output=True,text=True).stdout for root in roots]
-        assert all('open=0 ' in text for text in after),after
+        assert all('open=0 ' in text and 'reservations=0 ' in text and 'receipts=0' in text for text in after),after
         start();mount_client()
         assert path.stat().st_size==expected and path.read_bytes()==body+bytes(expected-len(body))
         path.unlink();wait(lambda:not files(ino),'revoked append physical reclaim',180)

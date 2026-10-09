@@ -83,6 +83,11 @@ int efs_session_fence_local(struct efs_kv *kv, uint32_t shard,
 int efs_session_accept(struct efs_kv *kv, uint32_t shard,
                        const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 
+/* Legacy mutation compatibility: absent local session is allowed, but retained
+ * epoch/floor evidence is authoritative and errors never grant permission. */
+int efs_session_accept_legacy(struct efs_kv *, uint32_t shard,
+    const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
+
 /* Staged transaction ownership barrier. Prepare before any pending-CREATE
  * effect, on every affected participant, using the SAME txid/participant set.
  * An EXCL exact-value intent keeps local epoch/floor changes behind resolution.
