@@ -6069,6 +6069,9 @@ static int attach_replica(struct efs_raft_host *h, int gi, uint32_t cfg_voters)
         if (mode && strcmp(mode, "0") && strcmp(mode, "1"))
             return EFS_ERR_INVAL;
         cfg.batch_noop = mode && !strcmp(mode, "1");
+        mode=getenv("EFS_RAFT_BATCH_OVERLAP");
+        if (mode && strcmp(mode,"0") && strcmp(mode,"1")) return EFS_ERR_INVAL;
+        cfg.batch_overlap=mode && !strcmp(mode,"1");
     }
     cfg.net = h;
     cfg.apply = host_apply;

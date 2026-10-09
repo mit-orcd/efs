@@ -186,6 +186,8 @@ struct efs_raft_cfg {
     /* Experimental: keep proven no-op AE requests inside an open cohort.
      * Fresh reads and any hard-state/conflict boundary still flush it. */
     int batch_noop;
+    /* Experimental: verified overlap may start/extend a suffix-only hold. */
+    int batch_overlap;
     void *net;
     efs_raft_apply_fn apply;
     void *app;
