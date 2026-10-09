@@ -607,6 +607,8 @@ struct efs_msg_query_stats_reply {
 #define EFS_INODE_RPC_STALE     11
 /* getxattr/removexattr of a name that is not set. Not ENOENT. */
 #define EFS_INODE_RPC_NODATA    12
+/* Explicit metadata/output capacity refusal; never transient BUSY. */
+#define EFS_INODE_RPC_OVERFLOW  13
 
 struct efs_msg_inode_lookup {
     efs_export_id_t export_id;

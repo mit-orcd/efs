@@ -18,6 +18,11 @@ Operations beyond capacity must fail promptly and atomically, leave the
 namespace unchanged and expose an explanatory diagnostic distinguishing the
 capacity refusal from transient contention or missing entries. Final errno and
 operator-visible diagnostics need a consistent implementation contract and tests.
+**Oct 9 implementation/acceptance:** current capacity refusal is EOVERFLOW,
+distinct from temporary EBUSY, with phase/count/limit diagnostics. The named
+bounded-envelope gates pass; [W84 closure](w84-closure-20261009.md) records
+normal/fault AMD acceptance and the retained initial client-view discrepancy.
+
 Supporting larger operations is a separate protocol enhancement, not an
 unapproved increase of fixed arrays or the one-byte participant encoding.
 
@@ -25,7 +30,7 @@ unapproved increase of fixed arrays or the one-byte participant encoding.
 combinations, no namespace mutation on refusal, cycle detection, prompt failure,
 concurrent renames and PREPARE/COMMIT coordinator death with cold recovery.
 Existing AMD maximum-envelope evidence remains valid for its tested build;
-verify remaining diagnostics/refusal behavior before closing W84. Historical
+Oct 9 diagnostics/refusal and cold recovery gates close the current W84 scope. Historical
 statements that the finite-limit policy is undecided are superseded here.
 
 ## D33 — W90 opt-in fixed scratch expiry

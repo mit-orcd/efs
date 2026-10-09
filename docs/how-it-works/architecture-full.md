@@ -1463,8 +1463,9 @@ this document is the invariant they are measured against.
 
 [D32–D35](../status/accepted-namespace-scratch-20261008.md) settle W84's current transaction
 limit, W90 expiry policy, W91 `.efs/` commands and W81 contention-triggered spread.
-Implementation and gates remain open; no fixed directory depth or universal
-scratch TTL is selected. D28–D30 are also accepted. The zero decision count
+[W84 bounded namespace acceptance](../status/w84-closure-20261009.md) is closed;
+other implementation and gates remain open. No fixed directory depth or
+universal scratch TTL is selected. D28–D30 are also accepted. The zero decision count
 refers to settled registered asks, not to every remaining implementation detail.
 
 ### Command options and expiry coverage
@@ -1644,7 +1645,7 @@ positions do not assign an execution order or override the active handoff.
 | scale1 | **W81** · automatic directory spreading lacks a pressure trigger | scalability feature gap | size trigger/migrator exist; pressure policy remains unspecified and unwired | [evidence and gate](#w81) |
 | proto1 | **W82** · stale completed ReadIndex authority survives leader isolation | read correctness | Closed: stale LOOKUP/GETATTR/session/publication/transaction views and configuration partition gates pass; coordinator callback refuses untrusted absence | [evidence and gate](#w82) |
 | proto2 | **W83** · transaction decision records lack safe retirement | metadata lifecycle gap | resolve/drop remove participant records; no decision acknowledgement/GC path found | [evidence and gate](#w83) |
-| proto3 | **W84** · eight-record namespace bounds reject deep/spread work | namespace completeness | 64-participant envelope and cross-group HASHED unlink repair; NUC boundary/refusal/restart gates and exact helper limits pass; shared 8-second rename budget; 144-participant envelope and full 64-lane removal/replacement implemented; ancestry now uses the 144-record envelope; depth143/refusal144 and 66-participant prepared/committed crash gates pass; full-ancestry product limit remains open | [evidence and gate](#w84) |
+| proto3 | **W84** · bounded namespace transactions | namespace completeness | Closed for accepted D32 144-participant envelope: distinct EOVERFLOW, prompt atomic refusal diagnostics, mixed boundaries, full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD normal/fault POSIX/GC gates pass; larger-operation protocol deferred | [closure and limits](../status/w84-closure-20261009.md) |
 | storage1 | **W85** · path-hint eviction loses ambiguous PUT retry history | conditional accounting/storage correctness | Closed: ambiguous PUT placement retained in 389a8baf; direct/buffered real lost-ACK collision and two-root physical/quota/restart gates pass | [evidence and gate](#w85) |
 | gc-own | **W86** · durable PUT ticket integration | feature / safe reclamation | metadata state machine committed `b3a11877`, staged for integration; production admission, sessions and all-member collection not active | [evidence and gate](#w86) · [D31](#d31--recorded-abandoned-upload-policy) |
 | append-load | **W87** · buffered concurrent append loses records under load | correctness investigation | failure recorded in private GC fixture; isolated repeats pass; full traced acceptance owed | [evidence and gate](#w87) |
@@ -1815,8 +1816,9 @@ pass; this is acceptance evidence, not a proven single cause for W87.
 
 **Oct 8 AMD package:** [evidence](../status/amd-functional-gates-20261008.md).
 Functional cycles use direct I/O/TCP; only transport/buffered-specific gates
-change modes. W84's exact 144-participant coordinator crashes pass; the finite
-ancestry product limit remains open. RDMA eager send-slot registration caused
+change modes. [W84 is closed for accepted D32 bounded scope](../status/w84-closure-20261009.md):
+explicit prompt EOVERFLOW, atomic refusal and exact144 coordinator-crash gates
+pass. Larger-operation protocol remains deferred. RDMA eager send-slot registration caused
 a 1 GiB whole-fixture OOM. Lazy registration keeps the 32-slot pipeline and passes
 the same 1 GiB recovery gate with zero OOM events; the allocation budgets did not
 increase. No benchmark source or harness was changed.
@@ -5391,6 +5393,17 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 <a id="w84"></a>
 
 ### W84 · Namespace guard bounds reject supported deep/spread-directory work
+
+**Closed Oct 9 for accepted D32 scope:** capacity returns explicit EOVERFLOW
+rather than retryable BUSY; diagnostics distinguish ancestry/participant/lane
+capacity from contention and missing entries. The144 envelope and all guards
+remain. Exact/mixed boundaries, atomic authoritative refusal, cycle/progress,
+full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD
+normal/fault full POSIX/peer/GC gates pass. Larger namespace protocol is deferred.
+[Closure, retained initial cache-view discrepancy and evidence](../status/w84-closure-20261009.md).
+
+**Historical implementation and acceptance narrative follows; later closure
+supersedes its old open-limit/gate statements.**
 
 **Policy accepted Oct 8 (D32):** retain the current 144-participant product limit, with no fixed depth promise; require prompt atomic refusal and clear diagnostics. Larger-operation protocol is deferred. Earlier finite-limit asks below are superseded; remaining diagnostics/refusal and recovery gates govern closure. [Contract](../status/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions).
 

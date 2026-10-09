@@ -154,6 +154,7 @@ static int rpc_status_to_efs(uint8_t st)
     case EFS_INODE_RPC_NOT_EMPTY:   return EFS_ERR_NOT_EMPTY;
     case EFS_INODE_RPC_STALE:       return EFS_ERR_STALE;
     case EFS_INODE_RPC_NODATA:      return EFS_ERR_NODATA;
+    case EFS_INODE_RPC_OVERFLOW:    return EFS_ERR_OVERFLOW;
     case EFS_INODE_RPC_SYMLINK:
     case EFS_INODE_RPC_DEEP:        return EFS_ERR_PROTO;
     default:                        return EFS_ERR_IO;

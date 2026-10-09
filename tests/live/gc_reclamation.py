@@ -6,6 +6,7 @@ The two root parents must already exist. Only unique harness-owned directories
 and processes are used; failed fixtures/logs are retained for diagnosis.
 """
 import argparse
+import errno
 import ctypes
 import concurrent.futures
 import struct
@@ -1379,21 +1380,44 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
 
     if a.namespace_max:
         # Exercise the actual guarded transaction envelope, including >64 hops.
+        attrs_helper=work/'namespace-attrs'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/namespace_attrs.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',attrs_helper])
+        def authoritative_attrs(path):
+            ino=path.stat().st_ino
+            return tuple(map(int,run([attrs_helper,str(a.port),str(ino)],capture_output=True,text=True).stdout.split()))
         folder=mount;chain=[];moving=mount/'max-moving';moving.mkdir()
         last=moving;elapsed=None
         for index in range(144):
             folder=folder/f'max-{index}';folder.mkdir();chain.append(folder)
+            unchanged=lambda path: tuple(getattr(path.stat(),field) for field in
+                ('st_ino','st_mode','st_uid','st_gid','st_nlink','st_mtime_ns','st_ctime_ns'))
+            before_source=unchanged(last);before_destination=unchanged(folder)
+            if index==143:
+                authoritative_source=authoritative_attrs(last)
+                authoritative_destination=authoritative_attrs(folder)
             started=time.monotonic()
             try:os.rename(last,folder/'moved')
             except OSError as error:
-                assert error.errno in (11,16),error
-                elapsed=time.monotonic()-started;break
+                assert error.errno==errno.EOVERFLOW,error
+                elapsed=time.monotonic()-started
+                assert index==143
+                assert authoritative_attrs(last)==authoritative_source
+                assert authoritative_attrs(folder)==authoritative_destination
+                break
             last=folder/'moved'
-        assert elapsed is not None and len(chain)>64
+        assert elapsed is not None and len(chain)==144
         saved=last.stat().st_ino
-        assert elapsed<30 and not (folder/'moved').exists()
+        assert elapsed<2 and not (folder/'moved').exists()
+        assert 'namespace-capacity' in ''.join((work/f'n{i+1}.log').read_text(errors='replace') for i in range(4))
         unmount();stop();start();mount_client()
         assert last.stat().st_ino==saved
+        assert authoritative_attrs(last)==authoritative_source
+        assert authoritative_attrs(folder)==authoritative_destination
+        (work/'namespace-refusal-attrs.json').write_text(json.dumps({
+            'authoritative_source':authoritative_source,'authoritative_destination':authoritative_destination,
+            'cached_source_before':before_source,'cold_source_after':unchanged(last),
+            'cached_destination_before':before_destination,'cold_destination_after':unchanged(folder),
+            'authoritative_unchanged_before_and_after_restart':True},indent=2))
         recovered=mount/'max-recovered';os.rename(last,recovered)
         assert recovered.stat().st_ino==saved
         if a.namespace_max_fault:
@@ -1441,7 +1465,7 @@ int main(int argc,char**argv){unsigned seen[64]={0},n=0,limit=argc>1?atoi(argv[1
             print('exact 144-participant prepared/committed coordinator death and cold atomic recovery PASS',flush=True)
         os.rmdir(recovered)
         for directory in reversed(chain):os.rmdir(directory)
-        (work/'namespace-max.json').write_text(json.dumps({'accepted_depth':len(chain)-1,'refused_depth':len(chain),'refusal_seconds':elapsed,'restart_verified':True},indent=2))
+        (work/'namespace-max.json').write_text(json.dumps({'accepted_depth':len(chain)-1,'refused_depth':len(chain),'refusal_seconds':elapsed,'refusal_errno':errno.EOVERFLOW,'refused_metadata_unchanged':True,'restart_verified':True},indent=2))
         print(f'namespace actual envelope: depth={len(chain)-1} accepted, depth={len(chain)} refused in {elapsed:.3f}s, restart recovery PASS',flush=True)
     if a.integrity:
         # A swap preserves a valid local payload/digest pair but violates the

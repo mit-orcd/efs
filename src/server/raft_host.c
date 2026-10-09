@@ -5188,6 +5188,8 @@ static uint8_t rc_to_inode_status(int rc)
         return EFS_INODE_RPC_NOT_EMPTY;
     if (rc == EFS_ERR_NODATA)
         return EFS_INODE_RPC_NODATA;
+    if (rc == EFS_ERR_OVERFLOW)
+        return EFS_INODE_RPC_OVERFLOW;
     return EFS_INODE_RPC_ERROR;
 }
 
@@ -9659,6 +9661,14 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
     }
 }
 
+static int host_namespace_capacity(const char *phase, uint32_t used)
+{
+    fprintf(stderr, "raft-host: namespace-capacity phase=%s used=%u limit=%u "
+            "rc=%d: operation exceeds supported transaction envelope\n",
+            phase, used, EFS_TXN_NAMESPACE_MAX_PART, EFS_ERR_OVERFLOW);
+    return EFS_ERR_OVERFLOW;
+}
+
 static int host_parts_add(struct efs_txn_parts *p, uint32_t shard)
 {
     uint8_t i;
@@ -9670,7 +9680,7 @@ static int host_parts_add(struct efs_txn_parts *p, uint32_t shard)
             return EFS_OK;
     }
     if (p->n >= EFS_TXN_NAMESPACE_MAX_PART)
-        return EFS_ERR_BUSY;
+        return host_namespace_capacity("participants", p->n);
     p->shard[p->n++] = shard;
     return EFS_OK;
 }
@@ -9684,7 +9694,7 @@ struct host_pver_guard {
 
 /* Ancestry of dst_parent as shared pver GUARDs (not exclusive on the
  * inode row). src in the chain is INVAL. Too many distinct shards is
- * BUSY (EFS_TXN_NAMESPACE_MAX_PART). */
+ * OVERFLOW (EFS_TXN_NAMESPACE_MAX_PART), distinct from contention. */
 static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
                                  efs_ino_t src, struct efs_txn_parts *parts,
                                  struct host_pver_guard *g, int *ng, int *hint)
@@ -9708,7 +9718,7 @@ static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
         if (!S_ISDIR(r.mode))
             return EFS_ERR_INVAL;
         if (*ng >= EFS_TXN_NAMESPACE_MAX_PART)
-            return EFS_ERR_BUSY;
+            return host_namespace_capacity("ancestry", (uint32_t)*ng);
         rc = efs_kv_key_pver(sh, cur, g[*ng].key, &g[*ng].klen);
         if (rc == EFS_OK)
             rc = efs_txn_ver_get(h->kv, g[*ng].key, g[*ng].klen, &g[*ng].ver);
@@ -9726,7 +9736,7 @@ static int host_pver_guard_chain(struct efs_raft_host *h, efs_ino_t dst_parent,
     }
     /* We did not reach the root: capacity exhaustion is not proof of a
      * cycle. INVAL is reserved for an observed ancestor == src above. */
-    return EFS_ERR_BUSY;
+    return host_namespace_capacity("ancestry", (uint32_t)*ng);
 }
 
 struct host_idx_ref {
@@ -11135,7 +11145,7 @@ void server_raft_host_rmdir(efs_ino_t parent, const char *name,
             if ((row.used_shards & (1ull << lane)) == 0)
                 continue;
             if (ngv >= EFS_TXN_NAMESPACE_MAX_PART) {
-                rc = EFS_ERR_BUSY;
+                rc = host_namespace_capacity("rmdir-lanes", (uint32_t)ngv);
                 break;
             }
             lsh = efs_kv_lane_shard(row.ino, (uint8_t)lane);
@@ -12641,7 +12651,7 @@ link_done:
  * prevention). A dest dir that is itself SPLITTING stays BUSY.
  * Replacing an existing dest file is POSIX replace (nlink-- / DEL).
  * Replacing an empty dest dir is dest rmdir (LOCAL or HASHED; HASHED
- * GUARDs used-lane dseqs, cap EFS_TXN_NAMESPACE_MAX_PART → BUSY). HASHED dentries
+ * GUARDs used-lane dseqs, cap EFS_TXN_NAMESPACE_MAX_PART → OVERFLOW). HASHED dentries
  * and scattered dir inodes bounce if this replica does not host every
  * participant. */
 void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
@@ -12955,7 +12965,7 @@ void server_raft_host_rename_at(efs_ino_t old_parent, const char *old_name,
                 if ((nrow.used_shards & (1ull << lane)) == 0)
                     continue;
                 if (nxd >= EFS_TXN_NAMESPACE_MAX_PART) {
-                    rc = EFS_ERR_BUSY;
+                    rc = host_namespace_capacity("rename-replacement-lanes", (uint32_t)nxd);
                     break;
                 }
                 lsh = efs_kv_lane_shard(nrow.ino, (uint8_t)lane);

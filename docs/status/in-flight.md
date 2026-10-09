@@ -92,8 +92,9 @@ pass; this is acceptance evidence, not a proven single cause for W87.
 
 **Oct 8 AMD package:** [evidence](amd-functional-gates-20261008.md).
 Functional cycles use direct I/O/TCP; only transport/buffered-specific gates
-change modes. W84's exact 144-participant coordinator crashes pass; the finite
-ancestry product limit remains open. RDMA eager send-slot registration caused
+change modes. [W84 is closed for accepted D32 bounded scope](w84-closure-20261009.md):
+explicit prompt EOVERFLOW, atomic refusal and exact144 coordinator-crash gates
+pass. Larger-operation protocol remains deferred. RDMA eager send-slot registration caused
 a 1 GiB whole-fixture OOM. Lazy registration keeps the 32-slot pipeline and passes
 the same 1 GiB recovery gate with zero OOM events; the allocation budgets did not
 increase. No benchmark source or harness was changed.

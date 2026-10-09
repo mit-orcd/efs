@@ -3339,6 +3339,17 @@ Demonstrate safe crash-restart reclamation without depending on GC thread timing
 
 ## W84 · Namespace guard bounds reject supported deep/spread-directory work
 
+**Closed Oct 9 for accepted D32 scope:** capacity returns explicit EOVERFLOW
+rather than retryable BUSY; diagnostics distinguish ancestry/participant/lane
+capacity from contention and missing entries. The144 envelope and all guards
+remain. Exact/mixed boundaries, atomic authoritative refusal, cycle/progress,
+full64-lane removal/replacement, exact144 PREPARE/COMMIT cold recovery and AMD
+normal/fault full POSIX/peer/GC gates pass. Larger namespace protocol is deferred.
+[Closure, retained initial cache-view discrepancy and evidence](../status/w84-closure-20261009.md).
+
+**Historical implementation and acceptance narrative follows; later closure
+supersedes its old open-limit/gate statements.**
+
 **Policy accepted Oct 8 (D32):** retain the current 144-participant product limit, with no fixed depth promise; require prompt atomic refusal and clear diagnostics. Larger-operation protocol is deferred. Earlier finite-limit asks below are superseded; remaining diagnostics/refusal and recovery gates govern closure. [Contract](../status/accepted-namespace-scratch-20261008.md#d32--w84-bounded-namespace-transactions).
 
 **Oct 8 AMD follow-up:** AMD direct-I/O/TCP now passes exact 144-participant coordinator death at both PREPARE and COMMIT, including cold atomic recovery. The existing depth 143 acceptance/depth 144 bounded refusal also passes. Full-ancestry versus a supported finite transaction envelope remains a product decision; no universal 143-depth promise follows from this fixture.
