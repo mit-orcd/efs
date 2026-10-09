@@ -56,6 +56,26 @@ int main(void) {
  for(unsigned i=0;i<16;i++)assert(o[i]==2*i);
  assert(o[16]==1); /* other group cannot wait beyond one 16-frame chunk */
  for(unsigned i=0;i<256;i++)free(m[i].buf);
+ /* Broad permutation/FIFO/fence coverage over the full hard inbox bound. */
+ unsigned random=971;
+ for(unsigned trial=0;trial<128;trial++) {
+  unsigned n=1+trial*2;unsigned fence=n;
+  for(unsigned i=0;i<n;i++) {
+   random=random*1664525u+1013904223u;
+   m[i]=frame((random>>31)?2:0,1);
+  }
+  if(trial%2){fence=trial%n;m[fence].buf[67]=1;}
+  check(m,n);host_inbox_order(m,n,view,o);
+  for(unsigned i=fence;i<n;i++)assert(o[i]==i);
+  for(unsigned i=0;i<n;i++)free(m[i].buf);
+ }
+ for(unsigned i=0;i<8;i++)m[i]=frame(i%2?2:0,1);
+ view[0].ready=0;host_inbox_order(m,8,view,o);
+ for(unsigned i=0;i<8;i++)assert(o[i]==i); /* stalled apply cannot be regrouped */
+ view[0].ready=1;view[0].leader=2;host_inbox_order(m,8,view,o);
+ for(unsigned i=0;i<8;i++)assert(o[i]==i); /* changed leader cannot be regrouped */
+ view[0].leader=0;
+ for(unsigned i=0;i<8;i++)free(m[i].buf);
  for(unsigned i=0;i<6;i++)m[i]=frame(i%2?2:0,600*1024);
  check(m,6);host_inbox_order(m,6,view,o);assert(o[0]==0&&o[1]==1);
  for(unsigned i=0;i<6;i++)free(m[i].buf);
@@ -64,6 +84,7 @@ int main(void) {
 '''
 with tempfile.TemporaryDirectory(prefix='efs-host-inbox-') as d:
  p=Path(d)/'test.c';p.write_text(code);binary=p.with_suffix('')
- subprocess.run([os.environ.get('CC','cc'),'-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(binary)],check=True)
+ flags=['-fsanitize=address,undefined','-fno-omit-frame-pointer'] if os.environ.get('EFS_TEST_SANITIZE')=='1' else []
+ subprocess.run([os.environ.get('CC','cc'),*flags,'-std=c99','-Wall','-Wextra','-Werror','-I'+str(root/'include'),str(p),'-o',str(binary)],check=True)
  subprocess.run([str(binary)],check=True)
 print('host inbox: stable group order, global read/control/config fences, frame/byte bounds PASS')
