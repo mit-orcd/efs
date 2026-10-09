@@ -138,7 +138,9 @@ int efs_lease_guarded_probe(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                            const struct efs_opid_req *q, unsigned flags,
                            uint64_t pending_token, int *verdict);
 /* Requires the completed global barrier AND local rejection floor, then
- * removes old ownership before forgetting its replay floor. */
+ * refuses while old lease/lock rows remain; the exact-key cleanup coordinator
+ * drains those first. Retirement deletes only one replay window and preserves
+ * the durable rejection floor. */
 int efs_lease_guarded_retire(struct efs_kv *kv, uint32_t shard,
                             const uint8_t uuid[EFS_OPID_UUID_LEN], uint32_t epoch);
 

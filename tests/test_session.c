@@ -437,6 +437,12 @@ static void test_guarded_lease_edges(void)
     CHECK(efs_lease_guarded_probe(kv,EFS_ROOT_INO,1,&q,EFS_LEASE_EDGE_OPEN,0,&verdict)==1 && verdict==EFS_ERR_INVAL,"directory refusal has a durable replay verdict");
     kv->ops=original;efs_kv_mem_free(kv);
 }
+static int (*guarded_del_original)(void *,const uint8_t *,uint32_t);
+static int guarded_del_fail;
+static int guarded_del_fault(void *ctx,const uint8_t *key,uint32_t len)
+{
+    return guarded_del_fail?EFS_ERR_IO:guarded_del_original(ctx,key,len);
+}
 static void test_guarded_pending_and_fence(void)
 {
     struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[EFS_OPID_UUID_LEN];efs_ino_t ino=0;
@@ -468,7 +474,27 @@ static void test_guarded_pending_and_fence(void)
     q.id.seq=6;q.ack=5;
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,"local fence rejects old edges before global barrier finishes");
     CHECK(efs_session_ack_fence(kv,uuid,1)==EFS_OK && efs_session_finish_fence(kv,uuid)==EFS_OK,"complete durable barrier");
-    CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_OK && guarded_rows(kv)==0,"barrier retires old ownership and replay floor");
+    CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_BUSY && guarded_rows(kv)==1,"retirement cannot expand into old ownership deletion");
+    struct efs_session_cleanup_key cleanup[EFS_SESSION_CLEANUP_MAX];uint32_t nc=0;
+    CHECK(efs_session_cleanup_select(kv,1,uuid,1,cleanup,&nc)==EFS_OK && nc==1 &&
+          efs_session_cleanup_apply(kv,1,uuid,1,cleanup,nc)==EFS_OK,"bounded ownership phase precedes retirement");
+    struct efs_txid retire_tx={{117}};struct efs_txn_parts retire_parts={.n=1,.shard={1}};
+    uint8_t replacement=1;
+    CHECK(efs_txn_prepare_excl_value(kv,&retire_tx,&retire_parts,window,wl,NULL,
+          EFS_TXN_ABSENT,EFS_TXN_PUT,&replacement,1)==EFS_OK,"prepared receipt ownership");
+    CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_BUSY,"retirement respects prepared receipt ownership");
+    CHECK(efs_txn_resolve(kv,&retire_tx,1,EFS_TXN_ABORT)==EFS_OK,"release receipt ownership");
+    uint8_t retained[13]={1};
+    CHECK(efs_kv_put(kv,window,wl,retained,sizeof(retained))==EFS_OK,"seed retained reply window");
+    const struct efs_kv_ops *original_ops=kv->ops;struct efs_kv_ops fault_ops=*original_ops;
+    guarded_del_original=fault_ops.del;fault_ops.del=guarded_del_fault;kv->ops=&fault_ops;
+    guarded_del_fail=1;
+    CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_IO,"retirement propagates storage failure");
+    vl=sizeof(value);
+    CHECK(efs_kv_get(kv,window,wl,value,&vl)==EFS_OK && vl==sizeof(retained),"failed retirement keeps replay window");
+    guarded_del_fail=0;kv->ops=original_ops;
+    CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_OK && guarded_rows(kv)==0,"empty phase retires only replay floor");
+    CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_OK,"retirement is idempotent");
     q.id.seq=6;q.ack=5;
     CHECK(efs_lease_guarded_edge(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,"retired old session cannot reopen after floor deletion");
     CHECK(efs_session_register(kv,uuid,2,1)==EFS_OK && efs_session_establish(kv,1,uuid,2)==EFS_OK,"new epoch establish");
@@ -960,8 +986,63 @@ static void test_deferred_close_identity(void)
     efs_kv_mem_free(kv);
 }
 
+/* Cold replay across 8+1 ownership pages; retirement retains epoch fencing. */
+static void test_guarded_retire_cold(void)
+{
+    char dir[]="/tmp/efs-retire-cold-XXXXXX";
+    CHECK(mkdtemp(dir)!=NULL,"retire cold root");
+    struct efs_kv_lsm_cfg cfg={0};
+    uint8_t uuid[16];uuid_of(uuid,219);
+    for(unsigned phase=0;phase<5;phase++) {
+        pid_t pid=fork();CHECK(pid>=0,"retire cold fork");if(pid<0)break;
+        if(!pid) {
+            struct efs_kv *kv=efs_kv_lsm_open(dir,&cfg);
+            if(!kv)_exit(2);
+            if(!phase) {
+                CHECK(efs_meta_apply_init(kv,T0)==EFS_OK,"retire cold init");
+                CHECK(efs_session_create(kv,uuid,1)==EFS_OK &&
+                      efs_session_register(kv,uuid,1,1)==EFS_OK &&
+                      efs_session_establish(kv,1,uuid,1)==EFS_OK,"retire cold establish");
+                for(unsigned i=0;i<9;i++) {
+                    uint8_t key[EFS_KV_KEY_MAX],one=1;uint32_t len;
+                    CHECK(efs_kv_key_lease(1,4097+(uint64_t)i*4096,1,uuid,1,key,&len)==EFS_OK &&
+                          efs_kv_put(kv,key,len,&one,1)==EFS_OK,"retire cold old rows");
+                }
+                CHECK(efs_session_begin_fence(kv,uuid)==EFS_OK &&
+                      efs_session_fence_local(kv,1,uuid,2)==EFS_OK &&
+                      efs_session_ack_fence(kv,uuid,1)==EFS_OK &&
+                      efs_session_finish_fence(kv,uuid)==EFS_OK,"retire cold barrier");
+            } else if(phase<3) {
+                CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_ERR_BUSY,"cold retirement refuses residual ownership");
+                struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];uint32_t n=0;
+                CHECK(efs_session_cleanup_select(kv,1,uuid,1,keys,&n)==EFS_OK &&
+                      n==(phase==1?8:1),"cold bounded exact ownership page");
+                CHECK(efs_session_cleanup_apply(kv,1,uuid,1,keys,n)==EFS_OK,"cold apply ownership page");
+            } else {
+                CHECK(efs_lease_guarded_retire(kv,1,uuid,1)==EFS_OK,"cold empty retirement replay");
+                struct efs_opid_req q=guarded_request(uuid,1,0);
+                CHECK(efs_lease_guarded_edge(kv,4097,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_STALE,
+                      "cold retired epoch cannot resurrect old lease");
+            }
+            efs_kv_lsm_close(kv);_exit(failures?1:0);
+        }
+        int status=0;CHECK(waitpid(pid,&status,0)==pid && WIFEXITED(status) &&
+                           !WEXITSTATUS(status),"retire cold child result");
+    }
+    DIR *d=opendir(dir);CHECK(d!=NULL,"retire cold cleanup");
+    if(d) {
+        struct dirent *e;while((e=readdir(d))) {
+            if(!strcmp(e->d_name,".") || !strcmp(e->d_name,".."))continue;
+            char path[1024];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);
+            CHECK(!unlink(path),"retire cold remove owned file");
+        }
+        closedir(d);CHECK(!rmdir(dir),"retire cold remove owned root");
+    }
+}
+
 int main(void)
 {
+    test_guarded_retire_cold();
     test_deferred_close_identity();
     test_bounded_session_cleanup();
     test_pending_create_session_fence();

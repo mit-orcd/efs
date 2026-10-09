@@ -260,3 +260,16 @@ peer64/64 and cold GC pass; installed direct/TCP service restored.
 Full fencing retains legacy append cleanup: substituting lease-only NEXT would
 omit abandoned reservation holes. Bounded session append and PUT-ticket phases
 remain dependencies before replacing the whole coordinator or activating it.
+
+## Bounded staged lease-edge retirement
+
+Explicit guarded retirement no longer invokes whole-session lease deletion. It
+requires global barrier + local floor, refuses residual old lease/lock rows and
+prepared reply ownership, deletes only one replay window, and preserves epoch
+rejection. AMD full Linux regressions, cold eight-plus-one cleanup/retirement/
+old OPEN rejection, prepared intent refusal, and deletion IO/retry pass. Old
+source fails the added relevant assertions.
+[Evidence](../../results/measure/20261009-bounded-edge-retirement/README.md).
+The helper remains staged; global authority routing, bounded session append and
+PUT-ticket cleanup, production ambiguous lease identity retention, and broader
+receipt/session lifecycle integration remain open. No activation is claimed.

@@ -977,10 +977,16 @@ int efs_lease_guarded_retire(struct efs_kv *kv,uint32_t shard,
 {
     int rc=efs_session_reclaimable(kv,shard,uuid,epoch);
     if(rc!=EFS_OK)return rc; /* missing authority is not successful retirement */
-    rc=efs_lease_drop_session(kv,shard,uuid,epoch);
+    /* Retirement never expands into whole-session ownership deletion. The
+     * exact-key cleanup coordinator must first drain the old lease/lock phase.
+     * Its durable floor prevents matching rows from being recreated. */
+    struct efs_session_cleanup_key keys[EFS_SESSION_CLEANUP_MAX];uint32_t n=0;
+    rc=efs_session_cleanup_select(kv,shard,uuid,epoch,keys,&n);
     if(rc!=EFS_OK)return rc;
+    if(n)return EFS_ERR_BUSY;
     uint8_t key[EFS_KV_KEY_MAX];uint32_t len=0;
     rc=edge_window_key(shard,uuid,epoch,key,&len);
+    if(rc==EFS_OK)rc=efs_txn_key_exclusive(kv,key,len);
     if(rc!=EFS_OK)return rc;
     rc=efs_kv_del(kv,key,len);
     return rc==EFS_ERR_NOT_FOUND?EFS_OK:rc;

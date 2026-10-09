@@ -1,0 +1,22 @@
+FAIL tests/test_session.c:1001: cold retirement refuses residual ownership
+FAIL tests/test_session.c:1003: cold bounded exact ownership page
+FAIL tests/test_session.c:1005: cold apply ownership page
+FAIL tests/test_session.c:1014: retire cold child result
+FAIL tests/test_session.c:1001: cold retirement refuses residual ownership
+FAIL tests/test_session.c:1003: cold bounded exact ownership page
+FAIL tests/test_session.c:1005: cold apply ownership page
+FAIL tests/test_session.c:1014: retire cold child result
+FAIL tests/test_session.c:1014: retire cold child result
+FAIL tests/test_session.c:1014: retire cold child result
+FAIL tests/test_session.c:771: cold owner acknowledged phase
+FAIL tests/test_session.c:771: cold owner acknowledged phase
+FAIL tests/test_session.c:771: cold owner acknowledged phase
+FAIL tests/test_session.c:771: cold owner acknowledged phase
+FAIL tests/test_session.c:771: cold owner acknowledged phase
+FAIL tests/test_session.c:771: cold owner acknowledged phase
+FAIL tests/test_session.c:771: cold owner acknowledged phase
+FAIL tests/test_session.c:771: cold owner acknowledged phase
+FAIL tests/test_session.c:471: retirement cannot expand into old ownership deletion
+FAIL tests/test_session.c:473: bounded ownership phase precedes retirement
+FAIL tests/test_session.c:479: retirement respects prepared receipt ownership
+test_session: 15 failure(s)
