@@ -89,6 +89,9 @@ struct efs_raft_msg {
     uint32_t wire_len;
 };
 
+/* Pure, non-reentrant estimate; stores may call it under their log mutex. */
+typedef uint64_t (*efs_raft_charge_fn)(const uint8_t *cmd, uint32_t clen);
+
 struct efs_raft_store {
     int (*save_hard)(void *ctx, uint64_t current_term, int32_t voted_for);
     int (*load_hard)(void *ctx, uint64_t *current_term, int32_t *voted_for);
@@ -120,6 +123,10 @@ struct efs_raft_store {
     uint64_t (*log_new_bytes)(void *ctx);
     /* Command bytes after an index, excluding retained applied history. */
     uint64_t (*log_bytes_after)(void *ctx, uint64_t index);
+    /* Sum pending command charges, saturating at limit. No body copies or I/O.
+     * Recomputed from the authoritative retained suffix, including on reopen. */
+    uint64_t (*log_charge_after)(void *ctx, uint64_t index,
+                                 efs_raft_charge_fn charge, uint64_t limit);
 };
 
 /* Snapshot once the log has grown by this many command bytes, and keep
@@ -247,6 +254,8 @@ uint64_t efs_raft_log_new_bytes(const struct efs_raft *r);
 /* All calls require the same serialization as propose/recv. */
 int efs_raft_backlog(struct efs_raft *r, uint64_t *count, uint64_t *bytes,
                       uint64_t *log_bytes);
+int efs_raft_backlog_charge(struct efs_raft *r, efs_raft_charge_fn charge,
+                            uint64_t limit, uint64_t *bytes);
 int efs_raft_leader(const struct efs_raft *r); /* -1 if unknown */
 
 /* Committed voting set (C_old). During joint this is still C_old. */

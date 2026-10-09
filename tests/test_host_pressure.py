@@ -23,12 +23,17 @@ struct host_group { struct efs_raft_host *host; struct efs_raft *r; };
 struct efs_raft_host { int pressure_enabled; struct efs_kv *kv;
  struct host_group g[2]; uint64_t pressure_rejected,pressure_recv_rejected; };
 static struct efs_kv_lsm_pressure observation;
-static uint64_t pending_n,pending_bytes,log_bytes;
+static uint64_t pending_n,pending_bytes,log_bytes,forced_work;
 int efs_kv_lsm_pressure(struct efs_kv *kv,struct efs_kv_lsm_pressure *p)
 {(void)kv;*p=observation;return EFS_OK;}
 int efs_raft_backlog(struct efs_raft *r,uint64_t *n,uint64_t *b,uint64_t *l)
 {(void)r;*n=pending_n;*b=pending_bytes;*l=log_bytes;return EFS_OK;}
 '''+limits+'\n'+policy+r'''
+int efs_raft_backlog_charge(struct efs_raft *r,efs_raft_charge_fn fn,uint64_t limit,uint64_t *out)
+{(void)r;(void)fn;*out=forced_work ? forced_work : host_pressure_charge(pending_bytes,pending_n);
+ if(*out>limit)*out=limit;
+ return EFS_OK;}
+
 int main(void) {
  struct efs_raft_host h={.pressure_enabled=1};
  h.g[0].host=&h;h.g[0].r=(struct efs_raft*)&h;
@@ -78,6 +83,24 @@ int main(void) {
  log_bytes=0;pending_n=UINT64_MAX/2+1;
  assert(host_pressure_admit(&h.g[0],NULL,0,EFS_RAFT_ADMIT_LEAD)==EFS_ERR_BUSY);
  pending_n=0;
+ uint8_t sweep=EFS_MD_CMD_LANE_SWEEP_BATCH,legacy=EFS_MD_CMD_LANE_SWEEP;
+ assert(host_pressure_command_charge(&sweep,51)==(64u<<10));
+ h.g[1].r=NULL;
+ forced_work=HOST_PRESSURE_PENDING_BYTES-(64u<<10);
+ e.cmd=&sweep;e.clen=1;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_OK);
+ forced_work++;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ forced_work=UINT64_MAX;
+ e.cmd=&recovery;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ forced_work=0;
+ assert(host_pressure_command_charge(&legacy,18)==UINT64_MAX);
+ legacy=EFS_MD_CMD_REAP_DONE;
+ assert(host_pressure_command_charge(&legacy,17)==UINT64_MAX);
+ e.cmd=&legacy;
+ assert(host_pressure_admit(&h.g[0],&e,1,EFS_RAFT_ADMIT_LOCAL)==EFS_ERR_BUSY);
+ e.cmd=&recovery;
  assert(host_pressure_add(UINT64_MAX,1)==UINT64_MAX);
  assert(host_pressure_charge(UINT64_MAX,UINT64_MAX)==UINT64_MAX);
  assert(host_pressure_charge(2,3)==32+12288);

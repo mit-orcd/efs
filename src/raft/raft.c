@@ -2267,3 +2267,12 @@ int efs_raft_backlog(struct efs_raft *r, uint64_t *count, uint64_t *bytes,
     *log_bytes = r->store->log_new_bytes ? r->store->log_new_bytes(r->store_ctx) : *bytes;
     return EFS_OK;
 }
+
+int efs_raft_backlog_charge(struct efs_raft *r, efs_raft_charge_fn charge,
+                            uint64_t limit, uint64_t *bytes)
+{
+    if (!r || !charge || !bytes || !r->store->log_charge_after)
+        return EFS_ERR_INVAL;
+    *bytes = r->store->log_charge_after(r->store_ctx,r->last_applied,charge,limit);
+    return EFS_OK;
+}

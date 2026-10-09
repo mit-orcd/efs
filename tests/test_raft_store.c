@@ -722,6 +722,11 @@ static void test_recv_batch_crash(int before_apply)
     rmtree(g_dir);
 }
 
+static uint64_t test_command_charge(const uint8_t *cmd, uint32_t n)
+{
+    return n && cmd[0]=='b' ? UINT64_MAX : (uint64_t)n*100+7;
+}
+
 static void test_backlog_byte_accounting(void)
 {
     struct efs_raft_disk *d;
@@ -734,16 +739,28 @@ static void test_backlog_byte_accounting(void)
           st_append(s,3,1,"cc")==EFS_OK,"mixed-size accepted log");
     CHECK(s->log_bytes_after(s,0)==6 && s->log_bytes_after(s,1)==5 &&
           s->log_bytes_after(s,2)==2 && s->log_bytes_after(s,3)==0,"exact byte prefixes");
+    CHECK(s->log_charge_after(s,0,test_command_charge,10000)==10000,
+          "unbounded pending command saturates charge");
+    CHECK(s->log_charge_after(s,2,test_command_charge,10000)==207,
+          "applied prefix releases command charge");
     CHECK(st_append(s,2,2,"longer")==EFS_OK && s->log_bytes_after(s,1)==8,
           "replacement maintains following prefix sums");
     CHECK(s->truncate_from(s,3)==EFS_OK && s->log_bytes_after(s,0)==7,"truncation releases suffix bytes");
+    CHECK(s->log_charge_after(s,0,test_command_charge,10000)==714,
+          "replacement and truncation release original charges");
     efs_raft_disk_close(d);
     d=efs_raft_disk_open(g_dir,EFS_RAFT_DISK_SYNC);CHECK(d!=NULL,"backlog disk reopens");
     if(!d)return;
     s=efs_raft_disk_group(d,0);
     CHECK(s->log_bytes_after(s,0)==7 && s->log_bytes_after(s,1)==6,"replay rebuilds exact byte ownership");
+    CHECK(s->log_charge_after(s,0,test_command_charge,10000)==714,
+          "cold replay reconstructs command charge");
+    CHECK(s->log_charge_after(s,0,test_command_charge,500)==500,
+          "sum stops at caller capacity");
     CHECK(s->save_snap(s,2,2)==EFS_OK && s->log_bytes_after(s,2)==0,"snapshot excludes applied retained bytes");
     CHECK(st_append(s,3,3,"tail")==EFS_OK && s->log_bytes_after(s,2)==4,"post-snapshot tail charged");
+    CHECK(s->log_charge_after(s,2,test_command_charge,10000)==407,
+          "snapshot retained prefix excluded from work charge");
     efs_raft_disk_close(d);rmtree(g_dir);
 }
 

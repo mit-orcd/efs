@@ -1671,6 +1671,11 @@ static int pressure_admit(void *app, const struct efs_raft_entry *e,
     return EFS_OK;
 }
 
+static uint64_t pressure_command_work(const uint8_t *cmd, uint32_t n)
+{
+    return n && cmd[0]==42 ? 65536 : n;
+}
+
 static void test_pressure_quorum_and_owned_backlog(void)
 {
     struct net net={.n=3};
@@ -1712,11 +1717,16 @@ static void test_pressure_quorum_and_owned_backlog(void)
     for (int i=0;i<3;i++) CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_OK,"accepted outstanding work");
     CHECK(efs_raft_backlog(net.r[leader],&count,&bytes,&logs)==EFS_OK && count==3 && bytes==3,
           "accepted log owns exact pending bytes independently of RPC lifetime");
+    uint64_t work=0;
+    CHECK(efs_raft_backlog_charge(net.r[leader],pressure_command_work,UINT64_MAX,&work)==EFS_OK && work==3*65536,
+          "pending tiny commands retain expanded work independently of RPC lifetime");
     CHECK(efs_raft_propose(net.r[leader],&cmd,1,&index)==EFS_ERR_BUSY,"unapplied work consumes capacity");
     for (int i=0;i<3;i++) net.drop[i]=0;
     CHECK(elect(&net,40)==1,"quorum returns");
     CHECK(efs_raft_backlog(net.r[leader],&count,&bytes,&logs)==EFS_OK && !count && !bytes,
           "actual apply releases accepted capacity");
+    CHECK(efs_raft_backlog_charge(net.r[leader],pressure_command_work,UINT64_MAX,&work)==EFS_OK && !work,
+          "actual apply releases expanded pending work");
     app[leader].pressure_mask=1u<<EFS_RAFT_ADMIT_LEAD;
     CHECK(efs_raft_step_down(net.r[leader])==EFS_OK,"pressured leader relinquishes role");
     CHECK(elect(&net,80)==1 && leader_id(&net)!=leader,"healthy capacity wins leadership");

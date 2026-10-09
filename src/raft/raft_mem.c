@@ -206,6 +206,19 @@ static int mem_load_snap(void *ctx, uint64_t *last_index, uint64_t *last_term)
     return EFS_OK;
 }
 
+static uint64_t mem_log_charge_after(void *ctx, uint64_t index,
+                                      efs_raft_charge_fn charge, uint64_t limit)
+{
+    struct raft_mem_box *m = box_of(ctx);
+    uint64_t total = 0;
+    uint64_t first = index > m->snap_idx ? index-m->snap_idx : 0;
+    for (uint64_t i=first; i<m->n && total<limit; i++) {
+        uint64_t next = charge(m->log[i].cmd,m->log[i].clen);
+        total = next >= limit-total ? limit : total+next;
+    }
+    return total;
+}
+
 static uint64_t mem_log_bytes_after(void *ctx, uint64_t index)
 {
     struct raft_mem_box *m = box_of(ctx);
@@ -263,6 +276,7 @@ static const struct efs_raft_store mem_ops = {
     .save_cfg = mem_save_cfg,
     .load_cfg = mem_load_cfg,
     .log_bytes_after = mem_log_bytes_after,
+    .log_charge_after = mem_log_charge_after,
     .destroy = mem_destroy,
 };
 

@@ -3634,6 +3634,22 @@ static uint64_t host_pressure_charge(uint64_t bytes, uint64_t count)
     return host_pressure_add(bodies, rows);
 }
 
+/* Bounded sweep can emit base plus eight delta GC rows for each of eight
+ * chunks. Reserve 64 KiB per entry (above those rows, tombstones and batch
+ * overhead). Historical whole-lane/reap commands have no finite wire-size
+ * bound: block new work until they apply; never reject their committed apply.
+ * Other commands retain the staged estimate and still require an audit. */
+static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
+{
+    uint64_t charge = host_pressure_charge(n,1);
+    if (!cmd || !n) return charge;
+    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE)
+        return UINT64_MAX;
+    if (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH && charge < (64u<<10))
+        return 64u<<10;
+    return charge;
+}
+
 static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
 {
     if (!cmd || !n || n > (256u<<10)) return 0;
@@ -3653,20 +3669,24 @@ static int host_pressure_admit(void *app, const struct efs_raft_entry *entries,
     struct host_group *g = app;
     struct efs_raft_host *h = g->host;
     struct efs_kv_lsm_pressure p;
-    uint64_t count=0, bytes=0, logs=0, incoming=0;
+    uint64_t count=0, logs=0, incoming=0, charge=0, need=0;
     int recovery = n != 0;
     if (!h->pressure_enabled) return EFS_OK;
     if (efs_kv_lsm_pressure(h->kv,&p) != EFS_OK || p.io_failed) return EFS_ERR_IO;
     for (uint32_t i=0; i<n; i++) {
         incoming = host_pressure_add(incoming, entries[i].clen);
+        need = host_pressure_add(need,
+            host_pressure_command_charge(entries[i].cmd,entries[i].clen));
         if (!host_pressure_recovery(entries[i].cmd,entries[i].clen)) recovery=0;
     }
     for (int i=0; i<HOST_NGROUPS; i++) {
-        uint64_t c,b,l;
+        uint64_t c,b,l,work;
         if (!h->g[i].r) continue;
         if (efs_raft_backlog(h->g[i].r,&c,&b,&l) != EFS_OK) return EFS_ERR_IO;
         count=host_pressure_add(count,c);
-        bytes=host_pressure_add(bytes,b);
+        if (efs_raft_backlog_charge(h->g[i].r,host_pressure_command_charge,
+                HOST_PRESSURE_PENDING_BYTES+1,&work) != EFS_OK) return EFS_ERR_IO;
+        charge=host_pressure_add(charge,work);
         logs=host_pressure_add(logs,l);
     }
     /* Includes retained log bodies plus the staged expansion estimate
@@ -3674,8 +3694,6 @@ static int host_pressure_admit(void *app, const struct efs_raft_entry *entries,
      * for commands whose state-machine writes exceed their wire size.
      * A caller leaving cannot release this:
      * only actual apply/truncation/snapshot advances the durable owner. */
-    uint64_t charge=host_pressure_charge(bytes,count);
-    uint64_t need=host_pressure_charge(incoming,n);
     uint64_t cap=HOST_PRESSURE_PENDING_BYTES-(recovery ? 0 : HOST_PRESSURE_PENDING_RESERVE);
     uint64_t logcap=HOST_PRESSURE_LOG_BYTES-(recovery ? 0 : HOST_PRESSURE_LOG_RESERVE);
     uint64_t ncap=HOST_PRESSURE_COUNT-(recovery ? 0 : HOST_PRESSURE_RECOVERY_COUNT);
@@ -5393,10 +5411,16 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
     if (!force && now_ms - h->obs_last_dump_ms < 5000)
         return;
     if (h->pressure_enabled) {
-        uint64_t count=0,bytes=0,logs=0,queued=0,qhi=0,inbox=0,ihi=0;
+        uint64_t count=0,bytes=0,logs=0,work_total=0,queued=0,qhi=0,inbox=0,ihi=0;
         for(int k=0;k<HOST_NGROUPS;k++) if(h->g[k].r) {
-            uint64_t c,b,l;
-            if(efs_raft_backlog(h->g[k].r,&c,&b,&l)==EFS_OK){count+=c;bytes+=b;logs+=l;}
+            uint64_t c,b,l,work;
+            if(efs_raft_backlog(h->g[k].r,&c,&b,&l)==EFS_OK) {
+                count=host_pressure_add(count,c);bytes=host_pressure_add(bytes,b);
+                logs=host_pressure_add(logs,l);
+            }
+            if(efs_raft_backlog_charge(h->g[k].r,host_pressure_command_charge,
+                    HOST_PRESSURE_PENDING_BYTES+1,&work)!=EFS_OK) work=UINT64_MAX;
+            work_total=host_pressure_add(work_total,work);
         }
         pthread_mutex_lock(&h->outbox_mu);
         for(int k=0;k<EFS_RAFT_MAX_PEERS;k++){queued+=h->tx[k].queued_bytes;qhi+=h->tx[k].queued_bytes_hi;}
@@ -5405,8 +5429,8 @@ static void host_obs_dump(struct efs_raft_host *h, int force)
         pthread_mutex_lock(&h->proposal_queue.mu);
         uint64_t pc=h->proposal_queue.count,pb=h->proposal_queue.bytes;
         pthread_mutex_unlock(&h->proposal_queue.mu);
-        fprintf(stderr,"pressure-obs: pending_n=%llu pending_bytes=%llu log_bytes=%llu proposal_n=%llu proposal_bytes=%llu outbox_bytes=%llu outbox_hi=%llu inbox_bytes=%llu inbox_hi=%llu rejected=%llu recv_rejected=%llu\n",
-            (unsigned long long)count,(unsigned long long)bytes,(unsigned long long)logs,
+        fprintf(stderr,"pressure-obs: pending_n=%llu pending_bytes=%llu pending_work=%llu log_bytes=%llu proposal_n=%llu proposal_bytes=%llu outbox_bytes=%llu outbox_hi=%llu inbox_bytes=%llu inbox_hi=%llu rejected=%llu recv_rejected=%llu\n",
+            (unsigned long long)count,(unsigned long long)bytes,(unsigned long long)work_total,(unsigned long long)logs,
             (unsigned long long)pc,(unsigned long long)pb,(unsigned long long)queued,(unsigned long long)qhi,
             (unsigned long long)inbox,(unsigned long long)ihi,
             (unsigned long long)h->pressure_rejected,(unsigned long long)h->pressure_recv_rejected);

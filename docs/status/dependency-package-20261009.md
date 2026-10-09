@@ -69,3 +69,34 @@ arithmetic fix. Command-specific expansion accounting remains open: the staged
 16x wire-byte plus 4 KiB/entry estimate is not a universal bound, particularly
 for legacy whole-lane/reap replay. Retained charges must follow log ownership
 through apply, truncation and snapshot before pressure activation.
+
+## Pending command work ownership
+
+Admission now sums command-specific work from the actual unapplied Raft suffix
+in both memory and disk stores. The pure callback reads retained bodies without
+allocation or disk I/O and stops at the supplied capacity. Apply excludes the
+completed prefix; replacement/truncation releases the removed suffix; cold log
+replay reconstructs the same charges. Caller completion does not release work.
+
+Bounded LANE_SWEEP_BATCH reserves at least 64 KiB for up to eight chunks and
+72 base/delta GC rows plus tombstones/batch overhead. Historical unbounded
+LANE_SWEEP and REAP_DONE saturate the charge: pressure-enabled nodes refuse new
+admission while those commands remain pending, but committed apply still runs.
+This deliberately does not certify mixed-version pressure-enabled catch-up.
+Other commands retain the staged estimate and require further coverage audit,
+including truncate, lane fences, transaction resolution and session cleanup.
+Pressure/D25 activation remains blocked on that audit and corresponding gates.
+
+Observations now include `pending_work`; the compaction cap harness checks that
+field instead of reconstructing the superseded uniform wire-size estimate.
+Scanning cost is proportional to pending entries until capacity; performance
+under a full pending queue still needs measurement before activation.
+
+Validation: AMD full Linux regression passes, final build has no warnings,
+focused Raft/host/store tests pass (exact capacity, unbounded barriers, retained
+ownership, replacement, truncation, saturation, snapshot prefix and cold replay).
+Private AMD direct/TCP pressure-enabled GC/core/peer POSIX gate passes, including
+physical deletion counters, offline member/rejoin, cold inventory/quota zero and
+late PUT fencing. Installed 978caaf7 service restored with pressure off. The
+last observation-only adjustment was rebuilt and focused-tested after the live
+run. No pressure-cap stress or universal bound is claimed by this checkpoint.

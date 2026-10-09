@@ -498,6 +498,21 @@ static uint64_t disk_log_floor(void *ctx)
     return floor;
 }
 
+static uint64_t disk_log_charge_after(void *ctx, uint64_t index,
+                                      efs_raft_charge_fn charge, uint64_t limit)
+{
+    struct raft_disk_group *m = group_of(ctx);
+    uint64_t total = 0;
+    pthread_mutex_lock(&m->d->mu);
+    uint64_t first = index > m->log_base ? index-m->log_base : 0;
+    for (uint64_t i=first; i<m->n && total<limit; i++) {
+        uint64_t next = charge(m->log[i].cmd,m->log[i].clen);
+        total = next >= limit-total ? limit : total+next;
+    }
+    pthread_mutex_unlock(&m->d->mu);
+    return total;
+}
+
 static uint64_t disk_log_bytes_after(void *ctx, uint64_t index)
 {
     struct raft_disk_group *g = group_of(ctx);
@@ -543,6 +558,7 @@ static const struct efs_raft_store disk_ops = {
     .log_floor = disk_log_floor,
     .log_new_bytes = disk_log_new_bytes,
     .log_bytes_after = disk_log_bytes_after,
+    .log_charge_after = disk_log_charge_after,
 };
 
 /* --- open / close ---------------------------------------------------- */

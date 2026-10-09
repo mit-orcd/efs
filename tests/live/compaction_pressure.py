@@ -69,7 +69,7 @@ def sample(phase):
         if q:
             assert q['inbox_hi']<=32<<20 and q['proposal_bytes']<=8<<20
             assert q['outbox_hi']<=3*(16<<20)
-            assert q['pending_n']<=2048 and q['pending_bytes']*16+q['pending_n']*4096<=256<<20
+            assert q['pending_n']<=2048 and q['pending_work']<=256<<20
     raw.flush();return records
 
 def wait(fn,seconds=60):
