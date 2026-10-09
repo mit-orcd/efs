@@ -3584,7 +3584,11 @@ publisher consumes about 90% of sampled cycles. Despite reusing all but 8–13
 partitions, each 1.3–1.5 s build refolds the global million-inode catalog and
 rebuilds its edges/rollups. Catalog accounting is 897 MiB against a 1 GiB cap.
 Incremental folded metadata/rollups, explicit CPU/freshness budgeting and
-memory-per-entry acceptance remain W92 work; no fix is claimed by the trace.
+memory-per-entry acceptance remain W92 work. Follow-up commit `5084f8c2d557`
+reuses dependency-valid folded stats and namespace contributions, deployed on
+NUC: warm median 508 ms versus about 1.4 s. Global reconstruction remains.
+Loaded broad command gates also hit the separate million-entry scan cap and
+retry EFS_ERR_BUSY; scoped traversal/paging and explicit limit errors remain open.
 [Perf/strace evidence](../status/find-stats-refresh-cpu-20261009.md).
 
 **Oct 8 New York loaded-namespace investigation:** devel merged into

@@ -143,4 +143,94 @@ The unchanged 1 GiB cap remains a separate approaching constraint.
 4. Limit refresh work/frequency with truthful lag reporting as a scheduling
    measure, rather than treating it as an algorithmic or hardware-ceiling fix.
 
-No production optimization is implemented or benchmarked by this profile.
+The profile above is the pre-fix baseline; the implementation and deployment below follow it.
+
+
+## Incremental reuse fix and NUC deployment
+
+Production commit `5084f8c2d557` on `devel-find-stats` is installed in
+`/data1/efs/src` on all four NUC nodes and both clients, with direct I/O, TCP,
+server/client commands enabled and the existing 1024 MiB catalog cap. Existing
+stores were preserved. Both clients were gracefully unmounted/drained and all
+four daemons terminated gracefully before installation. The generator had
+already stopped before deployment. The previous source/binaries are retained
+at the backup path recorded in the deployment evidence.
+
+The catalog now reuses folded inode stats only when the inode partition and
+all active lane partitions are unchanged. Immutable per-partition namespace
+contributions are reused only when their recorded name, parent layout, child
+inode and lane dependencies are unchanged. Layout precedence and hashed
+masking remain authoritative. Directory links and rollups are replayed into
+the new immutable generation. Global inode vector/index reconstruction and
+ancestor aggregation still run; this is not yet an O(changed entries) builder.
+Exact inode-vector allocation also avoids a transient capacity doubling at
+2^20 inodes. Cached contributions remain inside the explicit catalog budget.
+
+### Measured result
+
+A new 30-second, 199 Hz perf recording of node 2 during the same eight-worker
+random tiny-file workload contains 7,153 samples with no lost samples. Sixty
+nearby warm publications take **463–639 ms, median 508 ms**, versus the prior
+roughly 1.3–1.6 seconds. The namespace is slightly larger (over 1.03 million
+files), so this is an observational comparison, not a controlled throughput
+experiment. The screen reports 6,262 files after 40 seconds, 157 files/s;
+there is no demonstrated file-creation throughput improvement.
+
+Inclusive getattr falls from 49.55% to **0.54%** of process cycles; add_edge
+from 15.73% to **0.55%**; cache_get from 22.51% to **0.20%**. The builder remains
+70.26% inclusive and 47.03% self: global array/index reconstruction, dependency
+checks and memory/page-fault work remain. Faster publication can still run
+frequently under the unchanged 256-change trigger. This does not prove the
+machine is at a hardware ceiling or promise low total CPU under sustained
+mutation.
+
+Cold publication still folds the whole namespace: the first successful build
+took 3,688 ms for 1,033,117 files and 4,386 directories. Warm reuse works after
+that; accounted catalog memory was 964,379,748 bytes initially. The 1 GiB cap
+remains a scale constraint.
+
+### Validation and separate limitations
+
+- Native executable unit tests passed, including a new differential oracle:
+  incremental and full catalogs built from the same pinned source agree on
+  every inode/stat, directory binding and rollup. Coverage includes cross-shard
+  lane-only changes, rename/unlink/hardlinks, hashed layout, pending-transaction
+  refusal, cancellation and memory limits. Unchanged input refolds zero stats
+  and reuses all 4,096 edge partitions.
+- All five architecture documentation checks passed after adding README and
+  LICENSE to the isolated source fixture. The optional ASAN/UBSAN executable
+  could not link because the NUC sanitizer runtime was missing; no sanitizer
+  pass is claimed.
+- Private direct/TCP publication and v1/v2/v3 RPC gates passed, including
+  restart rebuild, immutable identity, redirects and explicit errors.
+- Full private direct/TCP two-mount command and display/filter suites passed,
+  followed by POSIX **212/212** (19.7 s), peer **64/64** (15.6 s), and persisted
+  restart recovery. These private tests do not establish million-file acceptance.
+- Live deployment smoke passed on both installed mounts: scoped ls/find/stats
+  returned complete, correct results for a newly created and removed probe.
+
+The loaded mounted command suites exposed a separate existing scan limit:
+find visits at most 1,000,000 index entries across the whole namespace, even
+for a scoped query. With this namespace above that threshold, suffix `.txt`
+and empty-pattern queries return EFS_ERR_BUSY; the client retries until its
+8-second budget, and command tests time out. Direct queries to both publishers
+confirm suffix status -13 in 44–72 ms, while exact `file.txt` succeeds in
+17–23 ms. This is distinct from the earlier 16 MiB response cap. Paging/scoped
+index traversal and a non-retryable, limit-specific error remain W92 work.
+The broad loaded command suites are **not passing** and W92 is not closed.
+
+The profiling generator was launched with a 75-second SIGINT timeout in the
+existing tiny_files screen and a new output directory
+`tiny-incremental-5084f8c2`. Its ThreadPoolExecutor drains already queued folder
+tasks after interruption, so shutdown takes longer than the nominal timeout.
+The generator has now exited after draining. A subsequent ten-second /proc
+CPU sample measures node 2 at **1.8% of one core** while quiet; this is not
+a comparable loaded before/after CPU measurement. No daemon restart or forced
+write discard was performed during this drain. A quiet repeat of the live
+suffix gate still times out at the same scan cap; the options repeat refuses
+its already existing test directory, so it adds no acceptance evidence.
+
+Raw deployment/profile evidence is retained in
+[results/measure/20261009-catalog-incremental](../../results/measure/20261009-catalog-incremental/)
+and on NUC at `/data1/efs/deploy-query-5084f8c2`. Native unit/build logs and private
+fixture logs remain under `/data1/efs/query-incremental-*`.

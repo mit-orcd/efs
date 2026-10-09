@@ -1,0 +1,27 @@
+Traceback (most recent call last):
+  File "/data1/efs/src/tests/live/efs_command_options.py", line 75, in <module>
+    result=eventually(fields_gate)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/src/tests/live/efs_command_options.py", line 53, in eventually
+    return check()
+           ^^^^^^^
+  File "/data1/efs/src/tests/live/efs_command_options.py", line 65, in fields_gate
+    result=get('--type','file')
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/src/tests/live/efs_command_options.py", line 59, in get
+    return json.loads(cmd('find','',*args,'--json').stdout)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data1/efs/src/tests/live/efs_command_options.py", line 45, in cmd
+    p=subprocess.run([sys.executable,str(other/'.efs'/command),*args],capture_output=True,timeout=30)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 550, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 1209, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.12/subprocess.py", line 2116, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+  File "/usr/lib64/python3.12/subprocess.py", line 1253, in _check_timeout
+    raise TimeoutExpired(
+subprocess.TimeoutExpired: Command '['/usr/bin/python3', '/data1/efs/mnt2/efs-options-gates/.efs/find', '', '--type', 'file', '--json']' timed out after 30 seconds
