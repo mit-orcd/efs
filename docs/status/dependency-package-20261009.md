@@ -491,3 +491,22 @@ Next: pending CREATE participant for first cross-group lane, retained FUSE CREAT
 result/adoption/compensating release and sequenced OPEN/CLOSE. Production PUT
 transport/storage fencing/collection is still open. This is an opt-in daemon
 prerequisite, not complete production session integration or D25 activation.
+
+
+## First-use cross-group pending CREATE transaction — implemented/gated
+
+Supersedes the first-use BUSY restriction above: pending CREATE now prepares
+its full UUID/epoch/token lease in the HASHED lane namespace transaction.
+An exclusive exact-value local-session participant prevents FENCE_LOC from
+crossing an unresolved transaction; a fence winning first rejects the snapshot.
+
+AMD direct/TCP local and cross-group first-use CREATE, same-inode retry,
+cold pending replay, adoption/CLOSE and proven rejection of reacquisition pass.
+Core212/212, peer64/64, append800, physical GC/restart and all code regressions
+pass. Both installed mounts restored, reservation released; local docs5/5.
+[Evidence](../../results/measure/20261009-hashed-pending-create/README.md).
+
+No new live lost-decision/fence-during-PREPARE injection gate is claimed.
+Next: retained FUSE CREATE identity/result, pending adoption with sequenced
+OPEN/CLOSE and compensating release. Production PUT-ticket transport, durable
+storage fences, collection and retirement remain open. D25 remains staged.

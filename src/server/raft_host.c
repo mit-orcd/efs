@@ -9769,7 +9769,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const struct efs_meta_attrs *at,
                                   struct efs_meta_row *prow, uint32_t dsh,
                                   const struct efs_opid_req *q, uint64_t hold,
-                                  int *hint);
+                                  int pending, int *hint);
 
 /* I16 leader-side probe: the op's window lives on `shard` (the dentry
  * shard of the named entry), which this host must hold. 1 = replay, reply
@@ -9938,11 +9938,8 @@ void server_raft_host_create(efs_ino_t parent, const char *name, uint32_t mode,
         (prow.used_shards & (1ull << efs_kv_dir_lane(name))) == 0 &&
         pg != dg) {
         hashed = 1;
-        /* Pending lease and first-use parent lane must be one transaction.
-         * Until its participant format exists, refuse before any effects. */
-        rc = pending ? EFS_ERR_BUSY :
-            host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh, q,
-                                    hold, &hint);
+        rc = host_hashed_create_txn(h, parent, name, mode, &at, &prow, dsh, q,
+                                    hold, pending, &hint);
     } else if (rc == EFS_OK) {
         efs_ino_t next = 0;
 
@@ -10939,7 +10936,7 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                                   const struct efs_meta_attrs *at,
                                   struct efs_meta_row *prow, uint32_t dsh,
                                   const struct efs_opid_req *q, uint64_t hold,
-                                  int *hint)
+                                  int pending, int *hint)
 {
     struct efs_meta_row crow;
     struct efs_meta_dentry dent;
@@ -10950,6 +10947,9 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     uint8_t k_alloc[EFS_KV_KEY_MAX], k_dseq[EFS_KV_KEY_MAX];
     uint8_t k_lease[EFS_KV_KEY_MAX], lease_uuid[EFS_OPID_UUID_LEN], lease_one = 1;
     uint32_t lease_len = 0;
+    uint8_t pending_value[EFS_LEASE_PENDING_VALUE_LEN];
+    uint8_t session_key[EFS_KV_KEY_MAX], session_value[EFS_SESS_LOCAL_VAL];
+    uint32_t session_len=0, session_bytes=sizeof(session_value);
     uint8_t v_dent[EFS_META_DENT_BYTES];
     uint8_t v_cino[EFS_META_INO_BYTES], v_alloc[EFS_META_ALLOC_BYTES];
     uint32_t kd = 0, kpi = 0, kci = 0, ka = 0, ks = 0;
@@ -10960,6 +10960,8 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
     efs_ino_t next = 0, ino = 0;
     int rc, i;
 
+    if (pending && (!q || !efs_opid_req_valid(q) || !q->id.session_epoch ||
+                    q->ack>=q->id.seq || hold)) return EFS_ERR_INVAL;
     psh = efs_kv_inode_shard(parent);
     lane = efs_kv_dir_lane(name);
     bit = 1ull << lane;
@@ -11015,6 +11017,18 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
         rc = efs_kv_key_lease(dsh, ino, crow.generation, lease_uuid, 1,
                                k_lease, &lease_len);
     }
+    if (rc==EFS_OK && pending) {
+        memcpy(lease_uuid,q->id.client_uuid,EFS_OPID_UUID_LEN);
+        rc=efs_kv_key_lease(dsh,ino,crow.generation,lease_uuid,
+                            q->id.session_epoch,k_lease,&lease_len);
+        if(rc==EFS_OK)rc=efs_lease_pending_value(q->id.seq,pending_value);
+        if(rc==EFS_OK)rc=efs_session_accept(h->kv,dsh,lease_uuid,q->id.session_epoch);
+        if(rc==EFS_OK)rc=efs_kv_key_sess_local(dsh,lease_uuid,session_key,&session_len);
+        if(rc==EFS_OK)rc=efs_kv_get(h->kv,session_key,session_len,session_value,&session_bytes);
+        if(rc==EFS_OK && (session_bytes!=sizeof(session_value) ||
+             rd32be(session_value)!=q->id.session_epoch ||
+             rd32be(session_value+4)>q->id.session_epoch))rc=EFS_ERR_STALE;
+    }
     if (rc == EFS_OK) {
         memset(&parts, 0, sizeof(parts));
         parts.n = 2;
@@ -11032,7 +11046,13 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                 rc = host_prep_ino_delta(h, psh, &t, &parts, k_pino, kpi, &pd,
                                          NULL, hint);
             if (rc == EFS_OK && sh == dsh) {
-                rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dent, kd,
+                /* Value-guarded ownership blocks FENCE_LOC until decision
+                 * resolution; a fence winning first rejects this snapshot. */
+                if(pending)
+                    rc=host_prep_value(h,dsh,&t,&parts,session_key,session_len,
+                        session_value,session_bytes,EFS_TXN_PUT,session_value,
+                        session_bytes,hint);
+                if(rc==EFS_OK)rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_dent, kd,
                                dver, EFS_TXN_PUT, v_dent, sizeof(v_dent),
                                hint);
                 if (rc == EFS_OK)
@@ -11049,9 +11069,11 @@ static int host_hashed_create_txn(struct efs_raft_host *h, efs_ino_t parent,
                 if (rc == EFS_OK)
                     rc = host_prep_lane_stamp(h, dsh, &t, &parts, prow, name,
                                               at->now, NULL, hint);
-                if (rc == EFS_OK && hold)
+                if (rc == EFS_OK && (hold || pending))
                     rc = host_prep(h, dsh, EFS_TXN_EXCL, &t, &parts, k_lease,
-                                   lease_len, 0, EFS_TXN_PUT, &lease_one, 1, hint);
+                                   lease_len, 0, EFS_TXN_PUT,
+                                   pending?pending_value:&lease_one,
+                                   pending?sizeof(pending_value):1, hint);
                 if (rc == EFS_OK)
                     rc = host_prep_opid(h, dsh, &t, &parts, q, ino, 0, NULL,
                                         hint);

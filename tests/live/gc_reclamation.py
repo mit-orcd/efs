@@ -528,19 +528,31 @@ try:
     if a.guarded_leases:
         pending_helper=work/'client-pending-create'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_pending_create.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',pending_helper])
-        pending_dir=mount/'pending-create-wire';pending_dir.mkdir()
-        created_pending=run([pending_helper,str(a.port),str(pending_dir.stat().st_ino),'create'],capture_output=True,text=True,timeout=90).stdout
-        pending_uuid=created_pending.split('pending_uuid=')[1].split()[0]
-        pending_before=(pending_dir/'pending').stat().st_ino
-        unmount();stop(crash=True);start();mount_client()
-        assert (pending_dir/'pending').stat().st_ino==pending_before,'pending CREATE lost across cold WAL replay'
-        pending_reply=subprocess.run([str(pending_helper),str(a.port),str(pending_dir.stat().st_ino),'resume',pending_uuid],capture_output=True,text=True,timeout=90)
-        assert pending_reply.returncode==0,pending_reply.stderr
-        pending_result=created_pending+pending_reply.stdout
-        (work/'pending-create-wire.txt').write_text(pending_result)
-        pending_ino=(pending_dir/'pending').stat().st_ino
-        (pending_dir/'pending').unlink();pending_dir.rmdir()
-        wait(lambda:not files(pending_ino),'pending CREATE adopted/closed inode physical reclaim',180)
+        pending_results=[]
+        for hashed in (False,True):
+            pending_dir=mount/('pending-create-hashed' if hashed else 'pending-create-wire');pending_dir.mkdir()
+            if hashed:
+                for operation in ('begin','finish'):
+                    for node in range(4):
+                        spread=subprocess.run([str(source/'efs-mgmt'),'raft-dir',f'127.0.0.1:{a.port+node}',str(pending_dir.stat().st_ino),operation],capture_output=True,text=True,timeout=30,env=env)
+                        if spread.returncode==0 and 'status=0' in spread.stdout:break
+                    else:raise AssertionError('pending CREATE spread failed: '+spread.stdout+spread.stderr)
+            stage='create-hashed' if hashed else 'create'
+            created_pending=run([pending_helper,str(a.port),str(pending_dir.stat().st_ino),stage],capture_output=True,text=True,timeout=90).stdout
+            pending_uuid=created_pending.split('pending_uuid=')[1].split()[0]
+            pending_name=created_pending.split('name=')[1].split()[0]
+            pending_path=pending_dir/pending_name
+            pending_before=pending_path.stat().st_ino
+            unmount();stop(crash=True);start();mount_client()
+            assert pending_path.stat().st_ino==pending_before,'pending CREATE lost across cold WAL replay'
+            stage='resume-hashed' if hashed else 'resume'
+            pending_reply=subprocess.run([str(pending_helper),str(a.port),str(pending_dir.stat().st_ino),stage,pending_uuid],capture_output=True,text=True,timeout=90)
+            assert pending_reply.returncode==0,pending_reply.stderr
+            pending_results.append(created_pending+pending_reply.stdout)
+            pending_ino=pending_path.stat().st_ino
+            pending_path.unlink();pending_dir.rmdir()
+            wait(lambda:not files(pending_ino),'pending CREATE adopted/closed inode physical reclaim',180)
+        (work/'pending-create-wire.txt').write_text(''.join(pending_results))
         client_edge=work/'client-lease-edge'
         run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_lease_edge.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',client_edge])
         edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048
