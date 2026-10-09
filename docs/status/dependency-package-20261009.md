@@ -651,3 +651,22 @@ LINK EIO. The nonseed follower gate isolates durability and does not close that
 routing problem. REPORT-wide identities/fencing, other ambiguous namespace
 request retention, production ticketed PUTs, durable storage fences and
 all-member collection/retirement remain open; D25 stays staged.
+
+## Follower catch-up timeout routing — implemented/gated
+
+The seed-routing EIO above is fixed narrowly: after successful authoritative
+remote ReadIndex, a follower that times out applying that index redirects to the
+validated remote leader. It never permits reading stale local state. Unknown,
+self/out-of-range hints and transport/storage failures preserve their errors.
+[Evidence](../../results/measure/20261009-follower-catchup-redirect/README.md).
+
+Actual AMD fault seed1 holds15–18 pending entries while LINK/rename succeed via
+leader routing; release catches up, cold exact bytes/nlink2 pass. The broader
+W66 leadership/placement and failure-matrix work remains open. This supersedes
+only the observed seed catch-up EIO finding above.
+
+Final routing checkpoint: AMD direct/TCP fault-seed live fixture core212/212,
+peer64/64, exact cold linked bytes and physical GC/restart pass; all code
+regressions pass, warning-free normal/fault builds, docs5/5. Installed service
+and both mounts restored, reservation released. Hour's commits retain staged
+activation: no push/merge/tag or production ticketed PUT/GC/D25 activation.

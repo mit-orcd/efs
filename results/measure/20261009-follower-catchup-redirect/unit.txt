@@ -1,0 +1,1 @@
+follower read: applied timeout redirects to validated remote leader; unknown/self/out-of-range/transport and storage errors never grant a local read PASS

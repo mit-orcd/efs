@@ -3514,6 +3514,20 @@ static int host_remote_read_index(struct efs_raft_host *h, uint8_t group,
  * after every cycle), never on h->mu — the pump must keep its heartbeat
  * cadence under 100+ concurrent handlers. Not the leader: forward
  * (blocking peer RPC, no host lock held). */
+/* An authoritative remote read succeeded, but this follower cannot apply
+ * its index in time. Route the caller to that leader instead of repeatedly
+ * timing out the same stale local view. This is a hint, never read permission. */
+static int host_follower_read_result(int rc,int self,int peers,int remote_hint,
+                                     int *leader_hint)
+{
+    if(rc==EFS_ERR_BUSY && remote_hint>=0 && remote_hint<peers &&
+       remote_hint!=self) {
+        if(leader_hint)*leader_hint=remote_hint;
+        return EFS_ERR_NOT_PRIMARY;
+    }
+    return rc;
+}
+
 static int host_read_index(struct efs_raft_host *h, uint8_t group,
                            int *leader_hint)
 {
@@ -3550,8 +3564,10 @@ static int host_read_index(struct efs_raft_host *h, uint8_t group,
             p1 = prof ? now_us_() : 0;
             if (prof)
                 read_prof_add(&g_read_prof.ri_remote, p1 - p0);
-            if (rc == EFS_OK)
+            if (rc == EFS_OK) {
                 rc = host_wait_applied(h, group, ridx, leader_hint);
+                rc = host_follower_read_result(rc,h->raft_id,h->n,rhint,leader_hint);
+            }
             if (prof)
                 read_prof_add(&g_read_prof.ri_remote_wait, now_us_() - p1);
             if (rc != EFS_OK)

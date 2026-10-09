@@ -86,6 +86,7 @@ p.add_argument('--rename-cache', action='store_true', help='root rename evicts t
 p.add_argument('--mixed-reads', action='store_true', help='tiny demand reads while sequential prefetch uses a bounded cache')
 p.add_argument('--ecrawl-binary',type=Path,help='run the actual ecrawl dense/sparse classification gate; requires --allocation')
 p.add_argument('--allocation', action='store_true', help='cold non-writing client allocation reports for dense and sparse files')
+p.add_argument('--transaction-fault-seed',action='store_true',help='prefer the client seed as fault follower for authority redirect validation')
 p.add_argument('--transaction-apply-retry',action='store_true',help='fault follower transaction persistence, retain commit/apply lag, retry and cold namespace bytes')
 p.add_argument('--compactor-pressure', action='store_true', help='fault-build follower pressure with finite stop and recovery')
 p.add_argument('--du-audit',action='store_true',help='measure repeated GNU du on a cold never-writing client')
@@ -1062,14 +1063,24 @@ os.close(fd)
         wait(drained,'bulk REPORT-audit deletions drained before fault fixture',600)
     if a.transaction_apply_retry:
         assert a.server_binary,'transaction retry gate requires an explicitly selected fault build'
+        if a.transaction_fault_seed:
+            # Restart only our private seed after peers are already available,
+            # so it rejoins as a follower rather than remaining group leader.
+            old=servers[0];old.send_signal(signal.SIGTERM);old.wait(timeout=20)
+            time.sleep(3)
+            log=open(work/'n1.log','ab');handles.append(log)
+            seed_env=dict(env,EFS_FAULT_TXN_APPLY_FILE=str(work/'transaction-apply-fault-1'))
+            servers[0]=subprocess.Popen(old.args,env=seed_env,stdout=log,stderr=log)
+            time.sleep(3)
         target=None
-        for candidate in (2,1,3,0):
+        for candidate in ((0,1,2,3) if a.transaction_fault_seed else (2,1,3,0)):
             text=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+candidate}'],capture_output=True,text=True).stdout
             roles=re.findall(r'role=([-\w]+)',text)
             pairs=re.findall(r'commit=(\d+) applied=(\d+)',text)
             if len(roles)==2 and len(pairs)==2 and 'LEADER' not in roles and any(int(commit)>0 for commit,applied in pairs):
                 target=candidate;break
         assert target is not None,'no actual caught-up follower to fault'
+        if a.transaction_fault_seed:assert target==0,'seed did not rejoin as a replicated follower'
         def transaction_lag():
             text=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port+target}'],capture_output=True,text=True).stdout
             roles=re.findall(r'role=([-\w]+)',text)
