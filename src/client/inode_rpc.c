@@ -1076,9 +1076,10 @@ int efs_client_rpc_publication(const struct efs_msg_publication *request, int qu
             (!reply.receipt_index && (reply.receipt_term || reply.receipt_group)))
             return EFS_ERR_PROTO;
         if(memcmp(digest,reply.digest,sizeof(digest)) ||
-           (reply.state!=EFS_PUBLICATION_COMMITTED && reply.state!=EFS_PUBLICATION_REJECTED && reply.state!=EFS_PUBLICATION_RETIRED && reply.state!=EFS_PUBLICATION_PENDING) ||
+           (reply.state!=EFS_PUBLICATION_COMMITTED && reply.state!=EFS_PUBLICATION_REJECTED && reply.state!=EFS_PUBLICATION_RETIRED && reply.state!=EFS_PUBLICATION_PENDING && reply.state!=EFS_PUBLICATION_APPLY_PENDING) ||
            (reply.state==EFS_PUBLICATION_RETIRED && reply.verdict!=EFS_META_PUBLICATION_RETIRED) ||
-           (reply.state==EFS_PUBLICATION_PENDING && reply.verdict!=EFS_META_PUBLICATION_PENDING) ||
+           ((reply.state==EFS_PUBLICATION_PENDING || reply.state==EFS_PUBLICATION_APPLY_PENDING) && reply.verdict!=EFS_META_PUBLICATION_PENDING) ||
+           (reply.state==EFS_PUBLICATION_APPLY_PENDING && !reply.receipt_index) ||
            (query_only==2 && reply.state!=EFS_PUBLICATION_RETIRED && reply.state!=EFS_PUBLICATION_PENDING) ||
            (reply.state==EFS_PUBLICATION_COMMITTED && reply.verdict!=EFS_OK) ||
            (reply.state==EFS_PUBLICATION_REJECTED && reply.verdict!=EFS_ERR_STALE && reply.verdict!=EFS_ERR_INVAL))

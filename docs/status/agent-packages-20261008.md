@@ -56,6 +56,11 @@ Primary ownership: raft_host routing/read-index/pump sections and Raft core.
 
 ## devel-compaction-pressure
 
+Latest user assignment: **Agent 4 owns D29/W88 alongside D30/W23/W89**.
+Complete durable publication receipts and replay protection before admission/
+pacing integration. This expands the original package scope below; retain the
+D25 public-activation exclusion and shared operating rules.
+
 Own D30/W23/W89 bounded admission and stalled-compactor acceptance. Begin with
 accepted D30 in decision-contracts.md and the current W23/W89 evidence; the
 historical shifted TSV output cannot establish a memory or follower-lag bound.

@@ -155,6 +155,11 @@ int main(void)
     assert(efs_publication_ack_consumed(&pending_q,r.id.seq,&pending_reply)==EFS_ERR_BUSY);
     assert(efs_publication_ack_complete(&pending_q,r.id.seq,&pending_reply)==EFS_ERR_BUSY);
     assert(!memcmp(&saved,&pending_q,sizeof(saved)));
+    pending_reply.state=EFS_PUBLICATION_APPLY_PENDING;
+    pending_reply.receipt_index=55;pending_reply.receipt_term=8;
+    assert(efs_publication_ack_consumed(&pending_q,r.id.seq,&pending_reply)==EFS_ERR_BUSY);
+    assert(efs_publication_ack_complete(&pending_q,r.id.seq,&pending_reply)==EFS_ERR_BUSY);
+    assert(!memcmp(&saved,&pending_q,sizeof(saved)));
     ownership();bounded_wrap();durable_order();
     puts("publication ACK: immutable ownership, ordered retirement, bounded wrap and lost replies PASS");
     return 0;
