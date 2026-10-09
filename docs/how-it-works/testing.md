@@ -150,3 +150,20 @@ has started. `perf record -a` is refused at `perf_event_paranoid=1`. Run
 `perf report` on the node that recorded. Never restart a daemon under
 `strace` and then quote the throughput; a traced daemon sits on the strace
 plateau (~100 K lines/s) and the MB/s is a tracer number.
+
+## NFS publication byte oracle (W55)
+
+`tests/live/nfs_publication_stress.py` creates a fresh owned directory and runs
+eight writers through fresh copies, overwrites, truncate/rewrite and name reuse.
+It records successful close boundaries without adding fsync, compares every
+operation's bytes, and saves final inode/hash expectations in a ledger. macOS
+uses explicit `cp -X`; this does not validate plain cp extended-attribute support.
+
+Run `tests/live/nfs_publication_audit.py --help` for the read-only gateway,
+authoritative GETCHUNKS and three-node files-store audit. It requires node IDs
+1–3 in order and checks exact generation/fragment names, not just any inode
+objects. Use an independent FUSE client as `--gateway` for a second byte view.
+This nonzero workload does not cover zero-data elision, storage restart or
+power-loss durability. The [recorded run](../../results/measure/20261009-xorinox-w55-stress/README.md)
+contains concrete commands and scope. Coordinate exclusive cluster access
+before running alongside other tests.

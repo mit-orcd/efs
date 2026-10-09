@@ -1,0 +1,1670 @@
+{
+  "platform": "darwin",
+  "directory": "/private/tmp/efsmac-x/w55-macos-stress-20261009",
+  "workers": 8,
+  "iterations": 20,
+  "boundary": "successful cp/close, no added fsync",
+  "copy_command": "cp -X",
+  "operations_passed": 640,
+  "operations_expected": 640,
+  "elapsed_seconds": 70.61649203300476,
+  "files": [
+    {
+      "name": "fresh-00-000",
+      "inode": 2137952,
+      "size": 2922,
+      "sha256": "11a52ff00f1f3d7ad4a75ae08f842433e00794db176bf95ac971d4de22536341",
+      "worker": 0,
+      "iteration": 0,
+      "mode": "fresh"
+    },
+    {
+      "name": "overwrite-00",
+      "inode": 2199392,
+      "size": 131073,
+      "sha256": "9080bb5c672348fc11636491e1ba7b289e6160ce781460f78919719121ebfdc5",
+      "worker": 0,
+      "iteration": 19,
+      "mode": "overwrite"
+    },
+    {
+      "name": "truncate-00",
+      "inode": 2244448,
+      "size": 131073,
+      "sha256": "9080bb5c672348fc11636491e1ba7b289e6160ce781460f78919719121ebfdc5",
+      "worker": 0,
+      "iteration": 19,
+      "mode": "truncate"
+    },
+    {
+      "name": "fresh-00-001",
+      "inode": 2293600,
+      "size": 4095,
+      "sha256": "b04b279e7a64c0ca6e97f9c7dd552d5cf9e500522fdbb241c9e4ffaf299cbd10",
+      "worker": 0,
+      "iteration": 1,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-002",
+      "inode": 2350944,
+      "size": 4097,
+      "sha256": "a9356f9c8676b51e66fd4b4b61d4a1df9a8750a48f156bd7975dccb23e7a3d1e",
+      "worker": 0,
+      "iteration": 2,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-003",
+      "inode": 2408288,
+      "size": 131073,
+      "sha256": "103f41c6aa49e6918cc41b6a59ef97350ec0101210dd0c1e6a3f643e2761a3d9",
+      "worker": 0,
+      "iteration": 3,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-004",
+      "inode": 2469728,
+      "size": 2922,
+      "sha256": "699c6f19b8357615c257300bed206c4a75646c7922ab4014f9fd3045d7d1c75c",
+      "worker": 0,
+      "iteration": 4,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-005",
+      "inode": 2543456,
+      "size": 4095,
+      "sha256": "06145bd1850fa5a0413703bd08456be079ac8f5da12bfe4502f069f5d36bc173",
+      "worker": 0,
+      "iteration": 5,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-006",
+      "inode": 2604896,
+      "size": 4097,
+      "sha256": "c39ca60295cb67072952a3dace934267c561dc4548380063a48a65ae3486cd14",
+      "worker": 0,
+      "iteration": 6,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-007",
+      "inode": 2666336,
+      "size": 131073,
+      "sha256": "c890309a581314a577772e35e03898ba2104ed617d0f70b9bd4fbf9bc4dcf38b",
+      "worker": 0,
+      "iteration": 7,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-008",
+      "inode": 2731872,
+      "size": 2922,
+      "sha256": "3d516dfe9844023725e9224207ac9bab47c032f14e9c3e621f3f57bf581c4949",
+      "worker": 0,
+      "iteration": 8,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-009",
+      "inode": 2801504,
+      "size": 4095,
+      "sha256": "f90f56e269642f8911f586ef656570f3791f46998e44ac187b839844e3227b53",
+      "worker": 0,
+      "iteration": 9,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-010",
+      "inode": 2867040,
+      "size": 4097,
+      "sha256": "122fa0261994e0dad3b3fa114f6ce60b1773e70c61567509334511c2af19949f",
+      "worker": 0,
+      "iteration": 10,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-011",
+      "inode": 2924384,
+      "size": 131073,
+      "sha256": "e7e87c70d865d5a3e1e053577e8ba91f645a03d4aa652a895dec5ec2a4d8fe9e",
+      "worker": 0,
+      "iteration": 11,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-012",
+      "inode": 3002208,
+      "size": 2922,
+      "sha256": "06832baee4666a67989b9317dcbdbcbd7f97820606770a8059dfba19337e6bc4",
+      "worker": 0,
+      "iteration": 12,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-013",
+      "inode": 3059552,
+      "size": 4095,
+      "sha256": "7a7221efc5e8ce6631ea8d1cc52fb5bd8e5aa4b38d432f5bff1d4fc34264cf31",
+      "worker": 0,
+      "iteration": 13,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-014",
+      "inode": 3129184,
+      "size": 4097,
+      "sha256": "205d60994e5fb1936bd386219b681a749c6dfefc9463d0c58d0857b500ebc1b2",
+      "worker": 0,
+      "iteration": 14,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-015",
+      "inode": 3194720,
+      "size": 131073,
+      "sha256": "5d463e6a5f1528fe9ac1658f32e33efc567df951954a87250779a88c8a8b8bc8",
+      "worker": 0,
+      "iteration": 15,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-016",
+      "inode": 3256160,
+      "size": 2922,
+      "sha256": "8ecb7c3f5c846fad3c5cc92b8d90649753c2c1b9010aa3f2198099592bd3d692",
+      "worker": 0,
+      "iteration": 16,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-017",
+      "inode": 3321696,
+      "size": 4095,
+      "sha256": "f922d9aede13e1ec959b44bab0d31b0727a4a28746b6e4a020406fa46114b12b",
+      "worker": 0,
+      "iteration": 17,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-018",
+      "inode": 3395424,
+      "size": 4097,
+      "sha256": "415cb2d9885bf6d2739b51715ad7b3446115763878d9d574f41b1f2f7da94020",
+      "worker": 0,
+      "iteration": 18,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-00-019",
+      "inode": 3456864,
+      "size": 131073,
+      "sha256": "9080bb5c672348fc11636491e1ba7b289e6160ce781460f78919719121ebfdc5",
+      "worker": 0,
+      "iteration": 19,
+      "mode": "fresh"
+    },
+    {
+      "name": "reuse-00",
+      "inode": 3497824,
+      "size": 131073,
+      "sha256": "9080bb5c672348fc11636491e1ba7b289e6160ce781460f78919719121ebfdc5",
+      "worker": 0,
+      "iteration": 19,
+      "mode": "reuse"
+    },
+    {
+      "name": "fresh-01-000",
+      "inode": 2146144,
+      "size": 2922,
+      "sha256": "d382098115ee424d22a50df21fae3e254f7d07b55df7ddfdd1aebff3ceec7f90",
+      "worker": 1,
+      "iteration": 0,
+      "mode": "fresh"
+    },
+    {
+      "name": "overwrite-01",
+      "inode": 2191200,
+      "size": 131073,
+      "sha256": "cde869638be88b360ab571d9a6ed043e878cdb129b8c2de00efff03c359cfdca",
+      "worker": 1,
+      "iteration": 19,
+      "mode": "overwrite"
+    },
+    {
+      "name": "truncate-01",
+      "inode": 2223968,
+      "size": 131073,
+      "sha256": "cde869638be88b360ab571d9a6ed043e878cdb129b8c2de00efff03c359cfdca",
+      "worker": 1,
+      "iteration": 19,
+      "mode": "truncate"
+    },
+    {
+      "name": "fresh-01-001",
+      "inode": 2285408,
+      "size": 4095,
+      "sha256": "65f14c55335d980dc2bd22df79991d9e80d02542bca959e636939fe221b44b1f",
+      "worker": 1,
+      "iteration": 1,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-002",
+      "inode": 2355040,
+      "size": 4097,
+      "sha256": "b464f27165917094b2503873dd548846a54cf290592762ff0447e9af99db6e26",
+      "worker": 1,
+      "iteration": 2,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-003",
+      "inode": 2412384,
+      "size": 131073,
+      "sha256": "e433195c4d03395ce9a63ed4221966dee0f1aa8cc16199823574fb1116cd17ea",
+      "worker": 1,
+      "iteration": 3,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-004",
+      "inode": 2490208,
+      "size": 2922,
+      "sha256": "cf64b154d8e573ae4fd11421c88cc4018581f636bfab3644736435b3ca0f0c50",
+      "worker": 1,
+      "iteration": 4,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-005",
+      "inode": 2551648,
+      "size": 4095,
+      "sha256": "db12774e036ce934e0477467143f17a59698fa9d311a2c2559b1fbb1cabdb6d4",
+      "worker": 1,
+      "iteration": 5,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-006",
+      "inode": 2617184,
+      "size": 4097,
+      "sha256": "c2dff319608b63b740c0385c09e9e97d7e869f69f594ecde4796a0a4f1a3645b",
+      "worker": 1,
+      "iteration": 6,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-007",
+      "inode": 2670432,
+      "size": 131073,
+      "sha256": "23ed2ce3d1c43b952b964ad0b4f5262ed893288a4a98c34dd7333d9abcc9f0a0",
+      "worker": 1,
+      "iteration": 7,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-008",
+      "inode": 2744160,
+      "size": 2922,
+      "sha256": "7a91c57b8f5f8f76de7e0968ff0973b30dc386157c7e8c36451c739ac56417de",
+      "worker": 1,
+      "iteration": 8,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-009",
+      "inode": 2809696,
+      "size": 4095,
+      "sha256": "5959ab32467f0bb9aa84f1741e36852f739f4c2f9589f401aad23bb8cae67d6d",
+      "worker": 1,
+      "iteration": 9,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-010",
+      "inode": 2875232,
+      "size": 4097,
+      "sha256": "8307e484005bdf64a28153ad915861f25524a215cda50188b7a711548b13a0c2",
+      "worker": 1,
+      "iteration": 10,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-011",
+      "inode": 2932576,
+      "size": 131073,
+      "sha256": "f87a41d3ce79295487e735bd57386ce22a1212ad365cdf50642c0fef260263b0",
+      "worker": 1,
+      "iteration": 11,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-012",
+      "inode": 2989920,
+      "size": 2922,
+      "sha256": "4de07f69194f2f1b6d13a32a4e239f5a47a66dcecff39ca107b9036bbe40933e",
+      "worker": 1,
+      "iteration": 12,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-013",
+      "inode": 3055456,
+      "size": 4095,
+      "sha256": "008ff78db8fb71c5752088b8c0b67cfa44cb0508965b52c512783aa2a51a2d84",
+      "worker": 1,
+      "iteration": 13,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-014",
+      "inode": 3112800,
+      "size": 4097,
+      "sha256": "3bd751a1e25d90cd6a11eb88ab2fff7f378e9f5ecb08093ad7283e2fefc0db67",
+      "worker": 1,
+      "iteration": 14,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-015",
+      "inode": 3166048,
+      "size": 131073,
+      "sha256": "e94132d06e7c6150c126c363a283c9df1c3bf5e851aed95e7d00de0bfa504ea4",
+      "worker": 1,
+      "iteration": 15,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-016",
+      "inode": 3239776,
+      "size": 2922,
+      "sha256": "ff34d762c3461e17c9914e0308519eab2e592c42723956e6e21f49e3f65bbb4f",
+      "worker": 1,
+      "iteration": 16,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-017",
+      "inode": 3301216,
+      "size": 4095,
+      "sha256": "30cd3ffaf0ac307b4e5038366ede37a81e87e685c74d43b3858d413d1c7cab17",
+      "worker": 1,
+      "iteration": 17,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-018",
+      "inode": 3366752,
+      "size": 4097,
+      "sha256": "812973505a74b0d643836fa41a531a2cec42fa9cc252037a5aa61a1bc1bf0e52",
+      "worker": 1,
+      "iteration": 18,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-01-019",
+      "inode": 3444576,
+      "size": 131073,
+      "sha256": "cde869638be88b360ab571d9a6ed043e878cdb129b8c2de00efff03c359cfdca",
+      "worker": 1,
+      "iteration": 19,
+      "mode": "fresh"
+    },
+    {
+      "name": "reuse-01",
+      "inode": 3481440,
+      "size": 131073,
+      "sha256": "cde869638be88b360ab571d9a6ed043e878cdb129b8c2de00efff03c359cfdca",
+      "worker": 1,
+      "iteration": 19,
+      "mode": "reuse"
+    },
+    {
+      "name": "fresh-02-000",
+      "inode": 2150240,
+      "size": 2922,
+      "sha256": "9547acc2da0f1ccae02c66942e78c36a82d94100b334c854b77696f32c4f44c4",
+      "worker": 2,
+      "iteration": 0,
+      "mode": "fresh"
+    },
+    {
+      "name": "overwrite-02",
+      "inode": 2174816,
+      "size": 131073,
+      "sha256": "55876566425a6a115e8a11844fc35520e5ec7e177e1d63c6fae996a47c12be9f",
+      "worker": 2,
+      "iteration": 19,
+      "mode": "overwrite"
+    },
+    {
+      "name": "truncate-02",
+      "inode": 2215776,
+      "size": 131073,
+      "sha256": "55876566425a6a115e8a11844fc35520e5ec7e177e1d63c6fae996a47c12be9f",
+      "worker": 2,
+      "iteration": 19,
+      "mode": "truncate"
+    },
+    {
+      "name": "fresh-02-001",
+      "inode": 2273120,
+      "size": 4095,
+      "sha256": "096802c79399a7cd08afe01613c18a1de50364dfaed8a08db014db2db1ae7c14",
+      "worker": 2,
+      "iteration": 1,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-002",
+      "inode": 2342752,
+      "size": 4097,
+      "sha256": "755ddf30d07af5ab69ec9f30344a4ea43e8950e10500f0fd6c3870fd20699369",
+      "worker": 2,
+      "iteration": 2,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-003",
+      "inode": 2424672,
+      "size": 131073,
+      "sha256": "0452a3c1b91556d37b14aa70b05ace1758ca04f3db26bf55b8b0c95951bfa21f",
+      "worker": 2,
+      "iteration": 3,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-004",
+      "inode": 2482016,
+      "size": 2922,
+      "sha256": "4298038202f13f86fe7566f7f1b13a670036bdbe8e4a7819e117f04f507a1200",
+      "worker": 2,
+      "iteration": 4,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-005",
+      "inode": 2535264,
+      "size": 4095,
+      "sha256": "209959a75baa23f8540a8cc997e2c1a26fc92962ce933b389f56b70b59f85ef7",
+      "worker": 2,
+      "iteration": 5,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-006",
+      "inode": 2613088,
+      "size": 4097,
+      "sha256": "77c5fca607c22a4be89c88d1481fa73b80fa84fec717c90d797fa3757966dd6d",
+      "worker": 2,
+      "iteration": 6,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-007",
+      "inode": 2682720,
+      "size": 131073,
+      "sha256": "5525a32a07464b61f7fd35c0be70d167f2a1cb6b501990b0fbf5fb67cb2e3fe4",
+      "worker": 2,
+      "iteration": 7,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-008",
+      "inode": 2748256,
+      "size": 2922,
+      "sha256": "5dbaa54bdb5a0b96d2e5ea6962b9d42dc3472824169d9c37c3cf4a7df50e3d1b",
+      "worker": 2,
+      "iteration": 8,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-009",
+      "inode": 2805600,
+      "size": 4095,
+      "sha256": "5fc6f50c53d17eb96ec8fe70e4d932561b7b4da782e1e0ec032c79eeb8d6f85a",
+      "worker": 2,
+      "iteration": 9,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-010",
+      "inode": 2871136,
+      "size": 4097,
+      "sha256": "d413b4929c615d0fa2048de9d8fe5c8520244548cb650b93f37063831ce7a30b",
+      "worker": 2,
+      "iteration": 10,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-011",
+      "inode": 2944864,
+      "size": 131073,
+      "sha256": "36eb00c5905e0a49d7a468c4cf247fd2fddb4f522a8395f592c4938033ab2246",
+      "worker": 2,
+      "iteration": 11,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-012",
+      "inode": 2998112,
+      "size": 2922,
+      "sha256": "fc7a7b918c392950112e8e084ce2d5cbba0616f61be302c313ff9595bd6bf31c",
+      "worker": 2,
+      "iteration": 12,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-013",
+      "inode": 3071840,
+      "size": 4095,
+      "sha256": "c18f53328d0451e51dcc69f15c86641e06c388e162250b8efdf3ba7e61ee928e",
+      "worker": 2,
+      "iteration": 13,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-014",
+      "inode": 3141472,
+      "size": 4097,
+      "sha256": "d243b620bbd13d9c168b0ba14437f73814e241fddde63685a359488bd79dd2cb",
+      "worker": 2,
+      "iteration": 14,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-015",
+      "inode": 3198816,
+      "size": 131073,
+      "sha256": "52778a740cb768b88df82440a312553f8998997d0c2be7867ef123760dd3e4cd",
+      "worker": 2,
+      "iteration": 15,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-016",
+      "inode": 3268448,
+      "size": 2922,
+      "sha256": "cd2e72835cc2af566027eb3cd2011a1ed2e9038486e6e6d01a2d908354f50b28",
+      "worker": 2,
+      "iteration": 16,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-017",
+      "inode": 3333984,
+      "size": 4095,
+      "sha256": "8c384415e2de25329487523accdb4c0b56d37e11add7e37ae7764713d2895067",
+      "worker": 2,
+      "iteration": 17,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-018",
+      "inode": 3387232,
+      "size": 4097,
+      "sha256": "0cc58e1dfaeb094af6818d89820efd3a8cdaafeb77be00db5bab47d65e95fde3",
+      "worker": 2,
+      "iteration": 18,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-02-019",
+      "inode": 3460960,
+      "size": 131073,
+      "sha256": "55876566425a6a115e8a11844fc35520e5ec7e177e1d63c6fae996a47c12be9f",
+      "worker": 2,
+      "iteration": 19,
+      "mode": "fresh"
+    },
+    {
+      "name": "reuse-02",
+      "inode": 3501920,
+      "size": 131073,
+      "sha256": "55876566425a6a115e8a11844fc35520e5ec7e177e1d63c6fae996a47c12be9f",
+      "worker": 2,
+      "iteration": 19,
+      "mode": "reuse"
+    },
+    {
+      "name": "fresh-03-000",
+      "inode": 2158432,
+      "size": 2922,
+      "sha256": "c4c134df2a54cde432a54fdae63258de4b36c2bf160fa3c0cde895de89a9e4d0",
+      "worker": 3,
+      "iteration": 0,
+      "mode": "fresh"
+    },
+    {
+      "name": "overwrite-03",
+      "inode": 2183008,
+      "size": 131073,
+      "sha256": "b93da9ec6ef674681f5c776b5c72a654972f4b9768fe8c51cc7ca613139d2342",
+      "worker": 3,
+      "iteration": 19,
+      "mode": "overwrite"
+    },
+    {
+      "name": "truncate-03",
+      "inode": 2211680,
+      "size": 131073,
+      "sha256": "b93da9ec6ef674681f5c776b5c72a654972f4b9768fe8c51cc7ca613139d2342",
+      "worker": 3,
+      "iteration": 19,
+      "mode": "truncate"
+    },
+    {
+      "name": "fresh-03-001",
+      "inode": 2289504,
+      "size": 4095,
+      "sha256": "96d556a4f8e15786d10a87c5e934a1d4a24ff6133980e0ca5bff8ebb9048b79a",
+      "worker": 3,
+      "iteration": 1,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-002",
+      "inode": 2359136,
+      "size": 4097,
+      "sha256": "197a3a6705a1cc0e2f4d981b08cff0a07c6a89b756f855f54a7f5e0425eecb47",
+      "worker": 3,
+      "iteration": 2,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-003",
+      "inode": 2428768,
+      "size": 131073,
+      "sha256": "4093b3eeb475e506ddd4a8aad847b7acc4c66a3246741307e83bbcca9d33fc91",
+      "worker": 3,
+      "iteration": 3,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-004",
+      "inode": 2494304,
+      "size": 2922,
+      "sha256": "f59307329076c81ad16299de17e0f9985ca1d6c5bc1246140400061af27f2043",
+      "worker": 3,
+      "iteration": 4,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-005",
+      "inode": 2559840,
+      "size": 4095,
+      "sha256": "ec6831c49875f3c6c1bc2c146772a3534a8c8721280d82271ad6ed61194f69bc",
+      "worker": 3,
+      "iteration": 5,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-006",
+      "inode": 2625376,
+      "size": 4097,
+      "sha256": "b283c8f8cb5e142e0fc215c08cb205c089c94d71c51983d08cc6956229a48b00",
+      "worker": 3,
+      "iteration": 6,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-007",
+      "inode": 2690912,
+      "size": 131073,
+      "sha256": "b01d27afa6660247e55c7e8f797950d10fea04d5eef82061588000747196ba59",
+      "worker": 3,
+      "iteration": 7,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-008",
+      "inode": 2768736,
+      "size": 2922,
+      "sha256": "bd8017415fe28dd7a9ff180db94d6e5b04994a4e0a748f9327df1a0ab648d06c",
+      "worker": 3,
+      "iteration": 8,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-009",
+      "inode": 2842464,
+      "size": 4095,
+      "sha256": "762b48ba5d4581233bb8c3597c90df6e4aa402c2ec93808c6adc911ed9af8d11",
+      "worker": 3,
+      "iteration": 9,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-010",
+      "inode": 2908000,
+      "size": 4097,
+      "sha256": "382a83f27635bbbe1aca387fc429bdae0c036fe47405d59d0e14c6ff6dd5ba7e",
+      "worker": 3,
+      "iteration": 10,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-011",
+      "inode": 2985824,
+      "size": 131073,
+      "sha256": "2c0d5b78435037899eef993406656a86f2651911c3428891dc67c7e6758bdfca",
+      "worker": 3,
+      "iteration": 11,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-012",
+      "inode": 3047264,
+      "size": 2922,
+      "sha256": "8ad6860f558c92cca9b0ff0b971557c75039f0060fb25a73c64fa4df816828be",
+      "worker": 3,
+      "iteration": 12,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-013",
+      "inode": 3120992,
+      "size": 4095,
+      "sha256": "7861c77d5fab61f54f5f17a1f1415374c0614872644388f9575a22e17f8fb565",
+      "worker": 3,
+      "iteration": 13,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-014",
+      "inode": 3186528,
+      "size": 4097,
+      "sha256": "9b49ebd9d10c54282f4d517def04a45e85c07f1a749e3bda71845f56edb7ba49",
+      "worker": 3,
+      "iteration": 14,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-015",
+      "inode": 3243872,
+      "size": 131073,
+      "sha256": "a57c22af67c224e0b690099ec96506ae27df5b88714d0c1f36abcf434c7b059e",
+      "worker": 3,
+      "iteration": 15,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-016",
+      "inode": 3313504,
+      "size": 2922,
+      "sha256": "a4a4f3fc7d3392b875adea48ea4ab926f527737c9d09858ce2f4a8a007b0b888",
+      "worker": 3,
+      "iteration": 16,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-017",
+      "inode": 3383136,
+      "size": 4095,
+      "sha256": "dde4c7c48a7c02feb4b869868c8ef4d7f71d73720929337a5c26dd987331a556",
+      "worker": 3,
+      "iteration": 17,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-018",
+      "inode": 3440480,
+      "size": 4097,
+      "sha256": "decf19b340fd277c0fd0a5d04ea5fefd49a53e8d1d3cfd798b9c21c189e19fba",
+      "worker": 3,
+      "iteration": 18,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-03-019",
+      "inode": 3493728,
+      "size": 131073,
+      "sha256": "b93da9ec6ef674681f5c776b5c72a654972f4b9768fe8c51cc7ca613139d2342",
+      "worker": 3,
+      "iteration": 19,
+      "mode": "fresh"
+    },
+    {
+      "name": "reuse-03",
+      "inode": 3510112,
+      "size": 131073,
+      "sha256": "b93da9ec6ef674681f5c776b5c72a654972f4b9768fe8c51cc7ca613139d2342",
+      "worker": 3,
+      "iteration": 19,
+      "mode": "reuse"
+    },
+    {
+      "name": "fresh-04-000",
+      "inode": 2166624,
+      "size": 2922,
+      "sha256": "33af2cff3bf261928f2980eb8b3e2f42c0fd4e54610dead3e98b7a18ae7fbe87",
+      "worker": 4,
+      "iteration": 0,
+      "mode": "fresh"
+    },
+    {
+      "name": "overwrite-04",
+      "inode": 2178912,
+      "size": 131073,
+      "sha256": "9c97a0b88328f1513965225778704f9512d3b5c1b0f4da6e9d99e4399f01699b",
+      "worker": 4,
+      "iteration": 19,
+      "mode": "overwrite"
+    },
+    {
+      "name": "truncate-04",
+      "inode": 2203488,
+      "size": 131073,
+      "sha256": "9c97a0b88328f1513965225778704f9512d3b5c1b0f4da6e9d99e4399f01699b",
+      "worker": 4,
+      "iteration": 19,
+      "mode": "truncate"
+    },
+    {
+      "name": "fresh-04-001",
+      "inode": 2269024,
+      "size": 4095,
+      "sha256": "94e07baa4153d692ca789c587c0cdabb00b608b123d9355a01a298b5cf1d4956",
+      "worker": 4,
+      "iteration": 1,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-002",
+      "inode": 2334560,
+      "size": 4097,
+      "sha256": "22febe1627629ab751358a02cde4ef9b2bd13cbb0dc0a72880ede822150b75f6",
+      "worker": 4,
+      "iteration": 2,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-003",
+      "inode": 2404192,
+      "size": 131073,
+      "sha256": "bdb5cdacf048081cf8e413c4fd1e26e08d92f8d3ddd1241885d14914d84e522e",
+      "worker": 4,
+      "iteration": 3,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-004",
+      "inode": 2457440,
+      "size": 2922,
+      "sha256": "bf5e11c7218e675dfa3dc4f97ee3443a17ad38e288e378c6fb678b387d78314f",
+      "worker": 4,
+      "iteration": 4,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-005",
+      "inode": 2531168,
+      "size": 4095,
+      "sha256": "d452f4bad28a711350ae7c449907a550af26e00f3438e446eb7e44b71d76732d",
+      "worker": 4,
+      "iteration": 5,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-006",
+      "inode": 2592608,
+      "size": 4097,
+      "sha256": "f96dfb8c603ad1cf3f701b058693ad64248937004a2a4b2fd7143ae40465d927",
+      "worker": 4,
+      "iteration": 6,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-007",
+      "inode": 2662240,
+      "size": 131073,
+      "sha256": "1d7fe23aec42d81f6eb24fb2946360a056f5544b67966cc0e27a3b5e2323d3a2",
+      "worker": 4,
+      "iteration": 7,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-008",
+      "inode": 2735968,
+      "size": 2922,
+      "sha256": "3d10d8284921685c62c9edc3c11c22704e446602f3ffe78ea3d4a947dcc2b5bd",
+      "worker": 4,
+      "iteration": 8,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-009",
+      "inode": 2781024,
+      "size": 4095,
+      "sha256": "ee7c3bef2623e4c8a0f734c310093e9c00bc836d9fca613675795ac1be63e053",
+      "worker": 4,
+      "iteration": 9,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-010",
+      "inode": 2854752,
+      "size": 4097,
+      "sha256": "68c77bd7b721338b84ec535142167bbf1bcf4b1b613a9a64a34dfc58220b75e1",
+      "worker": 4,
+      "iteration": 10,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-011",
+      "inode": 2920288,
+      "size": 131073,
+      "sha256": "cef8399844097271856aa6a00295ced3b7a10168a00f9750e219efbcfa5bcba3",
+      "worker": 4,
+      "iteration": 11,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-012",
+      "inode": 2961248,
+      "size": 2922,
+      "sha256": "d4c91e7bb34129d06c72545255f9c67bd1e8bc247c861bc9db4d5ede5a37203b",
+      "worker": 4,
+      "iteration": 12,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-013",
+      "inode": 3022688,
+      "size": 4095,
+      "sha256": "12da0ba60a477a34778e5a226b395644c79cb89cef552a2f5ab8d2a8e83fef38",
+      "worker": 4,
+      "iteration": 13,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-014",
+      "inode": 3100512,
+      "size": 4097,
+      "sha256": "56428bb97b05513001cb171f9e3b889f5c86f6558f9c89ca791e664499668887",
+      "worker": 4,
+      "iteration": 14,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-015",
+      "inode": 3157856,
+      "size": 131073,
+      "sha256": "07e2095cf70e8fa306860d955ec80c156d5c2816caec0cc1256b8b41017da756",
+      "worker": 4,
+      "iteration": 15,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-016",
+      "inode": 3223392,
+      "size": 2922,
+      "sha256": "df57226a6b44aebaea0e6a38c2cce31a67f5ca636f01bca81db0c4f33ee52898",
+      "worker": 4,
+      "iteration": 16,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-017",
+      "inode": 3280736,
+      "size": 4095,
+      "sha256": "ac309c5da8e8f7e791991359ad73c5b08cf14c7b21670ffabbb946535d4608f2",
+      "worker": 4,
+      "iteration": 17,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-018",
+      "inode": 3346272,
+      "size": 4097,
+      "sha256": "274cbeea279ffd8394fde4b37582353183f9b3ce3734b62670c12bbfe03495bd",
+      "worker": 4,
+      "iteration": 18,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-04-019",
+      "inode": 3407712,
+      "size": 131073,
+      "sha256": "9c97a0b88328f1513965225778704f9512d3b5c1b0f4da6e9d99e4399f01699b",
+      "worker": 4,
+      "iteration": 19,
+      "mode": "fresh"
+    },
+    {
+      "name": "reuse-04",
+      "inode": 3469152,
+      "size": 131073,
+      "sha256": "9c97a0b88328f1513965225778704f9512d3b5c1b0f4da6e9d99e4399f01699b",
+      "worker": 4,
+      "iteration": 19,
+      "mode": "reuse"
+    },
+    {
+      "name": "fresh-05-000",
+      "inode": 2154336,
+      "size": 2922,
+      "sha256": "440c16a0e4016111208fa056580566b3d79d41110c2811e718909341fe4736da",
+      "worker": 5,
+      "iteration": 0,
+      "mode": "fresh"
+    },
+    {
+      "name": "overwrite-05",
+      "inode": 2187104,
+      "size": 131073,
+      "sha256": "e380133162046c4adab2971cd487474f4a8661448edf95127e2815a3954bb2f9",
+      "worker": 5,
+      "iteration": 19,
+      "mode": "overwrite"
+    },
+    {
+      "name": "truncate-05",
+      "inode": 2232160,
+      "size": 131073,
+      "sha256": "e380133162046c4adab2971cd487474f4a8661448edf95127e2815a3954bb2f9",
+      "worker": 5,
+      "iteration": 19,
+      "mode": "truncate"
+    },
+    {
+      "name": "fresh-05-001",
+      "inode": 2281312,
+      "size": 4095,
+      "sha256": "65bb17a646a5613bf54b3a319d2e7096e673a4647ca8e8686938efd81afa0b0f",
+      "worker": 5,
+      "iteration": 1,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-002",
+      "inode": 2363232,
+      "size": 4097,
+      "sha256": "800910113f4166360550473f8a4c9db77fcc9b367ee000ff8143b9cbe7cffc9f",
+      "worker": 5,
+      "iteration": 2,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-003",
+      "inode": 2420576,
+      "size": 131073,
+      "sha256": "b0a959694414c11d535d56ce9749368cb40b892a715d3d22e49d2924884d23da",
+      "worker": 5,
+      "iteration": 3,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-004",
+      "inode": 2486112,
+      "size": 2922,
+      "sha256": "1295ec697fabe44fdcf7c12e18d5c20ed405e67aafcf2714180452a6898caa59",
+      "worker": 5,
+      "iteration": 4,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-005",
+      "inode": 2555744,
+      "size": 4095,
+      "sha256": "d62c973b791bce6a58bbf77ee930d2d7071b0147a4ddcda8778e5054fe2c31d4",
+      "worker": 5,
+      "iteration": 5,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-006",
+      "inode": 2608992,
+      "size": 4097,
+      "sha256": "ccbb4a2d4c6f31ff7447be7d25fc938cf5cad8cdd5442eb048143d4543e9edb9",
+      "worker": 5,
+      "iteration": 6,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-007",
+      "inode": 2674528,
+      "size": 131073,
+      "sha256": "d22022499f3012506a37f46c00dee28227f6d742e9848c459cec41b308d33a08",
+      "worker": 5,
+      "iteration": 7,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-008",
+      "inode": 2727776,
+      "size": 2922,
+      "sha256": "57e3d0f6f7f1bda1f8f6ac195cf67912d76d783ff63e686565ac312925220e7f",
+      "worker": 5,
+      "iteration": 8,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-009",
+      "inode": 2793312,
+      "size": 4095,
+      "sha256": "ec76e0dd1e4a1803693fc6c62aa8aabe92cdbf5e04bc93e671ced12462c0a97d",
+      "worker": 5,
+      "iteration": 9,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-010",
+      "inode": 2862944,
+      "size": 4097,
+      "sha256": "5cce14bb3b4c9ae183bd6be50ef5eaaebdb8f133aadc53dba8d6357ea03fe2aa",
+      "worker": 5,
+      "iteration": 10,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-011",
+      "inode": 2928480,
+      "size": 131073,
+      "sha256": "83db9af5ec6fb28f8e9e6cee7376632b2965ed67a8fd1b5e8eb67c13eea77053",
+      "worker": 5,
+      "iteration": 11,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-012",
+      "inode": 3010400,
+      "size": 2922,
+      "sha256": "bcd1e094d6bc8687fe9ffafc749aa3f50479d8b91ab4bf6cdc25c568bd5b2e2b",
+      "worker": 5,
+      "iteration": 12,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-013",
+      "inode": 3075936,
+      "size": 4095,
+      "sha256": "b74a7fdd082e70a9292ecdaab5ee0f8bfd5d48ee7bec2b816b73fde7f1b31b62",
+      "worker": 5,
+      "iteration": 13,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-014",
+      "inode": 3133280,
+      "size": 4097,
+      "sha256": "8bec72f344f07035fede1fb03af9ba41e2208d9a98dcf77e15f794b41b494db6",
+      "worker": 5,
+      "iteration": 14,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-015",
+      "inode": 3202912,
+      "size": 131073,
+      "sha256": "41669fe74758370bb71be0bbcd9631cbe9426ae5d42d34907e4156f9d49e4246",
+      "worker": 5,
+      "iteration": 15,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-016",
+      "inode": 3264352,
+      "size": 2922,
+      "sha256": "0dee404847671a2be6013fa04b05654d1714aed3d3c421ad2723232e86ace3fc",
+      "worker": 5,
+      "iteration": 16,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-017",
+      "inode": 3329888,
+      "size": 4095,
+      "sha256": "9a62efc19eb72aa8cd9244ba02e5e614f0a4c060295be7947b0078504d26f16c",
+      "worker": 5,
+      "iteration": 17,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-018",
+      "inode": 3403616,
+      "size": 4097,
+      "sha256": "a35120d0f53790f98fe84ac4aecb5ddb9d541402e55c4c18bcf86cf2213fb197",
+      "worker": 5,
+      "iteration": 18,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-05-019",
+      "inode": 3452768,
+      "size": 131073,
+      "sha256": "e380133162046c4adab2971cd487474f4a8661448edf95127e2815a3954bb2f9",
+      "worker": 5,
+      "iteration": 19,
+      "mode": "fresh"
+    },
+    {
+      "name": "reuse-05",
+      "inode": 3485536,
+      "size": 131073,
+      "sha256": "e380133162046c4adab2971cd487474f4a8661448edf95127e2815a3954bb2f9",
+      "worker": 5,
+      "iteration": 19,
+      "mode": "reuse"
+    },
+    {
+      "name": "fresh-06-000",
+      "inode": 2162528,
+      "size": 2922,
+      "sha256": "5efad987eef946546e1f384de831cb35d1d3a3d3728def51e23934978bcd4041",
+      "worker": 6,
+      "iteration": 0,
+      "mode": "fresh"
+    },
+    {
+      "name": "overwrite-06",
+      "inode": 2195296,
+      "size": 131073,
+      "sha256": "20d45ed2ad00b0f8ca19458fd2766f979ebaf34709f4e7e21a6abaca5fbb324d",
+      "worker": 6,
+      "iteration": 19,
+      "mode": "overwrite"
+    },
+    {
+      "name": "truncate-06",
+      "inode": 2228064,
+      "size": 131073,
+      "sha256": "20d45ed2ad00b0f8ca19458fd2766f979ebaf34709f4e7e21a6abaca5fbb324d",
+      "worker": 6,
+      "iteration": 19,
+      "mode": "truncate"
+    },
+    {
+      "name": "fresh-06-001",
+      "inode": 2297696,
+      "size": 4095,
+      "sha256": "43e11729300bce4d79db9ff592eaf078e9ba74550c3e42b8e818a214c26fae6f",
+      "worker": 6,
+      "iteration": 1,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-002",
+      "inode": 2346848,
+      "size": 4097,
+      "sha256": "691449833c9c18b6b295fd79650c6896ea50eaedbe9943f49fcc3d7e56f31cff",
+      "worker": 6,
+      "iteration": 2,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-003",
+      "inode": 2416480,
+      "size": 131073,
+      "sha256": "8630f890e5c8d805bd9e0372d56c4afb8cf19735b45dcc37d9d28de4c0e9aec4",
+      "worker": 6,
+      "iteration": 3,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-004",
+      "inode": 2477920,
+      "size": 2922,
+      "sha256": "f6474e9fb54140f3d1f6702b2240917f5fa6e554bb04c9aa8c5307121136ed99",
+      "worker": 6,
+      "iteration": 4,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-005",
+      "inode": 2547552,
+      "size": 4095,
+      "sha256": "7ee959680281f12931a5c552e3c499ec8bafde75772ff08009806e2a61bf04e6",
+      "worker": 6,
+      "iteration": 5,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-006",
+      "inode": 2621280,
+      "size": 4097,
+      "sha256": "91e2f333cffe33ff73ed66e5163a5c42fae6eb695ba9981d8155b15138b3e4f7",
+      "worker": 6,
+      "iteration": 6,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-007",
+      "inode": 2686816,
+      "size": 131073,
+      "sha256": "39163b1fd58f47944db7f82ac173cef0a1b72df0f00d9f75451c494bf53202c2",
+      "worker": 6,
+      "iteration": 7,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-008",
+      "inode": 2740064,
+      "size": 2922,
+      "sha256": "8e0fdc183b1a22d65b03feae466a5c904f0641fb768d095ec13adb789743482b",
+      "worker": 6,
+      "iteration": 8,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-009",
+      "inode": 2813792,
+      "size": 4095,
+      "sha256": "9ec14b4958897fe7462f002000df1f11b253b420c4028c3cbda1cc77e5cd1350",
+      "worker": 6,
+      "iteration": 9,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-010",
+      "inode": 2879328,
+      "size": 4097,
+      "sha256": "44b2f1018c1b0e0eb96f6076b7c046287a2b42981485ed1eb3747b9780cebda0",
+      "worker": 6,
+      "iteration": 10,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-011",
+      "inode": 2936672,
+      "size": 131073,
+      "sha256": "aa008362a022806b054a3b663be444c6ad270b1239bdf6aa140e03cf71ee628d",
+      "worker": 6,
+      "iteration": 11,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-012",
+      "inode": 2994016,
+      "size": 2922,
+      "sha256": "748ab4d9c4ac8f0e3cd22b02e2a6599a8b74ee1a50abe348d386656d0ee3d075",
+      "worker": 6,
+      "iteration": 12,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-013",
+      "inode": 3067744,
+      "size": 4095,
+      "sha256": "e6795347b72d6b424279387edf325f71af75cd4d0443c792400071cc626938ca",
+      "worker": 6,
+      "iteration": 13,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-014",
+      "inode": 3137376,
+      "size": 4097,
+      "sha256": "f1d2665ead4995beed0c072e71049967332946f2e22b8f605d9f637a7cdf6c25",
+      "worker": 6,
+      "iteration": 14,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-015",
+      "inode": 3207008,
+      "size": 131073,
+      "sha256": "9c41328d0373194487696f06c1960467770b018bedbfa7035a86ed3bf0e25852",
+      "worker": 6,
+      "iteration": 15,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-016",
+      "inode": 3276640,
+      "size": 2922,
+      "sha256": "ed3368d3384bceeb614f61a8eb98731488290ec6d837e54561c36fcfbaf5e75a",
+      "worker": 6,
+      "iteration": 16,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-017",
+      "inode": 3342176,
+      "size": 4095,
+      "sha256": "8a3002b90fb9c27d253c83b4568b5b955e204c9fe0fc63f67d9a3b6b52bef1c4",
+      "worker": 6,
+      "iteration": 17,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-018",
+      "inode": 3411808,
+      "size": 4097,
+      "sha256": "7930be9c918ddd7cce58e0f85bd69f555652ea2cb394c62821ffcffb71b1e60a",
+      "worker": 6,
+      "iteration": 18,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-06-019",
+      "inode": 3473248,
+      "size": 131073,
+      "sha256": "20d45ed2ad00b0f8ca19458fd2766f979ebaf34709f4e7e21a6abaca5fbb324d",
+      "worker": 6,
+      "iteration": 19,
+      "mode": "fresh"
+    },
+    {
+      "name": "reuse-06",
+      "inode": 3506016,
+      "size": 131073,
+      "sha256": "20d45ed2ad00b0f8ca19458fd2766f979ebaf34709f4e7e21a6abaca5fbb324d",
+      "worker": 6,
+      "iteration": 19,
+      "mode": "reuse"
+    },
+    {
+      "name": "fresh-07-000",
+      "inode": 2142048,
+      "size": 2922,
+      "sha256": "04643f36687b674dfeda4b67f20c96fc5e7f92ab6f6fe2c5e68c629d80c645d7",
+      "worker": 7,
+      "iteration": 0,
+      "mode": "fresh"
+    },
+    {
+      "name": "overwrite-07",
+      "inode": 2170720,
+      "size": 131073,
+      "sha256": "edf826422d9ba5b399fc961330a822cde2b01af381c9dd92bdff786b3eef585d",
+      "worker": 7,
+      "iteration": 19,
+      "mode": "overwrite"
+    },
+    {
+      "name": "truncate-07",
+      "inode": 2207584,
+      "size": 131073,
+      "sha256": "edf826422d9ba5b399fc961330a822cde2b01af381c9dd92bdff786b3eef585d",
+      "worker": 7,
+      "iteration": 19,
+      "mode": "truncate"
+    },
+    {
+      "name": "fresh-07-001",
+      "inode": 2277216,
+      "size": 4095,
+      "sha256": "c77df98e66022436b1608cb18c266bef485cefeb017bdeb6a5608625207786fc",
+      "worker": 7,
+      "iteration": 1,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-002",
+      "inode": 2338656,
+      "size": 4097,
+      "sha256": "739c7bc92720c871b62e9ff6e91c4260382b66162241b1ee7f49012c61a77cd6",
+      "worker": 7,
+      "iteration": 2,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-003",
+      "inode": 2400096,
+      "size": 131073,
+      "sha256": "a1a066e5185348eee14a2eac6f8d20c8535a77702a521d797435660e2a6232ab",
+      "worker": 7,
+      "iteration": 3,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-004",
+      "inode": 2465632,
+      "size": 2922,
+      "sha256": "1d66cf5b1ecb4fbf0b2239109e32c76a88ccabeeaca27b0309a9cf2f4892836a",
+      "worker": 7,
+      "iteration": 4,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-005",
+      "inode": 2527072,
+      "size": 4095,
+      "sha256": "0cadb9d6376c30dc9bd63d8f74de3933d188bba8df0c10843997b3afa95738ae",
+      "worker": 7,
+      "iteration": 5,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-006",
+      "inode": 2596704,
+      "size": 4097,
+      "sha256": "870f502becb49ec6d2a6ab79ef5f2d8ee8bb4bbff8481adf0a3197235ef60377",
+      "worker": 7,
+      "iteration": 6,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-007",
+      "inode": 2654048,
+      "size": 131073,
+      "sha256": "5b4f712584dffc8bc780c03ff512f8f02c82af5a4357228eabce6db56af52fed",
+      "worker": 7,
+      "iteration": 7,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-008",
+      "inode": 2723680,
+      "size": 2922,
+      "sha256": "80e4a8c8ce71ba641bbb0a2082fbeb48d9758d1fae351fb2afbeefc0859ec2f4",
+      "worker": 7,
+      "iteration": 8,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-009",
+      "inode": 2797408,
+      "size": 4095,
+      "sha256": "d019c73f94213093844866d52e150d71ace632488fd56e9208235e2a45918bd5",
+      "worker": 7,
+      "iteration": 9,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-010",
+      "inode": 2858848,
+      "size": 4097,
+      "sha256": "48ac4e4f33ea752e13e743ea3cf0440c713eeaac58f10a28151ca384fb8f4273",
+      "worker": 7,
+      "iteration": 10,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-011",
+      "inode": 2940768,
+      "size": 131073,
+      "sha256": "153f47fa33da90e7659a12d84fd592c25bb2b76f9b931042cd09142c653aa8b2",
+      "worker": 7,
+      "iteration": 11,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-012",
+      "inode": 3006304,
+      "size": 2922,
+      "sha256": "6365796aab23e4e8b0c9db0da4af6e0352a8ea4cbc85b0d03ca0976aff64e7ed",
+      "worker": 7,
+      "iteration": 12,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-013",
+      "inode": 3063648,
+      "size": 4095,
+      "sha256": "6c9dc839b89001d0155283045297618839bb60ec03e35de65b715648d10aa5bd",
+      "worker": 7,
+      "iteration": 13,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-014",
+      "inode": 3125088,
+      "size": 4097,
+      "sha256": "fddc7fd2873ccf6af9fbdfd5a3cbf255417def96852b06a234428f5d8200dd8b",
+      "worker": 7,
+      "iteration": 14,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-015",
+      "inode": 3190624,
+      "size": 131073,
+      "sha256": "44a532041df6f63bdae4e5d3e8a65812ee2064be62a44e66d8df363c335aa511",
+      "worker": 7,
+      "iteration": 15,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-016",
+      "inode": 3260256,
+      "size": 2922,
+      "sha256": "4b621ffb2451ebbf7b96fd3c7b0b37fe6b82c06eb7567f591e18238ef8d2d51f",
+      "worker": 7,
+      "iteration": 16,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-017",
+      "inode": 3325792,
+      "size": 4095,
+      "sha256": "b9d702c2be4c77c915fa0c228f60d6c7d248a30e46ece10adb2bb220f07fe9b1",
+      "worker": 7,
+      "iteration": 17,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-018",
+      "inode": 3379040,
+      "size": 4097,
+      "sha256": "f879d7dcaeff8af98d97534d131868f9c85865b3e68d75e206f465ceedd01c25",
+      "worker": 7,
+      "iteration": 18,
+      "mode": "fresh"
+    },
+    {
+      "name": "fresh-07-019",
+      "inode": 3448672,
+      "size": 131073,
+      "sha256": "edf826422d9ba5b399fc961330a822cde2b01af381c9dd92bdff786b3eef585d",
+      "worker": 7,
+      "iteration": 19,
+      "mode": "fresh"
+    },
+    {
+      "name": "reuse-07",
+      "inode": 3489632,
+      "size": 131073,
+      "sha256": "edf826422d9ba5b399fc961330a822cde2b01af381c9dd92bdff786b3eef585d",
+      "worker": 7,
+      "iteration": 19,
+      "mode": "reuse"
+    }
+  ],
+  "errors": []
+}

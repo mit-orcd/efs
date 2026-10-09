@@ -53,8 +53,10 @@ EIO cases decrease from 12 to 5 in one comparison; both broad NFS gates fail.
 Remaining failures must not be represented as clean acceptance or attributed to
 consensus without diagnosis. The export retains all_squash/anonuid=0; permission
 expectations and NFS-specific fallocate/direct-I/O/link-count behavior also fail.
-Mac NFSv4.0 acceptance is pending user-authorized mounting; these clients use
-Linux NFS 4.2. Gateway/NFS remounts clear client state; the three storage servers
+These initial clients use Linux NFS 4.2. Subsequent macOS NFSv4.0 data-only
+fresh-mount verification passes 20/20 (see macos/); plain cp attribute copying
+fails. The further [publication stress](../20261009-xorinox-w55-stress/README.md)
+adds 640 operations and exact generation inventories. Gateway/NFS remounts clear client state; the three storage servers
 were not crashed during this NFS run. Full server-crash evidence is private.
 
 `*-runtime.json` capture final installed processes, efs UID, direct-I/O flags,
