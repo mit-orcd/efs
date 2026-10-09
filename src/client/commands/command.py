@@ -392,13 +392,13 @@ def main(argv=None, script_path=None):
                             help="Maximum displayed results: 1–10000 (default: 100)")
         parser.add_argument("--file", metavar="PATH", help="Stream all results to a writable file; index order, JSON uses NDJSON")
         parser.add_argument("-0", "--print0", action="store_true", help="NUL-separated paths")
-        parser.add_argument("-l", "--long", action="store_true", help="Permissions, uid:gid, size, modification date and path")
-        parser.add_argument("--human-readable", action="store_true", help="Format long-list sizes as KiB, MiB, GiB")
+        parser.add_argument("--long", "-l", action="store_true", help="Permissions, uid:gid, size, modification date and path")
+        parser.add_argument("--human-readable", action="store_true", help="Format sizes as KiB, MiB, GiB (requires --long/-l)")
         parser.add_argument("--sort", choices=("name", "mtime", "size"), default=None,
                             help="Sort selected results: name ascending (default), newest first, or largest first")
         parser.add_argument("-r", "--reverse", action="store_true", help="Reverse the selected sort order")
         parser.add_argument("--time-style", choices=("iso", "relative", "full"),
-                            help="Long-list dates: UTC iso (default), relative age, or full UTC nanoseconds")
+                            help="Dates: UTC iso (default), relative age, or full UTC nanoseconds (requires --long/-l)")
         parser.add_argument("--relative", action="store_true", help="Paths relative to the directory containing .efs")
     if command == "ls":
         parser.add_argument("--dirs-first", action="store_true", help="Keep directories first, including with --reverse")
@@ -428,7 +428,7 @@ def main(argv=None, script_path=None):
         if args.long and (args.json or args.print0):
             parser.error("--long cannot be combined with --json or --print0")
         if (args.human_readable or args.time_style) and not args.long:
-            parser.error("--human-readable and --time-style require --long")
+            parser.error("--human-readable and --time-style require --long (-l)")
         if args.relative and args.json:
             parser.error("JSON already carries relative path_hex; --relative applies to text and -0")
     try:
