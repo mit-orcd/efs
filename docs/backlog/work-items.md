@@ -3860,12 +3860,11 @@ or present the Raft improvement as measured KV acceptance.
 
 ## W97 · Sustained tiny-file slowdown: persistence latency and replication inbox pressure
 
-**Class/status:** Performance investigation; open. The .efs-disabled control
-establishes that catalog refresh is not necessary for the observed decline.
+**Class/status:** Performance investigation; open. Sustained tiny-file
+throughput declines alongside persistence latency and replication pressure.
 The causal mechanism and a validated production fix remain open.
 
-**Finding (Oct 9, NUC):** With .efs disabled on all four servers and both mounts,
-eight tiny-file workers decline from **118.4 → 81.7 → 42.4 files/s** across
+**Finding (Oct 9, NUC):** Eight tiny-file workers decline from **118.4 → 81.7 → 42.4 files/s** across
 three consecutive 100-second windows. n3 drops **112,982 replication frames**
 because its inbox fills. Every measured nonempty-request tail mismatch is
 behind the local log; none is ahead or an equal-index term mismatch.
@@ -3877,13 +3876,13 @@ which starts the feedback, why SSD latency rises, or a hardware ceiling.
 **Evidence:** Source diagnostic commit c227bcbd, build c227bcbd-batchobs,
 TCP/direct I/O; five-minute run 13:04:59–13:09:59 UTC, preserved existing data,
 fresh output tree and cooperative stop. Exact boundary reasons, cumulative
-histograms, device counters and final disabled settings are retained in the
+histograms, device counters and final cluster settings are retained in the
 [measurement report](../status/batch-no-efs-profile-20261009.md) and
 [raw evidence](../../results/measure/20261009-batch-no-efs/README.md).
 Behind-tail counts include eligibility rechecks, not unique operations.
 Device counters include all users and queue time; enabled observer overhead
 is uncalibrated. Restart and random workload placement prevent a matched
-performance gain claim against prior .efs-enabled runs.
+performance gain claim against earlier runs.
 
 **Action:** Correlate per-group offered/accepted replication traffic,
 in-flight requests, retry/overlap causes, queue residence/depth, sync blocking
@@ -3907,8 +3906,7 @@ throughput alone does not close this item.
 **Related work:** W93 owns durable group-commit improvements; W97 owns the
 time-dependent decline and receiver/persistence feedback investigation.
 W95 covers tiny-payload storage principles, W96 KV WAL preallocation and W53
-mixed large-writer/tiny-close tails. W92's catalog memory cap is a separate
-issue and does not explain this disabled-control decline.
+mixed large-writer/tiny-close tails.
 
 **Forbidden:** Discard behind-tail traffic without Raft matching/ACK semantics,
 remove required persistence, grow queues without bounds, wipe existing stores,
