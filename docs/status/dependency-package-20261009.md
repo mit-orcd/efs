@@ -427,3 +427,24 @@ OPEN/CLOSE generation/identity retention, one full versioned mount UUID/epoch,
 and production PUT admission/storage fencing/collection remain open. Pressure
 and D25 remain staged; bounded pending-identity capacity and durable client-death
 handoff belong to that production session integration.
+
+## Retained sequenced client lease request — implemented/gated prerequisite
+
+A caller-owned lease request now retains immutable FileID/UUID/epoch/sequence/
+ACK/flags/token and its shared operation slot until durable stored-result proof.
+Unknown admission/submit/probe cannot reset it or advance the ACK past it.
+Resume probes before exact resubmission; probe-only performs no registration.
+Completed objects return the saved verdict without resending retired work.
+512 shared slots bound retained requests and refuse exhaustion before mutation.
+
+AMD direct/TCP real-client OPEN/CLOSE/result probe and safe-reset gate passes;
+full code regressions, core212/212, peer64/64, guarded cold lease replay,
+append800 and physical GC/restart pass. Both installed mounts restored.
+[Evidence](../../results/measure/20261009-retained-sequenced-lease/README.md).
+
+The primitive is not yet wired to FUSE open-description ownership. Next bridge
+must align CREATE/adoption, HOLD/locks, append and REPORT with one versioned full
+UUID/epoch before adopting deferred edges; otherwise two owners can protect or
+complete the same inode independently. Production PUT-ticket lifecycle remains
+open. Legacy forgotten-release retention is active; sequenced FUSE/session/D25
+activation remains gated. No claim of full package closure.

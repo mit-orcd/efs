@@ -1,0 +1,62 @@
+#!/usr/bin/env python3
+"""Retained exact lease ownership pins shared ACK slots across ambiguity."""
+from pathlib import Path
+import os,shlex,subprocess,tempfile
+root=Path(__file__).resolve().parents[1];s=(root/'src/client/inode_rpc.c').read_text()
+a=s.index('static int opid_begin(');b=s.index('/* A reservation identity',a)
+c=s.index('int efs_client_lease_begin(');d=s.index('int efs_client_rpc_publication(',c)
+code=r'''
+#include "client_internal.h"
+#include "efs/session.h"
+#include "efs/kv_key.h"
+#include <assert.h>
+#include <string.h>
+#include <stdio.h>
+struct efs_client g_client;
+static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
+static void opid_seed_locked(void) {if(!g_client.opid_next){g_client.opid_uuid[0]=17;g_client.opid_epoch=4;g_client.opid_next=1;}}
+static int admits,calls,probe_rc,submit_rc,admit_rc;
+static uint64_t probe_known,submit_known;
+static struct efs_opid_req expected;
+int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *id) {
+ assert(shard==1&&id->client_uuid[0]==17&&id->session_epoch==4);admits++;return admit_rc;
+}
+int efs_client_rpc_lease_edge(efs_ino_t ino,uint64_t gen,const struct efs_opid_req *q,unsigned flags,uint64_t token,int probe,uint64_t *known) {
+ assert(ino==4097&&gen==99&&flags==EFS_LEASE_EDGE_CLOSE&&!token);
+ assert(!memcmp(q,&expected,sizeof(*q)));calls++;
+ *known=probe?probe_known:submit_known;return probe?probe_rc:submit_rc;
+}
+'''+s[a:b]+s[c:d]+r'''
+int main(void) {
+ struct efs_client_lease_request r={0};
+ assert(efs_client_lease_begin(&r,4097,0,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_INVAL);
+ assert(!efs_client_lease_begin(&r,4097,99,EFS_LEASE_EDGE_CLOSE,0));expected=r.q;
+ assert(efs_client_lease_begin(&r,4097,99,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_BUSY);
+ admit_rc=EFS_ERR_NET;assert(efs_client_lease_resume(&r,0)==EFS_ERR_NET&&!calls&&!r.attempted);
+ assert(efs_client_lease_reset(&r)==EFS_ERR_BUSY&&g_client.opid_inflight[r.slot]);
+ admit_rc=0;submit_rc=EFS_ERR_NET;
+ assert(efs_client_lease_resume(&r,0)==EFS_ERR_NET&&r.attempted&&!r.complete);
+ struct efs_opid_req later;int later_slot=opid_begin(&later);assert(later_slot>=0&&later.ack<r.q.id.seq);opid_end(later_slot);
+ probe_rc=EFS_ERR_BUSY;
+ assert(efs_client_lease_resume(&r,1)==EFS_ERR_BUSY&&!r.complete&&admits==2);
+ submit_rc=EFS_OK;submit_known=1;
+ assert(!efs_client_lease_resume(&r,0)&&r.complete&&r.slot==-1);
+ int old_calls=calls;assert(!efs_client_lease_resume(&r,0)&&calls==old_calls);
+ later_slot=opid_begin(&later);assert(later_slot>=0&&later.ack>=r.q.id.seq);opid_end(later_slot);
+ assert(!efs_client_lease_reset(&r));
+ assert(!efs_client_lease_begin(&r,4097,99,EFS_LEASE_EDGE_CLOSE,0));expected=r.q;
+ submit_known=0;submit_rc=EFS_ERR_NET;assert(efs_client_lease_resume(&r,0)==EFS_ERR_NET);
+ probe_known=1;probe_rc=EFS_ERR_STALE;
+ assert(efs_client_lease_resume(&r,1)==EFS_ERR_STALE&&r.complete&&r.slot==-1);
+ assert(efs_client_lease_resume(&r,0)==EFS_ERR_STALE);assert(!efs_client_lease_reset(&r));
+ struct efs_client_lease_request all[EFS_OPID_INFLIGHT]={0};
+ for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++)assert(!efs_client_lease_begin(&all[i],4097,99,EFS_LEASE_EDGE_CLOSE,0));
+ assert(efs_client_lease_begin(&r,4097,99,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_BUSY&&!r.active);
+ for(unsigned i=0;i<EFS_OPID_INFLIGHT;i++) {expected=all[i].q;assert(efs_client_lease_resume(&all[i],1)==EFS_ERR_STALE);assert(!efs_client_lease_reset(&all[i]));}
+ puts("retained sequenced lease: immutable retries, unknown probe, pinned ACK, durable negative proof and capacity PASS");
+}
+'''
+with tempfile.TemporaryDirectory(prefix='efs-lease-request-') as d:
+ p=Path(d)/'t.c';p.write_text(code)
+ subprocess.run(shlex.split(os.environ.get('CC','cc'))+['-std=gnu11','-Wall','-Wextra','-Werror','-pthread','-I'+str(root/'include'),'-I'+str(root/'src/client'),str(p),'-o',str(p.with_suffix(''))],check=True)
+ subprocess.run([str(p.with_suffix(''))],check=True)

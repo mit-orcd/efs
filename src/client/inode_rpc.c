@@ -1136,6 +1136,71 @@ int efs_client_rpc_publication_session(uint32_t shard,const struct efs_opid *ide
     return publication_session_command(shard,command,sizeof(command));
 }
 
+/* Production ownership primitive: an unknown reply never frees its ACK slot
+ * or permits replacing identity/body. Namespace and publication use the same
+ * full mount UUID; legacy append/HOLD still need a versioned adoption bridge. */
+int efs_client_lease_begin(struct efs_client_lease_request *r,efs_ino_t ino,
+                           uint64_t generation,unsigned flags,uint64_t token)
+{
+    if (!r || !ino || !generation || !flags || (flags & ~7u) ||
+        (flags & 3u) == 3u ||
+        !!(flags & EFS_LEASE_EDGE_CLEAR_PENDING) != !!token)
+        return EFS_ERR_INVAL;
+    if (r->active) return EFS_ERR_BUSY;
+    struct efs_opid_req q;
+    int slot = opid_begin(&q);
+    if (slot < 0) return EFS_ERR_BUSY;
+    *r = (struct efs_client_lease_request){.q=q,.ino=ino,
+        .generation=generation,.pending_token=token,.flags=flags,
+        .slot=slot,.active=1};
+    return EFS_OK;
+}
+
+static int lease_request_result(struct efs_client_lease_request *r,int rc,
+                                 uint64_t known)
+{
+    if (known == 1) {
+        r->complete=1;
+        r->result=rc;
+        opid_end(r->slot);
+        r->slot=-1;
+    }
+    return rc;
+}
+
+int efs_client_lease_resume(struct efs_client_lease_request *r,int probe_only)
+{
+    if (!r || !r->active || probe_only<0 || probe_only>1)
+        return EFS_ERR_INVAL;
+    if (r->complete) return r->result;
+    uint64_t known=0;
+    int rc;
+    if (r->attempted || probe_only) {
+        rc=efs_client_rpc_lease_edge(r->ino,r->generation,&r->q,r->flags,
+                                     r->pending_token,1,&known);
+        if (known || probe_only || rc!=EFS_ERR_BUSY)
+            return lease_request_result(r,rc,known);
+        /* Unknown probe is not success; retry only the retained exact edge. */
+    }
+    if (!r->admitted) {
+        rc=efs_client_rpc_publication_session(efs_kv_inode_shard(r->ino),&r->q.id);
+        if (rc!=EFS_OK) return rc;
+        r->admitted=1;
+    }
+    r->attempted=1;
+    rc=efs_client_rpc_lease_edge(r->ino,r->generation,&r->q,r->flags,
+                                 r->pending_token,0,&known);
+    return lease_request_result(r,rc,known);
+}
+
+int efs_client_lease_reset(struct efs_client_lease_request *r)
+{
+    if (!r) return EFS_ERR_INVAL;
+    if (r->active && !r->complete) return EFS_ERR_BUSY;
+    memset(r,0,sizeof(*r));
+    return EFS_OK;
+}
+
 int efs_client_rpc_publication(const struct efs_msg_publication *request, int query_only,
                                struct efs_msg_publication_reply *out)
 {

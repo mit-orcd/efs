@@ -531,6 +531,10 @@ try:
         edge_path=mount/'client-lease-transport';edge_body=b'client lease transport'*2048
         with edge_path.open('wb') as out:out.write(edge_body);out.flush();os.fsync(out.fileno())
         edge_ino=edge_path.stat().st_ino;edge_uuid=(os.urandom(8)+bytes(8)).hex();edge_results=[]
+        retained=work/'client-retained-lease'
+        run(['cc','-Wall','-Wextra','-Werror','-I'+str(source/'include'),source/'tests/live/client_retained_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',retained])
+        edge_results.append(run([retained,str(a.port),str(edge_ino)],capture_output=True,text=True,timeout=90).stdout)
+
         for stage in ('open','close'):
             edge_results.append(run([client_edge,str(a.port),str(edge_ino),edge_uuid,stage],capture_output=True,text=True,timeout=90).stdout)
         unmount();stop(crash=True);start();mount_client()

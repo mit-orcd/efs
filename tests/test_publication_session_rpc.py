@@ -5,7 +5,7 @@ import os,subprocess,tempfile
 root=Path(__file__).resolve().parents[1]
 s=(root/'src/client/inode_rpc.c').read_text()
 a=s.index('static int session_command_reply(')
-b=s.index('int efs_client_rpc_publication(',a)
+b=s.index('/* Production ownership primitive:',a)
 code=r'''
 #include "efs/protocol.h"
 #include "efs/meta_cmd.h"
