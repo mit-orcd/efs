@@ -137,6 +137,7 @@ static int pack_lease_cmd(uint8_t *out, uint32_t *len, int open, efs_ino_t ino,
 struct host_inbox_item {
     uint8_t *buf;
     uint32_t len;
+    uint64_t queued_us; /* Opt-in monotonic observation; never admission state. */
 };
 
 /* One queued outbound raft message (encoded wire bytes, heap-owned). */
@@ -5195,6 +5196,8 @@ static void drain_inbox(struct efs_raft_host *h)
         struct efs_raft *r = NULL;
         int rc = EFS_ERR_INVAL;
         if (i < n) {
+            if (BO_ON() && local[i].queued_us)
+                BO_HIST(BH_INBOX_AGE_US, efs_batch_obs_now_us() - local[i].queued_us);
             if (local[i].len > EFS_WIRE_RAFT_HDR_LEN)
                 cmd_cap = local[i].len - EFS_WIRE_RAFT_HDR_LEN;
             if (!cmd_cap || (cmd = malloc(cmd_cap)) != NULL)
@@ -5506,6 +5509,8 @@ static void *host_pump(void *arg)
         uint64_t applied_now[HOST_NGROUPS];
         int i;
         int obs = raft_obs_on();
+        int batch_obs = BO_ON();
+        uint64_t phase_us = batch_obs ? efs_batch_obs_now_us() : 0;
         uint64_t t_drain = 0, t_tick = 0, t_persist = 0, t_wait = 0;
         if (obs) {
             c0 = now_us_();
@@ -5513,6 +5518,7 @@ static void *host_pump(void *arg)
             h->obs_apply_cycle_us = 0;
         }
         pthread_mutex_lock(&h->mu);
+        if (batch_obs) BO_HIST(BH_PUMP_LOCK_US, efs_batch_obs_now_us() - phase_us);
         if (obs) {
             t_wait = now_us_() - c0;
             c0 = now_us_();
@@ -5556,7 +5562,9 @@ static void *host_pump(void *arg)
          * during the hold (session/lock rows) is durable at this cycle's
          * release, at most one cycle later than before. */
         (void)efs_kv_lsm_sync_hold(h->kv);
+        if (batch_obs) phase_us = efs_batch_obs_now_us();
         drain_inbox(h);
+        if (batch_obs) BO_HIST(BH_PUMP_DRAIN_US, efs_batch_obs_now_us() - phase_us);
         if (obs) {
             t_drain = now_us_() - c0;
             c0 = now_us_();
@@ -5634,16 +5642,24 @@ static void *host_pump(void *arg)
          * fsync themselves. */
         if (obs)
             c0 = now_us_();
+        if (batch_obs) phase_us = efs_batch_obs_now_us();
         if (efs_kv_lsm_sync_release(h->kv) != EFS_OK)
             fprintf(stderr, "raft-host: kv wal fsync failed at pump release\n");
+        if (batch_obs) {
+            BO_HIST(BH_KV_RELEASE_US, efs_batch_obs_now_us() - phase_us);
+            phase_us = efs_batch_obs_now_us();
+        }
         {
             uint64_t pnow = now_us_();
 
             /* pnow is wall time for applied-index persistence; diagnostics
              * use monotonic time, matching cohort/hold measurements. */
-            if (BO_ON()) efs_batch_obs_dump(efs_batch_obs_now_us());
             for (i = 0; i < HOST_NGROUPS; i++)
                 (void)persist_applied(h, i, applied_now[i], pnow, 0);
+        }
+        if (batch_obs) {
+            BO_HIST(BH_APPLIED_PERSIST_US, efs_batch_obs_now_us() - phase_us);
+            efs_batch_obs_dump(efs_batch_obs_now_us());
         }
         if (obs) {
             t_persist = now_us_() - c0;
@@ -8373,6 +8389,7 @@ int server_raft_host_inbox(const uint8_t *payload, uint32_t plen)
     if (h->inbox_bytes > h->inbox_bytes_hi) h->inbox_bytes_hi = h->inbox_bytes;
     h->inbox[h->inbox_n].buf = copy;
     h->inbox[h->inbox_n].len = plen;
+    h->inbox[h->inbox_n].queued_us = BO_ON() ? efs_batch_obs_now_us() : 0;
     h->inbox_n++;
     if (BO_ON() && payload[0] == EFS_RAFT_MSG_AE_REQ)
         BO_COUNT(outbox_nentries(payload, plen) ? BO_ACCEPT_DATA : BO_ACCEPT_EMPTY);
