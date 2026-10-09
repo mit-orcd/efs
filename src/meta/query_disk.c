@@ -632,6 +632,11 @@ int efs_query_disk_build(const char *root,struct efs_kv_lsm_snapshot *source,
         for(unsigned i=0;i<sizeof(files) && !rc;i++) {
             if(!d->part[shard].count || (files[i]=='n' && !d->part[shard].names) ||
                 (files[i]=='d' && !d->part[shard].inodes))continue;
+            /* These immutable inodes were already synced and digested in the
+             * old completed generation. Only their new directory links need
+             * persistence (the candidate-directory fsync below). Derived rows
+             * and every changed raw/index/name file still require both steps. */
+            if(i<3 && old && old->part[shard].revision==revisions[shard])continue;
             char path[EFS_MAX_PATH];rc=filename(d,shard,files[i],path,sizeof(path));if(rc)break;
             int fd=open(path,O_RDONLY|O_CLOEXEC);if(fd<0){rc=EFS_ERR_IO;break;}
             if(fsync(fd))rc=EFS_ERR_IO;
