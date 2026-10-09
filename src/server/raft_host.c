@@ -925,15 +925,21 @@ static int outbox_is_ae_rep(const uint8_t *buf, uint32_t len)
     return buf && len >= 1 && buf[0] == EFS_RAFT_MSG_AE_REP;
 }
 
-/* Replace the first priority-lane item matching pred. The newest
- * heartbeat / AE reply is the only one that matters. */
+/* Coalesce within one Raft group only. Independent groups sharing a
+ * peer retain their own heartbeat / reply progress. A vote may still
+ * evict a heartbeat at capacity, as before. */
 static int outbox_pri_replace(struct host_outbox *tx,
                               int (*pred)(const uint8_t *, uint32_t),
                               uint8_t *buf, uint32_t len)
 {
     int i;
 
+    if (!buf || len < EFS_WIRE_RAFT_HDR_LEN)
+        return 0;
     for (i = 0; i < tx->npri; i++) {
+        if (tx->pri[i].len < EFS_WIRE_RAFT_HDR_LEN ||
+            (tx->pri[i].buf[0] == buf[0] && tx->pri[i].buf[1] != buf[1]))
+            continue;
         if (!pred(tx->pri[i].buf, tx->pri[i].len))
             continue;
         if (len > HOST_OUTBOX_BYTES - (tx->queued_bytes-tx->pri[i].len))
