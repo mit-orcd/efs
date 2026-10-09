@@ -417,6 +417,8 @@ struct efs_raft_host {
     pthread_mutex_t outbox_mu;
     int tx_running;
     struct host_outbox tx[EFS_RAFT_MAX_PEERS];
+    uint8_t close_cursor[HOST_NGROUPS][11];
+    uint32_t close_cursor_len[HOST_NGROUPS];
     uint8_t orphan_cursor[HOST_NGROUPS][11];
     uint32_t orphan_cursor_len[HOST_NGROUPS];
     uint8_t orphan_discovery_cursor[HOST_NGROUPS][EFS_KV_KEY_MAX];
@@ -1735,27 +1737,57 @@ static void lock_wait_signal_locked(struct efs_raft_host *h, efs_ino_t ino);
  * ESTABLISH; 10.5c-35c hosts the revocation barrier (BEGIN / FENCE_LOC /
  * ACK / FINISH / LEASE_DROP). Last close reclaims a nlink=0 inode (I19).
  * Apply never stalls the log. */
-/* Required close effects remain replayable after the guarded verdict batch.
- * Apply does not advance until persistence failures in these effects recover. */
+/* A prepared append/resize can own cleanup rows. Persist a deferred
+ * obligation BEFORE advancing past BUSY, allowing later DECIDE/RESOLVE
+ * entries to release them. Storage failures still hold this entry for retry.
+ * Uncontended close avoids extra durable writes. */
 static int host_lease_close_effects(struct efs_raft_host *h,efs_ino_t ino,uint64_t gen)
 {
-    int rc=EFS_OK,held=efs_lease_any(h->kv,ino,gen);
+    uint8_t key[EFS_KV_KEY_MAX], value[8];
+    uint32_t kl=0,vl=sizeof(value);
+    int rc=efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&kl);
+    if(rc!=EFS_OK)return rc;
+    key[2]=EFS_KV_KIND_CLOSE_CLEANUP;
+    struct efs_meta_row row;
+    rc=efs_meta_apply_get_inode(h->kv,ino,&row);
+    if(rc==EFS_ERR_NOT_FOUND || (rc==EFS_OK && row.generation!=gen))
+        goto done;
+    if(rc!=EFS_OK)return rc;
+    int held=efs_lease_any(h->kv,ino,gen);
     if(held<0)return held;
     if(!held) {
         /* The kernel sends no implicit flock UNLOCK on final close. */
-        int lr=efs_lock_drop_file(h->kv,ino,gen);
-        if(lr!=EFS_OK && lr!=EFS_ERR_NOT_FOUND)rc=lr;
-        /* Abandoned reservations must resolve as holes before reclaim. */
-        int dr=efs_meta_apply_append_drain_file(h->kv,ino);
-        if(dr!=EFS_OK && dr!=EFS_ERR_NOT_FOUND)rc=dr;
+        rc=efs_lock_drop_file(h->kv,ino,gen);
+        if(rc!=EFS_OK && rc!=EFS_ERR_NOT_FOUND)return rc;
+        uint8_t inode_key[EFS_KV_KEY_MAX];uint32_t inode_kl=0;
+        rc=efs_kv_key_inode(efs_kv_inode_shard(ino),ino,inode_key,&inode_kl);
+        if(rc==EFS_OK)rc=efs_txn_key_exclusive(h->kv,inode_key,inode_kl);
+        if(rc==EFS_ERR_BUSY)goto defer;
+        if(rc!=EFS_OK)return rc;
+        rc=efs_meta_apply_append_drain_file(h->kv,ino);
+        if(rc==EFS_ERR_BUSY)goto defer;
+        if(rc!=EFS_OK && rc!=EFS_ERR_NOT_FOUND)return rc;
         pthread_mutex_lock(&h->wait_mu);
         lock_wait_signal_locked(h,ino);
         pthread_mutex_unlock(&h->wait_mu);
     }
-    int r2=efs_meta_apply_reclaim(h->kv,ino);
-    if(r2!=EFS_OK && r2!=EFS_ERR_BUSY && r2!=EFS_ERR_NOT_FOUND)rc=r2;
-    return rc;
+    rc=efs_meta_apply_reclaim(h->kv,ino);
+    /* Zero-link transaction/lease contention has its own durable ORPHAN
+     * index. A held lease's eventual final close creates a new obligation. */
+    if(rc!=EFS_OK && rc!=EFS_ERR_BUSY && rc!=EFS_ERR_NOT_FOUND)return rc;
+done:
+    rc=efs_kv_get(h->kv,key,kl,value,&vl);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if(rc!=EFS_OK)return rc;
+    if(vl!=sizeof(value))return EFS_ERR_PROTO;
+    if(rd64be(value)!=gen)return EFS_OK;
+    rc=efs_kv_del(h->kv,key,kl);
+    return rc==EFS_ERR_NOT_FOUND ? EFS_OK : rc;
+defer:
+    wr64be(value,gen);
+    return efs_kv_put(h->kv,key,kl,value,sizeof(value));
 }
+
 static int host_unpack_lease_edge(const uint8_t *cmd,uint32_t clen,
                                    struct efs_opid_req *q,efs_ino_t *ino,
                                    uint64_t *gen,unsigned *flags,uint64_t *token)
@@ -2241,7 +2273,8 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_ACTIVATE_LANE ||
            cmd[0] == EFS_MD_CMD_LANE_FENCE ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
-           cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP)
+           cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
+           cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP)
               ? EFS_OK
               : rc;
     /* FENCE_LOC BUSY must let a later RESOLVE drain the owner intent. It is
@@ -2253,7 +2286,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
      * advance a follower past cleanup it did not durably perform. */
     if ((cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
-         cmd[0] == EFS_MD_CMD_CREATE ||
+         cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CREATE ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
         ret = rc;
@@ -2609,6 +2642,20 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index,
         return apply_lock_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_LANE_SWEEP)
         return apply_lane_sweep_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP) {
+        if(clen!=17)return EFS_ERR_PROTO;
+        efs_ino_t ino=rd64be(cmd+1);uint64_t gen=rd64be(cmd+9);
+        uint8_t key[EFS_KV_KEY_MAX],value[8];uint32_t kl=0,vl=sizeof(value);
+        int rc=efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&kl);
+        if(rc!=EFS_OK)return rc;
+        key[2]=EFS_KV_KIND_CLOSE_CLEANUP;
+        rc=efs_kv_get(h->kv,key,kl,value,&vl);
+        if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+        if(rc!=EFS_OK)return rc;
+        if(vl!=sizeof(value))return EFS_ERR_PROTO;
+        if(rd64be(value)!=gen)return EFS_OK; /* superseded queued retry */
+        return host_lease_close_effects(h,ino,gen);
+    }
     if (cmd[0] == EFS_MD_CMD_ORPHAN_REAP)
         return apply_orphan_reap_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_REAP_DONE)
@@ -6076,6 +6123,28 @@ static int orphan_scan_cb(void *user, const uint8_t *key, uint32_t kl,
     scan->ino[scan->count] = ino; scan->gen[scan->count++] = gen;
     return 0;
 }
+static void host_gc_close_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
+{
+    int gi=gc_gi(group);
+    uint8_t prefix[3]={(uint8_t)(anchor>>8),(uint8_t)anchor,EFS_KV_KIND_CLOSE_CLEANUP};
+    uint32_t *len=&h->close_cursor_len[gi];
+    uint8_t *cursor=h->close_cursor[gi];
+    struct orphan_scan scan={.group=group,.skip_len=*len};
+    memcpy(scan.skip,cursor,*len);
+    int rc=efs_kv_scan_from(h->kv,prefix,sizeof(prefix),*len?cursor:NULL,*len,orphan_scan_cb,&scan);
+    if(rc<0) {
+        __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED);
+        return;
+    }
+    if(!rc)*len=0;
+    else if(scan.last_len){memcpy(cursor,scan.last,scan.last_len);*len=scan.last_len;}
+    for(uint32_t i=0;i<scan.count && h->gc_running;i++) {
+        uint8_t cmd[17]={EFS_MD_CMD_CLOSE_CLEANUP};
+        wr64be(cmd+1,scan.ino[i]);wr64be(cmd+9,scan.gen[i]);
+        (void)host_gc_propose(h,group,cmd,sizeof(cmd));
+    }
+}
+
 static void host_gc_orphan_pass(struct efs_raft_host *h, uint8_t group, uint32_t anchor)
 {
     int gi = gc_gi(group);
@@ -6988,6 +7057,7 @@ static void *host_gc_thread(void *arg)
             ta = now_us_();
             __atomic_store_n(&h->s->gc_group, h->g[g].group, __ATOMIC_RELAXED);
             __atomic_store_n(&h->s->gc_stage, 3, __ATOMIC_RELAXED);
+            host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
             t_orphan += now_us_() - ta;
             ta = now_us_();
