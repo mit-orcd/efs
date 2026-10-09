@@ -46,14 +46,21 @@ static void delayed_apply(unsigned port, efs_ino_t ino, const struct efs_opid *i
     commands[1][22] = EFS_MD_CMD_PUBLISH;
     for (unsigned i=0; i<8; i++) commands[1][23+i]=(uint8_t)(ino>>(56-8*i));
     for (unsigned c=0; c<2; c++) {
-        int fd=efs_connect_tcp("127.0.0.1",port);assert(fd>=0);
-        assert(!efs_set_recv_timeout(fd,10000));
-        assert(!efs_send_msg(fd,EFS_MSG_RAFT_MKFS,commands[c],lengths[c]));
-        uint8_t type;void *body=NULL;uint32_t bytes;
-        assert(!efs_recv_msg(fd,&type,&body,&bytes));close(fd);
-        assert(type==EFS_MSG_RAFT_MKFS_REPLY && bytes==sizeof(struct efs_msg_raft_mkfs_reply));
-        struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,body,bytes);free(body);
-        assert(reply.rc==EFS_ERR_STALE);
+        int applied=0;
+        for (unsigned attempt=0; attempt<100 && !applied; attempt++) {
+            int fd=efs_connect_tcp("127.0.0.1",port+attempt%4);assert(fd>=0);
+            assert(!efs_set_recv_timeout(fd,10000));
+            assert(!efs_send_msg(fd,EFS_MSG_RAFT_MKFS,commands[c],lengths[c]));
+            uint8_t type;void *body=NULL;uint32_t bytes;
+            assert(!efs_recv_msg(fd,&type,&body,&bytes));close(fd);
+            assert(type==EFS_MSG_RAFT_MKFS_REPLY && bytes==sizeof(struct efs_msg_raft_mkfs_reply));
+            struct efs_msg_raft_mkfs_reply reply;memcpy(&reply,body,bytes);free(body);
+            if(reply.rc==EFS_ERR_NOT_PRIMARY || reply.rc==EFS_ERR_BUSY) {usleep(10000);continue;}
+            fprintf(stderr,"delayed REPORT apply case=%u rc=%d index=%llu\n",c,reply.rc,(unsigned long long)reply.index);
+            assert(reply.rc==EFS_ERR_STALE && reply.index);
+            applied=1;
+        }
+        assert(applied);
     }
 }
 
@@ -77,10 +84,26 @@ int main(int argc,char **argv)
     for(unsigned i=0;i<4;i++){g_client.nodes[i].id=i+1;strcpy(g_client.nodes[i].addr,"127.0.0.1");g_client.nodes[i].port=port+i;}
     efs_client_conn_init();struct efs_chunk_rec rec;uint32_t count=1;uint64_t generation=0;
     assert(!efs_client_rpc_getchunks_fileid(1,ino,0,0,&rec,&count,&generation) && count==1 && generation);
+    /* A sparse GETCHUNKS base can have zero nodes with its real bytes in a
+     * span. Replay that exact published span, never the empty base record. */
+    if (rec.delta_base_n) {
+        unsigned chosen=rec.delta_base_n;
+        for (unsigned i=0; i<rec.delta_base_n; i++)
+            if (rec.deltas[i].len && rec.deltas[i].nodes[0] && rec.deltas[i].nodes[1] && rec.deltas[i].nodes[2]) { chosen=i; break; }
+        assert(chosen<rec.delta_base_n);
+        struct efs_chunk_delta d=rec.deltas[chosen];
+        memcpy(rec.nodes,d.nodes,sizeof(rec.nodes));memcpy(rec.checksums,d.checksums,sizeof(rec.checksums));
+        rec.chunk_generation=d.generation;rec.delta_off=d.off;rec.delta_len=d.len;
+        rec.delta_base_n=0;rec.delta_base_seq=0;
+    }
+    assert(rec.nodes[0] && rec.nodes[1] && rec.nodes[2] && rec.chunk_generation);
+    memset(&rec.read_view,0,sizeof(rec.read_view));
     struct efs_opid id;assert(!efs_client_publication_id(1,&id));
     struct packet p=pack(&rec,&id);rpc(port,&p,1); /* Lost reply retains the immutable mapping body. */
     assert(rpc(port,&p,0).status==EFS_INODE_RPC_OK);
     assert(!efs_client_rpc_report_dirty_raft(1,&rec,1,NULL,0,1));
+    struct efs_chunk_rec invalid=rec;invalid.nodes[0]=0;
+    assert(efs_client_rpc_report_dirty_raft(1,&invalid,1,NULL,0,1)==EFS_ERR_INVAL);
     struct packet malformed=p;malformed.len--;assert(rpc(port,&malformed,0).status==EFS_INODE_RPC_INVAL);
     malformed=p;malformed.body[sizeof(struct efs_msg_report_chunks)+efs_chunk_rec_wire_size(&rec)+sizeof(struct efs_ino_size_rec)]=0;
     memset(malformed.body+malformed.len-EFS_REPORT_SESSION_LEN,0,16);assert(rpc(port,&malformed,0).status==EFS_INODE_RPC_INVAL);
