@@ -115,6 +115,19 @@ int efs_lease_pending_close(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
 #define EFS_LEASE_EDGE_OPEN 1u
 #define EFS_LEASE_EDGE_CLOSE 2u
 #define EFS_LEASE_EDGE_CLEAR_PENDING 4u
+/* Staged successor: lease effect, replay floor/result and exact close
+ * obligation commit atomically. No whole-file cleanup runs in this apply.
+ * OPEN checks the obligation's prepared owner. Production activation requires
+ * bounded close processing plus session/PUT lifecycle gates. */
+#define EFS_CLOSE_STEP_VALUE 36u
+#define EFS_CLOSE_STEP_LOCKS 1u
+#define EFS_CLOSE_STEP_RETIRE 2u
+int efs_close_step_apply(struct efs_kv *kv, efs_ino_t ino,
+    const uint8_t identity[EFS_CLOSE_STEP_VALUE], unsigned phase);
+int efs_lease_guarded_edge_deferred(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+    const struct efs_opid_req *q, unsigned flags, uint64_t token);
+int efs_lease_guarded_probe_deferred(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
+    const struct efs_opid_req *q, unsigned flags, uint64_t token, int *verdict);
 int efs_lease_guarded_edge(struct efs_kv *kv, efs_ino_t ino, uint64_t gen,
                           const struct efs_opid_req *q, unsigned flags,
                           uint64_t pending_token);

@@ -175,6 +175,17 @@ int efs_meta_prune_append(struct efs_kv *kv, efs_ino_t ino,
                            const struct efs_meta_append_ops *ops, void *ctx,
                            unsigned *removed);
 
+/* Staged last-close successor. The exact 36-byte close identity is frozen
+ * before any append image; live leases are rechecked after that PREPARE.
+ * Deferred lease OPEN must honor that obligation's exclusive owner. Neither
+ * helper removes the obligation or performs the legacy full-file drain. */
+int efs_meta_finish_append_close(struct efs_kv *kv, efs_ino_t ino, uint64_t offset,
+    const uint8_t identity[36], const struct efs_txid *t,
+    const struct efs_meta_append_ops *ops, void *ctx);
+int efs_meta_prune_append_close(struct efs_kv *kv, efs_ino_t ino,
+    const uint8_t identity[36], const struct efs_txid *t,
+    const struct efs_meta_append_ops *ops, void *ctx, unsigned *removed);
+
 /* Atomic single-authority fence, for the future serialized TRUNCATE path.
  * Caller owns Raft apply serialization and cross-authority coordination.
  * This does not replace the current public truncate command by itself. */

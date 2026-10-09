@@ -906,8 +906,63 @@ static void test_bounded_session_cleanup(void)
     efs_kv_mem_free(kv);
 }
 
+static void test_deferred_close_identity(void)
+{
+    struct efs_kv *kv=efs_kv_mem_create();uint8_t uuid[16];efs_ino_t ino=0;
+    guarded_session_init(kv,uuid);
+    CHECK(efs_meta_apply_create_file(kv,&g_at,1,S_IFREG|0600,"deferred",&ino)==EFS_OK,"deferred file");
+    struct efs_opid_req q=guarded_request(uuid,1,0);
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"deferred open");
+    uint8_t key[EFS_KV_KEY_MAX],before[EFS_CLOSE_STEP_VALUE],value[EFS_CLOSE_STEP_VALUE];uint32_t len,n;
+    CHECK(efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&len)==EFS_OK,"close step key");
+    key[2]=EFS_KV_KIND_CLOSE_STEP;
+    q.id.seq=2;q.ack=1;
+    const struct efs_kv_ops *saved=kv->ops;struct efs_kv_ops ops=*saved;
+    guarded_batch_original=ops.batch;ops.batch=guarded_batch_fault;kv->ops=&ops;guarded_batch_fail=1;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_IO,"close obligation atomic failure");
+    n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_ERR_NOT_FOUND,"failed close no obligation");
+    CHECK(efs_lease_any(kv,ino,1)==1,"failed close retains ownership");
+    guarded_batch_fail=0;kv->ops=saved;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"atomic deferred close retry");
+    n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && n==36,"identified close obligation");
+    CHECK(!memcmp(value+8,uuid,16) && value[27]==1 && value[35]==2,"close identity exact UUID epoch sequence");
+    memcpy(before,value,sizeof(value));
+    int verdict=123;
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0,&verdict)==1 && verdict==EFS_OK,"deferred lost reply probe");
+    CHECK(efs_lease_guarded_probe(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0,&verdict)==EFS_ERR_PROTO,"legacy/deferred identities distinct");
+    struct efs_txid tx={{82}};struct efs_txn_parts parts={.n=1};parts.shard[0]=efs_kv_anchor_shard(efs_kv_inode_shard(ino));
+    CHECK(efs_txn_prepare_excl_value(kv,&tx,&parts,key,len,value,n,EFS_TXN_PUT,value,n)==EFS_OK,"prepare close obligation");
+    q.id.seq=3;q.ack=1;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_BUSY,"reopen blocked by close ownership");
+    CHECK(!efs_lease_any(kv,ino,1),"BUSY cannot acquire lease");
+    CHECK(efs_lease_guarded_probe_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0,&verdict)==0,"BUSY does not retire identity");
+    CHECK(efs_txn_resolve(kv,&tx,parts.shard[0],EFS_TXN_ABORT)==EFS_OK,"release close ownership");
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"same reopen identity retries");
+    q.id.seq=2;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK && efs_lease_any(kv,ino,1)==1,"old close cannot remove reopened lease");
+    n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && !memcmp(before,value,n),"old close does not recreate obligation");
+    q.id.seq=4;q.ack=3;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"next close changes obligation");
+    n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[35]==4,"later close has new exact identity");
+    CHECK(efs_close_step_apply(kv,ino,before,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_STALE,"obsolete cleanup cannot retire later close");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_LOCKS)==EFS_OK,"identified lock phase");
+    CHECK(efs_close_step_apply(kv,ino,value,EFS_CLOSE_STEP_RETIRE)==EFS_OK,"empty append/lock state retires exact obligation");
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"lost close reply remains known after cleanup");
+    n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_ERR_NOT_FOUND,"known close replay cannot recreate retired obligation");
+    q.id.seq=5;q.ack=3;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_OPEN,0)==EFS_OK,"reopen after cleanup");
+    q.id.seq=6;q.ack=5;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK,"new close after cleanup");
+    n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[35]==6,"new obligation survives old identity retirement");
+    q.id.seq=2;q.ack=1;
+    CHECK(efs_lease_guarded_edge_deferred(kv,ino,1,&q,EFS_LEASE_EDGE_CLOSE,0)==EFS_ERR_STALE,"retired close cannot resurrect old obligation");
+    n=sizeof(value);CHECK(efs_kv_get(kv,key,len,value,&n)==EFS_OK && value[35]==6,"retired retry preserves later close");
+    efs_kv_mem_free(kv);
+}
+
 int main(void)
 {
+    test_deferred_close_identity();
     test_bounded_session_cleanup();
     test_pending_create_session_fence();
     test_prepared_owner_fence();

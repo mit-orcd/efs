@@ -2,6 +2,7 @@
  * through exact-image transactions. No hosted-view recomputation at apply. */
 #include "efs/meta_apply.h"
 #include "efs/kv_lsm.h"
+#include "efs/session.h"
 #include <assert.h>
 #include <dirent.h>
 #include <stdio.h>
@@ -249,5 +250,67 @@ static void recovery(int committed)
  while((e=readdir(d))){if(e->d_name[0]=='.')continue;char path[512];snprintf(path,sizeof(path),"%s/%s",dir,e->d_name);assert(!unlink(path));}
  closedir(d);assert(!rmdir(dir));
 }
+struct close_context {struct efs_kv *kv;efs_ino_t ino;uint64_t gen;struct efs_opid_req reopen;unsigned fenced;};
+static int close_prepare(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *parts,
+                           const struct efs_meta_append_image *image)
+{
+ struct close_context *c=ctx;int rc=prepare(c->kv,t,parts,image);
+ if(!rc && image->key[2]==EFS_KV_KIND_CLOSE_STEP) {
+  assert(efs_lease_guarded_edge_deferred(c->kv,c->ino,c->gen,&c->reopen,EFS_LEASE_EDGE_OPEN,0)==EFS_ERR_BUSY);
+  c->fenced++;
+ }
+ return rc;
+}
+static int close_decide(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
+{return decide(((struct close_context *)ctx)->kv,t,p,d);}
+static int close_resolve(void *ctx,const struct efs_txid *t,const struct efs_txn_parts *p,int d)
+{return resolve(((struct close_context *)ctx)->kv,t,p,d);}
+static void close_completion(void)
+{
+ struct efs_kv *kv=efs_kv_mem_create();efs_ino_t ino;uint64_t gen;fixture(kv,&ino,&gen);
+ struct efs_meta_append_plan *plan=malloc(sizeof(*plan));assert(plan);
+ struct efs_opid_req reservation=identity(1,0);struct efs_txid tx={{91}};
+ for(unsigned i=0;i<2;i++) {
+  reservation.id.seq=i+1;reservation.ack=i;
+  assert(efs_meta_capture_append(kv,ino,8,&reservation,decision,kv,plan)==EFS_OK);
+  tx.bytes[1]=i+1;assert(efs_meta_execute_append(plan,&tx,&ops,kv)==EFS_OK);
+ }
+ struct efs_opid_req close=identity(1,0);close.id.client_uuid[0]=99;
+ uint32_t shard=efs_kv_inode_shard(ino);
+ assert(efs_session_create(kv,close.id.client_uuid,1)==EFS_OK);
+ assert(efs_session_register(kv,close.id.client_uuid,1,shard)==EFS_OK);
+ assert(efs_session_establish(kv,shard,close.id.client_uuid,1)==EFS_OK);
+ assert(efs_lease_guarded_edge_deferred(kv,ino,gen,&close,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK);
+ uint8_t key[EFS_KV_KEY_MAX],first[EFS_CLOSE_STEP_VALUE],latest[EFS_CLOSE_STEP_VALUE];uint32_t kl,vl=sizeof(first);
+ assert(efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,key,&kl)==EFS_OK);key[2]=EFS_KV_KIND_CLOSE_STEP;
+ assert(efs_kv_get(kv,key,kl,first,&vl)==EFS_OK && vl==sizeof(first));
+ close.id.seq=2;
+ assert(efs_lease_guarded_edge_deferred(kv,ino,gen,&close,EFS_LEASE_EDGE_OPEN,0)==EFS_OK);
+ tx.bytes[1]=10;
+ assert(efs_meta_finish_append_close(kv,ino,200,first,&tx,&ops,kv)==EFS_ERR_BUSY);
+ uint32_t open;assert(efs_meta_apply_append_state(kv,ino,NULL,NULL,&open)==EFS_OK && open==2);
+ close.id.seq=3;close.ack=2;
+ assert(efs_lease_guarded_edge_deferred(kv,ino,gen,&close,EFS_LEASE_EDGE_CLOSE,0)==EFS_OK);
+ tx.bytes[1]=11;
+ assert(efs_meta_finish_append_close(kv,ino,200,first,&tx,&ops,kv)==EFS_ERR_STALE);
+ vl=sizeof(latest);assert(efs_kv_get(kv,key,kl,latest,&vl)==EFS_OK);
+ assert(efs_close_step_apply(kv,ino,latest,EFS_CLOSE_STEP_RETIRE)==EFS_ERR_BUSY);
+ struct close_context context={.kv=kv,.ino=ino,.gen=gen,.reopen=close};context.reopen.id.seq=4;
+ const struct efs_meta_append_ops closed_ops={close_prepare,close_decide,close_resolve};
+ for(unsigned i=0;i<2;i++) {
+  tx.bytes[1]=20+i;
+  assert(efs_meta_finish_append_close(kv,ino,200+8*i,latest,&tx,&closed_ops,&context)==EFS_OK);
+ }
+ assert(context.fenced==2);
+ assert(efs_meta_apply_append_state(kv,ino,NULL,NULL,&open)==EFS_OK && !open);
+ unsigned removed=0;tx.bytes[1]=30;
+ assert(efs_meta_prune_append_close(kv,ino,latest,&tx,&closed_ops,&context,&removed)==EFS_OK && removed==2);
+ assert(context.fenced==3 && !efs_meta_append_prune_pending(kv,ino));
+ assert(efs_close_step_apply(kv,ino,latest,EFS_CLOSE_STEP_LOCKS)==EFS_OK);
+ assert(efs_close_step_apply(kv,ino,latest,EFS_CLOSE_STEP_RETIRE)==EFS_OK);
+ struct efs_meta_stat st;assert(efs_meta_apply_getattr(kv,ino,decision,kv,&st)==EFS_OK && st.size==216);
+ assert(efs_kv_get(kv,key,kl,first,&vl)==EFS_ERR_NOT_FOUND);
+ free(plan);efs_kv_mem_free(kv);
+}
 int main(void)
-{unit();bounds_and_pending();completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}
+{unit();bounds_and_pending();completion();close_completion();recovery(0);recovery(1);puts("append transaction: fixed EOF, exact lane/inode guards, conflict abort, lost COMMIT and partial resolution recovery PASS");return 0;}

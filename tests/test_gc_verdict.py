@@ -103,7 +103,7 @@ int main(void){
  verdict=EFS_ERR_BUSY;errors=s.gc_reap_errors;
  assert(host_gc_propose(&h,0,reap,50)==EFS_ERR_BUSY && s.gc_reap_errors==errors);
  for(unsigned op=0;op<6;op++){
-  uint8_t codes[]={EFS_MD_CMD_LANE_SWEEP,EFS_MD_CMD_REAP_DONE,EFS_MD_CMD_GC_ACK,EFS_MD_CMD_ORPHAN_REAP,EFS_MD_CMD_LANE_SWEEP_BATCH,EFS_MD_CMD_REAP_BATCH};
+  uint8_t codes[]={EFS_MD_CMD_LANE_SWEEP,EFS_MD_CMD_REAP_DONE,EFS_MD_CMD_GC_ACK,EFS_MD_CMD_ORPHAN_REAP,EFS_MD_CMD_LANE_SWEEP_BATCH,EFS_MD_CMD_REAP_BATCH,EFS_MD_CMD_CLOSE_STEP};
   assert(core_result(codes[op],EFS_ERR_BUSY,53)==EFS_OK);
   assert(core_result(codes[op],EFS_ERR_IO,53)==EFS_ERR_IO);
   assert(core_result(codes[op],EFS_ERR_NOMEM,53)==EFS_ERR_NOMEM);

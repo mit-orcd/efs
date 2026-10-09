@@ -5,6 +5,7 @@
 #include "efs/opid.h"
 #include "efs/checksum.h"
 #include "efs/txn.h"
+#include "efs/lock.h"
 #include <string.h>
 #include <sys/stat.h>
 
@@ -867,8 +868,8 @@ static void edge_lease_pack(const struct edge_lease *lease,uint8_t v[EDGE_VALUE]
 {
     v[0]=3;v[1]=lease->flags;edge_be64(v+2,lease->seq);edge_be64(v+10,lease->token);
 }
-int efs_lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
-                          const struct efs_opid_req *q,unsigned flags,uint64_t token)
+static int lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+                          const struct efs_opid_req *q,unsigned flags,uint64_t token,int deferred)
 {
     uint32_t shard=efs_kv_inode_shard(ino),wklen=0,lklen=0;
     uint8_t wkey[EFS_KV_KEY_MAX],lkey[EFS_KV_KEY_MAX],digest[32],identity[32]={0};
@@ -885,7 +886,7 @@ int efs_lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     for (unsigned i=0;i<window.count;i++)
         if (efs_kv_inode_shard(window.replies[i].ino)!=shard) return EFS_ERR_PROTO;
     edge_be64(identity,ino);edge_be64(identity+8,gen);be32(identity+16,flags);
-    edge_be64(identity+20,token);be32(identity+28,UINT32_C(0x4c454153));
+    edge_be64(identity+20,token);be32(identity+28,deferred?UINT32_C(0x434c4f53):UINT32_C(0x4c454153));
     efs_hash(identity,sizeof(identity),digest);
     if(q->id.seq<=window.floor)return EFS_ERR_STALE;
     for(unsigned i=0;i<window.count;i++)if(window.replies[i].seq==q->id.seq)
@@ -893,7 +894,7 @@ int efs_lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
 
     /* At most 16 old closed rows are considered, and all retirement is atomic
      * with the new floor/effect. A later OPEN on the same key is preserved. */
-    struct efs_kv_item items[EDGE_SLOTS+2];uint32_t count=0;
+    struct efs_kv_item items[EDGE_SLOTS+3];uint32_t count=0;
     uint8_t retired[EDGE_SLOTS][EFS_KV_KEY_MAX];uint32_t rlen[EDGE_SLOTS];
     uint64_t floor=q->ack>window.floor?q->ack:window.floor;
     if(q->id.seq-floor>EFS_OPID_BITMAP_BITS)return EFS_ERR_BUSY;
@@ -929,6 +930,21 @@ int efs_lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
         if(verdict!=EFS_OK && verdict!=EFS_ERR_NOT_FOUND && verdict!=EFS_ERR_STALE &&
            verdict!=EFS_ERR_INVAL)return verdict;
     }
+    uint8_t close_key[EFS_KV_KEY_MAX],close_value[EFS_CLOSE_STEP_VALUE];
+    uint32_t close_len=0;
+    if(deferred && verdict==EFS_OK) {
+        rc=efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,close_key,&close_len);
+        if(rc!=EFS_OK)return rc;
+        close_key[2]=EFS_KV_KIND_CLOSE_STEP;
+        rc=efs_txn_key_exclusive(kv,close_key,close_len);
+        if(rc!=EFS_OK)return rc; /* BUSY is retryable, never record it as success */
+        if(flags&(EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING)) {
+            edge_be64(close_value,gen);memcpy(close_value+8,q->id.client_uuid,16);
+            be32(close_value+24,q->id.session_epoch);edge_be64(close_value+28,q->id.seq);
+            items[count++]=(struct efs_kv_item){EFS_KV_PUT,close_key,close_len,
+                                             close_value,sizeof(close_value)};
+        }
+    }
     uint8_t lvalue[EDGE_VALUE],wvalue[EDGE_WINDOW_MAX];
     if(verdict==EFS_OK) {
         if(flags&EFS_LEASE_EDGE_OPEN)lease.flags|=LEASE_NORMAL;
@@ -945,6 +961,17 @@ int efs_lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
     rc=efs_kv_batch(kv,items,count);
     return rc==EFS_OK?verdict:rc;
 }
+int efs_lease_guarded_edge(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+                            const struct efs_opid_req *q,unsigned flags,uint64_t token)
+{
+    return lease_guarded_edge(kv,ino,gen,q,flags,token,0);
+}
+int efs_lease_guarded_edge_deferred(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+                            const struct efs_opid_req *q,unsigned flags,uint64_t token)
+{
+    return lease_guarded_edge(kv,ino,gen,q,flags,token,1);
+}
+
 int efs_lease_guarded_retire(struct efs_kv *kv,uint32_t shard,
                             const uint8_t uuid[EFS_OPID_UUID_LEN],uint32_t epoch)
 {
@@ -959,9 +986,9 @@ int efs_lease_guarded_retire(struct efs_kv *kv,uint32_t shard,
     return rc==EFS_ERR_NOT_FOUND?EFS_OK:rc;
 }
 
-int efs_lease_guarded_probe(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+static int lease_guarded_probe(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
                            const struct efs_opid_req *q,unsigned flags,uint64_t token,
-                           int *verdict)
+                           int *verdict,int deferred)
 {
     if(!kv || !verdict || !ino || !gen || !q || !efs_opid_req_valid(q) ||
        !q->id.session_epoch || q->ack>=q->id.seq || !flags || (flags&~7u) ||
@@ -978,7 +1005,7 @@ int efs_lease_guarded_probe(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
         if(efs_kv_inode_shard(window.replies[i].ino)!=shard)return EFS_ERR_PROTO;
     if(q->id.seq<=window.floor)return EFS_ERR_STALE;
     edge_be64(identity,ino);edge_be64(identity+8,gen);be32(identity+16,flags);
-    edge_be64(identity+20,token);be32(identity+28,UINT32_C(0x4c454153));
+    edge_be64(identity+20,token);be32(identity+28,deferred?UINT32_C(0x434c4f53):UINT32_C(0x4c454153));
     efs_hash(identity,sizeof(identity),digest);
     for(unsigned i=0;i<window.count;i++) {
         const struct edge_reply *reply=&window.replies[i];
@@ -987,4 +1014,65 @@ int efs_lease_guarded_probe(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
         *verdict=reply->rc;return 1;
     }
     return 0;
+}
+
+int efs_lease_guarded_probe(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+    const struct efs_opid_req *q,unsigned flags,uint64_t token,int *verdict)
+{
+    return lease_guarded_probe(kv,ino,gen,q,flags,token,verdict,0);
+}
+int efs_lease_guarded_probe_deferred(struct efs_kv *kv,efs_ino_t ino,uint64_t gen,
+    const struct efs_opid_req *q,unsigned flags,uint64_t token,int *verdict)
+{
+    return lease_guarded_probe(kv,ino,gen,q,flags,token,verdict,1);
+}
+
+static int close_step_present(void *ctx,const uint8_t *key,uint32_t len,
+    const uint8_t *value,uint32_t length)
+{
+    (void)ctx;(void)key;(void)len;(void)value;(void)length;return 1;
+}
+int efs_close_step_apply(struct efs_kv *kv,efs_ino_t ino,
+    const uint8_t identity[EFS_CLOSE_STEP_VALUE],unsigned phase)
+{
+    if(!kv || !ino || !identity ||
+       (phase!=EFS_CLOSE_STEP_LOCKS && phase!=EFS_CLOSE_STEP_RETIRE))return EFS_ERR_INVAL;
+    uint64_t gen=cleanup_rd64(identity);
+    if(!gen || !rd32(identity+24) || !cleanup_rd64(identity+28))return EFS_ERR_INVAL;
+    uint32_t shard=efs_kv_inode_shard(ino),len=0,vl=EFS_CLOSE_STEP_VALUE;
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_CLOSE_STEP_VALUE];
+    int rc=efs_kv_key_reap(efs_kv_anchor_shard(shard),ino,key,&len);
+    if(rc!=EFS_OK)return rc;
+    key[2]=EFS_KV_KIND_CLOSE_STEP;
+    rc=efs_txn_key_exclusive(kv,key,len);
+    if(rc!=EFS_OK)return rc;
+    rc=efs_kv_get(kv,key,len,value,&vl);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK;
+    if(rc!=EFS_OK)return rc;
+    if(vl!=sizeof(value))return EFS_ERR_PROTO;
+    if(memcmp(value,identity,sizeof(value)))return EFS_ERR_STALE;
+    int held=efs_lease_any(kv,ino,gen);
+    if(held<0)return held;
+    if(held)return EFS_ERR_BUSY;
+    if(phase==EFS_CLOSE_STEP_LOCKS)return efs_lock_drop_file(kv,ino,gen);
+    uint8_t inode_key[EFS_KV_KEY_MAX];uint32_t inode_len;
+    rc=efs_kv_key_inode(shard,ino,inode_key,&inode_len);
+    if(rc==EFS_OK)rc=efs_txn_key_exclusive(kv,inode_key,inode_len);
+    if(rc!=EFS_OK)return rc;
+    int locks=efs_lock_count(kv,ino,gen);
+    if(locks<0)return locks;
+    if(locks)return EFS_ERR_BUSY;
+    uint8_t prefix[EFS_KV_KEY_MAX];uint32_t pl;
+    rc=efs_kv_key_append_rsv_prefix(shard,ino,gen,prefix,&pl);
+    if(rc==EFS_OK)rc=efs_kv_scan_prefix(kv,prefix,pl,close_step_present,NULL);
+    if(rc==1)return EFS_ERR_BUSY;
+    if(rc!=EFS_OK)return rc;
+    rc=efs_kv_key_append_cur(shard,ino,gen,prefix,&pl);
+    if(rc==EFS_OK) {
+        uint8_t cursor[24];uint32_t cl=sizeof(cursor);
+        rc=efs_kv_get(kv,prefix,pl,cursor,&cl);
+        if(rc==EFS_OK)return EFS_ERR_BUSY;
+        if(rc!=EFS_ERR_NOT_FOUND)return rc;
+    } else return rc;
+    return efs_kv_del(kv,key,len);
 }

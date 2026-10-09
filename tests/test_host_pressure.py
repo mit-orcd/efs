@@ -18,8 +18,10 @@ code=r'''
 #include "efs/meta_apply.h"
 #include "efs/txn.h"
 #include "efs/session.h"
+#include "efs/lock.h"
 #include "efs/kv_key.h"
 #include <assert.h>
+static uint32_t rd32be(const uint8_t *p){return (uint32_t)p[0]<<24|(uint32_t)p[1]<<16|(uint32_t)p[2]<<8|p[3];}
 #include <string.h>
 #define HOST_NGROUPS 2
 struct efs_raft_host;
@@ -41,6 +43,14 @@ int efs_raft_backlog_charge(struct efs_raft *r,efs_raft_charge_fn fn,uint64_t li
 int main(void) {
  struct efs_raft_host h={.pressure_enabled=1};
  h.g[0].host=&h;h.g[0].r=(struct efs_raft*)&h;
+ uint8_t close_step[46]={EFS_MD_CMD_CLOSE_STEP};
+ assert(host_pressure_command_charge(close_step,sizeof(close_step))>=host_pressure_rows_charge(64,1,0));
+ assert(host_pressure_recovery(close_step,sizeof(close_step)));
+ uint8_t deferred[EFS_MD_SESS_LEASE_EDGE_LEN]={EFS_MD_CMD_SESSION,EFS_MD_SESS_LEASE_EDGE_DEFERRED};
+ assert(host_pressure_command_charge(deferred,sizeof(deferred))>=host_pressure_rows_charge(19,1,EFS_OPID_VAL_MAX));
+ deferred[57]=EFS_LEASE_EDGE_OPEN;assert(!host_pressure_recovery(deferred,sizeof(deferred)));
+ deferred[57]=EFS_LEASE_EDGE_CLOSE;
+ assert(host_pressure_recovery(deferred,sizeof(deferred)));
  uint8_t ordinary=0xfe,recovery=EFS_MD_CMD_RESOLVE;
  struct efs_raft_entry e={.cmd=&ordinary,.clen=1};
  observation.l0_soft_bytes=768ull<<20;observation.l0_hard_bytes=1ull<<30;

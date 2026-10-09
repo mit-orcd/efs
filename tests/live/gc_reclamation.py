@@ -40,6 +40,7 @@ p.add_argument('--tiny-mixed-only',action='store_true',help='run only the mixed-
 p.add_argument('--tiny-mixed-files',type=int,default=512,help='8..8192 tiny files, divisible by eight; use 4096 for longer mixed-load timing')
 p.add_argument('--fixture-quota',choices=('1G','4G','16G'),help='explicit per-daemon private quota; default preserves each gate existing quota')
 p.add_argument('--session-cleanup',action='store_true',help='staged bounded lease/lock cleanup, global barrier, exact replay and cold physical reclaim')
+p.add_argument('--deferred-close',action='store_true',help='staged identified close, 64 cross-group OPEN appends, crash/resume, exact holes and bounded retirement')
 p.add_argument('--guarded-leases',action='store_true',help='sequenced lease wire reorder, lost reply probe, cold replay and last-close reclaim')
 p.add_argument('--put-barrier-fault',action='store_true',help='test-only server fragment fsync refusal, unpublished state, retained-body recovery and cold bytes')
 p.add_argument('--create-live-retry',action='store_true',help='actual FUSE CREATE retries consumed committed reply then BUSY using one identity')
@@ -211,7 +212,7 @@ def wait(predicate, label, seconds=120):
     (work/'failed-status.json').write_text(json.dumps(status(),indent=2))
     raise AssertionError(label+' timed out')
 
-def start():
+def start(prefer_single_host=False):
     for i,root in enumerate(roots):
         root.mkdir(exist_ok=True)
         log=open(work/f'n{i+1}.log','ab');handles.append(log)
@@ -237,6 +238,7 @@ def start():
                 with socket.create_connection(('127.0.0.1',a.port+i), timeout=.2):return True
             except OSError:return False
         wait(listening,f'node {i+1} listening',30)
+        if prefer_single_host and i==0:time.sleep(2)
     time.sleep(3)
 
 def stop(crash=False):
@@ -583,6 +585,55 @@ try:
         wait(lambda:not files(ino),'durably fenced physical fragments reclaimed',180)
         (work/'guarded-leases.json').write_text(json.dumps(records,indent=2))
         print('guarded lease reorder/lost-reply/read-only probe/cold replay/final-close reclaim PASS',flush=True)
+    if a.deferred_close:
+        helper=work/'deferred-lease';inspector=work/'close-step'
+        for output,cfile in ((helper,'lease_edges.c'),(inspector,'close_step.c')):
+            run(['cc','-Wall','-Wextra','-I'+str(source/'include'),source/'tests/live'/cfile,source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',output])
+        path=mount/'deferred-close';body=bytes(range(256))*4096
+        with path.open('wb') as out:out.write(body);out.flush();os.fsync(out.fileno())
+        ino=path.stat().st_ino;gen=1;uuid=os.urandom(16).hex()
+        attr=run([helper,str(a.port),str(ino)],capture_output=True,text=True).stdout
+        shard=int(re.search(r'shard=(\d+)',attr).group(1))
+        for operation,extra in [('create',['1']),('register',[str(shard),'1']),('establish',[str(shard),'1'])]:
+            run([source/'efs-mgmt','raft-session',f'127.0.0.1:{a.port}',operation,uuid,*extra])
+        deferred_env=dict(env,EFS_TEST_DEFERRED_LEASE='1');records=[]
+        def deferred(seq,ack,flags,probe=0,expected=0):
+            result=subprocess.run([str(helper),str(a.port),str(ino),str(gen),uuid,str(seq),str(ack),str(flags),str(probe),str(expected),'0'],env=deferred_env,capture_output=True,text=True,check=True,timeout=45).stdout
+            records.append(result.strip());return result
+        deferred(1,0,1)
+        reserved=run([inspector,'reserve',str(a.port),str(ino),uuid,'64','131072'],capture_output=True,text=True,timeout=180).stdout
+        expected=len(body)+64*131072
+        assert f'first={len(body)} end={expected}' in reserved,reserved
+        deferred(2,1,2);deferred(2,1,2,probe=1)
+        unmount();stop(crash=True)
+        # Opening these LSMs is only permitted while ALL private daemons stop.
+        before=[run([inspector,'inspect',root/'mdraft/kv',str(ino)],capture_output=True,text=True).stdout for root in roots]
+        assert any(int(re.search(r'open=(\d+)',text).group(1))>0 for text in before),before
+        assert any(int(re.search(r'markers=(\d+)',text).group(1))>0 for text in before),before
+        start(prefer_single_host=True);mount_client()
+        routing=run([source/'efs-mgmt','raft-status',f'127.0.0.1:{a.port}'],capture_output=True,text=True).stdout
+        assert re.search(r'group 0 hosted=1 role=LEADER',routing),routing
+        assert re.search(r'group 2 hosted=0',routing),routing
+        def settled():
+            try:return path.stat().st_size==expected
+            except OSError:return False
+        wait(settled,'cold deferred close drains OPEN append frontier',180)
+        assert path.read_bytes()==body+bytes(expected-len(body)),'deferred close corrupts original bytes or holes'
+        # Give exact DONE-page cleanup time to retire its obligation. The
+        # offline snapshot remains the final oracle, never pathname absence.
+        time.sleep(12)
+        unmount();stop()
+        after=[run([inspector,'inspect',root/'mdraft/kv',str(ino)],capture_output=True,text=True).stdout for root in roots]
+        for text in after:
+            assert 'markers=0 reservations=0' in text and 'open=0 ' in text and 'locks=0' in text,text
+        start();mount_client();deferred(2,1,2,probe=1)
+        deferred(3,2,1);assert path.read_bytes()==body+bytes(expected-len(body))
+        deferred(4,3,2)
+        stale=int(re.search(r'#define\s+EFS_ERR_STALE\s+(-?\d+)',(source/'include/efs/common.h').read_text()).group(1))
+        deferred(2,1,2,expected=stale)
+        path.unlink();wait(lambda:not files(ino),'deferred-close physical reclaim',180)
+        (work/'deferred-close.json').write_text(json.dumps({'ino':ino,'reserved':reserved.strip(),'before':before,'after':after,'edges':records,'expected_bytes':expected,'single_host_leader':routing},indent=2))
+        print('identified deferred close, cold 64-append holes, exact retirement and reopened bytes PASS',flush=True)
     if a.create_lease:
         helper=work/'create-lease'
         run(['cc','-I'+str(source/'include'),source/'tests/live/create_lease.c',source/'libefs.a','-pthread','-lm','-ldl','-libverbs','-o',helper])

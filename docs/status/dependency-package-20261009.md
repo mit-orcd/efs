@@ -225,3 +225,24 @@ core212/212 and peer64/64 pass. Installed service restored.
 [Evidence](../../results/measure/20261009-atomic-close-locks/README.md).
 The remaining unbounded last-close expansion is append drain; this portion does
 not activate pressure admission, D25 or production sessions.
+
+## Replay-identified bounded close successor
+
+Staged deferred lease edge/probe atomically persists the exact generation/UUID/
+epoch/sequence obligation with lease state and replay floor/result. The worker
+performs capped lock cleanup, one cross-authority append completion or eight
+DONE deletes, then exact retirement after ownership/cursor/reservations clear.
+Prepared obligation blocks deferred OPEN; a fresh lease after capture aborts
+cleanup before append effects. The collector has a hard 69-image allocation cap.
+A single-group leader delegates through RPC-only NEXT to a dual-host follower
+with fresh two-group ReadIndex; handlers never recursively forward.
+AMD direct/TCP actual crash retains64 OPEN reservations; single-group node1
+leadership recovers exact1MiB content plus8MiB holes, then cold inspection proves
+zero obligations/reservations/locks/cursor. Full Linux, core212/212, peer64/64,
+append and physical GC/restart pass; installed service restored.
+[Evidence](../../results/measure/20261009-deferred-close/README.md).
+Legacy HOLD/apply drain is unchanged and production FUSE does not yet use this
+successor. The package remains open for production lease/session identity,
+ambiguous release retention, bounded session append cleanup and receipt/session
+retirement. Existing ordered frontier scans retain a CPU/time-bound follow-up;
+this is a finite allocation/entry-shape claim, not whole-call timing proof.

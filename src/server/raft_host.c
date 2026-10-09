@@ -435,6 +435,8 @@ struct efs_raft_host {
     struct host_outbox tx[EFS_RAFT_MAX_PEERS];
     uint8_t close_cursor[HOST_NGROUPS][11];
     uint32_t close_cursor_len[HOST_NGROUPS];
+    uint8_t close_step_cursor[HOST_NGROUPS][11];
+    uint32_t close_step_cursor_len[HOST_NGROUPS];
     uint8_t orphan_cursor[HOST_NGROUPS][11];
     uint32_t orphan_cursor_len[HOST_NGROUPS];
     uint8_t orphan_discovery_cursor[HOST_NGROUPS][EFS_KV_KEY_MAX];
@@ -1871,7 +1873,8 @@ static int host_unpack_lease_edge(const uint8_t *cmd,uint32_t clen,
                                    uint64_t *gen,unsigned *flags,uint64_t *token)
 {
     if(clen!=EFS_MD_SESS_LEASE_EDGE_LEN || cmd[0]!=EFS_MD_CMD_SESSION ||
-       (cmd[1]!=EFS_MD_SESS_LEASE_EDGE && cmd[1]!=EFS_MD_SESS_LEASE_PROBE))
+       (cmd[1]!=EFS_MD_SESS_LEASE_EDGE && cmd[1]!=EFS_MD_SESS_LEASE_PROBE &&
+        cmd[1]!=EFS_MD_SESS_LEASE_EDGE_DEFERRED && cmd[1]!=EFS_MD_SESS_LEASE_PROBE_DEFERRED))
         return EFS_ERR_INVAL;
     memset(q,0,sizeof(*q));memcpy(q->id.client_uuid,cmd+2,EFS_OPID_UUID_LEN);
     q->id.session_epoch=rd32be(cmd+18);q->id.seq=rd64be(cmd+22);q->ack=rd64be(cmd+30);
@@ -2010,13 +2013,17 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
             required_failure=rc!=EFS_OK;
         }
         break;
+    case EFS_MD_SESS_LEASE_EDGE_DEFERRED:
     case EFS_MD_SESS_LEASE_EDGE: {
         struct efs_opid_req q;unsigned flags;uint64_t token;
         rc=host_unpack_lease_edge(cmd,clen,&q,&ino,&gen,&flags,&token);
         if(rc==EFS_OK) {
             shard=efs_kv_inode_shard(ino);
-            rc=efs_lease_guarded_edge(h->kv,ino,gen,&q,flags,token);
-            if(rc==EFS_OK && (flags&(EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING))) {
+            rc=cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED?
+                efs_lease_guarded_edge_deferred(h->kv,ino,gen,&q,flags,token):
+                efs_lease_guarded_edge(h->kv,ino,gen,&q,flags,token);
+            if(rc==EFS_OK && cmd[1]==EFS_MD_SESS_LEASE_EDGE &&
+               (flags&(EFS_LEASE_EDGE_CLOSE|EFS_LEASE_EDGE_CLEAR_PENDING))) {
                 rc=host_lease_close_effects(h,ino,gen);
                 required_failure=rc!=EFS_OK;
             }
@@ -2039,8 +2046,8 @@ static int apply_session_cmd(struct efs_raft_host *h, const uint8_t *cmd,
     }
     /* A blocked local fence is not a completed revocation barrier. Preserve
      * its business verdict in the apply ring so the coordinator cannot ACK it. */
-    if (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH)
-        return rc;
+    if (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+        cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED) return rc;
     if (rc == EFS_ERR_NOT_FOUND || rc == EFS_ERR_INVAL || rc == EFS_ERR_BUSY ||
         rc == EFS_ERR_STALE)
         rc = EFS_OK;
@@ -2403,13 +2410,14 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
            cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
            cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
-           cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP)
+           cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP)
               ? EFS_OK
               : rc;
     /* FENCE_LOC BUSY must let a later RESOLVE drain the owner intent. It is
      * a rejected command, not a retryable storage failure at this log index. */
     if (cmd[0] == EFS_MD_CMD_SESSION && clen >= 2 &&
-        (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH) &&
+        (cmd[1] == EFS_MD_SESS_FENCE_LOC || cmd[1] == EFS_MD_SESS_LEASE_LOCK_BATCH ||
+         cmd[1] == EFS_MD_SESS_LEASE_EDGE_DEFERRED) &&
         rc != EFS_ERR_IO && rc != EFS_ERR_NOMEM)
         ret = EFS_OK;
     /* Storage failure must retry this entry on every replica, rather than
@@ -2417,7 +2425,7 @@ static int host_apply(void *app, uint64_t index, uint64_t term,
     if ((cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH ||
            cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH ||
          cmd[0] == EFS_MD_CMD_GC_ACK || cmd[0] == EFS_MD_CMD_ORPHAN_REAP ||
-         cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CREATE ||
+         cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP || cmd[0] == EFS_MD_CMD_CLOSE_STEP || cmd[0] == EFS_MD_CMD_CREATE ||
          cmd[0] == EFS_MD_CMD_APPEND_RES ||
          (cmd[0] == EFS_MD_CMD_APPEND_RSV && clen == HOST_APPEND_RSV_LEN)) &&
         (rc == EFS_ERR_IO || rc == EFS_ERR_NOMEM))
@@ -2774,6 +2782,10 @@ static int host_apply_dispatch(struct efs_raft_host *h, uint64_t index, uint64_t
         return apply_lock_cmd(h, cmd, clen, index);
     if (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH)
         return apply_lane_sweep_cmd(h, cmd, clen, index);
+    if (cmd[0] == EFS_MD_CMD_CLOSE_STEP) {
+        if(clen!=46)return EFS_ERR_INVAL;
+        return efs_close_step_apply(h->kv,rd64be(cmd+1),cmd+9,cmd[45]);
+    }
     if (cmd[0] == EFS_MD_CMD_CLOSE_CLEANUP) {
         if(clen!=17)return EFS_ERR_PROTO;
         efs_ino_t ino=rd64be(cmd+1);uint64_t gen=rd64be(cmd+9);
@@ -3695,6 +3707,10 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
         return UINT64_MAX;
     if (cmd[0]==EFS_MD_CMD_SESSION && n>=2) {
         if (cmd[1]==EFS_MD_SESS_LEASE_DROP) return UINT64_MAX;
+        if(cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED) {
+            uint64_t rows=host_pressure_rows_charge(19,1,EFS_OPID_VAL_MAX);
+            return charge>rows?charge:rows;
+        }
         if (cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH) {
             uint64_t rows=host_pressure_rows_charge(2*EFS_SESSION_CLEANUP_MAX,1,8);
             return charge>rows ? charge : rows;
@@ -3702,6 +3718,7 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
     }
     uint64_t work = 0;
     switch (cmd[0]) {
+    case EFS_MD_CMD_CLOSE_STEP: work=host_pressure_rows_charge(2*EFS_LOCK_CAP,1,0); break;
     case EFS_MD_CMD_LANE_SWEEP_BATCH: work=64u<<10; break;
     case EFS_MD_CMD_TRUNCATE:
         work=host_pressure_rows_charge(EFS_META_TRUNCATE_ITEMS,2,EFS_META_GC_VAL);
@@ -3723,12 +3740,16 @@ static uint64_t host_pressure_command_charge(const uint8_t *cmd, uint32_t n)
 static int host_pressure_recovery(const uint8_t *cmd, uint32_t n)
 {
     if (!cmd || !n || n > (256u<<10)) return 0;
+    if(cmd[0]==EFS_MD_CMD_SESSION && n==EFS_MD_SESS_LEASE_EDGE_LEN &&
+       cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED &&
+       !(rd32be(cmd+54)&EFS_LEASE_EDGE_OPEN))return 1;
     if (cmd[0]==EFS_MD_CMD_SESSION && n>=2 && cmd[1]==EFS_MD_SESS_LEASE_LOCK_BATCH)
         return 1;
     switch (cmd[0]) {
     case EFS_MD_CMD_DECIDE: case EFS_MD_CMD_RESOLVE: case EFS_MD_CMD_DROP:
     case EFS_MD_CMD_LANE_SWEEP: case EFS_MD_CMD_LANE_SWEEP_BATCH:
     case EFS_MD_CMD_REAP_DONE: case EFS_MD_CMD_REAP_BATCH:
+    case EFS_MD_CMD_CLOSE_STEP:
     case EFS_MD_CMD_GC_ACK: case EFS_MD_CMD_PUBLICATION_RETIRE:
         return 1;
     default: return 0;
@@ -6422,9 +6443,9 @@ static int host_gc_propose(struct efs_raft_host *h, uint8_t group,
                            const uint8_t *cmd, uint32_t clen)
 {
     int rc = host_bg_propose(h, group, cmd, clen, 1);
-    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT))) {
+    if (rc != EFS_OK && !(rc == EFS_ERR_BUSY && (cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT || cmd[0] == EFS_MD_CMD_CLOSE_STEP))) {
         uint64_t *counter = (cmd[0] == EFS_MD_CMD_LANE_SWEEP || cmd[0] == EFS_MD_CMD_LANE_SWEEP_BATCH || cmd[0] == EFS_MD_REQ_SWEEP_NEXT) ? &h->s->gc_sweep_errors :
-                            (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_CMD_ORPHAN_REAP) ? &h->s->gc_reap_errors :
+                            (cmd[0] == EFS_MD_CMD_REAP_DONE || cmd[0] == EFS_MD_CMD_REAP_BATCH || cmd[0] == EFS_MD_CMD_ORPHAN_REAP || cmd[0] == EFS_MD_CMD_CLOSE_STEP) ? &h->s->gc_reap_errors :
                             &h->s->gc_ack_errors;
         __atomic_fetch_add(counter, 1, __ATOMIC_RELAXED);
     }
@@ -6464,6 +6485,51 @@ static int orphan_scan_cb(void *user, const uint8_t *key, uint32_t kl,
     scan->ino[scan->count] = ino; scan->gen[scan->count++] = gen;
     return 0;
 }
+static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
+    const uint8_t identity[EFS_CLOSE_STEP_VALUE]);
+struct close_step_scan {
+    efs_ino_t ino[8];uint8_t identity[8][EFS_CLOSE_STEP_VALUE],skip[11],last[11];
+    uint32_t n,skip_len;int rc;
+};
+static int close_step_scan_cb(void *user,const uint8_t *key,uint32_t len,
+    const uint8_t *value,uint32_t length)
+{
+    struct close_step_scan *scan=user;
+    if(len!=11 || length!=EFS_CLOSE_STEP_VALUE || !rd64be(value) ||
+       !rd32be(value+24) || !rd64be(value+28)) {scan->rc=EFS_ERR_PROTO;return 1;}
+    if(scan->skip_len && !memcmp(key,scan->skip,11))return 0;
+    memcpy(scan->last,key,11);scan->ino[scan->n]=rd64be(key+3);
+    memcpy(scan->identity[scan->n++],value,length);
+    return scan->n==8;
+}
+static void host_gc_close_step_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
+{
+    int gi=gc_gi(group);
+    struct close_step_scan scan={.skip_len=h->close_step_cursor_len[gi]};
+    memcpy(scan.skip,h->close_step_cursor[gi],scan.skip_len);
+    uint8_t prefix[3]={(uint8_t)(anchor>>8),(uint8_t)anchor,EFS_KV_KIND_CLOSE_STEP};
+    int rc=efs_kv_scan_from(h->kv,prefix,3,scan.skip_len?scan.skip:NULL,
+        scan.skip_len,close_step_scan_cb,&scan);
+    if(rc<0 || scan.rc!=EFS_OK) {
+        __atomic_fetch_add(&h->s->gc_scan_errors,1,__ATOMIC_RELAXED);return;
+    }
+    if(!rc)h->close_step_cursor_len[gi]=0;
+    else if(scan.n) {
+        memcpy(h->close_step_cursor[gi],scan.last,11);h->close_step_cursor_len[gi]=11;
+    }
+    for(uint32_t i=0;i<scan.n && h->gc_running;i++) {
+        uint8_t cmd[46]={EFS_MD_CMD_CLOSE_STEP};
+        wr64be(cmd+1,scan.ino[i]);memcpy(cmd+9,scan.identity[i],EFS_CLOSE_STEP_VALUE);
+        cmd[45]=EFS_CLOSE_STEP_LOCKS;
+        rc=host_gc_propose(h,group,cmd,sizeof(cmd));
+        if(rc!=EFS_OK)continue;
+        rc=host_close_append_step(h,scan.ino[i],scan.identity[i]);
+        if(rc!=EFS_OK)continue;
+        cmd[45]=EFS_CLOSE_STEP_RETIRE;
+        (void)host_gc_propose(h,group,cmd,sizeof(cmd));
+    }
+}
+
 static void host_gc_close_pass(struct efs_raft_host *h,uint8_t group,uint32_t anchor)
 {
     int gi=gc_gi(group);
@@ -7422,6 +7488,7 @@ static void *host_gc_thread(void *arg)
             ta = now_us_();
             __atomic_store_n(&h->s->gc_group, h->g[g].group, __ATOMIC_RELAXED);
             __atomic_store_n(&h->s->gc_stage, 3, __ATOMIC_RELAXED);
+            host_gc_close_step_pass(h, h->g[g].group, anchor);
             host_gc_close_pass(h, h->g[g].group, anchor);
             host_gc_orphan_pass(h, h->g[g].group, anchor);
             t_orphan += now_us_() - ta;
@@ -8578,7 +8645,9 @@ static int host_lease_edge_result(struct efs_raft_host *h,const uint8_t *cmd,
     rc=host_read_index(h,group,hint);
     if(rc!=EFS_OK)return rc;
     int verdict=EFS_ERR_BUSY;
-    rc=efs_lease_guarded_probe(h->kv,ino,gen,&q,flags,token,&verdict);
+    rc=(cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1]==EFS_MD_SESS_LEASE_PROBE_DEFERRED)?
+        efs_lease_guarded_probe_deferred(h->kv,ino,gen,&q,flags,token,&verdict):
+        efs_lease_guarded_probe(h->kv,ino,gen,&q,flags,token,&verdict);
     *known=rc==1;
     return rc==1?verdict:(rc==0?EFS_ERR_BUSY:rc);
 }
@@ -8614,8 +8683,14 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
     group = payload[0];
     cmd = payload + 1;
     clen = plen - 1;
+    if(clen && cmd[0]==EFS_MD_CMD_CLOSE_STEP &&
+       (clen!=46 || !rd64be(cmd+1) ||
+        group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1))))) {
+        out->rc=EFS_ERR_INVAL;return;
+    }
     if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
-       (cmd[1]==EFS_MD_SESS_LEASE_EDGE || cmd[1]==EFS_MD_SESS_LEASE_PROBE)) {
+       (cmd[1]==EFS_MD_SESS_LEASE_EDGE || cmd[1]==EFS_MD_SESS_LEASE_PROBE ||
+        cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED || cmd[1]==EFS_MD_SESS_LEASE_PROBE_DEFERRED)) {
         struct efs_opid_req q;efs_ino_t ino;uint64_t gen,token;unsigned flags;
         rc=host_unpack_lease_edge(cmd,clen,&q,&ino,&gen,&flags,&token);
         if(rc!=EFS_OK || group!=efs_raft_shard_group(efs_kv_inode_shard(ino))) {
@@ -8644,6 +8719,19 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             return;
         }
     }
+    if(clen && cmd[0]==EFS_MD_REQ_CLOSE_APPEND_NEXT) {
+        if(clen!=45 || !rd64be(cmd+1) ||
+           group!=efs_raft_shard_group(efs_kv_inode_shard(rd64be(cmd+1)))) {
+            out->rc=EFS_ERR_INVAL;return;
+        }
+        uint8_t groups[2];host_need_both(groups);
+        /* RPC handlers never forward this request recursively. A dual-host
+         * follower can coordinate after fresh ReadIndex on both groups. */
+        if(!host_hosts(h,groups[0]) || !host_hosts(h,groups[1])) {
+            out->rc=EFS_ERR_NOT_PRIMARY;out->leader_hint=host_pick_peer(h,groups,2,-1);return;
+        }
+        out->rc=host_close_append_step(h,rd64be(cmd+1),cmd+9);return;
+    }
     if (clen >= HOST_CFG_LEN && cmd[0] == EFS_MD_CMD_CFG) {
         rc = host_cfg(h, group, cmd, clen, &hint);
         {
@@ -8657,7 +8745,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
             out->leader_hint = hint;
         return;
     }
-    if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && cmd[1]==EFS_MD_SESS_LEASE_PROBE) {
+    if(clen>=2 && cmd[0]==EFS_MD_CMD_SESSION && (cmd[1]==EFS_MD_SESS_LEASE_PROBE || cmd[1]==EFS_MD_SESS_LEASE_PROBE_DEFERRED)) {
         if(!host_hosts(h,group)) {
             rc=host_remote_cmd(h,group,cmd,clen,out,-1);
             if(rc!=EFS_OK)out->rc=rc;
@@ -8785,7 +8873,7 @@ void server_raft_host_submit(const uint8_t *payload, uint32_t plen,
          * PREP's BUSY/STALE verdict read as OK. */
         rc = host_propose_wait_idx(h, group, cmd, clen, &hint, &idx);
         if(rc==EFS_OK && clen>=2 && cmd[0]==EFS_MD_CMD_SESSION &&
-           cmd[1]==EFS_MD_SESS_LEASE_EDGE)
+           (cmd[1]==EFS_MD_SESS_LEASE_EDGE || cmd[1]==EFS_MD_SESS_LEASE_EDGE_DEFERRED))
             rc=host_lease_edge_result(h,cmd,clen,group,&hint,&salt);
     }
     out->salt=salt;
@@ -10154,6 +10242,37 @@ static int host_append_authority(struct efs_raft_host *h,int *hint)
     }
     return EFS_OK;
 }
+static int host_close_append_step(struct efs_raft_host *h,efs_ino_t ino,
+    const uint8_t identity[EFS_CLOSE_STEP_VALUE])
+{
+    int hint=-1,rc;
+    uint8_t groups[2];host_need_both(groups);
+    if(!host_hosts(h,groups[0]) || !host_hosts(h,groups[1])) {
+        hint=host_pick_peer(h,groups,2,-1);
+        if(hint<0)return EFS_ERR_NOT_PRIMARY;
+        uint8_t cmd[45]={EFS_MD_REQ_CLOSE_APPEND_NEXT};struct efs_msg_raft_mkfs_reply reply;
+        wr64be(cmd+1,ino);memcpy(cmd+9,identity,EFS_CLOSE_STEP_VALUE);
+        return host_remote_cmd(h,efs_raft_shard_group(efs_kv_inode_shard(ino)),cmd,sizeof(cmd),&reply,hint);
+    }
+    rc=host_append_authority(h,&hint);
+    if(rc!=EFS_OK)return rc;
+    int held=efs_lease_any(h->kv,ino,rd64be(identity));
+    if(held<0)return held;
+    if(held)return EFS_ERR_BUSY;
+    uint64_t offset,length;uint32_t n=1;
+    rc=efs_meta_apply_append_open(h->kv,ino,&offset,&length,&n);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_OK; /* REAP_BATCH owns dead-file rows */
+    if(rc!=EFS_OK)return rc;
+    struct host_resize_ctx ctx={h,&hint};struct efs_txid tx;fill_txid(h,&tx);
+    if(n) {
+        rc=efs_meta_finish_append_close(h->kv,ino,offset,identity,&tx,&host_append_ops,&ctx);
+        return rc==EFS_OK?EFS_ERR_BUSY:rc; /* another pass checks completion */
+    }
+    unsigned removed=0;
+    rc=efs_meta_prune_append_close(h->kv,ino,identity,&tx,&host_append_ops,&ctx,&removed);
+    return rc==EFS_OK && removed?EFS_ERR_BUSY:rc;
+}
+
 static int host_append_transaction(struct efs_raft_host *h,efs_ino_t ino,uint64_t len,
                                     const struct efs_opid_req *q,uint64_t *offset,int *hint)
 {

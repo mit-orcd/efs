@@ -11,6 +11,7 @@
 #define EFS_KV_SHARD_BITS 12
 #define EFS_KV_SHARD_MASK 0xFFFu
 #define EFS_KV_KEY_MAX    320
+#define EFS_KV_KIND_CLOSE_STEP 34 /* staged replay-identified bounded close obligation */
 #define EFS_KV_KIND_CLOSE_CLEANUP 33 /* durable deferred final-close effects */
 #define EFS_KV_KIND_LEASE_EDGE 32 /* bounded staged session/shard lease replay */
 

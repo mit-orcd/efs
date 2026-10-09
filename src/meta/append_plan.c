@@ -2,6 +2,7 @@
  * capture exact replacement images, rather than duplicating its frontier,
  * hole and DONE-row cleanup rules. The capture KV never mutates its base. */
 #include "efs/meta_apply.h"
+#include "efs/session.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -15,12 +16,14 @@ struct finish_capture {
     struct efs_kv *base;
     struct finish_image *images;
     uint32_t count, capacity, mutations;
+    efs_ino_t close_ino;
 };
 static int finish_data_key(const uint8_t *key,uint32_t n)
 {
     if(n<11)return 0;
     return key[2]==EFS_KV_KIND_INODE || key[2]==EFS_KV_KIND_LANE ||
-           key[2]==EFS_KV_KIND_APPEND_CUR || key[2]==EFS_KV_KIND_APPEND_RSV;
+           key[2]==EFS_KV_KIND_APPEND_CUR || key[2]==EFS_KV_KIND_APPEND_RSV ||
+           key[2]==EFS_KV_KIND_CLOSE_STEP;
 }
 static int finish_record(struct finish_capture *c,const uint8_t *key,uint32_t n,
                            const uint8_t *value,uint32_t length,uint32_t *slot)
@@ -35,8 +38,10 @@ static int finish_record(struct finish_capture *c,const uint8_t *key,uint32_t n,
             return EFS_ERR_BUSY; /* source moved while collecting */
         *slot=i;return EFS_OK;
     }
+    if(c->count>=EFS_META_LANES+5)return EFS_ERR_OVERFLOW;
     if(c->count==c->capacity) {
         uint32_t cap=c->capacity?c->capacity*2:16;
+        if(cap>EFS_META_LANES+5)cap=EFS_META_LANES+5;
         size_t bytes=(size_t)cap*sizeof(*c->images);
         if(cap<c->capacity || bytes/sizeof(*c->images)!=cap)return EFS_ERR_NOMEM;
         struct finish_image *images=realloc(c->images,bytes);
@@ -111,10 +116,11 @@ static int finish_execute(struct finish_capture *capture,const struct efs_txid *
     int rc=EFS_OK;
     /* The first read is the inode. Freeze it before any cursor or lane,
      * preventing activation, legacy reserve/resolve and truncate races. */
-    if(!c.count || c.images[0].klen!=11 || c.images[0].key[2]!=EFS_KV_KIND_INODE) {
+    if(!c.count || c.images[0].klen!=11 ||
+       c.images[0].key[2]!=(c.close_ino?EFS_KV_KIND_CLOSE_STEP:EFS_KV_KIND_INODE)) {
         rc=EFS_ERR_INVAL;goto out;
     }
-    if(c.count>EFS_META_LANES+4){rc=EFS_ERR_INVAL;goto out;}
+    if(c.count>EFS_META_LANES+4+(c.close_ino!=0)){rc=EFS_ERR_INVAL;goto out;}
     for(uint32_t i=0;i<c.count;++i) {
         struct finish_image *im=&c.images[i];
         if(memcmp(im->key+3,c.images[0].key+3,8)){rc=EFS_ERR_INVAL;goto out;}
@@ -136,6 +142,16 @@ static int finish_execute(struct finish_capture *capture,const struct efs_txid *
             memcpy(q.expected,im->expected,im->expected_len);
         if(im->new_len)memcpy(q.value,im->replacement?im->replacement:im->expected,im->new_len);
         rc=ops->prepare(ctx,t,&parts,&q);
+        if(rc==EFS_OK && !i && c.close_ino) {
+            /* Deferred OPEN/CLOSE checks this prepared obligation. A lease
+             * acquired after capture but before PREPARE must stop cleanup. */
+            int held=efs_lease_any(c.base,c.close_ino,
+                (uint64_t)q.expected[0]<<56 | (uint64_t)q.expected[1]<<48 |
+                (uint64_t)q.expected[2]<<40 | (uint64_t)q.expected[3]<<32 |
+                (uint64_t)q.expected[4]<<24 | (uint64_t)q.expected[5]<<16 |
+                (uint64_t)q.expected[6]<<8 | q.expected[7]);
+            rc=held<0?held:held?EFS_ERR_BUSY:EFS_OK;
+        }
         if(rc!=EFS_OK) {
             int aborted=ops->decide(ctx,t,&parts,EFS_TXN_ABORT);
             if(aborted!=EFS_OK)rc=aborted;
@@ -223,6 +239,56 @@ int efs_meta_prune_append(struct efs_kv *kv,efs_ino_t ino,const struct efs_txid 
         return EFS_ERR_INVAL;
     *removed=0;
     int rc=prune_capture(kv,ino,&c,&count);
+    if(rc==EFS_OK && count)rc=finish_execute(&c,t,ops,ctx);
+    if(rc==EFS_OK)*removed=count;
+    finish_free(&c);return rc;
+}
+
+static int close_capture(struct efs_kv *kv,efs_ino_t ino,const uint8_t *identity,
+                            struct finish_capture *c)
+{
+    uint8_t key[EFS_KV_KEY_MAX],value[EFS_CLOSE_STEP_VALUE];uint32_t kl,n=sizeof(value),slot;
+    int rc=efs_kv_key_reap(efs_kv_anchor_shard(efs_kv_inode_shard(ino)),ino,key,&kl);
+    if(rc!=EFS_OK)return rc;
+    key[2]=EFS_KV_KIND_CLOSE_STEP;
+    rc=efs_kv_get(kv,key,kl,value,&n);
+    if(rc==EFS_ERR_NOT_FOUND)return EFS_ERR_STALE;
+    if(rc!=EFS_OK)return rc;
+    if(n!=sizeof(value))return EFS_ERR_PROTO;
+    if(memcmp(value,identity,sizeof(value)))return EFS_ERR_STALE;
+    struct efs_meta_row row;
+    rc=efs_meta_apply_get_inode(kv,ino,&row);
+    if(rc!=EFS_OK)return rc;
+    uint64_t gen=0;for(unsigned i=0;i<8;i++)gen=gen<<8|identity[i];
+    if(row.generation!=gen)return EFS_ERR_STALE;
+    c->close_ino=ino;
+    return finish_record(c,key,kl,value,n,&slot);
+}
+int efs_meta_finish_append_close(struct efs_kv *kv,efs_ino_t ino,uint64_t offset,
+    const uint8_t identity[EFS_CLOSE_STEP_VALUE],const struct efs_txid *t,
+    const struct efs_meta_append_ops *ops,void *ctx)
+{
+    struct finish_capture c={.base=kv};
+    const struct efs_kv_ops capture_ops={.get=finish_get,.scan_prefix=finish_scan,.scan_from=finish_scan_from};
+    struct efs_kv capture={.ops=&capture_ops,.ctx=&c};
+    if(!kv || !ino || !identity || !t || !ops || !ops->prepare || !ops->decide || !ops->resolve)
+        return EFS_ERR_INVAL;
+    int rc=close_capture(kv,ino,identity,&c);
+    if(rc==EFS_OK)rc=efs_meta_collect_append_completion(&capture,ino,offset,
+        EFS_META_APPEND_ABORTED_HOLE,finish_batch,&c);
+    if(rc==EFS_OK && c.mutations)rc=finish_execute(&c,t,ops,ctx);
+    finish_free(&c);return rc;
+}
+int efs_meta_prune_append_close(struct efs_kv *kv,efs_ino_t ino,
+    const uint8_t identity[EFS_CLOSE_STEP_VALUE],const struct efs_txid *t,
+    const struct efs_meta_append_ops *ops,void *ctx,unsigned *removed)
+{
+    struct finish_capture c={.base=kv};unsigned count=0;
+    if(!kv || !ino || !identity || !t || !ops || !ops->prepare || !ops->decide || !ops->resolve || !removed)
+        return EFS_ERR_INVAL;
+    *removed=0;
+    int rc=close_capture(kv,ino,identity,&c);
+    if(rc==EFS_OK)rc=prune_capture(kv,ino,&c,&count);
     if(rc==EFS_OK && count)rc=finish_execute(&c,t,ops,ctx);
     if(rc==EFS_OK)*removed=count;
     finish_free(&c);return rc;

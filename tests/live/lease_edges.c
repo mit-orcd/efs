@@ -128,6 +128,7 @@ int main(int argc,char **argv)
  unsigned flags=atoi(argv[7]),probe=atoi(argv[8]);int expected=atoi(argv[9]),discard=atoi(argv[10]);
  uint8_t p[1+EFS_MD_SESS_LEASE_EDGE_LEN]={0};unsigned shard=efs_kv_inode_shard(ino);
  p[0]=efs_raft_shard_group(shard);p[1]=EFS_MD_CMD_SESSION;p[2]=probe?EFS_MD_SESS_LEASE_PROBE:EFS_MD_SESS_LEASE_EDGE;
+ if(getenv("EFS_TEST_DEFERRED_LEASE"))p[2]=probe?EFS_MD_SESS_LEASE_PROBE_DEFERRED:EFS_MD_SESS_LEASE_EDGE_DEFERRED;
  assert(strlen(argv[4])==32);for(unsigned i=0;i<16;i++){unsigned b;assert(sscanf(argv[4]+2*i,"%2x",&b)==1);p[3+i]=b;}
  be(p+19,1,4);be(p+23,seq,8);be(p+31,ack,8);be(p+39,ino,8);be(p+47,gen,8);be(p+55,flags,4);
  for(unsigned attempt=0;attempt<120;attempt++){

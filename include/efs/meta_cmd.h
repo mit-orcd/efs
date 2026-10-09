@@ -13,6 +13,8 @@
 
 /* Exact bounded key set, so retrying an applied entry cannot consume the
  * next batch. Historical LANE_SWEEP retains whole-lane replay semantics. */
+#define EFS_MD_REQ_CLOSE_APPEND_NEXT 37 /* RPC only: [ino:8][identity:36] */
+#define EFS_MD_CMD_CLOSE_STEP 36 /* [ino:8][identity:36][phase:1], 46 bytes */
 #define EFS_MD_REQ_SWEEP_NEXT 35 /* RPC only: leader selects exact keys; never log */
 #define EFS_MD_CMD_REAP_BATCH 34 /* [ino:8][gen:8][n:1][len:1,key:31]*n */
 #define EFS_MD_CMD_LANE_SWEEP_BATCH 33 /* [ino:8][gen:8][lane:1][n:1][ci:4]*n */
@@ -46,6 +48,8 @@
  * NEXT is RPC-only; leader selects exact keys before writing BATCH to Raft.
  * [tag,sub,uuid:16,epoch:4,shard:4] + BATCH [n:1][len:1,key:65]*n.
  * Reply salt=1 means this phase is empty; salt=0 means one batch progressed. */
+#define EFS_MD_SESS_LEASE_EDGE_DEFERRED 16 /* staged atomic close obligation */
+#define EFS_MD_SESS_LEASE_PROBE_DEFERRED 17 /* read-only matching identity domain */
 #define EFS_MD_SESS_LEASE_LOCK_NEXT 14
 #define EFS_MD_SESS_LEASE_LOCK_BATCH 15
 #define EFS_MD_SESS_LEASE_PROBE 13 /* host-only ReadIndex; never a log command */
