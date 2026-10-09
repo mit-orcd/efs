@@ -27,6 +27,14 @@ the recommended first priorities within this set. W95 refines existing P4.1,
 so the earlier grouped count below is retained as a dated baseline rather than
 recomputed by blindly adding four. W90–W92 keep their existing scopes.
 
+## Disk-backed query cache progress
+
+[W92 local disk backend](query-disk-backend-20261009.md) implements persistent
+partition catalogs, bounded builder scratch, immutable snapshots and validated
+checkpoint recovery. Initial functional gates pass; normal Xorinox query
+publication refuses a retained wrong-shard directory entry. Incremental derived
+stats, disk quotas and large-scale acceptance remain open.
+
 ## All-node metadata query discussion
 
 [W98 — serve metadata queries through all nodes](all-node-metadata-queries-20261009.md)

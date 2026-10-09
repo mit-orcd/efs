@@ -1,0 +1,5 @@
+inode=4113 rc=0 parent=9876 nlink=2 mode=40755 generation=1
+parent=9876 rc=0 mode=40755 layout=0 inode_shard=1684 hashed_shard=3632
+lookup rc=-3 ino=0
+incoming shard=0 parent=9876 type=16384 gen=1 name=level_2
+incoming_live=1 incoming_tombstones=0 scan_rc=0

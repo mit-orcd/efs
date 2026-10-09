@@ -1,0 +1,29 @@
+cluster: xorinox
+xefsct1 already running
+== ship binaries + scripts + tests/posix -> xefsct1
+xefsct1: remount requested (stop workloads first)
+Unmounting /mnt/efs
+Retiring drained efs-fuse PID 4145863 for /mnt/efs
+Unmounted /mnt/efs
+xefsct1: mounting efs (seed 192.168.122.111:17432)
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+xefsct2 already running
+== ship binaries + scripts + tests/posix -> xefsct2
+xefsct2: remount requested (stop workloads first)
+Unmounting /mnt/efs
+Not mounted: /mnt/efs (cleared any stale FUSE handle)
+xefsct2: mounting efs (seed 192.168.122.111:17432)
+Stop with: ./scripts/client.sh stop /mnt/efs
+Logging efs-fuse to /mnt/efs-fuse-efs.log
+Mounted /mnt/efs
+cluster: xorinox
+xefs1: hosts + ssh config updated
+xefs2: hosts + ssh config updated
+xefs3: hosts + ssh config updated
+xefsgw: hosts + ssh config updated
+xefsct1: hosts + ssh config updated
+xefsct2: hosts + ssh config updated
+mac: ~/.ssh/config updated (ssh xefs1 xefs2 xefs3 xefsgw xefsct1 xefsct2)
+test clients ready: xefsct1 xefsct2 (posix.sh 2client runs across them)
