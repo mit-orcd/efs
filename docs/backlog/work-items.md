@@ -2681,7 +2681,14 @@ signals (63–215 ms); handlers still drain before teardown.
 
 ## W66 · Metadata leadership distribution and routing (queue row meta-scale)
 
-**Class:** scalability enhancement. **Status:** open; indexed Oct 7, 2026.
+**Class:** scalability enhancement / metadata protection protocol. **Status:** open; indexed Oct 7, 2026.
+
+**D36 (Oct 9):** topology work must satisfy the user-required four-node,
+any-two-loss preservation of acknowledged authoritative metadata. Current Raft
+majority placement does not meet it. Select and prove the metadata protocol;
+never substitute a five-node minimum for the accepted requirement. Larger
+clusters must scale metadata service while retaining the same protection target.
+See [binding decision](../status/node-count-protection-20261009.md).
 
 **Evidence/current state:** Two fixed parity Raft groups and dual-group routing remain implemented; logical shard count is not independent leadership capacity.
 
@@ -2947,7 +2954,11 @@ hardware power-loss proof.
 ## W74 · Configurable protection profiles, debt and automatic repair remain absent (queue row spec4)
 
 **Class:** protection/recovery feature gap. **Status:** accepted design, absent
-public control-plane/data-plane integration; no new design decision here.
+public control-plane/data-plane integration. **D36 (Oct 9) supersedes the
+former protection ladder:** three nodes minimum/2+1, four nodes maximum
+two-loss safety/2+2, more nodes for scale with the same protection target.
+Authoritative metadata must meet the same loss envelope; coordinate its
+unresolved four-node protocol with W66. See [binding decision](../status/node-count-protection-20261009.md).
 
 **Evidence:** `EFS_NUM_FRAGMENTS` is 3 and `erasure.h` specifies fixed 2+1.
 `efs_publication_from_rec` stamps K2F1; `meta_apply.c:evidence_ok` rejects other
@@ -2956,7 +2967,8 @@ that reconstructs missing live fragments, effective_f/target_f transition or
 profile-cutover controller was found. Namespace/metadata recovery and reading
 from two survivors are not data repair. W42 separately records the two-ACK
 legacy PUT success/protection-debt concern; staged evidence validation is not
-a repair implementation. Five or seven nodes alone do not activate f=2/f=3.
+a repair implementation. Four or more nodes alone do not activate the required
+2+2 protection or solve the metadata protocol gap.
 
 **Change/gate:** implement the accepted profile/debt/repair control plane in
 stages; advertise only supported and validated guarantees. Demonstrate missing
@@ -2966,8 +2978,8 @@ profile cutover while writers remain active. Retain actual configured RF/EC
 and permanent-loss evidence. Coordinate with W66 metadata topology.
 
 **Forbidden:** counting returning/empty nodes as restored fragments, calling
-GC or metadata snapshot recovery repair, or advertising the spec's f=2/f=3
-matrix as current production capability.
+GC or metadata snapshot recovery repair, advertising D36 as implemented, or
+replacing the accepted four-node target with a five-node minimum/f=3 ladder.
 
 <a id="w75"></a>
 
@@ -3539,6 +3551,8 @@ with raw logs. This format repair does not establish a follower pressure bound;
 the original record and withdrawn interpretation remain retained.
 
 **Forbidden:** accepting shifted/missing fields as zero, claiming no effect or a bound from the old summary, or silently replacing original evidence.
+
+<a id="w92"></a>
 
 ## W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 

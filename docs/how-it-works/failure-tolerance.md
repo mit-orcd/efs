@@ -8,15 +8,17 @@ consult those gates before claiming this contract is implemented.
 [Architecture](architecture.md) · [Design rationale](design-rationale.md) ·
 [Data protocol](protocols/data.md)
 
-The normative rule lives in
-[§2 of the spec](architecture.md): **N ≥ max(2f+1, k+f), RF = 2f+1**.
-This document derives it, explains why there is no weaker mode, and
-specifies how f and k change online.
+The normative node-count contract lives in [§2 of the spec](architecture.md),
+accepted as D36 on Oct 9: three nodes minimum, four nodes maximum two-loss
+protection, larger clusters for scale. This supersedes the previous f=3 ladder.
+The mathematics below explain a limitation of majority Raft; they must not be
+used to silently replace the accepted four-node requirement with five nodes.
+The required four-node metadata protocol is unresolved and not implemented.
 
 ## The derivation
 
 The two planes scale differently with the configured failure target f
-(max simultaneous *permanent* node losses with no data loss, capped at 3):
+(maximum two simultaneous permanent node losses under D36):
 
 - **Data (EC):** a `k+f` stripe survives any f losses (any k of k+f
   fragments reconstruct). Needs **N ≥ k+f** distinct failure domains.
@@ -30,12 +32,12 @@ The two planes scale differently with the configured failure target f
   failure domains, gives Q = f+1 and survival of any f replica losses with
   both properties.
 
-**f=3 needs 7 nodes, not 5 or 6.** On 5 nodes the best metadata
-configuration is RF=5, Q=3, and 3 ≯ 3 — the 3 dead nodes could be exactly
-the quorum that acknowledged the most recent writes. The config validator
-rejects any configuration that violates N ≥ max(2f+1, k+f).
+For f=2, ordinary majority Raft needs five voting failure domains for continued
+authority. D36 requires preservation with four nodes, so selecting a different
+metadata protocol and its safe recovery behavior is mandatory before claiming
+compliance. No extra node or witness is implicitly authorized.
 
-## Why there is no N = 2f mode
+## Why survivor-log merge does not implement the four-node requirement
 
 At N = 2f exactly (e.g. 4 nodes wanting f=2), f permanent losses leave a
 minority of survivors. Every committed entry still has ≥1 surviving copy
@@ -72,13 +74,11 @@ a synthesized state-machine history no leader authorized.
 Raft is deliberately majority-based; the paper provides availability only
 while a majority remains, and production systems (e.g. etcd) treat
 permanent quorum loss as disaster recovery, not ordinary log
-reconciliation. EFS therefore does not offer the mode: permanent majority
-loss is **disaster territory** (an operator procedure over surviving state),
-not an efs operating mode. If a 4-node/f=2-style disaster-survivability
-guarantee is ever genuinely needed, it is designed as a separate protocol
-with its own proof — not bolted onto Raft by prose.
+reconciliation. This rules out the former survivor-log-merge recipe, not D36.
+Four-node/two-loss preservation is now required and needs a separately proved
+metadata protocol. Current Raft cannot advertise that guarantee.
 
-## Changing f or k online
+## Profile migration obligations (metadata recipe needs D36 review)
 
 The cluster carries `effective_f` (the guarantee currently in force) and,
 during a change, `target_f`. Raising f:
@@ -166,8 +166,9 @@ every chunk it re-encoded would corrupt every incremental-backup and
 `make`-style workflow on the system while reporting success. The same rule
 applies to repair/rebuild. Both are placement changes, not reformats. EC stripe
 width k is independently configurable (wider k on larger clusters trades
-encode CPU for storage efficiency, e.g. 4+3 = 1.75× overhead instead of
-2+3 = 2.5×); the binding constraint is always N ≥ max(2f+1, k+f).
+encode CPU for storage efficiency. The default remains 2+2 above four nodes;
+a wider profile is not an accepted default. Data placement needs k+f distinct
+domains; the metadata mechanism must independently meet D36.
 
 ## Degraded operation
 

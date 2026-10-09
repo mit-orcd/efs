@@ -4,6 +4,14 @@
 [Decisions](decisions.md) · [Work-item details](../backlog/work-items.md) ·
 [Operations](../operations/operations.md) · [Archive](../archive/README.md)
 
+## Governing node-count contract — D36
+
+[User-ratified D36](node-count-protection-20261009.md): three nodes minimum,
+four nodes maximum two-loss safety, additional nodes for capacity and performance
+across all dimensions. This supersedes the earlier protection ladder. Current
+fixed 2+1 and three-voter metadata groups do not satisfy the four-node target;
+W74/W66 must close the gap. Never infer the accepted design from current code.
+
 ## Accepted design follow-up
 
 [D32–D35](accepted-namespace-scratch-20261008.md) settle W84's current transaction

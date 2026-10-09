@@ -73,10 +73,12 @@ have three voters each (nodes 1/2/3 and 2/3/4). Losing nodes 2 and 3 leaves
 neither metadata group with its required majority. A four-node data 2+2 code
 alone would not solve metadata consensus availability.
 
-The architecture's intended automatic authoritative-survival rule requires
-2f+1 metadata voters: three nodes for f=1, five for f=2. Its five-node 2+2/RF5
-row is a design target, not proof that current defaults implement it; current
-group_voters() still selects three voters for clusters larger than three.
+D36 supersedes the former architecture ladder: four nodes must provide
+maximum two-loss protection, and larger clusters add scale. Ordinary majority
+Raft needs five voters for automatic authority after two losses; the required
+four-node metadata protocol remains unresolved. Current group_voters() still
+selects three voters for clusters larger than three. See
+[the binding decision](node-count-protection-20261009.md).
 Distinguish temporary quorum unavailability from permanent loss of committed
 metadata. No unsafe quorum override or automatic fresh metadata initialization
 is acceptable as a pressure-recovery strategy. Independent backups remain a

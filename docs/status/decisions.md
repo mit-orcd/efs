@@ -1,4 +1,4 @@
-# Decisions — taken and pending (register D1–D35)
+# Decisions — taken and pending (register D1–D36)
 
 **Decided means the design was accepted; it does not mean implementation or
 acceptance is complete. Preserve accepted choices and check their current work
@@ -9,7 +9,7 @@ items before implementation. ASK rows remain unresolved design choices.**
 
 ---
 
-#### Decisions — taken and pending (register D1–D35)
+#### Decisions — taken and pending (register D1–D36)
 
 Each row is a choice the spec did not make. A row marked **decided**
 was accepted by the user and is now part of the design; implement it
@@ -19,6 +19,17 @@ assigned. D15/D16 (closed Oct 2) and the Sep 28/29 ordering tables are
 in project-history.md "START-HERE closed items". **D28, D29 and D30 were
 accepted Oct 8, 2026.** Their current contracts and remaining gates are below;
 former ASK descriptions are historical.
+
+## D36 — node-count protection contract (accepted Oct 9)
+
+Three nodes are the minimum deployment; four provide maximum two-node-loss
+protection for acknowledged data and authoritative metadata; additional nodes
+increase volume and performance across all dimensions. Default data profiles
+are 2+1 at three nodes and 2+2 from four onward. This supersedes the older
+four-node/f=1 and f=3 ladder. The four-node metadata mechanism remains unresolved,
+not permission to weaken the requirement. See [binding contract and gates](node-count-protection-20261009.md)
+and [architecture §2](../how-it-works/architecture.md). W74/W66 implementation
+and acceptance remain open.
 
 ## Earlier decisions — compact register
 

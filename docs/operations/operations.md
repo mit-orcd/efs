@@ -1,5 +1,12 @@
 # Operations
 
+**Accepted deployment contract (D36, Oct 9):** three nodes are the minimum;
+four nodes provide the maximum two-node-loss safety target; additional nodes
+scale volume and performance across all dimensions. Today's fixed 2+1 data and
+three-voter metadata groups do not implement that four-node guarantee. See
+[binding requirement and implementation gates](../status/node-count-protection-20261009.md); preserve the requirement
+rather than deriving the design from current code.
+
 [Quick start](../using/quickstart.md) ·
 [Failure tolerance](../how-it-works/failure-tolerance.md) ·
 [Architecture](../how-it-works/architecture.md) · [Testing](../how-it-works/testing.md)

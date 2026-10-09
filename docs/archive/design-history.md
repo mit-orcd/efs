@@ -1,3 +1,10 @@
+> **Historical, superseded in node-count policy by D36 (Oct 9, 2026).** The
+> user reaffirmed three-node minimum, four-node maximum two-loss safety and
+> larger clusters for scale. Round 6's unsafe-merge finding remains valid, but
+> its revised protection ladder no longer governs the accepted requirement.
+> See [current architecture §2](../how-it-works/architecture.md) and
+> [D36](../status/node-count-protection-20261009.md).
+
 # Design history
 
 [Architecture](../how-it-works/architecture.md)
