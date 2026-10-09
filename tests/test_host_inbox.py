@@ -49,7 +49,7 @@ int main(void) {
   if(fence==8)m[2].buf[7]=2; /* changed leader */
   host_inbox_order(m,8,view,o);assert(o[2]==2);
   for(unsigned i=0;i<2;i++)assert(o[i]<2);
-  for(unsigned i=3;i<8;i++)assert(o[i]>2);
+  for(unsigned i=3;i<8;i++)assert(o[i]==i); /* captured view invalid after fence */
   memcpy(m[2].buf,saved,93);m[2].len=93;
  }
  check(m,256);host_inbox_order(m,256,view,o);

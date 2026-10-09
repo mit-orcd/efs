@@ -5283,7 +5283,7 @@ static int host_read_inode_lanes(struct efs_raft_host *h, efs_ino_t ino,
 }
 
 /* Stable per-group order, bounded chunks, and global control fences. Only
- * consecutive stable-leader, noncommitting entry AE traffic may be grouped.
+ * the initial stable-leader, noncommitting entry AE prefix may be grouped.
  * Commit/apply boundaries retain cross-group metadata dependency order. Votes, replies,
  * snapshots, empty probes and fresh-read contexts keep their inbox position.
  * No new work is collected and no extra assembly delay is introduced. */
@@ -5316,7 +5316,13 @@ static void host_inbox_order(const struct host_inbox_item *local, unsigned n,
         }
     }
     while (cursor<n) {
-        if (group[cursor]<0) { order[out++]=cursor++; continue; }
+        if (group[cursor]<0) {
+            /* This control/apply boundary may invalidate the captured view.
+             * Preserve the entire remaining suffix instead of using stale
+             * eligibility after a transient apply failure or role change. */
+            while (cursor<n) order[out++]=cursor++;
+            break;
+        }
         unsigned end=cursor;
         while (end<n && group[end]>=0) end++;
         for (unsigned first=cursor; first<end;) {
