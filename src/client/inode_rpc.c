@@ -704,6 +704,12 @@ static int rpc_send_recv_shard(uint32_t shard, uint8_t type, const void *req,
             continue;
         }
         if (r->status == EFS_INODE_RPC_STALE && stale_retryable(type)) {
+            /* PREPARE can report the participant leader whose canonical
+             * version disagreed with this replica. Re-reading repeatedly on
+             * the same coordinator cannot resolve that replica-local drift. */
+            target = r->primary_id && r->primary_id <= EFS_MAX_NODES &&
+                     r->primary_id != nid ? r->primary_id : 0;
+            skip = target ? 0 : nid;
             /* A directory-op txn lands STALE when a same-name dentry, the
              * child row, or an emptiness witness moved between its read
              * and its PREPARE (the parent row itself is a commutative
@@ -2162,6 +2168,12 @@ static int rpc_send_recv_dual(uint8_t type, const void *req, uint32_t req_len,
             continue;
         }
         if (r->status == EFS_INODE_RPC_STALE && stale_retryable(type)) {
+            /* PREPARE can report the participant leader whose canonical
+             * version disagreed with this replica. Re-reading repeatedly on
+             * the same coordinator cannot resolve that replica-local drift. */
+            target = r->primary_id && r->primary_id <= EFS_MAX_NODES &&
+                     r->primary_id != nid ? r->primary_id : 0;
+            skip = target ? 0 : nid;
             /* See rpc_send_recv_shard: a directory-op txn that lost a
              * dentry / witness race committed nothing; re-run it.
              * REPORT_CHUNKS owns its STALE (W1). */
