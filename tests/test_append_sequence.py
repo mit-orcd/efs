@@ -21,6 +21,7 @@ code=r'''
 static struct {uint64_t opid_next,opid_inflight[EFS_OPID_INFLIGHT],flock_token;
  uint8_t opid_uuid[16];uint32_t opid_epoch;} g_client={.opid_next=1,.opid_epoch=1,.opid_uuid={1,[15]=77},.flock_token=42};
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
+int efs_client_rpc_past_deadline(void) {return 0;}
 static void opid_seed_locked(void) {}
 static uint64_t values[N][M];
 '''+fn('static int opid_begin(')+fn('static void opid_end(')+fn('int efs_client_append_begin(')+fn('void efs_client_append_end(')+r'''

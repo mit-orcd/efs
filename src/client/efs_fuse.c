@@ -3210,6 +3210,32 @@ static int append_publication_wait(efs_ino_t ino,int *held)
     }
 }
 
+/* Receipt admission can wait behind an older OPEN or reservation. Never
+ * hold the append stripe while waiting: that older operation may need it
+ * to finish and release the contiguous-ACK window. Saturation is local
+ * backpressure, not a failed append; retry before allocating a reservation
+ * within the caller's inherited budget. Success returns with the stripe. */
+static int append_identity_begin(efs_ino_t ino, struct efs_opid_req *q, int *held)
+{
+    pthread_mutex_unlock(append_mu(ino));
+    *held = 0;
+    for (;;) {
+        if (efs_client_rpc_past_deadline()) return -1;
+        int slot = efs_client_append_begin(q);
+        if (slot >= 0) {
+            if (wb_lock_budget(append_mu(ino)) == EFS_OK) {
+                *held = 1;
+                return slot;
+            }
+            efs_client_append_end(slot);
+            return -1;
+        }
+        if (!efs_client_rpc_deadline_ms() || efs_client_rpc_past_deadline())
+            return -1;
+        usleep(1000);
+    }
+}
+
 /* Cross-client append: reserve the region at the metadata owner so two
  * clients never write at the same end offset. A second client's uuid is
  * BUSY while the first still has OPEN reservations (in-place fragments
@@ -3225,8 +3251,8 @@ static int append_reserve_offset(efs_ino_t ino, uint64_t len, off_t *off_out)
     int slot;
     int rc = EFS_ERR_BUSY, held = 1;
 
-    slot = efs_client_append_begin(&q);
-    if (slot < 0) {pthread_mutex_unlock(append_mu(ino));return -EAGAIN;}
+    slot = append_identity_begin(ino, &q, &held);
+    if (slot < 0) return -EAGAIN;
     seq = q.id.seq;
     /* Foreign uuid is BUSY until their close REPORT. 2 ms × 15000 was
      * 500 reserve RPCs/s that stalled the live appender (B's 45 s SSH

@@ -24,6 +24,9 @@ source=r'''
 #include <time.h>
 struct efs_client g_client;
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
+static uint64_t test_deadline;
+static uint64_t mono_ms(void) {struct timespec t;clock_gettime(CLOCK_MONOTONIC,&t);return (uint64_t)t.tv_sec*1000+t.tv_nsec/1000000;}
+int efs_client_rpc_past_deadline(void) {return test_deadline && mono_ms()>=test_deadline;}
 static unsigned calls;
 static uint64_t last_ack,last_seq;
 static int rpc_status_to_efs(uint8_t status) { return status?EFS_ERR_IO:EFS_OK; }
@@ -68,6 +71,9 @@ int main(void) {
     assert(efs_client_rpc_rename_at(1,1,"test",1,"new",NULL)==EFS_ERR_BUSY);
     assert(efs_client_rpc_link(1,2,1,"test",NULL)==EFS_ERR_BUSY);
     assert(!calls && g_client.opid_next==next);
+    uint64_t begin=mono_ms();test_deadline=begin+20;
+    assert(opid_begin(&q)<0 && !q.id.seq && g_client.opid_next==next);
+    assert(mono_ms()-begin<200);test_deadline=0;
     opid_end(7);
     /* A free object slot is insufficient: higher known sequences are still
      * unacknowledgeable while the oldest remains unresolved. */

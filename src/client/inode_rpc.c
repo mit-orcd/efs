@@ -242,6 +242,7 @@ static int opid_begin(struct efs_opid_req *q)
      * never issue more sequence positions than the smallest receipt cache.
      * Otherwise later replies fill it and the missing oldest cannot commit. */
     for(unsigned attempt=0;attempt<1000;attempt++) {
+        if (efs_client_rpc_past_deadline()) break;
         int slot=-1;uint64_t low=0;
         pthread_mutex_lock(&opid_mu);
         opid_seed_locked();

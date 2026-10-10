@@ -20,6 +20,7 @@ code=r'''
 #include <unistd.h>
 struct efs_client g_client;
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
+int efs_client_rpc_past_deadline(void) {return 0;}
 static void opid_seed_locked(void) {}
 '''+ '\n'.join(fn(n) for n in ('opid_begin','opid_end','opid_refresh_ack','opid_retry_ack'))+r'''
 int main(void) {

@@ -29,7 +29,7 @@ static struct efs_open_ref open_ref={.ino=1},*g_open_refs=&open_ref;
 static uint64_t cached_size;
 static int flush_calls,flush_rc,clear_publish_on_sleep;
 static uint64_t now,deadline;static unsigned calls,begins,ends,sleeps,last_sleep;
-static int accept_after,rpc_expires,contend,begin_failure,extent_failure,other_held;
+static int accept_after,rpc_expires,contend,begin_failure,begin_release_after,extent_failure,other_held;
 static pthread_mutex_t *append_mu(efs_ino_t ino) {(void)ino;return &stripe;}
 static uint64_t stats_now_ms(void) {return now;}
 static uint64_t efs_client_rpc_deadline_ms(void) {return deadline;}
@@ -41,7 +41,15 @@ static void usleep(unsigned micros) {
  if(clear_publish_on_sleep){open_ref.append_publishing=0;clear_publish_on_sleep=0;}
  if(contend) {assert(!pthread_mutex_lock(&stripe));contend=0;other_held=1;}
 }
-static int efs_client_append_begin(struct efs_opid_req *q) {begins++;q->id.seq=42;return begin_failure?-1:7;}
+static int efs_client_append_begin(struct efs_opid_req *q) {
+ assert(!pthread_mutex_trylock(&stripe));pthread_mutex_unlock(&stripe);
+ begins++;q->id.seq=42;
+ if(begin_failure){
+  if(begin_release_after && begins>=(unsigned)begin_release_after)begin_failure=0;
+  else {q->id.seq=0;if(begin_release_after)now+=600;return -1;}
+ }
+ return 7;
+}
 static void efs_client_append_end(int slot) {assert(slot==7);ends++;}
 static int efs_client_rpc_append_reserve(uint32_t export,efs_ino_t ino,uint64_t len,const struct efs_opid_req *q,uint64_t *end,uint64_t *start) {
  (void)export;(void)ino;assert(q->id.seq==42);calls++;
@@ -58,10 +66,10 @@ static void efs_client_unlock_dir(efs_ino_t ino) {(void)ino;}
 static int efs_export_get_inode(struct test_export *e,efs_ino_t ino,struct efs_inode *row) {(void)e;(void)ino;row->size=cached_size;return 0;}
 static void efs_export_set_size(struct test_export *e,efs_ino_t ino,uint64_t size) {(void)e;(void)ino;cached_size=size;}
 static int efs_append_flush_report(void *fi,efs_ino_t ino) {(void)fi;(void)ino;flush_calls++;assert(open_ref.append_publishing);assert(!pthread_mutex_trylock(&stripe));pthread_mutex_unlock(&stripe);return flush_rc;}
-'''+fn('wb_lock_budget')+fn('append_retry_wait')+fn('append_publication_wait')+fn('append_reserve_offset')+fn('append_publish_burst')+r'''
+'''+fn('wb_lock_budget')+fn('append_retry_wait')+fn('append_publication_wait')+fn('append_identity_begin')+fn('append_reserve_offset')+fn('append_publish_burst')+r'''
 static void reset(void) {
  now=1000;deadline=1100;calls=begins=ends=sleeps=last_sleep=0;
- accept_after=rpc_expires=contend=begin_failure=extent_failure=other_held=0;
+ accept_after=rpc_expires=contend=begin_failure=begin_release_after=extent_failure=other_held=0;
  cached_size=flush_calls=flush_rc=clear_publish_on_sleep=0;open_ref=(struct efs_open_ref){.ino=1};
  assert(!pthread_mutex_lock(&stripe));
 }
@@ -69,7 +77,7 @@ static void free_stripe(void) {assert(!pthread_mutex_trylock(&stripe));pthread_m
 int main(void) {
  off_t off=0;
  reset();deadline=1000;
- assert(append_reserve_offset(1,8,&off)==-EIO && !calls && begins==1 && ends==1);free_stripe();
+ assert(append_reserve_offset(1,8,&off)==-EAGAIN && !calls && !begins && !ends);free_stripe();
  reset();rpc_expires=1;
  assert(append_reserve_offset(1,8,&off)==-EIO && calls==1 && !sleeps && ends==1);free_stripe();
  reset();deadline=1001;
@@ -80,7 +88,11 @@ int main(void) {
  reset();accept_after=3;
  assert(!append_reserve_offset(1,8,&off) && off==100 && calls==3 && begins==1 && ends==1);
  assert(pthread_mutex_trylock(&stripe)==EBUSY);pthread_mutex_unlock(&stripe);
- reset();begin_failure=1;assert(append_reserve_offset(1,8,&off)==-EAGAIN && !calls && !ends);free_stripe();
+ reset();begin_failure=1;assert(append_reserve_offset(1,8,&off)==-EAGAIN && !calls && !ends && now==deadline && begins==100);free_stripe();
+ reset();begin_failure=1;begin_release_after=3;deadline=3000;accept_after=1;
+ assert(!append_reserve_offset(1,8,&off) && begins==3 && calls==1 && ends==1 && now==2202 && off==100);
+ assert(pthread_mutex_trylock(&stripe)==EBUSY);pthread_mutex_unlock(&stripe);
+ reset();begin_failure=1;deadline=0;assert(append_reserve_offset(1,8,&off)==-EAGAIN && begins==1 && !calls && !ends);free_stripe();
  reset();accept_after=1;extent_failure=1;
  assert(append_reserve_offset(1,8,&off)==-EFBIG && calls==1 && ends==1);free_stripe();
  reset();accept_after=1;cached_size=1000;

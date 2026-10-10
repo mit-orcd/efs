@@ -16,6 +16,7 @@ code=r'''
 #include <unistd.h>
 struct efs_client g_client;
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
+int efs_client_rpc_past_deadline(void) {return 0;}
 static void opid_seed_locked(void) {if(!g_client.opid_next){g_client.opid_uuid[0]=29;g_client.opid_epoch=7;g_client.opid_next=1;}}
 static int admits,submits,probes,admit_rc,transport_rc,stored,negative,bad_route,unknown_ok,unrouted_busy;
 static struct efs_opid identity;
