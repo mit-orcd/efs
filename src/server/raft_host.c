@@ -402,7 +402,7 @@ struct efs_raft_host {
     int inbox_n;
     uint64_t inbox_bytes, inbox_bytes_hi;
     int pressure_enabled;
-    int flow_enabled, inbox_pressure, group_drain;
+    int flow_enabled, inbox_pressure, group_drain, flow_early_retire;
     unsigned inbox_work_n;
     uint64_t inbox_work_bytes;
     uint64_t inbox_probe_sent[HOST_NGROUPS][EFS_RAFT_MAX_PEERS];
@@ -6078,6 +6078,25 @@ static void host_inbox_retire(struct efs_raft_host *h, unsigned n, uint64_t byte
     pthread_mutex_unlock(&h->inbox_mu);
 }
 
+/* KV release has already completed; consumed frames and applied KV work
+ * no longer need inbox credits. The restart checkpoint is a separate tail.
+ * Early credit return changes transport admission only, never a Raft ACK or
+ * the KV-before-marker prerequisite. Failed releases retain prior retirement
+ * semantics and still cannot save an unproven applied index. */
+static int host_checkpoint_retire(struct efs_raft_host *h, const uint64_t *idx,
+                                   uint64_t now, int kv_rc,
+                                   unsigned n, uint64_t bytes)
+{
+    if (h->flow_enabled && h->flow_early_retire && n) {
+        BO_COUNT(BO_FLOW_RETIRE_EARLY);
+        host_inbox_retire(h,n,bytes);
+    }
+    int rc=host_save_applied(h,idx,now,0,kv_rc);
+    if (h->flow_enabled && !h->flow_early_retire && n)
+        host_inbox_retire(h,n,bytes);
+    return rc;
+}
+
 static void *host_pump(void *arg)
 {
     struct efs_raft_host *h = arg;
@@ -6239,12 +6258,11 @@ static void *host_pump(void *arg)
 
             /* pnow is wall time for applied-index persistence; diagnostics
              * use monotonic time, matching cohort/hold measurements. */
-            int durable_rc=host_save_applied(h,applied_now,pnow,0,kv_rc);
+            int durable_rc=host_checkpoint_retire(h,applied_now,pnow,kv_rc,done_n,done_bytes);
             if (durable_rc != EFS_OK && !checkpoint_failed)
                 fprintf(stderr,"raft-host: applied checkpoint not advanced after persistence failure\n");
             checkpoint_failed=durable_rc!=EFS_OK;
         }
-        if (h->flow_enabled && done_n) host_inbox_retire(h,done_n,done_bytes);
         if (batch_obs) {
             BO_HIST(BH_APPLIED_PERSIST_US, efs_batch_obs_now_us() - phase_us);
             efs_batch_obs_dump(efs_batch_obs_now_us());
@@ -8759,6 +8777,9 @@ int server_raft_host_start(struct efsd_server *s)
     int query_enabled=!commands || !strcmp(commands,"1");
     const char *flow=getenv("EFS_RAFT_FLOW");
     if (flow && strcmp(flow,"0") && strcmp(flow,"1")) return EFS_ERR_INVAL;
+    const char *early_retire=getenv("EFS_RAFT_FLOW_EARLY_RETIRE");
+    if (early_retire && strcmp(early_retire,"0") && strcmp(early_retire,"1"))
+        return EFS_ERR_INVAL;
     const char *group_drain=getenv("EFS_RAFT_GROUP_DRAIN");
     if (group_drain && strcmp(group_drain,"0") && strcmp(group_drain,"1"))
         return EFS_ERR_INVAL;
@@ -8783,7 +8804,8 @@ int server_raft_host_start(struct efsd_server *s)
         return EFS_ERR_NOMEM;
     struct efs_admission_limits limits={8ull<<20,1ull<<20,64,8};
     if (efs_admission_init(&h->proposal_queue,&limits) != EFS_OK) { free(h); return EFS_ERR_IO; }
-    h->flow_enabled=flow && !strcmp(flow,"1"); /* candidate opt-in until acceptance */
+    h->flow_enabled=flow && !strcmp(flow,"1");
+    h->flow_early_retire=early_retire && !strcmp(early_retire,"1"); /* candidate opt-in until acceptance */
     h->group_drain=group_drain && !strcmp(group_drain,"1");
     h->pressure_enabled=pressure && !strcmp(pressure,"1");
     h->s = s;
