@@ -3657,11 +3657,17 @@ Oct 10 closure work is active at the user's request. Aggregate retained-cache
 admission, durable partition checkpoints/catch-up and bounded incremental discovery
 pass focused/full native gates. Ten-million-entry pilots pass full exports,
 retained mutation and cold-hint catch-up with a fixed 3.69 MiB builder. The actual
-2^32-entry attempts are preserved; the next latest-code run awaits temporary
-source VM provisioning. Complete native gates pass after bounding private scan
+2^32-entry attempts are preserved; the current actual-entry run is active on
+the temporarily provisioned source VM (more than 2.2 billion entries populated). Complete native gates pass after bounding private scan
 scratch/tails and row-only stat reuse. Live disabled catch-up, aggregate QUOTA,
 publisher loss and interrupted-cache recovery pass; latest deployment and full
-scale/platform/export-policy acceptance remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
+scale/platform acceptance remain open. Durable single-export policy live/cold,
+quorum, lost-reply, startup-ceiling and storage-error gates pass on the private
+candidate (`49a73b22`); normal rollout is still pending. The real 400 GiB writer
+stopped after 124983 acknowledged files on CREATE PROTO. A valid unrouted BUSY
+probe retry defect is fixed and passes focused plus full native gates; recovery
+rehashes acknowledged payloads before writing more. No full capacity pass is
+claimed. [Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.

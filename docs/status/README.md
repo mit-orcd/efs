@@ -405,5 +405,7 @@ and complete exports pass on the identified private candidate. Startup-ceiling
 catch-up also passes (500 payloads); the final proposal-forwarding guard passes
 full native and private live/cold gates. Normal-cluster rollout remains pending.
 The actual 2^32 index fixture is running; the 400 GiB writer stopped on a
-CREATE protocol error after 124983 acknowledged files and is under diagnosis; Mac NFS execution still needs a privileged mount refresh.
+CREATE protocol error after 124983 acknowledged files. The unrouted BUSY retry
+fix passes full native gates; a diagnostic private client is rehashing the
+acknowledged payloads before continuing; Mac NFS execution still needs a privileged mount refresh.
 W92 remains open.

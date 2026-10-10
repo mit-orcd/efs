@@ -18,8 +18,9 @@ measurements; remaining software limits are recorded in that report.
 Earlier findings below are historical; do not mistake the former client tree
 walker or missing server catalog for the current source/deployment state.
 Loaded publication, publisher-loss and restart gates now pass; W92 remains open
-for 400 GiB scale, the broader fault matrix, platform and remote export-policy
-acceptance. Historical deployment statements below are superseded by these reports.
+for real 400 GiB and actual 2^32-entry scale, platform execution and final
+normal-cluster rollout. The [durable single-export policy](efs-query-persistent-policy-20261010.md)
+is implemented and passes private live/cold/quorum/lost-reply/ceiling/fault gates. Historical deployment statements below are superseded by these reports.
 
 ## Billions of files — disk-backed, bounded-memory catalog
 

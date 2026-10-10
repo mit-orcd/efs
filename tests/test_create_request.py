@@ -17,7 +17,7 @@ code=r'''
 struct efs_client g_client;
 static pthread_mutex_t opid_mu=PTHREAD_MUTEX_INITIALIZER;
 static void opid_seed_locked(void) {if(!g_client.opid_next){g_client.opid_uuid[0]=29;g_client.opid_epoch=7;g_client.opid_next=1;}}
-static int admits,submits,probes,admit_rc,transport_rc,stored,negative,bad_route,unknown_ok;
+static int admits,submits,probes,admit_rc,transport_rc,stored,negative,bad_route,unknown_ok,unrouted_busy;
 static struct efs_opid identity;
 static int rpc_status_to_efs(uint8_t status) {
  if(status==EFS_INODE_RPC_OK)return EFS_OK;
@@ -40,6 +40,7 @@ static int rpc_send_recv_owner(efs_ino_t parent,uint8_t type,const void *body,ui
  if(r->probe)probes++;else {submits++;assert(r->routed&&r->shard==121);}
  if(transport_rc)return transport_rc;
  struct efs_msg_create_retained_reply *reply=out;
+ if(unrouted_busy){assert(r->probe);reply->rpc.status=EFS_INODE_RPC_BUSY;return EFS_OK;}
  reply->routed=1;reply->shard=bad_route?122:121;
  reply->known=stored;reply->rpc.status=stored?(negative?EFS_INODE_RPC_EXIST:EFS_INODE_RPC_OK):(unknown_ok&&!r->probe?EFS_INODE_RPC_OK:EFS_INODE_RPC_BUSY);
  if(stored&&!negative){reply->rpc.inode.ino=4217;reply->generation=1;}
@@ -52,6 +53,15 @@ int main(void) {
  assert(efs_client_create_begin(&r,4097,"new",S_IFDIR|0700,11,12)==EFS_ERR_INVAL);
  assert(!efs_client_create_begin(&r,4097,"new",S_IFREG|0600,11,12));identity=r.wire.q.id;
  assert(efs_client_create_reset(&r)==EFS_ERR_BUSY);
+ /* Parent ReadIndex can be BUSY before routing exists. It must not turn
+  * into PROTO/EIO or submit an operation on an invented shard. */
+ unrouted_busy=1;
+ for(int retry=0;retry<3;retry++) {
+  assert(efs_client_create_resume(&r,0)==EFS_ERR_BUSY && !r.wire.routed);
+  assert(!r.attempted && !r.complete && !admits && !submits && r.slot>=0);
+  assert(g_client.opid_inflight[r.slot]==identity.seq);
+ }
+ unrouted_busy=0;
  assert(efs_client_create_resume(&r,1)==EFS_ERR_BUSY&&r.wire.routed&&!admits&&!submits);
  admit_rc=EFS_ERR_NET;assert(efs_client_create_resume(&r,0)==EFS_ERR_NET&&!r.attempted&&!submits);
  assert(!efs_client_create_cancel(&r));
@@ -83,7 +93,7 @@ int main(void) {
  revoke_rc=0;revoke_proof=1;
  assert(efs_client_create_resume(&r,0)==EFS_ERR_STALE&&r.complete&&r.revoked&&r.slot==-1&&!r.attempted);
  assert(!efs_client_create_reset(&r));
- puts("retained CREATE: immutable body/identity, pure probe, admission ambiguity, cancellation barrier, exact proof and pinned routing PASS");
+ puts("retained CREATE: immutable body/identity, unrouted BUSY, pure probe, admission ambiguity, cancellation barrier, exact proof and pinned routing PASS");
 }
 '''
 with tempfile.TemporaryDirectory(prefix='efs-create-request-') as directory:

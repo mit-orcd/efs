@@ -548,3 +548,12 @@ operation identity, and admits/submits nothing until a route is received. The
 actual extracted CREATE regression now exercises three such probes and passes
 on Mac; candidate Linux/live and native repetition follow. The original log
 without per-probe tracing does not prove which validation branch fired.
+
+The unrouted-BUSY fix passes the actual extracted retained-CREATE and FUSE
+admission deadline regressions on Mac, the retained-CREATE regression on Linux,
+and the [unchanged complete native suite](../../results/measure/20261010-w92-closure/w92-unrouted-busy-native-passed.log).
+The initial resume was intentionally stopped with SIGTERM/143 during its read-only
+acknowledgement rehash to install the fixed private client. The new detached
+`w92-capacity-busy-fixed-20261010` resumes from the preserved original write
+checkpoints with client diagnostics captured to a persistent file. Actual full
+payload/cold/export acceptance remains pending.
