@@ -717,6 +717,23 @@ def dir_rename_noreplace(d):
 
 
 @test
+def dir_rename_exchange_preserves_both_files(d):
+    import ctypes
+    a, b = os.path.join(d, "a"), os.path.join(d, "b")
+    wr(a, b"first exchange payload")
+    wr(b, b"second exchange payload")
+    libc = ctypes.CDLL("libc.so.6", use_errno=True)
+    rc = libc.renameat2(-100, os.fsencode(a), -100, os.fsencode(b), 2)
+    if rc == 0:
+        eq(rd(a), b"second exchange payload", "exchange source bytes")
+        eq(rd(b), b"first exchange payload", "exchange destination bytes")
+    else:
+        eq(ctypes.get_errno(), errno.EOPNOTSUPP, "unsupported exchange refused")
+        eq(rd(a), b"first exchange payload", "refused exchange source unchanged")
+        eq(rd(b), b"second exchange payload", "refused exchange destination unchanged")
+
+
+@test
 def dir_rename_symlink(d):
     wr(os.path.join(d, "t"), b"data")
     os.symlink("t", os.path.join(d, "sl"))

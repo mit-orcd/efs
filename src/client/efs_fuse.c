@@ -4838,7 +4838,10 @@ static int efs_fuse_rename_at(fuse_ino_t parent, const char *name,
 {
     struct efs_inode src, src_parent, dst_parent;
     int rc;
-    (void)flags;
+    /* Legacy rename has no atomic flags contract. Never silently turn an
+     * exchange, no-replace or whiteout request into a destructive rename. */
+    if (flags != 0)
+        return -EOPNOTSUPP;
     if (virt_kind(parent) || virt_kind(newparent))
         return -EACCES;
     if (name_is_reserved(name) || name_is_reserved(newname))
