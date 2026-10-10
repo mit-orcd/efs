@@ -5688,6 +5688,14 @@ transport after admission: default FUSE flush/PUT, durable storage rejection
 fences, stable server membership capture and abandoned all-member ACKs remain
 open. [Current checkpoint](../status/dependency-package-20261009.md#retained-put-ownership-and-ticketed-publications--oct-10-utc).
 
+**Oct 10 merged storage-barrier progress:** durable full-UUID storage-session
+certificates and every-current-member seal/check are implemented. FINISH now
+logs the verified epoch and preserves incomplete-barrier BUSY/STALE instead of
+reporting success. AMD injected certificate-sync EIO and four-member cold-floor
+gates cover these primitives. This does not close production PUT validation,
+default flush, durable per-ticket membership or abandoned-member deletion ACKs.
+See the [merged checkpoint](../status/dependency-package-20261009.md#merged-baseline-and-durable-storage-session-barrier--oct-10-utc).
+
 ### W87 · Buffered concurrent append loses records under broader load
 
 **Oct 8 AMD follow-up:** Retrieved the original NUC failure TSV/manifest: missing W1S0002 and W0S0004 records, beyond first-record loss. AMD broad buffered POSIX 216/0/1 skip and peer 64/64 pass, plus mixed-close append during GC and 800 exact cold records. The separate identical-RPC reservation race is fixed, but is not established as this incident's sole cause.

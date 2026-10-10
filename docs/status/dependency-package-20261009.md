@@ -944,3 +944,51 @@ Selected local/AMD source hashes match; installed service and both mounts
 were verified restored. This hour produced commits 22c8c1f9, 70daa5a4 and
 f626c2ba. The next gate should reproduce default CREATE BUSY with the retained
 identity tracing before further production activation work.
+
+
+## Merged baseline and durable storage-session barrier — Oct 10 UTC
+
+The authorized hour began 04:26:59 UTC on `devel-w66`. All inspected local
+branch tips were incorporated, including `devel-find-stats` and the subsequent
+`devel` integration merge `4be9ecf6`. No other branch was moved or pushed.
+The merged full AMD direct-I/O/TCP fixture `gc-direct-ueiiqfa5` passed core
+212/212, peer 64/64, both >128-ticket retirement streams, sync/append,
+retained identities and physical reclamation/cold restart. It supersedes the
+prior hour's default CREATE BUSY reproduction for this merged candidate; the
+failed earlier fixture remains recorded. Commit `767d2577` fixes stale simulator
+objects at public header boundaries; an incremental merged test crash was
+reproduced, then clean and header-touch rebuild gates passed.
+
+Storage-session certificates now persist the full UUID and monotonic rejected
+before-epoch floor with checksum, atomic replacement, file and parent-directory
+sync. Per-session striped guards order old receive/store work before the seal;
+corrupt or unsynced certificates cannot acknowledge it. Every configured
+storage member must seal, including a member outside the metadata replica set.
+FINISH obtains fresh authority and checks each exact certificate. Unavailable
+members, mismatched UUID/floor, duplicate IDs and changed rosters fail closed.
+The idempotent seal phase retains its exact body through bounded BUSY retries;
+EIO fails immediately. This is current-roster validation, not durable per-ticket
+membership capture or ticket validation in the production PUT receiver.
+
+The new gate found two additional completion hazards. New FINISH log commands
+carry the checked epoch, so delayed epoch-two completion cannot complete an
+epoch-three revocation; legacy persisted commands remain readable. FINISH's
+business rejection was previously normalized as success. It now preserves BUSY
+and STALE. The raw namespace gate ACKed shard zero instead of its registered
+shard seven, which that normalization concealed. The strengthened gate requires
+BUSY with the incomplete ACK set, then exact successful and repeated completion.
+
+Certificate syscall-error/cold-floor/guard-ordering and epoch-race regressions
+passed. AMD certificate-sync EIO proved the coordinator failed and global
+revocation remained incomplete, then resumed the same barrier after repair.
+All four actual daemon certificates rejected old guards. Linux code regressions
+passed; the private checkout documentation initially lacked linked historical
+evidence, supplied unchanged before its 5/5 documentation pass. Final live
+POSIX/cold gates and source hashes are recorded in the evidence checkpoint.
+
+The package remains open: production ticket validation at receive/store,
+default FUSE typed flush, durable captured storage member identities,
+all-member abandoned-upload deletion acknowledgements and revoked unknown-intent
+reconciliation. No D25 activation, forced write loss or hardware power-loss
+claim follows from these staged tests. Evidence:
+[merged/storage checkpoint](../../results/measure/20261010-merged-ticket-storage-fence/README.md).
