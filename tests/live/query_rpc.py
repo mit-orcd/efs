@@ -5,6 +5,7 @@ A size gate prevents silently changing this wire contract.
 """
 import ctypes as C
 import socket
+import os
 import struct
 class Request(C.Structure):
     _fields_=[('version',C.c_uint32),('operation',C.c_uint32),('root',C.c_uint64),
@@ -51,7 +52,7 @@ def receive(s,n):
     return bytes(data)
 def query(port,q,raw=None):
     body=bytes(q) if raw is None else raw
-    with socket.create_connection(('127.0.0.1',port),7) as s:
+    with socket.create_connection((os.environ.get('EFS_QUERY_TEST_HOST','127.0.0.1'),port),7) as s:
         s.sendall(struct.pack('!I',len(body)+1)+bytes([123])+body)
         n=struct.unpack('!I',receive(s,4))[0]
         assert 121<=n<=120+(16<<20)+1,n
@@ -64,7 +65,7 @@ def query(port,q,raw=None):
 
 def features(port):
     body=b'w92-private'.ljust(256,b'\0')
-    with socket.create_connection(('127.0.0.1',port),7) as s:
+    with socket.create_connection((os.environ.get('EFS_QUERY_TEST_HOST','127.0.0.1'),port),7) as s:
         s.sendall(struct.pack('!I',len(body)+1)+bytes([39])+body)
         n=struct.unpack('!I',receive(s,4))[0]
         payload=receive(s,n)

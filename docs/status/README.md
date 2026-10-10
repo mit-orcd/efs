@@ -88,7 +88,11 @@ and affected-parent folds pass focused and full native gates; their live and
 live validation remains pending. The version-5 ten-million repeat passes full
 exports before/after mutation, retained totals and cold restore (3.69 MiB builder,
 40.04 MiB peak process RSS). Sequential lookup regressions pass; a repeat is
-running on a newly provisioned isolated scale disk before the actual 2^32 gate.
+complete (231.9 s fresh, 2.43 s mutation), and full native gates pass.
+The actual 2^32-entry generator is running on the isolated capped disk. A separate
+ten-million cold-hint catch-up/full-stream oracle passes. Deployed command/pages
+and concurrent publication gates pass, including all 2131 payload hashes and
+measured convergence under contention; recovery/platform/full scale remain open.
 Large-export total lifetime is now
 configurable with bounded retention and unchanged idle/permission checks.
 

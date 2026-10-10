@@ -270,3 +270,58 @@ configuration were unchanged. Host backing is capped at 2 TiB with approximately
 explicitly configures larger logical cache limits. This is synthetic production
 record validation, not a claim of real EFS/Raft payload capacity. No billion-entry
 result is claimed until actual population and independent streaming oracles pass.
+
+
+## Actual-entry gate dispatched; further pilot recovery
+
+The sequential ten-million repeat completed: fresh build 231.856 s, unchanged
+refresh 0.633 s, complete export oracle 9.526 s. One inode mutation rebuilt one
+partition/refolded 2443 inodes in 2.430 s; the retained original totals and a second
+full export (9.206 s) pass. These are single shared-VM observations on a different
+isolated volume, not controlled engine throughput. Builder allocation remains
+3,864,480 bytes. The complete native suite also passes.
+
+The test volumes were normally unmounted/remounted outside `/data1` because the
+cluster's dedicated-filesystem preflight correctly rejects child mounts. The
+big volume is now `/mnt/w92-scale-big-20261010`; the earlier 8 GiB pilot volume is
+`/mnt/w92-scale-pilot-20261010`. A mount-move attempt was refused by shared mount
+propagation; no production disk changed. Xorinox had rebooted and lost `/tmp/efs`,
+so checkouts were restored without wiping retained state; deployment uses the
+correctly identified `648495c6` binaries, direct IO/TCP.
+
+The actual 4,294,967,296-file generator is running in detached screen
+`w92-2p32-20261010`, nice 19 / idle IO priority, with explicit 8 TiB generation,
+16 TiB aggregate logical limits and 100 GiB physical reserve. It writes every
+production-format record; no sparse offset simulation or smaller recycled index
+is counted. Terminal markers, two full independent streams, restart and retained
+mutation oracles must pass before accepting it. It has not finished.
+
+A separate `--recover` harness mode makes bounded advisory DONTNEED requests for
+regular files in the private fixture, never following symlinks or dropping global
+host caches. It opens the durable KV/checkpoint, catches up the prior one-inode
+change, and verifies the complete export. On the version-5 ten-million fixture:
+20785 regular files hinted, catch-up 11.266 s, one partition rebuilt, complete
+stream verified in 6.520 s, rc=0. Eviction is advisory; this complements rather
+than proves universal physical-cold behavior. The live load gate now scopes its
+readers to its private tree, records per-create latency/convergence, and checks
+every acknowledged payload independently through the peer mount.
+
+
+## Live command and loaded-publication checkpoint
+
+The `648495c6` deployment passes command-source, raw filename, peer catalog,
+lookup-only traversal, fresh descendant authorization, opened-descriptor lifetime,
+real `.efs` collision and bounded identity/FORGET recovery gates. Paged exports
+pass display bounds, full NUL/NDJSON streams, retained generation during mutation,
+second-session BUSY admission, explicit close/stale and permission revocation.
+The first raw-RPC attempt targeted loopback while efsd binds its configured VM IP;
+the harness now accepts `EFS_QUERY_TEST_HOST` and the actual endpoint retry passes.
+This was test endpoint configuration, not a daemon failure.
+
+Eight writers and two query readers overlapped on a private tree. Both readers
+observed multiple generations and bounded BUSY refusals without partial success.
+2131 acknowledged 256-byte payloads were independently verified through the peer
+mount; exact counts/545536 bytes converged 6.775 s after the writer phase. Create
+latency p50/p95/p99 was 44.33/97.91/189.52 ms while other live suites and the
+low-priority scale generator shared the VMs. This is a functional contention and
+truthful freshness measurement, not an uncontended throughput baseline.

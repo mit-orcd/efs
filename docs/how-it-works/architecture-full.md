@@ -1546,7 +1546,11 @@ and affected-parent folds pass focused and full native gates; their live and
 live validation remains pending. The version-5 ten-million repeat passes full
 exports before/after mutation, retained totals and cold restore (3.69 MiB builder,
 40.04 MiB peak process RSS). Sequential lookup regressions pass; a repeat is
-running on a newly provisioned isolated scale disk before the actual 2^32 gate.
+complete (231.9 s fresh, 2.43 s mutation), and full native gates pass.
+The actual 2^32-entry generator is running on the isolated capped disk. A separate
+ten-million cold-hint catch-up/full-stream oracle passes. Deployed command/pages
+and concurrent publication gates pass, including all 2131 payload hashes and
+measured convergence under contention; recovery/platform/full scale remain open.
 Large-export total lifetime is now
 configurable with bounded retention and unchanged idle/permission checks.
 
@@ -5825,9 +5829,11 @@ the original record and withdrawn interpretation remain retained.
 ### W92 · .efs/find and .efs/stats server snapshots and large namespace acceptance
 
 Oct 10 closure work is active at the user's request. Aggregate retained-cache
-admission has focused and full native passing gates; 100,000/1,000,000 synthetic
-file pilots pass streaming oracles with bounded builder memory. Durable catch-up and the full scale/fault
-acceptance matrix remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
+admission, durable partition checkpoints/catch-up and bounded incremental discovery
+pass focused/full native gates. Ten-million-entry pilots pass full exports,
+retained mutation and cold-hint catch-up with a fixed 3.69 MiB builder. The actual
+2^32-entry generator is running on an isolated capped disk. Deployment/live
+recovery and full scale/fault acceptance remain open. [Closure ledger](../status/query-cache-closure-20261010.md).
 
 Oct 10 incremental checkpoint: fixed 1024-item change/ancestor sets reuse immutable
 derived partitions and recompute exact affected rollups, with full-build fallback.

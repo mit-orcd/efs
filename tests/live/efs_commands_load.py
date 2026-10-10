@@ -7,13 +7,19 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import hashlib
+import statistics
 from query_rpc import query, request
 
 mount=Path(sys.argv[1])
 peer=Path(sys.argv[2])
-root=mount/'command-load'
+fixture=os.environ.get('EFS_QUERY_TEST_FIXTURE','command-load')
+assert fixture and '/' not in fixture and fixture not in ('.','..')
+root=mount/fixture
 root.mkdir()  # refuse reuse
+root_ino=root.stat().st_ino
 end=time.monotonic()+14
+latencies=[[] for _ in range(8)]
 
 def writer(worker):
     count=0
@@ -21,7 +27,9 @@ def writer(worker):
     folder.mkdir()
     while time.monotonic()<end and count<2000:
         # Actual small payload and close, rather than namespace-only RPCs.
+        start=time.monotonic()
         (folder/str(count)).write_bytes(bytes([worker])*256)
+        latencies[worker].append((time.monotonic()-start)*1000)
         count+=1
     return count
 
@@ -32,7 +40,7 @@ def reader():
     generations=set()
     while time.monotonic()<end:
         reply,text=query(int(os.environ['EFS_QUERY_TEST_PORT']),request(
-            version=2,operation=1,match=3,term=b'',max_output=4<<20))
+            version=2,operation=1,root=root_ino,uid=os.getuid(),gid=os.getgid(),match=3,term=b'',max_output=4<<20))
         if reply.status:
             assert reply.status==-13 and not text,('concurrent query failure',reply.status)
             continue  # bounded BUSY during mutations; never partial success
@@ -63,8 +71,9 @@ assert sum(counts)>100,counts
 assert len(set(generations))>1,('publication starved under ordinary writes',generations)
 # After close, wait for the exact independent writer oracle.
 expected=sum(counts)
+converge_start=time.monotonic()
 for _ in range(40):
-    result=subprocess.run([sys.executable,str(peer/'command-load/.efs/stats'),'--json'],
+    result=subprocess.run([sys.executable,str(peer/fixture/'.efs/stats'),'--json'],
                           check=True,stdout=subprocess.PIPE,timeout=12)
     parsed=json.loads(result.stdout)
     if parsed['stats']['tree_files']==expected:
@@ -74,3 +83,16 @@ for _ in range(40):
 else:
     raise AssertionError(('closed writer oracle did not publish',expected,parsed))
 print(f'loaded publication PASS files={expected} logical_bytes={expected*256}',flush=True)
+
+converge=time.monotonic()-converge_start
+for worker,count in enumerate(counts):
+    expected_hash=hashlib.sha256(bytes([worker])*256).digest()
+    for index in range(count):
+        payload=(peer/fixture/str(worker)/str(index)).read_bytes()
+        assert len(payload)==256 and hashlib.sha256(payload).digest()==expected_hash,(worker,index)
+values=sorted(value for worker in latencies for value in worker)
+def percentile(p):return values[min(len(values)-1,int((len(values)-1)*p))]
+print('writer latency and exact payload oracle '+json.dumps(dict(
+    fixture=fixture,files=expected,create_p50_ms=statistics.median(values),
+    create_p95_ms=percentile(.95),create_p99_ms=percentile(.99),
+    converge_seconds=converge,payloads_verified=expected),sort_keys=True),flush=True)

@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-root=/data1/efs/bench/w92-scale-2p32-20261010
+root=/mnt/w92-scale-big-20261010
 n=${1:?actual entry count required}
 finish() { status=$?; printf '%s\n' "$status" > "$root/exit-$n"; touch "$root/finished-$n"; }
 trap finish EXIT
