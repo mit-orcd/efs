@@ -319,7 +319,11 @@ def transport_proof(processes):
 
 def unmount(timeout=15):
     global client
-    if subprocess.run(['mountpoint','-q',str(mount)]).returncode==0:
+    # mountpoint stats the FUSE root. During recovery GETATTR can fail even
+    # though the kernel still lists this mount and its client remains alive.
+    # The stop script checks /proc/mounts and process/control ownership without
+    # depending on successful metadata RPCs; do not skip its drain in that case.
+    if client or subprocess.run(['mountpoint','-q',str(mount)]).returncode==0:
         run([source/'scripts/client.sh','stop',mount])
     if client:
         client.wait(timeout=timeout);client=None
