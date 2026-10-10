@@ -4,6 +4,7 @@
 #include "efs/rdma.h"
 #include "efs/checksum.h"
 #include "efs/store.h"
+#include "efs/put_upload.h"
 #include "efs/opid.h"
 #include "efs/version.h"
 #include "server_internal.h"
@@ -395,6 +396,16 @@ send_reply:
                                 reply[0] != EFS_GET_CHUNK_OK);
                 server_export_put(g_server, ex);
             }
+            break;
+        }
+        case EFS_MSG_PUT_TICKETED: {
+            uint64_t start=efs_iostats_now_us();
+            uint8_t reply[EFS_PUT_UPLOAD_REPLY_LEN],path=0xff;
+            int result=server_put_upload(g_server,payload,payload_len,&path);
+            efs_put_upload_wr32(reply,(uint32_t)result);reply[4]=path;
+            efs_conn_send_msg(conn,EFS_MSG_PUT_TICKETED_REPLY,reply,sizeof(reply));
+            efs_iostats_add(EFS_IOSTAT_PUT,result==EFS_OK?payload_len-EFS_PUT_UPLOAD_HEADER_LEN:0,
+                efs_iostats_now_us()-start,result!=EFS_OK);
             break;
         }
         case EFS_MSG_PUT_CHUNK: {

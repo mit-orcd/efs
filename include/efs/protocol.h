@@ -184,6 +184,8 @@ enum efs_msg_type {
     EFS_MSG_CREATE_RETAINED_REPLY = 126,
     EFS_MSG_STORAGE_SESSION_FENCE = 127,
     EFS_MSG_STORAGE_SESSION_FENCE_REPLY = 128,
+    EFS_MSG_PUT_TICKETED = 129,
+    EFS_MSG_PUT_TICKETED_REPLY = 130,
 };
 
 /* Storage session seal/check. Reply echoes the exact identity and floor.
